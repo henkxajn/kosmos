@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // WYKONANIE prawdziwego `Outliner` (`draw` na atrapie ctx z rejestrem napisów i prostokątów, `hitTest`, `updateHover`,
 // `handleWheel`, nasłuch zaznaczenia) na świecie w EntityManagerze; kolejność układów z PRAWDZIWEGO `LeftOutliner`;
-// prawdziwe `MapInsets` i ich konsumenci (kotwica panelu statku, `StationPanel`). `ThreeRenderer` i `UIManager` nie
+// prawdziwe `MapInsets` i ich konsument (kotwica panelu statku). `ThreeRenderer` i `UIManager` nie
 // importują się pod node (THREE) — ich metody wycięte ze źródła (komentarze zdjęte) i wykonane z atrapą `this`.
 //
 // PINY:
@@ -26,10 +26,13 @@
 //       i przewija do wiersza; członek floty — układ PROWADZĄCEGO
 //   R8  podpowiedzi: statek (rola, przyczyna znacznika — „bez paliwa” rozróżnia dryf od utrzymania, aktywność,
 //       położenie), flota, nagłówek (klawisze)
-//   R9  `MapInsets.right` = 150 przy widocznej kolumnie (0 ukryta); kotwica zapasowa panelu statku i `StationPanel`
-//       kończą się przed nią (KONTROLA: kolumna ukryta — do krawędzi ekranu)
+//   R9  `MapInsets.right` = 150 przy widocznej kolumnie (0 ukryta); kotwica zapasowa panelu statku kończy się przed nią
+//       (KONTROLA: kolumna ukryta — do krawędzi ekranu)
 //       ⚠ R9d PRZECELOWANY 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): pin bez zmian (kotwica
 //       zapasowa — `shipPanelOutliner` OFF); R9d-T3 — przy ON panel przy wierszu kończy się DOKŁADNIE na kolumnie
+//       ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): R9d — kotwica zapasowa panelu przy
+//       ON (kolumna ukryta albo statek bez wiersza — ta sama geometria); R9e / R9f (kotwica `sp.x + 18` panelu stacji —
+//       ścieżka `bodyCardSide` OFF) usunięte razem z tą ścieżką (panel stacji jako powierzchnia znika w kolejnym kroku T4).
 //   R10 Tab (reszta 478): `cycleSelectedVessel` = zaznaczenie + „drugi klik” reguły — statek z innego układu przełącza
 //       układ, potem kamera (wykonanie metody wyciętej z UIManagera)
 //   R11 Finding 477 — `pingVessel` z terminem układu (wykonanie wyciętej metody)
@@ -53,15 +56,13 @@ import { t, setLocale } from '../../i18n/i18n.js';
 import { isEnemyVessel } from '../../entities/Vessel.js';
 import { systemIdOf } from '../../utils/SystemScope.js';
 import { resolveVesselPanelAnchor } from '../../ui/MapVesselPanelLogic.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
 
-let OL = null, LO = null, MI = null, CI = null, STL = null, SPm = null;
+let OL = null, LO = null, MI = null, CI = null, STL = null;
 try { OL = await import('../../ui/Outliner.js'); } catch { /* piny padną */ }
 try { LO = await import('../../ui/LeftOutliner.js'); } catch { /* piny padną */ }
 try { MI = await import('../../ui/MapInsets.js'); } catch { /* piny padną */ }
 try { CI = await import('../../ui/ClickIntentLogic.js'); } catch { /* piny padną */ }
 try { STL = await import('../../ui/ShipTreeLogic.js'); } catch { /* piny padną */ }
-try { SPm = await import('../../ui/StationPanel.js'); } catch { /* piny padną */ }
 
 let pass = 0, fail = 0;
 const ok = (c, label) => { if (c) { pass++; console.log('  ✓ ' + label); } else { fail++; console.log('  ✗ ' + label); } };
@@ -368,7 +369,7 @@ header('R8  podpowiedzi');
 }
 
 // ═══ R9 ═══════════════════════════════════════════════════════════════════════
-header('R9  `MapInsets.right` i konsumenci (kotwica panelu statku, StationPanel)');
+header('R9  `MapInsets.right` i konsument (kotwica panelu statku)');
 {
   reset(); const ro = newRO();
   ok(MI?.getMapInsets?.(K)?.right === 150, 'R9a SEDNO: kolumna widoczna → wcięcie prawe 150');
@@ -394,24 +395,6 @@ header('R9  `MapInsets.right` i konsumenci (kotwica panelu statku, StationPanel)
   ok(pHid?.mode === 'fallback' && pHid.x + 300 > W - 150, `R9d-T3b kolumna schowana — kotwica zapasowa może sięgać krawędzi ekranu (x ${pHid?.x})`);
   if (ro) ro.visible = true;
   reset();
-  // StationPanel — stacja tuż przy prawej krawędzi ekranu. ARKUSZ HUD paczka A (493): to kotwica sprzed zmiany (`sp.x + 18`)
-  // — ścieżka `bodyCardSide` OFF; przy ON panel stoi z boku modelu stacji (keeper `body_card_side_smoke`, kadr z `MapInsets`).
-  const sideWas = GAME_CONFIG.FEATURES.bodyCardSide;
-  GAME_CONFIG.FEATURES.bodyCardSide = false;
-  const sp = SPm?.StationPanel ? new SPm.StationPanel() : null;
-  const st = { id: 'stR', type: 'station', name: 'Stacja R', systemId: 'sys_home', depot: { inventory: new Map() }, modules: [] };
-  EntityManager.add(st);
-  K.threeRenderer.getStationScreenPosition = () => ({ x: W - 30, y: 300 });
-  let threw = null;
-  const placeAt = () => { try { sp._stationId = 'stR'; sp.show(); sp._float.reanchor?.(); sp.draw(recCtx(), W, H); } catch (e) { threw = e; } return sp?._lastRect; };
-  const r1 = sp ? placeAt() : null;
-  const pw = r1?.PW ?? r1?.w ?? 0;
-  ok(!threw && !!r1 && r1.px + pw <= W - 150, `R9e StationPanel przy prawej krawędzi kończy się przed kolumną (px ${r1?.px} + ${pw}${threw ? ', wyjątek ' + threw.message : ''})`);
-  if (ro) ro.visible = false; const r0 = sp ? placeAt() : null; if (ro) ro.visible = true;
-  ok(!!r0 && r0.px + pw > W - 150, `R9f KONTROLA: kolumna schowana — panel może stanąć przy krawędzi ekranu (px ${r0?.px})`);
-  delete K.threeRenderer.getStationScreenPosition;
-  EntityManager.remove?.('stR');
-  GAME_CONFIG.FEATURES.bodyCardSide = sideWas;
 }
 
 // ═══ R10 ══════════════════════════════════════════════════════════════════════

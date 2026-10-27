@@ -22,8 +22,8 @@ import { classifyStationDepot, gatherStationTraders } from './StationPanelLogic.
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import { resolveStationTabHost } from '../utils/StationGroup.js';   // C6c-3 — „Zarządzaj" → zakładka Stacja
 import { getMapInsets }          from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
-import { GAME_CONFIG }           from '../config/GameConfig.js';
-import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc, cardObstacles } from './BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493); T3 strojenie 1 (544)
+import { makeCardSideMemory, cardObstacles } from './BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493); T3 strojenie 1 (544)
+import { objectScreenDisc } from './HudProjection.js';
 import { PIN_SWAP_REASON } from './LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 — zamiana przypięcia ciało → stacja
 
 // Wymiary
@@ -118,7 +118,7 @@ export class StationPanel extends BaseOverlay {
     const bodyH = Math.max(colH(left), colH(right));
     const PH = HEADER_H + PAD + bodyH + PAD + BTN_H + PAD;   // header + kolumny + „Zarządzaj"
 
-    // Kotwica: ekranowa pozycja stacji + offset; null (za kamerą) → fallback lewy-górny róg mapy.
+    // Kotwica: z boku modelu stacji; null (za kamerą) → lewy-górny róg mapy.
     const b  = this._getOverlayBounds(W, H);
     // Wcięcia obszaru mapy — jedno źródło (`MapInsets`, ARKUSZ UI U2-2): za lewym outlinerem (gdy widoczny nad mapą),
     // nad paskiem nawigacji i Dokiem taktycznym. Góra — z granic overlayu (pas zakładek grupy przy otwartym overlayu).
@@ -126,22 +126,14 @@ export class StationPanel extends BaseOverlay {
     b.ox = ins.left;
     b.ow = Math.max(80, W - ins.left - ins.right);
     b.oh = Math.max(40, H - b.oy - ins.bottom);
-    let ax, ay;
-    if (isBodyCardSideOn(GAME_CONFIG.FEATURES)) {
-      // ARKUSZ HUD paczka A (493) — karta z boku modelu stacji (prawo, flip w lewo), px logiczne z projektora HUD; strona
-      // trzymana (histereza — bez migotania lewo↔prawo przy zoomie). REFORMA ZAKŁADEK T3, strojenie 1 (544): panel statku przy
-      // prawym outlinerze jest przeszkodą — panel stacji staje po wolnej stronie modelu.
-      this._sideMem ??= makeCardSideMemory();
-      const pl = this._sideMem.place({ key: this._stationId, disc: objectScreenDisc(window.KOSMOS, 'station', this._stationId), PW, PH,
-        bounds: { ox: b.ox, oy: b.oy, ow: b.ow, oh: b.oh }, obstacles: cardObstacles(window.KOSMOS), now: performance.now() });
-      ax = pl.px; ay = pl.py;
-    } else {
-      const sp = window.KOSMOS?.threeRenderer?.getStationScreenPosition?.(this._stationId);
-      if (sp) { ax = sp.x + 18;     ay = sp.y - PH / 2; }
-      else    { ax = b.ox + 12;     ay = b.oy + 12; }
-    }
+    // ARKUSZ HUD paczka A (493) — karta z boku modelu stacji (prawo, flip w lewo), px logiczne z projektora HUD; strona
+    // trzymana (histereza — bez migotania lewo↔prawo przy zoomie). REFORMA ZAKŁADEK T3, strojenie 1 (544): panel statku przy
+    // prawym outlinerze jest przeszkodą — panel stacji staje po wolnej stronie modelu.
+    this._sideMem ??= makeCardSideMemory();
+    const pl = this._sideMem.place({ key: this._stationId, disc: objectScreenDisc(window.KOSMOS, 'station', this._stationId), PW, PH,
+      bounds: { ox: b.ox, oy: b.oy, ow: b.ow, oh: b.oh }, obstacles: cardObstacles(window.KOSMOS), now: performance.now() });
     // C1 (S3.4b) — drag override kotwicy; place() clampuje panel do obszaru mapy.
-    const { px, py } = this._float.place(ax, ay, PW, PH, b);
+    const { px, py } = this._float.place(pl.px, pl.py, PW, PH, b);
     // Rect + strefa-drag (pas nagłówka POZA przyciskami [✏][▼][✕]) do przeciągania (tryBeginDrag).
     this._lastRect = { px, py, PW, PH, b, dragZone: { x: px, y: py, w: PW - 70, h: HEADER_H } };
 

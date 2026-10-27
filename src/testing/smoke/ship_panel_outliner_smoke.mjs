@@ -10,32 +10,37 @@
 // i wykonane z atrapą `this`.
 //
 // PINY:
-//   S0  moduł `ShipPanelAnchorLogic` + flaga `shipPanelOutliner` (brak klucza = OFF; w `GameConfig` — ON)
+//   S0  moduł `ShipPanelAnchorLogic` (flaga kroku `shipPanelOutliner` na stałe ON od T4 — predykat i klucz usunięte)
 //   S1  kotwica wiersz → prostokąt: x = W − 150 − 300 (prawa krawędź = lewa krawędź kolumny), górna krawędź = wiersz
 //       statku; 300 / 360; klamra do obszaru mapy (dół nad pasem — wiersz u dołu listy); okna 1280×720 i 1280×833
 //   S2  przewinięcie: wiersz poza listą → kotwica przy górnej / dolnej krawędzi listy, łącznik tylko przy widocznym
 //       wierszu; panel idzie za przewijaniem; statek w zwiniętym układzie → nagłówek układu; „W drodze”
-//   S3  zapas (D-TR-8): kolumna ukryta („.”), overlay, Dok rozwinięty → dzisiejsza kotwica zapasowa (prawdziwy
-//       `FloatingPanel`); powrót kolumny → wiersz
-//   S4  `UIManager` (wykonanie wyciętych metod): `_vesselPanelBounds` przy ON = kotwica wiersza, przy OFF = dzisiejsza
-//       kotwica (KONTROLA); bez przeciągania przy ON; tryb Y (D-TR-10, 542) — panel się nie rysuje, klik / kółko /
-//       blokada kamery wyłączone, prostokąt zdjęty
+//   S3  zapas (D-TR-8): kolumna ukryta („.”), overlay, Dok rozwinięty → kotwica zapasowa (geometria dawnego pływającego
+//       panelu — klamra 4 px wyliczona w keeperze); powrót kolumny → wiersz
+//   S4  `UIManager` (wykonanie wyciętych metod): `_shipPanelAtOutliner` = kotwica wiersza; bez przeciągania (dawny panel
+//       pływający usunięty); tryb Y (D-TR-10, 542) — panel się nie rysuje, klik / kółko / blokada kamery wyłączone,
+//       prostokąt panelu T5 zdjęty (`clear`)
 //   S5  mutex (D-TR-9): N == 1 → panel statku; N ≥ 2 → grupa; węzeł floty → flota, zaznaczenie statku zdjęte
 //   S6  wejścia ×5 (mapa, prawy outliner, Dok taktyczny, etykieta HUD, Tab) — każde daje N == 1 i panel przy wierszu
 //   S7  zwinięcie: zmiana zaznaczenia → panel przy nowym wierszu; odznaczenie; Esc (kaskada bez zmian); przełączenie
-//       układu — statek spoza układu docelowego zdjęty, z docelowego (Tab, 2. klik §7.8) zostaje; OFF — jak dziś
-//   S8  rozbiórka (D-TR-13, 543): `fleet:disbandRequest` dopiero po potwierdzeniu (`_handleHit` przy ON); OFF — od razu
+//       układu — statek spoza układu docelowego zdjęty, z docelowego (Tab, 2. klik §7.8) zostaje
+//   S8  rozbiórka (D-TR-13, 543): `fleet:disbandRequest` dopiero po potwierdzeniu (`_handleHit`)
 //   S9  D-TR-14 (539): klik ciała / stacji na mapie nie zdejmuje zaznaczenia statku (scena + renderer); pustka — zdejmuje
 //   S10 montaż: panel rysowany PO outlinerze (świeży układ listy w tej samej klatce); `seamRight`; klucz i18n
 //   S11 STROJENIE 1 (Finding 545) — karta walki jako przeszkoda kotwicy, okno 1280×720, scena starcia (prawdziwy `CombatHUD`):
 //       panel przy wierszu przesunięty w pionie nad kartę (łącznik, gdy wiersz w zasięgu), „Obserwuj” odsłonięte; brak
 //       miejsca → kotwica zapasowa; KONTROLE: bez przeszkody panel zakrywa „Obserwuj”, bez starcia i w oknie właściciela —
 //       bez zmian; kolejność kliku przy ON — panel przed kartą walki (rysunek = klik)
-//   S12 STROJENIE 1 (Finding 544) — `UIManager`: prostokąt panelu z ostatniej klatki jako przeszkoda kart (tylko przy ON),
+//   S12 STROJENIE 1 (Finding 544) — `UIManager`: prostokąt panelu z ostatniej klatki jako przeszkoda kart,
 //       zmiana prostokąta zamawia klatkę (logika kart — `body_card_side_smoke` C6)
 //   S13 STROJENIE 1 (Finding 547) — PL „🗑 Rozbiórka (zwrot 75%)”; tytuł okna potwierdzenia z tego samego klucza
 //   ⚠ S4k (strojenie 1) — bramka kliku panelu w `_vesselPanelClick` (wołana z `handleClick` przed / po karcie walki).
 //
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `shipPanelOutliner` na stałe ON —
+//   S0b / S0c (flaga) zastąpione pinem braku predykatu i klucza; sekcje OFF usunięte (S4c, S4e, S4g, S7l, S8i, S9e, S12e /
+//   S12f; połowy OFF S7g, S9a); S3 — wyrocznia kotwicy zapasowej bez `FloatingPanel`; S4 / S10 / S11j / S11k — dawny panel
+//   pływający (`_vesselPanelBounds`, przeciąganie, `drawVesselPanel` w `UIManager`) usunięty: kotwica wiersza z
+//   `_shipPanelAtOutliner`, rysunek i klik panelu T5; S4b (wysokość 360 px dawnego panelu T3) — wysokość podaje panel T5.
 // ⚠ Moduł POWSTAJE w T3 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -47,10 +52,7 @@ import { setLocale, t } from '../../i18n/i18n.js';
 import { isEnemyVessel } from '../../entities/Vessel.js';
 import { worldToGameplay } from '../../utils/CoordTransform.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
-import { COSMIC, BOTTOM_RESERVED } from '../../config/LayoutConfig.js';
 import { resolveVesselPanelAnchor, resolveMapSelectionSurface } from '../../ui/MapVesselPanelLogic.js';
-import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc } from '../../ui/BodyCardSideLogic.js';
-import { FloatingPanel } from '../../ui/FloatingPanel.js';
 import * as CI from '../../ui/ClickIntentLogic.js';
 import { CombatHUD } from '../../ui/CombatHUD.js';
 
@@ -82,8 +84,6 @@ const call = (fn, self, ...a) => { try { return fn ? fn.apply(self, a) : undefin
 const callAsync = async (fn, self, ...a) => { try { return fn ? await fn.apply(self, a) : undefined; } catch (e) { return `WYJĄTEK: ${e.message}`; } };
 const tick = () => new Promise((r) => (globalThis.__origSetTimeout ?? setTimeout)(r, 1));   // env odracza setTimeout(…, 0) do flusha
 const FEATURES = GAME_CONFIG.FEATURES;
-const FLAG_WAS = FEATURES.shipPanelOutliner;
-const setFlag = (v) => { if (v === undefined) delete FEATURES.shipPanelOutliner; else FEATURES.shipPanelOutliner = v; };
 
 setLocale('pl');
 const W = 1280;
@@ -208,15 +208,10 @@ const mShip = compileMethod(UI, '_shipPanelAtOutliner', {
   resolveRowAnchor: SPA?.resolveRowAnchor, shipRowKeys: SPA?.shipRowKeys, computeShipPanelPlacement: SPA?.computeShipPanelPlacement,
   getMapInsets: MI?.getMapInsets,
 });
-const mBounds = compileMethod(UI, '_vesselPanelBounds', {
-  GAME_CONFIG, COSMIC, BOTTOM_RESERVED, MVP_COMPACT_H: 300, MVP_SELECT_H: 360, UI_SCALE: 1, getMapInsets: MI?.getMapInsets,
-  isBodyCardSideOn, objectScreenDisc, makeCardSideMemory, resolveVesselPanelAnchor, isShipPanelOutlinerOn: SPA?.isShipPanelOutlinerOn,
-});
-const mDrag = compileMethod(UI, 'tryBeginVesselPanelDrag', { GAME_CONFIG, isShipPanelOutlinerOn: SPA?.isShipPanelOutlinerOn });
 const mDockHidden = compileMethod(UI, '_shipPanelDockHidden', { GAME_CONFIG, shipPanelHiddenByDock: SPA?.shipPanelHiddenByDock });
 const mPanelHit = compileMethod(UI, '_vesselPanelHit', {});
 const mSyncSwitch = compileMethod(UI, '_syncShipPanelOnSystemSwitch', {
-  GAME_CONFIG, isShipPanelOutlinerOn: SPA?.isShipPanelOutlinerOn, syncShipPanelOnSystemSwitch: SPA?.syncShipPanelOnSystemSwitch,
+  GAME_CONFIG, syncShipPanelOnSystemSwitch: SPA?.syncShipPanelOnSystemSwitch,
 });
 const mCycle = compileMethod(UI, 'cycleSelectedVessel', { isEnemyVessel, clickObject: CI.clickObject, vesselTarget: CI.vesselTarget, EventBus });
 const mPick = compileMethod(GS, '_selectFromClickPick', { GAME_CONFIG, isEnemyVessel, keepShipSelectionOnMapClick: SPA?.keepShipSelectionOnMapClick });
@@ -229,15 +224,15 @@ const mTrClick = compileMethod(TRS, 'handleClick', {
 const shipPanel = (H = 720, panelH = 300) => { draw(H); return call(mShip, { _outliner: ro, _selectedVesselId: sel[0] ?? null }, W, H, 300, panelH); };
 
 // ═══ S0 ═══════════════════════════════════════════════════════════════════════
-header('S0  moduł i flaga');
+header('S0  moduł (flaga kroku `shipPanelOutliner` na stałe ON od T4)');
 {
-  const API = ['SHIP_PANEL_W', 'isShipPanelOutlinerOn', 'shipRowKeys', 'resolveRowAnchor', 'computeShipPanelPlacement',
+  const API = ['SHIP_PANEL_W', 'shipRowKeys', 'resolveRowAnchor', 'computeShipPanelPlacement',
     'shipPanelHiddenByDock', 'syncShipPanelOnSystemSwitch', 'keepShipSelectionOnMapClick', 'confirmThenDisband'];
   ok(!!SPA && API.every((k) => k in SPA), `S0a ShipPanelAnchorLogic eksportuje: ${API.join(', ')}`);
-  ok(SPA?.isShipPanelOutlinerOn?.({}) === false && SPA?.isShipPanelOutlinerOn?.({ shipPanelOutliner: true }) === true
-    && SPA?.isShipPanelOutlinerOn?.({ shipPanelOutliner: 'true' }) === false, 'S0b brak klucza = OFF; tylko `true` włącza');
-  ok(FLAG_WAS === true, `S0c \`GameConfig.FEATURES.shipPanelOutliner\` — ON (jest: ${FLAG_WAS})`);
-  ok(!!mShip && !!mBounds && !!mDrag && !!mDockHidden && !!mPanelHit && !!mSyncSwitch && !!mCycle && !!mPick && !!mLeft && !!mTrClick,
+  ok(!!SPA && SPA.isShipPanelOutlinerOn === undefined && FEATURES.shipPanelOutliner === undefined
+    && !/\bshipPanelOutliner:\s*(true|false)/.test(src('../../config/GameConfig.js')),
+    'S0b flaga kroku `shipPanelOutliner` na stałe ON (T4) — predykat `isShipPanelOutlinerOn` i klucz w GameConfig usunięte');
+  ok(!!mShip && !!mDockHidden && !!mPanelHit && !!mSyncSwitch && !!mCycle && !!mPick && !!mLeft && !!mTrClick,
     'S0d metody T3 wycięte ze źródeł i skompilowane');
 }
 
@@ -245,7 +240,6 @@ header('S0  moduł i flaga');
 // Lista (dom bieżący, przewinięcie 0): „W drodze” · Skoczek · Kepler-4799 · WOJENNE · Grupa Alfa (Miecz, Tarcza) · Fregata ·
 // CARGO · Frachtowiec 01…40 · Kurier · Bellatrix · Alioth — okno listy 610 px przy 1280×720, treść dłuższa.
 header('S1  kotwica wiersz → prostokąt (D-TR-7 (a))');
-setFlag(true);
 {
   reset(); ro._scrollY = 0; UM.setSelectedVesselId('v2'); draw();
   const z = zoneOf('v2');
@@ -319,20 +313,22 @@ header('S2  przewinięcie listy, układ zwinięty, „W drodze”');
 }
 
 // ═══ S3 ═══════════════════════════════════════════════════════════════════════
-header('S3  zapas (D-TR-8 (a)) — dzisiejsza kotwica zapasowa');
+header('S3  zapas (D-TR-8 (a)) — kotwica zapasowa (geometria dawnego pływającego panelu)');
 {
-  const legacy = (H, h) => {   // dzisiejsza kotwica zapasowa: obszar mapy jak przy OFF, `resolveVesselPanelAnchor(null)`, prawdziwy FloatingPanel
+  // Wyrocznia: obszar mapy z marginesem 8 px, `resolveVesselPanelAnchor(null)` (prawy górny róg), klamra 4 px — arytmetyka
+  // dawnego `FloatingPanel._clamp` (moduł usunięty w T4) wyliczona tu, niezależnie od `computeShipPanelPlacement`.
+  const legacy = (H, h) => {
     const i = ins(); const oy = i.top + 8;
     const b = { ox: i.left + 8, oy, ow: Math.max(80, W - i.left - i.right - 16), oh: Math.max(60, H - i.bottom - oy) };
     const a = resolveVesselPanelAnchor(null, 1, b, 300, h, 24);
-    const q = new FloatingPanel().place(a.x, a.y, 300, h, b);
-    return { x: q.px, y: q.py };
+    const minX = b.ox + 4, maxX = Math.max(minX, b.ox + b.ow - 300 - 4), minY = b.oy + 4, maxY = Math.max(minY, b.oy + b.oh - h - 4);
+    return { x: Math.max(minX, Math.min(maxX, a.x)), y: Math.max(minY, Math.min(maxY, a.y)) };
   };
   reset({ sel: ['v1'] }); ro.visible = false;
   const p = shipPanel();
   const l = legacy(720, 300);
   ok(p?.mode === 'fallback' && p.x === l.x && p.y === l.y && p.seam === false && p.tab === null,
-    `S3a SEDNO: kolumna schowana („.”) → kotwica zapasowa jak dziś (${p?.x},${p?.y} = ${l.x},${l.y}), pełna ramka`);
+    `S3a SEDNO: kolumna schowana („.”) → kotwica zapasowa (${p?.x},${p?.y} = ${l.x},${l.y}), pełna ramka`);
   ok(p?.x === W - 320, `S3b prawy górny róg obszaru mapy bez kolumny (x ${p?.x} = W − 320)`);
   ro.visible = true;
   const back = shipPanel();
@@ -347,52 +343,34 @@ header('S3  zapas (D-TR-8 (a)) — dzisiejsza kotwica zapasowa');
 }
 
 // ═══ S4 ═══════════════════════════════════════════════════════════════════════
-header('S4  UIManager — `_vesselPanelBounds`, przeciąganie, tryb Y (D-TR-10)');
+header('S4  UIManager — `_shipPanelAtOutliner`, bez przeciągania, tryb Y (D-TR-10)');
 {
   reset({ sel: ['v2'] }); ro._scrollY = 0; draw();
-  const self = { _fleetOverlay: { _missionConfig: null }, _vesselPanelFloat: new FloatingPanel(), _vesselPanelSide: null,
-    get _selectedVesselId() { return sel[0] ?? null; }, _outliner: ro, _shipPanelAtOutliner: mShip };
-  const on = call(mBounds, self, W, 720);
+  const self = { get _selectedVesselId() { return sel[0] ?? null; }, _outliner: ro };
+  const on = call(mShip, self, W, 720, 200, 300);
   const z = zoneOf('v2');
-  ok(!!z && on?.x === W - 450 && on?.y === z.y && on?.mode === 'row', `S4a SEDNO: przy ON \`_vesselPanelBounds\` = kotwica wiersza (${on?.x},${on?.y})`);
-  self._fleetOverlay._missionConfig = { step: 'select' };
-  const on360 = call(mBounds, self, W, 720);
-  ok(on360?.h === 360 && on360?.y === z?.y, 'S4b krok wyboru celu — 360 px przy wierszu');
-  self._fleetOverlay._missionConfig = null;
-  setFlag(false);
-  const off = call(mBounds, self, W, 720);
-  const i = ins(); const oy = i.top + 8;
-  const b = { ox: i.left + 8, oy, ow: Math.max(80, W - i.left - i.right - 16), oh: Math.max(60, 720 - i.bottom - oy) };
-  const a = resolveVesselPanelAnchor(null, 1, b, 300, 300, 24);
-  const q = new FloatingPanel().place(a.x, a.y, 300, 300, b);
-  ok(off?.x === q.px && off?.y === q.py && off?.mode === undefined, `S4c KONTROLA: przy OFF dzisiejsza kotwica (statek bez sprite'a → róg ${off?.x},${off?.y})`);
-  setFlag(true);
-  // przeciąganie
-  const dragSelf = { _mapSurface: () => 'vessel', overlayManager: { isAnyOpen: () => false },
-    _fleetOverlay: { _vesselPanelRect: { x: 100, y: 100, w: 300, h: 300 } }, _vesselPanelFloat: new FloatingPanel() };
-  ok(call(mDrag, dragSelf, 150, 110) === false && dragSelf._vesselPanelFloat.isDragging() === false, 'S4d przy ON — bez przeciągania (pas nagłówka nie chwyta)');
-  setFlag(false);
-  ok(call(mDrag, dragSelf, 150, 110) === true, 'S4e KONTROLA: przy OFF ten sam punkt chwyta (jak dziś)');
-  setFlag(true);
+  ok(!!z && on?.x === W - 350 && on?.y === z.y && on?.mode === 'row', `S4a SEDNO: \`_shipPanelAtOutliner\` (panel T5, 200 px) = kotwica wiersza (${on?.x},${on?.y})`);
+  const on260 = call(mShip, self, W, 720, 260, 300);
+  ok(on260?.x === W - 410 && on260?.y === z?.y && on260?.w === 260, 'S4b konfigurator (260 px) — przy wierszu, prawa krawędź nadal przy kolumnie');
+  // przeciąganie — dawny panel pływający usunięty
+  ok(!/tryBeginVesselPanelDrag|handleVesselPanelDragMove|endVesselPanelDrag|_vesselPanelFloat|_vesselPanelBounds/.test(UI),
+    'S4d bez przeciągania — `UIManager` nie ma już dawnego panelu pływającego (przeciąganie, `_vesselPanelBounds`)');
   // tryb Y
   const dock = (exp) => ({ tacticalDock: { isExpanded: () => exp } });
   ok(call(mDockHidden, dock(true)) === true && call(mDockHidden, dock(false)) === false, 'S4f tryb Y: rozwinięty Dok chowa panel statku, zwinięty — nie');
-  setFlag(false);
-  ok(call(mDockHidden, dock(true)) === false, 'S4g przy OFF rozwinięty Dok niczego nie chowa (542 jak dziś)');
-  setFlag(true);
-  const hitSelf = (hidden) => ({ _fleetOverlay: { _vesselPanelRect: { x: 100, y: 100, w: 300, h: 300 } }, _shipPanelDockHidden: () => hidden });
+  const hitSelf = (hidden) => ({ _shipPanelHud: { rect: { x: 100, y: 100, w: 200, h: 300 } }, _shipPanelDockHidden: () => hidden });
   ok(call(mPanelHit, hitSelf(true), 200, 200) === false, 'S4h blokada kamery (`_vesselPanelHit`) wyłączona przy panelu schowanym przez Dok');
   ok(call(mPanelHit, hitSelf(false), 200, 200) === true, 'S4h-k KONTROLA: panel widoczny — kursor nad nim blokuje kamerę (jak dziś)');
   const dr = body(UI, '  _draw() {');
   ok(/!this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{/.test(dr), 'S4i rysunek panelu za bramką trybu Y');
-  ok(/else if \(this\._fleetOverlay && this\._shipPanelDockHidden\(\)\) \{\s*this\._fleetOverlay\._vesselPanelRect = null;/.test(dr),
-    'S4j panel schowany przez Dok — prostokąt z poprzedniej klatki zdjęty (klik, kółko, przeszkoda etykiet HUD)');
+  ok(/if \(!shipPanelHudDrawn\) this\._shipPanelHud\?\.clear\?\.\(\);/.test(dr),
+    'S4j panel schowany przez Dok (nienarysowany) — `clear`: prostokąt z poprzedniej klatki zdjęty (klik, kółko, przeszkoda etykiet HUD)');
   const hc = body(UI, '  handleClick(x, y) {');
   const hw = body(UI, '  handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {');
   const vpc = body(UI, '  _vesselPanelClick(x, y) {');
-  ok(/!this\._shipPanelDockHidden\(\) && this\._fleetOverlay\?\.handleVesselPanelClick\?\.\(x, y\)/.test(vpc)
+  ok(/!this\._shipPanelDockHidden\(\) && this\._shipPanelHud\.handleClick\(x, y,/.test(vpc)
     && /this\._vesselPanelClick\(x, y\)/.test(hc)
-    && /!this\._shipPanelDockHidden\(\) && this\._fleetOverlay\?\.handleVesselPanelScroll\?\.\(x, y, delta\)/.test(hw),
+    && /!this\._shipPanelDockHidden\(\) && this\._shipPanelHud\?\.handleWheel\?\.\(x, y, delta\)/.test(hw),
     'S4k klik i kółko panelu za bramką trybu Y (klik — `_vesselPanelClick`, wołany z `handleClick`)');
 }
 
@@ -442,7 +420,7 @@ header('S7  zwinięcie — zmiana zaznaczenia, odznaczenie, Esc, przełączenie 
   reset({ sel: ['v2'] }); ro._scrollY = 0; const p1 = shipPanel(); const z1 = zoneOf('v2');
   UM.setSelectedVesselId('c05'); const p2 = shipPanel(); const z2 = zoneOf('c05');
   ok(!!z1 && !!z2 && p1?.y === z1.y && p2?.y === z2.y && p1.y !== p2.y, `S7a zmiana zaznaczenia → panel przeskakuje do nowego wiersza (${p1?.y} → ${p2?.y})`);
-  ok(resolveMapSelectionSurface([], { flagOn: true }) === 'none', 'S7b KONTROLA: odznaczenie → brak powierzchni (panel się zwija, jak dziś)');
+  ok(resolveMapSelectionSurface([]) === 'none', 'S7b KONTROLA: odznaczenie → brak powierzchni (panel się zwija, jak dziś)');
   const esc = GS.slice(GS.indexOf("if (e.key === 'Escape') {"), GS.indexOf("if (e.key === 'Enter' && um?.isPickerActive?.())"));
   const iP = esc.indexOf('um.cancelPickerMode()'), iR = esc.indexOf('rcm.hide()'), iS = esc.indexOf('um.clearSelection()');
   ok(iP > 0 && iR > iP && iS > iR, 'S7c KONTROLA: Esc — kaskada bez zmian: picker → menu PPM → zaznaczenie statku (panel się zwija)');
@@ -450,15 +428,14 @@ header('S7  zwinięcie — zmiana zaznaczenia, odznaczenie, Esc, przełączenie 
   const f = SPA?.syncShipPanelOnSystemSwitch;
   let cleared = 0; const clr = () => cleared++;
   const V = (sys) => ({ id: 'q', systemId: sys });
-  ok(call(f, null, { flagOn: true, vesselIds: ['q'], vessel: V('sys_home'), systemId: 'sys_A', clear: clr }) === 'clear' && cleared === 1,
+  ok(call(f, null, { vesselIds: ['q'], vessel: V('sys_home'), systemId: 'sys_A', clear: clr }) === 'clear' && cleared === 1,
     'S7d SEDNO: statek spoza układu docelowego → zaznaczenie zdjęte');
-  ok(call(f, null, { flagOn: true, vesselIds: ['q'], vessel: V('sys_A'), systemId: 'sys_A', clear: clr }) === 'keep' && cleared === 1,
+  ok(call(f, null, { vesselIds: ['q'], vessel: V('sys_A'), systemId: 'sys_A', clear: clr }) === 'keep' && cleared === 1,
     'S7e statek w układzie docelowym → zostaje');
-  ok(call(f, null, { flagOn: true, vesselIds: ['q'], vessel: V(null), systemId: 'sys_A', clear: clr }) === 'clear' && cleared === 2,
+  ok(call(f, null, { vesselIds: ['q'], vessel: V(null), systemId: 'sys_A', clear: clr }) === 'clear' && cleared === 2,
     'S7f statek w skoku (układ `null`) → zdjęty');
-  ok(call(f, null, { flagOn: true, vesselIds: ['q', 'r'], vessel: V('sys_home'), systemId: 'sys_A', clear: clr }) === null
-    && call(f, null, { flagOn: false, vesselIds: ['q'], vessel: V('sys_home'), systemId: 'sys_A', clear: clr }) === null && cleared === 2,
-    'S7g grupa N ≥ 2 i flaga OFF — bez zmian (D-TR-9, dzisiejszy kod)');
+  ok(call(f, null, { vesselIds: ['q', 'r'], vessel: V('sys_home'), systemId: 'sys_A', clear: clr }) === null && cleared === 2,
+    'S7g grupa N ≥ 2 — bez zmian (D-TR-9)');
   // słuchacz w UIManagerze (wycięta metoda) + rejestracja
   reset({ sel: ['v1'] });
   call(mSyncSwitch, UM, 'sys_A');
@@ -477,9 +454,7 @@ header('S7  zwinięcie — zmiana zaznaczenia, odznaczenie, Esc, przełączenie 
   VMAP.clear(); for (const [k, v] of save) VMAP.set(k, v);
   ok(ops.some((o) => o[0] === 'switch' && o[1] === 'sys_A') && syncRes === 'keep' && sel[0] === 'v3' && !ops.some((o) => o[0] === 'clear'),
     `S7k Tab na „Badacza” (Alioth): przełączenie układu, słuchacz T3 „zostaje” — panel przy wierszu (sync ${syncRes}, ops ${JSON.stringify(ops)})`);
-  setFlag(false); reset({ sel: ['v1'] }); call(mSyncSwitch, UM, 'sys_A');
-  ok(ops.length === 0 && sel[0] === 'v1', 'S7l KONTROLA: przy OFF przełączenie układu zaznaczenia nie zdejmuje (jak dziś)');
-  setFlag(true); reset();
+  reset();
 }
 
 // ═══ S8 ═══════════════════════════════════════════════════════════════════════
@@ -507,7 +482,7 @@ header('S8  rozbiórka z potwierdzeniem (D-TR-13 (a), Finding 543)');
   if (fmo) fmo._confirmVesselDisband = () => pend2;
   call(fmo?._handleHit, fmo, { type: 'disband', data: { vesselId: 'v1' } });
   await tick();
-  ok(!!fmo && disbands().length === 0 && sel[0] === 'v1', 'S8f `_handleHit` przy ON: okno otwarte — żądania brak, statek nadal zaznaczony');
+  ok(!!fmo && disbands().length === 0 && sel[0] === 'v1', 'S8f `_handleHit`: okno otwarte — żądania brak, statek nadal zaznaczony');
   const before = disbands().length;
   res2(true); await tick(); await tick();
   ok(before === 0 && disbands().length === 1 && disbands()[0][1]?.vesselId === 'v1' && sel.length === 0,
@@ -516,10 +491,7 @@ header('S8  rozbiórka z potwierdzeniem (D-TR-13 (a), Finding 543)');
   call(fmo?._handleHit, fmo, { type: 'disband', data: { vesselId: 'v1' } });
   await tick(); await tick();
   ok(!!fmo && disbands().length === 0 && sel[0] === 'v1', 'S8h anulowanie — bez żądania, statek zaznaczony');
-  setFlag(false); reset({ sel: ['v1'] });
-  call(fmo?._handleHit, fmo, { type: 'disband', data: { vesselId: 'v1' } });
-  ok(!!fmo && disbands().length === 1, 'S8i KONTROLA: przy OFF — żądanie od razu, jednym klikiem (jak dziś)');
-  setFlag(true); reset();
+  reset();
   const conf = body(FMO_SRC, '  async _confirmVesselDisband(vessel) {');
   ok(/showConfirmModal\(\{[\s\S]*?t\('fleet\.disbandVesselConfirm'/.test(conf) && /danger:\s*true/.test(conf),
     'S8j okno: istniejący `ConfirmModal` (Esc / tło = anuluj), treść `fleet.disbandVesselConfirm`, przycisk niebezpieczny');
@@ -531,16 +503,12 @@ header('S8  rozbiórka z potwierdzeniem (D-TR-13 (a), Finding 543)');
 header('S9  D-TR-14 (a), Finding 539 — klik ciała / stacji na mapie nie zdejmuje zaznaczenia statku');
 {
   const k = SPA?.keepShipSelectionOnMapClick;
-  ok(call(k, null, { shipPanelOutliner: true }, 'body') === true && call(k, null, { shipPanelOutliner: true }, 'station') === true
-    && call(k, null, { shipPanelOutliner: true }, null) === false && call(k, null, {}, 'body') === false,
-    'S9a reguła: ON — ciało i stacja zachowują zaznaczenie, pustka nie; OFF — jak dziś');
+  ok(call(k, null, 'body') === true && call(k, null, 'station') === true && call(k, null, null) === false,
+    'S9a reguła: ciało i stacja zachowują zaznaczenie, pustka nie');
   const run = (objectHit) => { reset({ sel: ['v1'] }); call(mPick, { uiManager: UM }, null, false, null, objectHit); return [...ops]; };
   ok(JSON.stringify(run('body')) === '[]' && sel[0] === 'v1', 'S9b SEDNO: klik tarczy ciała → zaznaczenie statku zostaje (scena)');
   ok(JSON.stringify(run('station')) === '[]', 'S9c klik modelu stacji → zaznaczenie zostaje');
   ok(JSON.stringify(run(null)) === '[["clear"]]', 'S9d KONTROLA: pusta mapa → odznaczenie (jak dziś)');
-  setFlag(false);
-  ok(JSON.stringify(run('body')) === '[["clear"]]', 'S9e KONTROLA: przy OFF klik ciała odznacza (dzisiejszy kod)');
-  setFlag(true);
   // `_handleTacticalLeftClick` (gałąź canvas — zwykła gra) przekazuje trafienie z pickera renderera
   const G = { planetScene: null, uiManager: UM, _resolveClickTarget: () => null, _selectFromClickPick: mPick, threeRenderer: {} };
   const ev = { target: { id: 'planet-canvas', tagName: 'CANVAS', closest: () => null }, ctrlKey: false, clientX: 640, clientY: 360 };
@@ -573,14 +541,11 @@ header('S9  D-TR-14 (a), Finding 539 — klik ciała / stacji na mapie nie zdejm
 header('S10 montaż');
 {
   const dr = body(UI, '  _draw() {');
-  const iOut = dr.indexOf('this._outliner.draw('), iPanel = dr.indexOf('drawVesselPanel?.(');
+  const iOut = dr.indexOf('this._outliner.draw('), iPanel = dr.indexOf('this._drawShipPanelHud(ctx, W, H)');
   ok(iOut > 0 && iPanel > iOut, 'S10a KONTROLA: rysunek — prawy outliner PRZED panelem statku (układ listy z tej samej klatki)');
-  ok(/compact: GAME_CONFIG\.FEATURES\?\.mapVesselPanelCompact === true, seamRight: r\.seam === true \}\);\s*if \(r\.tab\) this\._drawShipPanelTab\(ctx, r\);/.test(dr),
-    'S10b panel przy wierszu — wspólna krawędź (`seamRight`) i łącznik (`_drawShipPanelTab`)');
-  const vb = body(UI, '  _vesselPanelBounds(W, H) {');
-  const iOn = vb.indexOf('if (isShipPanelOutlinerOn(GAME_CONFIG.FEATURES)) return this._shipPanelAtOutliner(W, H, w, h);');
-  ok(iOn > 0 && iOn < vb.indexOf('isBodyCardSideOn(') && iOn < vb.indexOf('this._vesselPanelFloat.place('),
-    'S10c przy ON — kotwica wiersza PRZED kotwicą z boku modelu (493) i `FloatingPanel` (529: pływający panel wyłączony)');
+  const sph = body(UI, '  _drawShipPanelHud(ctx, W, H) {');
+  ok(/const p = this\._shipPanelAtOutliner\(W, H, size\.w, size\.h\);/.test(sph) && /if \(p\.tab\) this\._drawShipPanelTab\(ctx, p\);/.test(sph),
+    'S10b panel przy wierszu — kotwica `_shipPanelAtOutliner` i łącznik (`_drawShipPanelTab`)');
   const dp = body(FMO_SRC, '  drawVesselPanel(ctx, x, y, w, h, opts = {}) {');
   ok(/if \(opts\.seamRight === true\) \{[\s\S]*?\} else \{\s*ctx\.strokeRect\(x \+ 0\.5, y \+ 0\.5, w - 1, h - 1\);/.test(dp),
     'S10d płyta panelu: bez `seamRight` — ramka jak dotąd (strokeRect)');
@@ -592,7 +557,6 @@ header('S10 montaż');
 // ═══ S11 ══════════════════════════════════════════════════════════════════════
 header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, okno 1280×720, scena starcia');
 {
-  setFlag(true);
   // Prawdziwy `CombatHUD` na atrapie kanwy; świat starcia podstawiony na czas rysowania karty (geometria karty jak w grze).
   const hudCtx = () => ({ font: '10px monospace', textAlign: 'left',
     measureText(s) { const px = Number(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1]) || 10; return { width: [...String(s)].length * px * 0.6 }; },
@@ -672,29 +636,29 @@ header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, o
   const p945 = panelWith(hud945, 945); const z945 = zoneOf('v2');
   ok(!!hud945.getPanelRect() && p945?.shifted !== true && p945.y === z945?.y && !over(p945, hud945.getPanelRect()),
     'S11i KONTROLA: okno właściciela (1280×945) — karta niżej, panel przy wierszu bez przesunięcia (K10)');
-  // E — kolejność kliku: przy ON panel PRZED kartą walki i panelem stacji (rysowany po nich); przy OFF — w dawnym miejscu
+  // E — kolejność kliku: panel PRZED kartą walki i panelem stacji (rysowany po nich)
   const hc = body(UI, '  handleClick(x, y) {');
-  const iFirst = hc.indexOf('if (shipPanelFirst && this._vesselPanelClick(x, y)) return true;');
+  const iFirst = hc.indexOf('if (this._vesselPanelClick(x, y)) return true;');
   const iCombat = hc.indexOf('this.combatHud?.handleClick?.(x, y)');
   const iStation = hc.indexOf('this.stationPanel?.handleClick?.(x, y)');
-  const iLate = hc.indexOf('if (!shipPanelFirst && this._vesselPanelClick(x, y)) return true;');
-  ok(/const shipPanelFirst = isShipPanelOutlinerOn\(GAME_CONFIG\.FEATURES\);/.test(hc) && iFirst > 0 && iCombat > iFirst && iStation > iCombat && iLate > iStation,
-    'S11j kolejność kliku: przy ON panel statku przed kartą walki i panelem stacji (rysunek = klik); przy OFF — w dawnym miejscu');
+  ok(iFirst > 0 && iCombat > iFirst && iStation > iCombat && hc.split('this._vesselPanelClick(x, y)').length === 2,
+    'S11j kolejność kliku: panel statku przed kartą walki i panelem stacji (rysunek = klik), jedno wywołanie');
   const mVpc = compileMethod(UI, '_vesselPanelClick', {});
   const vself = (hidden, surf = 'vessel', ovl = false) => ({ overlayManager: { isAnyOpen: () => ovl }, _mapSurface: () => surf,
-    _shipPanelDockHidden: () => hidden, _fleetOverlay: { handleVesselPanelClick: () => true } });
+    _shipPanelDockHidden: () => hidden, _shipPanelHud: { rect: { x: 0, y: 0, w: 10, h: 10 }, handleClick: () => true } });
+  const civWas = K.civMode; K.civMode = true;
   ok(call(mVpc, vself(false), 1, 1) === true && call(mVpc, vself(true), 1, 1) === false && call(mVpc, vself(false, 'group'), 1, 1) === false
     && call(mVpc, vself(false, 'vessel', true), 1, 1) === false, 'S11k `_vesselPanelClick` — ta sama bramka co rysunek (overlay, powierzchnia, tryb Y)');
+  K.civMode = civWas;
   reset();
 }
 
 // ═══ S12 ══════════════════════════════════════════════════════════════════════
 header('S12 strojenie 1 (Finding 544) — panel statku jako przeszkoda kart: prostokąt z ostatniej klatki (`UIManager`)');
 {
-  const mGet = compileMethod(UI, 'getShipPanelObstacle', { GAME_CONFIG, isShipPanelOutlinerOn: SPA?.isShipPanelOutlinerOn });
+  const mGet = compileMethod(UI, 'getShipPanelObstacle', { GAME_CONFIG });
   const mNote = compileMethod(UI, '_noteShipPanelDrawn', {});
   ok(!!mGet && !!mNote, 'S12-0 metody strojenia (`getShipPanelObstacle`, `_noteShipPanelDrawn`) wycięte ze źródła i skompilowane');
-  setFlag(true);
   const self = { _shipPanelDrawn: null, _dirty: false };
   const r1 = { x: 830, y: 162, w: 300, h: 300, mode: 'row' };
   const ch1 = call(mNote, self, r1);
@@ -707,10 +671,7 @@ header('S12 strojenie 1 (Finding 544) — panel statku jako przeszkoda kart: pro
   self._dirty = false;
   ok(call(mNote, self, null) === true && self._dirty === true && call(mGet, self) === null, 'S12d panel zniknął — bez przeszkody, klatka zamówiona');
   call(mNote, self, r1);
-  setFlag(false);
-  ok(call(mGet, self) === null, 'S12e przy OFF — bez przeszkody (karty jak dziś), choć prostokąt zapisany');
-  setFlag(true);
-  ok(call(mGet, self)?.x === 830, 'S12f przy ON ten sam zapis daje przeszkodę');
+  ok(call(mGet, self)?.x === 830, 'S12f ten sam zapis znowu daje przeszkodę');
 }
 
 // ═══ S13 ══════════════════════════════════════════════════════════════════════
@@ -726,6 +687,5 @@ header('S13 strojenie 1 (Finding 547) — PL „Rozbiórka”, tytuł potwierdze
     'S13c KONTROLA: tytuł okna potwierdzenia i etykieta przycisku — ten sam klucz (`fleet.disbandReturn`; od T3)');
 }
 
-setFlag(FLAG_WAS);
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

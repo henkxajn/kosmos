@@ -1,5 +1,5 @@
 // FleetPanelHudLayer — REFORMA ZAKŁADEK T6 (TABS_REFORM_PLAN.md §5.9): lekki renderer PANELU FLOTY i PANELU GRUPY N ≥ 2
-// przy prawym outlinerze W IDIOMIE ETYKIET z T5 (za flagą `FEATURES.fleetPanelHud`; logika — czysty `FleetPanelHudLogic`).
+// przy prawym outlinerze W IDIOMIE ETYKIET z T5 (flaga kroku `fleetPanelHud` — na stałe ON od T4; logika — czysty `FleetPanelHudLogic`).
 // Rysuje na `#ui-canvas` w miejscu panelu statku T5 (`UIManager._draw` — po karcie walki, przed dokiem; w klatce co najwyżej
 // jeden z trzech paneli — mutex `fleetHudSurface`): ciemny półprzezroczysty pasek bez ramki, font motywu, kolory z ról,
 // cyfry w kratce — maszyneria tekstu (pomiar, pamięć linii, kratka cyfr) odziedziczona z `ShipPanelHudLayer` co do metody;

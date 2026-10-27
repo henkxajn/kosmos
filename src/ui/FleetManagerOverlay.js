@@ -34,8 +34,8 @@ import { isSystemExplored } from '../utils/SystemExploration.js';
 import { resolveSystemReveal } from '../utils/SystemReveal.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
-// REFORMA ZAKŁADEK T3 (D-TR-7, D-TR-13) — panel statku przy outlinerze: wspólna krawędź, rozbiórka z potwierdzeniem.
-import { isShipPanelOutlinerOn, confirmThenDisband } from './ShipPanelAnchorLogic.js';
+// REFORMA ZAKŁADEK T3 (D-TR-13) — rozbiórka z potwierdzeniem.
+import { confirmThenDisband } from './ShipPanelAnchorLogic.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
 import { buildFleetReturnPlan } from '../utils/FleetReturnPlan.js';
 import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal } from '../utils/CameraFrame.js';
@@ -2743,12 +2743,9 @@ export class FleetManagerOverlay {
         break;
       }
       case 'disband':
-        // REFORMA ZAKŁADEK T3 (D-TR-13 (a), Finding 543) — przy `shipPanelOutliner` rozbiórka (nieodwracalna) dopiero po
-        //   potwierdzeniu w istniejącym oknie `ConfirmModal` (Esc / tło = anuluj); przy OFF — jak dotąd, jednym klikiem.
-        if (isShipPanelOutlinerOn(GAME_CONFIG.FEATURES)) { this._disbandVesselConfirmed(zone.data.vesselId); break; }
-        EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
-        this._setSelectedVesselViaUI(null);
-        this._missionConfig = null;
+        // REFORMA ZAKŁADEK T3 (D-TR-13 (a), Finding 543) — rozbiórka (nieodwracalna) dopiero po potwierdzeniu w istniejącym
+        //   oknie `ConfirmModal` (Esc / tło = anuluj); zaznaczenie i konfigurator zdejmuje `_disbandVesselConfirmed`.
+        this._disbandVesselConfirmed(zone.data.vesselId);
         break;
       case 'manual_refuel':
         window.KOSMOS?.vesselManager?.manualRefuel?.(zone.data.vesselId);

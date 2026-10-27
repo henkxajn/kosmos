@@ -6,8 +6,8 @@
 //     bramki wywiadu: `unknown` pomijany, `rumor` anonimowy „?”); statek bez widocznego sprite'a — bez etykiety (485);
 //   • tekst na półprzezroczystym ciemnym pasku bez ramki (`THEME.bgPrimary`, 0,72 zaznaczony / 0,55 reszta), podkreślenie =
 //     początek nitki do obiektu; kolonie WERSALIKAMI z odstępem liter, statki małymi literami, zaznaczony jedyny pogrubiony;
-//     druga linia z danymi tylko dla zaznaczonego i najechanego (hover MAPY — picker statku tylko widocznych, 485; tarcza ciała
-//     pod kursorem — raycast renderera; własny hover etykiety); cyfry w stałej kratce (D-HUD-6);
+//     rozwinięcie z danymi dla zaznaczonego i najechanego (REFORMA ZAKŁADEK T1; hover MAPY — picker statku tylko widocznych,
+//     485; tarcza ciała pod kursorem — raycast renderera; własny hover etykiety); cyfry w stałej kratce (D-HUD-6);
 //   • stos planeta + księżyce + stacje (`stationGroupOf`) — LOD po średnicy tarczy kotwicy: „NOWA ZIEMIA +2” / szyna /
 //     każdy przy swoim obiekcie;
 //   • anti-overlap wszystkich etykiet + kadr obszaru mapy (`MapInsets`, 514); przeszkody: tarcze ciał, odczyt zasięgu radaru
@@ -31,18 +31,18 @@ import { clusterScreenPoints } from './FleetPictureLogic.js';
 import { clickObject, vesselsTarget } from './ClickIntentLogic.js';
 import { colonyRadarRangeAU, readoutCenter } from './HudRadarLogic.js';
 import {
-  HUD_LABELS, LABEL_PRIO, isHudLabelsOn, stackLOD, atLeastLOD, collapsedText, groupByAnchor, placeLabels,
+  HUD_LABELS, LABEL_PRIO, isHudLabelsOn, stackLOD, atLeastLOD, collapsedText, groupByAnchor,
   threadGeometry, railRows, railBlockSize, resolveLabelClick, layoutTabular, truncateText, updateBorn, fadeAlpha,
   pointInRect, labelCandidates, rectOverlapArea,
 } from './HudLabelLogic.js';
-// REFORMA ZAKŁADEK T1 (flaga `labelHover`) — rozwinięcie informacyjne i etykieta na żądanie; przy OFF nic stąd nie biegnie.
+// REFORMA ZAKŁADEK T1 — rozwinięcie informacyjne i etykieta na żądanie (flaga kroku `labelHover` na stałe ON od T4).
 import {
-  isLabelHoverOn, LABEL_HOVER, makeHoverMemory, expansionFade, resolveHoverTarget, hoverObjectKey, pickStationAt,
+  LABEL_HOVER, makeHoverMemory, expansionFade, resolveHoverTarget, hoverObjectKey, pickStationAt,
   colonyExpansionLines, bodyExpansionLines, starExpansionLines, foreignColonyExpansionLines, stationExpansionLines,
   foreignStationExpansionLines, vesselExpansionLines, enemyVesselExpansionLines, depositSummary, pinFor, updatePins,
   placeLabelsPinned, makeYieldMemory,
 } from './LabelHoverLogic.js';
-import { objectScreenDisc } from './BodyCardSideLogic.js';
+import { objectScreenDisc } from './HudProjection.js';
 import { buildShipEntry } from './FleetPictureLogic.js';
 import { colonyQueueCount } from './SystemTreeLogic.js';
 import { gatherStationTraders } from './StationPanelLogic.js';
@@ -53,9 +53,9 @@ import { resolveHomeColony } from '../utils/TransferStore.js';
 import { resolveSystemReveal } from '../utils/SystemReveal.js';
 import { isSystemExplored, HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
 import { STATIONS } from '../data/StationData.js';
-// REFORMA ZAKŁADEK T2 (flaga `labelPin`) — przypięcie etykiety z akcjami; przy OFF nic stąd nie biegnie.
+// REFORMA ZAKŁADEK T2 — przypięcie etykiety z akcjami (flaga kroku `labelPin` na stałe ON od T4; w trybie cywilizacji).
 import {
-  isLabelPinActive, LABEL_PIN, pinnedContentKey, bodyPinButtons, stationPinButtons, layoutButtonRows, homeDistanceLine,
+  LABEL_PIN, pinnedContentKey, bodyPinButtons, stationPinButtons, layoutButtonRows, homeDistanceLine,
   visibleDeposits, depositRows, trafficRows, moduleRows, storageRows, limitRows, toggleOpenList, openListFor, pinHitAt,
   runPinAction, yieldToPinnedLabel, pinLabelPlacement,
 } from './LabelPinLogic.js';
@@ -82,10 +82,9 @@ export class HudLabelLayer {
     this._last = null;               // ostatnio zebrane (odczyt bramki)
     this._measure = new Map();       // pomiar tekstu: `font|tekst` → szerokość
     this._lineCache = new Map();     // gotowe linie (układ z kratką cyfr): `font|odstęp|ucięcie|tekst` → linia
-    this._subCache = new Map();      // druga linia statku: id → { t (czas realny), text } (zasięgi zmienia tylko technologia)
     this._ptsCache = null;           // stan statków do etykiet (`gatherVesselLabels`): { key, t, points } — `SUB_TTL_MS`
     this._fontStatus = null;         // `document.fonts.status` — zmiana czyści pamięć pomiaru (font doładowany po pomiarze)
-    // REFORMA ZAKŁADEK T1 (`labelHover`): stan najechania (czas realny), przypięcia etykiet rozwiniętych (I8.3), narodziny
+    // REFORMA ZAKŁADEK T1: stan najechania (czas realny), przypięcia etykiet rozwiniętych (I8.3), narodziny
     // rozwinięć (fade-in), pamięć treści (TTL) i wyboru obiektu pod kursorem.
     this._hoverMem = makeHoverMemory();
     this._pins = new Map();          // klucz etykiety → { cand, baseH }
@@ -93,7 +92,7 @@ export class HudLabelLayer {
     this._expBorn = new Map();       // klucz treści (`body:X` / `station:Y` / `vessel:V`) → chwila rozwinięcia
     this._expCache = new Map();      // klucz treści → { t, loc, tac, lines }
     this._pickCache = null;          // { key, t, v } — `_hoverPick`
-    // REFORMA ZAKŁADEK T2 (`labelPin`): strefy przypiętej etykiety z ostatniej klatki (przyciski, linia nazwy, całość), lista
+    // REFORMA ZAKŁADEK T2: strefy przypiętej etykiety z ostatniej klatki (przyciski, linia nazwy, całość), lista
     // otwarta w przypięciu (akordeon) i pamięć treści przypięcia (TTL jak treść rozwinięcia).
     this._pinZones = [];             // { kind: 'btn'|'name'|'body', id?, ck?, key, target?, x, y, w, h }
     this._pinOpen = null;            // { ck, list } — `toggleOpenList`
@@ -245,19 +244,16 @@ export class HudLabelLayer {
     for (const [a, w] of anchors) key += `|a${a}:${q(w.r ?? 0)}`;
     for (const r of this._cardRects(K)) key += `|k${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
     for (const p of points) { const w = vworld.get(p.id); key += `|v${p.id}:${w ? `${q(w.x)},${q(w.y)},${q(w.z)}` : ''}:${p.name}:${p.fleetId ?? ''}:${p.alertCount}:${p.activityKey ?? ''}:${p.etaYear != null ? Math.round(p.etaYear) : ''}`; }
-    // REFORMA ZAKŁADEK T1 — rozwinięcie i etykieta na żądanie (flaga `labelHover`; przy OFF — klucz i stan jak dziś).
-    let t1 = null;
-    if (isLabelHoverOn(F.features)) {
-      t1 = this._t1Prepare(F, { bodies, pictureCtx, sel, sys });
-      key += t1.key;
-    }
-    // REFORMA ZAKŁADEK T2 — przypięcie z akcjami (flaga `labelPin`; przy OFF — klucz i stan jak dziś).
+    // REFORMA ZAKŁADEK T1 — rozwinięcie i etykieta na żądanie.
+    const t1 = this._t1Prepare(F, { bodies, pictureCtx, sel, sys });
+    key += t1.key;
+    // REFORMA ZAKŁADEK T2 — przypięcie z akcjami (w trybie cywilizacji).
     let t2 = null;
-    if (t1 && isLabelPinActive(F.features) && K.civMode) {
+    if (K.civMode) {
       t2 = this._t2Prepare(F, sel);
       key += t2.key;
     } else if (this._pinZones.length || this._pinOpen) { this._pinZones = []; this._pinOpen = null; }
-    this._prep = { on: true, bodies, anchors, points, vworld, hover, homeId, t1, t2 };
+    this._prep = { on: true, bodies, anchors, points, vworld, homeId, t1, t2 };
     return key;
   }
 
@@ -424,7 +420,7 @@ export class HudLabelLayer {
     if (ptr && !ptr.overUI) {
       // T2: kursor nad przypiętą etykietą — najechana jest ona (przycisk > etykieta > tarcza pod spodem), bez rozwinięcia
       // obiektu, którego tarczę etykieta przykrywa.
-      const pz = isLabelPinActive(F.features) && this._prep?.t2?.ck ? pinHitAt(this._pinZones, ptr.lx, ptr.ly) : null;
+      const pz = this._prep?.t2?.ck ? pinHitAt(this._pinZones, ptr.lx, ptr.ly) : null;
       if (pz) target = { kind: 'label', key: pz.key };
       else {
         const z = resolveLabelClick(this._zones, ptr.lx, ptr.ly);
@@ -443,7 +439,7 @@ export class HudLabelLayer {
     const groups = groupByAnchor(bodies);
     const lead = sel.leadId ?? (sel.vesselIds?.[0] ?? null);
     // T2: przypięty członek stosu ma własną etykietę — zwinięta „+N” reszty nazywa głowę RESZTY grupy (lustro `collect`).
-    const pinCk = isLabelPinActive(F.features) && K.civMode ? pinnedContentKey(sel) : null;
+    const pinCk = K.civMode ? pinnedContentKey(sel) : null;
     // Klucz treści obiektu: grupa „+N” → głowa grupy (kotwica — ciało, które etykieta nazywa); klaster statków → prowadzący
     // (gdy w klastrze), inaczej pierwszy z klucza.
     const contentKeyOf = (objKey) => {
@@ -629,16 +625,6 @@ export class HudLabelLayer {
     return t('hudLabel.stationPop', fmtInt(b.pop, getLocale()), fmtInt(b.cap, getLocale())) + (badges ? '  ' + badges : '');
   }
 
-  _subVesselCached(id, F) {
-    const loc = getLocale();
-    const c = this._subCache.get(id);
-    if (c && c.loc === loc && F.now - c.t >= 0 && F.now - c.t < SUB_TTL_MS) return c.text;
-    const text = this._subVessel(F.K.vesselManager?.getVessel?.(id), F.K);
-    if (this._subCache.size > 200) this._subCache.clear();
-    this._subCache.set(id, { t: F.now, loc, text });
-    return text;
-  }
-
   _subVessel(v, K) {
     if (!v) return null;
     const loc = getLocale();
@@ -663,27 +649,10 @@ export class HudLabelLayer {
     return { w: w + R.PAD_X * 2, h };
   }
 
-  _bodyLines(b, { selected, sub, collapsedOthers = 0 }, F) {
-    const R = HUD_LABELS;
-    const size = (THEME.fontSizeNormal ?? 11) + R.MAIN_SIZE_DELTA;
-    const subSize = THEME.fontSizeSmall ?? 9;
-    const loc = getLocale();
-    const isColony = b.kind === 'colony';
-    const name = isColony ? String(b.name).toLocaleUpperCase(loc) : String(b.name);
-    const main = this._line(collapsedOthers > 0 ? collapsedText(name, collapsedOthers) : name,
-      { size, bold: selected, spacing: isColony ? R.LETTER_SPACING_COLONY : 0, maxW: R.MAX_NAME_PX });
-    const lines = [main];
-    if (sub) {
-      const text = b.kind === 'colony' ? this._subColony(b, F) : this._subStation(b);
-      if (text) lines.push(this._line(text, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
-    }
-    return lines;
-  }
-
   /**
-   * REFORMA ZAKŁADEK T1 — linie etykiety ciała / stacji: pierwsza linia jak `_bodyLines` (wersaliki kolonii, „+N”, pogrubienie
-   * zaznaczonej), pod nią — gdy obiekt ma rozwinięcie — treść z pamięci `_t1Prepare` (zastępuje dzisiejszą drugą linię:
-   * pierwsza linia rozwinięcia kolonii i stacji to ta sama treść). `baseH` — wysokość bez rozwinięcia (przypięcie, I8.3).
+   * REFORMA ZAKŁADEK T1 — linie etykiety ciała / stacji: pierwsza linia — nazwa (wersaliki kolonii, „+N”, pogrubienie
+   * zaznaczonej), pod nią — gdy obiekt ma rozwinięcie — treść z pamięci `_t1Prepare` (pierwsza linia rozwinięcia kolonii
+   * i stacji to dawna druga linia z danymi). `baseH` — wysokość bez rozwinięcia (przypięcie, I8.3).
    */
   _t1BodyLines(b, { selected, ck, collapsedOthers = 0 }, F, T) {
     const R = HUD_LABELS;
@@ -759,12 +728,11 @@ export class HudLabelLayer {
     const pushItem = (it) => { items.push(it); };
     const isSelBody = (b) => (b.kind === 'colony' && sel.entityId != null && String(sel.entityId) === String(b.id))
       || (b.kind === 'station' && sel.stationId != null && String(sel.stationId) === String(b.id));
-    const isHovBody = (b, key) => P.hover.labelKey === key || (b.kind === 'colony' && P.hover.bodyId != null && String(P.hover.bodyId) === String(b.id));
-    // REFORMA ZAKŁADEK T1 (`labelHover`): linie z rozwinięciem (treść z `_t1Prepare`), priorytet najechanej (na wierzchu)
-    // i przypięcie etykiety rozwiniętej (I8.3). Przy OFF — `T` puste, ścieżki jak dziś.
-    const T = P.t1 ?? null;
+    // REFORMA ZAKŁADEK T1: linie z rozwinięciem (treść z `_t1Prepare`), priorytet najechanej (na wierzchu) i przypięcie
+    // etykiety rozwiniętej (I8.3).
+    const T = P.t1;
     const bodyCk = (b) => (b.kind === 'colony' ? 'body:' : 'station:') + b.id;
-    const hovPrio = (ck) => (T && T.hov.key != null && ck === T.hoverContent ? LABEL_HOVER.HOVER_PRIO : null);
+    const hovPrio = (ck) => (T.hov.key != null && ck === T.hoverContent ? LABEL_HOVER.HOVER_PRIO : null);
     // REFORMA ZAKŁADEK T2 (strojenie 1, zachowanie 5): tarcze, na które rozwinięcie i przypięcie nie wchodzą — tarcza swojego ciała
     // (`it.clear`), a do tego tarcza ciała-gospodarza stacji i tarcza kotwicy stosu (księżyc → planeta).
     const pinKeepOut = (kind, id) => {
@@ -783,8 +751,8 @@ export class HudLabelLayer {
       }
       return out;
     };
-    // T2 włączone (flaga `labelPin`) — także bez przypiętego obiektu (reguła rozwinięcia najechania niżej). Przy OFF — jak T1.
-    const T2on = !!T && isLabelPinActive(F.features) && !!K.civMode;
+    // T2 (w trybie cywilizacji) — także bez przypiętego obiektu (reguła rozwinięcia najechania niżej). Poza nim — jak T1.
+    const T2on = !!K.civMode;
     // T1 (I8.3): rozwinięta etykieta stoi na kandydacie sprzed rozwinięcia (`pinFor`) i rośnie w dół. T2 (strojenie 1): przy
     // POJAWIENIU się rozwinięcia (bez zapamiętanego przypięcia położenia) ta sama reguła co przypięcie — nadmiar nad tarczą
     // (`pinKeepOut`) w górę dokładnie o tyle, bez miejsca w kadrze — pod tarczę (`pinLabelPlacement`); wynik zapamiętany
@@ -801,10 +769,10 @@ export class HudLabelLayer {
       }
       return it;
     };
-    // REFORMA ZAKŁADEK T2 (`labelPin`): przypięty obiekt (zaznaczenie) ma własną etykietę przy SWOIM obiekcie — członek stosu
-    // (zwinięta „+N”, szyna) wychodzi z grupy (przypięta etykieta zawsze rozwinięta, z wierszem akcji; jej położenie nie zależy
-    // od innych wierszy szyny), reszta grupy — LOD jak dziś. Przy OFF — `T2` puste, ścieżki jak dziś.
-    const T2 = (T && P.t2?.ck) ? P.t2 : null;
+    // REFORMA ZAKŁADEK T2: przypięty obiekt (zaznaczenie) ma własną etykietę przy SWOIM obiekcie — członek stosu (zwinięta „+N”,
+    // szyna) wychodzi z grupy (przypięta etykieta zawsze rozwinięta, z wierszem akcji; jej położenie nie zależy od innych
+    // wierszy szyny), reszta grupy — LOD jak dziś. Poza trybem cywilizacji (bez przypięcia) — `T2` puste.
+    const T2 = P.t2?.ck ? P.t2 : null;
     let pinnedMember = null;
     // T2: przypięta etykieta nie stoi pod kartą UI rysowaną nad warstwą HUD (panel statku przy outlinerze): gdy karta zasłania
     // jej przypięte miejsce, przypięcie położenia przepada — rozkład kładzie ją obok karty (raz), od następnej klatki znów stoi.
@@ -841,19 +809,19 @@ export class HudLabelLayer {
       const ad = aw ? (pushDisc(anchorId, aw) ?? discOf(aw)) : null;
       let state = stackLOD(ad ? 2 * ad.r : NaN, proj1.length);
       // T1: członek inny niż kotwica — zaznaczony ALBO najechany (tarcza) — widoczny (co najmniej szyna).
-      const selIdx = proj1.findIndex((x) => (T ? T.contentKeys.has(bodyCk(x.b)) : isSelBody(x.b)));
+      const selIdx = proj1.findIndex((x) => T.contentKeys.has(bodyCk(x.b)));
       if (selIdx > 0) state = atLeastLOD(state, 'rail');           // zaznaczony członek inny niż kotwica — widoczny
       if (state === 'single' || state === 'spread') {
         for (const { b, d } of proj1) {
           const key = b.key, selected = isSelBody(b);
-          const L = T ? this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T) : null;
-          const lines = L ? L.lines : this._bodyLines(b, { selected, sub: selected || isHovBody(b, key) }, F);
+          const L = this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T);
+          const lines = L.lines;
           const box = this._labelBox(lines);
           const it = { key, kind: b.kind, ax: d.x, ay: d.y, clear: d.r, w: box.w, h: box.h, lines, selected,
-            role: 'primary', prio: (L?.expanded ? hovPrio(bodyCk(b)) : null) ?? (selected ? LABEL_PRIO.selected : b.home ? LABEL_PRIO.home : b.kind === 'colony' ? LABEL_PRIO.colony : LABEL_PRIO.station),
+            role: 'primary', prio: (L.expanded ? hovPrio(bodyCk(b)) : null) ?? (selected ? LABEL_PRIO.selected : b.home ? LABEL_PRIO.home : b.kind === 'colony' ? LABEL_PRIO.colony : LABEL_PRIO.station),
             target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
-          if (L) Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
-          pushItem(L ? pinIt(it, L.baseH, b.kind === 'station' ? 'station' : 'body', b.id) : it);
+          Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
+          pushItem(pinIt(it, L.baseH, b.kind === 'station' ? 'station' : 'body', b.id));
         }
         continue;
       }
@@ -864,8 +832,8 @@ export class HudLabelLayer {
         const key = 'g:' + anchorId;
         const selected = isSelBody(head.b);
         // T1: najechana zwinięta „+N” — rozwinięcie GŁOWY grupy (ciało, które etykieta nazywa), bez rozwijania szyny.
-        const L = T ? this._t1BodyLines(head.b, { selected, ck: bodyCk(head.b), collapsedOthers: proj1.length - 1 }, F, T) : null;
-        const lines = L ? L.lines : this._bodyLines(head.b, { selected, sub: selected || isHovBody(head.b, key) || P.hover.labelKey === key, collapsedOthers: proj1.length - 1 }, F);
+        const L = this._t1BodyLines(head.b, { selected, ck: bodyCk(head.b), collapsedOthers: proj1.length - 1 }, F, T);
+        const lines = L.lines;
         const box = this._labelBox(lines);
         // T2: grupa bez przypiętego członka — kotwica wyszła do własnej etykiety, a głowa reszty nie jest kotwicą: klik zwiniętej
         // etykiety zaznacza obiekt, który etykieta nazywa (nie przypiętą kotwicę). Poza tym — kotwica (jak dziś).
@@ -873,35 +841,33 @@ export class HudLabelLayer {
           ? (head.b.kind === 'colony' ? { type: 'body', id: head.b.id, entity: head.b.body, systemId: sys } : { type: 'station', id: head.b.id, systemId: sys })
           : { type: 'body', id: anchorId, entity: anchorEntity, systemId: sys };
         const it = { key, kind: 'group', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: box.w, h: box.h, lines, selected,
-          role: 'primary', prio: (L?.expanded ? hovPrio(bodyCk(head.b)) : null) ?? (selected ? LABEL_PRIO.selected : LABEL_PRIO.group), members: proj1.map((x) => x.b.key),
+          role: 'primary', prio: (L.expanded ? hovPrio(bodyCk(head.b)) : null) ?? (selected ? LABEL_PRIO.selected : LABEL_PRIO.group), members: proj1.map((x) => x.b.key),
           target };
-        if (L) Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
-        pushItem(L ? pinIt(it, L.baseH) : it);
+        Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
+        pushItem(pinIt(it, L.baseH));
         continue;
       }
       // Szyna — blok wierszy (każdy wiersz z własną strefą kliku).
       const rows = proj1.map(({ b }) => {
         const rkey = b.key, selected = isSelBody(b);
-        const L = T ? this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T) : null;
-        const lines = L ? L.lines : this._bodyLines(b, { selected, sub: selected || isHovBody(b, rkey) }, F);
+        const L = this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T);
+        const lines = L.lines;
         const box = this._labelBox(lines);
         const row = { key: rkey, kind: b.kind, w: box.w, h: box.h, lines, selected,
           target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
-        if (L) Object.assign(row, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha, baseH: L.baseH, ck: bodyCk(b) });
+        Object.assign(row, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha, baseH: L.baseH, ck: bodyCk(b) });
         return row;
       });
       const size = railBlockSize(rows);
       const anySel = rows.some((r) => r.selected);
       const it = { key: 'r:' + anchorId, kind: 'rail', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: size.w, h: size.h,
         rows, selected: anySel, role: 'primary', prio: anySel ? LABEL_PRIO.selected : LABEL_PRIO.group };
-      if (T) {
-        const exp = rows.filter((r) => r.expanded);
-        it.expanded = exp.length > 0;
-        if (exp.some((r) => r.ck === T.hoverContent && T.hov.key != null)) it.prio = LABEL_HOVER.HOVER_PRIO;
-        // Wysokość bloku bez rozwinięć (przypięcie: górna krawędź bloku stoi, wiersze rosną w dół).
-        const baseH = rows.reduce((s, r, i) => s + r.baseH + (i > 0 ? R.ROW_GAP : 0), 0);
-        pushItem(pinIt(it, baseH));
-      } else pushItem(it);
+      const exp = rows.filter((r) => r.expanded);
+      it.expanded = exp.length > 0;
+      if (exp.some((r) => r.ck === T.hoverContent && T.hov.key != null)) it.prio = LABEL_HOVER.HOVER_PRIO;
+      // Wysokość bloku bez rozwinięć (przypięcie: górna krawędź bloku stoi, wiersze rosną w dół).
+      const baseH = rows.reduce((s, r, i) => s + r.baseH + (i > 0 ? R.ROW_GAP : 0), 0);
+      pushItem(pinIt(it, baseH));
     }
     // ── REFORMA ZAKŁADEK T2 — przypięty członek stosu: własna etykieta przy swoim obiekcie (nazwa, rozwinięcie T1, przypięcie) ──
     if (T2 && pinnedMember) {
@@ -920,7 +886,7 @@ export class HudLabelLayer {
       }
     }
     // ── REFORMA ZAKŁADEK T1 — etykiety na żądanie (D-TR-1 (a)): ciała i stacje bez etykiety stałej, najechane albo zaznaczone ──
-    if (T) {
+    {
       const size = (THEME.fontSizeNormal ?? 11) + R.MAIN_SIZE_DELTA;
       const subSize = THEME.fontSizeSmall ?? 9;
       for (const dm of T.demand) {
@@ -972,7 +938,6 @@ export class HudLabelLayer {
     const vesselItem = (c, isEnemy) => {
       const single = c.items.length === 1;
       const lead = leadId != null ? c.items.find((p) => String(p.id) === String(leadId)) : null;
-      const hov = c.items.find((p) => (P.hover.vesselId != null && String(p.id) === String(P.hover.vesselId))) ?? null;
       const ids = c.items.map((p) => p.id);
       const key = (isEnemy ? 'e:' : 'k:') + [...ids].map(String).sort().join(',');
       let text;
@@ -993,41 +958,30 @@ export class HudLabelLayer {
       const selected = !!lead;
       const lines = [this._line(text, { size, bold: selected, maxW: R.MAX_NAME_PX })];
       // REFORMA ZAKŁADEK T1: rozwinięcie statku (prowadzący w klastrze, najechany sprite albo etykieta) — treść z pamięci
-      // `_t1Prepare` (obcy statek wg wywiadu — 504); przy OFF — druga linia jak dziś.
-      let t1 = null;
-      if (T) {
-        const sids = ids.map(String), hk = T.hov.key;
-        const ck = (!isEnemy && lead) ? 'vessel:' + lead.id
-          : (hk?.startsWith('vessel:') && sids.includes(hk.slice(7))) ? hk
-          : (hk === 'lbl:' + key ? T.hoverContent : null);
-        const expanded = !!ck && T.contentKeys.has(ck);
-        const baseH = this._labelBox(lines).h;
-        if (expanded) for (const s of T.content.get(ck) ?? []) lines.push(this._line(s, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
-        t1 = { expanded, baseH, expAlpha: expanded ? T.alphaOf(ck) : 0, prio: expanded ? hovPrio(ck) : null };
-      } else {
-        const subFor = lead ?? (hov ?? (P.hover.labelKey === key ? c.items[0] : null));
-        if (subFor && (single || lead || subFor === hov)) {
-          const isAnon = isEnemy && subFor.name === '?';
-          const sub = isAnon ? null : this._subVesselCached(subFor.id, F);
-          if (sub) lines.push(this._line(sub, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
-        }
-      }
+      // `_t1Prepare` (obcy statek wg wywiadu — 504).
+      const sids = ids.map(String), hk = T.hov.key;
+      const ck = (!isEnemy && lead) ? 'vessel:' + lead.id
+        : (hk?.startsWith('vessel:') && sids.includes(hk.slice(7))) ? hk
+        : (hk === 'lbl:' + key ? T.hoverContent : null);
+      const expanded = !!ck && T.contentKeys.has(ck);
+      const baseH = this._labelBox(lines).h;
+      if (expanded) for (const s of T.content.get(ck) ?? []) lines.push(this._line(s, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
+      const t1 = { expanded, baseH, expAlpha: expanded ? T.alphaOf(ck) : 0, prio: expanded ? hovPrio(ck) : null };
       const box = this._labelBox(lines);
       const ax = single ? c.items[0].x : c.x, ay = single ? c.items[0].y : c.y;
       const bracketClear = single && bracketIds.has(String(c.items[0].id)) ? R.BRACKET_HALF * Math.SQRT2 : 0;
       const it = { key, kind: isEnemy ? 'enemy' : 'vessel', ax, ay, clear: single ? Math.max(2, c.items[0].r, bracketClear) : 3, w: box.w, h: box.h, lines,
-        selected, role: isEnemy ? 'foreign' : 'primary', prio: (t1?.prio ?? null) ?? (selected ? LABEL_PRIO.selected : isEnemy ? LABEL_PRIO.enemy : LABEL_PRIO.own),
+        selected, role: isEnemy ? 'foreign' : 'primary', prio: t1.prio ?? (selected ? LABEL_PRIO.selected : isEnemy ? LABEL_PRIO.enemy : LABEL_PRIO.own),
         target: isEnemy ? { type: 'enemy', id: ids[0], systemId: sys } : vesselsTarget(ids, sys) };
-      if (!t1) return it;
       Object.assign(it, { expanded: t1.expanded, expFrom: 1, expAlpha: t1.expAlpha });
       return pinIt(it, t1.baseH);
     };
     // T1: statek najechany (także w trakcie wygasania rozwinięcia) — etykieta widoczna jak przy dzisiejszym najechaniu.
-    const t1Hovered = (c) => !!T && typeof T.hov.key === 'string' && T.hov.key.startsWith('vessel:') && c.items.some((p) => 'vessel:' + p.id === T.hov.key);
+    const t1Hovered = (c) => typeof T.hov.key === 'string' && T.hov.key.startsWith('vessel:') && c.items.some((p) => 'vessel:' + p.id === T.hov.key);
     for (const c of ownClusters) {
       const single = c.items.length === 1;
       const show = !single || c.label === 'fleet' || c.alertCount > 0 || c.items.some((p) => p.selected || (leadId != null && String(p.id) === String(leadId)))
-        || F.tactical || (T ? t1Hovered(c) : (P.hover.vesselId != null && c.items.some((p) => String(p.id) === String(P.hover.vesselId))));
+        || F.tactical || t1Hovered(c);
       if (show) pushItem(vesselItem(c, false));
     }
     for (const c of enemyClusters) pushItem(vesselItem(c, true));
@@ -1041,22 +995,17 @@ export class HudLabelLayer {
     // ── Rozkład (anti-overlap + kadr) ───────────────────────────────────────────────────────────────────────────────
     this._lastPlaceInput = { items, obstacles, rect: map };   // odczyt bramki / keepera (`debugPlacement`)
     // T1: etykiety rozwinięte stoją na przypiętym kandydacie (I8.3), sąsiedzi je omijają, a po końcu rozwinięcia wracają
-    // (`_yieldMem`, kamera nieruszona); przy OFF — rozkład jak dziś.
-    const expandedKeys = T ? new Set(items.filter((it) => it.expanded).map((it) => it.key)) : null;
+    // (`_yieldMem`, kamera nieruszona).
+    const expandedKeys = new Set(items.filter((it) => it.expanded).map((it) => it.key));
     // T2: przypięta etykieta stoi, etykieta rozwinięta T1, której przypięte miejsce weszłoby na nią, ustępuje (I8.3).
     const placeItems = T2 ? yieldToPinnedLabel(items, { rect: map }) : items;
-    if (T) this._yieldMem.step(this._prev, expandedKeys.size > 0, tr?.getCameraMoveEpoch?.() ?? 0);
-    const { placed } = T ? placeLabelsPinned(placeItems, { rect: map, obstacles, prev: this._prev }) : placeLabels(items, { rect: map, obstacles, prev: this._prev });
+    this._yieldMem.step(this._prev, expandedKeys.size > 0, tr?.getCameraMoveEpoch?.() ?? 0);
+    const { placed } = placeLabelsPinned(placeItems, { rect: map, obstacles, prev: this._prev });
     this._prev.clear();
     for (const p of placed) this._prev.set(p.key, p.cand);
-    if (T) {
-      // T2: etykieta, która ustąpiła przypiętej, zapomina dawne przypięcie położenia — od następnej klatki stoi na nowym miejscu.
-      for (const p of placed) if (p.yieldedToPin) this._pins.delete(p.key);
-      updatePins(this._pins, placed, expandedKeys);
-    } else {
-      if (this._pins.size) this._pins.clear();
-      this._yieldMem.reset();
-    }
+    // T2: etykieta, która ustąpiła przypiętej, zapomina dawne przypięcie położenia — od następnej klatki stoi na nowym miejscu.
+    for (const p of placed) if (p.yieldedToPin) this._pins.delete(p.key);
+    updatePins(this._pins, placed, expandedKeys);
     const fading = updateBorn(this._born, placed.map((p) => p.key), F.now);
     // Strefy kliku — prostokąty tekstu (wiersze szyny osobno), w kolejności rysowania.
     const zones = [];
@@ -1084,16 +1033,17 @@ export class HudLabelLayer {
     const um = K?.uiManager;
     const bc = um?._bottomContext?._cardRect;
     if (bc && um?._selectedEntity) out.push({ x: bc.x, y: bc.y, w: bc.w, h: bc.h });
-    // REFORMA ZAKŁADEK T5: panel statku w idiomie etykiet (`shipPanelHud`) — jego prostokąt (przy ON panel T3 bez prostokąta).
-    const vp = um?._shipPanelHud?.rect ?? um?._fleetOverlay?._vesselPanelRect;
+    // REFORMA ZAKŁADEK T5: panel statku w idiomie etykiet — jego prostokąt z ostatniej klatki.
+    const vp = um?._shipPanelHud?.rect;
     if (vp && um?._mapSurface?.() === 'vessel') out.push({ x: vp.x, y: vp.y, w: vp.w, h: vp.h });
-    // REFORMA ZAKŁADEK T6: panel floty / grupy w idiomie etykiet (`fleetPanelHud`) — jego prostokąt z ostatniej klatki (OFF — `null`).
+    // REFORMA ZAKŁADEK T6: panel floty / grupy w idiomie etykiet — jego prostokąt z ostatniej klatki (`null` — nienarysowany).
     const fp = um?._fleetPanelHud?.rect;
     if (fp) out.push({ x: fp.x, y: fp.y, w: fp.w, h: fp.h });
     const sp = K?.stationPanel;
     const sr = sp?._lastRect;
-    // T2: przy `labelPin` panel stacji się nie rysuje (jego stan = przypięcie stacji) — prostokąt z dawnej klatki nie jest przeszkodą.
-    const spDrawn = !(isLabelPinActive(GAME_CONFIG.FEATURES) && K?.civMode);
+    // T2: w trybie cywilizacji panel stacji się nie rysuje (jego stan = przypięcie stacji) — prostokąt z dawnej klatki nie jest
+    // przeszkodą.
+    const spDrawn = !K?.civMode;
     if (sr && spDrawn && sp.visible && !sp._float?.minimized) out.push({ x: sr.px, y: sr.py, w: sr.PW, h: sr.PH });
     return out;
   }
@@ -1252,7 +1202,7 @@ export class HudLabelLayer {
     const tr = K?.threeRenderer;
     // REFORMA ZAKŁADEK T2 — przypięta etykieta: przycisk > linia nazwy (reguła D-UI-5 — przypięty obiekt jest zaznaczeniem, więc
     // klik = kamera) > reszta (klik pochłonięty — nie idzie do mapy); tarcza pod przypiętą etykietą nie wygrywa.
-    if (this._prep?.on && this._prep.t2?.ck && isLabelPinActive(GAME_CONFIG.FEATURES)) {
+    if (this._prep?.on && this._prep.t2?.ck) {
       const pz = pinHitAt(this._pinZones, x, y);
       if (pz) {
         if (pz.kind === 'btn') this._t2Run(pz, K);
@@ -1280,18 +1230,18 @@ export class HudLabelLayer {
 
   /**
    * REFORMA ZAKŁADEK T1 — tożsamość obiektu z rozwinięciem z najechania (`body:X`, `station:Y`, `vessel:V`, `lbl:…`) albo
-   * `null` (flaga OFF, brak najechania). Czyta ją scena (współrzędne pustej mapy nie przykrywają rozwinięcia).
+   * `null` (brak najechania, warstwa wyłączona). Czyta ją scena (współrzędne pustej mapy nie przykrywają rozwinięcia).
    */
   hoverObjectKey() {
-    return this._prep?.on && this._prep.t1 ? (this._prep.t1.hov.key ?? null) : null;
+    return this._prep?.on ? (this._prep.t1.hov.key ?? null) : null;
   }
 
   /**
    * REFORMA ZAKŁADEK T1 — punkt (px logiczne) pod etykietą z ostatniej klatki, pod stacją oglądanego układu albo przy
-   * aktywnym najechaniu (scena: współrzędne pustej mapy nie przykrywają rozwinięcia — 530). Flaga OFF — `false`.
+   * aktywnym najechaniu (scena: współrzędne pustej mapy nie przykrywają rozwinięcia — 530). Warstwa wyłączona — `false`.
    */
   coversPoint(lx, ly) {
-    if (!this._prep?.on || !this._prep.t1) return false;
+    if (!this._prep?.on) return false;
     if (this._prep.t1.hov.key != null || resolveLabelClick(this._zones, lx, ly) != null) return true;
     const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
     const st = [];
@@ -1301,7 +1251,7 @@ export class HudLabelLayer {
 
   /**
    * Finding 530 (REFORMA ZAKŁADEK T5) — czy punkt (px logiczne) leży na strefie etykiety albo przypięcia z ostatniej klatki
-   * (dymek współrzędnych pustej mapy nie pokazuje się nad UI warstwy HUD) — niezależnie od `labelHover` / `labelPin`.
+   * (dymek współrzędnych pustej mapy nie pokazuje się nad UI warstwy HUD).
    */
   coversUiPoint(lx, ly) {
     if (!this._prep?.on) return false;

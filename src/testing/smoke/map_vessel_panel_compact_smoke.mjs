@@ -24,17 +24,20 @@
 // PINY (mają PAŚĆ przed zmianą, przejść po niej)
 //   E1  RÓWNOŚĆ: zbiór akcji w `compact` ≡ zbiór akcji Rejestru (ta sama metoda, ta sama instancja)
 //   E2  GOLDEN NIETKNIĘTY: Rejestr BEZ `compact` = dzisiejsza sygnatura Z GEOMETRIĄ stref
-//   E3  KILL-SWITCH: `{compact:false}` (runtime OFF po flipie) ≡ brak `opts`, CO DO PIKSELA
-//   M2  BRAMKA RODZICA: kompakt NIEOSIĄGALNY przy `mapVesselPanel:false` (wykonanie + źródło)
+//   E3  `{compact:false}` ≡ brak `opts`, CO DO PIKSELA (`_drawRight` odróżnia jawne `false` od braku `opts`)
+//   M   (T4) flagi `mapVesselPanel` / `mapVesselPanelCompact` usunięte; `UIManager` nie rysuje dawnego panelu T3
 //   R1  RENDER: `compact` realnie SKRACA panel — karta katalogowa znika, akcje idą do góry
 //   R2  PICKER: krok `select` mieści listę celów w ~360 px (panel rośnie na czas wyboru)
-//   A1  KOTWICA: px CSS → px LOGICZNE (`/uiScale`), offset prawo-dół, `null` → fallback
-//   A2  panel nie zakrywa sprite'a statku
-//   D1  DRAG na PRAWDZIWYM `FloatingPanel`: dragPos > kotwica, `reanchor()` wraca, clamp
-//   D2  pin ŹRÓDŁOWY: host (FloatingPanel + kotwica + drag) zamontowany w `UIManager`
-//   ⚠ PRZECELOWANE 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): A1, A2, D1, D2 i Z1 opisują
-//     kotwicę przy STATKU — ścieżkę `shipPanelOutliner` OFF (dzisiejszy kod, piny bez zmian). Przy ON panel stoi przy
-//     wierszu prawego outlinera bez przeciągania — warianty „-T3” (pełne piny: `ship_panel_outliner_smoke`).
+//   A1  KOTWICA ZAPASOWA (`resolveVesselPanelAnchor(null)`): prawy górny róg obszaru mapy; NaN = brak pozycji
+//   ⚠ PRZECELOWANE 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): A1, A2, D1, D2 i Z1 opisywały
+//     kotwicę przy STATKU — ścieżkę `shipPanelOutliner` OFF. Przy ON panel stoi przy wierszu prawego outlinera bez
+//     przeciągania — warianty „-T3” (pełne piny: `ship_panel_outliner_smoke`).
+//   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): pływający panel statku usunięty z `UIManager`
+//     — A1 (kotwica przy statku: px CSS → px logiczne, offset) i A2 (panel obok sprite'a) przycięte do kotwicy zapasowej i
+//     wariantów „-T3”; D1 / D2 (przeciąganie na `FloatingPanel`, host w `UIManager`) usunięte; M / M2 (flagi
+//     `mapVesselPanelCompact` / `mapVesselPanel`) zastąpione pinem M usunięcia; S2 / Z / K1 — trasa kółka i kolejność
+//     malowania panelu statku T5 (`_drawShipPanelHud`). C1–R2 i S1 (dawny panel T3 `drawVesselPanel` — wyrocznia trybu
+//     kompaktowego) — do kolejnego kroku T4.
 //   S1  Finding 260: kółko przewija panel i jest POCHŁANIANE (kontrola: poza panelem `false`)
 //   S2  pin ŹRÓDŁOWY: clamp przewijania ma JEDNO źródło (`_applyRightScroll`), nie dwie kopie
 //   Z   KOLEJNOŚĆ: etykiety mapy rysowane PRZED klastrem paneli (Z1/Z1b panel statku,
@@ -47,10 +50,7 @@
 //   live-gate'cie B1 (6/6) i gate'cie kolejności malowania (4/4, `23523af`). Stary kształt
 //   pinowałby od tej chwili DEFEKT — panel niewidoczny bez wpisu w konsoli. Powód tutaj,
 //   bo odwrócony pin bez zapisanego powodu jest nieodróżnialny od poluzowanego.
-// ⚠ M2 i E3 NIE SĄ fail-first tego commitu — przechodzą po OBU stronach flipu, bo opisują
-//   WARUNKI, które czyniły flip bezpiecznym. Sprawdzone MUTACJĄ, że potrafią paść:
-//   M2 pada po wyprowadzeniu argumentu `compact:` poza blok bramki (i po dodaniu czwartego
-//   odczytu flagi), E3 pada, gdy `_drawRight` przestaje odróżniać `false` od braku `opts`.
+// ⚠ E3 NIE JEST fail-first — opisuje WARUNEK: pada, gdy `_drawRight` przestaje odróżniać `false` od braku `opts`.
 // ⚠ FIXTURE Z POPULACJI OSIĄGALNEJ NA MAPIE — statek `orbiting`, NIE `docked`. Zadokowany nie ma
 //   sprite'a (`ThreeRenderer:4783`/`:1185`), więc nie ma kotwicy ekranowej; pin kotwicy na takim
 //   fixturze mierzyłby ciszę. Lekcja z 258, tu wpisana od pierwszej wersji.
@@ -289,124 +289,34 @@ header('R2  PIN — krok `select` mieści listę celów w ~360 px');
      `KONTROLA: bez kompaktu ten sam krok NIE mieści się w 360 px (contentH ${Math.round(fmo2._rightContentH)})`);
 }
 
-// ═══ M — pin ŹRÓDŁOWY: flaga jest ZAMONTOWANA ════════════════════════════════════════════════
-// ⚠ Lekcja W3 „skonstruowany ≠ zamontowany": wszyscy konsumenci czytają przez `?.`, więc martwa
-//   flaga NIE KRZYCZY. `UIManager` nie importuje się pod node ⇒ pin źródłowy z kontrolami.
-header('M  PIN ŹRÓDŁOWY — `mapVesselPanelCompact` jest realnie wpięta w UIManagerze');
+// ═══ M — (T4) flagi trybu kompaktowego i panelu statku nad mapą usunięte ═══════════════════════
+header('M  PIN — flagi `mapVesselPanel` / `mapVesselPanelCompact` usunięte, `UIManager` nie rysuje dawnego panelu T3 (T4)');
 {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8');
   const code = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
-  ok(code.includes('mapVesselPanelCompact'), 'UIManager czyta flagę mapVesselPanelCompact');
-  ok(code.includes('compact:'), 'i podaje ją do drawVesselPanel jako `compact:`');
+  ok(GAME_CONFIG.FEATURES?.mapVesselPanelCompact === undefined && GAME_CONFIG.FEATURES?.mapVesselPanel === undefined,
+     'klucze `mapVesselPanel` i `mapVesselPanelCompact` usunięte z GameConfig (na stałe ON od T4)');
+  ok(!code.includes('mapVesselPanelCompact') && !code.includes('drawVesselPanel') && code.includes('this._drawShipPanelHud(ctx, W, H)'),
+     '`UIManager`: brak odczytu flagi i dawnego panelu T3 — panel statku nad mapą to panel T5 (`_drawShipPanelHud`)');
   ok(code.length > 50000, `KONTROLA: źródło realnie wczytane (${code.length} zn.)`);
-  // ⚠ PIN ODWRÓCONY ŚWIADOMIE 2026-09-09. Do live-gate'u asertował `=== false` — czyli stan
-  //   „kompakt istnieje, ale gra go nie używa", właściwy WYŁĄCZNIE na czas slice'u B. Po
-  //   zdanym gate'cie (B1 6/6 + kolejność malowania 4/4, `23523af`) flaga zasłużyła na
-  //   default-ON regułą „default-ON dopiero PO gate'cie"; precedens `mapVesselPanel`
-  //   (`48c913f`). Stara asercja pinowałaby od tej chwili DEFEKT: panel, którego gracz nie
-  //   widzi bez wpisu w konsoli. Wzór odwracania: `deploy_seams` T1/T2/T4,
-  //   `ai_capture_last_stand` T4/T5.
-  ok(GAME_CONFIG.FEATURES?.mapVesselPanelCompact === true,
-     'flaga istnieje i jest domyślnie ON (kompakt jest zachowaniem gry od startu)');
-}
-
-// ═══ M2 — KOMPAKT LEŻY POD FLAGĄ RODZICA (potwierdzenie do flipu default-ON) ═════════════════
-// PYTANIE, NA KTÓRE TEN PIN ODPOWIADA: czy default-ON kompaktu tworzy stan, którego nikt nie
-// bramkuje — kompakt próbujący się rysować, gdy sam panel jest wyłączony (`mapVesselPanel:false`)?
-// ODPOWIEDŹ: nie, i to Z KONSTRUKCJI. Dwie połowy, obie mierzone:
-//   (a) WYKONANIE — `resolveMapSelectionSurface` przy `flagOn:false` NIGDY nie zwraca `vessel`,
-//       a cała maszyneria kompaktu wisi POD tą odpowiedzią;
-//   (b) ŹRÓDŁO — WSZYSTKIE trzy odczyty flagi w `UIManager` są za bramką `'vessel'`: dwa leżą
-//       w bloku rysowania otwartym przez tę bramkę (dowodzone ZLICZANIEM KLAMER, nie
-//       sąsiedztwem), trzeci (`tryBeginVesselPanelDrag`) niesie bramkę we własnym ciele.
-// ⚠ To NIE jest pin fail-first tego commitu (przechodzi po obu stronach flipu) — to WARUNEK,
-//   który czynił flip bezpiecznym. Ma paść, gdy ktoś wyprowadzi `compact:` poza bramkę albo
-//   doda czwarty, niebramkowany odczyt flagi. Zweryfikowane MUTACJĄ (patrz nagłówek pliku).
-header('M2  PIN — kompakt jest NIEOSIĄGALNY przy `mapVesselPanel:false` (bramka rodzica)');
-{
-  // (a) WYKONANIE — czysta reguła powierzchni.
   const f = MapLogic?.resolveMapSelectionSurface;
-  if (typeof f !== 'function') {
-    for (let i = 0; i < 3; i++) ok(false, 'resolveMapSelectionSurface istnieje');
-  } else {
-    const off = [[], ['a'], ['a', 'b'], ['a', 'b', 'c']].map((ids) => f(ids, { flagOn: false }));
-    ok(off.every((s) => s !== 'vessel'),
-       `flagOn:false ⇒ ŻADNE N nie daje 'vessel' (jest: ${JSON.stringify(off)})`);
-    ok(off.length === 4 && off[1] === 'group',
-       'KONTROLA ANTY-JAŁOWA: zbiór N jest NIEPUSTY, a N==1 realnie trafia na `group`');
-    ok(f(['a'], { flagOn: true }) === 'vessel',
-       'KONTROLA KIERUNKU: przy flagOn:true N==1 to `vessel` — bramka mierzy flagę, nie ciszę');
-  }
-
-  // (b) ŹRÓDŁO — inwentarz odczytów flagi i ich bramki.
-  const { readFileSync } = await import('node:fs');
-  const src   = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8');
-  const code  = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
-  const cnt   = (n) => code.split(n).length - 1;
-  const FLAG  = 'mapVesselPanelCompact';
-  const GUARD = "this._mapSurface() === 'vessel') {";   // UNIKALNY — bramka bloku RYSOWANIA
-
-  ok(code.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${code.length} zn.)`);
-  ok(cnt('nie-ma-takiego-tokenu-w-UIManagerze') === 0, 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
-
-  // Blok bramki wycięty ZLICZANIEM KLAMER — dowód PRZYNALEŻNOŚCI, nie sąsiedztwa.
-  ok(cnt(GUARD) === 1, `bramka bloku rysowania występuje DOKŁADNIE raz (jest: ${cnt(GUARD)})`);
-  const iG = code.indexOf(GUARD);
-  let depth = 0, endG = -1;
-  for (let k = code.indexOf('{', iG); k < code.length && k >= 0; k++) {
-    if (code[k] === '{') depth++;
-    else if (code[k] === '}') { depth--; if (depth === 0) { endG = k; break; } }
-  }
-  const block = endG > iG ? code.slice(iG, endG + 1) : '';
-  ok(block.length > 40 && block.length < 2000,
-     `KONTROLA: blok bramki realnie wycięty i jest CIASNY (${block.length} zn.)`);
-  ok(block.includes('compact: GAME_CONFIG.FEATURES?.' + FLAG),
-     'odczyt #1 (argument `compact:`) leży WEWNĄTRZ bloku bramki');
-  ok(block.includes('_vesselPanelBounds(W, H)'),
-     'odczyt #2 dochodzi przez `_vesselPanelBounds`, wołane WEWNĄTRZ bloku bramki');
-  ok(cnt('drawVesselPanel?.(') === 1 && cnt('_vesselPanelBounds(') === 2,
-     `oba wejścia mają po JEDNYM wywołaniu (panel ${cnt('drawVesselPanel?.(')}, bounds ${cnt('_vesselPanelBounds(') - 1} + definicja)`);
-
-  // Odczyt #3 — drag; bramka we WŁASNYM ciele, nie u wołającego.
-  const iDrag = code.indexOf('tryBeginVesselPanelDrag(x, y) {');
-  ok(iDrag > 0, 'KONTROLA: `tryBeginVesselPanelDrag` znaleziony w źródle');
-  const body = code.slice(iDrag, iDrag + 400);
-  ok(body.includes(FLAG) && body.includes("this._mapSurface() !== 'vessel'"),
-     'odczyt #3 (`tryBeginVesselPanelDrag`) niesie bramkę `!== vessel` we własnym ciele');
-
-  // INWENTARZ ZAMKNIĘTY: czwarty odczyt ma ten pin ZŁAMAĆ, a nie przemknąć niezauważony.
-  ok(cnt(FLAG) === 3,
-     `flaga czytana w UIManagerze DOKŁADNIE 3× — wszystkie zbramkowane (jest: ${cnt(FLAG)})`);
+  ok(typeof f === 'function' && f(['a'], { flagOn: false }) === 'vessel' && f(['a', 'b']) === 'group',
+     'KONTROLA: powierzchnia N == 1 to `vessel` bez względu na dawny argument flagi (N == 2 — `group`)');
 }
 
-// ═══ A1 — KOTWICA: panel siada PRZY STATKU, w px LOGICZNYCH ══════════════════════════════════
-// ⚠ KONWERSJA `/uiScale` JEST SEDNEM TEGO PINU. `getVesselScreenPosition` liczy z
-//   `window.innerWidth/Height` (px CSS), a overlay rysuje pod `setTransform(UI_SCALE * _DPR)`.
-//   Bez dzielenia panel rozjeżdża się na KAŻDEJ rozdzielczości ≠ 1280×720 — a to jest KAŻDY
-//   nowoczesny ekran. Kanon: `MapLabelLogic.toLogicalPx` (Aneks A.3).
-//   ⚠ `StationPanel:117-120` tej konwersji NIE robi (defekt PRE-EXISTING, osobny finding);
-//   ten pin pilnuje, żeby panel statku NIE powielił tamtego wzorca.
-header('A1  PIN — kotwica panelu: px CSS → px LOGICZNE, offset prawo-dół, fallback bez chowania');
+// ═══ A1 — KOTWICA ZAPASOWA i kotwica przy wierszu (T3) ═══════════════════════════════════════════
+// Dawny panel przy STATKU (px CSS → px logiczne `/uiScale`, offset prawo-dół) usunięty w T4 razem z pływającym panelem;
+// zostaje kotwica zapasowa (`resolveVesselPanelAnchor(null)` — wejście `computeShipPanelPlacement` przy schowanej kolumnie).
+header('A1  PIN — kotwica zapasowa panelu (`resolveVesselPanelAnchor(null)`) i kotwica przy wierszu (T3)');
 {
   const f = MapLogic?.resolveVesselPanelAnchor;
   const B = { ox: 8, oy: 40, ow: 1264, oh: 600 };
   if (typeof f !== 'function') {
-    for (let i = 0; i < 7; i++) ok(false, 'resolveVesselPanelAnchor istnieje');
+    for (let i = 0; i < 4; i++) ok(false, 'resolveVesselPanelAnchor istnieje');
   } else {
     ok(true, 'MapVesselPanelLogic.resolveVesselPanelAnchor istnieje');
-    // uiScale = 1 → kotwica = pozycja + offset
-    const a1 = f({ x: 400, y: 300 }, 1, B, 300, 300, 24);
-    ok(a1.anchored === true && a1.x === 424 && a1.y === 324,
-       `uiScale 1: offset prawo-dół +24 (jest: ${a1.x},${a1.y})`);
-    // uiScale = 1.5 (1920×1080!) → MUSI podzielić, inaczej panel ucieka o połowę ekranu
-    const a15 = f({ x: 900, y: 600 }, 1.5, B, 300, 300, 24);
-    ok(a15.x === 624 && a15.y === 424,
-       `uiScale 1.5: pozycja PODZIELONA (900/1.5+24=624, 600/1.5+24=424) — jest: ${a15.x},${a15.y}`);
-    // ⚠ KONTROLA ANTY-JAŁOWA: bez dzielenia wyszłoby 924/624 — pin realnie mierzy konwersję.
-    ok(a15.x !== 924 && a15.y !== 624,
-       'KONTROLA: to NIE jest wynik bez konwersji (924/624) — dzielenie faktycznie zaszło');
-    // null (statek za kamerą albo ZADOKOWANY — brak sprite'a) → fallback, NIE chowanie
+    // null (brak pozycji ekranowej — dawny panel przy statku usunięty w T4) → kotwica zapasowa w prawym górnym rogu
     const fb = f(null, 1.5, B, 300, 300, 24);
     ok(fb.anchored === false, 'brak pozycji ekranowej → kotwica zapasowa (nie chowamy panelu)');
     ok(fb.x === B.ox + B.ow - 300 - 12 && fb.y === B.oy + 8,
@@ -434,101 +344,15 @@ header('A1  PIN — kotwica panelu: px CSS → px LOGICZNE, offset prawo-dół, 
      `A1-T3 statek bez wiersza w liście (kolumna widoczna) → ten sam fallback (${fbRow?.x},${fbRow?.y} = ${oldRow?.x},${oldRow?.y})`);
 }
 
-// ═══ A2 — PANEL NIE ZAKRYWA STATKU ═══════════════════════════════════════════════════════════
-// Offset prawo-dół sprawia, że lewy-górny róg panelu leży POZA sprite'em. Sprite statku ma
-// promień rzędu kilkunastu px; offset 24 daje zapas w obu osiach.
-header('A2  PIN — zakotwiczony panel nie zachodzi na sprite statku');
+// ═══ A2 — PANEL PRZY KOLUMNIE (T3) ══════════════════════════════════════════════════════════════
+header('A2  PIN — panel przy kolumnie (T3): nie zasłania kolumny');
 {
-  const f = MapLogic?.resolveVesselPanelAnchor;
-  if (typeof f !== 'function') { ok(false, 'A2 — brak helpera'); }
-  else {
-    const B = { ox: 0, oy: 0, ow: 1280, oh: 720 };
-    const shipLogical = { x: 400, y: 300 };
-    const a = f({ x: 400, y: 300 }, 1, B, 300, 300, 24);
-    const SPRITE_R = 16;   // z zapasem powyżej realnego promienia ikony statku
-    const overlaps = a.x < shipLogical.x + SPRITE_R && a.y < shipLogical.y + SPRITE_R;
-    ok(!overlaps, `panel zaczyna się poza sprite'em (panel ${a.x},${a.y} vs statek ${shipLogical.x},${shipLogical.y} r=${SPRITE_R})`);
-    ok(a.x > shipLogical.x && a.y > shipLogical.y, 'kierunek: PRAWO-DÓŁ od statku');
-  }
   // A2-T3 — przy ON panel stoi przy kolumnie (sprite statku nie jest wejściem kotwicy — 529): nie zasłania kolumny,
   // prawa krawędź = lewa krawędź kolumny.
   const pr = SPA?.computeShipPanelPlacement?.({ W: 1280, H: 720, insets: { left: 150, right: 150, top: 28, bottom: 62 },
     column: { x: 1130, y: 28, w: 150, h: 630 }, anchor: { rowTop: 400, h: 16, anchorY: 400, visible: true, edge: null }, panelH: 300 });
   ok(!!pr && pr.x + pr.w === 1130 && pr.x >= 150, `A2-T3 przy ON panel kończy się na lewej krawędzi kolumny (${pr?.x}–${pr ? pr.x + pr.w : '—'})`);
 }
-
-// ═══ D1 — DRAG: `dragPos` wygrywa nad kotwicą, `reanchor()` go zdejmuje ══════════════════════
-// ⚠ Prowadzone na PRAWDZIWYM `FloatingPanel` (importuje się pod node), nie na atrapie —
-//   inaczej pin mierzyłby moją kopię reguły, a nie regułę.
-header('D1  PIN — drag panelu: dragPos wygrywa nad kotwicą, reanchor wraca do statku');
-{
-  const { FloatingPanel } = await import('../../ui/FloatingPanel.js');
-  const B = { ox: 0, oy: 0, ow: 1280, oh: 720 };
-  const fp = new FloatingPanel();
-  const anchored = fp.place(400, 300, 300, 300, B);
-  ok(anchored.px === 400 && anchored.py === 300, `bez draga panel siedzi na kotwicy (${anchored.px},${anchored.py})`);
-  fp.beginDrag(410, 310, 400, 300);
-  const movedSmall = fp.updateDrag(412, 312, 300, 300, B);
-  ok(movedSmall === false, 'KONTROLA: ruch poniżej progu to KLIK, nie drag (kotwica nietknięta)');
-  const moved = fp.updateDrag(600, 500, 300, 300, B);
-  ok(moved === true, 'ruch powyżej progu ustawia dragPos');
-  const dragged = fp.place(400, 300, 300, 300, B);
-  ok(dragged.px !== 400 || dragged.py !== 300, `dragPos WYGRYWA nad kotwicą (${dragged.px},${dragged.py})`);
-  ok(fp.endDrag() === true, 'endDrag zgłasza realny drag (panel może pochłonąć klik)');
-  fp.reanchor();
-  const back = fp.place(400, 300, 300, 300, B);
-  ok(back.px === 400 && back.py === 300, 'reanchor() wraca do kotwicy przy statku');
-  // Clamp: panel nigdy nie ucieka poza obszar mapy.
-  const fp2 = new FloatingPanel();
-  const far = fp2.place(5000, 5000, 300, 300, B);
-  ok(far.px <= B.ox + B.ow - 300 && far.py <= B.oy + B.oh - 300,
-     `clamp trzyma panel na ekranie (${far.px},${far.py})`);
-  // D1-T3 — przy ON bez przeciągania: `UIManager.tryBeginVesselPanelDrag` (wycięte ze źródła) wraca `false` przed
-  // `beginDrag`; przy OFF ten sam punkt nagłówka chwyta (dzisiejszy kod).
-  const { readFileSync } = await import('node:fs');
-  const ui = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
-  const i0 = ui.indexOf('  tryBeginVesselPanelDrag(x, y) {');
-  const txt = i0 < 0 ? '' : ui.slice(i0, ui.indexOf('\n  }\n', i0) + 4).split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-  let drag = null;
-  try {
-    drag = new Function('GAME_CONFIG', 'isShipPanelOutlinerOn', '__s', 'return eval("(function " + __s.trim().slice("tryBeginVesselPanelDrag".length) + ")");')(
-      GAME_CONFIG, SPA?.isShipPanelOutlinerOn, txt);
-  } catch { drag = null; }
-  const self = { _mapSurface: () => 'vessel', overlayManager: { isAnyOpen: () => false },
-    _fleetOverlay: { _vesselPanelRect: { x: 100, y: 100, w: 300, h: 300 } }, _vesselPanelFloat: new FloatingPanel() };
-  const was = GAME_CONFIG.FEATURES.shipPanelOutliner;
-  GAME_CONFIG.FEATURES.shipPanelOutliner = true;
-  let on = null; try { on = drag ? drag.call(self, 150, 110) : null; } catch { on = 'WYJĄTEK'; }
-  ok(on === false && self._vesselPanelFloat.isDragging() === false, 'D1-T3 przy ON nagłówek panelu nie chwyta (bez przeciągania)');
-  GAME_CONFIG.FEATURES.shipPanelOutliner = false;
-  let off = null; try { off = drag ? drag.call(self, 150, 110) : null; } catch { off = 'WYJĄTEK'; }
-  ok(off === true, 'D1-T3 KONTROLA: przy OFF ten sam punkt chwyta (przeciąganie jak dziś)');
-  GAME_CONFIG.FEATURES.shipPanelOutliner = was;
-}
-
-// ═══ D2 — pin ŹRÓDŁOWY: host jest ZAMONTOWANY w UIManagerze ══════════════════════════════════
-// `UIManager` nie importuje się pod node ⇒ pin źródłowy, z kontrolami (lekcja „skonstruowany
-// ≠ zamontowany": konsumenci czytają przez `?.`, martwy host NIE krzyczy).
-header('D2  PIN ŹRÓDŁOWY — FloatingPanel + kotwica + drag realnie wpięte w UIManagerze');
-{
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8');
-  const code = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
-  ok(code.includes('new FloatingPanel()'), 'UIManager tworzy FloatingPanel dla panelu statku');
-  ok(code.includes('resolveVesselPanelAnchor('), 'i liczy kotwicę CZYSTYM helperem (nie inline)');
-  ok(code.includes('tryBeginVesselPanelDrag(x, y)'), 'drag wpięty w mousedown');
-  ok(code.includes('endVesselPanelDrag()'), 'drag zamykany w mouseup');
-  ok(code.includes('isDraggingVesselPanel()'), 'drag prowadzony w mousemove');
-  ok(code.includes('reanchor()'), 'zmiana statku wraca do kotwicy');
-  ok(code.length > 50000, `KONTROLA: źródło realnie wczytane (${code.length} zn.)`);
-  ok(!code.includes('resolveVesselPanelAnchorXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
-  // D2-T3 — przy ON `_vesselPanelBounds` kończy się kotwicą wiersza ZANIM dojdzie do FloatingPanel / kotwicy przy statku.
-  const vb = code.slice(code.indexOf('_vesselPanelBounds(W, H) {'), code.indexOf('tryBeginVesselPanelDrag(x, y) {'));
-  const iT3 = vb.indexOf('if (isShipPanelOutlinerOn(GAME_CONFIG.FEATURES)) return this._shipPanelAtOutliner(W, H, w, h);');
-  ok(iT3 > 0 && iT3 < vb.indexOf('resolveVesselPanelAnchor(') && iT3 < vb.indexOf('this._vesselPanelFloat.place('),
-     'D2-T3 przy ON kotwica wiersza przed kotwicą przy statku i przed `FloatingPanel` (pływający panel wyłączony — 529)');
-}
-
 
 // ═══ S1 — Finding 260: KÓŁKO przewija panel i jest POCHŁANIANE ═══════════════════════════════
 // ⚠ Maszyneria przewijania istniała od 258 (`_rightScrollY`/`_rightContentH`/`_rightViewH`
@@ -584,7 +408,7 @@ header('S2  PIN ŹRÓDŁOWY — clamp przewijania ma JEDNO źródło, nie dwie k
      `arytmetyka clampu występuje raz (jest: ${cnt(code, "this._rightScrollY = Math.max(0, Math.min(maxScroll")})`);
   const ui = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8')
     .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
-  ok(ui.includes('handleVesselPanelScroll'), 'UIManager.handleWheel ma TRASĘ do panelu (bez niej pin S1 byłby martwy w grze)');
+  ok(ui.includes('this._shipPanelHud?.handleWheel?.(x, y, delta)'), 'UIManager.handleWheel ma TRASĘ do panelu statku (panel T5 — bez niej kółko zoomowałoby mapę)');
   ok(ui.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${ui.length} zn.)`);
 }
 
@@ -611,7 +435,7 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
 
   const iLabels = at('this._mapLabelLayer.draw(');
   const iVessLb = at('this._mapLabelLayer.drawVesselLabels(');
-  const iPanel  = at('drawVesselPanel?.(');
+  const iPanel  = at('this._drawShipPanelHud(ctx, W, H)');
   const iStation= at('this.stationPanel.draw(');
   const iCombat = at('this.combatHud.draw(');
   const iBrack  = at('this._drawSelectionBrackets(');
@@ -622,19 +446,21 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
      `K1: _mapLabelLayer.draw wywołane dokładnie raz (jest: ${cnt('this._mapLabelLayer.draw(')})`);
   ok(cnt('this._mapLabelLayer.drawVesselLabels(') === 1,
      `K1: drawVesselLabels wywołane dokładnie raz (jest: ${cnt('this._mapLabelLayer.drawVesselLabels(')})`);
-  ok(cnt('drawVesselPanel?.(') === 1,
-     `K1: drawVesselPanel wywołane dokładnie raz (jest: ${cnt('drawVesselPanel?.(')})`);
+  ok(cnt('this._drawShipPanelHud(') === 1,
+     `K1: panel statku T5 (_drawShipPanelHud) wywołany dokładnie raz (jest: ${cnt('this._drawShipPanelHud(')})`);
   ok(iLabels > 0 && iVessLb > 0 && iPanel > 0 && iStation > 0 && iCombat > 0,
      'K1: wszystkie mierzone wywołania REALNIE znalezione w źródle');
 
   // Z1 / Z1b — etykiety przed panelem statku.
   ok(iLabels < iPanel, `Z1: plakietki kolonii PRZED panelem statku (${iLabels} < ${iPanel})`);
   ok(iVessLb < iPanel, `Z1b: plakietki flotowe PRZED panelem statku (${iVessLb} < ${iPanel})`);
-  // Z1-T3 — przy ON panel stoi przy wierszu prawego outlinera: outliner rysowany PRZED panelem (układ listy z tej samej
-  // klatki), łącznik z wierszem PO panelu.
+  // Z1-T3 — panel stoi przy wierszu prawego outlinera: outliner rysowany PRZED panelem (układ listy z tej samej klatki),
+  // łącznik z wierszem PO panelu (w `_drawShipPanelHud`).
   const iOutl = at('this._outliner.draw(');
-  const iTab  = at('this._drawShipPanelTab(ctx, r)');
-  ok(iOutl > 0 && iOutl < iPanel && iTab > iPanel, `Z1-T3: prawy outliner PRZED panelem, łącznik PO nim (${iOutl} < ${iPanel} < ${iTab})`);
+  const sph = code.slice(at('_drawShipPanelHud(ctx, W, H) {'), code.indexOf('\n  }\n', at('_drawShipPanelHud(ctx, W, H) {')));
+  const iDrawT5 = sph.indexOf('this._shipPanelHud.draw('), iTab = sph.indexOf('this._drawShipPanelTab(ctx, p)');
+  ok(iOutl > 0 && iOutl < iPanel && iDrawT5 > 0 && iTab > iDrawT5,
+     `Z1-T3: prawy outliner PRZED panelem (${iOutl} < ${iPanel}), łącznik PO panelu w \`_drawShipPanelHud\` (${iDrawT5} < ${iTab})`);
 
   // Z2 — to jest fix KLASOWY, nie jednopanelowy.
   ok(iLabels < iStation && iVessLb < iStation, `Z2: etykiety PRZED stationPanel (${iLabels}/${iVessLb} < ${iStation})`);

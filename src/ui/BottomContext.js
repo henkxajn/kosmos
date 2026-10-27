@@ -13,9 +13,8 @@ import { showRenameModal } from '../ui/ModalInput.js';
 import EventBus            from '../core/EventBus.js';
 import { getMapInsets }   from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 import { t }              from '../i18n/i18n.js';
-import { computeFloatingPlacement } from '../ui/BottomContextLogic.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
-import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc, cardObstacles } from '../ui/BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493); T3 strojenie 1 (544)
+import { makeCardSideMemory, cardObstacles } from '../ui/BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493); T3 strojenie 1 (544)
+import { objectScreenDisc } from '../ui/HudProjection.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { readGarrisonReadout, formatGarrisonReadout } from '../utils/GarrisonReadout.js';   // G3-3
@@ -179,19 +178,12 @@ export class BottomContext {
 
     // ── Pozycja: kotwica do ciała 3D + clamp (albo pozycja narzucona dragiem). ──
     const bounds = this._bounds(W, H);
-    // ARKUSZ HUD paczka A (493) — przy `bodyCardSide` karta z boku TARCZY (prawo, flip w lewo), nigdy na niej; przy zoomie idzie
-    // za krawędzią tarczy; px logiczne z projektora HUD; strona trzymana (histereza — bez migotania lewo↔prawo). Przy OFF —
-    // dzisiejsza kotwica przy środku ciała. REFORMA ZAKŁADEK T3, strojenie 1 (544): panel statku przy prawym outlinerze jest
-    // przeszkodą — karta staje po wolnej stronie tarczy.
-    let pl;
-    if (isBodyCardSideOn(GAME_CONFIG.FEATURES)) {
-      this._sideMem ??= makeCardSideMemory();
-      pl = this._sideMem.place({ key: entity.id, disc: objectScreenDisc(window.KOSMOS, 'body', entity.id), PW, PH, bounds,
-        obstacles: cardObstacles(window.KOSMOS), now: performance.now() });
-    } else {
-      const sp = window.KOSMOS?.threeRenderer?.getBodyScreenPosition?.(entity.id) ?? null;
-      pl = computeFloatingPlacement({ bodyScreen: sp, PW, PH, bounds, screenW: W });
-    }
+    // ARKUSZ HUD paczka A (493) — karta z boku TARCZY (prawo, flip w lewo), nigdy na niej; przy zoomie idzie za krawędzią
+    // tarczy; px logiczne z projektora HUD; strona trzymana (histereza — bez migotania lewo↔prawo). REFORMA ZAKŁADEK T3,
+    // strojenie 1 (544): panel statku przy prawym outlinerze jest przeszkodą — karta staje po wolnej stronie tarczy.
+    this._sideMem ??= makeCardSideMemory();
+    const pl = this._sideMem.place({ key: entity.id, disc: objectScreenDisc(window.KOSMOS, 'body', entity.id), PW, PH, bounds,
+      obstacles: cardObstacles(window.KOSMOS), now: performance.now() });
     const { px, py } = this._float.place(pl.px, pl.py, PW, PH, bounds);   // C1 — drag override kotwicy
     // Strefa-drag = pas nagłówka POZA przyciskami (✏ najbliżej lewej @ px+PW-58).
     this._lastRect = { px, py, PW, PH, b: bounds, dragZone: { x: px, y: py, w: PW - 60, h: HEADER_H } };

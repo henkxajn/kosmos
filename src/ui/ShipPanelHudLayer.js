@@ -1,5 +1,5 @@
 // ShipPanelHudLayer — REFORMA ZAKŁADEK T5 (TABS_REFORM_PLAN.md §5.8): lekki renderer panelu statku przy prawym outlinerze
-// W IDIOMIE PRZYPIĘĆ HUD (za flagą `FEATURES.shipPanelHud`; logika — czysty `ShipPanelHudLogic`). Rysuje na `#ui-canvas`
+// W IDIOMIE PRZYPIĘĆ HUD (flaga kroku `shipPanelHud` — na stałe ON od T4; logika — czysty `ShipPanelHudLogic`). Rysuje na `#ui-canvas`
 // w miejscu panelu T3 (`UIManager._draw` — po karcie walki, przed dokiem): kolejność rysunku i kliku, łącznik z wierszem,
 // blokada kamery, przeszkody kart i etykiet — jak panel T3; zmienia się wyłącznie WYGLĄD i układ treści.
 //   • ciemny półprzezroczysty pasek bez ramki (`THEME.bgPrimary` × `BAR_ALPHA` — jak przypięta etykieta HUD), font motywu,

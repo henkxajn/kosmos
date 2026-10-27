@@ -1,6 +1,7 @@
 // LabelPinLogic — REFORMA ZAKŁADEK T2 (TABS_REFORM_PLAN.md §5.1–§5.2; D-TR-1 (a) — przypięcie, D-TR-4 (a), D-TR-5 (a); treść
 // wg tabel I7 §3.1 / §3.2 / §3.4): czysta logika PRZYPIĘCIA etykiety z akcjami. Rysunek, strefy kliku i odczyt świata —
-// `HudLabelLayer` (gałąź za flagą `labelPin`); spięcie z kartą ciała i panelem stacji — `UIManager`, Esc — `GameScene`.
+// `HudLabelLayer` (warstwa etykiet HUD — `hudLabels`; flaga kroku `labelPin` na stałe ON od T4); spięcie z kartą ciała
+// i panelem stacji — `UIManager`, Esc — `GameScene`.
 //   • PRZYPIĘCIE = ZAZNACZENIE (D-UI-5 bez zmian: 1. klik zaznacza i przypina, 2. klik — kamera): ciało = zaznaczone ciało
 //     (`UIManager._selectedEntity`), stacja = panel stacji w stanie „otwarty” (`StationPanel.visible` + `_stationId`) —
 //     BEZ nowego pola stanu; `readClickSelection.entityId / stationId` czyta przypięcie z konstrukcji. Przy ON karta ciała
@@ -20,16 +21,11 @@
 //   • Esc (D-TR-5 (a), 534) zdejmuje przypięcie po zaznaczeniu statku; przy otwartym overlayu (przypięcie leży pod nim, a
 //     overlay sam używa Esc — np. tryb budowy) i przy otwartym oknie DOM (raport ciała) — nie (overlay / okno dostają Esc).
 // Czysty: bez three, bez DOM i bez `window`; `K` (= `window.KOSMOS`), `emit`, `t` i otwieracz raportu podaje wołający.
-import { isLabelHoverActive, bodyCardAction } from './LabelHoverLogic.js';
-import { HUD_LABELS, labelCandidates, rectOverlapArea, rectCircleOverlap, insideRect } from './HudLabelLogic.js';
+import { bodyCardAction } from './LabelHoverLogic.js';
+import { HUD_LABELS, isHudLabelsOn, labelCandidates, rectOverlapArea, rectCircleOverlap, insideRect } from './HudLabelLogic.js';
 import { readClickSelection } from './ClickIntentLogic.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
-
-/** Flaga kroku — `true` wyłącznie przy `features.labelPin === true` (brak klucza = OFF). */
-export const isLabelPinOn = (features) => features?.labelPin === true;
-/** Przypięcie stoi na rozwinięciu T1 (warstwa etykiet HUD) — wymaga `hudLabels`, `labelHover` i `labelPin`. */
-export const isLabelPinActive = (features) => isLabelHoverActive(features) && isLabelPinOn(features);
 
 // Stałe (px logiczne). Strojenie na bramce.
 export const LABEL_PIN = Object.freeze({
@@ -407,22 +403,22 @@ export function runPinAction(id, { ck, entity = null, K = null, emit = null, sho
 /**
  * Przypięcie STACJI zdejmuje przypięcie ciała (wołane po `station:selected`, gdy panel stacji już „otwarty”): odznaczenie
  * z powodem `PIN_SWAP_REASON` — `UIManager` czyści zaznaczenie ciała, renderer orbity i znaczniki BEZ polecenia kamery,
- * panel stacji go nie słucha. Flaga OFF / poza trybem cywilizacji — nic (jak dziś: karta i panel niezależne).
+ * panel stacji go nie słucha. Bez warstwy etykiet HUD (`hudLabels` OFF) / poza trybem cywilizacji — nic.
  * @returns {boolean} czy zdjęto przypięcie ciała
  */
 export function enforceSinglePinOnStation({ K = null, emit = null, features = null } = {}) {
-  if (!isLabelPinActive(features) || !K?.civMode) return false;
+  if (!isHudLabelsOn(features) || !K?.civMode) return false;
   if (!K?.uiManager?._selectedEntity) return false;
   emit?.('body:deselected', { reason: PIN_SWAP_REASON });
   return true;
 }
 
 /**
- * Przypięcie CIAŁA chowa panel stacji (wołane po `body:selected`). Flaga OFF / poza trybem cywilizacji — nic.
+ * Przypięcie CIAŁA chowa panel stacji (wołane po `body:selected`). Bez warstwy etykiet HUD / poza trybem cywilizacji — nic.
  * @returns {boolean} czy zdjęto przypięcie stacji
  */
 export function enforceSinglePinOnBody({ K = null, features = null } = {}) {
-  if (!isLabelPinActive(features) || !K?.civMode) return false;
+  if (!isHudLabelsOn(features) || !K?.civMode) return false;
   const sp = K?.stationPanel;
   if (!sp?.visible) return false;
   sp.hide?.();
@@ -432,20 +428,21 @@ export function enforceSinglePinOnBody({ K = null, features = null } = {}) {
 /**
  * Esc nad oknem DOM `.kosmos-modal-overlay` (raport ciała otwarty z przypięcia) należy do okna — kaskada mapy (statek,
  * przypięcie, overlay, menu ☰) stoi, okno zamyka się własnym Esc. Bez tego Esc w raporcie zamykał okno i JEDNOCZEŚNIE
- * otwierał menu ☰ (zmierzone w grze). Flaga OFF / poza trybem cywilizacji — `false` (kaskada jak dziś).
+ * otwierał menu ☰ (zmierzone w grze). Bez warstwy etykiet HUD / poza trybem cywilizacji — `false` (kaskada bez kroku).
  */
 export function escapeHeldByModal({ K = null, features = null, domModalOpen = false } = {}) {
-  return isLabelPinActive(features) && !!K?.civMode && domModalOpen === true;
+  return isHudLabelsOn(features) && !!K?.civMode && domModalOpen === true;
 }
 
 /**
- * Esc zdejmuje przypięcie (D-TR-5 (a), Finding 534) — krok kaskady `GameScene` PO zaznaczeniu statku. Nic, gdy: flaga OFF,
- * poza trybem cywilizacji, otwarty overlay pełnoekranowy (przypięcie leży pod nim; Esc należy do overlayu — np. tryb budowy
- * mapy kolonii), otwarte okno DOM (raport ciała zamyka się własnym Esc), brak przypięcia.
+ * Esc zdejmuje przypięcie (D-TR-5 (a), Finding 534) — krok kaskady `GameScene` PO zaznaczeniu statku. Nic, gdy: bez
+ * warstwy etykiet HUD (`hudLabels` OFF), poza trybem cywilizacji, otwarty overlay pełnoekranowy (przypięcie leży pod nim;
+ * Esc należy do overlayu — np. tryb budowy mapy kolonii), otwarte okno DOM (raport ciała zamyka się własnym Esc), brak
+ * przypięcia.
  * @returns {'body'|'station'|null}
  */
 export function escapeUnpin({ K = null, emit = null, features = null, overlayOpen = false, modalOpen = false } = {}) {
-  if (!isLabelPinActive(features) || !K?.civMode || overlayOpen || modalOpen) return null;
+  if (!isHudLabelsOn(features) || !K?.civMode || overlayOpen || modalOpen) return null;
   const ck = pinnedContentKey(readClickSelection(K));
   if (!ck) return null;
   if (ck.startsWith('body:')) { emit?.('body:deselected'); return 'body'; }

@@ -94,6 +94,12 @@
 // PRZECELOWANIA (ARKUSZ UI U4-4 — decyzja (d)):
 //   L7f / L16c — `UIManager.handleWheel` dostał czwarty parametr (surowe `deltaY` dla suwaka zoomu — ten sam krok co
 //         kółko nad mapą); piny szukają metody po nowej sygnaturze, trasa kółka do outlinerów bez zmian.
+// PRZECELOWANIA (REFORMA ZAKŁADEK T4 — TABS_REFORM_PLAN.md §5.10; flagi kroków na stałe ON, dawne panele usunięte):
+//   L7d / L17-0 / L17c — dawny panel grupy (`fleetGroupPanel.draw`) się nie rysuje; jego miejsce w kolejności zajmuje panel
+//         floty / grupy w idiomie etykiet (`_drawFleetPanelHud`, T6) — ta sama pozycja po liście kolonii z belki.
+//   L7i — pływający panel statku (`_vesselPanelBounds`, ścieżka `shipPanelOutliner` OFF) usunięty; zostaje L7i-T3.
+//   L17d-0 / L17d — klik dawnego panelu floty (`fleetCommandPanel.handleClick`) usunięty; w jego miejscu klik panelu
+//         floty / grupy T6 (`_fleetPanelHudClick`), nadal przed listą kolonii z belki.
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -430,19 +436,16 @@ header('L7  montaż w UIManager i rendererze (piny źródłowe)');
   ok(iLO > iTRD && iLO > iLog && iLO < iOv, 'L7c SEDNO: klik outlinera PO liście kolonii z belki i dzienniku (leżą nad nim), przed overlayem');
   const dr = body(ui, '  _draw() {');
   const dLO = dr.indexOf('this._leftOutliner.draw('), dTRD = dr.indexOf('this._topResourceDrawer.draw(');
-  const dSP = dr.indexOf('this.stationPanel.draw('), dFG = dr.indexOf('this.fleetGroupPanel.draw(');
-  ok(dLO > 0 && dLO < dTRD && dLO < dSP && dLO < dFG, 'L7d rysowanie: outliner PRZED listą kolonii z belki i pływającymi panelami (§7.17)');
+  const dSP = dr.indexOf('this.stationPanel.draw('), dFG = dr.indexOf('this._drawFleetPanelHud(');
+  ok(dLO > 0 && dLO < dTRD && dLO < dSP && dLO < dFG, 'L7d rysowanie: outliner PRZED listą kolonii z belki i panelami nad mapą (panel stacji, panel floty / grupy T6; §7.17)');
   ok(/this\._leftOutliner\.draw\(ctx, W, H, \{ colonies: this\._cachedColonies, groundUnits: this\._outlinerState\?\.groundUnits/.test(dr),
     'L7e dane drzewa: wszystkie kolonie (cache) i jednostki naziemne z tej samej listy co prawy Outliner');
   ok(/this\._leftOutliner\?\.handleWheel\?\.\(x, y, delta, W, H\)/.test(body(ui, '  handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {')), 'L7f kółko');
   ok(/this\._leftOutliner\?\.updateHover\?\.\(x, y, W, H\)/.test(body(ui, '  handleMouseMove(x, y) {')), 'L7g najechanie');
   ok(/this\._leftOutliner\?\.isOver\?\.\(x, y, W, H\)/.test(body(ui, '  isPointerOverFloatingPanel(rawX, rawY) {')),
     'L7h bez podpowiedzi mapy 3D pod kolumną (`isPointerOverFloatingPanel`)');
-  const vpb = body(ui, '  _vesselPanelBounds(W, H) {');
-  ok(/getMapInsets\(window\.KOSMOS\)/.test(vpb) && /ox: ins\.left \+ 8/.test(vpb) && /H - ins\.bottom - oy/.test(vpb),
-    'L7i panel statku (tryb kompaktowy): obszar clampu z `MapInsets` (za outlinerem, nad dołem)');
-  // ⚠ L7i PRZECELOWANY 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): pin wyżej — ścieżka
-  //   `shipPanelOutliner` OFF; przy ON panel przy wierszu prawego outlinera bierze wcięcia z TEGO SAMEGO źródła.
+  // ⚠ L7i PRZECELOWANY 2026-10-24 (REFORMA ZAKŁADEK T3) i usunięty 2026-10-27 (T4 — ścieżka `shipPanelOutliner` OFF,
+  //   `_vesselPanelBounds`, zniknęła): panel przy wierszu prawego outlinera bierze wcięcia z `MapInsets`.
   const spo = body(ui, '  _shipPanelAtOutliner(W, H, w, h) {');
   ok(/insets: getMapInsets\(K\)/.test(spo) && /column: shown \? ro\._rect : null/.test(spo),
     'L7i-T3 przy ON: klamra panelu z `MapInsets` (góra — pod belką, dół — nad pasem), kolumna z ostatniego rysunku outlinera');
@@ -781,18 +784,18 @@ header('L17 Finding 483 — kolejność rysowania i kliku (piny źródłowe)');
   const at = (n) => dr.indexOf(n);
   const dLbl = at('this._mapLabelLayer.draw('), dVL = at('this._mapLabelLayer.drawVesselLabels('), dAll = at('this._drawAllLabels(ctx, tr)');
   const dLO = at('this._leftOutliner.draw('), dTRD = at('this._topResourceDrawer.draw(ctx, W, H)'), dDock = at('this.tacticalDock.draw(');
-  const dNav = at('this._bottomNavBar.draw('), dSP = at('this.stationPanel.draw('), dFG = at('this.fleetGroupPanel.draw('), dBr = at('this._drawSelectionBrackets(');
+  const dNav = at('this._bottomNavBar.draw('), dSP = at('this.stationPanel.draw('), dFG = at('this._drawFleetPanelHud('), dBr = at('this._drawSelectionBrackets(');
   ok([dLbl, dVL, dAll, dLO, dTRD, dDock, dNav, dSP, dFG, dBr].every((i) => i > 0), 'L17-0 KONTROLA: wszystkie wywołania w `_draw` znalezione');
   ok(dAll < dLO && dLbl < dLO && dVL < dLO, 'L17a SEDNO: etykiety mapy (plakietki kolonii / stacji / flot, CTRL) PRZED lewym outlinerem');
   ok(dLO < dTRD && dTRD < dDock && dTRD < dNav, 'L17b KONTROLA (od U2-2): lewy outliner → lista kolonii z belki → Dok taktyczny / paski');
   ok(dTRD < dSP && dTRD < dFG && dBr > dVL, 'L17c KONTROLA: lista kolonii POD pływającymi panelami; ramki zaznaczenia nadal PO etykietach');
   const hc = body(ui, '  handleClick(x, y) {');
   const c = (n) => hc.indexOf(n);
-  const cSP = c('this.stationPanel?.handleClick?.('), cFC = c('this.fleetCommandPanel?.handleClick?.('), cTRD = c('this._topResourceDrawer?.handleClick?.(');
+  const cSP = c('this.stationPanel?.handleClick?.('), cFC = c('this._fleetPanelHudClick(x, y)'), cTRD = c('this._topResourceDrawer?.handleClick?.(');
   const cLog = c('this._eventLogDrawer?.handleClick?.('), cLO = c('this._leftOutliner?.hitTest?.('), cLbl = c('this._mapLabelLayer?.handleClick?.(');
   ok([cSP, cFC, cTRD, cLog, cLO, cLbl].every((i) => i > 0), 'L17d-0 KONTROLA: wszystkie wywołania w `handleClick` znalezione');
   ok(cSP < cTRD && cFC < cTRD && cTRD < cLog && cLog < cLO && cLO < cLbl,
-    'L17d SEDNO: klik — pływające panele → lista kolonii → dziennik → lewy outliner → etykiety mapy (tak jak leżą na ekranie)');
+    'L17d SEDNO: klik — panele nad mapą (panel floty / grupy T6, panel stacji) → lista kolonii → dziennik → lewy outliner → etykiety mapy (tak jak leżą na ekranie)');
   ok(c('this._mapLabelLayer?.handleClick?.(') === hc.lastIndexOf('this._mapLabelLayer?.handleClick?.('), 'L17e KONTROLA: jedno wywołanie kliku etykiet');
 }
 

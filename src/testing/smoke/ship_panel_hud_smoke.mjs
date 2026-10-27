@@ -3,7 +3,7 @@
 // Rejestr: `docs/design/TABS_REFORM_PLAN.md` §5.8 (decyzje właściciela 2026-10-26); Finding 530.
 // ─────────────────────────────────────────────────────────────────────────────
 // Wyłącznie LOGIKA (protokół `HUD_PLAN.md` §4.0, aneks 2026-10-23): zbiór akcji, handlery, stany nieaktywne, strefy kliku,
-// akordeon, konfigurator, kotwica T3, łamanie nazwy, 530, OFF, budżet. Bez pinów na stałych rysunku (szerokość, odstępy,
+// akordeon, konfigurator, kotwica T3, łamanie nazwy, 530, budżet. Bez pinów na stałych rysunku (szerokość, odstępy,
 // krycie — strojenie okiem; piny czytają `SHIP_PANEL_HUD` symbolicznie). WYKONANIE: prawdziwy `FleetManagerOverlay` (panel
 // T3 `drawVesselPanel` — źródło prawdy zbioru stref i dyspozycji), prawdziwy `ShipPanelHudLayer` (rysunek na atrapie ctx,
 // prawdziwe kliki), prawdziwy `Outliner` (kotwica przy wierszu), prawdziwe `HudLabelLayer` / `HudLayer` (530); metody
@@ -11,7 +11,7 @@
 // `this`.
 //
 // PINY:
-//   H0  moduły, flaga `shipPanelHud` (brak klucza = OFF; aktywna wyłącznie na T3 + trybie kompaktowym; w `GameConfig` — ON)
+//   H0  moduły (flaga kroku `shipPanelHud` i flagi, na których stała — na stałe ON od T4: predykaty i klucze usunięte)
 //   H1  ZBIÓR AKCJI ON = OFF: strefy panelu T5 ≡ strefy panelu T3 (`drawVesselPanel`, wysokość bez przycinania) co do typu
 //       i danych — 20 stanów (hangar, dok bez stoczni, koloniści, orbita, lot, walka, obca orbita, przylot międzygwiezdny,
 //       rekon obcy, pętla, rezerwa, mobilizacja, rally ×2, pula, unieruchomiony, blokada, konfigurator ×3); pokrycie 31 typów
@@ -22,15 +22,20 @@
 //       `UIManager._vesselPanelClick` / `_vesselPanelHit` / `_detectHoverBtn` (rączka) — prostokąt panelu T5
 //   H5  AKORDEON „[ Rozkazy ▼ ]”: jedna lista, otwarcie / zamknięcie, zwinięcie przy zmianie zaznaczenia (także A → nic → A)
 //   H6  KONFIGURATOR: szerokość `W_CONFIG` w kroku wyboru celu i potwierdzenia, powrót do `W`; cel zniknął — konfigurator zdjęty;
-//       zachowanie 9 (PASS, Finding 546) — zmiana zaznaczenia przy ON zdejmuje konfigurator (Rejestr i OFF — bez zmian)
+//       zachowanie 9 (PASS, Finding 546) — zmiana zaznaczenia zdejmuje konfigurator (Rejestr — bez zmian)
 //   H7  KOTWICA T3 BEZ ZMIAN (prawdziwy Outliner, wycięte `_drawShipPanelHud` / `_shipPanelAtOutliner`): prawa krawędź = lewa
 //       krawędź kolumny, górna = wiersz, łącznik; zapas (kolumna schowana); klamra wysokości; lista przewijana, nie panel
 //   H8  ŁAMANIE NAZWY: nazwa ≤ 30 znaków (okno zmiany nazwy) — ≤ 2 linie, bez „…”, pełna treść; font proporcjonalny
-//   H9  530: dymek współrzędnych nie nad UI (`isOverUI` + strefy HUD) — przy każdym stanie flag
-//   H10 OFF = T3: przy OFF klik, kółko, trafienie i rysunek idą do panelu T3 (prostokąt T5 `null`); pin źródłowy gałęzi
+//   H9  530: dymek współrzędnych nie nad UI (`isOverUI` + strefy HUD) — z warstwą etykiet HUD i bez niej
+//   H10 panel T5 jedyną powierzchnią statku nad mapą: nienarysowany (`clear`) — klik i trafienie nie idą do dawnego panelu
+//       T3; przeszkoda etykiet HUD — wyłącznie prostokąt panelu T5
 //   H11 BUDŻET: powtórna klatka bez pomiaru tekstu; jeden model na klatkę; panel nienarysowany — bez stref
 //   H12 STROJENIE 1 (Finding 556) — PL „⛽ Tankuj”, „🗑 Rozbiórka — wymaga stoczni” (bez angielskich słów); EN bez zmian
 //
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flagi kroków na stałe ON — H0c–H0e (flaga)
+//   zastąpione pinem braku predykatów i kluczy; H6g / H6j bez połowy OFF; H9b — stany warstwy etykiet HUD (`hudLabels`)
+//   zamiast `labelHover` × `shipPanelHud`; H10 (OFF = T3) przecelowany na „panel T5 jedyną powierzchnią”; H11d — bramka bez
+//   `_vesselPanelBounds`. H1 / H2 / H3 (panel T3 jako wyrocznia zbioru stref i dyspozycji) — bez zmian do kolejnego kroku T4.
 // ⚠ Moduły POWSTAJĄ w T5 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -76,8 +81,6 @@ const compileMethod = (code, name, scope = {}) => {
 };
 const call = (fn, self, ...a) => { try { return fn ? fn.apply(self, a) : undefined; } catch (e) { return `WYJĄTEK: ${e.message}`; } };
 const FEATURES = GAME_CONFIG.FEATURES;
-const FLAG_WAS = FEATURES.shipPanelHud;
-const setFlag = (v) => { if (v === undefined) delete FEATURES.shipPanelHud; else FEATURES.shipPanelHud = v; };
 // Stałe rysunku czytane symbolicznie (bez pinów na wartościach); brak modułu (fail-first) — NaN: porównania szerokości padają.
 const S = L?.SHIP_PANEL_HUD ?? { W: NaN, W_CONFIG: NaN };
 const AU = GAME_CONFIG.AU_TO_PX;
@@ -215,19 +218,17 @@ const mid = (z) => ({ x: z.x + z.w / 2, y: z.y + z.h / 2 });
 const spyFmo = (fmo) => { const rec = []; fmo._handleHit = (z) => rec.push('hit|' + L?.zoneKey?.(z)); fmo._handleVesselPanelFooter = (z) => rec.push('footer|' + L?.zoneKey?.(z)); return rec; };
 
 // ═══ H0 ═══════════════════════════════════════════════════════════════════════
-header('H0  moduły i flaga');
+header('H0  moduły (flagi kroków na stałe ON od T4)');
 {
-  const API = ['isShipPanelHudOn', 'isShipPanelHudActive', 'SHIP_PANEL_HUD', 'SHIP_PANEL_ZONE_TYPES', 'FOOTER_ZONE_TYPES', 'buildShipPanelModel',
+  const API = ['SHIP_PANEL_HUD', 'SHIP_PANEL_ZONE_TYPES', 'FOOTER_ZONE_TYPES', 'buildShipPanelModel',
     'modelZones', 'zoneKey', 'wrapText', 'wrapName', 'layoutChipRows', 'toggleOrders', 'ordersOpen', 'shipPanelHitAt', 'runShipPanelAction', 'coordTooltipBlocked'];
   ok(!!L && API.every((k) => k in L), `H0a ShipPanelHudLogic eksportuje: ${API.join(', ')}`);
   ok(typeof Y?.ShipPanelHudLayer === 'function', 'H0b ShipPanelHudLayer — klasa renderera');
-  ok(L?.isShipPanelHudOn?.({}) === false && L?.isShipPanelHudOn?.({ shipPanelHud: true }) === true && L?.isShipPanelHudOn?.({ shipPanelHud: 'true' }) === false,
-    'H0c brak klucza = OFF; tylko `true` włącza');
-  const base = { shipPanelHud: true, shipPanelOutliner: true, mapVesselPanelCompact: true };
-  ok(L?.isShipPanelHudActive?.(base) === true && L?.isShipPanelHudActive?.({ ...base, shipPanelOutliner: false }) === false
-    && L?.isShipPanelHudActive?.({ ...base, mapVesselPanelCompact: false }) === false && L?.isShipPanelHudActive?.({ ...base, mapVesselPanel: false }) === false,
-    'H0d panel T5 stoi na T3 (`shipPanelOutliner`) i trybie kompaktowym — bez nich zostaje panel T3 / grupy');
-  ok(FLAG_WAS === true && FEATURES.shipPanelOutliner === true, `H0e \`GameConfig.FEATURES.shipPanelHud\` — ON (jest: ${FLAG_WAS}), T3 ON`);
+  const gone = ['shipPanelHud', 'shipPanelOutliner', 'mapVesselPanel', 'mapVesselPanelCompact'];
+  const cfgSrc = src('../../config/GameConfig.js');
+  ok(!!L && L.isShipPanelHudOn === undefined && L.isShipPanelHudActive === undefined && gone.every((k) => FEATURES[k] === undefined)
+    && gone.every((k) => !new RegExp('\\b' + k + ':\\s*(true|false)').test(cfgSrc)),
+    'H0c flagi `shipPanelHud`, `shipPanelOutliner`, `mapVesselPanel`, `mapVesselPanelCompact` na stałe ON (T4) — predykaty i klucze usunięte');
   ok((L?.SHIP_PANEL_ZONE_TYPES?.length ?? 0) === 31 && new Set(L?.SHIP_PANEL_ZONE_TYPES ?? []).size === 31, 'H0f 31 typów stref panelu statku (inwentarz I2 §3.3), bez powtórzeń');
 }
 
@@ -452,10 +453,9 @@ header('H6  konfigurator misji — szerokość i powrót; cel zniknął');
   // Zachowanie 9 (PASS T5, Finding 546): zmiana zaznaczenia zdejmuje konfigurator — reguła czysta + metoda `UIManager` (wycięta).
   const D = L?.shouldDropMissionConfig;
   const cfg = { actionId: 'orbit', targetId: null, step: 'select' };
-  const onF = { ...FEATURES, shipPanelHud: true }, offF = { ...FEATURES, shipPanelHud: false };
-  ok(D?.({ features: onF, overlayOpen: false, config: cfg }) === true && D({ features: onF, overlayOpen: true, config: cfg }) === false
-    && D({ features: onF, overlayOpen: false, config: null }) === false && D({ features: offF, overlayOpen: false, config: cfg }) === false,
-    'H6g reguła: ON, bez overlayu, konfigurator otwarty — zdjąć; overlay (Rejestr) / brak konfiguratora / OFF — zostawić');
+  ok(D?.({ overlayOpen: false, config: cfg }) === true && D({ overlayOpen: true, config: cfg }) === false
+    && D({ overlayOpen: false, config: null }) === false,
+    'H6g reguła: bez overlayu, konfigurator otwarty — zdjąć; overlay (Rejestr) / brak konfiguratora — zostawić');
   const mDrop = compileMethod(UI, '_dropMissionConfigOnSelection', { GAME_CONFIG, shouldDropMissionConfig: D });
   const dropSelf = (ovl = false) => ({ _fleetOverlay: fmo, overlayManager: { isAnyOpen: () => ovl }, _dirty: false });
   // konfigurator otwarty prawdziwym klikiem (jak H6b), potem zmiana zaznaczenia
@@ -468,12 +468,9 @@ header('H6  konfigurator misji — szerokość i powrót; cel zniknął');
   const ds = dropSelf(false);
   const r1 = call(mDrop, ds);
   ok(opened && r1 === true && fmo._missionConfig === null && fmo._targetScrollOffset === 0 && ds._dirty === true && w() === S.W,
-    'H6h ON: konfigurator (prawdziwy klik „⊙ Leć i orbituj”) → zmiana zaznaczenia — zdjęty (jak „ANULUJ”), panel wraca do W');
+    'H6h konfigurator (prawdziwy klik „⊙ Leć i orbituj”) → zmiana zaznaczenia — zdjęty (jak „ANULUJ”), panel wraca do W');
   fmo._missionConfig = { ...cfg };
   ok(call(mDrop, dropSelf(true)) !== true && fmo._missionConfig?.step === 'select', 'H6i KONTROLA: overlay otwarty (Rejestr Dowództwa) — konfigurator zostaje (własna reguła Rejestru)');
-  setFlag(false);
-  ok(call(mDrop, dropSelf(false)) !== true && fmo._missionConfig?.step === 'select', 'H6j KONTROLA OFF: konfigurator zostaje (dzisiejsze zachowanie panelu T3)');
-  setFlag(FLAG_WAS);
   fmo._missionConfig = null;
   ok(/EventBus\.on\('ui:selectionChanged', \(\) => \{ this\._dropMissionConfigOnSelection\(\); \}\);/.test(UI),
     'H6k montaż: `UIManager` słucha `ui:selectionChanged` (każda zmiana zaznaczenia, także A → nic → A)');
@@ -575,18 +572,18 @@ header('H8  łamanie nazwy — ≤ 2 linie, bez „…”, pełna treść');
 }
 
 // ═══ H9 ═══════════════════════════════════════════════════════════════════════
-header('H9  530 — dymek współrzędnych nie nad UI (isOverUI + strefy HUD), przy każdym stanie flag');
+header('H9  530 — dymek współrzędnych nie nad UI (isOverUI + strefy HUD), z warstwą etykiet HUD i bez niej');
 {
   const B = L?.coordTooltipBlocked;
   ok(B?.({}) === false && B({ overUI: true }) === true && B({ hudZone: true }) === true && B({ overUI: false, hudZone: false }) === false,
     'H9a reguła: nad UI albo strefą HUD — bez dymka; pusta mapa — dymek');
-  const mMain = compileMethod(GS, '_tooltipHoverFromMain3D', { GAME_CONFIG, isLabelHoverActive: (f) => f?.hudLabels === true && f?.labelHover === true, worldToGameplay });
+  const mMain = compileMethod(GS, '_tooltipHoverFromMain3D', { GAME_CONFIG, isHudLabelsOn: (f) => f?.hudLabels === true, worldToGameplay });
   const mCover = compileMethod(GS, '_coordTooltipOverUi', { coordTooltipBlocked: B });
   ok(!!mMain && !!mCover, 'H9-0 `GameScene._tooltipHoverFromMain3D` i `_coordTooltipOverUi` wycięte ze źródła');
-  const run = ({ overUI = false, hud = false, lh = true, t5 = true } = {}) => {
+  const run = ({ overUI = false, hud = false, hl = true } = {}) => {
     const got = [];
-    const saved = { hudLabels: FEATURES.hudLabels, labelHover: FEATURES.labelHover, shipPanelHud: FEATURES.shipPanelHud };
-    FEATURES.labelHover = lh; FEATURES.shipPanelHud = t5;
+    const saved = { hudLabels: FEATURES.hudLabels };
+    FEATURES.hudLabels = hl;
     globalThis.window.KOSMOS.hudLayer = { coversUiPoint: () => hud, coversPoint: () => false };
     const self = {
       uiManager: { overlayManager: { isAnyOpen: () => false }, isPointerOverFloatingPanel: () => false, isOverUI: () => overUI, toLocalUI: (x, y) => ({ x, y }) },
@@ -600,9 +597,9 @@ header('H9  530 — dymek współrzędnych nie nad UI (isOverUI + strefy HUD), p
     Object.assign(FEATURES, saved);
     return got.some((g) => g[0] === 'coord');
   };
-  for (const lh of [true, false]) for (const t5 of [true, false]) {
-    ok(run({ overUI: true, lh, t5 }) === false && run({ hud: true, lh, t5 }) === false && run({ lh, t5 }) === true,
-      `H9b labelHover ${lh ? 'ON' : 'OFF'}, shipPanelHud ${t5 ? 'ON' : 'OFF'} — nad UI / strefą HUD bez dymka; nad pustą mapą — dymek (KONTROLA)`);
+  for (const hl of [true, false]) {
+    ok(run({ overUI: true, hl }) === false && run({ hud: true, hl }) === false && run({ hl }) === true,
+      `H9b warstwa etykiet HUD ${hl ? 'ON' : 'OFF'} — nad UI / strefą HUD bez dymka; nad pustą mapą — dymek (KONTROLA)`);
   }
   // `isOverUI` (wykonanie): panel T5, belka, pas, outlinery, nawigacja — każda powierzchnia zgłasza UI
   const mOver = compileMethod(UI, 'isOverUI', { UI_SCALE: 1, W: 1280, H: 720, GAME_CONFIG, CIV_PANEL_Y: 0, CIV_SIDEBAR_W: 0, COSMIC });
@@ -640,32 +637,30 @@ header('H9  530 — dymek współrzędnych nie nad UI (isOverUI + strefy HUD), p
 }
 
 // ═══ H10 ══════════════════════════════════════════════════════════════════════
-header('H10 OFF = T3 — przy OFF panel T3 co do bitu');
+header('H10 panel T5 jedyną powierzchnią statku nad mapą (dawny panel T3 poza rysunkiem i klikiem `UIManager`)');
 {
-  setFlag(false);
-  ok(L?.isShipPanelHudActive?.(FEATURES) === false, 'H10a flaga OFF — panel T5 nieaktywny');
   const mVpc = compileMethod(UI, '_vesselPanelClick', {});
   const mHit = compileMethod(UI, '_vesselPanelHit', {});
   const lay = Y ? new Y.ShipPanelHudLayer() : null;
   lay?.clear?.();
   const t3r = { x: 100, y: 100, w: 300, h: 300 };
+  let t3Clicks = 0;
   const self = { overlayManager: { isAnyOpen: () => false }, _mapSurface: () => 'vessel', _shipPanelDockHidden: () => false, _shipPanelHud: lay,
-    _fleetOverlay: { handleVesselPanelClick: () => true, _vesselPanelRect: t3r } };
-  ok(lay?.rect === null && call(mVpc, self, 150, 150) === true && call(mHit, self, 150, 150) === true && call(mHit, self, 50, 50) === false,
-    'H10b panel T5 niewyrysowany (`clear`) — klik i trafienie idą do panelu T3 (jego prostokąt)');
-  const dr = body(UI, '  _draw() {');
-  ok(/this\._mapSurface\(\) === 'vessel'\) \{\s*const r = this\._vesselPanelBounds\(W, H\);\s*if \(this\._shipPanelHudActive\(\)\) \{\s*shipPanelDrawn = this\._drawShipPanelHud\(ctx, W, H\);\s*shipPanelHudDrawn = !!shipPanelDrawn;\s*\} else \{\s*this\._fleetOverlay\?\.drawVesselPanel\?\.\(ctx, r\.x, r\.y, r\.w, r\.h,/.test(dr)
-    && /if \(!shipPanelHudDrawn\) this\._shipPanelHud\?\.clear\?\.\(\);/.test(dr),
-    'H10c `_draw`: za bramką T3 przy ON gałąź T5, inaczej (`else`) dzisiejszy panel T3 (`drawVesselPanel` z prostokątem `r`); panel T5 nienarysowany — `clear` (bez stref z dawnej klatki)');
-  ok(/_shipPanelHudActive\(\) \{\s*return isShipPanelHudActive\(GAME_CONFIG\.FEATURES\);/.test(UI), 'H10d flaga czytana przy każdym rysunku (`isShipPanelHudActive(GAME_CONFIG.FEATURES)`)');
-  // HudLabelLayer: przeszkoda — panel T5, przy OFF — panel T3
+    _fleetOverlay: { handleVesselPanelClick: () => { t3Clicks++; return true; }, _vesselPanelRect: t3r } };
+  globalThis.window.KOSMOS.civMode = true;
+  ok(lay?.rect === null && call(mVpc, self, 150, 150) === false && t3Clicks === 0 && call(mHit, self, 150, 150) === false,
+    'H10b panel T5 niewyrysowany (`clear`) — klik i trafienie NIE idą do dawnego panelu T3 (jego prostokąt bez znaczenia)');
+  if (lay) lay.rect = { x: 120, y: 120, w: 200, h: 200 };
+  ok(call(mHit, self, 150, 150) === true && call(mHit, self, 110, 110) === false,
+    'H10c KONTROLA: panel T5 narysowany — trafienie wg JEGO prostokąta (110,110 leży w dawnym T3, nie w T5)');
+  // HudLabelLayer: przeszkoda — wyłącznie prostokąt panelu T5
   const HLx = HLL?.HudLabelLayer ? new HLL.HudLabelLayer() : null;
   const um = { _mapSurface: () => 'vessel', _bottomContext: {}, _selectedEntity: null, _shipPanelHud: { rect: null }, _fleetOverlay: { _vesselPanelRect: t3r } };
-  const rOff = HLx?._cardRects?.({ uiManager: um, civMode: true }) ?? [];
-  um._shipPanelHud.rect = { x: 930, y: 60, w: 200, h: 250 }; um._fleetOverlay._vesselPanelRect = null;
+  const rNone = HLx?._cardRects?.({ uiManager: um, civMode: true }) ?? null;
+  um._shipPanelHud.rect = { x: 930, y: 60, w: 200, h: 250 };
   const rOn = HLx?._cardRects?.({ uiManager: um, civMode: true }) ?? [];
-  ok(rOff.length === 1 && rOff[0].w === 300 && rOn.length === 1 && rOn[0].w === 200, 'H10e przeszkoda etykiet HUD: OFF — prostokąt panelu T3; ON — panelu T5');
-  setFlag(FLAG_WAS);
+  ok(Array.isArray(rNone) && rNone.length === 0 && rOn.length === 1 && rOn[0].w === 200,
+    'H10e przeszkoda etykiet HUD: panel T5 nienarysowany — brak przeszkody (dawny prostokąt T3 ignorowany); narysowany — jego prostokąt');
 }
 
 // ═══ H11 ══════════════════════════════════════════════════════════════════════
@@ -684,7 +679,7 @@ header('H11 budżet — powtórna klatka bez pomiaru tekstu, jeden model na klat
   ok(lay?.rect === null && (lay?._zones?.length ?? -1) === 0 && lay.chipAt(1000, 100) === null && lay.handleClick(1000, 100, {}) === false
     && lay.handleWheel(1000, 100, 50) === false, 'H11c panel nienarysowany — bez stref: brak kliku, kółka i „rączki”');
   const dr = body(UI, '  _draw() {');
-  ok(/if \(civMode && !globeOpen && !this\.overlayManager\.isAnyOpen\(\) && !this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*const r = this\._vesselPanelBounds\(W, H\);\s*if \(this\._shipPanelHudActive\(\)\) \{/.test(dr),
+  ok(/if \(civMode && !globeOpen && !this\.overlayManager\.isAnyOpen\(\) && !this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*shipPanelDrawn = this\._drawShipPanelHud\(ctx, W, H\);/.test(dr),
     'H11d model liczony wyłącznie przy rysunku panelu (bramka T3: tryb cywilizacji, bez globusa i overlayu, bez trybu Y, N == 1)');
 }
 
@@ -699,6 +694,5 @@ header('H12 strojenie 1 (Finding 556) — PL bez angielskich słów na chipach t
   ok(enR === '⛽ Refuel' && enD === '🗑 Disband — requires shipyard', `H12c KONTROLA: EN bez zmian („${enR}”, „${enD}”)`);
 }
 
-setFlag(FLAG_WAS);
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

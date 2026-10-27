@@ -1,7 +1,6 @@
 // FleetPanelHudLogic — REFORMA ZAKŁADEK T6 (TABS_REFORM_PLAN.md §5.9; decyzja właściciela 2026-10-26 — D-TR-9 zmieniona):
 // czysta logika PANELU FLOTY (`FleetCommandPanel`) i PANELU GRUPY N ≥ 2 (`FleetGroupPanel`) W IDIOMIE ETYKIET z T5, przy
-// prawym outlinerze, za flagą `FEATURES.fleetPanelHud` (stoi na T5 — `isShipPanelHudActive`: geometria T3, tryb kompaktowy;
-// brak klucza = OFF → dzisiejsze panele w lewym dolnym rogu co do bitu). Rysunek, pomiar tekstu i strefy —
+// prawym outlinerze (flaga kroku `fleetPanelHud` — na stałe ON od T4, klucz usunięty). Rysunek, pomiar tekstu i strefy —
 // `FleetPanelHudLayer`; spięcie z hostem (geometria T3, klik, kółko, kursor, przeszkody, mutex) — `UIManager`.
 //   • TREŚĆ I AKCJE = LUSTRO `FleetCommandPanel.draw` / `FleetGroupPanel.draw`: te same warunki aktywności, te same strefy
 //     `{ type, data }` (flota — 16 typów `FLEET_PANEL_ZONE_TYPES`, grupa — 11 `GROUP_PANEL_ZONE_TYPES`) i TE SAME handlery:
@@ -29,15 +28,9 @@ import { ROLE_GLYPHS, ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY, buildShi
 import { shipMarker, worstMarker, TRANSIT } from './ShipTreeLogic.js';
 import { computePanelMode } from './TacticalDockLogic.js';
 import { summarizeFleetGroup, countActionable, combatCheckOf } from './FleetGroupPanelLogic.js';
-import { isShipPanelHudActive } from './ShipPanelHudLogic.js';
 import { toggleOpenList, openListFor } from './LabelPinLogic.js';
 import { doctrineNameKey } from '../data/FleetDoctrines.js';
 import { systemIdOf } from '../utils/SystemScope.js';
-
-/** Flaga kroku — `true` wyłącznie przy `features.fleetPanelHud === true` (brak klucza = OFF). */
-export const isFleetPanelHudOn = (features) => features?.fleetPanelHud === true;
-/** Panele T6 stoją na panelu statku T5 (idiom, geometria T3, tryb kompaktowy) — bez niego zostają dzisiejsze panele. */
-export const isFleetPanelHudActive = (features) => isFleetPanelHudOn(features) && isShipPanelHudActive(features);
 
 // Stałe (px logiczne) — wartości startowe = panel statku T5 po bramce. Strojenie z konsoli: `KOSMOS.fleetPanelHud.tune({ W: 210 })`.
 export const FLEET_PANEL_HUD_DEFAULTS = Object.freeze({
@@ -89,36 +82,35 @@ const chip = (id, label, z, enabled = !!z, extra = {}) => ({ id, label, enabled:
 // ── Mutex trzech paneli ─────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Powierzchnia zaznaczenia przy T6 (`UIManager._mapSurface`): przy aktywnym T6 — reguła Doku taktycznego
- * `computePanelMode` (flota > N ≥ 2 > lider): `fleetHud` — panel floty T6, `groupHud` — panel grupy T6, reszta bez zmian
- * (`vessel` — panel statku T5). Bramki dzisiejszych paneli (`fcFleetPanel`, `fcGroupPanel`) obowiązują; OFF — bez zmian.
+ * Powierzchnia zaznaczenia (`UIManager._mapSurface`): reguła Doku taktycznego `computePanelMode` (flota > N ≥ 2 > lider):
+ * `fleetHud` — panel floty T6, `groupHud` — panel grupy T6, reszta bez zmian (`vessel` — panel statku T5). Bramki paneli
+ * floty i grupy (`fcFleetPanel`, `fcGroupPanel`) obowiązują — przy OFF danej flagi panelu nie ma.
  * @param {'none'|'vessel'|'group'} surface — `resolveMapSelectionSurface`
  * @param {{ features:object, fleetId?:string|null, vesselCount?:number, leadId?:string|null }} p
  * @returns {'none'|'vessel'|'group'|'fleetHud'|'groupHud'}
  */
 export function fleetHudSurface(surface, { features, fleetId = null, vesselCount = 0, leadId = null } = {}) {
-  if (!isFleetPanelHudActive(features)) return surface;
   const mode = computePanelMode({ leadId, selectedCount: vesselCount, fleetId });
   if (mode === 'fleet' && features?.fcFleetPanel) return 'fleetHud';
   if (surface === 'group' && features?.fcGroupPanel) return 'groupHud';
   return surface;
 }
 
-/** Zaznaczenie statku (setSelectedVesselId / addToSelection — każda powierzchnia) zdejmuje flotę — tylko przy aktywnym T6. */
-export const dropFleetOnShipSelection = ({ features, vesselId = null, fleetId = null } = {}) =>
-  isFleetPanelHudActive(features) && vesselId != null && fleetId != null;
+/** Zaznaczenie statku (setSelectedVesselId / addToSelection — każda powierzchnia) zdejmuje flotę. */
+export const dropFleetOnShipSelection = ({ vesselId = null, fleetId = null } = {}) =>
+  vesselId != null && fleetId != null;
 
-/** Esc zamyka panel floty (zaznaczenie floty) — przy aktywnym T6, bez otwartego overlayu i okna DOM. */
-export const escapeClosesFleetPanel = ({ features, fleetId = null, overlayOpen = false, modalOpen = false } = {}) =>
-  isFleetPanelHudActive(features) && fleetId != null && overlayOpen !== true && modalOpen !== true;
+/** Esc zamyka panel floty (zaznaczenie floty) — bez otwartego overlayu i okna DOM. */
+export const escapeClosesFleetPanel = ({ fleetId = null, overlayOpen = false, modalOpen = false } = {}) =>
+  fleetId != null && overlayOpen !== true && modalOpen !== true;
 
 /**
  * Reguła 546 dla floty: picker celu floty (Rusz / Atak) uzbrojony dla floty, której panel już nie pokazuje (zmiana
- * zaznaczenia floty albo statku) — zdjęty. Przy OFF — jak dziś (picker przeżywa zmianę zaznaczenia).
- * @param {{ features:object, picker:{metadata?:{intent?:string, fleetId?:string}}|null, fleetId:string|null }} p
+ * zaznaczenia floty albo statku) — zdjęty.
+ * @param {{ picker:{metadata?:{intent?:string, fleetId?:string}}|null, fleetId:string|null }} p
  */
-export function shouldDropFleetPicker({ features, picker = null, fleetId = null } = {}) {
-  if (!isFleetPanelHudActive(features) || !picker) return false;
+export function shouldDropFleetPicker({ picker = null, fleetId = null } = {}) {
+  if (!picker) return false;
   const md = picker.metadata ?? {};
   return FLEET_PICKER_INTENTS.has(md.intent) && md.fleetId !== fleetId;
 }
@@ -133,19 +125,18 @@ export function fleetPickerFor(picker, fleetId) {
  * Strojenie 1 (3): klik w PUSTĄ mapę zdejmuje flotę — panel floty znika jak panel statku i przypięcia (grupa N ≥ 2 znika już
  * z `clearSelection`). WYJĄTEK — uzbrojony picker: klik w mapę to cel (gałąź pickera `GameScene._handleTacticalLeftClick`
  * wraca przed zaznaczeniem; tu — obrona w głąb). Klik ciała / stacji zostawia flotę (D-TR-14, jak zaznaczenie statku).
- * Przy OFF — jak dziś (flota zostaje).
  */
-export const dropFleetOnEmptyMapClick = ({ features, fleetId = null, pickerActive = false } = {}) =>
-  isFleetPanelHudActive(features) && fleetId != null && pickerActive !== true;
+export const dropFleetOnEmptyMapClick = ({ fleetId = null, pickerActive = false } = {}) =>
+  fleetId != null && pickerActive !== true;
 
 /**
  * Strojenie 1 (4): baner pickera u góry ekranu ukryty, gdy panel T6 pokazuje konfigurator celu floty (podpowiedź tylko
  * w panelu) — picker Rusz / Atak uzbrojony dla floty z panelu, panel narysowany i niezwinięty (te same warunki co
- * `buildFleetPanelModel` → `config`). Zwinięty panel, overlay, brak panelu — baner widoczny. Przy OFF — jak dziś (baner).
- * @param {{ features:object, picker?:object|null, fleetId?:string|null, minimized?:boolean, panelShown?:boolean }} p
+ * `buildFleetPanelModel` → `config`). Zwinięty panel, overlay, brak panelu — baner widoczny.
+ * @param {{ picker?:object|null, fleetId?:string|null, minimized?:boolean, panelShown?:boolean }} p
  */
-export function pickerBannerHidden({ features, picker = null, fleetId = null, minimized = false, panelShown = false } = {}) {
-  return isFleetPanelHudActive(features) && panelShown === true && minimized !== true && fleetPickerFor(picker, fleetId) != null;
+export function pickerBannerHidden({ picker = null, fleetId = null, minimized = false, panelShown = false } = {}) {
+  return panelShown === true && minimized !== true && fleetPickerFor(picker, fleetId) != null;
 }
 
 // ── Kotwica przy wierszu (geometria T3 — `ShipPanelAnchorLogic`) ─────────────────────────────────────────────────────

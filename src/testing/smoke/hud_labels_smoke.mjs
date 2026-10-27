@@ -11,8 +11,8 @@
 //       odpowiedź przy tym samym wejściu; poprzedni wybór miejsca wygrywa, gdy nadal ważny (bez skoków)
 //   L3  stres: wiele etykiet przy jednej kotwicy — zero nakładań; etykieta większa niż kadr — schowana
 //   L4  strefa kliku: najwyższa strefa; punkt na tarczy ciała wygrywa (487, 503)
-//   L5  warstwa (stub świata, prawdziwy `HudLayer` + `HudLabelLayer`): zwinięta grupa → klik zaznacza KOTWICĘ, drugi klik —
-//       kamera (D-UI-5 bez zmian); środek gwiazdy przy 450 j. → bez strefy etykiety, tarcza wygrywa (503); szyna — strefa na
+//   L5  warstwa (stub świata, prawdziwy `HudLayer` + `HudLabelLayer`): zwinięta grupa → klik zaznacza KOTWICĘ (przypiętą — wychodzi
+//       ze stosu), drugi klik — kamera (D-UI-5 bez zmian); środek gwiazdy przy 450 j. → bez strefy etykiety (503); szyna — strefa na
 //       wiersz (stacja → panel stacji); mgła wojny (unknown — brak, rumor — „?”, contact — nazwa; sprite ukryty — brak, 485);
 //       strzałki krawędzi bez etykiet w kadrze (497); flaga OFF i `uiPrefs.fleetMapLabelsVisible` — pusto
 //   L6  zegary: fade-in na czasie REALNYM (działa w pauzie), potem spoczynek — 0 wywołań ctx (budżet klatek)
@@ -25,6 +25,9 @@
 //     zaznaczona kotwica jest PRZYPIĘTA: wychodzi ze stosu do własnej etykiety z wierszem akcji („+N” rozkłada się), 2. klik
 //     trafia linię nazwy przypiętej, a przypięta etykieta na tarczy wygrywa z tarczą (przycisk > etykieta > tarcza) —
 //     warianty „-T2” (pełne piny: `label_pin_smoke`).
+//   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `labelPin` na stałe ON (klucz
+//     usunięty) — warianty OFF L5c, L5d, L5f usunięte (w trybie cywilizacji tej ścieżki już nie ma); jedynymi zostają L5c-T2,
+//     L5d-T2, L5f-T2. L5e (środek gwiazdy) stoi przed blokiem przypięcia — bez zaznaczenia.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -256,8 +259,6 @@ const projLogical = (cam, p) => { const v = new T3.Vector3(p.x, p.y, p.z).projec
 // ═══ L5 ══════════════════════════════════════════════════════════════════════
 header('L5  warstwa: zwinięta grupa, gwiazda (503), szyna, mgła wojny, strzałki (497), OFF');
 {
-  const wasPin = FEATURES.labelPin;
-  FEATURES.labelPin = false;           // T2 — piny L5c–L5f opisują ścieżkę `labelPin` OFF (warianty „-T2” niżej)
   W0.cam = CAM_FAR; W0.camEpoch++;
   const H = mkHud();
   const emitted = [];
@@ -270,29 +271,13 @@ header('L5  warstwa: zwinięta grupa, gwiazda (503), szyna, mgła wojny, strzał
     `L5a: widok układu — stos Nowej Ziemi zwinięty: „${g?.text?.[0]}” (bez osobnych etykiet księżyca i stacji)`);
   const fob = labelBy(d, 'c:p_fob');
   ok(!!fob && fob.text[0] === 'FOBOS', 'L5b: Fobos (księżyc innej planety bez kolonii) — osobna etykieta, wersaliki');
-  // Klik zwiniętej etykiety: kotwica (Nowa Ziemia), 1. klik — zaznaczenie bez kamery, 2. — kamera (D-UI-5 bez zmian).
   const zones = () => H.lab?._zones ?? [];
   const click = (x, y) => (H.hud?.handleClick ? H.hud.handleClick(x, y, x * 1.25, y * 1.25) : undefined);
-  const z = zones().find((q) => q.key === 'g:p_nz');
-  const cx = z ? z.x + z.w / 2 : -1, cy = z ? z.y + z.h / 2 : -1;
-  const r1 = click(cx, cy);
-  ok(r1 === true && emitted.length === 1 && emitted[0].id === 'p_nz' && emitted[0].focus === false, `L5c: klik zwiniętej etykiety → kotwica „Nowa Ziemia”, bez kamery (${JSON.stringify(emitted[0] ?? null)})`);
-  W0.entity = 'p_nz';                                             // gra: `body:selected` ustawia kartę ciała
-  H.frame(1100);
-  const z2 = zones().find((q) => q.key === 'g:p_nz');
-  const r2 = z2 ? click(z2.x + 2, z2.y + 2) : undefined;
-  ok(r2 === true && emitted.length === 2 && emitted[1].focus === true, 'L5d: drugi klik w zaznaczoną kotwicę → kamera (`focus: true`)');
   // 503 — środek gwiazdy przy 450 j.: żadna strefa etykiety go nie pokrywa; a nawet gdyby — tarcza wygrywa.
   const sc = projLogical(CAM_FAR, BODIES.star);
   const zoneAtStar = LL?.resolveLabelClick?.(zones(), sc.x, sc.y);
   ok(zoneAtStar === null && zones().length > 0, `L5e: środek gwiazdy (${sc.x.toFixed(1)}, ${sc.y.toFixed(1)}) — bez strefy etykiety (dziś: strefa stacji, 503)`);
-  W0.onDisc = () => true;
-  const r3 = click(cx, cy);
-  W0.onDisc = () => false;
-  ok(r3 === false && emitted.length === 2, 'L5f: punkt na tarczy ciała — klik NIE trafia etykiety (raycast tarcz rozstrzyga — 487)');
-  W0.entity = null;
-  // ── L5d-T2 / L5f-T2 — przy `labelPin` ON (REFORMA ZAKŁADEK T2): kotwica przypięta wychodzi ze stosu do własnej etykiety ──
-  FEATURES.labelPin = true;
+  // ── L5c-T2 / L5d-T2 / L5f-T2 — kotwica przypięta wychodzi ze stosu do własnej etykiety (REFORMA ZAKŁADEK T2; od T4 jedyna ścieżka) ──
   W0.camEpoch++; H.frame(1110);
   const zT = zones().find((q) => q.key === 'g:p_nz');
   emitted.length = 0;
@@ -313,7 +298,6 @@ header('L5  warstwa: zwinięta grupa, gwiazda (503), szyna, mgła wojny, strzał
   W0.onDisc = () => false;
   ok(rT3 === true && emitted.length === 2, 'L5f-T2: punkt przypiętej etykiety na tarczy ciała — klik pochłonięty przez przypięcie (przycisk > etykieta > tarcza), bez zdarzeń');
   W0.entity = null;
-  FEATURES.labelPin = wasPin;
   W0.camEpoch++; H.frame(1450);
   // Szyna przy średnim zbliżeniu — strefa na wiersz; wiersz stacji → panel stacji.
   W0.cam = CAM_MID; W0.camEpoch++;

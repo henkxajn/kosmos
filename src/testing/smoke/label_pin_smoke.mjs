@@ -6,7 +6,7 @@
 // zaznaczenia, cele akcji (piny na wywołaniach), limit list, przypięcie w rozkładzie, wejścia I3; bez pinów na stałych rysunku.
 // Uruchom: node src/testing/smoke/label_pin_smoke.mjs
 //
-//   P0  API i flaga `labelPin` (brak klucza = OFF; stoi na rozwinięciu T1 — wymaga `hudLabels` i `labelHover`)
+//   P0  API (flaga kroku `labelPin` na stałe ON od T4 — predykaty i klucz usunięte; przypięcie stoi na warstwie etykiet HUD)
 //   P1  przypięcie = zaznaczenie: klucz z `readClickSelection` (ciało / stacja), bez nowego pola stanu
 //   P2  strefy kliku: przycisk > etykieta (linia nazwy) > reszta przypięcia (pochłonięta) > tarcza / sprite; KONTROLA —
 //       zwykła etykieta na tarczy dalej przegrywa z tarczą (487); kursor „rączki” nad przyciskiem
@@ -24,14 +24,18 @@
 //       outlinerze) — etykieta przenosi się obok karty; STROJENIE 1 (zachowanie 5, wariant 2): pasek rośnie w dół jak przy
 //       najechaniu — mała tarcza: linia nazwy bez zmian po przypięciu; duża tarcza: przesunięcie w górę = dokładnie nadmiar nad
 //       tarczą (swoją, gospodarza stacji); bez miejsca w kadrze — pod tarczę; lista handlu stacji przy ~4 j. — tarcza odkryta;
-//       rozwinięcie NAJECHANIA (T1) — ta sama reguła raz przy pojawieniu się (P11z–P11zb; przy `labelPin` OFF — jak T1)
+//       rozwinięcie NAJECHANIA (T1) — ta sama reguła raz przy pojawieniu się (P11za–P11zb)
 //   Fail-first (kopia `git archive 1eed72d`): zielone wyłącznie KONTROLE, świadkowie sceny i OFF; strojenie 1 — kopia drzewa
 //   z T2 sprzed strojenia: czerwone piny strojenia, zielone kontrole i świadkowie.
 //   P12 karta ciała i panel stacji przy ON — nierysowane i nieklikalne (piny na wywołaniach `UIManager`)
 //   P13 wejścia I3 (karta ciała ×9, panel stacji ×4) prowadzą do przypięcia; strojenie 1 (b): 1. klik w wiersz ciała z INNEGO
 //       układu w lewym outlinerze — wiersz podświetlony jak zaznaczenie (U2), przypięcie dopiero po 2. kliku (przełączenie)
 //   P14 budżet: treść przypięcia z pamięci (TTL), spoczynek — 0 wywołań ctx
-//   P15 OFF = dziś
+//   P15 bez warstwy etykiet HUD (`hudLabels` OFF) — reguła jednego przypięcia nie działa
+//   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `labelPin` na stałe ON —
+//     P0b–P0d (flaga) zastąpione pinem braku predykatów i klucza; sekcje OFF usunięte (P4d, P5e, P11z, P15a); P5i i P15 —
+//     „bez przypięcia” znaczy teraz bez warstwy etykiet HUD (`hudLabels`, flaga do paczki B); P11g — przeszkodą jest prostokąt
+//     panelu statku T5 (`_shipPanelHud.rect`); P12a / P12b / P12g — bramką jest warstwa etykiet HUD w trybie cywilizacji.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -77,20 +81,17 @@ const methodBody = (s, name) => {
 };
 
 // ═══ P0 ══════════════════════════════════════════════════════════════════════
-header('P0  API i flaga `labelPin`');
+header('P0  API (flaga kroku `labelPin` na stałe ON od T4)');
 {
-  const need = ['isLabelPinOn', 'isLabelPinActive', 'LABEL_PIN', 'PIN_SWAP_REASON', 'pinnedContentKey', 'stripArrow', 'stripColon',
+  const need = ['LABEL_PIN', 'PIN_SWAP_REASON', 'pinnedContentKey', 'stripArrow', 'stripColon',
     'visibleDeposits', 'homeDistanceLine', 'depositStars', 'depositRows', 'trafficRows', 'moduleRows', 'storageRows', 'limitRows',
     'bodyPinButtons', 'stationPinButtons', 'layoutButtonRows', 'toggleOpenList', 'openListFor', 'pinHitAt', 'runPinAction',
     'enforceSinglePinOnStation', 'enforceSinglePinOnBody', 'escapeUnpin', 'escapeHeldByModal', 'pinnedBox', 'yieldToPinnedLabel'];
   const missing = need.filter((n) => LP?.[n] === undefined);
   ok(missing.length === 0, `P0a: \`LabelPinLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
-  ok(LP?.isLabelPinOn?.({ labelPin: true }) === true && LP?.isLabelPinOn?.({}) === false && LP?.isLabelPinOn?.({ labelPin: 1 }) === false,
-    'P0b: flaga — `true` wyłącznie przy `labelPin === true` (brak klucza = OFF)');
-  ok(LP?.isLabelPinActive?.({ hudLabels: true, labelHover: true, labelPin: true }) === true
-    && LP?.isLabelPinActive?.({ hudLabels: true, labelPin: true }) === false && LP?.isLabelPinActive?.({ labelHover: true, labelPin: true }) === false,
-    'P0c: przypięcie stoi na rozwinięciu T1 — wymaga `hudLabels`, `labelHover` i `labelPin`');
-  ok(/\blabelPin:\s*true,/.test(strip(src('../../config/GameConfig.js'))), 'P0d: `FEATURES.labelPin: true` w GameConfig (do oglądania)');
+  ok(!!LP && LP.isLabelPinOn === undefined && LP.isLabelPinActive === undefined && FEATURES.labelPin === undefined
+    && !/\blabelPin:\s*(true|false)/.test(strip(src('../../config/GameConfig.js'))),
+    'P0b: flaga kroku `labelPin` na stałe ON (T4) — predykaty `isLabelPinOn` / `isLabelPinActive` i klucz w GameConfig usunięte');
   ok(LP?.PIN_SWAP_REASON === 'pin_swap' && LP?.LABEL_PIN?.LIST_LIMIT === 5, 'P0e: powód zamiany przypięcia `pin_swap`; limit listy 5 wierszy');
   const need1 = ['mapActionWorks', 'pinLabelPlacement', 'discExcess'];
   const missing1 = need1.filter((n) => typeof LP?.[n] !== 'function');
@@ -183,7 +184,7 @@ const setWorld = () => {
 setWorld();
 // Prawdziwy rejestr encji (lewy outliner i panel stacji czytają `EntityManager`, nie `K.entityManager`).
 for (const e of [...Object.values(ENT), ...STATIONS]) EntityManagerReal.add(e);
-FEATURES.hudLabels = true; FEATURES.labelHover = true; FEATURES.labelPin = true;
+FEATURES.hudLabels = true;
 // Panel stacji — prawdziwy (stan „otwarty” = przypięcie stacji przy ON; cykl życia ze słuchaczy).
 const stationPanel = SPm?.StationPanel ? new SPm.StationPanel() : null;
 K.stationPanel = stationPanel;
@@ -326,11 +327,6 @@ header('P4  jedno przypięcie naraz (ciało ↔ stacja)');
   const closedPlain = stationPanel?.visible === false;
   selectStation('st_1'); EventBus.emit('body:deselected', { reason: 'system_switch' });
   ok(closedPlain && stationPanel?.visible === true, 'P4c KONTROLA: odznaczenie bez powodu zamyka panel stacji, `system_switch` — nie (jak dziś)');
-  // OFF — karta i panel niezależne (dziś): nic się nie zdejmuje.
-  FEATURES.labelPin = false;
-  reset(); selectBody('p_nz'); emits.length = 0; selectStation('st_1');
-  ok(W0.entity === 'p_nz' && stationPanel?.visible === true && countOf('body:deselected') === 0, 'P4d: OFF — ciało i stacja razem (jak dziś)');
-  FEATURES.labelPin = true;
   // Renderer: `pin_swap` zdejmuje zaznaczenie, nie kamerę (słuchacz wycięty ze źródła, wykonanie na atrapie).
   const iH = TR.indexOf("EventBus.on('body:deselected', safe((p) => {");
   const hb = iH > 0 ? TR.slice(iH, TR.indexOf('}));', iH)) : '';
@@ -359,9 +355,6 @@ header('P5  Esc w kaskadzie (po zaznaczeniu statku, przed overlayem)');
   reset(); selectBody('p_x');
   ok(esc({ overlayOpen: true }) === null && W0.entity === 'p_x', 'P5c: przy otwartym overlayu Esc należy do overlayu — przypięcie zostaje');
   ok(esc({ modalOpen: true }) === null && W0.entity === 'p_x', 'P5d: nad oknem DOM (raport ciała) — przypięcie zostaje (okno zamyka własny Esc)');
-  FEATURES.labelPin = false;
-  ok(esc() === null && W0.entity === 'p_x', 'P5e: OFF — Esc nie dotyka karty ciała (jak dziś — 534 przy OFF zostaje)');
-  FEATURES.labelPin = true;
   reset();
   ok(esc() === null, 'P5f: bez przypięcia — nic (Esc idzie dalej: menu ☰)');
   // Kolejność w `GameScene`: picker → menu PPM → zaznaczenie statku → PRZYPIĘCIE → overlay → okno potwierdzenia → menu ☰.
@@ -377,8 +370,8 @@ header('P5  Esc w kaskadzie (po zaznaczeniu statku, przed overlayem)');
     'P5h: krok przypięcia dostaje stan overlayu i okna DOM (`.kosmos-modal-overlay` — raport ciała)');
   // Okno DOM (raport ciała z przypięcia) — Esc należy do okna: kaskada mapy stoi (bez tego otwierało się menu ☰ — zmierzone w grze).
   ok(call(LP?.escapeHeldByModal, { K, features: FEATURES, domModalOpen: true }) === true && call(LP?.escapeHeldByModal, { K, features: FEATURES, domModalOpen: false }) === false
-    && call(LP?.escapeHeldByModal, { K, features: { ...FEATURES, labelPin: false }, domModalOpen: true }) === false,
-    'P5i: okno DOM otwarte — Esc należy do okna (kaskada mapy stoi); bez okna albo przy OFF — kaskada jak dziś');
+    && call(LP?.escapeHeldByModal, { K, features: { ...FEATURES, hudLabels: false }, domModalOpen: true }) === false,
+    'P5i: okno DOM otwarte — Esc należy do okna (kaskada mapy stoi); bez okna albo bez warstwy etykiet HUD — kaskada jak dziś');
   const iRcm = GS.indexOf('rcm.hide();', iKey), iMod = GS.indexOf('escapeHeldByModal({', iKey);
   ok(iRcm > iKey && iMod > iRcm && iMod < iVes && /domModalOpen: !!document\.querySelector\('\.kosmos-modal-overlay'\)/.test(GS.slice(iMod, iMod + 260)),
     `P5j: \`GameScene\` — strażnik okna DOM po menu PPM, PRZED zaznaczeniem statku i przypięciem (${iRcm} < ${iMod} < ${iVes})`);
@@ -724,10 +717,9 @@ header('P11 przypięta etykieta przy swoim obiekcie (I8.3)');
   }
   // Rozwinięcie NAJECHANIA (T1) z tą samą regułą (dopełnienie strojenia 1, scena P1d arkusza): przy pojawieniu się nad dużą
   // tarczą — w górę dokładnie o nadmiar, RAZ (przypięcie położenia zapamiętane — po ruchu kamery bez ponownego przesuwania,
-  // I8.3); KONTROLA — przy `labelPin` OFF (T1) rozwinięcie rośnie w dół od linii nazwy i wchodzi na tarczę.
+  // I8.3). (Kontrola P11z — `labelPin` OFF — usunięta w T4 razem z tą ścieżką; P11za mierzy przesunięcie > 0.)
   {
-    const hoverScene = (pinOn) => {
-      FEATURES.labelPin = pinOn;
+    const hoverScene = () => {
       reset(); W0.cam = camAround([6.2, 0, 0], 3, 0.5, Math.PI / 2); W0.camEpoch++;
       const Hh = mkHud(); Hh.frame(1000);
       const c0 = rawLab(Hh, 'c:p_nz');
@@ -736,14 +728,10 @@ header('P11 przypięta etykieta przy swoim obiekcie (I8.3)');
       W0.cam = camAround([6.2, 0, 0], 2.6, 0.5, Math.PI / 2); W0.camEpoch++;   // bliżej — większa tarcza
       hoverBodyAt(Hh, 'p_nz'); Hh.frame(1500); Hh.frame(1600);
       const pin1 = Hh.lab?._pins?.get?.('c:p_nz') ?? null, disc1 = discOf(Hh, 'p_nz');
-      FEATURES.labelPin = true;
       return { c0, hv, disc, pin0, pin1, disc1 };
     };
-    const off = hoverScene(false), on = hoverScene(true);
-    const exOff = excessOf(off.hv, off.disc);
+    const on = hoverScene();
     const exStart = excessOf(on.c0 && on.hv ? { x: on.hv.x, y: on.c0.y, w: on.hv.w, h: on.hv.h } : null, on.disc);
-    ok(!!off.c0 && !!off.hv && off.hv.expanded === true && off.hv.y === off.c0.y && exOff > 0,
-      `P11z KONTROLA: \`labelPin\` OFF (T1) — rozwinięcie najechania rośnie w dół od linii nazwy i wchodzi na dużą tarczę (${Math.round(exOff)} px)`);
     ok(!!on.c0 && !!on.hv && on.hv.expanded === true && exStart > 0 && Math.abs(on.hv.y - (on.c0.y - exStart)) < 1e-6 && excessOf(on.hv, on.disc) < 1e-6,
       `P11za: rozwinięcie najechania (scena P1d) — w górę dokładnie o nadmiar (${Math.round(exStart)} px), tarcza odkryta`);
     ok(!!on.pin0 && !!on.pin1 && on.pin0.cand === on.pin1.cand && on.pin0.baseH === on.pin1.baseH && (on.disc1?.r ?? 0) > (on.disc?.r ?? Infinity),
@@ -826,12 +814,12 @@ header('P11 przypięta etykieta przy swoim obiekcie (I8.3)');
   W0.camEpoch++; H2.frame(3400);
   const q0b = pinLabel(H2.dbg());
   const card = q0 ? { x: q0.x - 4, y: q0.y - 4, w: q0.w + 8, h: q0.h + 8 } : null;
-  K.uiManager._fleetOverlay = { _vesselPanelRect: card }; K.uiManager._mapSurface = () => 'vessel';
+  K.uiManager._shipPanelHud = { rect: card }; K.uiManager._mapSurface = () => 'vessel';
   W0.camEpoch++; H2.frame(3500);
   const q1 = pinLabel(H2.dbg());
   W0.camEpoch++; H2.frame(3600);
   const q2 = pinLabel(H2.dbg());
-  delete K.uiManager._fleetOverlay; K.uiManager._mapSurface = () => null;
+  delete K.uiManager._shipPanelHud; K.uiManager._mapSurface = () => null;
   ok(!!q0 && !!q0b && q0b.x === q0.x && q0b.y === q0.y, 'P11f KONTROLA: bez karty przypięta stoi (ta sama pozycja w kolejnej klatce)');
   ok(!!q1 && !!card && (LL?.rectOverlapArea?.(q1, card, 0) ?? 1) === 0 && !!q2 && q2.x === q1.x && q2.y === q1.y,
     `P11g: panel statku zasłania przypiętą — etykieta przenosi się obok karty (${q0?.x},${q0?.y} → ${q1?.x},${q1?.y}) i znów stoi`);
@@ -839,26 +827,27 @@ header('P11 przypięta etykieta przy swoim obiekcie (I8.3)');
 }
 
 // ═══ P12 ═════════════════════════════════════════════════════════════════════
-header('P12 karta ciała i panel stacji przy ON — nierysowane i nieklikalne (piny na wywołaniach)');
+header('P12 karta ciała i panel stacji na warstwie etykiet HUD — nierysowane i nieklikalne (piny na wywołaniach)');
 {
   const bce = methodBody(UIM, '_bodyCardEntity');
   let fBce = null, fSurf = null;
   const sps = methodBody(UIM, '_stationPanelSurface');
-  try { fBce = new Function('GAME_CONFIG', 'isLabelHoverActive', 'isLabelPinActive', 'bodyCardAction', 'window', `return function () {${bce?.body}\n};`); } catch (e) { console.log('    (' + e.message + ')'); }
-  try { fSurf = new Function('GAME_CONFIG', 'isLabelPinActive', 'window', `return function () {${sps?.body}\n};`); } catch (e) { console.log('    (' + e.message + ')'); }
+  try { fBce = new Function('GAME_CONFIG', 'isHudLabelsOn', 'window', `return function () {${bce?.body}\n};`); } catch (e) { console.log('    (' + e.message + ')'); }
+  try { fSurf = new Function('GAME_CONFIG', 'isHudLabelsOn', 'window', `return function () {${sps?.body}\n};`); } catch (e) { console.log('    (' + e.message + ')'); }
   const mk = (feat, civ) => {
     const G = { FEATURES: feat };
     const win = { KOSMOS: { ...K, civMode: civ } };
-    const b = fBce ? fBce(G, LH?.isLabelHoverActive, LP?.isLabelPinActive, LH?.bodyCardAction, win) : null;
-    const s = fSurf ? fSurf(G, LP?.isLabelPinActive, win) : null;
+    const b = fBce ? fBce(G, LL?.isHudLabelsOn, win) : null;
+    const s = fSurf ? fSurf(G, LL?.isHudLabelsOn, win) : null;
     return { b: (e) => (b ? b.call({ _selectedEntity: e }) : undefined), s: () => (s ? s.call({}) : undefined) };
   };
-  const ON = mk({ hudLabels: true, labelHover: true, labelPin: true }, true);
-  const OFF = mk({ hudLabels: true, labelHover: true }, true);
-  const GEN = mk({ hudLabels: true, labelHover: true, labelPin: true }, false);
-  ok(ON.b(ENT.p_nz) === null && ON.b(ENT.p_x) === null && OFF.b(ENT.p_nz) === ENT.p_nz && OFF.b(ENT.pd_1) === null && GEN.b(ENT.p_nz) === ENT.p_nz,
-    'P12a: `_bodyCardEntity` — przy ON karta ciała nie istnieje (każde ciało); KONTROLA: OFF — jak T1 (karta dla ciała z akcją); Generator — jak dziś');
-  ok(ON.s() === false && OFF.s() === true && GEN.s() === true, 'P12b: `_stationPanelSurface` — przy ON panel stacji nie jest powierzchnią; OFF i Generator — jest');
+  const ON = mk({ hudLabels: true }, true);
+  const NOHUD = mk({}, true);
+  const GEN = mk({ hudLabels: true }, false);
+  ok(ON.b(ENT.p_nz) === null && ON.b(ENT.p_x) === null && ON.b(ENT.pd_1) === null && NOHUD.b(ENT.p_nz) === ENT.p_nz && NOHUD.b(ENT.pd_1) === ENT.pd_1
+    && GEN.b(ENT.p_nz) === ENT.p_nz,
+    'P12a: `_bodyCardEntity` — na warstwie etykiet HUD w trybie cywilizacji karta ciała nie istnieje (każde ciało); KONTROLA: bez warstwy (`hudLabels` OFF) i w Generatorze — zaznaczone ciało');
+  ok(ON.s() === false && NOHUD.s() === true && GEN.s() === true, 'P12b: `_stationPanelSurface` — na warstwie etykiet HUD w trybie cywilizacji panel stacji nie jest powierzchnią; bez warstwy i w Generatorze — jest');
   const gated = (re) => re.test(UIM);
   ok(gated(/if \(civMode && !globeOpen && this\._stationPanelSurface\(\)\) this\.stationPanel\.draw\(ctx, W, H\);/)
     && gated(/if \(this\._stationPanelSurface\(\) && this\.stationPanel\?\.handleClick\?\.\(x, y\)\) return true;/)
@@ -875,7 +864,7 @@ header('P12 karta ciała i panel stacji przy ON — nierysowane i nieklikalne (p
   ok(/if \(p\?\.reason === PIN_SWAP_REASON\) return;/.test(SPsrc), 'P12f: `StationPanel` nie zamyka się przy `pin_swap` (panel = przypięcie stacji)');
   // Strefy kart w etykietach: panel stacji przy ON nie jest przeszkodą (prostokąt z dawnej klatki).
   const lay = strip(src('../../ui/HudLabelLayer.js'));
-  ok(/const spDrawn = !\(isLabelPinActive\(GAME_CONFIG\.FEATURES\) && K\?\.civMode\);/.test(lay), 'P12g: etykiety nie omijają niewidocznego panelu stacji');
+  ok(/const spDrawn = !K\?\.civMode;/.test(lay), 'P12g: etykiety nie omijają niewidocznego panelu stacji (w trybie cywilizacji panel stacji się nie rysuje)');
 }
 
 // ═══ P13 ═════════════════════════════════════════════════════════════════════
@@ -980,18 +969,13 @@ header('P14 budżet: treść przypięcia z pamięci, spoczynek');
 }
 
 // ═══ P15 ═════════════════════════════════════════════════════════════════════
-header('P15 OFF = dziś');
+header('P15 bez warstwy etykiet HUD (`hudLabels` OFF) — reguła jednego przypięcia nie działa');
 {
-  FEATURES.labelPin = false;
-  reset(); W0.cam = CAM_WIDE; W0.camEpoch++;
-  const H = mkHud();
-  selectBody('p_x'); H.frame(1000); H.frame(1300);
-  const d = H.dbg();
-  ok(!pinLabel(d) && d?.pin === undefined && (d?.labels ?? []).every((l) => !(l.text ?? []).some((s) => /^\[ /.test(String(s)))),
-    'P15a: OFF — brak przypięcia i wiersza akcji (zaznaczone ciało: rozwinięcie T1 jak dziś)');
-  ok(call(LP?.enforceSinglePinOnStation, { K, emit: () => { throw new Error('emit'); }, features: FEATURES }) === false
-    && call(LP?.enforceSinglePinOnBody, { K, features: FEATURES }) === false, 'P15b: OFF — reguła jednego przypięcia nie działa (karta i panel niezależne)');
-  FEATURES.labelPin = true;
+  reset(); selectBody('p_x');
+  const noHud = { ...FEATURES, hudLabels: false };
+  ok(call(LP?.enforceSinglePinOnStation, { K, emit: () => { throw new Error('emit'); }, features: noHud }) === false
+    && call(LP?.enforceSinglePinOnBody, { K, features: noHud }) === false && W0.entity === 'p_x',
+    'P15b: bez warstwy etykiet HUD — reguła jednego przypięcia nie działa (przypięcia nie ma)');
   reset();
 }
 

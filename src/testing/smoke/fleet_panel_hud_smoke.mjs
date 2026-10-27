@@ -1,20 +1,26 @@
 // fleet_panel_hud_smoke — REFORMA ZAKŁADEK T6 (TABS_REFORM_PLAN.md §5.9; decyzja właściciela 2026-10-26 — D-TR-9 zmieniona):
 // panel FLOTY (`FleetCommandPanel`) przy wierszu węzła floty i panel GRUPY N ≥ 2 (`FleetGroupPanel`) przy wierszu lidera,
-// w idiomie etykiet z T5, za flagą `FEATURES.fleetPanelHud` (stoi na T5; brak klucza = OFF → dzisiejsze panele co do bitu).
+// w idiomie etykiet z T5 (flaga kroku `fleetPanelHud` — na stałe ON od T4, klucz usunięty; dawne panele bez rysunku i kliku).
 //
 // Keeper WYŁĄCZNIE logiki (protokół `HUD_PLAN.md` §4.0, aneks 2026-10-23 — bez pinów na stałych rysunku):
-//   F0  moduły i flaga · F1 zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy PRAWDZIWEGO `FleetCommandPanel.draw` /
+//   F0  moduły (flagi kroków na stałe ON od T4) · F1 zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy PRAWDZIWEGO `FleetCommandPanel.draw` /
 //   `FleetGroupPanel.draw` (typ + dane) w każdym stanie z inwentarza §5.9.1, pokrycie typów, kontrola czułości · F2 każdy
 //   chip → ten sam handler (prawdziwy klik obu paneli, szpieg `_onHit`) · F3 stany nieaktywne · F4 strefy kliku (chip >
 //   linia członka > nazwa > pasek) · F5 mutex trzech paneli (`fleetHudSurface` = reguła Doku; `UIManager._mapSurface`,
 //   `setSelectedVesselId`, `addToSelection` wykonane) · F6 klik w członka → panel statku · F7 akordeon · F8 konfigurator celu
 //   floty i reguła 546 · F9 kotwica na prawdziwym Outlinerze (węzeł floty, układ zwinięty, lider grupy, zapas, tryb Y, karta
-//   walki) · F10 Esc · F11 OFF = dziś (logika i montaż) · F12 budżet · F13 kółko (lista członków) · F14 trafienie i przeszkody.
+//   walki) · F10 Esc · F11 montaż (dawne panele poza rysunkiem i klikiem `UIManager`) · F12 budżet · F13 kółko (lista członków)
+//   · F14 trafienie i przeszkody.
 //   Strojenie 1 (właściciel 2026-10-27): F15 klik w pustą mapę zdejmuje flotę (uzbrojony picker — cel) · F16 baner pickera
-//   ukryty przy konfiguratorze w panelu (OFF — jak dziś) · F17 Finding 562 — „Odwrót” grupy tylko dla członka w aktywnym
+//   ukryty przy konfiguratorze w panelu · F17 Finding 562 — „Odwrót” grupy tylko dla członka w aktywnym
 //   starciu (predykat bramki MOS `not_in_combat`, wykonanie prawdziwego `_issueRetreat`; OFF i ON).
 // `UIManager` i `GameScene` (nie importują się pod node — THREE) — metody wycięte ze źródła (komentarze zdjęte) i wykonane
 // z atrapą `this`. Ślad deterministyczny „OFF = dziś” wobec kotwicy — sonda poza repo (teczka T6, `probes/trace_off_T6.mjs`).
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flagi kroków na stałe ON — F0c–F0e (flaga)
+//   zastąpione pinem braku predykatów i kluczy; sekcje OFF usunięte (F5b, F5f, F14c, F15f, F16e; połowy OFF F8f, F10a, F15a,
+//   F16b); F5k — bramki rysunku bez dawnego panelu floty; F11 (OFF = dziś) przecelowany na montaż: dawne panele floty i grupy
+//   poza rysunkiem i klikiem `UIManager`. F1 / F2 / F3 / F17 (dawne panele jako wyrocznia stref i dyspozycji) — bez zmian do
+//   kolejnego kroku T4.
 // ⚠ Moduły POWSTAJĄ w T6 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -63,8 +69,6 @@ const compileMethod = (code, name, scope = {}) => {
 };
 const call = (fn, self, ...a) => { try { return fn ? fn.apply(self, a) : undefined; } catch (e) { return `WYJĄTEK: ${e.message}`; } };
 const FEATURES = GAME_CONFIG.FEATURES;
-const FLAG_WAS = FEATURES.fleetPanelHud;
-const setFlag = (v) => { if (v === undefined) delete FEATURES.fleetPanelHud; else FEATURES.fleetPanelHud = v; };
 const S = L?.FLEET_PANEL_HUD ?? { W: NaN, W_CONFIG: NaN, MEMBERS_MAX: NaN };
 const AU = GAME_CONFIG.AU_TO_PX;
 const UI = src('../../scenes/UIManager.js');
@@ -233,22 +237,20 @@ function t6Panel(surface, { lay = null, ctx = recCtx(), fcp = null, fgp = null, 
 const mid = (z) => ({ x: z.x + z.w / 2, y: z.y + z.h / 2 });
 
 // ═══ F0 ═══════════════════════════════════════════════════════════════════════
-header('F0  moduły i flaga');
+header('F0  moduły (flagi kroków na stałe ON od T4)');
 {
-  const API = ['isFleetPanelHudOn', 'isFleetPanelHudActive', 'FLEET_PANEL_HUD', 'FLEET_PANEL_ZONE_TYPES', 'GROUP_PANEL_ZONE_TYPES',
+  const API = ['FLEET_PANEL_HUD', 'FLEET_PANEL_ZONE_TYPES', 'GROUP_PANEL_ZONE_TYPES',
     'PAGING_ZONE_TYPES', 'FLEET_PICKER_INTENTS', 'fleetHudSurface', 'dropFleetOnShipSelection', 'escapeClosesFleetPanel',
     'shouldDropFleetPicker', 'fleetPickerFor', 'fleetRowKeys', 'buildFleetPanelModel', 'buildGroupPanelModel', 'modelZones', 'zoneKey',
     'toggleOrders', 'ordersOpen', 'fleetPanelHitAt', 'runFleetPanelAction', 'memberClickPlan', 'dropFleetOnEmptyMapClick', 'pickerBannerHidden'];
   ok(!!L && API.every((k) => k in L), `F0a FleetPanelHudLogic eksportuje: ${API.join(', ')}`);
   ok(typeof Y?.FleetPanelHudLayer === 'function' && new Y.FleetPanelHudLayer() instanceof T5.ShipPanelHudLayer,
     'F0b FleetPanelHudLayer — osobny renderer; maszyneria tekstu odziedziczona z panelu statku T5 (ten sam font, kratka cyfr)');
-  ok(L?.isFleetPanelHudOn?.({}) === false && L?.isFleetPanelHudOn?.({ fleetPanelHud: true }) === true && L?.isFleetPanelHudOn?.({ fleetPanelHud: 'true' }) === false,
-    'F0c brak klucza = OFF; tylko `true` włącza');
-  const base = { fleetPanelHud: true, shipPanelHud: true, shipPanelOutliner: true, mapVesselPanelCompact: true };
-  ok(L?.isFleetPanelHudActive?.(base) === true && L?.isFleetPanelHudActive?.({ ...base, shipPanelHud: false }) === false
-    && L?.isFleetPanelHudActive?.({ ...base, shipPanelOutliner: false }) === false && L?.isFleetPanelHudActive?.({ ...base, mapVesselPanel: false }) === false,
-    'F0d T6 stoi na T5 (panel statku w idiomie etykiet, geometria T3, tryb kompaktowy) — bez nich dzisiejsze panele');
-  ok(FLAG_WAS === true && L?.isFleetPanelHudActive?.(FEATURES) === true, `F0e \`GameConfig.FEATURES.fleetPanelHud\` — ON (jest: ${FLAG_WAS}), T5 aktywny`);
+  const gone = ['fleetPanelHud', 'shipPanelHud', 'shipPanelOutliner', 'mapVesselPanel', 'mapVesselPanelCompact'];
+  const cfgSrc = src('../../config/GameConfig.js');
+  ok(!!L && L.isFleetPanelHudOn === undefined && L.isFleetPanelHudActive === undefined && gone.every((k) => FEATURES[k] === undefined)
+    && gone.every((k) => !new RegExp('\\b' + k + ':\\s*(true|false)').test(cfgSrc)),
+    'F0c flaga `fleetPanelHud` i flagi T5 / T3 na stałe ON (T4) — predykaty `isFleetPanelHudOn` / `isFleetPanelHudActive` i klucze usunięte');
   ok((L?.FLEET_PANEL_ZONE_TYPES?.length ?? 0) === 16 && new Set(L?.FLEET_PANEL_ZONE_TYPES ?? []).size === 16
     && (L?.GROUP_PANEL_ZONE_TYPES?.length ?? 0) === 11 && new Set(L?.GROUP_PANEL_ZONE_TYPES ?? []).size === 11,
     'F0f typy stref (inwentarz §5.9.1 I2): flota 16, grupa 11, bez powtórzeń (stronicowanie i tło osobno)');
@@ -385,23 +387,19 @@ header('F4  strefy kliku: chip > linia członka > nazwa > pasek');
 
 // ═══ F5 ═══════════════════════════════════════════════════════════════════════
 header('F5  mutex trzech paneli — flota > N ≥ 2 > lider (reguła Doku `computePanelMode`), zaznaczenie statku zdejmuje flotę');
-const ON_F = { ...FEATURES, fleetPanelHud: true }, OFF_F = { ...FEATURES, fleetPanelHud: false };
+const ON_F = { ...FEATURES };
 {
   const cases = [
     [null, 0, null, 'none'], [null, 1, 'a', 'vessel'], [null, 3, 'a', 'group'], ['F1', 0, null, 'none'], ['F1', 1, 'a', 'vessel'], ['F1', 3, 'a', 'group'],
   ];
-  let okOn = true, okOff = true, okDock = true;
+  let okOn = true;
   for (const [fid, n, lead, surf] of cases) {
     const on = L?.fleetHudSurface?.(surf, { features: ON_F, fleetId: fid, vesselCount: n, leadId: lead });
-    const off = L?.fleetHudSurface?.(surf, { features: OFF_F, fleetId: fid, vesselCount: n, leadId: lead });
     const mode = TDL.computePanelMode({ leadId: lead, selectedCount: n, fleetId: fid });
     const want = mode === 'fleet' ? 'fleetHud' : mode === 'multi' ? 'groupHud' : mode === 'single' ? 'vessel' : 'none';
     if (on !== want) okOn = false;
-    if (off !== surf) okOff = false;
-    if (mode === 'fleet' && on !== 'fleetHud') okDock = false;
   }
-  ok(okOn, 'F5a ON: powierzchnia = reguła Doku taktycznego (flota → `fleetHud` przy N 0 / 1 / 3; N ≥ 2 → `groupHud`; N = 1 → `vessel`)');
-  ok(okOff, 'F5b OFF: powierzchnia bez zmian (`resolveMapSelectionSurface` — panel statku i grupy jak dziś)');
+  ok(okOn, 'F5a powierzchnia = reguła Doku taktycznego (flota → `fleetHud` przy N 0 / 1 / 3; N ≥ 2 → `groupHud`; N = 1 → `vessel`)');
   ok(L?.fleetHudSurface?.('vessel', { features: { ...ON_F, fcFleetPanel: false }, fleetId: 'F1', vesselCount: 1, leadId: 'a' }) === 'vessel'
     && L?.fleetHudSurface?.('group', { features: { ...ON_F, fcGroupPanel: false }, vesselCount: 3, leadId: 'a' }) === 'group',
     'F5c dzisiejsze bramki obowiązują (`fcFleetPanel` / `fcGroupPanel` OFF — bez panelu T6 tego rodzaju)');
@@ -412,47 +410,43 @@ const ON_F = { ...FEATURES, fleetPanelHud: true }, OFF_F = { ...FEATURES, fleetP
   for (const n of ['_mapSurface', 'setSelectedFleetId', 'setSelectedVesselId', 'addToSelection', '_dropFleetOnShipSelection', 'getSelectedVesselId',
     'getSelectedVesselIds', 'getSelectedFleetId', '_syncFleetOvLead']) M[n] = compileMethod(UI, n, scope);
   const umReal = () => {
-    const self = { _selectedVesselId: null, _selectedVesselIds: new Set(), _selectedFleetId: null, overlayManager: { overlays: {} }, _vesselPanelFloat: null };
+    const self = { _selectedVesselId: null, _selectedVesselIds: new Set(), _selectedFleetId: null, overlayManager: { overlays: {} } };
     for (const [n, f] of Object.entries(M)) if (f) self[n] = f;
     return self;
   };
   world({ vessels: ['a', 'b', 'c'].map((id) => ship(id)), fleets: [fleet('F1', ['a', 'b'])] });
   const K = globalThis.window.KOSMOS;
-  const withF = (feat, fn) => { const saved = FEATURES.fleetPanelHud; FEATURES.fleetPanelHud = feat; try { return fn(); } finally { FEATURES.fleetPanelHud = saved; } };
-  const run = (feat, steps) => withF(feat, () => { const u = umReal(); K.uiManager = u; for (const s of steps) call(s[0], u, ...s.slice(1)); return u; });
-  const u1 = run(true, [[M.setSelectedFleetId, 'F1']]);
+  const run = (steps) => { const u = umReal(); K.uiManager = u; for (const s of steps) call(s[0], u, ...s.slice(1)); return u; };
+  const u1 = run([[M.setSelectedFleetId, 'F1']]);
   ok(call(M._mapSurface, u1) === 'fleetHud', 'F5d `_mapSurface` (wykonanie): wybrana flota → `fleetHud`');
-  const u2 = run(true, [[M.setSelectedFleetId, 'F1'], [M.setSelectedVesselId, 'c']]);
-  ok(u2._selectedFleetId === null && u2._selectedVesselId === 'c' && withF(true, () => call(M._mapSurface, u2)) === 'vessel',
-    'F5e ON: zaznaczenie statku (mapa, Tab, etykieta, Dok) zdejmuje flotę → panel statku T5');
-  const u3 = run(false, [[M.setSelectedFleetId, 'F1'], [M.setSelectedVesselId, 'c']]);
-  ok(u3._selectedFleetId === 'F1' && u3._selectedVesselId === 'c' && withF(false, () => call(M._mapSurface, u3)) === 'vessel',
-    'F5f KONTROLA OFF: flota zostaje (jak dziś — panel floty i panel statku razem)');
-  const u4 = run(true, [[M.setSelectedVesselId, 'a'], [M.setSelectedFleetId, 'F1'], [M.setSelectedVesselId, 'a']]);
-  ok(u4._selectedFleetId === null && u4._selectedVesselId === 'a', 'F5g ON: statek już zaznaczony przy wybranej flocie (np. „→ Flota”) — ponowny wybór też zdejmuje flotę (przed deduplikacją)');
-  const u5 = run(true, [[M.setSelectedFleetId, 'F1'], [M.addToSelection, 'b'], [M.addToSelection, 'c']]);
-  ok(u5._selectedFleetId === null && u5._selectedVesselIds.size === 2 && withF(true, () => call(M._mapSurface, u5)) === 'groupHud',
-    'F5h ON: CTRL / prostokąt SHIFT (`addToSelection`) zdejmuje flotę → panel grupy');
+  const u2 = run([[M.setSelectedFleetId, 'F1'], [M.setSelectedVesselId, 'c']]);
+  ok(u2._selectedFleetId === null && u2._selectedVesselId === 'c' && call(M._mapSurface, u2) === 'vessel',
+    'F5e zaznaczenie statku (mapa, Tab, etykieta, Dok) zdejmuje flotę → panel statku T5');
+  const u4 = run([[M.setSelectedVesselId, 'a'], [M.setSelectedFleetId, 'F1'], [M.setSelectedVesselId, 'a']]);
+  ok(u4._selectedFleetId === null && u4._selectedVesselId === 'a', 'F5g statek już zaznaczony przy wybranej flocie (np. „→ Flota”) — ponowny wybór też zdejmuje flotę (przed deduplikacją)');
+  const u5 = run([[M.setSelectedFleetId, 'F1'], [M.addToSelection, 'b'], [M.addToSelection, 'c']]);
+  ok(u5._selectedFleetId === null && u5._selectedVesselIds.size === 2 && call(M._mapSurface, u5) === 'groupHud',
+    'F5h CTRL / prostokąt SHIFT (`addToSelection`) zdejmuje flotę → panel grupy');
   // `clickObject(fleetTarget)` — 1. klik węzła floty: flota + zaznaczenie statków zdjęte; flota ZOSTAJE (null nie zdejmuje).
-  const u6 = withF(true, () => { const u = umReal(); u.setSelectedVesselId('c'); K.uiManager = u;
-    CI.applyClickIntent(CI.fleetTarget('F1', K.vesselManager.getVessel('a')), CI.CLICK_INTENT.SELECT, { K, emit: () => {} }); return u; });
-  ok(u6._selectedFleetId === 'F1' && u6._selectedVesselIds.size === 0 && withF(true, () => call(M._mapSurface, u6)) === 'fleetHud',
+  const u6 = umReal(); u6.setSelectedVesselId('c'); K.uiManager = u6;
+  CI.applyClickIntent(CI.fleetTarget('F1', K.vesselManager.getVessel('a')), CI.CLICK_INTENT.SELECT, { K, emit: () => {} });
+  ok(u6._selectedFleetId === 'F1' && u6._selectedVesselIds.size === 0 && call(M._mapSurface, u6) === 'fleetHud',
     'F5i węzeł floty w outlinerze (reguła U1) — panel floty; panel statku zdjęty');
   ok(call(M._dropFleetOnShipSelection, u6, null) === false && u6._selectedFleetId === 'F1', 'F5j odznaczenie statków (`null`) floty nie zdejmuje');
-  // JEDEN panel naraz (ON): bramki rysunku — panel statku (`vessel`), dzisiejszy panel grupy (`group`), dzisiejszy panel floty
-  // (przy ON wyłączony), panel T6 (`fleetHud` / `groupHud`) — w każdym stanie zaznaczenia najwyżej jedna prawdziwa.
+  // JEDEN panel naraz: bramki rysunku — panel statku (`vessel`), panel grupy bez T6 (`group` — przy `fcGroupPanel` OFF, nic nie
+  // rysuje), panel T6 (`fleetHud` / `groupHud`) — w każdym stanie zaznaczenia najwyżej jedna prawdziwa (dawnego panelu floty brak).
   const states = [['F1', []], ['F1', ['a']], ['F1', ['a', 'b']], [null, ['a']], [null, ['a', 'b', 'c']], [null, []]];
   let oneOk = true, seenT6 = 0, seenShip = 0;
-  for (const [fid, ids] of states) withF(true, () => {
+  for (const [fid, ids] of states) {
     const u = umReal(); K.uiManager = u; u._selectedFleetId = fid; u._selectedVesselIds = new Set(ids); u._selectedVesselId = ids[0] ?? null;
     const surf = call(M._mapSurface, u);
-    const gates = [surf === 'vessel', surf === 'group', !L?.isFleetPanelHudActive?.(FEATURES) && !!fid, surf === 'fleetHud' || surf === 'groupHud'];
+    const gates = [surf === 'vessel', surf === 'group', surf === 'fleetHud' || surf === 'groupHud'];
     const n = gates.filter(Boolean).length;
     if (n > 1 || ((fid || ids.length) && n !== 1)) oneOk = false;
-    if (gates[3]) seenT6++;
+    if (gates[2]) seenT6++;
     if (gates[0]) seenShip++;
-  });
-  ok(oneOk && seenT6 === 4 && seenShip === 1, `F5k JEDEN panel naraz (ON): w ${states.length} stanach zaznaczenia najwyżej jedna bramka rysunku (T6 ${seenT6}×, statek ${seenShip}×)`);
+  }
+  ok(oneOk && seenT6 === 4 && seenShip === 1, `F5k JEDEN panel naraz: w ${states.length} stanach zaznaczenia najwyżej jedna bramka rysunku (T6 ${seenT6}×, statek ${seenShip}×)`);
 }
 
 // ═══ F6 ═══════════════════════════════════════════════════════════════════════
@@ -532,12 +526,11 @@ header('F8  konfigurator celu floty (picker Rusz / Atak tej floty) i reguła 546
   fcp._armEngagePicker('F1');
   ok(L?.fleetPickerFor?.(UM._picker, 'F1') === 'fleetcmd_engage', 'F8e prawdziwy picker „Atak” (`_armEngagePicker`) — rozpoznany');
   const P = (intent, fid) => ({ mode: 'targetPoint', metadata: { intent, fleetId: fid } });
-  ok(L?.shouldDropFleetPicker?.({ features: ON_F, picker: P('fleetcmd_move', 'F1'), fleetId: 'F2' }) === true
-    && L.shouldDropFleetPicker({ features: ON_F, picker: P('fleetcmd_move', 'F1'), fleetId: null }) === true
-    && L.shouldDropFleetPicker({ features: ON_F, picker: P('fleetcmd_move', 'F1'), fleetId: 'F1' }) === false
-    && L.shouldDropFleetPicker({ features: ON_F, picker: P('create_poi', undefined), fleetId: null }) === false
-    && L.shouldDropFleetPicker({ features: OFF_F, picker: P('fleetcmd_move', 'F1'), fleetId: 'F2' }) === false,
-    'F8f reguła 546: inna flota / brak floty — zdjęty; ta sama flota, picker POI, OFF — zostaje');
+  ok(L?.shouldDropFleetPicker?.({ picker: P('fleetcmd_move', 'F1'), fleetId: 'F2' }) === true
+    && L.shouldDropFleetPicker({ picker: P('fleetcmd_move', 'F1'), fleetId: null }) === true
+    && L.shouldDropFleetPicker({ picker: P('fleetcmd_move', 'F1'), fleetId: 'F1' }) === false
+    && L.shouldDropFleetPicker({ picker: P('create_poi', undefined), fleetId: null }) === false,
+    'F8f reguła 546: inna flota / brak floty — zdjęty; ta sama flota, picker POI — zostaje');
   const mDrop = compileMethod(UI, '_dropFleetPickerOnSelection', { GAME_CONFIG, shouldDropFleetPicker: L?.shouldDropFleetPicker ?? (() => false) });
   const self = (fid) => { const s = { _pickerState: P('fleetcmd_engage', 'F1'), _selectedFleetId: fid, cancelled: 0 }; s.cancelPickerMode = () => { s.cancelled++; s._pickerState = null; return true; }; return s; };
   const sB = self('F2'), sA = self('F1');
@@ -599,9 +592,9 @@ header('F9  kotwica — wiersz węzła floty / lidera grupy w PRAWDZIWYM outline
 // ═══ F10 ══════════════════════════════════════════════════════════════════════
 header('F10 Esc zamyka panel floty (przed zaznaczeniem statków; nie przy overlayu i oknie DOM)');
 {
-  ok(L?.escapeClosesFleetPanel?.({ features: ON_F, fleetId: 'F1' }) === true && L.escapeClosesFleetPanel({ features: ON_F, fleetId: null }) === false
-    && L.escapeClosesFleetPanel({ features: ON_F, fleetId: 'F1', overlayOpen: true }) === false && L.escapeClosesFleetPanel({ features: ON_F, fleetId: 'F1', modalOpen: true }) === false
-    && L.escapeClosesFleetPanel({ features: OFF_F, fleetId: 'F1' }) === false, 'F10a Esc: flota przy ON — tak; bez floty, overlay, okno DOM, OFF — nie');
+  ok(L?.escapeClosesFleetPanel?.({ fleetId: 'F1' }) === true && L.escapeClosesFleetPanel({ fleetId: null }) === false
+    && L.escapeClosesFleetPanel({ fleetId: 'F1', overlayOpen: true }) === false && L.escapeClosesFleetPanel({ fleetId: 'F1', modalOpen: true }) === false,
+    'F10a Esc: flota — tak; bez floty, overlay, okno DOM — nie');
   const kd = body(GS, '    window.addEventListener(\'keydown\'') || GS;
   const iMod = GS.indexOf('escapeHeldByModal({ K: window.KOSMOS'), iFl = GS.indexOf('escapeClosesFleetPanel({'), iVes = GS.indexOf('if (um?.getSelectedVesselId?.()) {');
   ok(iMod > 0 && iFl > iMod && iVes > iFl && /um\.setSelectedFleetId\(null\);/.test(GS.slice(iFl, iVes)),
@@ -610,32 +603,25 @@ header('F10 Esc zamyka panel floty (przed zaznaczeniem statków; nie przy overla
 }
 
 // ═══ F11 ══════════════════════════════════════════════════════════════════════
-header('F11 OFF = dziś — logika i montaż (ślad deterministyczny wobec kotwicy — sonda w teczce T6)');
+header('F11 montaż — dawne panele floty i grupy poza rysunkiem i klikiem `UIManager` (T4)');
 {
-  setFlag(false);
-  ok(L?.isFleetPanelHudActive?.(FEATURES) === false, 'F11a flaga OFF — T6 nieaktywny');
-  ok(L?.dropFleetOnShipSelection?.({ features: FEATURES, vesselId: 'a', fleetId: 'F1' }) === false && L?.escapeClosesFleetPanel?.({ features: FEATURES, fleetId: 'F1' }) === false,
-    'F11b OFF: zaznaczenie statku nie zdejmuje floty, Esc jak dziś');
   const mClick = compileMethod(UI, '_fleetPanelHudClick', {});
   const lay = Y ? new Y.FleetPanelHudLayer() : null; lay?.clear?.();
-  ok(call(mClick, { _fleetPanelHud: lay, overlayManager: { isAnyOpen: () => false }, _mapSurface: () => 'group' }, 900, 100) === false,
-    'F11c panel T6 nienarysowany (OFF) — klik nie jego');
-  setFlag(FLAG_WAS);
+  globalThis.window.KOSMOS.civMode = true;
+  ok(call(mClick, { _fleetPanelHud: lay, overlayManager: { isAnyOpen: () => false }, _mapSurface: () => 'groupHud' }, 900, 100) === false,
+    'F11c panel T6 nienarysowany — klik nie jego');
   const dr = body(UI, '\n  _draw() {');
-  const cnt = (hay, n) => hay.split(n).length - 1;
-  ok(cnt(UI, 'this.fleetCommandPanel.draw(') === 1 && /GAME_CONFIG\.FEATURES\?\.fcFleetPanel && !this\.overlayManager\.isAnyOpen\(\) && !this\._fleetPanelHudActive\(\)\) this\.fleetCommandPanel\.draw\(ctx, W, H\);/.test(dr),
-    'F11d rysunek: jedyne wywołanie panelu floty za bramką `!this._fleetPanelHudActive()` (OFF — jak dziś)');
-  ok(cnt(UI, 'fleetGroupPanel.draw(') === 1 && /this\._mapSurface\(\) === 'group'\) this\.fleetGroupPanel\.draw\(ctx, W, H\);/.test(dr),
-    'F11e KONTROLA: jedyne wywołanie panelu grupy — bramka `_mapSurface() === \'group\'` bez zmian (przy ON powierzchnia to `groupHud`)');
+  ok(dr.length > 0 && !/fleetCommandPanel\.draw\(|fleetGroupPanel\.draw\(/.test(UI),
+    'F11d rysunek: dawne panele floty i grupy NIE są rysowane przez `UIManager` (T4; jedyną powierzchnią jest panel T6)');
   ok(/if \(fleetPanelDrawn\) shipPanelDrawn = fleetPanelDrawn;\s*else \{ this\._fleetPanelHud\?\.clear\?\.\(\); this\._fleetPanelPlacement = null; \}/.test(dr)
     && dr.indexOf('this._drawFleetPanelHud(ctx, W, H)') > dr.indexOf('if (!shipPanelHudDrawn) this._shipPanelHud?.clear?.();')
     && dr.indexOf('this._drawFleetPanelHud(ctx, W, H)') < dr.indexOf('this._noteShipPanelDrawn(shipPanelDrawn)'),
     'F11f rysunek T6 w miejscu panelu statku (po T5, przed zapisem przeszkody kart); nienarysowany — `clear` + kotwica wyzerowana');
   const hc = body(UI, '\n  handleClick(x, y) {');
-  ok(hc.indexOf('this._fleetPanelHudClick(x, y)') > hc.indexOf('shipPanelFirst && this._vesselPanelClick(x, y)')
+  ok(hc.indexOf('this._vesselPanelClick(x, y)') > 0 && hc.indexOf('this._fleetPanelHudClick(x, y)') > hc.indexOf('this._vesselPanelClick(x, y)')
     && hc.indexOf('this._fleetPanelHudClick(x, y)') < hc.indexOf('this.combatHud?.handleClick?.(x, y)')
-    && /isAnyOpen\(\) && !this\._fleetPanelHudActive\(\)\s*&& this\.fleetCommandPanel\?\.handleClick\?\.\(x, y\)/.test(hc),
-    'F11g klik: T6 zaraz po panelu statku (przed kartą walki); dzisiejszy panel floty za bramką OFF');
+    && !/fleetCommandPanel\?\.handleClick|fleetGroupPanel\?\.handleClick|fleetCommandPanel\.handleClick|fleetGroupPanel\.handleClick/.test(UI),
+    'F11g klik: T6 zaraz po panelu statku (przed kartą walki); dawnych paneli floty i grupy brak w łańcuchu kliku');
 }
 
 // ═══ F12 ══════════════════════════════════════════════════════════════════════
@@ -686,14 +672,13 @@ header('F14 trafienie, blokada kamery i przeszkody — prostokąt panelu T6');
   const mOver = compileMethod(UI, 'isOverUI', { UI_SCALE: 1, W: 1280, H: 720, GAME_CONFIG, CIV_PANEL_Y: 0, CIV_SIDEBAR_W: 0, COSMIC });
   const no = { isOver: () => false };
   const fcpStub = { visible: true, _hitTest: () => true };
-  const base = (on) => ({ _gameOverData: null, _confirmDialog: null, _topBar: no, _bottomBar: no, _leftOutliner: no, _outliner: no, _topResourceDrawer: no,
+  const base = () => ({ _gameOverData: null, _confirmDialog: null, _topBar: no, _bottomBar: no, _leftOutliner: no, _outliner: no, _topResourceDrawer: no,
     _bottomNavBar: no, _bottomControlBar: no, _eventLogDrawer: no, _mapSurface: () => 'none', _vesselPanelHit: () => false, _fleetPanelHud: lay,
-    _fleetPanelHudHit: mHit, _fleetPanelHudActive: () => on, fleetGroupPanel: null, fleetCommandPanel: fcpStub, _stationPanelSurface: () => false,
+    _fleetPanelHudHit: mHit, fleetGroupPanel: null, fleetCommandPanel: fcpStub, _stationPanelSurface: () => false,
     stationPanel: null, _tacticalMode: null, tacticalDock: null, panelDock: null, _bottomContext: no, _bodyCardEntity: () => null, overlayManager: { isAnyOpen: () => false } });
   globalThis.window.KOSMOS.civMode = true;
-  ok(call(mOver, base(true), 1000, 100) === true && call(mOver, base(true), 400, 400) === false,
-    'F14b `isOverUI` (wykonanie, ON): nad panelem T6 — UI; pusta mapa — nie (dzisiejszy panel floty nie pytany)');
-  ok(call(mOver, base(false), 400, 400) === true, 'F14c KONTROLA OFF: dzisiejszy panel floty pytany jak dziś (`_hitTest`)');
+  ok(call(mOver, base(), 1000, 100) === true && call(mOver, base(), 400, 400) === false,
+    'F14b `isOverUI` (wykonanie): nad panelem T6 — UI; pusta mapa — nie (dawny panel floty nie jest pytany, nawet gdy jego `_hitTest` mówi „tak”)');
   const HLx = HLL?.HudLabelLayer ? new HLL.HudLabelLayer() : null;
   const um = { _mapSurface: () => 'fleetHud', _bottomContext: {}, _selectedEntity: null, _shipPanelHud: { rect: null }, _fleetOverlay: { _vesselPanelRect: null },
     _fleetPanelHud: { rect: { x: 930, y: 60, w: 200, h: 220 } } };
@@ -709,11 +694,9 @@ header('F14 trafienie, blokada kamery i przeszkody — prostokąt panelu T6');
 // ═══ F15 ══════════════════════════════════════════════════════════════════════
 header('F15 strojenie 1 (3) — klik w PUSTĄ mapę zdejmuje flotę i grupę (jak panel statku i przypięcia); uzbrojony picker — klik = cel');
 {
-  const withF = (feat, fn) => { const saved = FEATURES.fleetPanelHud; FEATURES.fleetPanelHud = feat; try { return fn(); } finally { FEATURES.fleetPanelHud = saved; } };
   const D = L?.dropFleetOnEmptyMapClick;
-  ok(D?.({ features: ON_F, fleetId: 'F1' }) === true && D?.({ features: ON_F, fleetId: null }) === false
-    && D?.({ features: ON_F, fleetId: 'F1', pickerActive: true }) === false && D?.({ features: OFF_F, fleetId: 'F1' }) === false,
-    'F15a reguła: ON + flota — zdjęta; bez floty, przy uzbrojonym pickerze, przy OFF — nie');
+  ok(D?.({ fleetId: 'F1' }) === true && D?.({ fleetId: null }) === false && D?.({ fleetId: 'F1', pickerActive: true }) === false,
+    'F15a reguła: flota — zdjęta; bez floty, przy uzbrojonym pickerze — nie');
   // Prawdziwe metody (wycięte ze źródła, wykonane): `UIManager._dropFleetOnEmptyMapClick`, `GameScene._selectFromClickPick`,
   // `GameScene._handleTacticalLeftClick` (gałąź pickera).
   const mDrop = compileMethod(UI, '_dropFleetOnEmptyMapClick', { GAME_CONFIG, dropFleetOnEmptyMapClick: D ?? (() => false) });
@@ -740,46 +723,42 @@ header('F15 strojenie 1 (3) — klik w PUSTĄ mapę zdejmuje flotę i grupę (ja
     return s;
   };
   const u1 = umFor();
-  withF(true, () => call(mSel, scene(u1), null, false, null, null));
+  call(mSel, scene(u1), null, false, null, null);
   ok(u1._selectedFleetId === null && u1.calls.some((c) => c[0] === 'clear'),
-    'F15b ON: pusta mapa (`_selectFromClickPick` — wykonanie) — zaznaczenie wyczyszczone i flota zdjęta → panel floty znika');
+    'F15b pusta mapa (`_selectFromClickPick` — wykonanie) — zaznaczenie wyczyszczone i flota zdjęta → panel floty znika');
   const u2 = umFor({ fleet: null, sel: ['a', 'b'] });
-  withF(true, () => call(mSel, scene(u2), null, false, null, null));
-  ok(u2._sel.length === 0 && u2.calls.some((c) => c[0] === 'clear'), 'F15c ON: grupa N ≥ 2 — pusta mapa czyści zbiór (`clearSelection`, już dziś) → panel grupy znika');
+  call(mSel, scene(u2), null, false, null, null);
+  ok(u2._sel.length === 0 && u2.calls.some((c) => c[0] === 'clear'), 'F15c grupa N ≥ 2 — pusta mapa czyści zbiór (`clearSelection`, już dziś) → panel grupy znika');
   const u3 = umFor();
-  withF(true, () => call(mSel, scene(u3), null, false, null, 'body'));
-  ok(u3._selectedFleetId === 'F1' && !u3.calls.some((c) => c[0] === 'clear'), 'F15d ON: klik w CIAŁO na mapie — flota zostaje (D-TR-14, jak zaznaczenie statku)');
+  call(mSel, scene(u3), null, false, null, 'body');
+  ok(u3._selectedFleetId === 'F1' && !u3.calls.some((c) => c[0] === 'clear'), 'F15d klik w CIAŁO na mapie — flota zostaje (D-TR-14, jak zaznaczenie statku)');
   const u4 = umFor();
-  withF(true, () => call(mSel, scene(u4), null, true, null, null));
-  ok(u4._selectedFleetId === 'F1' && u4.calls.length === 0, 'F15e ON: CTRL + pusta mapa — zbiór i flota bez zmian (jak dziś)');
-  const u5 = umFor();
-  withF(false, () => call(mSel, scene(u5), null, false, null, null));
-  ok(u5._selectedFleetId === 'F1' && u5.calls.some((c) => c[0] === 'clear'), 'F15f KONTROLA OFF: pusta mapa czyści statki, flota zostaje (jak dziś)');
+  call(mSel, scene(u4), null, true, null, null);
+  ok(u4._selectedFleetId === 'F1' && u4.calls.length === 0, 'F15e CTRL + pusta mapa — zbiór i flota bez zmian (jak dziś)');
   const u6 = umFor({ picker: true });
-  ok(withF(true, () => call(mDrop, u6)) === false && u6._selectedFleetId === 'F1', 'F15g obrona w głąb: przy uzbrojonym pickerze `_dropFleetOnEmptyMapClick` floty nie zdejmuje');
+  ok(call(mDrop, u6) === false && u6._selectedFleetId === 'F1', 'F15g obrona w głąb: przy uzbrojonym pickerze `_dropFleetOnEmptyMapClick` floty nie zdejmuje');
   // WYJĄTEK — uzbrojony picker: klik w mapę to cel (gałąź pickera wraca przed zaznaczeniem).
   const ev = { target: { id: 'planet-canvas', tagName: 'CANVAS', closest: () => null }, ctrlKey: false, clientX: 600, clientY: 300 };
   const u7 = umFor({ picker: true }), s7 = scene(u7);
-  withF(true, () => call(mLeft, s7, ev, { vesselId: null, object: null }));
+  call(mLeft, s7, ev, { vesselId: null, object: null });
   ok(s7.finals.length === 1 && u7._selectedFleetId === 'F1' && !u7.calls.some((c) => c[0] === 'clear'),
     'F15h WYJĄTEK (wykonanie `_handleTacticalLeftClick`): uzbrojony picker — klik w mapę to cel (`_finalizeTargetPointPicker`); flota i zaznaczenie zostają');
   const u8 = umFor(), s8 = scene(u8);
-  withF(true, () => call(mLeft, s8, ev, { vesselId: null, object: null }));
+  call(mLeft, s8, ev, { vesselId: null, object: null });
   ok(s8.finals.length === 0 && u8._selectedFleetId === null, 'F15i ten sam klik bez pickera (pełna ścieżka mapy) — flota zdjęta');
 }
 
 // ═══ F16 ══════════════════════════════════════════════════════════════════════
-header('F16 strojenie 1 (4) — baner pickera u góry ekranu ukryty, gdy panel floty T6 pokazuje konfigurator; OFF — baner jak dziś');
+header('F16 strojenie 1 (4) — baner pickera u góry ekranu ukryty, gdy panel floty T6 pokazuje konfigurator');
 {
-  const withF = (feat, fn) => { const saved = FEATURES.fleetPanelHud; FEATURES.fleetPanelHud = feat; try { return fn(); } finally { FEATURES.fleetPanelHud = saved; } };
   const HB = L?.pickerBannerHidden;
   const P = (intent, fid) => ({ mode: 'targetPoint', metadata: { intent, fleetId: fid } });
-  const base = { features: ON_F, picker: P('fleetcmd_move', 'F1'), fleetId: 'F1', minimized: false, panelShown: true };
+  const base = { picker: P('fleetcmd_move', 'F1'), fleetId: 'F1', minimized: false, panelShown: true };
   ok(HB?.(base) === true && HB?.({ ...base, picker: P('fleetcmd_engage', 'F1') }) === true,
-    'F16a ON: picker Rusz / Atak tej floty, panel narysowany i niezwinięty — baner ukryty (podpowiedź tylko w panelu)');
+    'F16a picker Rusz / Atak tej floty, panel narysowany i niezwinięty — baner ukryty (podpowiedź tylko w panelu)');
   ok(HB?.({ ...base, minimized: true }) === false && HB?.({ ...base, panelShown: false }) === false && HB?.({ ...base, fleetId: 'F2' }) === false
-    && HB?.({ ...base, picker: P('create_poi', undefined) }) === false && HB?.({ ...base, picker: null }) === false && HB?.({ ...base, features: OFF_F }) === false,
-    'F16b baner widoczny: panel zwinięty albo nienarysowany (overlay), picker innej floty albo POI, bez pickera, OFF (jak dziś)');
+    && HB?.({ ...base, picker: P('create_poi', undefined) }) === false && HB?.({ ...base, picker: null }) === false,
+    'F16b baner widoczny: panel zwinięty albo nienarysowany (overlay), picker innej floty albo POI, bez pickera');
   // Zgodność z modelem: baner ukryty dokładnie wtedy, gdy panel ma konfigurator (prawdziwy `_armMovePicker`).
   const { w, fcp } = fleetScene('f_space');
   fcp._armMovePicker('F1');
@@ -792,12 +771,10 @@ header('F16 strojenie 1 (4) — baner pickera u góry ekranu ukryty, gdy panel f
   const doc = { getElementById: (id) => (id === 'kosmos-picker-banner' ? el : null) };
   const mSync = compileMethod(UI, '_syncPickerBanner', { GAME_CONFIG, pickerBannerHidden: HB ?? (() => false), document: doc });
   const self = { _pickerState: P('fleetcmd_move', 'F1'), _selectedFleetId: 'F1', fleetCommandPanel: { _minimized: false } };
-  const rOn = withF(true, () => call(mSync, self, true)), visOn = el.style.visibility;
-  const rGone = withF(true, () => call(mSync, self, false)), visGone = el.style.visibility;
+  const rOn = call(mSync, self, true), visOn = el.style.visibility;
+  const rGone = call(mSync, self, false), visGone = el.style.visibility;
   ok(rOn === true && visOn === 'hidden' && rGone === false && visGone === '' && el.style.display === 'block',
     'F16d `_syncPickerBanner` (wykonanie): panel z konfiguratorem — `visibility: hidden`; panel znika — widoczny; `display` (zdarzenia pickera) nietknięte');
-  const rOff = withF(false, () => call(mSync, self, true));
-  ok(rOff === false && el.style.visibility === '', 'F16e OFF: `_syncPickerBanner` niczego nie ukrywa — baner jak dziś');
   const dr = body(UI, '\n  _draw() {');
   ok(/else \{ this\._fleetPanelHud\?\.clear\?\.\(\); this\._fleetPanelPlacement = null; \}\s*this\._syncPickerBanner\(!!fleetPanelDrawn && this\._mapSurface\(\) === 'fleetHud'\);/.test(dr),
     'F16f montaż w klatce: zaraz po rysunku panelu T6 (stan z tej klatki)');

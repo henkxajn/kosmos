@@ -1,7 +1,8 @@
 // ShipPanelHudLogic — REFORMA ZAKŁADEK T5 (TABS_REFORM_PLAN.md §5.8; decyzje właściciela 2026-10-26): czysta logika panelu
-// statku W IDIOMIE PRZYPIĘĆ HUD przy prawym outlinerze, za flagą `FEATURES.shipPanelHud` (stoi na T3 — `shipPanelOutliner`
-// i tryb kompaktowy; brak klucza = OFF → panel T3 `FleetManagerOverlay.drawVesselPanel` co do bitu). Rysunek, pomiar tekstu
-// i strefy — `ShipPanelHudLayer`; spięcie z hostem (geometria T3, klik, kółko, kursor, przeszkody) — `UIManager`.
+// statku W IDIOMIE PRZYPIĘĆ HUD przy prawym outlinerze (flaga kroku `shipPanelHud` i flagi, na których stał — T3
+// `shipPanelOutliner`, slice 258 / B `mapVesselPanel`, `mapVesselPanelCompact` — na stałe ON od T4, klucze usunięte).
+// Rysunek, pomiar tekstu i strefy — `ShipPanelHudLayer`; spięcie z hostem (geometria T3, klik, kółko, kursor, przeszkody)
+// — `UIManager`.
 //   • TREŚĆ I AKCJE = LUSTRO `FleetManagerOverlay._drawRight` (tryb kompaktowy) + footer `drawVesselPanel`: te same warunki
 //     pokazania, te same strefy `{ type, data }` — 31 typów (`SHIP_PANEL_ZONE_TYPES`; 16 rozkazów misji = typ `action`
 //     z `getAvailableActions`) — i TE SAME handlery: footer → `FleetManagerOverlay._handleVesselPanelFooter`, reszta →
@@ -34,15 +35,6 @@ import { isEnemyVessel, canColonize as vesselCanColonize, getPrimaryRole } from 
 import { ROLE_GLYPHS, ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY, buildShipEntry } from './FleetPictureLogic.js';
 import { layoutButtonRows, toggleOpenList, openListFor } from './LabelPinLogic.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
-
-/** Flaga kroku — `true` wyłącznie przy `features.shipPanelHud === true` (brak klucza = OFF). */
-export const isShipPanelHudOn = (features) => features?.shipPanelHud === true;
-/**
- * Panel T5 stoi na panelu T3 (kotwica przy wierszu prawego outlinera, tryb kompaktowy, panel statku nad mapą) — bez nich
- * zostaje dzisiejszy panel (OFF → T3 co do bitu; `mapVesselPanel` OFF — panel grupy jak przed 258).
- */
-export const isShipPanelHudActive = (features) => isShipPanelHudOn(features) && features?.shipPanelOutliner === true
-  && features?.mapVesselPanelCompact === true && features?.mapVesselPanel !== false;
 
 // Stałe (px logiczne). Strojenie na bramce — z konsoli: `KOSMOS.shipPanelHud.tune({ W: 210 })` (przeżywa do F5).
 export const SHIP_PANEL_HUD_DEFAULTS = Object.freeze({
@@ -604,11 +596,11 @@ export const ordersOpen = (state, vesselId) => openListFor(state, ordersKey(vess
 /**
  * Zachowanie 9 (PASS T5, Finding 546): czy zmiana zaznaczenia (także A → nic → A) zdejmuje konfigurator misji
  * (`FleetManagerOverlay._missionConfig` — wybór celu / potwierdzenie nie przechodzi na inny statek), jak zwinięcie listy
- * rozkazów. Tylko przy aktywnym panelu T5 i bez otwartego overlayu — Rejestr Dowództwa ma własną regułę (klik w wiersz
- * statku zdejmuje konfigurator); przy OFF — jak dziś (konfigurator zostaje).
+ * rozkazów. Tylko bez otwartego overlayu — Rejestr Dowództwa ma własną regułę (klik w wiersz statku zdejmuje
+ * konfigurator).
  */
-export const shouldDropMissionConfig = ({ features, overlayOpen = false, config = null } = {}) =>
-  isShipPanelHudActive(features) && overlayOpen !== true && config != null;
+export const shouldDropMissionConfig = ({ overlayOpen = false, config = null } = {}) =>
+  overlayOpen !== true && config != null;
 
 // ── Strefy kliku: chip > nazwa > pasek (pochłania) ────────────────────────────────────────────────────────────────────
 

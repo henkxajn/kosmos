@@ -128,8 +128,8 @@ export class HudLayer {
   }
 
   /**
-   * REFORMA ZAKŁADEK T1 — obiekt z rozwinięciem z najechania (podwarstwa etykiet; `null` — brak albo flaga `labelHover`
-   * OFF). Warstwa schowana (overlay, globus, czysty widok) — `null`.
+   * REFORMA ZAKŁADEK T1 — obiekt z rozwinięciem z najechania (podwarstwa etykiet; `null` — brak). Warstwa schowana
+   * (overlay, globus, czysty widok) — `null`.
    */
   hoverObjectKey() {
     if (!this._gate.shown) return null;

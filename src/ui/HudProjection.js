@@ -106,3 +106,32 @@ export function makeHudProjector(v) {
     },
   };
 }
+
+// [j.] najmniejsza głębia kotwicy obiektu przed kamerą (mniej niż `HUD_NEAR_CLIP` — podłoga zoomu stacji 0,005 j.).
+const OBJECT_NEAR_CLIP = 1e-4;
+
+/**
+ * Tarcza obiektu na ekranie (px logiczne): środek i promień — ciało (`getBodyWorldInfo`), statek (`getVesselWorldInfo`),
+ * stacja (`getStationWorldInfo`) rzutowane wspólnym projektorem HUD. `null` — obiekt za kamerą albo nie w scenie.
+ * Przeniesione z `BodyCardSideLogic` (ARKUSZ HUD paczka A, 493) w REFORMIE ZAKŁADEK T4 — wołają: warstwa etykiet (T1 —
+ * stacja pod kursorem, `coversPoint`). Czyta z przekazanego `K` (atrapa w keeperze).
+ * @param {object} K — `window.KOSMOS`
+ * @param {'body'|'vessel'|'station'} kind
+ */
+export function objectScreenDisc(K, kind, id) {
+  const tr = K?.threeRenderer;
+  if (!tr || id == null) return null;
+  const view = tr.getHudView?.();
+  if (!view) return null;
+  const w = kind === 'vessel' ? tr.getVesselWorldInfo?.(id)
+    : kind === 'station' ? tr.getStationWorldInfo?.(id)
+    : tr.getBodyWorldInfo?.(id);
+  if (!w) return null;
+  const s = K.uiScale > 0 ? K.uiScale : Math.min((view.cssW ?? 1280) / 1280, (view.cssH ?? 720) / 720);
+  const proj = makeHudProjector({ ...view, uiScale: s });
+  // Próg głębi niższy niż dla okręgów radaru: kamera schodzi do 0,005 j. od stacji (podłoga zoomu) — obiekt przed kamerą
+  // nadal ma kotwicę.
+  const p = proj?.point(w.x, w.y, w.z, OBJECT_NEAR_CLIP);
+  if (!p) return null;
+  return { x: p.x, y: p.y, r: w.r > 0 ? w.r * proj.pxPerWorld(p.depth) : 0 };
+}

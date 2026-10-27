@@ -12,16 +12,13 @@
 //   • promień w px z TEGO SAMEGO projektora co warstwa HUD (`HudProjection` z `ThreeRenderer.getHudView`): ciało — sfera
 //     siatki, statek — połowa rozmiaru modelu, stacja — sfera modelu; wszystko w px LOGICZNYCH UI (dzisiejsza kotwica brała
 //     px CSS jako logiczne — przy skali UI ≠ 1 przesunięta, Finding 528);
-//   • za flagą `FEATURES.bodyCardSide` (brak klucza = OFF — dzisiejsze kotwice karty ciała, panelu statku i stacji);
+//   • flaga `bodyCardSide` — na stałe ON od REFORMY ZAKŁADEK T4 (dawne kotwice OFF — Finding 528 — usunięte); tarcza
+//     obiektu (`objectScreenDisc`) mieszka od T4 w `HudProjection`;
 //   • PRZESZKODY (REFORMA ZAKŁADEK T3, strojenie 1, Finding 544): panel statku przy prawym outlinerze (`cardObstacles`) —
 //     karta ciała / stacji staje po stronie WOLNEJ (w obszarze mapy i bez przeszkody); żadna wolna — strona z większym
 //     prześwitem (miejsce między krawędzią tarczy a krawędzią mapy albo przeszkodą). Przeszkoda nie czeka na histerezę.
 //     Bez przeszkód — dokładnie jak wyżej.
-// Czysty poza `objectScreenDisc` i `cardObstacles` (czytają z przekazanego `K` — atrapa w keeperze).
-import { makeHudProjector } from './HudProjection.js';
-
-/** Flaga karty z boku tarczy — `true` wyłącznie przy `features.bodyCardSide === true` (brak klucza = OFF). */
-export const isBodyCardSideOn = (features) => features?.bodyCardSide === true;
+// Czysty poza `cardObstacles` (czyta z przekazanego `K` — atrapa w keeperze).
 
 export const CARD_SIDE = Object.freeze({
   GAP: 16,      // odstęp karty od krawędzi tarczy (px logiczne)
@@ -61,8 +58,6 @@ function sideClearance(disc, r, py, PH, bounds, obs) {
   }
   return { right: Math.max(0, limR - rEdge), left: Math.max(0, lEdge - limL) };
 }
-// [j.] najmniejsza głębia kotwicy karty przed kamerą (mniej niż `HUD_NEAR_CLIP` radaru — podłoga zoomu stacji 0,005 j.)
-const OBJECT_NEAR_CLIP = 1e-4;
 
 /**
  * Położenie lewego-górnego rogu karty z boku tarczy.
@@ -160,33 +155,9 @@ export function cardOverDisc({ px, py, PW, PH }, disc) {
 }
 
 /**
- * Tarcza obiektu na ekranie (px logiczne): środek i promień — ciało (`getBodyWorldInfo`), statek (`getVesselWorldInfo`),
- * stacja (`getStationWorldInfo`) rzutowane wspólnym projektorem HUD. `null` — obiekt za kamerą albo nie w scenie.
- * @param {object} K — `window.KOSMOS`
- * @param {'body'|'vessel'|'station'} kind
- */
-export function objectScreenDisc(K, kind, id) {
-  const tr = K?.threeRenderer;
-  if (!tr || id == null) return null;
-  const view = tr.getHudView?.();
-  if (!view) return null;
-  const w = kind === 'vessel' ? tr.getVesselWorldInfo?.(id)
-    : kind === 'station' ? tr.getStationWorldInfo?.(id)
-    : tr.getBodyWorldInfo?.(id);
-  if (!w) return null;
-  const s = K.uiScale > 0 ? K.uiScale : Math.min((view.cssW ?? 1280) / 1280, (view.cssH ?? 720) / 720);
-  const proj = makeHudProjector({ ...view, uiScale: s });
-  // Próg głębi niższy niż dla okręgów radaru: kamera schodzi do 0,005 j. od stacji (podłoga zoomu) — obiekt przed kamerą
-  // nadal ma kotwicę (inaczej karta skakała do rogu obszaru mapy przy samej podłodze zoomu).
-  const p = proj?.point(w.x, w.y, w.z, OBJECT_NEAR_CLIP);
-  if (!p) return null;
-  return { x: p.x, y: p.y, r: w.r > 0 ? w.r * proj.pxPerWorld(p.depth) : 0 };
-}
-
-/**
  * Przeszkody kart z boku tarczy (REFORMA ZAKŁADEK T3, strojenie 1, Finding 544): panel statku przy prawym outlinerze
- * narysowany w ostatniej klatce (`UIManager.getShipPanelObstacle` — `null` przy fladze `shipPanelOutliner` OFF i bez
- * panelu). Karta ciała i panel stacji podają wynik do `place({ …, obstacles })`.
+ * narysowany w ostatniej klatce (`UIManager.getShipPanelObstacle` — `null` bez panelu). Karta ciała i panel stacji podają
+ * wynik do `place({ …, obstacles })`.
  * @param {object} K — `window.KOSMOS`
  * @returns {Array<{x:number,y:number,w:number,h:number}>}
  */

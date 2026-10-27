@@ -14,7 +14,7 @@ import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } fr
 import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
 import { systemDisplayName }  from '../ui/MapLabelLogic.js';
 import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 (D-TR-14)
-import { isLabelHoverActive } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedź mapy wygaszona
+import { isHudLabelsOn } from '../ui/HudLabelLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedź mapy wygaszona na warstwie HUD
 import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
 import { coordTooltipBlocked } from '../ui/ShipPanelHudLogic.js';   // REFORMA ZAKŁADEK T5 — 530: dymek współrzędnych nie nad UI
 import { escapeClosesFleetPanel } from '../ui/FleetPanelHudLogic.js';   // REFORMA ZAKŁADEK T6 — Esc zamyka panel floty
@@ -4773,12 +4773,11 @@ export class GameScene {
           return;
         }
         // REFORMA ZAKŁADEK T2 — okno DOM (raport ciała z przypięcia, `.kosmos-modal-overlay`) zamyka się własnym Esc; kaskada
-        // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰). Przy `labelPin` OFF — jak dziś.
+        // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰). Bez warstwy etykiet HUD — kaskada bez kroku.
         if (escapeHeldByModal({ K: window.KOSMOS, features: GAME_CONFIG.FEATURES, domModalOpen: !!document.querySelector('.kosmos-modal-overlay') })) return;
-        // REFORMA ZAKŁADEK T6 — panel floty w idiomie etykiet (`fleetPanelHud`): Esc zamyka panel floty (zdejmuje flotę) PRZED
-        // zaznaczeniem statków — flota wygrywa mutex, więc Esc zamyka widoczny panel; przy otwartym overlayu i nad oknem DOM —
-        // nie (Esc należy do nich). Przy OFF — jak dziś (Esc panelu floty nie zamyka).
-        if (escapeClosesFleetPanel({ features: GAME_CONFIG.FEATURES, fleetId: um?.getSelectedFleetId?.() ?? null,
+        // REFORMA ZAKŁADEK T6 — panel floty w idiomie etykiet: Esc zamyka panel floty (zdejmuje flotę) PRZED zaznaczeniem statków —
+        // flota wygrywa mutex, więc Esc zamyka widoczny panel; przy otwartym overlayu i nad oknem DOM — nie (Esc należy do nich).
+        if (escapeClosesFleetPanel({ fleetId: um?.getSelectedFleetId?.() ?? null,
           overlayOpen: um?.overlayManager?.isAnyOpen?.() === true,
           modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay') })) {
           e.preventDefault();
@@ -5802,10 +5801,10 @@ export class GameScene {
       return;
     }
     const target = this._resolveClickTarget(clientX, clientY);
-    // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — przy `labelHover` ciało i statek opisuje rozwinięcie etykiety HUD: bez podpowiedzi
+    // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — na warstwie etykiet HUD ciało i statek opisuje rozwinięcie etykiety: bez podpowiedzi
     // mapy (531, 536); POI — bez zmian; współrzędne tylko nad PUSTĄ mapą — nie pod etykietą HUD ani nad gwiazdą / stacją
     // (obiektem z rozwinięciem; resolver zwraca dla nich „pustkę” — 530).
-    const lh = isLabelHoverActive(GAME_CONFIG.FEATURES);
+    const lh = isHudLabelsOn(GAME_CONFIG.FEATURES);
     if (lh && target && target.type !== 'empty' && target.type !== 'poi') {
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
@@ -6114,8 +6113,8 @@ export class GameScene {
   // także klik w ciało, jak dotąd) albo pustka z raycastu → odznaczenie zbioru, CTRL zachowuje zbiór; ciało / POI /
   // inny obiekt trafiony raycastem sceny → zbiór bez zmian (jak dotąd).
   // REFORMA ZAKŁADEK T3 (D-TR-14 (a), Finding 539): `objectHit` — co trafił picker renderera w tym geście
-  // (`lastClickPick.object`: 'body' | 'station' | brak); przy `shipPanelOutliner` klik ciała / stacji na mapie NIE zdejmuje
-  // zaznaczenia statku (jak klik w lewym outlinerze), pustka — jak dotąd.
+  // (`lastClickPick.object`: 'body' | 'station' | brak); klik ciała / stacji na mapie NIE zdejmuje zaznaczenia statku (jak
+  // klik w lewym outlinerze), pustka — jak dotąd.
   _selectFromClickPick(vid, multi, target, objectHit = null) {
     if (vid) {
       const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
@@ -6127,10 +6126,10 @@ export class GameScene {
     }
     if (multi) return;
     if (!target || target.type === 'empty') {
-      if (objectHit != null && keepShipSelectionOnMapClick(GAME_CONFIG.FEATURES, objectHit)) return;
+      if (objectHit != null && keepShipSelectionOnMapClick(objectHit)) return;
       this.uiManager.clearSelection();
       // REFORMA ZAKŁADEK T6, strojenie 1 (3) — pustka zdejmuje też flotę (panel floty znika jak panel statku i przypięcia);
-      // ciało / stacja — wyżej, flota zostaje (D-TR-14); uzbrojony picker — ta funkcja nie biegnie (klik = cel); OFF — nic.
+      // ciało / stacja — wyżej, flota zostaje (D-TR-14); uzbrojony picker — ta funkcja nie biegnie (klik = cel).
       this.uiManager._dropFleetOnEmptyMapClick?.();
     }
   }

@@ -211,37 +211,11 @@ export const GAME_CONFIG = {
     fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
     fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
     fcMultiSelect:        true,   // Slice 8 — multi-select (CTRL+klik toggle + SHIFT box-select)
-    fcGroupPanel:         true,   // Slice 8b — panel zarządzania zaznaczoną grupą statków (lewy-dolny róg)
-    fcFleetPanel:         true,   // Slice 8b — pływający panel dowodzenia wybraną flotą (FleetCommandPanel)
-    // Slice 258 — panel statku z Rejestru nad mapą 3D (Wariant A, „panel mode"): klik w statek
-    // na mapie otwiera TĘ SAMĄ powierzchnię co prawa kolumna Dowództwa (ta sama instancja FMO).
-    // OFF ⇒ zachowanie sprzed 258: pojedynczy statek obsługuje FleetGroupPanel.
-    // ⚠ ON PO LIVE-GATE'CIE RUNDY 2 (2026-09-08, PASS) — slice 258 ZAMKNIĘTY.
-    //   Zweryfikowane na żywo: płyta tła + pełny zestaw akcji Rejestru (①), klik w panel
-    //   POCHŁANIANY (brak odznaczenia, brak zjazdu kamery — ③), przy N>=2 panel grupy BEZ
-    //   „Powrotu" (A1). OFF dalej = zachowanie sprzed 258 (`FleetGroupPanel` od N==1).
-    //   ⚠ ② NIE jest bramkowane tą flagą i NIE zamyka się z 258 — `Finding 259`. Odmowa
-    //     „Statek niedostępny" przy Transporcie przychodzi z `MissionSystem`/`VesselManager`
-    //     i wygląda TAK SAMO z Rejestru i z Dowództwa. Własny slice, kierunek podpisany.
-    mapVesselPanel:       true,
-    // Slice B (B1) — TRYB KOMPAKTOWY panelu statku nad mapą. ON ⇒ panel pomija kartę
-    //   katalogową (opis kadłuba, OSIĄGI, paski, utrzymanie) i pokazuje nagłówek + AKCJE
-    //   + status misji. Powód: ZMIERZONE 456 px karty katalogowej nad pierwszym
-    //   przyciskiem akcji przy contentH 550 ⇒ panel był w 83 % kartą, w 17 % akcjami.
-    // ⚠ OFF ⇒ dzisiejsza kolumna A BIT W BIT (Rejestr i Dowództwo nie podają `opts`
-    //   w ogóle, więc ich render jest niezależny od tej flagi Z KONSTRUKCJI).
-    // ⚠ To DRUGA oś obok `mapVesselPanel`: tamta OFF = zachowanie sprzed 258
-    //   (`FleetGroupPanel` od N==1), ta OFF = pełna kolumna A. Fallbackiem podczas
-    //   slice'u B jest A, nie stan sprzed 258 — dlatego dwie flagi, nie jedna.
-    // ⚠ DOMYŚLNIE ON od 2026-09-09 — reguła „default-ON dopiero PO gate'cie": live-gate B1
-    //   zdał 6/6, gate kolejności malowania 4/4 (`23523af`). Precedens: `mapVesselPanel`
-    //   (`48c913f`). Bez tego kompakt istniałby wyłącznie po ręcznym wpisie w konsoli.
-    // ⚠ KOMPAKT LEŻY POD FLAGĄ RODZICA, nie obok niej: wszystkie TRZY odczyty tej flagi
-    //   w `UIManager` są za bramką `_mapSurface() === 'vessel'` (dwa w bloku rysowania,
-    //   trzeci — `tryBeginVesselPanelDrag` — ma bramkę we własnym ciele), a
-    //   `resolveMapSelectionSurface` przy `mapVesselPanel:false` NIGDY nie zwraca `vessel`.
-    //   ⇒ zgaszenie rodzica gasi kompakt Z KONSTRUKCJI (pin M2 w keeperze).
-    mapVesselPanelCompact: true,
+    fcGroupPanel:         true,   // Slice 8b — panel zaznaczonej grupy statków (od REFORMY ZAKŁADEK T6 — przy prawym outlinerze)
+    fcFleetPanel:         true,   // Slice 8b — panel dowodzenia wybraną flotą (od REFORMY ZAKŁADEK T6 — przy prawym outlinerze)
+    // ⚠ `mapVesselPanel` (slice 258 — panel statku nad mapą zamiast panelu grupy od N==1) i `mapVesselPanelCompact` (slice B —
+    //   tryb kompaktowy panelu statku) — na stałe ON od REFORMY ZAKŁADEK T4 (2026-10-27), klucze usunięte razem z dawnymi
+    //   panelami (panel statku i panele floty / grupy w idiomie etykiet przy prawym outlinerze — T5, T6; TABS_REFORM_PLAN §5.10).
     // ── Reforma detekcji (post-handoff) — sensory per-kadłub + reveal tożsamości ──
     // sensorLockContact: trzeci próg w ProximitySystem (sensor-lock) — własny statek
     //   w promieniu SENSOR_LOCK_AU×tech od wroga → vessel:sensorLockEnter → IntelSystem
@@ -550,7 +524,7 @@ export const GAME_CONFIG = {
     //   (`ThreeRenderer._syncHudOrbits`). Tokeny `orbitLine` / `orbitColony` dostają czytelnika (Finding 512).
     //   ⚠ Brak klucza = OFF (idiom liveGasShaders); ścieżka OFF = dzisiejszy kod co do bitu (turkusowe hexy
     //     w `ThreeRenderer` nietknięte).
-    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `mapVesselPanelCompact`): ten wpis wchodzi
+    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór dawnego `mapVesselPanelCompact`): ten wpis wchodzi
     //     commitem H0-2 po bramce H0. Przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.hudOrbits = false`)
     //     przebudowuje orbity od następnej klatki, także w pauzie; F5 wczytuje wartość z tego pliku.
     hudOrbits: true,
@@ -585,8 +559,6 @@ export const GAME_CONFIG = {
     //   niezaznaczonych), kreski w px ekranu z marszem na zegarze symulacji (stoi w pauzie), cel — kółko / chevron; patrol,
     //   pościg i przechwycenie; skok warp — kreski do krawędzi kadru z glifem układu docelowego (tylko układ odlotu); obce —
     //   tylko wykryte TERAZ i ≥ contact (509). Przy ON linie tras 3D (`LineDashedMaterial`) wyłączone; przy OFF — jak dziś.
-    // bodyCardSide (Finding 493): karta ciała, panel statku (tryb kompaktowy) i panel stacji z boku tarczy / modelu (prawo,
-    //   flip w lewo, nigdy na tarczy), w px logicznych z projektora HUD (`BodyCardSideLogic.js`). Przy OFF — dzisiejsze kotwice.
     //   ⚠ Brak klucza = OFF (idiom `hudRadar`); każda flaga czytana przy każdym rysunku — przestawienie w konsoli
     //     (`KOSMOS.gameConfig.FEATURES.hudLabels = false` itd.) działa od następnej klatki; linie tras 3D po przestawieniu
     //     `hudRoutes` na OFF wracają przy najbliższej synchronizacji statków (w pauzie — po klatce gry); F5 wczytuje plik.
@@ -594,78 +566,11 @@ export const GAME_CONFIG = {
     //     właściciela.
     hudLabels: true,
     hudRoutes: true,
-    bodyCardSide: true,
 
-    // ── REFORMA ZAKŁADEK T3 (TABS_REFORM_PLAN.md §5.2; D-TR-7, 8, 10, 13, 14) — panel statku przy prawym outlinerze ──
-    // shipPanelOutliner: panel statku (tryb kompaktowy, treść `_drawRight` bez zmian) wysunięty W LEWO od prawego outlinera
-    //   na wysokości wiersza zaznaczonego statku (`ShipPanelAnchorLogic.js`): prawa krawędź = lewa krawędź kolumny, wspólna
-    //   krawędź i łącznik z wierszem, klamra do obszaru mapy; wiersz przewinięty poza listę — panel przy górnej / dolnej
-    //   krawędzi listy; kolumna ukryta (klawisz „.”) — kotwica zapasowa jak dziś (prawy górny róg obszaru mapy); bez
-    //   przeciągania; tryb Y z rozwiniętym Dokiem — panel się nie rysuje (542); przełączenie układu zdejmuje zaznaczenie
-    //   statku spoza układu docelowego; klik ciała / stacji na mapie nie zdejmuje zaznaczenia statku (539); rozbiórka
-    //   statku dopiero po potwierdzeniu (543). Przy ON pływający panel statku (kotwica przy modelu, 493) wyłączony (529).
-    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejszy kod co do bitu; flaga czytana przy każdym rysunku
-    //     i kliku — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.shipPanelOutliner = false`) działa od następnej
-    //     klatki; F5 wczytuje wartość z tego pliku.
-    shipPanelOutliner: true,
-
-    // ── REFORMA ZAKŁADEK T1 (TABS_REFORM_PLAN.md §5.2; D-TR-1 (a), D-TR-2 (a), D-TR-3) — rozwinięcie informacyjne etykiet ──
-    // labelHover: na warstwie etykiet HUD (wymaga `hudLabels`; logika `LabelHoverLogic.js`) — najechanie etykiety albo
-    //   obiektu (tarcza, sprite, model stacji) rozwija pod nazwą do 4 linii (treść wg tabel I7: kolonia gracza, ciało bez
-    //   kolonii, gwiazda, obca kolonia — właściciel / populacja / garnizon wg wywiadu, stacja, statek — obcy wg wywiadu, 504);
-    //   fade-in 150 ms i wygasanie 200 ms po zejściu kursora na czasie realnym (działa w pauzie); zaznaczony obiekt —
-    //   rozwinięcie stałe; etykieta rozwinięta nie zmienia położenia (I8.3 — sąsiedzi ustępują i po niej wracają); ciała
-    //   i stacje bez etykiety stałej (gwiazda, ciała bez kolonii, kolonie i stacje AI, planetoidy) dostają etykietę NA ŻĄDANIE
-    //   przy najechaniu i do odznaczenia; podpowiedzi `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkowa część
-    //   `#kosmos-tooltip` wygaszone (zostają: podpowiedź budynku, POI, współrzędne pustej mapy); karta ciała dla ciała bez
-    //   akcji (gwiazda, planetoida bez placówki) się nie otwiera — 1. klik zaznacza, 2. klik — kamera.
-    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejszy kod co do bitu; flaga czytana przy każdym rysunku,
-    //     ruchu kursora i kliku — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.labelHover = false`) działa od
-    //     następnej klatki; F5 wczytuje wartość z tego pliku.
-    labelHover: true,
-
-    // ── REFORMA ZAKŁADEK T2 (TABS_REFORM_PLAN.md §5.2; D-TR-1 (a), D-TR-4 (a), D-TR-5 (a)) — przypięcie etykiety z akcjami ──
-    // labelPin: na rozwinięciu T1 (wymaga `hudLabels` i `labelHover`; logika `LabelPinLogic.js`) — przypięcie = zaznaczenie
-    //   (D-UI-5 bez zmian: 1. klik w ciało / kolonię / stację — tarcza, etykieta, etykieta na żądanie, lewy outliner — przypina,
-    //   2. klik — kamera): przy etykiecie obiektu rozwinięcie T1 + wiersz akcji — ciało: „Mapa ciała” (4 warianty karty, w tym
-    //   jedyny producent `planet:previewMap`), „Raport” (`BodyDetailModal` — orbita, fizyka, skład, złoża, ✏), lista złóż, ✕;
-    //   stacja gracza: „Zarządzaj”, listy ruchu, modułów i magazynu (z limitem wierszy), ✕; jedno przypięcie naraz (ciało albo
-    //   stacja; panel statku osobno); Esc zdejmuje przypięcie (po zaznaczeniu statku; przy otwartym overlayu — overlay);
-    //   przełączenie układu zdejmuje przypięcie spoza układu. Przypięta etykieta stoi przy swoim obiekcie (członek stosu ma
-    //   własną etykietę; sąsiedzi ustępują). Przy ON karta ciała i panel stacji (pływające) wyłączone — bez rysunku, kliku,
-    //   przeciągania i doku (stan zaznaczenia zostaje źródłem przypięcia); w trybie Generator (bez warstwy HUD) — jak dziś.
-    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejszy kod co do bitu; flaga czytana przy każdym rysunku,
-    //     kliku i klawiszu — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.labelPin = false`) działa od następnej
-    //     klatki; F5 wczytuje wartość z tego pliku.
-    labelPin: true,
-
-    // ── REFORMA ZAKŁADEK T5 (TABS_REFORM_PLAN.md §5.8; decyzje właściciela 2026-10-26) — panel statku w idiomie etykiet ──
-    // shipPanelHud: na panelu T3 (wymaga `shipPanelOutliner` i trybu kompaktowego; logika `ShipPanelHudLogic.js`, rysunek
-    //   `ShipPanelHudLayer.js`) — lekki renderer panelu statku przy prawym outlinerze w stylu przypięć HUD: ciemny półprzezroczysty
-    //   pasek bez ramki, font motywu, kolory z ról HUD, cyfry w kratce; szerokość ~200 px (konfigurator misji ~260), wysokość =
-    //   treść (brak miejsca — przewija się lista rozkazów / celów, nie panel); nazwa pełna w 2 liniach + ✎, „typ · kadłub · ★”,
-    //   „● stan · baza”, linie rozkazu / misji / ETA / paliwa, MODUŁY n/m, ładunek (pasek 2 px), akcje jako chipy „[ … ]”, 16 rozkazów
-    //   misji pod „[ Rozkazy ▼ ]” (zwija się przy zmianie zaznaczenia). Akcje — TE SAME handlery co przyciski panelu T3
-    //   (`FleetManagerOverlay._handleHit`, footer); geometria T3 bez zmian (kotwica przy wierszu, łącznik, karta walki, zapas,
-    //   tryb Y). Przy ON panel T3 (`drawVesselPanel`) się nie rysuje i nie łapie kliku; Rejestr Dowództwa — bez zmian.
-    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF panel T3 co do bitu; flaga czytana przy każdym rysunku i kliku —
-    //     przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.shipPanelHud = false`) działa od następnej klatki; F5 wczytuje
-    //     wartość z tego pliku. Sprząta ją krok T4.
-    shipPanelHud: true,
-
-    // ── REFORMA ZAKŁADEK T6 (TABS_REFORM_PLAN.md §5.9; decyzja właściciela 2026-10-26 — D-TR-9 zmieniona) — panele floty i grupy ──
-    // fleetPanelHud: na panelu statku T5 (wymaga `shipPanelHud` aktywnego; logika `FleetPanelHudLogic.js`, rysunek
-    //   `FleetPanelHudLayer.js`) — panel floty (`FleetCommandPanel`) przy wierszu węzła floty w prawym outlinerze i panel grupy
-    //   N ≥ 2 (`FleetGroupPanel`) przy wierszu lidera, w idiomie etykiet z T5 (ciemny pasek bez ramki, font motywu, kolory z ról,
-    //   cyfry w kratce; ~200 px, konfigurator celu floty ~260): nazwa + ✎, linia „N statków · lider · stan”, doktryna, członkowie
-    //   jako linie (klik — panel statku T5), akcje główne jako chipy, rozkazy pod „[ Rozkazy ▼ ]”. Akcje — TE SAME handlery co
-    //   przyciski dzisiejszych paneli (`_onHit`); geometria T3 bez zmian. Mutex: jeden z trzech paneli (flota > N ≥ 2 > lider),
-    //   zaznaczenie statku zdejmuje flotę, Esc zamyka panel floty. Przy ON dzisiejsze panele w lewym dolnym rogu się nie
-    //   rysują i nie łapią kliku; Rejestr Dowództwa i overlay floty — bez zmian.
-    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejsze panele co do bitu; flaga czytana przy każdym rysunku,
-    //     kliku i klawiszu — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.fleetPanelHud = false`) działa od następnej
-    //     klatki; F5 wczytuje wartość z tego pliku. Sprząta ją krok T4.
-    fleetPanelHud: true,
+    // ── REFORMA ZAKŁADEK — flagi kroków T1–T6 na stałe ON od T4 (2026-10-27; TABS_REFORM_PLAN.md §5.10) ──
+    // `bodyCardSide` (493), `shipPanelOutliner` (T3), `labelHover` (T1), `labelPin` (T2), `shipPanelHud` (T5), `fleetPanelHud`
+    //   (T6): klucze usunięte, kod czyta ścieżkę ON bez rozgałęzień; przełącznikiem warstwy zostaje wyłącznie `hudLabels`
+    //   (do paczki B ARKUSZA HUD); przestawienie dawnych kluczy w konsoli nie ma już skutku.
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

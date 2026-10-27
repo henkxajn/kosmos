@@ -3,14 +3,15 @@
 // HUD_PLAN.md §4.2a, §4.0 aneks 2026-10-23 (keeper WYŁĄCZNIE dla logiki położenia — px tarczy i kadr → położenie karty).
 // Uruchom: node src/testing/smoke/body_card_side_smoke.mjs
 //
-//   C0  API i flaga `bodyCardSide` (brak klucza = OFF)
+//   C0  API (flaga `bodyCardSide` na stałe ON od T4 — predykat i klucz usunięte)
 //   C1  położenie: domyślnie na prawo od krawędzi tarczy (odstęp), flip w lewo przy braku miejsca, NIGDY nad tarczą, gdy
 //       którakolwiek strona się mieści; przy zoomie idzie za krawędzią (promień rośnie — karta odsuwa się o tyle samo);
 //       pionowo — środek tarczy, w kadrze; obiekt za kamerą — róg obszaru mapy (jak dziś)
-//   C2  tarcza z WSPÓLNEGO projektora HUD (px logiczne, skala UI): ciało, statek, stacja; za kamerą — brak
+//   C2  tarcza z WSPÓLNEGO projektora HUD (px logiczne, skala UI): ciało, statek, stacja; za kamerą — brak (`objectScreenDisc`
+//       — od T4 w `HudProjection`)
 //   C3  scena ZF: Nowa Ziemia po fokusie (tarcza 71–133 px promienia na środku kadru) — karta obok tarczy, nie na niej
-//   C4  montaż (piny źródłowe): karta ciała, panel statku i panel stacji — położenie z boku (z pamięcią strony) przy ON,
-//       dzisiejsze kotwice przy OFF
+//   C4  montaż (piny źródłowe): karta ciała i panel stacji — położenie z boku (z pamięcią strony); dawne kotwice (528)
+//       i kotwica z boku modelu dla dawnego pływającego panelu statku — usunięte (T4)
 //   C5  histereza strony (strojenie 1, 2026-10-24 — migotanie lewo↔prawo przy zoomie na stację): strona wybrana przy
 //       zaznaczeniu i trzymana; zmiana tylko, gdy karta na bieżącej stronie wyszłaby poza obszar mapy (i druga się mieści),
 //       nie częściej niż co 400 ms; nowy obiekt / karta schowana dłużej — wybór od nowa; KONTROLA: ta sama scena bez pamięci
@@ -18,8 +19,12 @@
 //   C6  PRZESZKODA (REFORMA ZAKŁADEK T3, strojenie 1, Finding 544): panel statku przy prawym outlinerze — karta ciała /
 //       stacji na wolnej stronie (scena K12: KONTROLA — bez przeszkody karta zachodzi na panel); żadna wolna — większy
 //       prześwit; przeszkoda nie czeka na histerezę; przeszkoda poza kandydatami — wynik jak bez niej; `cardObstacles`;
-//       montaż: karta ciała i panel stacji podają przeszkody, `UIManager` — prostokąt z ostatniej klatki tylko przy ON
+//       montaż: karta ciała i panel stacji podają przeszkody, `UIManager` — prostokąt panelu statku T5 z ostatniej klatki
 //   ⚠ C4a — wzorzec wywołania uzupełniony o `obstacles: cardObstacles(window.KOSMOS)` (strojenie 1 T3; to samo wywołanie).
+//   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga `bodyCardSide` na stałe ON — C0b / C0c
+//     zastąpione pinem braku predykatu i klucza; C2 — `objectScreenDisc` z `HudProjection`; C4 bez gałęzi OFF (528) i bez
+//     dawnego pływającego panelu statku (C4c, C4c-T3 usunięte); C6h — zapis prostokąta panelu T5 bez bramki flagi. Keeper
+//     do usunięcia razem z kartą ciała i panelem stacji (kolejny krok T4; `objectScreenDisc` — pin przeniesiony).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -35,15 +40,17 @@ const tryImport = async (p) => { try { return await import(p); } catch (e) { con
 const call = (f, ...a) => { try { return f?.(...a); } catch (e) { console.log('    (wyjątek: ' + e.message + ')'); return undefined; } };
 
 const CS = await tryImport('../../ui/BodyCardSideLogic.js');
+const HPm = await tryImport('../../ui/HudProjection.js');
 
 // ═══ C0 ══════════════════════════════════════════════════════════════════════
-header('C0  API i flaga');
+header('C0  API (flaga `bodyCardSide` na stałe ON od T4)');
 {
-  const need = ['isBodyCardSideOn', 'CARD_SIDE', 'computeSideCardPlacement', 'makeCardSideMemory', 'cardOverDisc', 'objectScreenDisc'];
+  const need = ['CARD_SIDE', 'computeSideCardPlacement', 'makeCardSideMemory', 'cardOverDisc'];
   const missing = need.filter((n) => CS?.[n] === undefined);
   ok(missing.length === 0, `C0a: \`BodyCardSideLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
-  ok(/\bbodyCardSide:\s*true,/.test(strip(src('../../config/GameConfig.js'))), 'C0b: `FEATURES.bodyCardSide: true` w GameConfig');
-  ok(CS?.isBodyCardSideOn?.({ bodyCardSide: true }) === true && CS?.isBodyCardSideOn?.({}) === false, 'C0c: flaga — brak klucza = OFF');
+  ok(!!CS && CS.isBodyCardSideOn === undefined && CS.objectScreenDisc === undefined && typeof HPm?.objectScreenDisc === 'function'
+    && !/\bbodyCardSide:\s*(true|false)/.test(strip(src('../../config/GameConfig.js'))),
+    'C0b: flaga `bodyCardSide` na stałe ON (T4) — predykat i klucz usunięte; `objectScreenDisc` przeniesione do `HudProjection`');
 }
 
 // ═══ C1 ══════════════════════════════════════════════════════════════════════
@@ -98,22 +105,22 @@ const KST = (cam) => ({
 header('C2  tarcza z projektora HUD (px logiczne, skala UI)');
 {
   const cam = camAt(2);
-  const d = call(CS?.objectScreenDisc, KST(cam), 'body', 'p_nz');
+  const d = call(HPm?.objectScreenDisc, KST(cam), 'body', 'p_nz');
   const v = new T3.Vector3(NZ.x, NZ.y, NZ.z).project(cam);
   const ex = (v.x * 0.5 + 0.5) * 1600 / 1.25, ey = (-v.y * 0.5 + 0.5) * 1041 / 1.25;
   const fpx = (1041 / 2) / Math.tan((55 / 2) * Math.PI / 180) / 1.25;      // ogniskowa w px logicznych
   const er = 0.3 / 2 * fpx;                                                 // promień przy odległości 2 j.
   ok(!!d && Math.abs(d.x - ex) < 0.01 && Math.abs(d.y - ey) < 0.01 && Math.abs(d.r - er) / er < 0.01,
     `C2a: ciało — środek i promień jak rzut kamery w px logicznych (r ${d?.r?.toFixed?.(1)} ≈ ${er.toFixed(1)} px)`);
-  const dv = call(CS?.objectScreenDisc, KST(cam), 'vessel', 'v_1'), ds = call(CS?.objectScreenDisc, KST(cam), 'station', 'st_1');
+  const dv = call(HPm?.objectScreenDisc, KST(cam), 'vessel', 'v_1'), ds = call(HPm?.objectScreenDisc, KST(cam), 'station', 'st_1');
   ok(dv?.r > 0 && ds?.r > 0 && dv.r < d.r && ds.r < d.r, 'C2b: statek i stacja — tarcza z rozmiaru modelu (mniejsza niż planety)');
   const behind = mkCam([NZ.x + 5, 0.5, 0], [NZ.x + 10, 0.5, 0]);          // Nowa Ziemia za kamerą
-  ok(call(CS?.objectScreenDisc, KST(behind), 'body', 'p_nz') === null && call(CS?.objectScreenDisc, KST(cam), 'body', 'nope') === null,
+  ok(call(HPm?.objectScreenDisc, KST(behind), 'body', 'p_nz') === null && call(HPm?.objectScreenDisc, KST(cam), 'body', 'nope') === null,
     'C2c: za kamerą / nie w scenie — brak tarczy (karta w rogu, jak dziś)');
   // Podłoga zoomu stacji (0,005 j.) leży bliżej niż próg głębi okręgów radaru (0,01 j.) — kotwica karty ma przetrwać.
   const ST = { x: 6.55, y: 0, z: 0.05 };
   const close = mkCam([ST.x, 0.003, ST.z + 0.0052], [ST.x, 0, ST.z]);
-  const dClose = call(CS?.objectScreenDisc, KST(close), 'station', 'st_1');
+  const dClose = call(HPm?.objectScreenDisc, KST(close), 'station', 'st_1');
   const HP = await tryImport('../../ui/HudProjection.js');
   const projD = HP?.makeHudProjector?.({ ...viewOf(close), uiScale: 1.25 });
   const defNull = projD ? projD.point(ST.x, ST.y, ST.z) : 'brak';
@@ -133,24 +140,20 @@ header('C3  scena ZF: Nowa Ziemia po fokusie — karta obok tarczy');
 }
 
 // ═══ C4 ══════════════════════════════════════════════════════════════════════
-header('C4  montaż (piny źródłowe): ON — z boku, OFF — dzisiejsze kotwice');
+header('C4  montaż (piny źródłowe): karta ciała i panel stacji z boku; dawne kotwice usunięte');
 {
   const bc = strip(src('../../ui/BottomContext.js'));
-  ok(/if \(isBodyCardSideOn\(GAME_CONFIG\.FEATURES\)\) \{\s*this\._sideMem \?\?= makeCardSideMemory\(\);\s*pl = this\._sideMem\.place\(\{ key: entity\.id, disc: objectScreenDisc\(window\.KOSMOS, 'body', entity\.id\), PW, PH, bounds,\s*obstacles: cardObstacles\(window\.KOSMOS\), now: performance\.now\(\) \}\);\s*\} else \{\s*const sp = window\.KOSMOS\?\.threeRenderer\?\.getBodyScreenPosition\?\.\(entity\.id\) \?\? null;\s*pl = computeFloatingPlacement\(/.test(bc),
-    'C4a: karta ciała — z boku tarczy z pamięcią strony (klucz = ciało) przy ON; przy OFF `computeFloatingPlacement` jak dziś');
+  ok(/this\._sideMem \?\?= makeCardSideMemory\(\);\s*const pl = this\._sideMem\.place\(\{ key: entity\.id, disc: objectScreenDisc\(window\.KOSMOS, 'body', entity\.id\), PW, PH, bounds,\s*obstacles: cardObstacles\(window\.KOSMOS\), now: performance\.now\(\) \}\);/.test(bc)
+    && !/computeFloatingPlacement|getBodyScreenPosition/.test(bc),
+    'C4a: karta ciała — z boku tarczy z pamięcią strony (klucz = ciało); dawnej kotwicy (`computeFloatingPlacement`, 528) brak');
   const sp = strip(src('../../ui/StationPanel.js'));
-  ok(/if \(isBodyCardSideOn\(GAME_CONFIG\.FEATURES\)\) \{[\s\S]{0,300}?this\._sideMem \?\?= makeCardSideMemory\(\);\s*const pl = this\._sideMem\.place\(\{ key: this\._stationId, disc: objectScreenDisc\(window\.KOSMOS, 'station', this\._stationId\)[\s\S]{0,300}?\} else \{\s*const sp = window\.KOSMOS\?\.threeRenderer\?\.getStationScreenPosition\?\.\(this\._stationId\);\s*if \(sp\) \{ ax = sp\.x \+ 18;/.test(sp),
-    'C4b: panel stacji — z boku modelu z pamięcią strony (klucz = stacja) przy ON; przy OFF `sp.x + 18` jak dziś');
+  ok(/this\._sideMem \?\?= makeCardSideMemory\(\);\s*const pl = this\._sideMem\.place\(\{ key: this\._stationId, disc: objectScreenDisc\(window\.KOSMOS, 'station', this\._stationId\)/.test(sp)
+    && !/sp\.x \+ 18/.test(sp),
+    'C4b: panel stacji — z boku modelu z pamięcią strony (klucz = stacja); dawnej kotwicy (`sp.x + 18`, 528) brak');
   const ui = strip(src('../../scenes/UIManager.js'));
-  ok(/const disc = isBodyCardSideOn\(GAME_CONFIG\.FEATURES\) \? objectScreenDisc\(window\.KOSMOS, 'vessel', this\._selectedVesselId\) : null;[\s\S]{0,200}?this\._vesselPanelSide \?\?= makeCardSideMemory\(\);\s*const pl = this\._vesselPanelSide\.place\(\{ key: this\._selectedVesselId, disc, PW: w, PH: h, bounds: b, now: performance\.now\(\) \}\);[\s\S]{0,300}?\} else \{\s*const sp = window\.KOSMOS\?\.threeRenderer\?\.getVesselScreenPosition\?\.\(this\._selectedVesselId\);\s*a\s*= resolveVesselPanelAnchor\(/.test(ui),
-    'C4c: panel statku — z boku modelu z pamięcią strony (klucz = statek) przy ON (bez sprite\'a — kotwica zapasowa); przy OFF `resolveVesselPanelAnchor` jak dziś');
-  ok(/getMapInsets/.test(bc) && /getMapInsets/.test(sp) && /_vesselPanelBounds\(W, H\) \{[\s\S]{0,1200}?getMapInsets\(window\.KOSMOS\)/.test(ui),
-    'C4d: KONTROLA — kadr karty: obszar mapy z `MapInsets` (pod outlinerami i pasem; zielona po obu stronach)');
-  // ⚠ C4c PRZECELOWANY 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): pin wyżej — ścieżka
-  //   `shipPanelOutliner` OFF (493 dla panelu statku); przy ON panel statku stoi przy wierszu prawego outlinera, a gałąź
-  //   T3 wraca ZANIM `_vesselPanelBounds` dojdzie do kotwicy z boku modelu (karta ciała i panel stacji — bez zmian, do T2).
-  ok(/_vesselPanelBounds\(W, H\) \{[\s\S]{0,800}?if \(isShipPanelOutlinerOn\(GAME_CONFIG\.FEATURES\)\) return this\._shipPanelAtOutliner\(W, H, w, h\);[\s\S]{0,800}?const disc = isBodyCardSideOn\(GAME_CONFIG\.FEATURES\)/.test(ui),
-    'C4c-T3: przy ON panel statku bez kotwicy z boku modelu — gałąź wiersza outlinera przed `objectScreenDisc`');
+  ok(!/_vesselPanelSide|_vesselPanelBounds|_vesselPanelFloat/.test(ui),
+    'C4c: dawny pływający panel statku (kotwica z boku modelu, `_vesselPanelBounds`) usunięty — panel statku stoi przy wierszu outlinera (T5)');
+  ok(/getMapInsets/.test(bc) && /getMapInsets/.test(sp), 'C4d: KONTROLA — kadr karty: obszar mapy z `MapInsets` (pod outlinerami i pasem)');
 }
 
 // ═══ C5 ══════════════════════════════════════════════════════════════════════
@@ -246,9 +249,9 @@ header('C6  przeszkoda — panel statku przy prawym outlinerze (T3, strojenie 1,
     && /obstacles: cardObstacles\(window\.KOSMOS\), now: performance\.now\(\)/.test(bcx),
     'C6g montaż: panel stacji i karta ciała podają przeszkody (`cardObstacles(window.KOSMOS)`)');
   const go = ui.slice(ui.indexOf('  getShipPanelObstacle() {'), ui.indexOf('  _noteShipPanelDrawn(rect) {'));
-  ok(/if \(!isShipPanelOutlinerOn\(GAME_CONFIG\.FEATURES\)\) return null;/.test(go) && /shipPanelDrawn = this\._fleetOverlay\?\._vesselPanelRect \?\? null;/.test(ui)
-    && /if \(isShipPanelOutlinerOn\(GAME_CONFIG\.FEATURES\)\) this\._noteShipPanelDrawn\(shipPanelDrawn\);/.test(ui),
-    'C6h montaż: `UIManager` — prostokąt panelu z ostatniej klatki, tylko przy `shipPanelOutliner` (OFF — brak przeszkody, karty jak dziś)');
+  ok(/const r = this\._shipPanelDrawn;\s*return r \? \{ \.\.\.r \} : null;/.test(go) && /shipPanelDrawn = this\._drawShipPanelHud\(ctx, W, H\);/.test(ui)
+    && /\n\s*this\._noteShipPanelDrawn\(shipPanelDrawn\);/.test(ui),
+    'C6h montaż: `UIManager` — prostokąt panelu statku T5 (albo T6) z ostatniej klatki jako przeszkoda kart');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

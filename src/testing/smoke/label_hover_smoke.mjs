@@ -5,7 +5,7 @@
 // etykieta na żądanie, „+N”, dymki i karta ciała (piny na wywołaniach), budżet (spoczynek, pamięć treści); bez pinów na stałych
 // rysunku. Uruchom: node src/testing/smoke/label_hover_smoke.mjs
 //
-//   K0  API i flaga `labelHover` (brak klucza = OFF; działa na warstwie etykiet — wymaga `hudLabels`)
+//   K0  API (flaga kroku `labelHover` na stałe ON od T4 — predykaty i klucz usunięte; działa na warstwie etykiet `hudLabels`)
 //   K1  stan najechania na CZASIE REALNYM: fade-in 150 ms, wygasanie 200 ms po zejściu kursora, powrót bez ponownego fade-in,
 //       przejście na inny obiekt — od razu; warstwa: w pauzie (zegar symulacji stoi) rozwinięcie rośnie i znika
 //   K2  treść wg wywiadu i właściciela: obca kolonia (contact — nazwa bez populacji; rumor — „obce imperium”; unknown —
@@ -19,11 +19,14 @@
 //       przypięcia skacze, bez pamięci powrotu sąsiad zostaje
 //   K6  zwinięta „+N” → rozwinięcie głowy grupy bez szyny; tarcza członka innego niż kotwica — co najmniej szyna
 //   K7  dymki (piny na wywołaniach): `#colony-3d-tooltip` (statek, kolonia) i ciałowo-statkowa część `#kosmos-tooltip`
-//       wygaszone przy ON; podpowiedź budynku (K3), POI i współrzędne pustej mapy — zostają; przy OFF — jak dziś
-//   K8  karta ciała: `bodyCardAction` = lustro `BottomContext._actionLabel` (tabela ciał); przy ON karta ciała bez akcji
-//       się nie otwiera (piny na wywołaniach `UIManager`), zaznaczenie zostaje
+//       wygaszone na warstwie etykiet HUD; podpowiedź budynku (K3), POI i współrzędne pustej mapy — zostają
+//   K8  karta ciała: `bodyCardAction` = lustro `BottomContext._actionLabel` (tabela ciał); na warstwie etykiet HUD w trybie
+//       cywilizacji karta ciała się nie otwiera (od T2 — przypięcie; piny na wywołaniach `UIManager`), zaznaczenie zostaje
 //   K9  budżet: w spoczynku z kursorem na etykiecie — 0 wywołań ctx; treść z pamięci (jedno liczenie na obiekt w TTL)
-//   K10 OFF: dzisiejsze zachowanie (druga linia przy najechaniu, bez etykiet na żądanie)
+//   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `labelHover` na stałe ON —
+//     K0b–K0d (flaga) zastąpione pinem braku predykatów i klucza; K5i bez połowy OFF; K7 / K8e — bramką jest warstwa etykiet
+//     HUD (`isHudLabelsOn`); K10 (OFF = dziś: druga linia przy najechaniu, bez etykiet na żądanie) usunięty razem z tą ścieżką
+//     (K10c — ta sama kolonia rozwinięta — zostaje jako K4j).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -49,20 +52,18 @@ const BCm = await tryImport('../../ui/BottomContext.js');
 const FEATURES = GAME_CONFIG.FEATURES;
 
 // ═══ K0 ══════════════════════════════════════════════════════════════════════
-header('K0  API i flaga `labelHover`');
+header('K0  API (flaga kroku `labelHover` na stałe ON od T4)');
 {
-  const need = ['isLabelHoverOn', 'isLabelHoverActive', 'LABEL_HOVER', 'makeHoverMemory', 'expansionFade', 'resolveHoverTarget',
+  const need = ['LABEL_HOVER', 'makeHoverMemory', 'expansionFade', 'resolveHoverTarget',
     'labelObjectKey', 'hoverObjectKey', 'pickStationAt', 'bodyCardAction', 'colonyExpansionLines', 'bodyExpansionLines',
     'starExpansionLines', 'foreignColonyExpansionLines', 'stationExpansionLines', 'foreignStationExpansionLines',
     'vesselExpansionLines', 'enemyVesselExpansionLines', 'placeLabelsPinned', 'pinFor', 'updatePins', 'depositSummary',
     'makeYieldMemory'];
   const missing = need.filter((n) => LH?.[n] === undefined);
   ok(missing.length === 0, `K0a: \`LabelHoverLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
-  ok(LH?.isLabelHoverOn?.({ labelHover: true }) === true && LH?.isLabelHoverOn?.({}) === false && LH?.isLabelHoverOn?.({ labelHover: 1 }) === false,
-    'K0b: flaga — `true` wyłącznie przy `labelHover === true` (brak klucza = OFF)');
-  ok(LH?.isLabelHoverActive?.({ labelHover: true, hudLabels: true }) === true && LH?.isLabelHoverActive?.({ labelHover: true }) === false
-    && LH?.isLabelHoverActive?.({ hudLabels: true }) === false, 'K0c: rozwinięcie działa na warstwie etykiet HUD — wymaga OBU flag');
-  ok(/\blabelHover:\s*true,/.test(strip(src('../../config/GameConfig.js'))), 'K0d: `FEATURES.labelHover: true` w GameConfig (do oglądania)');
+  ok(!!LH && LH.isLabelHoverOn === undefined && LH.isLabelHoverActive === undefined && FEATURES.labelHover === undefined
+    && !/\blabelHover:\s*(true|false)/.test(strip(src('../../config/GameConfig.js'))),
+    'K0b: flaga kroku `labelHover` na stałe ON (T4) — predykaty `isLabelHoverOn` / `isLabelHoverActive` i klucz w GameConfig usunięte');
   const L = LH?.LABEL_HOVER ?? {};
   ok(L.FADE_MS === 150 && L.LINGER_MS > 0 && L.MAX_LINES === 4, `K0e: fade-in ${L.FADE_MS} ms, wygasanie ${L.LINGER_MS} ms, ≤ ${L.MAX_LINES} linie (D-TR-3)`);
 }
@@ -228,7 +229,6 @@ const setWorld = () => {
 };
 setWorld();
 FEATURES.hudLabels = true;
-FEATURES.labelHover = true;
 const mkCtx = () => {
   const o0 = { calls: [] };
   return new Proxy(o0, {
@@ -391,9 +391,9 @@ header('K5  przypięcie (I8.3) — etykieta rozwinięta nie zmienia położenia,
   const q2 = new Map([['b', 3]]);
   const back2 = call(ym2?.step?.bind(ym2), q2, false, 8);
   ok(back2 === false && q2.get('b') === 3 && ym2?.active === false, 'K5h: kamera ruszona w trakcie rozwinięcia — bez powrotu (rozkład ułożył etykiety od nowa), migawka nie wraca do końca rozwinięcia');
-  ok(/this\._yieldMem\.step\(this\._prev, expandedKeys\.size > 0, tr\?\.getCameraMoveEpoch\?\.\(\) \?\? 0\);\s*const \{ placed \} = T \? placeLabelsPinned/.test(lay)
-    && /else \{\s*if \(this\._pins\.size\) this\._pins\.clear\(\);\s*this\._yieldMem\.reset\(\);/.test(lay),
-    'K5i: warstwa — pamięć powrotu przed rozkładem T1 (epoka ruchu kamery), przy OFF wyzerowana');
+  ok(/this\._yieldMem\.step\(this\._prev, expandedKeys\.size > 0, tr\?\.getCameraMoveEpoch\?\.\(\) \?\? 0\);\s*const \{ placed \} = placeLabelsPinned\(/.test(lay)
+    && !/\bplaceLabels\(/.test(lay),
+    'K5i: warstwa — pamięć powrotu przed rozkładem T1 (epoka ruchu kamery); rozkład zawsze z przypięciami (bez dawnej ścieżki OFF)');
 }
 
 // ═══ K6 ══════════════════════════════════════════════════════════════════════
@@ -421,27 +421,27 @@ header('K6  zwinięta „+N” — rozwinięcie głowy grupy bez szyny; tarcza c
 }
 
 // ═══ K7 ══════════════════════════════════════════════════════════════════════
-header('K7  dymki — wygaszone przy ON, zostają: budynek (K3), POI, współrzędne pustej mapy (piny na wywołaniach)');
+header('K7  dymki — wygaszone na warstwie etykiet HUD, zostają: budynek (K3), POI, współrzędne pustej mapy (piny na wywołaniach)');
 {
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
   const mm = tr.slice(tr.indexOf('  handleMouseMove(screenX, screenY) {'), tr.indexOf('  _showBuildingTooltip(markerHit, sx, sy) {'));
-  ok(/if \(isLabelHoverActive\(GAME_CONFIG\.FEATURES\)\) this\._hideColonyTooltip\(\);\s*else this\._showVesselTooltip\(vesselHover, screenX, screenY\);/.test(mm),
-    'K7a: `#colony-3d-tooltip` statku — przy ON schowany, przy OFF `_showVesselTooltip` jak dziś');
-  ok(/if \(newId && newId === focusId && !isLabelHoverActive\(GAME_CONFIG\.FEATURES\)\) \{[\s\S]*?this\._showColonyTooltip\(newId, screenX, screenY\);/.test(mm),
-    'K7b: `#colony-3d-tooltip` kolonii (533) — tylko przy OFF');
+  ok(/if \(isHudLabelsOn\(GAME_CONFIG\.FEATURES\)\) this\._hideColonyTooltip\(\);\s*else this\._showVesselTooltip\(vesselHover, screenX, screenY\);/.test(mm),
+    'K7a: `#colony-3d-tooltip` statku — na warstwie etykiet HUD schowany (bez niej — `_showVesselTooltip`)');
+  ok(/if \(newId && newId === focusId && !isHudLabelsOn\(GAME_CONFIG\.FEATURES\)\) \{[\s\S]*?this\._showColonyTooltip\(newId, screenX, screenY\);/.test(mm),
+    'K7b: `#colony-3d-tooltip` kolonii (533) — tylko bez warstwy etykiet HUD');
   const iB = mm.indexOf('this._showBuildingTooltip(markerHit, screenX, screenY);');
-  ok(iB > 0 && !/isLabelHoverActive/.test(mm.slice(mm.indexOf('const markerHit'), iB)), 'K7c KONTROLA: podpowiedź budynku (K3) — bez bramki T1');
+  ok(iB > 0 && !/isHudLabelsOn/.test(mm.slice(mm.indexOf('const markerHit'), iB)), 'K7c KONTROLA: podpowiedź budynku (K3) — bez bramki warstwy etykiet');
   const gs = strip(src('../../scenes/GameScene.js'));
   const m3 = gs.slice(gs.indexOf('  _tooltipHoverFromMain3D(clientX, clientY) {'), gs.indexOf('  _tooltipHoverFromTactical(clientX, clientY) {'));
-  ok(/const lh = isLabelHoverActive\(GAME_CONFIG\.FEATURES\);\s*if \(lh && target && target\.type !== 'empty' && target\.type !== 'poi'\) \{\s*this\._scheduleEntityTooltip\(null, clientX, clientY\);\s*return;/.test(m3),
-    'K7d: `#kosmos-tooltip` ciała i statku — przy ON odwołany (531, 536); POI — przechodzi');
+  ok(/const lh = isHudLabelsOn\(GAME_CONFIG\.FEATURES\);\s*if \(lh && target && target\.type !== 'empty' && target\.type !== 'poi'\) \{\s*this\._scheduleEntityTooltip\(null, clientX, clientY\);\s*return;/.test(m3),
+    'K7d: `#kosmos-tooltip` ciała i statku — na warstwie etykiet HUD odwołany (531, 536); POI — przechodzi');
   ok(/const covered = lh && \(/.test(m3) && /if \(!covered && wp &&/.test(m3), 'K7e: współrzędne tylko nad PUSTĄ mapą — nie pod etykietą / gwiazdą / stacją z rozwinięciem (530)');
   ok(/this\._scheduleCoordTooltip\(gp, clientX, clientY\)/.test(m3) && /this\._scheduleEntityTooltip\(target, clientX, clientY\);/.test(m3),
-    'K7f KONTROLA: ścieżki współrzędnych i encji (POI, OFF) zostają w kodzie');
+    'K7f KONTROLA: ścieżki współrzędnych i encji (POI, bez warstwy etykiet) zostają w kodzie');
 }
 
 // ═══ K8 ══════════════════════════════════════════════════════════════════════
-header('K8  karta ciała: ciało bez akcji przy ON — bez karty; zaznaczenie zostaje');
+header('K8  karta ciała: na warstwie etykiet HUD w trybie cywilizacji — bez karty; zaznaczenie zostaje');
 {
   const save = { ...K };
   K.civMode = true; K.homePlanet = { id: 'p_nz' };
@@ -467,8 +467,8 @@ header('K8  karta ciała: ciało bez akcji przy ON — bez karty; zaznaczenie zo
   Object.assign(K, save);
   const ui = strip(src('../../scenes/UIManager.js'));
   const fn = ui.slice(ui.indexOf('  _bodyCardEntity() {'), ui.indexOf('  _shipPanelDockHidden() {'));
-  ok(/if \(!e \|\| !isLabelHoverActive\(GAME_CONFIG\.FEATURES\) \|\| !window\.KOSMOS\?\.civMode\) return e;/.test(fn) && /return bodyCardAction\(e, window\.KOSMOS\) \? e : null;/.test(fn)
-    && !/_selectedEntity\s*=[^=]/.test(fn), 'K8e: `_bodyCardEntity` — przy OFF zawsze zaznaczone ciało; przy ON ciało bez akcji → brak karty; zaznaczenia NIE zmienia');
+  ok(/if \(!e \|\| !isHudLabelsOn\(GAME_CONFIG\.FEATURES\) \|\| !window\.KOSMOS\?\.civMode\) return e;\s*return null;/.test(fn)
+    && !/_selectedEntity\s*=[^=]/.test(fn), 'K8e: `_bodyCardEntity` — na warstwie etykiet HUD w trybie cywilizacji karty nie ma (każde ciało); bez warstwy i w Generatorze — zaznaczone ciało; zaznaczenia NIE zmienia');
   ok(/this\._bottomContext\.draw\(ctx, W, H, this\._bodyCardEntity\(\)\)/.test(ui) && /this\._bottomContext\.isOver\(x, y, W, H, this\._bodyCardEntity\(\)\)/.test(ui)
     && /const cardEntity = this\._bodyCardEntity\(\);\s*if \(cardEntity && this\._bottomContext\.hitTest\(x, y, W, H, cardEntity\)\) return true;/.test(ui)
     && /this\._bottomContext\.handleWheel\(x, y, delta, W, H, this\._bodyCardEntity\(\)\)/.test(ui),
@@ -496,28 +496,15 @@ header('K9  budżet: spoczynek z kursorem na obiekcie — 0 wywołań ctx; treś
   ok(builds === 2, `K9c: po czasie pamięci (${LH?.LABEL_HOVER?.CONTENT_TTL_MS} ms) — jedno odświeżenie (${builds})`);
 }
 
-// ═══ K10 ═════════════════════════════════════════════════════════════════════
-header('K10 OFF — dzisiejsze zachowanie (druga linia przy najechaniu, bez etykiet na żądanie)');
+// ═══ K4j (dawny K10c) ════════════════════════════════════════════════════════
+header('K4j najechana kolonia — rozwinięcie (≥ 3 linie)');
 {
-  FEATURES.labelHover = false;
   reset(); W0.cam = CAM_WIDE; W0.camEpoch++;
-  const H = mkHud();
-  H.frame(1000);
-  hoverBody(H, CAM_WIDE, 'pd_1'); H.frame(1100); H.frame(1300);
-  const d = H.dbg();
-  ok(!(d?.labels ?? []).some((l) => String(l.key).startsWith('h:')) && (H.lab?.hoverObjectKey?.() ?? null) === null && (H.hud?.coversPoint?.(10, 10) ?? false) === false,
-    'K10a KONTROLA: OFF — najechanie planetoidy bez etykiety na żądanie (jak dziś), bez obiektu najechania dla sceny');
-  hoverBody(H, CAM_WIDE, 'p_x'); H.frame(1400); H.frame(1600);
-  const fob = (H.dbg()?.labels ?? []).find((l) => l.key === 'c:p_fob');
-  W0.hoverBody = 'p_fob'; H.frame(1700); H.frame(1900);
-  const fob2 = labelBy(H.dbg(), 'c:p_fob');
-  ok(!!fob2 && fob2.text.length === 2, `K10b KONTROLA: OFF — najechana kolonia ma DWIE linie (nazwa + dane, dziś): ${fob2 ? JSON.stringify(fob2.text) : '—'}`);
-  FEATURES.labelHover = true;
   const H2 = mkHud();
   W0.hoverBody = 'p_fob'; const pf = projLogical(CAM_WIDE, BODIES.p_fob); pointAt(H2, pf.x, pf.y);
   H2.frame(2000); H2.frame(2200);
   const fob3 = labelBy(H2.dbg(), 'c:p_fob');
-  ok(!!fob3 && fob3.text.length >= 3, `K10c: ON — ta sama kolonia rozwinięta (${fob3?.text?.length ?? 0} linie)`);
+  ok(!!fob3 && fob3.text.length >= 3, `K4j: najechana kolonia Fobos rozwinięta (${fob3?.text?.length ?? 0} linie)`);
   W0.hoverBody = null;
 }
 

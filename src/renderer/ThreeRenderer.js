@@ -52,7 +52,7 @@ import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { orbitalPositionAtDelta, futureMarkerDeltas, orbitTicksVisible } from '../ui/TacticalModeLogic.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { t } from '../i18n/i18n.js';
-import { isLabelHoverActive } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedzi DOM wygaszone
+import { isHudLabelsOn } from '../ui/HudLabelLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedzi DOM wygaszone na warstwie HUD
 import {
   weaponColor as fxWeaponColor,
   FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
@@ -3652,8 +3652,8 @@ export class ThreeRenderer {
       if (vesselHover !== this._hoverVesselId) {
         this._hoverVesselId = vesselHover;
       }
-      // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — przy `labelHover` statek opisuje rozwinięcie etykiety HUD, nie podpowiedź DOM.
-      if (isLabelHoverActive(GAME_CONFIG.FEATURES)) this._hideColonyTooltip();
+      // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — na warstwie etykiet HUD statek opisuje rozwinięcie etykiety, nie podpowiedź DOM.
+      if (isHudLabelsOn(GAME_CONFIG.FEATURES)) this._hideColonyTooltip();
       else this._showVesselTooltip(vesselHover, screenX, screenY);
       return;
     }
@@ -3675,9 +3675,9 @@ export class ThreeRenderer {
       return;
     }
 
-    // Sprawdź hover na planetę (podsumowanie kolonii) — REFORMA ZAKŁADEK T1 (D-TR-2 (a)): przy `labelHover` kolonię opisuje
-    // rozwinięcie etykiety HUD (podpowiedź DOM wygaszona, 533); podpowiedź budynku (K3) wyżej — bez zmian.
-    if (newId && newId === focusId && !isLabelHoverActive(GAME_CONFIG.FEATURES)) {
+    // Sprawdź hover na planetę (podsumowanie kolonii) — REFORMA ZAKŁADEK T1 (D-TR-2 (a)): na warstwie etykiet HUD kolonię opisuje
+    // rozwinięcie etykiety (podpowiedź DOM wygaszona, 533); podpowiedź budynku (K3) wyżej — bez zmian.
+    if (newId && newId === focusId && !isHudLabelsOn(GAME_CONFIG.FEATURES)) {
       const colMgr = window.KOSMOS?.colonyManager;
       if (colMgr?.hasColony(newId)) {
         this._showColonyTooltip(newId, screenX, screenY);

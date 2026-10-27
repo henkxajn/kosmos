@@ -13,19 +13,18 @@
  * ⚠ KLUCZEM JEST **LICZBA**, NIE DROGA DOJŚCIA. `removeFromSelection` przy N==2 też ląduje
  *   na N==1 — i ma dać ten sam wynik co świeży single-select. Gdyby reguła patrzyła na
  *   „jak tu trafiliśmy" (poprzedni stan, typ zdarzenia), te dwie drogi rozjechałyby się
- *   i panel migałby zależnie od historii kliknięć. Dlatego `prevCount` jest CELOWO ignorowany
- *   — przyjmujemy go tylko po to, żeby wołający nie musiał go odfiltrowywać.
+ *   i panel migałby zależnie od historii kliknięć. Dlatego reguła bierze WYŁĄCZNIE zbiór — drugi argument
+ *   (np. `{ prevCount }`) jest ignorowany.
+ *
+ * ⚠ Kill-switch `FEATURES.mapVesselPanel` (grupa od N==1 — zachowanie sprzed slice'u 258) usunięty w REFORMIE ZAKŁADEK T4
+ *   razem z dawnymi panelami (panel statku i grupy w idiomie etykiet stoją na tej regule).
  *
  * @param {string[]|null|undefined} vesselIds — `vesselIds` z `ui:selectionChanged`
- * @param {{ flagOn?: boolean, prevCount?: number }} [opts]
- *        flagOn — `FEATURES.mapVesselPanel`; `false` ⇒ zachowanie sprzed slice'u 258 (grupa od N==1)
  * @returns {'none'|'vessel'|'group'}
  */
-export function resolveMapSelectionSurface(vesselIds, opts = {}) {
+export function resolveMapSelectionSurface(vesselIds) {
   const n = Array.isArray(vesselIds) ? vesselIds.length : 0;
   if (n === 0) return 'none';
-  // Kill-switch: bez flagi pojedynczy statek obsługuje GRUPA, dokładnie jak przed 258.
-  if (opts.flagOn === false) return 'group';
   return n === 1 ? 'vessel' : 'group';
 }
 

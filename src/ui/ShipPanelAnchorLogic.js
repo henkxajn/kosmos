@@ -1,6 +1,7 @@
 // ShipPanelAnchorLogic — REFORMA ZAKŁADEK, T3 (TABS_REFORM_PLAN §5.2; podpisy §6.0: D-TR-7, D-TR-8, D-TR-10, D-TR-13,
-// D-TR-14): panel statku (tryb kompaktowy — `FleetManagerOverlay.drawVesselPanel` → `_drawRight`, treść BEZ zmian) przy
-// WIERSZU zaznaczonego statku w prawym outlinerze, za flagą `FEATURES.shipPanelOutliner`.
+// D-TR-14): geometria panelu statku przy WIERSZU zaznaczonego statku w prawym outlinerze — od T5 panel w idiomie etykiet
+// (`ShipPanelHudLayer`), od T6 także panele floty i grupy (`FleetPanelHudLayer`). Flaga kroku `shipPanelOutliner` — na
+// stałe ON od T4 (klucz usunięty).
 //
 //   • Kotwica (D-TR-7 (a)): panel 300 × 300 (360 w kroku wyboru celu) wysunięty W LEWO od prawego outlinera — prawa
 //     krawędź panelu = lewa krawędź kolumny, górna = górna krawędź wiersza statku; klamra do obszaru mapy z `MapInsets`
@@ -10,8 +11,8 @@
 //   • „Spawanie”: przy kotwicy na wierszu panel bez własnej krawędzi od strony kolumny (wspólną krawędzią jest linia
 //     kolumny) i łącznik na wysokości wiersza — tylko gdy wiersz jest w liście widoczny (rysunek i stałe — `UIManager`).
 //   • Zapas (D-TR-8 (a)): kolumna ukryta (klawisz „.”, overlay, rozwinięty Dok) albo statku brak w drzewie — kotwica
-//     zapasowa JAK DZIŚ: prawy górny róg obszaru mapy (`resolveVesselPanelAnchor(null, …)` + klamra `FloatingPanel`,
-//     4 px); bez przeciągania.
+//     zapasowa (geometria dawnego pływającego panelu statku): prawy górny róg obszaru mapy
+//     (`resolveVesselPanelAnchor(null, …)` + klamra 4 px); bez przeciągania.
 //   • Tryb Y (D-TR-10 (a), Finding 542): przy rozwiniętym Doku taktycznym panel statku nad mapą się nie rysuje (mini-panel
 //     Doku + „Pokaż w rejestrze”).
 //   • Przełączenie układu: zaznaczony POJEDYNCZY statek spoza układu docelowego — zaznaczenie zdjęte (panel się zwija);
@@ -44,11 +45,6 @@ function overlapsRect(a, o, pad) {
 function validRects(list) {
   if (!Array.isArray(list)) return [];
   return list.filter((o) => o && [o.x, o.y, o.w, o.h].every(Number.isFinite) && o.w > 0 && o.h > 0);
-}
-
-/** Flaga kroku T3 — brak klucza = OFF (dzisiejszy kod co do bitu). */
-export function isShipPanelOutlinerOn(features) {
-  return features?.shipPanelOutliner === true;
 }
 
 /**
@@ -145,8 +141,8 @@ export function computeShipPanelPlacement({ W, H, insets, column, anchor, panelW
       };
     }
   }
-  // D-TR-8 (a): kotwica zapasowa — dzisiejsza (obszar mapy jak `UIManager._vesselPanelBounds` przy OFF, kotwica bez pozycji
-  // ekranowej → prawy górny róg, klamra `FloatingPanel._clamp`); także panel przy wierszu bez wolnego miejsca obok przeszkody.
+  // D-TR-8 (a): kotwica zapasowa — geometria dawnego pływającego panelu statku (obszar mapy z `MapInsets` z marginesem 8 px,
+  // kotwica bez pozycji ekranowej → prawy górny róg, klamra 4 px); także panel przy wierszu bez wolnego miejsca obok przeszkody.
   const oy = ins.top + 8;
   const b = { ox: ins.left + 8, oy, ow: Math.max(80, W - ins.left - ins.right - 16), oh: Math.max(60, H - ins.bottom - oy) };
   const a = resolveVesselPanelAnchor(null, 1, b, panelW, panelH, 24);
@@ -159,24 +155,22 @@ export function computeShipPanelPlacement({ W, H, insets, column, anchor, panelW
 }
 
 /**
- * D-TR-10 (a), Finding 542: tryb Y — przy rozwiniętym Doku taktycznym panel statku nad mapą się nie rysuje (przy ON).
- * @param {object} features — `GAME_CONFIG.FEATURES`
+ * D-TR-10 (a), Finding 542: tryb Y — przy rozwiniętym Doku taktycznym panel statku nad mapą się nie rysuje.
  * @param {boolean} dockExpanded — `TacticalDock.isExpanded()`
  */
-export function shipPanelHiddenByDock(features, dockExpanded) {
-  return isShipPanelOutlinerOn(features) && dockExpanded === true;
+export function shipPanelHiddenByDock(dockExpanded) {
+  return dockExpanded === true;
 }
 
 /**
- * Przełączenie układu (przy ON; wołane z `system:switched`): zaznaczony POJEDYNCZY statek spoza układu docelowego →
- * zaznaczenie zdjęte (panel się zwija); statek w układzie docelowym — zostaje (Tab i 2. klik reguły §7.8 przełączają na
- * układ statku). Statek w skoku (układ `null` — kanon `systemIdOf`) nie jest w żadnym układzie — zdjęty. Grupa N ≥ 2
- * i flota — bez zmian (D-TR-9 (a)).
- * @param {{flagOn:boolean, vesselIds:string[], vessel:object|null, systemId:string|null, clear?:Function}} p
+ * Przełączenie układu (wołane z `system:switched`): zaznaczony POJEDYNCZY statek spoza układu docelowego → zaznaczenie
+ * zdjęte (panel się zwija); statek w układzie docelowym — zostaje (Tab i 2. klik reguły §7.8 przełączają na układ statku).
+ * Statek w skoku (układ `null` — kanon `systemIdOf`) nie jest w żadnym układzie — zdjęty. Grupa N ≥ 2 i flota — bez zmian.
+ * @param {{vesselIds:string[], vessel:object|null, systemId:string|null, clear?:Function}} p
  * @returns {'clear'|'keep'|null}
  */
-export function syncShipPanelOnSystemSwitch({ flagOn, vesselIds, vessel, systemId, clear = null } = {}) {
-  if (flagOn !== true || !systemId) return null;
+export function syncShipPanelOnSystemSwitch({ vesselIds, vessel, systemId, clear = null } = {}) {
+  if (!systemId) return null;
   if (!Array.isArray(vesselIds) || vesselIds.length !== 1 || !vessel) return null;
   if (systemIdOf(vessel) !== systemId) { clear?.(); return 'clear'; }
   return 'keep';
@@ -185,11 +179,10 @@ export function syncShipPanelOnSystemSwitch({ flagOn, vesselIds, vessel, systemI
 /**
  * D-TR-14 (a), Finding 539: klik ciała albo stacji na mapie (trafienie z `ThreeRenderer.lastClickPick.object`) nie zdejmuje
  * zaznaczenia statku — jak klik w lewym outlinerze; pusta mapa zdejmuje jak dotąd.
- * @param {object} features — `GAME_CONFIG.FEATURES`
  * @param {'body'|'station'|null} objectHit
  */
-export function keepShipSelectionOnMapClick(features, objectHit) {
-  return isShipPanelOutlinerOn(features) && (objectHit === 'body' || objectHit === 'station');
+export function keepShipSelectionOnMapClick(objectHit) {
+  return objectHit === 'body' || objectHit === 'station';
 }
 
 /**

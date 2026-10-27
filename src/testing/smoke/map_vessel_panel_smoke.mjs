@@ -28,7 +28,8 @@
 //   P5  brak podwójnego producenta stref (dwa rysowania pod rząd → count bez zmian)
 //   P7  wymuszenie gałęzi statku mimo `_selectedFleetId`
 //   P-open   rysowanie panelu NIE ustawia `_visible` (nie perturbuje `isAnyOpen()`)
-//   P-flag   `mapVesselPanel:false` ⇒ przy N==1 powierzchnią jest `group` (dzisiejsze zachowanie)
+//   P-flag   kill-switch `mapVesselPanel` usunięty (REFORMA ZAKŁADEK T4) — przy N==1 powierzchnią jest `vessel`
+//            niezależnie od drugiego argumentu (dawne `{ flagOn: false }` → `group` już nie istnieje)
 //   P-scroll `_rightScrollY` WSPÓLNY (D-MVP-6) + reset przy zmianie statku dalej działa
 //   P11      RENDER: przy każdym N (0/1/≥2) rysuje DOKŁADNIE JEDNA powierzchnia, a w UIManagerze
 //            jest JEDEN producent każdego rysowania (odpowiedź na ① z live-gate'u 2026-09-07 —
@@ -41,6 +42,10 @@
 //     (prostokąt panelu niezależny od kotwicy); dochodzą warianty „-T3” — panel przy wierszu prawego outlinera
 //     (`shipPanelOutliner` ON): jeden producent rysowania za bramką trybu Y (D-TR-10) i pochłanianie kliku w nowym
 //     prostokącie (wspólna krawędź z kolumną — `seamRight`).
+//   ⚠ P-flag, P-mount, P11 — PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flagi kroków na
+//     stałe ON — w `UIManager` panel statku nad mapą to panel T5 (`_drawShipPanelHud`, klik `_vesselPanelClick`), panel
+//     floty / grupy to panel T6 (`_drawFleetPanelHud`); dawne wywołania `drawVesselPanel` / `fleetGroupPanel.draw` w
+//     `UIManager` usunięte (metody dawnych paneli — do kolejnego kroku T4; `drawFor` w P11 rysuje je wprost jako wyrocznię).
 //   P13      INTEGRACJA — akcja CELOWANA klikana z panelu mapy zmienia stan PRAWDZIWEGO
 //            `MissionSystem` (+ P13-src: pin premisy populacji)
 //   P-plate  płyta tła pokrywa CAŁY prostokąt panelu i NIE jest strefą (absorber ③ ma być
@@ -427,15 +432,16 @@ header('P-open  PIN — rysowanie panelu nie ustawia `_visible` (D-MVP-7)');
 }
 
 // ═══ P-flag — kill-switch ════════════════════════════════════════════════════════════════════
-header('P-flag  PIN — `mapVesselPanel:false` ⇒ N==1 obsługuje GRUPA (dzisiejsze zachowanie)');
+header('P-flag  PIN — kill-switch `mapVesselPanel` usunięty (T4): N==1 obsługuje panel STATKU zawsze');
 {
   const f = MapLogic?.resolveMapSelectionSurface;
   if (typeof f !== 'function') {
-    ok(false, 'flagOn:false ⇒ N==1 → group');
-    ok(false, 'KONTROLA: flagOn:true ⇒ N==1 → vessel');
+    ok(false, 'N==1 → vessel bez względu na drugi argument');
+    ok(false, 'KONTROLA: N==2 → group');
   } else {
-    ok(f(['a'], { flagOn: false }) === 'group', 'flagOn:false ⇒ N==1 → group (bit w bit jak dziś)');
-    ok(f(['a'], { flagOn: true }) === 'vessel', 'KONTROLA: flagOn:true ⇒ N==1 → vessel');
+    ok(f(['a'], { flagOn: false }) === 'vessel' && f(['a'], false) === 'vessel' && f(['a']) === 'vessel',
+      'N==1 → vessel bez względu na drugi argument (dawne `{ flagOn: false }` → `group` usunięte w T4)');
+    ok(f(['a', 'b']) === 'group' && f([]) === 'none', 'KONTROLA: N==2 → group, N==0 → none (mutex po liczbie bez zmian)');
   }
 }
 
@@ -476,9 +482,11 @@ header('P-mount  PIN ŹRÓDŁOWY — adapter jest ZAMONTOWANY w UIManagerze');
   const src = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8');
   const code = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
   ok(code.includes("from '../ui/MapVesselPanelLogic.js'"), 'UIManager importuje regułę mutexu');
-  ok(code.includes('drawVesselPanel'), 'UIManager RYSUJE panel statku (drawVesselPanel)');
-  ok(code.includes('handleVesselPanelClick'), 'UIManager ROUTUJE klik (handleVesselPanelClick)');
-  ok(code.includes("_mapSurface() === 'group'"), 'panel grupy bramkowany na _mapSurface()===group');
+  ok(code.includes('this._drawShipPanelHud(ctx, W, H)'), 'UIManager RYSUJE panel statku (panel T5 — `_drawShipPanelHud`)');
+  ok(code.includes('this._vesselPanelClick(x, y)') && code.includes('this._shipPanelHud.handleClick('), 'UIManager ROUTUJE klik (`_vesselPanelClick` → panel T5)');
+  ok(code.includes('this._drawFleetPanelHud(ctx, W, H)') && code.includes("surf !== 'groupHud'"), 'panel grupy — panel T6 (`_drawFleetPanelHud`, powierzchnia `groupHud`)');
+  ok(!code.includes('drawVesselPanel') && !code.includes('fleetGroupPanel.draw(') && !code.includes('fleetCommandPanel.draw('),
+    'dawne panele (statku T3, grupy, floty) NIE są rysowane przez UIManager (T4)');
   ok(code.includes("_mapSurface() === 'vessel'"), 'panel statku bramkowany na _mapSurface()===vessel');
   ok(code.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${code.length} zn.)`);
   ok(!code.includes('drawVesselPanelXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
@@ -640,7 +648,7 @@ header('P11  PIN RENDER — przy każdym N rysuje DOKŁADNIE JEDNA powierzchnia 
   const fmo = new FleetManagerOverlay();
   const gp  = new FleetGroupPanel();
 
-  // Mirror montażu z `UIManager.draw` (P-mount pinuje, że tak właśnie jest wpięte).
+  // Wyrocznia dawnych paneli (rysowane WPROST — od T4 `UIManager` ich nie rysuje; P-mount pinuje montaż T5 / T6).
   const drawFor = (ids) => {
     const surface = f(ids, { flagOn: true });
     fmo._selectedVesselId = ids[0] ?? null;
@@ -682,17 +690,16 @@ header('P11  PIN RENDER — przy każdym N rysuje DOKŁADNIE JEDNA powierzchnia 
   const uiCode = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8')
     .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
   const cnt = (hay, needle) => hay.split(needle).length - 1;
-  ok(cnt(uiCode, 'fleetGroupPanel.draw(') === 1,
-     `dokładnie JEDNO miejsce wywołania fleetGroupPanel.draw( (jest: ${cnt(uiCode, 'fleetGroupPanel.draw(')})`);
-  ok(cnt(uiCode, 'drawVesselPanel?.(') === 1,
-     `dokładnie JEDNO miejsce wywołania drawVesselPanel?.( (jest: ${cnt(uiCode, 'drawVesselPanel?.(')})`);
-  // P11-T3 — przy ON ten sam JEDYNY producent, za bramką trybu Y (rozwinięty Dok — panel statku się nie rysuje, D-TR-10).
-  ok(/!this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*const r = this\._vesselPanelBounds\(W, H\);/.test(uiCode),
+  ok(cnt(uiCode, 'this._drawFleetPanelHud(') === 1,
+     `dokładnie JEDNO miejsce wywołania panelu floty / grupy T6 (jest: ${cnt(uiCode, 'this._drawFleetPanelHud(')})`);
+  ok(cnt(uiCode, 'this._drawShipPanelHud(') === 1,
+     `dokładnie JEDNO miejsce wywołania panelu statku T5 (jest: ${cnt(uiCode, 'this._drawShipPanelHud(')})`);
+  // P11-T3 — jedyny producent panelu statku za bramką trybu Y (rozwinięty Dok — panel statku się nie rysuje, D-TR-10).
+  ok(/!this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*shipPanelDrawn = this\._drawShipPanelHud\(ctx, W, H\);/.test(uiCode),
      'P11-T3: jedyne wywołanie panelu statku za bramką trybu Y (`_shipPanelDockHidden`) i powierzchni N == 1');
   let SPA = null; try { SPA = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first */ }
-  ok(SPA?.shipPanelHiddenByDock?.({ shipPanelOutliner: true }, true) === true && SPA?.shipPanelHiddenByDock?.({ shipPanelOutliner: true }, false) === false
-     && SPA?.shipPanelHiddenByDock?.({}, true) === false,
-     'P11-T3: rozwinięty Dok chowa panel statku tylko przy ON (zwinięty — panel przy wierszu; OFF — jak dziś, 542)');
+  ok(SPA?.shipPanelHiddenByDock?.(true) === true && SPA?.shipPanelHiddenByDock?.(false) === false,
+     'P11-T3: rozwinięty Dok chowa panel statku (zwinięty — panel przy wierszu; 542)');
 
   vm._vessels.delete('v_2');
   delete window.KOSMOS.fleetSystem;
