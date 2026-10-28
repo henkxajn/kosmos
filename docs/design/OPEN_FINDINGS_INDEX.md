@@ -942,6 +942,24 @@
 > • Dalej: paczka B (H4) w arkuszu; reforma zakładek poza arkuszem; kotwica = commit dokumentacji `docs(HUD A CLOSE)`.
 > • **Pierwszy wolny numer: 531.**
 
+> **Aktualizacja 2026-10-28 (REFORMA ZAKŁADEK — zamknięta 2026-10-27 · ARKUSZ HUD — paczka B i B-Z, WYKONANE — ARKUSZ HUD
+> ZAMKNIĘTY)** (rejestr macierzysty `HUD_PLAN.md` §3 — także dla #531–#567 reformy zakładek, `TABS_REFORM_PLAN.md`).
+> • **Reforma zakładek** (2026-10-24–27, poza arkuszem HUD; ten indeks nie miał wpisu po paczce A — uzupełnione tutaj):
+>   531 / 532 → T3 → T1 → T2 → T5 → T6 → T4 — wykonane i zacommitowane (`TABS_REFORM_PLAN.md` §5.4–§5.10); rejestr
+>   #531–#567 przed paczką B: ✅ 531–554, 556, 558–562, 566 · ⚪ 555, 557, 563–565, 567.
+> • **Paczka B** (H4 — model uwagi, alerty z treścią, chipy warstw, klawisze 6–9, 564, kolory 3D w rolach): `18f06b2` B-1 ·
+>   `30f5d87` B-2 · `45c25ce` B-3 · `fabb4b2` B-4; bramka właściciela PASS 2026-10-28. ✅ **564** · **568** (jedna reguła
+>   nazwy obcego statku — od `contact`) w `HUD_PLAN.md` §3; ✅ **490** w `UI_PLAN.md` §6; NOWE ⚪ **569–572** — bez kroku.
+> • **B-Z** (`453a7c6`): flagi H0–H4 na stałe ON, ścieżki OFF usunięte (dawne orbity hex, pierścienie 3D, plakietki
+>   `MapLabelLayer`, linie tras 3D, błysk H1, ramki RTS); dowód metodą T4 — 70/70 par bez różnic. ✅ **523** (powierzchnia
+>   usunięta); NOWY ⚪ **573** (dawny przełącznik pierścieni 3D bez słuchacza — `TacticalModeController`). Sweep
+>   **349/349**, `check-i18n` pl = en = **3399**; save v101 bez migracji.
+> • Wiersze A10 / A11 przepisane do stanu po B-Z: zdjęte 488, 490 (✅ w `UI_PLAN.md` §6) oraz 523, 528, 529, 530 (✅ w
+>   `HUD_PLAN.md` §3); dopisane otwarte z #531–#573.
+> • Rejestr #504–#573: 70 wpisów — ✅ 51 · 🟠 1 (504) · ⚪ 18. **ARKUSZ HUD ZAMKNIĘTY — brak otwartego kroku**; 504 —
+>   osobny drobny krok poza arkuszem.
+> • **Pierwszy wolny numer: 574.**
+
 
 ---
 
@@ -1022,7 +1040,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
 | **471-503** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki + dolny pas + U5; 2026-10-18–21; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1, 488-493 z bramki U2 i sesji U2, 494-496 z sesji U3 — zapisane przy zamknięciu, 497-501 z sesji i bramki U4 — zapisane przy zamknięciu, 502-503 z sesji i bramki 501 — zapisane przy zamknięciu U5) |
-| **504-530** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; 2026-10-21–24; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A) |
+| **504-573** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–28; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1295,15 +1313,13 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 |---|---|---|---|
 | **484** | ⚪ | `#planet-canvas` (legacy PlanetScene) jest niewidzialnym celem KAŻDEGO kliku mapy — `display: none` (`index.html:33`) przegrywa specyficznością z `#game-container canvas { display: block }` (`:24-30`), z-index 4 nad `#event-layer` (3); gałąź canvas lewego kliku (`GameScene.js:5970`, `:5984`) i pominięcie `isOverUI` w prawym (`:6072-6073`) polegają na tym celu — cel kliku zmierzony, prawy klik — wniosek z kodu | → przy usuwaniu PlanetScene (ostrzeżenie: cel kliku przejdzie na `#event-layer` — lewy klik na gałąź z raycastem sceny, prawy zacznie pytać `isOverUI`). `UI_PLAN.md` §6 |
 | **485** | ⚪ | podpowiedź po najechaniu zdradza statek ukryty mgłą wojny — picker najechania (`ThreeRenderer.js:3400`) nie pyta o `sprite.visible`; `_showVesselTooltip` (`:3593`) ma bramkę tożsamości, nie widoczności; picker kliku filtruje od U1-3 — wniosek z kodu | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-1 — picker najechania z `visibleOnly`; U3 bez zmian — zmieniony tylko picker kliku, 487). `UI_PLAN.md` §6 |
-| **488** | ⚪ | zamknięcie karty ciała to glif „−” (`BottomContext.js:218`), panel stacji ma w tym miejscu „✕” (`StationPanel.js:151`) — „−” wygląda jak minimalizacja; z bramki U1 (obserwacja 1, strefa zmierzona przy pięciu rozdzielczościach) | → reforma pływających okien (zaparkowana). `UI_PLAN.md` §6 |
-| **490** | ⚪ | prawy klik nad lewą kolumną otwiera menu kontekstowe mapy pod nią — przy celu `CANVAS` prawy klik nie pyta `isOverUI` (`GameScene.js:6083-6084`); zmierzone (ZF r120, `087949c`): menu otwarte nad wierszami i nad tłem kolumny przy `isOverUI` = `true` | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-2 — `isOverUI` przy prawym kliku bez wyjątku `CANVAS`; rodzina **484**); od U3 dotyczy też prawej kolumny, zawsze widocznej (wniosek z kodu). `UI_PLAN.md` §6 |
 | **492** | 🟠 | czarny ekran po zamknięciu klawiszem H mapy kolonii z innego układu (bramka U2, 2× u właściciela) — **NIE odtworzony** w 8 przebiegach (`803a927` i `087949c`; SwiftShader i GPU; pauza i płynący czas; po „Obserwuj”; pełna część A bramki; przytrzymany H); H i Esc zamykają tą samą funkcją (`ColonyOverlay.hide`); „Rebake: 58 tekstur” = przełączenie układu z kliku w listę kolonii z górnej belki (`TopResourceDrawer.js:722`, sprzed U2), log asynchroniczny | → diagnoza jednolinijkowcem z `UI_PLAN.md` §4.3 A przy następnym wystąpieniu; naprawa po pomiarze; bez hotfiksu (w sesji U3 nie odtworzony; bez kodu). `UI_PLAN.md` §6 |
 | **498** | ⚪ | karta walki (`CombatHUD`, `:132-137`) liczy dół sama — pasek nawigacji + listwa dziennika + rezerwa Doku + 8 px — bez pasa dolnego ⇒ od U4-3 dolne ~12 px karty leżą na pasie; wniosek z kodu (w zapisie ZF gy120 brak starcia) | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-2 — dół z `MapInsets.bottom`). `UI_PLAN.md` §6 |
 | **499** | ⚪ | rozwinięta lista kolonii górnej belki (`TopResourceDrawer`, `:257`: `H − BOTTOM_RESERVED − 8`) sięga `H − 42 − 8` — przy długiej liście dolne ~12 px wchodzą na pas dolny; wniosek z kodu | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-2 — dół z `MapInsets.bottom`). `UI_PLAN.md` §6 |
 | **500** | ⚪ | `check-i18n` (`tools/check-i18n.mjs:115`, `T_CALL = /(?<![\w$.])t\s*\(/g`) czyta komentarze, a `\w` bez flagi `u` nie zna polskich liter — „skrót (” w komentarzu = fałszywy „klucz bez definicji” (dwa razy w sesji U4); rodzina reguły z Findingu 269 (bramka czyta `t('…')` także w komentarzach) | → osobny drobny krok (narzędzie, z własnym keeperem) — poza U5 (U5 zamknięte na 501, 2026-10-21; `UI_PLAN.md` §4.7 (e)). `UI_PLAN.md` §6 |
 | **502** | 🟠 | tarcza gwiazdy nie zależy od klasy — `renderStar` czyta `star.mass` (`ThreeRenderer.js:1551`), a encja `Star` trzyma masę w `physics.mass` (`CelestialBody.js:17`) ⇒ masa 1,0 dla każdej gwiazdy, tarcza 3,6 j.; ten sam odczyt w `SystemGenerator.js:170` (`minOrbitAU` 0,55 AU dla każdej gwiazdy); od `9a6a52e` (2026-03-18); zmierzone w grze (ZF gy120: Kepler-4799, typ M — `physics.mass` 0,3159, `_sunCoreRadius` 3,6); liczby V-261 / V-268 liczone z masy | → rejestr VISUALS — osobny krok (naprawa zmienia tarczę i orbitę minimalną — wygląd i balans; strefa i podłoga 501 pójdą za tarczą). `UI_PLAN.md` §6 |
 
-## A11 — Arkusz HUD: radar, etykiety, trasy, orbity, paleta z motywu (rejestr `HUD_PLAN.md` §3)
+## A11 — Arkusz HUD i reforma zakładek: radar, etykiety, trasy, orbity, paleta z motywu, przypięcia i panele (rejestr `HUD_PLAN.md` §3)
 
 | # | | opis | uwaga |
 |---|---|---|---|
@@ -1313,14 +1329,19 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **520** | ⚪ | klik w przycisk panelu motywu (F7) przechodzi do mapy jako klik w pustkę — globalny `click` (`GameScene._setupMouseInput`, `:5462`) ma strażnik `.kosmos-menu-panel` (`:5483`), a nie ma strażnika `ThemeOverlay` ⇒ odznaczenie ciała; czy ciało pod przyciskiem zostałoby zaznaczone — niezmierzone; bramka H0 punkt 16 | → drobny krok poza arkuszem (strażnik klasy panelu albo `stopPropagation`); rodzina 517, 521. `HUD_PLAN.md` §3 |
 | **521** | ⚪ | pola koloru panelu F7 dostają wartości `rgba` — `ThemeOverlay.js:442` (`controls.picker.value = THEME[key]`) do `<input type="color">`, który przyjmuje wyłącznie `#rrggbb` ⇒ ostrzeżenia konsoli przy każdym otwarciu F7; sprzed H0, zgłoszenie właściciela z bramki H0 | → drobny krok poza arkuszem (konwersja `rgba` → `#rrggbb`); rodzina 517, 520. `HUD_PLAN.md` §3 |
 | **522** | ⚪ | `window.KOSMOS.planetGlobeOpen` bez pisarza — czytają go `UIManager.js:2008`, `:2219`, `OutlinerColumn.js:70` i od H1 `HudLayer`; dziś bez skutku (globus tylko w overlayu kolonii — chowa reguła overlayu); wniosek z kodu | → do decyzji (pisarz albo usunięcie flagi). `HUD_PLAN.md` §3 |
-| **523** | ⚪ | pierścienie radaru 3D znikają po przełączeniu układu w pauzie (`switchSystem` → `_disposeAllMeshes`, odbudowa dopiero przy `physics:updated` / `vessel:positionUpdate` / ☰); zmierzone — bramka H1, K10 linia 2; sprzed H1 | → przy `hudRadar` ON nie występuje; przy OFF (rollback) zostaje. `HUD_PLAN.md` §3 |
 | **524** | ⚪ | rola `dim` w 4 z 5 motywów ekranu tytułowego = akcent × 0,32 — różni się od `primary` tylko jasnością, ma odcień orbit; granica radaru w `dim` — kontrast 1,09–1,12, ΔE od orbit 0,3–2,3 (zmierzone, korekta 1b H1) | → paczka A: etykiety w rolach `primary` / `foreign`, `dim` tylko w nazwach wraków przy CTRL — bez decyzji; zmiana tokenu albo roli — decyzja właściciela. `HUD_PLAN.md` §3 |
 | **526** | ⚪ | podziałka radaru na małych okręgach — kreski 10 / 16 px przy okręgu ~19 px sięgają do 53 / 84 % promienia („słoneczko”); bramka H1, K2 | → do decyzji (paczka A jej nie rozstrzygnęła). `HUD_PLAN.md` §3 |
 | **527** | ⚪ | bramka H1 sprzed korekty 1b (K11 — czas JS) nie widziała kosztu rasteryzacji: przy S5 radar zbijał obraz do 18–23 kl./s (kropki na całej ścieżce — 6); w H1 zamknięte przycięciem do okna (60 kl./s), otwarta reguła pomiaru | → protokół od H2 — keepery budżetu klatek w kl./s. `HUD_PLAN.md` §3 |
-| **528** | ⚪ | kotwice karty ciała (`computeFloatingPlacement`) i panelu stacji (`sp.x + 18`) na ścieżce OFF traktują px CSS jako logiczne — przy skali UI 1,26 karta ciała ok. 169 px za daleko w prawo, na tarczy (część przyczyny 493); sesja paczki A | → przy `bodyCardSide` ON nie dotyczy; przy OFF (rollback) zostaje. `HUD_PLAN.md` §3 |
-| **529** | ⚪ | panel statku z boku modelu (493) potrafi przykryć trasę HUD i cel statku — reguła 493 chroni tylko tarczę / model zaznaczonego obiektu; wniosek z kodu | → reforma zakładek (pływający panel statku znika — `TABS_REFORM_PLAN.md`). `HUD_PLAN.md` §3 |
-| **530** | ⚪ | dymek „Pozycja: (x, y)” przy kursorze nad pustą mapą może zasłaniać etykiety HUD (`#ui-canvas` nad warstwą HUD); sesja paczki A | → do decyzji (polerka). `HUD_PLAN.md` §3 |
-
+| **555** | ⚪ | okno szczegółów ciała pokazuje „???” zamiast nazwy ciała niezbadanego (`BodyDetailModal.js:62`), choć etykieta, przypięcie i lewy outliner pokazują nazwę — dwie reguły nazwy dla tego samego ciała (rodzina 372); reforma zakładek T2 | → do decyzji (jedna reguła nazwy ciała; polerka). `HUD_PLAN.md` §3 |
+| **557** | ⚪ | nazwa celu misji renderowana przy utworzeniu i zapisywana (`MissionSystem.js:1376`, `ExpeditionSystem.js:1080`) — tekst w języku z chwili wysłania (rodzina 165); reforma zakładek T5 | → do decyzji (cel jako klucz, tekst przy rysowaniu; polerka). `HUD_PLAN.md` §3 |
+| **563** | ⚪ | PL liczba mnoga `fleet.shipsCount` — „3 statków” (panele T6, dymek węzła floty); w repo brak pomocnika polskiej liczby mnogiej (rodzina 377); reforma zakładek T6 | → do decyzji (pomocnik liczby mnogiej PL; polerka i18n). `HUD_PLAN.md` §3 |
+| **565** | ⚪ | zdejmowanie zniszczonego statku z zaznaczenia mieszka w słuchaczu `FleetGroupPanel` (od T4 bez rysunku) — sprzątnięcie „martwego” panelu zabrałoby zdejmowanie wraków; reforma zakładek T4 | → bez kroku (kierunek: słuchacz do `UIManager`). `HUD_PLAN.md` §3 |
+| **567** | ⚪ | komentarze nazywają usunięte powierzchnie (karta ciała, panel stacji) jak żywe — m.in. `ThreeRenderer.js`, `HudLayer.js:3`, `MapInsets.js`, `NotificationCenter.js`; reforma zakładek T4 | → bez kroku. `HUD_PLAN.md` §3 |
+| **569** | ⚪ | trasa z celem za kamerą (przycięcie płaszczyzną bliską) rysuje się albo nie — zależnie od przebiegu (K4b arkusza paczki B; przyczyna niezmierzona) | → bez kroku. `HUD_PLAN.md` §3 |
+| **570** | ⚪ | rozkład etykiet zależy od historii klatek (pamięć `prev` szyny) — porównanie pikseli między rozruchami wymaga tej samej historii kamery | → bez kroku (skutek dla protokołu bramek). `HUD_PLAN.md` §3 |
+| **571** | ⚪ | dwa radary przy jednoczesnym zaznaczeniu statku i ciała (wymaganie z bramki H1) | → bez kroku. `HUD_PLAN.md` §3 |
+| **572** | ⚪ | dwa pingi — ping HUD i ping zaznaczenia D-UI-10 (`pingVessel`) — scalenie z bramki H1 bez kroku | → bez kroku. `HUD_PLAN.md` §3 |
+| **573** | ⚪ | `TacticalModeController` zapisuje `uiPrefs.sensorOverlayVisible` i emituje `ui:sensorOverlayToggle` — od B-Z bez słuchacza i bez skutku (radar trybu Y wymusza warstwa HUD) | → bez kroku (przy najbliższym dotknięciu trybu Y). `HUD_PLAN.md` §3 |
 
 ---
 
