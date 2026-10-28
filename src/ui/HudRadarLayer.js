@@ -14,7 +14,8 @@
 //   • paczka B (flaga `hudAttention`, B-2): zdarzenie wykrycia → ALERT w rejestrze warstwy (`HudLayer.alerts`, zegar
 //     symulacji) — wyłącznie dla obiektu ZAZNACZONEGO (w trybie Y — każdego własnego), także kolonii z zasięgiem ∞ (bez
 //     granicy — alert przez etykietę); błysk na granicy: łuk co najmniej `HUD_ALERT.FLASH_MIN_ARC_PX` na ekranie, dwa pulsy
-//     `HUD_ALERT.ALERT_MS` (stoi w pauzie). Przy OFF — kod H1 co do bitu.
+//     `HUD_ALERT.ALERT_MS` (stoi w pauzie); widoczność radaru = chip [R] (`uiPrefs.hudLayers.radar`, dawny `hudRadarVisible`
+//     wchłonięty). Przy OFF — kod H1 co do bitu.
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';   // korekta 1b — font odczytu zasięgu
@@ -173,7 +174,8 @@ export class HudRadarLayer {
     this._trackSelection(radarSelection(F.sel), F);
     // Błyski — wyłącznie z okna 0,8 s czasu realnego.
     this._flashes = this._flashes.filter((f) => F.now - f.t0 < HUD_RADAR.FLASH_MS);
-    const visible = on && radarLayerVisible(K?.uiPrefs, F.tactical);
+    // Paczka B: widoczność = chip [R] (`hudLayers.radar`; tryb Y wymusza — jak ☰ „Radar”).
+    const visible = on && (F.att ? (F.tactical === true || F.att.layers.radar) : radarLayerVisible(K?.uiPrefs, F.tactical));
     if (!visible) { this._prep = { on, visible, holders: [], flashes: [] }; return `r:${on ? 1 : 0}:0`; }
     const tr = K.threeRenderer;
     const vm = K.vesselManager, cm = K.colonyManager;

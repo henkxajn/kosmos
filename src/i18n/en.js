@@ -3730,7 +3730,16 @@ export default {
   'hudLabel.stationPop': '{0}/{1} POP',
   'hudLabel.detect':     'det. {0}',
   'hudLabel.lock':       'lock {0}',
-  // ── HUD SHEET pack B — alert (D-HUD-11) ──
+  // ── HUD SHEET pack B — layer chips on the bottom strip (D-HUD-13) and alert (D-HUD-11) ──
+  'hudChips.radar':      'S',
+  'hudChips.routes':     'R',
+  'hudChips.labels':     'L',
+  'hudChips.orbits':     'O',
+  'hudChips.nameRadar':  'Sensors',
+  'hudChips.nameRoutes': 'Routes',
+  'hudChips.nameLabels': 'Labels',
+  'hudChips.nameOrbits': 'Orbits',
+  'hudChips.tip':        '{0} — key {1}',
   'hudAlert.contact':    'contact',
 
   // ── TABS REFORM T1 — informational expansion of map labels (D-TR-3, I7 tables) ──

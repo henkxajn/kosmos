@@ -64,8 +64,9 @@ import { isHudOrbitsOn, planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, a
   hudOrbitSyncKey } from './HudOrbitLogic.js';   // ARKUSZ HUD H0 (D-HUD-7) — orbity w kolorach motywu
 import { isHudRadarOn } from '../ui/HudRadarLogic.js';   // ARKUSZ HUD H1 (D-HUD-3/4) — radar na warstwie HUD 2D
 import { isHudRoutesOn } from '../ui/HudRouteLogic.js';   // ARKUSZ HUD paczka A (H3, D-HUD-8) — trasy na warstwie HUD 2D
-// ARKUSZ HUD paczka B — celownik wroga w rytmie alertu (flaga `hudAttention`).
+// ARKUSZ HUD paczka B — chip [O] (`uiPrefs.hudLayers.orbits`), celownik wroga w rytmie alertu (flaga `hudAttention`).
 import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';
+import { readHudLayers } from '../ui/HudLayerChipsLogic.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -552,6 +553,7 @@ export class ThreeRenderer {
     // Tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
     this._orbitFilter = 'planetoids'; // domyślny — planetoidy widoczne, planety wg reguł
     this._hudOrbitKey     = null;   // ARKUSZ HUD H0 — klucz przebudowy orbit (`_syncHudOrbits`; null = flaga OFF)
+    this._hudOrbitLayerOff = false; // paczka B — chip [O] wyłączony w ostatniej klatce (`_syncHudOrbits`)
     this._hudHoverOrbitId = null;   // ARKUSZ HUD H0 — ciało pod kursorem (styl orbit przy `hudOrbits`)
 
     // Współdzielona tekstura kropki życia — tworzona raz
@@ -2976,9 +2978,23 @@ export class ThreeRenderer {
   // domu i kolonii widoczne na pauzie bez biegu gry). OFF ⇒ klucz null ⇒ bez pracy; zmiana klucza ⇒ pełne odświeżenie.
   _syncHudOrbits() {
     const key = hudOrbitSyncKey(GAME_CONFIG.FEATURES, themeEpoch(), window.KOSMOS?.homePlanet?.id ?? null);
-    if (key === this._hudOrbitKey) return;
+    // Paczka B (B-3) — chip [O]: zmiana stanu warstwy ⇒ przestylowanie bez przebudowy geometrii (także w pauzie).
+    const layerOff = key != null && this._hudOrbitsLayerOff?.() === true;
+    if (key === this._hudOrbitKey) {
+      if (key != null && layerOff !== (this._hudOrbitLayerOff === true)) {
+        this._hudOrbitLayerOff = layerOff;
+        this._hudRestyleOrbits();
+      }
+      return;
+    }
     this._hudOrbitKey = key;
+    this._hudOrbitLayerOff = layerOff;
     this._hudRefreshAllOrbits();
+  }
+
+  // Paczka B (B-3) — czy chip [O] wyłączył orbity: flaga `hudAttention` i `uiPrefs.hudLayers.orbits === false`.
+  _hudOrbitsLayerOff() {
+    return isHudAttentionOn(GAME_CONFIG.FEATURES) && readHudLayers(window.KOSMOS?.uiPrefs).orbits === false;
   }
 
   // Pełne odświeżenie orbit ścieżką bieżącej flagi: planety i planetoidy od zera, pierścienie księżyców przestylowane.
@@ -3020,8 +3036,10 @@ export class ThreeRenderer {
   }
 
   // Stan wspólny partii stylowania: filtr, czysty widok, barwy z motywu (liczone raz na partię).
+  // Paczka B (B-3) — chip [O] wyłączony = filtr „Żadne” (wybór z menu ☰ nietknięty; orbita zaznaczonego zostaje — 3b).
   _hudOrbitState() {
-    return { filter: this._orbitFilter, cleanView: this._cleanView === true, palette: orbitPalette() };
+    const filter = this._hudOrbitsLayerOff?.() === true ? 'none' : this._orbitFilter;
+    return { filter, cleanView: this._cleanView === true, palette: orbitPalette() };
   }
 
   _hudStylePlanetOrbit(planet, line, st = this._hudOrbitState()) {

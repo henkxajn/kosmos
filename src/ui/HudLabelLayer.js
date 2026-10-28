@@ -19,8 +19,9 @@
 //   • paczka B (flaga `hudAttention` — `F.att`): MODEL UWAGI — przy zaznaczeniu albo alercie etykiety niezaznaczone
 //     `HUD_ATTENTION.LABEL_DIM`, zaznaczone / przypięte / alertowane / najechane 1,0 (przejście `FADE_MS` czasu realnego —
 //     `makeAttentionMemory`); ALERT — linia treści (rola `alert`) pod etykietą intruza (brak etykiety — etykieta na żądanie
-//     przy widocznym intruzie), kolonia ∞ — pasek etykiety w roli `alert` + linia treści; ramka statku jako przeszkoda —
-//     kwadrat nawiasów (`bracketBox`). Przy OFF — kod paczki A co do bitu.
+//     przy widocznym intruzie), kolonia ∞ — pasek etykiety w roli `alert` + linia treści; CHIP [E] wyłączony — etykiety stałe
+//     znikają, zostają przypięcie, etykiety na żądanie, najechane i nośniki alertu (strzałki krawędzi — bez); ramka statku
+//     jako przeszkoda — kwadrat nawiasów (`bracketBox`). Przy OFF — kod paczki A co do bitu.
 // ⚠ Moduł importuje się pod node (keeper `hud_labels_smoke` — atrapa ctx): bez three i bez DOM.
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
@@ -744,7 +745,7 @@ export class HudLabelLayer {
     const bodyCk = (b) => (b.kind === 'colony' ? 'body:' : 'station:') + b.id;
     const hovPrio = (ck) => (T.hov.key != null && ck === T.hoverContent ? LABEL_HOVER.HOVER_PRIO : null);
     // ── Paczka B (`F.att`; przy OFF — `null`, wszystko niżej bez skutku): alerty klatki — linia treści pod etykietą intruza
-    //    (`foeAlert`), kolonia ∞ — przez etykietę kolonii (`colonyAlert`); najechanie (`isHovCk`) — dla uwagi ──
+    //    (`foeAlert`), kolonia ∞ — przez etykietę kolonii (`colonyAlert`); najechanie (`isHovCk`) — dla uwagi i chipu [E] ──
     const ATT = F.att ?? null;
     const foeAlert = new Map(), colonyAlert = new Map();
     if (ATT) {
@@ -1064,9 +1065,17 @@ export class HudLabelLayer {
           expanded: false, expFrom: 1, expAlpha: 1, alertLine: true, alerted: true, hov: false });
       }
     }
+    // Paczka B — chip [E] wyłączony: etykiety stałe znikają; zostają przypięcie, etykiety na żądanie (najechanie, zaznaczenie),
+    // etykiety najechane i nośniki alertu; strzałki krawędzi — bez.
+    const labelsOff = !!ATT && ATT.layers.labels === false;
+    if (labelsOff) {   // filtr W MIEJSCU — rozkład niżej czyta tę samą listę co bez chipów
+      const keep = items.filter((it) => it.pinLabel || it.demand || it.alertLine || it.hov);
+      items.length = 0;
+      for (const it of keep) items.push(it);
+    }
     // Strzałki krawędzi — statki poza kadrem (zawsze, także bez żadnej etykiety w kadrze — 497); strony osobno (własne —
     // `primary`, wrogie — `foreign`), wróg w tym samym sektorze co własne — przesunięty wzdłuż krawędzi.
-    const arrows = this._edgeArrows(offScreen, F, map);
+    const arrows = labelsOff ? [] : this._edgeArrows(offScreen, F, map);
     for (const a of arrows) {
       const s = R.ARROW_BOX;
       obstacles.push({ x: a.x - s / 2, y: a.y - s / 2, w: s, h: s });

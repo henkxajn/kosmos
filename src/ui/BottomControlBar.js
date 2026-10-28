@@ -18,8 +18,18 @@
 // `STAR_FLOOR_MULT` × promień rdzenia — poprawka 501) – `maxDist`; gałka co klatkę z
 // `_targetDist` (kółko i auto-zoom fokusu ją przesuwają), zapis wyłącznie `setTargetDist` (cel kamery nietknięty);
 // przeciąganie przez `UIManager.handleMouseDown/Move/Up`, kółko nad suwakiem — ten sam krok co nad mapą (`wheelZoom`).
+// CHIPY WARSTW (ARKUSZ HUD paczka B, B-3 — D-HUD-13, D-HUD-14; flaga `hudAttention`): nad mapą, od lewego końca pasa (miejsce
+// dawnego rzędu doku): [R] [T] [E] [O] (EN [S] [R] [L] [O]) w idiomie chipów T5 — włączony w roli `primary`, wyłączony w roli
+// `dim` (przekreślony albo bez nawiasów — `HUD_CHIPS.CHIP_OFF_STYLE`); klik przełącza warstwę (`uiPrefs.hudLayers`), podpowiedź
+// z klawiszem (6–9); pod overlayem — brak (jak suwak). Zegar, suwak, 🔔, ☰ i czip ⚔ — w tych samych px co bez chipów.
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';   // paczka B — flaga `hudAttention` (chipy warstw)
+import { resolveHudRoles } from './HudPalette.js';
+import { isHudAttentionOn } from './HudAttentionLogic.js';
+import {
+  HUD_CHIPS, HUD_LAYER_KEYS, HUD_LAYER_KEY_LABEL, readHudLayers, toggleHudLayer, chipText, chipWidth, layoutLayerChips, chipAt,
+} from './HudLayerChipsLogic.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
@@ -67,7 +77,69 @@ export class BottomControlBar {
     this._zoomTrack = null;   // U4-4: tor suwaka {x,w}
     this._zoomDragging = false;
     this._zoomDragMoved = false;
-    this._hover     = null;   // 'bell'|'menu'|'play'|`speed${i}`|null
+    this._hover     = null;   // 'bell'|'menu'|'play'|`speed${i}`|`chip:${warstwa}`|null
+    this._layerChips = [];    // paczka B — chipy warstw z ostatniej klatki: [{ layer, x, y, w, h }] (puste pod overlayem / przy OFF)
+  }
+
+  /** Paczka B — chipy warstw z ostatniej klatki (bramka, keeper). */
+  getLayerChips() { return this._layerChips.map((c) => ({ ...c })); }
+
+  // Litery chipów (i18n) i nazwy warstw (podpowiedź).
+  _chipLetter(layer) { return t(`hudChips.${layer}`); }
+  _chipName(layer) {
+    return t({ radar: 'hudChips.nameRadar', routes: 'hudChips.nameRoutes', labels: 'hudChips.nameLabels', orbits: 'hudChips.nameOrbits' }[layer]);
+  }
+
+  // Paczka B — rząd chipów warstw od lewego końca pasa (`bgLeft`) do klastra po prawej (`limitX`).
+  _drawLayerChips(ctx, bgLeft, stripTop, limitX) {
+    const font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.font = font;
+    const measure = (s) => ctx.measureText(s).width;
+    const widths = HUD_LAYER_KEYS.map((L) => chipWidth(this._chipLetter(L), measure));
+    this._layerChips = layoutLayerChips({ x0: bgLeft, stripTop, stripH: STRIP_H, widths, limitX });
+    const roles = resolveHudRoles(THEME);
+    const on = readHudLayers(window.KOSMOS?.uiPrefs);
+    const C = HUD_CHIPS;
+    for (const c of this._layerChips) {
+      const st = chipText(this._chipLetter(c.layer), on[c.layer]);
+      const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+      if (this._hover === 'chip:' + c.layer) {
+        ctx.globalAlpha = C.CHIP_HOVER_FILL;
+        ctx.fillStyle = roles.primary;
+        ctx.fillRect(c.x, c.y, c.w, c.h);
+      }
+      ctx.globalAlpha = on[c.layer] ? C.CHIP_ALPHA : C.CHIP_OFF_ALPHA;
+      ctx.fillStyle = on[c.layer] ? roles.primary : roles.dim;
+      ctx.font = font;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(st.text, cx, cy + 0.5);
+      if (st.strike) {
+        const tw = measure(st.text);
+        ctx.strokeStyle = roles.dim;
+        ctx.lineWidth = C.CHIP_STRIKE_WIDTH;
+        ctx.beginPath(); ctx.moveTo(cx - tw / 2, Math.round(cy) + 0.5); ctx.lineTo(cx + tw / 2, Math.round(cy) + 0.5); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // Paczka B — podpowiedź chipu (nazwa warstwy + klawisz) nad pasem, przy chipie.
+  _drawLayerChipTip(ctx, W) {
+    const layer = this._hover.slice(5);
+    const c = this._layerChips.find((x) => x.layer === layer);
+    if (!c) return;
+    const text = t('hudChips.tip', this._chipName(layer), HUD_LAYER_KEY_LABEL[layer]);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const w = Math.ceil(ctx.measureText(text).width) + 12, h = 16;
+    const x = Math.max(4, Math.min(W - w - 4, c.x + c.w / 2 - w / 2));
+    const y = c.y - 4 - h;
+    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 6, y + h / 2 + 0.5);
+    ctx.textBaseline = 'alphabetic';
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
@@ -193,8 +265,16 @@ export class BottomControlBar {
       this._drawCombatChip(ctx, this._chipRect);
     }
 
+    // Paczka B — chipy warstw od lewego końca pasa (miejsce dawnego rzędu doku), do klastra po prawej (czip ⚔, suwak, 🔔);
+    // tylko nad mapą i przy fladze `hudAttention`. Rysowane PO klastrze — klaster liczony bez nich (te same px).
+    this._layerChips = [];
+    if (mapMode && isHudAttentionOn(GAME_CONFIG.FEATURES)) {
+      this._drawLayerChips(ctx, bgLeft, stripTop, this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x);
+    }
+
     // Podpowiedź suwaka zoomu (U4-4) — nad pasem, przy suwaku.
     if (this._zoomRect && this._hover === 'zoom' && !this._zoomDragging) this._drawZoomTip(ctx, W);
+    if (typeof this._hover === 'string' && this._hover.startsWith('chip:') && this._layerChips.length) this._drawLayerChipTip(ctx, W);
   }
 
   // Suwak zoomu (U4-4): końcówki „−” (daleko) / „+” (blisko), tor i gałka — wyłącznie `fillRect` (bez obrysów).
@@ -343,6 +423,14 @@ export class BottomControlBar {
       return true;
     }
     if (!this._bgRect) return false;
+    // Paczka B — chip warstwy: przełączenie (`uiPrefs.hudLayers`), warstwa HUD i orbity 3D czytają stan co klatkę.
+    const chip = chipAt(this._layerChips, x, y);
+    if (chip) {
+      const K = window.KOSMOS;
+      if (K) { K.uiPrefs = K.uiPrefs ?? {}; toggleHudLayer(K.uiPrefs, chip.layer); K.hudLayer?.wake?.(); }
+      this._markDirty();
+      return true;
+    }
     // Bell → dropdown powiadomień (otwiera W GÓRĘ: bez topY, barH = wys. od dołu ekranu do paska)
     if (this._in(this._bellRect, x, y)) {
       const scale = window.KOSMOS?.uiScale ?? 1;
@@ -387,6 +475,7 @@ export class BottomControlBar {
     else if (this._in(this._menuRect, x, y)) h = 'menu';
     else if (this._in(this._playRect, x, y)) h = 'play';
     else if (this._in(this._zoomRect, x, y)) h = 'zoom';   // U4-4 — suwak zoomu
+    else if (chipAt(this._layerChips, x, y)) h = 'chip:' + chipAt(this._layerChips, x, y).layer;   // paczka B — chip warstwy
     else { for (let i = 0; i < 5; i++) if (this._in(this._speedRects[i], x, y)) { h = `speed${i}`; break; } }
     if (h !== this._hover) { this._hover = h; this._markDirty(); }
   }

@@ -161,7 +161,8 @@ import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { outlinerKeyAction } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2-4 — klawisze outlinerów (§7.16)
-import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';   // ARKUSZ HUD paczka B — flaga (490)
+import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';   // ARKUSZ HUD paczka B — flaga (klawisze warstw, 490)
+import { layerForKeyCode, layerKeyAllowed, toggleHudLayer } from '../ui/HudLayerChipsLogic.js';   // paczka B — klawisze 6–9 (D-HUD-14)
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
@@ -4889,6 +4890,24 @@ export class GameScene {
         case 'Digit3': EventBus.emit('time:setMultiplier', { index: 3 }); EventBus.emit('time:play'); break; // 1t/s
         case 'Digit4': EventBus.emit('time:setMultiplier', { index: 4 }); EventBus.emit('time:play'); break; // 1m/s
         case 'Digit5': EventBus.emit('time:setMultiplier', { index: 5 }); EventBus.emit('time:play'); break; // 1r/s
+        // ARKUSZ HUD paczka B (D-HUD-14) — warstwy HUD: 6 radar · 7 trasy · 8 etykiety · 9 orbity (kolejność chipów na pasie);
+        // wyłącznie z fokusem na mapie (tryb cywilizacji, bez overlayu, okna DOM i modyfikatorów); flaga `hudAttention`.
+        case 'Digit6':
+        case 'Digit7':
+        case 'Digit8':
+        case 'Digit9': {
+          const layer = isHudAttentionOn(GAME_CONFIG.FEATURES) ? layerForKeyCode(e.code) : null;
+          if (layer && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
+            modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay, .se-overlay, .at-overlay, .ce-overlay'),
+            planetSceneOpen: !!this.planetScene?.isOpen, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey })) {
+            e.preventDefault();
+            window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
+            toggleHudLayer(window.KOSMOS.uiPrefs, layer);
+            window.KOSMOS.hudLayer?.wake?.();
+            this.uiManager?.markDirty?.();
+          }
+          break;
+        }
         case 'BracketLeft':  EventBus.emit('time:slower'); break;
         case 'BracketRight': EventBus.emit('time:faster'); break;
         case 'KeyQ': if (!window.KOSMOS?.civMode) EventBus.emit('action:stabilize');  break;

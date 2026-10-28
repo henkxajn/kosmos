@@ -570,8 +570,8 @@ export const GAME_CONFIG = {
     hudLabels: true,
     hudRoutes: true,
 
-    // ── ARKUSZ HUD paczka B (H4 — D-HUD-11, D-HUD-12, D-HUD-17, D-HUD-c; HUD_PLAN.md §4.5) ──────────────
-    // hudAttention: model uwagi, nawiasy i alerty — JEDNA flaga paczki:
+    // ── ARKUSZ HUD paczka B (H4 — D-HUD-11, D-HUD-12, D-HUD-13, D-HUD-14, D-HUD-17, D-HUD-c; HUD_PLAN.md §4.5) ──────────────
+    // hudAttention: model uwagi, alerty, nawiasy, chipy warstw i klawisze — JEDNA flaga paczki:
     //   • uwaga (`HudAttentionLogic.js`): przy zaznaczeniu albo alercie etykiety niezaznaczone 0,38, trasy 0,25, zaznaczone /
     //     przypięte / alertowane / najechane 1,0 (przejście 200 ms czasu realnego); nawiasy ⌜ ⌟ wokół zaznaczonego ciała,
     //     stacji i statku z oddechem krycia na zegarze symulacji (pauza — statycznie); statek — nawiasy HUD w miejscu ramek RTS
@@ -579,7 +579,8 @@ export const GAME_CONFIG = {
     //   • alerty (`HudAlertLogic.js`): obcy w zasięgu wykrycia obiektu zaznaczonego (w trybie Y — każdego własnego) — błysk na
     //     granicy (najkrótszy łuk w px, dwa pulsy ~1,6 s na zegarze symulacji), dwa pierścienie na intruzie (albo celownik wroga
     //     — jeden rysunek), kropkowany wektor i linia treści wg wywiadu — jeden komplet na intruza; kolonia ∞ — przez etykietę;
-    //     celownik wroga pulsuje na zegarze symulacji; 490 — prawy klik nad powierzchnią UI bez menu mapy (D-HUD-17).
+    //     celownik wroga pulsuje na zegarze symulacji; 490 — prawy klik nad powierzchnią UI bez menu mapy (D-HUD-17);
+    //   • chipy warstw [R] [T] [E] [O] na pasie dolnym + klawisze 6–9 (`HudLayerChipsLogic.js`, `uiPrefs.hudLayers`).
     //   ⚠ Brak klucza = OFF — ścieżka OFF = kod sprzed paczki B co do bitu. Czytana przy każdym rysunku / zdarzeniu — przestawienie
     //     w konsoli (`KOSMOS.gameConfig.FEATURES.hudAttention = false`) działa od następnej klatki; F5 wczytuje plik.
     hudAttention: true,

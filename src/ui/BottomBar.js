@@ -16,6 +16,9 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 import { buildSaveFileName, downloadSave, pickSaveFile, markPendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { isHudRadarOn } from './HudRadarLogic.js';   // ARKUSZ HUD H1 — ☰ „Radar” przy `hudRadar` steruje warstwą HUD
+// ARKUSZ HUD paczka B (B-3) — przy `hudAttention` ☰ „Radar” i chip [R] czytają i piszą ten sam stan (`uiPrefs.hudLayers.radar`).
+import { isHudAttentionOn } from './HudAttentionLogic.js';
+import { readHudLayers, setHudLayer } from './HudLayerChipsLogic.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -441,9 +444,12 @@ export class BottomBar {
     const apValue = apEnabled ? (pl ? 'WŁ' : 'ON') : (pl ? 'WYŁ' : 'OFF');
     // M4 P2 — radar toggle (window.KOSMOS.uiPrefs.sensorOverlayVisible). ARKUSZ HUD H1 — przy `hudRadar` stan warstwy HUD:
     // `uiPrefs.hudRadarVisible` (brak klucza = widoczna — bez migracji zapisu).
-    const radarOn = isHudRadarOn(GAME_CONFIG.FEATURES)
-      ? window.KOSMOS?.uiPrefs?.hudRadarVisible !== false
-      : window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true;
+    // Paczka B — przy `hudAttention` ze stanu chipów (`uiPrefs.hudLayers.radar`; dawny klucz czytany jako zapas).
+    const radarOn = !isHudRadarOn(GAME_CONFIG.FEATURES)
+      ? window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true
+      : (isHudAttentionOn(GAME_CONFIG.FEATURES)
+        ? readHudLayers(window.KOSMOS?.uiPrefs).radar
+        : window.KOSMOS?.uiPrefs?.hudRadarVisible !== false);
     // Obraz Operacyjny F1 — plakietki flotowe (default ON: brak klucza ≠ false)
     const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
     return [
@@ -561,6 +567,13 @@ export class BottomBar {
     // ARKUSZ HUD H1 — przy `hudRadar` przełącznik steruje warstwą HUD (pierścienie 3D wyłączone; warstwa czyta preferencję
     // w każdej klatce). `sensorOverlayVisible` zostaje stanem ścieżki OFF i trybu Y — nietknięty.
     if (isHudRadarOn(GAME_CONFIG.FEATURES)) {
+      // Paczka B — przy `hudAttention` jedno źródło z chipem [R] (`uiPrefs.hudLayers.radar`; zapis usuwa dawny klucz).
+      if (isHudAttentionOn(GAME_CONFIG.FEATURES)) {
+        const uiPrefs = window.KOSMOS.uiPrefs;
+        setHudLayer(uiPrefs, 'radar', !readHudLayers(uiPrefs).radar);
+        window.KOSMOS.hudLayer?.wake?.();
+        return;
+      }
       window.KOSMOS.uiPrefs.hudRadarVisible = window.KOSMOS.uiPrefs.hudRadarVisible === false;
       return;
     }

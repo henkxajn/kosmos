@@ -12,8 +12,8 @@
 //     (trasa wieloprzeskokowa — cel trasy, kierunek — bieżący przeskok);
 //   • linia rysowana tylko w oknie (+ margines) — `clipRunsToRect` z fazą kresek (koszt rasteryzacji — Finding 527).
 //   • paczka B (flaga `hudAttention` — `F.att`): mnożnik uwagi z modelu uwagi — zaznaczona (także członek zaznaczonej floty),
-//     najechana i alertowana 1,0, reszta `HUD_ATTENTION.ROUTE_DIM` (przejście `FADE_MS` czasu realnego). Przy OFF — kod
-//     paczki A co do bitu.
+//     najechana i alertowana 1,0, reszta `HUD_ATTENTION.ROUTE_DIM` (przejście `FADE_MS` czasu realnego); chip [T] wyłączony —
+//     bez tras (także zaznaczonego statku). Przy OFF — kod paczki A co do bitu.
 // ⚠ Moduł importuje się pod node (keeper `hud_routes_smoke` — atrapa ctx): bez three i bez DOM.
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
@@ -51,6 +51,8 @@ export class HudRouteLayer {
   prepare(F) {
     const on = isHudRoutesOn(F.features);
     if (!on) { this._prep = { on: false, routes: [], warps: [] }; return 't:0'; }
+    // Paczka B — chip [T] wyłączony: bez tras.
+    if (F.att && F.att.layers.routes === false) { this._prep = { on: true, routes: [], warps: [] }; return 't:1:off'; }
     const K = F.K, tr = K.threeRenderer, vm = K.vesselManager, ps = K.proximitySystem, obs = K.observatorySystem;
     const intel = K.intelSystem;
     const sys = F.activeSystemId;

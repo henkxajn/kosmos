@@ -3731,7 +3731,16 @@ export default {
   'hudLabel.stationPop': '{0}/{1} POP',
   'hudLabel.detect':     'wykr. {0}',
   'hudLabel.lock':       'lock {0}',
-  // ── ARKUSZ HUD paczka B — alert (D-HUD-11) ──
+  // ── ARKUSZ HUD paczka B — chipy warstw na pasie dolnym (D-HUD-13) i alert (D-HUD-11) ──
+  'hudChips.radar':      'R',
+  'hudChips.routes':     'T',
+  'hudChips.labels':     'E',
+  'hudChips.orbits':     'O',
+  'hudChips.nameRadar':  'Radar',
+  'hudChips.nameRoutes': 'Trasy',
+  'hudChips.nameLabels': 'Etykiety',
+  'hudChips.nameOrbits': 'Orbity',
+  'hudChips.tip':        '{0} — klawisz {1}',
   'hudAlert.contact':    'kontakt',
 
   // ── REFORMA ZAKŁADEK T1 — rozwinięcie informacyjne etykiet mapy (D-TR-3, tabele I7) ──

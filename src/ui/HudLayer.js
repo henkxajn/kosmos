@@ -15,7 +15,7 @@
 // Treść rysują PODWARSTWY (`addSublayer`): `prepare(F)` → część klucza klatki (tanio, w każdej klatce), `collect(F, proj)` →
 // `{ count, animating, … }` (geometria w px logicznych), `draw(ctx, F, collected)`; opcjonalnie `debug()`, `destroy()`.
 // Rzut — jeden wspólny projektor (`HudProjection.makeHudProjector` z `ThreeRenderer.getHudView()`).
-// Paczka B (flaga `hudAttention`): stan klatki dla modelu uwagi i alertów (`F.att` — ostrość, alerty) i widok
+// Paczka B (flaga `hudAttention`): stan klatki dla modelu uwagi i alertów (`F.att` — ostrość, alerty, warstwy chipów) i widok
 // alertów w px (`F.alertView(proj)` — położenia, linia treści wg wywiadu) liczone RAZ na klatkę, wspólne dla podwarstw; rejestr
 // alertów (`alerts`) żyje tu, zasilają go zdarzenia wykrycia (`HudRadarLayer`).
 // ⚠ Moduł importuje się pod node (keeper `hud_layer_smoke` — atrapa kanwy i ctx): bez three i bez DOM poza kanwą.
@@ -36,6 +36,7 @@ import { isHudAttentionOn, focusActive, focusVesselIds, tuneHudAttention, resetH
 import {
   HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
 } from './HudAlertLogic.js';
+import { readHudLayers, tuneHudChips, resetHudChips } from './HudLayerChipsLogic.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;     // px logiki gry na 1 AU (pozycje statków i ciał)
 
@@ -113,13 +114,13 @@ export class HudLayer {
 
   /**
    * Paczka B — strojenie stałych z konsoli (bramka): `KOSMOS.hudLayer.tune({ LABEL_DIM: 0.3, ALERT_MS: 2000 })` — klucze
-   * modelu uwagi i nawiasów (`HUD_ATTENTION`) i alertów (`HUD_ALERT`); nieznane pominięte; `tune(null)` — wartości domyślne.
-   * Przeżywa do F5.
+   * modelu uwagi i nawiasów (`HUD_ATTENTION`), alertów (`HUD_ALERT`) i chipów (`HUD_CHIPS`); nieznane pominięte;
+   * `tune(null)` — wartości domyślne. Przeżywa do F5.
    */
   tune(patch = {}) {
     const r = patch == null
-      ? { ...resetHudAttention(), ...resetHudAlert() }
-      : { ...tuneHudAttention(patch), ...tuneHudAlert(patch) };
+      ? { ...resetHudAttention(), ...resetHudAlert(), ...resetHudChips() }
+      : { ...tuneHudAttention(patch), ...tuneHudAlert(patch), ...tuneHudChips(patch) };
     this._lastKey = null;
     this._wake = true;
     const um = (typeof window !== 'undefined') ? window.KOSMOS?.uiManager : null;
@@ -133,7 +134,7 @@ export class HudLayer {
     return this.alerts.envelopeFor(foeId, simClockMs());
   }
 
-  /** Paczka B — stan klatki modelu uwagi: alerty oglądanego układu, ostrość, zbiór statków w ostrości. */
+  /** Paczka B — stan klatki modelu uwagi: alerty oglądanego układu, ostrość, zbiór statków w ostrości, warstwy chipów. */
   _attentionFrame(K, sel, F) {
     const alerts = this.alerts.frame(F.sim).filter((a) => a.systemId === F.activeSystemId);
     const fleet = sel.fleetId != null ? K.fleetSystem?.getFleet?.(sel.fleetId) : null;
@@ -144,7 +145,7 @@ export class HudLayer {
     }
     return {
       on: true, alerts, focus: focusActive(sel, alerts.length), focusIds: focusVesselIds(sel, fleet?.memberIds ?? []),
-      alertedVessels, alertedColonies,
+      alertedVessels, alertedColonies, layers: readHudLayers(K.uiPrefs),
     };
   }
 
@@ -379,7 +380,9 @@ export class HudLayer {
       return (viewMemo = this._alertView(F, proj));
     };
     if (att) {
-      key += `|A${att.focus ? 1 : 0}:${sel.stationId ?? ''}:${sel.fleetId ?? ''}:${(sel.vesselIds ?? []).join(',')}`;
+      const Ly = att.layers;
+      key += `|A${att.focus ? 1 : 0}${Ly.radar ? 1 : 0}${Ly.routes ? 1 : 0}${Ly.labels ? 1 : 0}${Ly.orbits ? 1 : 0}`
+        + `:${sel.stationId ?? ''}:${sel.fleetId ?? ''}:${(sel.vesselIds ?? []).join(',')}`;
       // Alerty biegną na zegarze symulacji — klatka przy każdym przyroście wieku (w pauzie wiek stoi → spoczynek).
       for (const a of att.alerts) key += `|a${a.id}:${Math.round(a.age)}`;
     }
