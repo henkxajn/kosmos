@@ -12,7 +12,7 @@
 //       `switchSystem+focus` — najpierw przełączenie układu, potem kamera; odmowa przełączenia = nic; gwiazda — focus =
 //       `resetToSystemView`.
 //   T4  WYKONANIE `Outliner.hitTest` — nagłówek BIEŻĄCEGO układu → `resetToSystemView`; innego → przełączenie (kontrola).
-//   T5  WYKONANIE `MapLabelLayer.handleClick` — aktywny chip układu → `resetToSystemView`; inny → przełączenie (kontrola).
+//   T5  bez chipów układów (U3-3) — od B-Z klik etykiet mapy wyłącznie warstwą HUD (`HudLabelLayer`; `MapLabelLayer` usunięty).
 //   T6  `ThreeRenderer.resetToSystemView` (renderer nie importuje się pod node): pin ŹRÓDŁOWY + WYKONANIE metody
 //       wyciętej ze źródła na atrapie `this` — zeruje WSZYSTKIE pola kamery (472), potem kadr `frameSystem`; podgląd
 //       obserwatorium i lot intro — bez resetu.
@@ -33,7 +33,8 @@
 // wyniku), dwuklik bez ColonyOverlay i bez `vessel:focus` (2b), plakietki i etykiety mapy, dzisiejszy Outliner (statek,
 // kolonia bez zmiany aktywnej kolonii — §7.10, stacja; obiekt z innego układu — §7.8), karta ciała z doku, wróg (2d),
 // Dok taktyczny (2c). „KONTROLA” = zachowanie, które U1 zostawia (zielone po obu stronach).
-//   T10 WYKONANIE `Outliner.hitTest` · T11 `MapLabelLayer.handleClick` · T12 `TacticalDock._onHit` · (T13 — usunięte w T4)
+//   T10 WYKONANIE `Outliner.hitTest` · T11 `HudLabelLayer.handleClick` (B-Z; dawniej `MapLabelLayer`) · T12 `TacticalDock._onHit` ·
+//   (T13 — usunięte w T4)
 //   T14 `ThreeRenderer.handleClick` i T15 `GameScene._handleTacticalLeftClick` (wycięte ze źródła, atrapa `this`) ·
 //   T16 dwuklik (wycięty słuchacz) · T17 fokus statku bez sprite'a po przełączeniu układu · T18 pamięć pingu wroga ·
 //   T19 picker kliku tylko widocznych sprite'ów.
@@ -41,6 +42,11 @@
 //   (`BottomContext`) usunięte — T2e: stacja ZAMKNIĘTA (panel ukryty, id zostaje) nie jest bieżącym zaznaczeniem (dawniej:
 //   zminimalizowana do doku); T13 (przywrócenie karty z doku bez kamery) usunięte razem z dokiem; atrapy panelu stacji bez
 //   `_float`.
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON; dawny styl orbit i plakietki `MapLabelLayer` usunięte):
+//   T9 — atrapa renderera z przestylowaniem orbit (`_hudRestyle*`), a wizualizację zaznaczenia czytają style orbit HUD
+//   (`_hudStyle*`; najechanie — `_hudHoverOrbitId`) zamiast dawnych gałęzi hexów (`_showPlanetoidOrbit` / złota orbita); T5 — klik
+//   w dawny rząd chipów na warstwie etykiet HUD (dawniej `MapLabelLayer`); T11 — te same intencje (etykieta własna / wroga /
+//   stacji, decyzja 2d) przez `HudLabelLayer.handleClick` → `clickObject` (jedyny producent etykiet mapy po B-Z).
 // Uruchom: node src/testing/smoke/click_focus_rule_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
@@ -249,17 +255,19 @@ header('T4  WYKONANIE Outliner.hitTest — nagłówek układu (§7.9)');
 // ARKUSZ UI U3-3 — przecelowanie: chipy układów usunięte (wyłączone w U2-3, §7.18; ich rolę ma lewy outliner, a regułę
 // §7.9 dla bieżącego układu pinują T4 i `left_outliner` L3). Pin: klik w dawny rząd chipów nie przełącza i nie jest
 // pochłaniany przez warstwę etykiet; w źródle nie ma kodu chipów.
-header('T5  MapLabelLayer — bez chipów układów (U3-3; §7.18)');
+header('T5  bez chipów układów (U3-3; §7.18) — od B-Z etykiety mapy klika warstwa HUD');
 {
-  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
-  const m = new MapLabelLayer();
+  let mll = null; try { mll = src('../../ui/MapLabelLayer.js'); } catch { mll = null; }
+  const HLL = await import('../../ui/HudLabelLayer.js');
+  const m = new HLL.HudLabelLayer(null);
   rec.reset = 0; rec.switched = [];
-  const r1 = m.handleClick(20, 35);
+  const r1 = m.handleClick(20, 35, 25, 43.75);
   ok(r1 === false && rec.reset === 0 && rec.switched.length === 0 && !('_chipZones' in m),
-    'T5a klik w dawny rząd chipów — niepochłonięty, bez przełączenia i bez resetu (warstwa bez stref chipów)');
-  const ml = src('../../ui/MapLabelLayer.js');
-  ok(ml.length > 1000 && !/_drawSystemChips|_chipZones|buildSystemChips|layoutSystemChips/.test(ml), 'T5b źródło: bez rysowania, stref i kliku chipów');
-  ok(/handleClick\(x, y\) \{/.test(ml), 'T5c KONTROLA: metoda kliku warstwy etykiet istnieje (plakietki, stacje — T11)');
+    'T5a klik w dawny rząd chipów — niepochłonięty, bez przełączenia i bez resetu (warstwa etykiet HUD bez stref chipów)');
+  const hl = src('../../ui/HudLabelLayer.js');
+  ok(mll === null && hl.length > 1000 && !/_drawSystemChips|_chipZones|buildSystemChips|layoutSystemChips/.test(hl),
+    'T5b źródło: `MapLabelLayer` usunięty (B-Z); warstwa etykiet HUD bez rysowania, stref i kliku chipów');
+  ok(/handleClick\(x, y, rawX, rawY\) \{/.test(hl), 'T5c KONTROLA: metoda kliku warstwy etykiet HUD istnieje (etykiety statków i stacji — T11)');
 }
 
 // ═══ T6 ═════════════════════════════════════════════════════════════════════
@@ -349,7 +357,7 @@ header('T9  U1-2: zaznaczenie ciała ≠ cel kamery (słuchacze ThreeRenderer wy
       _getEntityRadius: () => 0.25,
       _colonyMarkers: { show: () => calls.push(['markers.show']), hide: () => calls.push(['markers.hide']) },
       _hideColonyTooltip() {}, _planets: new Map([['p1', { group: {} }]]),
-      _showPlanetoidOrbit() {}, _hideAllMoonOrbits() {}, _showMoonOrbit() {}, _hideAllPlanetoidOrbits() {},
+      _hudRestylePlanetoidOrbits() {}, _hudRestyleMoonRings() {},
       _rebuildAllOrbits() { calls.push(['rebuildOrbits']); }, ...over };
   };
   globalThis.KOSMOS.colonyManager = { hasColony: (id) => id === 'p1', getColony: () => ({ grid: {} }) };
@@ -394,10 +402,10 @@ header('T9  U1-2: zaznaczenie ciała ≠ cel kamery (słuchacze ThreeRenderer wy
   const veil = methodBody(tr, '  _syncBodyScanVeil() {');
   const SITES = [
     ['znaczniki kolonii (odświeżenie)', /!this\._colonyMarkers\.entityId \|\| !this\._selectedEntityId/.test(tr)],
-    ['hover: orbita planetoidy',         /if \(id !== this\._selectedEntityId\) \{/.test(listenerText(tr, 'planet:hover'))],
-    ['hover: orbita planety',            /if \(id === this\._selectedEntityId\) return;/.test(listenerText(tr, 'planet:hover'))],
-    ['filtr orbit',                      /this\._selectedEntityId/.test(methodBody(tr, '  _applyOrbitFilter() {'))],
-    ['złota orbita',                     /const isFocused = planet\.id === this\._selectedEntityId;/.test(tr)],
+    ['najechanie: styl ze stanu',        /this\._hudHoverOrbitId = entityId \?\? null;\s*this\._hudRestyleOrbits\(\);/.test(listenerText(tr, 'planet:hover'))],
+    ['styl orbity planety',              /selected: planet\.id === this\._selectedEntityId,/.test(methodBody(tr, '  _hudStylePlanetOrbit('))],
+    ['styl pierścienia księżyca',        /selected: moonId === this\._selectedEntityId/.test(methodBody(tr, '  _hudStyleMoonRing('))],
+    ['styl orbity planetoidy',           /selected: id === this\._selectedEntityId,/.test(methodBody(tr, '  _hudStylePlanetoidOrbit('))],
     ['tooltip znaczników kolonii',       /const focusId = this\._selectedEntityId;/.test(tr)],
     ['zasłona podglądu obserwatorium',   (veil.match(/this\._selectedEntityId/g) ?? []).length === 3],
   ];
@@ -524,20 +532,19 @@ header('T10 WYKONANIE Outliner.hitTest — wiersz statku, kolonii, stacji (§7.8
 }
 
 // ═══ T11 ════════════════════════════════════════════════════════════════════
-header('T11 WYKONANIE MapLabelLayer.handleClick — plakietka własna / wroga, etykieta stacji (decyzja 2d)');
+header('T11 WYKONANIE HudLabelLayer.handleClick — etykieta własna / wroga, etykieta stacji (decyzja 2d; B-Z — dawniej MapLabelLayer)');
 {
-  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
-  const m = new MapLabelLayer();
-  m._vesselHitZones = [{ x: 100, y: 100, w: 60, h: 14, vesselIds: ['v1', 'v2'], isEnemy: false },
-                       { x: 100, y: 200, w: 60, h: 14, vesselIds: ['x1'], isEnemy: true }];
-  m._chipZones = [];
-  m._hitZones = [{ x: 100, y: 300, w: 60, h: 14, stationId: 's1' }];
+  const HLL = await import('../../ui/HudLabelLayer.js');
+  const m = new HLL.HudLabelLayer(null);
+  m._zones = [{ x: 100, y: 100, w: 60, h: 14, key: 'v:own', kind: 'vessel', target: CI?.vesselsTarget?.(['v1', 'v2'], 'sys_home') },
+              { x: 100, y: 200, w: 60, h: 14, key: 'v:x1', kind: 'enemy', target: { type: 'enemy', id: 'x1', systemId: 'sys_home' } },
+              { x: 100, y: 300, w: 60, h: 14, key: 's:s1', kind: 'station', target: { type: 'station', id: 's1', systemId: 'sys_home' } }];
   reset(); m.handleClick(110, 105);
-  ok(JSON.stringify(ops) === '[["select","v1"],["add","v2"]]' && cam().length === 0, 'T11a KONTROLA (jak przed U1): plakietka własna (klaster), 1. klik → zaznaczenie zbioru, kamera stoi');
+  ok(JSON.stringify(ops) === '[["select","v1"],["add","v2"]]' && cam().length === 0, 'T11a KONTROLA (jak przed U1): etykieta własna (klaster), 1. klik → zaznaczenie zbioru, kamera stoi');
   reset({ sel: ['v1', 'v2'] }); m.handleClick(110, 105);
   ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"v1"}]]' && ops.length === 0, 'T11b … 2. klik w ten sam zbiór → kamera na liderze (dawniej drugiego kliku brak)');
   reset(); m.handleClick(110, 205);
-  ok(JSON.stringify(ops) === '[["pingEnemy","x1"]]' && cam().length === 0, 'T11c plakietka wroga, 1. klik → ping celu, kamera stoi (dawniej `vessel:focus` od razu)');
+  ok(JSON.stringify(ops) === '[["pingEnemy","x1"]]' && cam().length === 0, 'T11c etykieta wroga, 1. klik → ping celu, kamera stoi (dawniej `vessel:focus` od razu)');
   reset({ pinged: 'x1' }); m.handleClick(110, 205);
   ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"x1"}]]' && ops.length === 0, 'T11d KONTROLA (zgodne z dawnym „zawsze kamera”): 2. klik (ten sam wróg) → `vessel:focus`');
   reset(); m.handleClick(110, 305);

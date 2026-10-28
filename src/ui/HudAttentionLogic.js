@@ -11,13 +11,10 @@
 //   • nawiasy ⌜ ⌟ (D-HUD-c) w rogach tarczy zaznaczonego ciała / stacji / statku: odstęp od tarczy stały w px, linia
 //     `BRACKET_WIDTH` w roli `primary`, „oddech” krycia `BREATH_LO` ↔ `BREATH_HI` na zegarze symulacji `simClockMs` (pauza —
 //     statycznie; przed pierwszym tikiem — `BREATH_HI`); tarcza ciała / stacji mniejsza niż `BRACKET_MIN_DISC_PX` (średnica) —
-//     bez nawiasów (zostaje etykieta 1,0); statek — nawiasy zawsze, co najmniej ramka RTS (`SHIP_MIN_HALF_PX`, lustro
-//     `UIManager._drawBracketForVessel`: s = 17), bo to dziś jedyny znacznik zaznaczonego statku (paski paliwa pod nią);
+//     bez nawiasów (zostaje etykieta 1,0); statek — nawiasy zawsze, co najmniej rozmiar dawnej ramki RTS (`SHIP_MIN_HALF_PX`:
+//     s = 17 — ramka usunięta w B-Z), bo to jedyny znacznik zaznaczonego statku (paski paliwa pod nim);
 //     gasną przy bliskim zoomie (bok nawiasów ≥ `FADE_LARGE_FROM` × kadr); narożnik pod przypiętą albo rozwiniętą etykietą
 //     — pominięty (rozwinięcie ma pierwszeństwo).
-
-/** Flaga paczki B — `true` wyłącznie przy `features.hudAttention === true` (brak klucza = OFF). */
-export const isHudAttentionOn = (features) => features?.hudAttention === true;
 
 // Stałe (px logiczne, ms). Strojenie na bramce — z konsoli: `KOSMOS.hudLayer.tune({ LABEL_DIM: 0.3 })` (przeżywa do F5).
 export const HUD_ATTENTION_DEFAULTS = Object.freeze({

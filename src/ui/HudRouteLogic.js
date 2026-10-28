@@ -17,14 +17,11 @@
 //     reguła co puls ruchu, SB43); `rumor` — nigdy;
 //   • marsz kresek (D-HUD-12): przesunięcie wzoru = f(`simClockMs`) — stoi w pauzie; przed pierwszym tikiem po wczytaniu
 //     (`null`) — wzór statyczny, BEZ zapasu na czas realny;
-//   • krycie gasnące wzdłuż długości: przy statku 0,6 → przy celu 0,15; × 0,25 dla niezaznaczonych (stała poziomu uwagi —
-//     pełny model uwagi to paczka B); zaznaczony i najechany — × 1.
+//   • krycie gasnące wzdłuż długości: przy statku 0,6 → przy celu 0,15; × mnożnik modelu uwagi (paczka B —
+//     `HudAttentionLogic.routeAttentionTarget`: niezaznaczona `ROUTE_DIM` = `ATTENTION_UNSELECTED` 0,25).
 import { systemIdOf } from '../utils/SystemScope.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { isEndpointVisibleByQuality } from '../utils/VesselFxLogic.js';
-
-/** Flaga tras HUD — `true` wyłącznie przy `features.hudRoutes === true` (brak klucza = OFF). */
-export const isHudRoutesOn = (features) => features?.hudRoutes === true;
 
 // Rysunek i harmonogram (px logiczne, ms). Strojenie na bramce.
 export const HUD_ROUTES = Object.freeze({
@@ -206,11 +203,6 @@ export function marchOffset(simMs, period = HUD_ROUTES.DASH[0] + HUD_ROUTES.DASH
 export function routeAlpha(u, mult = 1) {
   const x = Math.max(0, Math.min(1, Number.isFinite(u) ? u : 0));
   return (HUD_ROUTES.ALPHA_SHIP + (HUD_ROUTES.ALPHA_TARGET - HUD_ROUTES.ALPHA_SHIP) * x) * mult;
-}
-
-/** Mnożnik poziomu uwagi trasy: zaznaczony / najechany — 1, reszta — 0,25. */
-export function routeAttention({ selected = false, hovered = false } = {}) {
-  return (selected || hovered) ? 1 : HUD_ROUTES.ATTENTION_UNSELECTED;
 }
 
 /**

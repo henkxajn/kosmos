@@ -1,19 +1,19 @@
 // HudRouteLayer — ARKUSZ HUD H3 (D-HUD-8, D-HUD-9, D-HUD-10, D-HUD-12; HUD_PLAN.md §4.4): podwarstwa TRAS statków warstwy
 // HUD 2D (`HudLayer`). Logika — czysty `HudRouteLogic`; tu: odczyt świata (`F.K` = `window.KOSMOS`), rzut wspólnym
 // projektorem, przycięcie do okna i rysunek Canvas 2D w px logicznych.
-//   • za flagą `FEATURES.hudRoutes` (brak klucza = OFF; przy OFF podwarstwa pusta, a linie 3D `ThreeRenderer` — jak dziś;
-//     przy ON linie 3D (`LineDashedMaterial`) wyłączone);
-//   • linia 1 px w roli `primary` (obce — `foreign`), krycie gasnące od statku (0,6) do celu (0,15), × 0,25 dla
-//     niezaznaczonych; wzór kresek w px ekranu, marsz na `simClockMs` (stoi w pauzie); cel: puste kółko (ciało, obiekt
+//   • jedyne trasy mapy od B-Z (flaga `hudRoutes` na stałe ON; dawne linie tras 3D `ThreeRenderer` — `LineDashedMaterial`,
+//     ścieżka OFF — usunięte);
+//   • linia 1 px w roli `primary` (obce — `foreign`), krycie gasnące od statku (0,6) do celu (0,15), × mnożnik modelu uwagi
+//     (niezaznaczone 0,25); wzór kresek w px ekranu, marsz na `simClockMs` (stoi w pauzie); cel: puste kółko (ciało, obiekt
 //     pościgu), chevron (punkt w przestrzeni); bez strzałek na długości;
 //   • najechanie statku podświetla trasę (× 1, grubiej): wiersz Doku taktycznego (`ThreeRenderer._tacticalHoverVid` — jak
 //     dziś) i statek pod kursorem na mapie (picker tylko widocznych — `F.hover`);
 //   • skok warp: w układzie odlotu dłuższe kreski od punktu odlotu do krawędzi kadru + glif z nazwą układu DOCELOWEGO TRASY
 //     (trasa wieloprzeskokowa — cel trasy, kierunek — bieżący przeskok);
 //   • linia rysowana tylko w oknie (+ margines) — `clipRunsToRect` z fazą kresek (koszt rasteryzacji — Finding 527).
-//   • paczka B (flaga `hudAttention` — `F.att`): mnożnik uwagi z modelu uwagi — zaznaczona (także członek zaznaczonej floty),
-//     najechana i alertowana 1,0, reszta `HUD_ATTENTION.ROUTE_DIM` (przejście `FADE_MS` czasu realnego); chip [T] wyłączony —
-//     bez tras (także zaznaczonego statku). Przy OFF — kod paczki A co do bitu.
+//   • paczka B (`F.att`): mnożnik uwagi z modelu uwagi — zaznaczona (także członek zaznaczonej floty), najechana
+//     i alertowana 1,0, reszta `HUD_ATTENTION.ROUTE_DIM` (przejście `FADE_MS` czasu realnego); chip [T] wyłączony — bez tras
+//     (także zaznaczonego statku).
 // ⚠ Moduł importuje się pod node (keeper `hud_routes_smoke` — atrapa ctx): bez three i bez DOM.
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
@@ -24,8 +24,8 @@ import { HUD_NEAR_CLIP } from './HudProjection.js';
 import { clipRunsToRect } from './HudRadarLogic.js';
 import { routeAttentionTarget, makeAttentionMemory } from './HudAttentionLogic.js';   // paczka B — model uwagi tras
 import {
-  HUD_ROUTES, isHudRoutesOn, routeSpec, warpSpec, routeVisible, warpVisible, detectedNowIds, marchOffset, routeAlpha,
-  routeAttention, projectPolyline, warpScreenRay,
+  HUD_ROUTES, routeSpec, warpSpec, routeVisible, warpVisible, detectedNowIds, marchOffset, routeAlpha,
+  projectPolyline, warpScreenRay,
 } from './HudRouteLogic.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
@@ -47,12 +47,10 @@ export class HudRouteLayer {
     this._att = makeAttentionMemory();   // paczka B — poziomy uwagi tras (przejście czasu realnego)
   }
 
-  /** Część klucza klatki: flaga, trasy (statek, cel, punkty pośrednie), zaznaczenie, najechanie, zegar symulacji (marsz). */
+  /** Część klucza klatki: chip [T], trasy (statek, cel, punkty pośrednie), zaznaczenie, najechanie, zegar symulacji (marsz). */
   prepare(F) {
-    const on = isHudRoutesOn(F.features);
-    if (!on) { this._prep = { on: false, routes: [], warps: [] }; return 't:0'; }
     // Paczka B — chip [T] wyłączony: bez tras.
-    if (F.att && F.att.layers.routes === false) { this._prep = { on: true, routes: [], warps: [] }; return 't:1:off'; }
+    if (F.att.layers.routes === false) { this._prep = { on: true, routes: [], warps: [] }; return 't:1:off'; }
     const K = F.K, tr = K.threeRenderer, vm = K.vesselManager, ps = K.proximitySystem, obs = K.observatorySystem;
     const intel = K.intelSystem;
     const sys = F.activeSystemId;
@@ -79,8 +77,8 @@ export class HudRouteLayer {
     const sel = F.sel;
     const selIds = new Set((sel.vesselIds ?? []).map(String));
     if (sel.leadId != null) selIds.add(String(sel.leadId));
-    if (F.att) for (const id of F.att.focusIds) selIds.add(id);   // paczka B — także członkowie zaznaczonej floty
-    const alertIds = F.att?.alertedVessels ?? null;                // paczka B — statki w trwającym alercie
+    for (const id of F.att.focusIds) selIds.add(id);              // paczka B — także członkowie zaznaczonej floty
+    const alertIds = F.att.alertedVessels;                         // paczka B — statki w trwającym alercie
     const hovIds = new Set();
     if (tr?._tacticalHoverVid != null) hovIds.add(String(tr._tacticalHoverVid));
     if (F.hover?.vesselId != null) hovIds.add(String(F.hover.vesselId));
@@ -130,12 +128,10 @@ export class HudRouteLayer {
     const M = HUD_ROUTES.CLIP_PX;
     const view = { x0: -M, y0: -M, x1: F.W + M, y1: F.H + M };
     const pr = { depth: (x, y, z) => proj.depth(x, y, z), point: (x, y, z) => proj.point(x, y, z), near: HUD_NEAR_CLIP };
-    // Paczka B — mnożnik uwagi z pamięci przejść (czas realny); przy OFF — stała H3 (`routeAttention`).
-    const ATT = F.att ?? null;
-    if (ATT) this._att.begin();
-    const alive = ATT ? new Set() : null;
+    // Paczka B — mnożnik uwagi z pamięci przejść (czas realny).
+    this._att.begin();
+    const alive = new Set();
     const attMult = (key, r) => {
-      if (!ATT) return routeAttention({ selected: r.selected, hovered: r.hovered });
       alive.add(key);
       return this._att.step(key, routeAttentionTarget({ selected: r.selected, hovered: r.hovered, alerted: r.alerted }), F.now);
     };
@@ -223,9 +219,8 @@ export class HudRouteLayer {
     }
     this._last = { routes: out, warps };
     const count = out.reduce((a, r) => a + r.pieces.length, 0) + warps.length;
-    let animating = false;
-    if (ATT) { this._att.prune(alive); animating = this._att.animating; }
-    return { count, animating, routes: out, warps };
+    this._att.prune(alive);
+    return { count, animating: this._att.animating, routes: out, warps };
   }
 
   /** Przeszkody dla etykiet (anti-overlap): glify i nazwy układów skoku warp przy krawędzi kadru. */

@@ -9,7 +9,8 @@
 //   z `MapInsets`, pilnuje `map_insets_single_source_smoke` (M5).
 //   4f-3 TacticalDock._onHit('row') — CTRL=toggle / zwykły=single / dwuklik=vessel:focus.
 //   4f   computePanelMode / canCancelOrder — regresja.
-//   Fix stacji — stationLabelLOD: marker z podłogą przy oddaleniu (kolonie declutterują normalnie).
+//   (Fix stacji — `stationLabelLOD` — usunięty w ARKUSZU HUD B-Z razem z plakietkami `MapLabelLayer`; stacje opisuje
+//   warstwa etykiet HUD.)
 
 const store = new Map();
 globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
@@ -26,7 +27,7 @@ const approx = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const {
   computeDockLayout, computePanelMode, canCancelOrder,
 } = await import('../../ui/TacticalDockLogic.js');
-// stationLabelLOD (fix znikającej stacji) pokryty osobno w tmp_map_labels_smoke.mjs (jego naturalny dom).
+// (`stationLabelLOD` — fix znikającej stacji — usunięty w ARKUSZU HUD B-Z; `map_labels_smoke` pinuje jego brak.)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. computeDockLayout — wycentrowanie 4f-1

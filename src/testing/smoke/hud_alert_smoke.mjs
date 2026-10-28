@@ -20,13 +20,17 @@
 //   A5  kolonia ∞ (bez granicy): alert przez etykietę — pasek w roli `alert` i linia treści na etykiecie kolonii; bez
 //       błysku na granicy, bez pierścieni i bez wektora
 //   A6  scalenie z celownikiem wroga: intruz z celownikiem — bez pierścieni HUD (jeden rysunek), wektor zostaje; obwiednia
-//       alertu dla renderera 3D (`alertEnvelopeFor`) — w czasie alertu > 0, po nim 0, przy OFF 0; renderer czyta ją
+//       alertu dla renderera 3D (`alertEnvelopeFor`) — w czasie alertu > 0, po nim 0, obiekt bez alertu 0; renderer czyta ją
 //   A7  zakres alertu: wyłącznie obiekt z WIDOCZNYM radarem — zaznaczony statek prowadzący albo zaznaczone ciało z kolonią,
 //       w trybie Y każdy własny; niezaznaczony poza Y — bez alertu i bez błysku; zadokowany i inny układ — bez alertu;
 //       zaznaczona planeta ∞ przy księżycu z kolonią 1 AU — alert planety (w trybie Y — najbliższa kolonia pokrywająca,
-//       reguła H1); flaga OFF — ścieżka H1 (błysk 0,8 s na granicy niezaznaczonego, bez alertu)
+//       reguła H1); świeża warstwa — błysk wyłącznie z alertu (na granicy zaznaczonego)
 //   A8  jeden komplet na intruza: dwa widoczne radary (tryb Y) — dwa błyski, ale jeden komplet pierścieni, jeden wektor
 //       i jedna linia treści — od zaznaczonego obiektu, bez zaznaczenia od najbliższego
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON, ścieżki OFF usunięte): A6e — obiekt bez alertu
+//   zamiast flagi OFF; A6f — celownik bez gałęzi flagi i bez czasu realnego; A7b — błysk czytany z rysunku warstwy (pole
+//   `_flashes` ścieżki H1 usunięte); A7h — kontrola: błysk wyłącznie z alertu (dawna ścieżka H1 — błysk bez alertu —
+//   usunięta). Przełączniki flag w keeperze usunięte (klucze nie istnieją).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -51,7 +55,6 @@ const FLay = await tryImport('../../ui/HudFocusLayer.js');
 const LLay = await tryImport('../../ui/HudLabelLayer.js');
 const PJ = await tryImport('../../ui/HudProjection.js');
 const { t, setLocale, getLocale } = await import('../../i18n/i18n.js');
-const FEATURES = GAME_CONFIG.FEATURES;
 const AU = GAME_CONFIG.AU_TO_PX;
 const A = AL?.HUD_ALERT ?? {};
 const call = (fn, ...a) => { try { return AL?.[fn]?.(...a); } catch (e) { return `ERR ${e.message}`; } };
@@ -169,8 +172,6 @@ const setWorld = () => {
   });
 };
 setWorld();
-const WAS = { att: FEATURES.hudAttention, radar: FEATURES.hudRadar, labels: FEATURES.hudLabels, routes: FEATURES.hudRoutes };
-FEATURES.hudAttention = true; FEATURES.hudRadar = true; FEATURES.hudLabels = true; FEATURES.hudRoutes = true;
 const mkCtx = () => new Proxy({ calls: [] }, {
   get(o, p) { if (p === 'calls') return o.calls; if (p in o) return o[p]; if (p === 'measureText') return (s) => ({ width: String(s).length * 6 }); return (...a) => { o.calls.push(String(p)); }; },
   set(o, p, v) { o[p] = v; return true; },
@@ -327,13 +328,12 @@ header('A6  scalenie z celownikiem wroga');
   ok(e1 === 1 && e2 > 0 && e2 < 1, `A6c: obwiednia dla celownika w czasie alertu (${e1} → ${e2?.toFixed?.(3)})`);
   W0.sim += A.ALERT_MS;
   ok(H.hud?.alertEnvelopeFor?.('v_foe') === 0, 'A6d: po alercie — 0 (celownik wraca do pulsu okresowego)');
-  FEATURES.hudAttention = false;
-  ok(H.hud?.alertEnvelopeFor?.('v_foe') === 0, 'A6e: flaga OFF — 0 (celownik jak w H1)');
-  FEATURES.hudAttention = true;
+  ok(H.hud?.alertEnvelopeFor?.('v_own') === 0 && H.hud?.alertEnvelopeFor?.('v_nope') === 0,
+    'A6e: obiekt bez alertu (własny statek, nieznany id) — 0 (celownik w pulsie okresowym)');
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
   const i = tr.indexOf('\n  _syncEnemyAlertMarkers() {'), body = i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i));
-  ok(/alertEnvelopeFor\?\.\(vid\)/.test(body) && /isHudAttentionOn\(GAME_CONFIG\.FEATURES\)/.test(body) && /simClockMs\(\)/.test(body),
-    'A6f: renderer 3D — celownik czyta obwiednię alertu i przy ON pulsuje na zegarze symulacji (pauza — stoi)');
+  ok(/alertEnvelopeFor\?\.\(vid\)/.test(body) && /simClockMs\(\)/.test(body) && !/isHudAttentionOn|performance\.now|Date\.now/.test(body),
+    'A6f: renderer 3D — celownik czyta obwiednię alertu i pulsuje na zegarze symulacji (pauza — stoi; bez gałęzi flagi i czasu realnego — B-Z)');
   W0.cross = new Set();
   H.destroy();
 }
@@ -353,7 +353,8 @@ header('A7  zakres alertu — zaznaczony obiekt, w trybie Y każdy własny');
   ok(recs().some((a) => a.holderId === 'v_own' && a.foeId === 'v_foe'), 'A7a SEDNO: zaznaczony statek — alert (jego radar jest widoczny)');
   clear();
   prox('v_two', 'v_foe');
-  ok((H.hud?.alerts?.size ?? -1) === 0 && (H.radar?._flashes?.length ?? -1) === 0,
+  H.frame(108);
+  ok((H.hud?.alerts?.size ?? -1) === 0 && (H.radar?.debug?.()?.flashes?.length ?? -1) === 0,
     'A7b SEDNO: statek NIEzaznaczony poza trybem Y — bez alertu i bez błysku (jego radar jest niewidoczny)');
   W0.tactical = true; W0.lead = null; W0.ids = [];
   H.frame(116);
@@ -386,15 +387,15 @@ header('A7  zakres alertu — zaznaczony obiekt, w trybie Y każdy własny');
     `A7g: tryb Y — ta sama scena: najbliższa kolonia pokrywająca (księżyc 1 AU, reguła H1) (${ym.map((a) => a.holderId).join(', ') || '—'})`);
   foe.position = keep;
   H.destroy();
-  // Kontrola na świeżej warstwie (bez błysków z wcześniejszych scen — ścieżka H1 zbiera je w oknie 0,8 s czasu realnego).
-  W0.tactical = false;
-  FEATURES.hudAttention = false;
+  // Kontrola na świeżej warstwie (bez alertów z wcześniejszych scen): błysk na granicy rysuje WYŁĄCZNIE alert — dawna
+  // ścieżka H1 (błysk 0,8 s czasu realnego na granicy niezaznaczonego, bez alertu) usunięta w B-Z.
+  W0.tactical = false; W0.entity = null; W0.lead = 'v_own'; W0.ids = ['v_own'];
   const H0 = mkHud();
-  H0.frame(180);                                 // radar widzi stan bez zaznaczenia (H1: zaznaczony — bez błysku)
+  H0.frame(180);
   prox('v_own', 'v_foe');
-  ok((H0.hud?.alerts?.size ?? 0) === 0 && (H0.radar?._flashes?.length ?? 0) === 1,
-    'A7h KONTROLA: flaga OFF — ścieżka H1: błysk na granicy NIEzaznaczonego statku, bez alertu');
-  FEATURES.hudAttention = true;
+  H0.frame(196);
+  ok((H0.hud?.alerts?.size ?? 0) === 1 && (H0.radar?.debug?.()?.flashes?.length ?? 0) === 1 && H0.radar?._flashes === undefined,
+    `A7h KONTROLA: zaznaczony statek — alert i jeden błysk na JEGO granicy; pole \`_flashes\` ścieżki H1 usunięte (${H0.hud?.alerts?.size} / ${H0.radar?.debug?.()?.flashes?.length})`);
   H0.destroy();
 }
 
@@ -425,6 +426,5 @@ header('A8  jeden komplet na intruza (tryb Y — dwa obiekty gracza)');
   H.destroy();
 }
 
-Object.assign(FEATURES, { hudAttention: WAS.att, hudRadar: WAS.radar, hudLabels: WAS.labels, hudRoutes: WAS.routes });
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

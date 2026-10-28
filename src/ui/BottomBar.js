@@ -14,10 +14,7 @@ import { toggleNotificationDropdown, isNotificationDropdownOpen } from './Notifi
 import { TIME_W } from './TopBar.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { buildSaveFileName, downloadSave, pickSaveFile, markPendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
-import { isHudRadarOn } from './HudRadarLogic.js';   // ARKUSZ HUD H1 — ☰ „Radar” przy `hudRadar` steruje warstwą HUD
-// ARKUSZ HUD paczka B (B-3) — przy `hudAttention` ☰ „Radar” i chip [R] czytają i piszą ten sam stan (`uiPrefs.hudLayers.radar`).
-import { isHudAttentionOn } from './HudAttentionLogic.js';
+// ARKUSZ HUD paczka B (B-3) — ☰ „Radar” i chip [R] czytają i piszą ten sam stan (`uiPrefs.hudLayers.radar`).
 import { readHudLayers, setHudLayer } from './HudLayerChipsLogic.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
@@ -442,14 +439,8 @@ export class BottomBar {
     const apEnabled = apSys ? apSys.isEnabled() : true;
     const apLabel = pl ? 'Auto-pauza...' : 'Auto-pause...';
     const apValue = apEnabled ? (pl ? 'WŁ' : 'ON') : (pl ? 'WYŁ' : 'OFF');
-    // M4 P2 — radar toggle (window.KOSMOS.uiPrefs.sensorOverlayVisible). ARKUSZ HUD H1 — przy `hudRadar` stan warstwy HUD:
-    // `uiPrefs.hudRadarVisible` (brak klucza = widoczna — bez migracji zapisu).
-    // Paczka B — przy `hudAttention` ze stanu chipów (`uiPrefs.hudLayers.radar`; dawny klucz czytany jako zapas).
-    const radarOn = !isHudRadarOn(GAME_CONFIG.FEATURES)
-      ? window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true
-      : (isHudAttentionOn(GAME_CONFIG.FEATURES)
-        ? readHudLayers(window.KOSMOS?.uiPrefs).radar
-        : window.KOSMOS?.uiPrefs?.hudRadarVisible !== false);
+    // ☰ „Radar” = chip [R] — stan warstwy radaru HUD (`uiPrefs.hudLayers.radar`; dawny `hudRadarVisible` czytany jako zapas).
+    const radarOn = readHudLayers(window.KOSMOS?.uiPrefs).radar;
     // Obraz Operacyjny F1 — plakietki flotowe (default ON: brak klucza ≠ false)
     const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
     return [
@@ -558,33 +549,21 @@ export class BottomBar {
     EventBus.emit('orbits:filterChanged', { mode: this._orbitMode });
   }
 
-  // ── Toggle radar (M4 P2) ──────────────────────────────────────────────
-  // Stan żyje w window.KOSMOS.uiPrefs.sensorOverlayVisible (persistowane w save
-  // v70+). BottomBar tylko flipuje i emituje. ThreeRenderer reaguje na event.
+  // ── Toggle radar ──────────────────────────────────────────────────────
+  // ARKUSZ HUD — ☰ „Radar” = chip [R]: jedno źródło (`uiPrefs.hudLayers.radar`, zapis gry; zapis usuwa dawny klucz
+  // `hudRadarVisible`); warstwa HUD czyta stan w każdej klatce. Dawny przełącznik pierścieni 3D (`sensorOverlayVisible`,
+  // `ui:sensorOverlayToggle`) — ścieżka OFF `hudRadar` — usunięty w B-Z.
   _toggleSensorOverlay() {
     if (!window.KOSMOS) return;
     window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
-    // ARKUSZ HUD H1 — przy `hudRadar` przełącznik steruje warstwą HUD (pierścienie 3D wyłączone; warstwa czyta preferencję
-    // w każdej klatce). `sensorOverlayVisible` zostaje stanem ścieżki OFF i trybu Y — nietknięty.
-    if (isHudRadarOn(GAME_CONFIG.FEATURES)) {
-      // Paczka B — przy `hudAttention` jedno źródło z chipem [R] (`uiPrefs.hudLayers.radar`; zapis usuwa dawny klucz).
-      if (isHudAttentionOn(GAME_CONFIG.FEATURES)) {
-        const uiPrefs = window.KOSMOS.uiPrefs;
-        setHudLayer(uiPrefs, 'radar', !readHudLayers(uiPrefs).radar);
-        window.KOSMOS.hudLayer?.wake?.();
-        return;
-      }
-      window.KOSMOS.uiPrefs.hudRadarVisible = window.KOSMOS.uiPrefs.hudRadarVisible === false;
-      return;
-    }
-    const next = !window.KOSMOS.uiPrefs.sensorOverlayVisible;
-    window.KOSMOS.uiPrefs.sensorOverlayVisible = next;
-    EventBus.emit('ui:sensorOverlayToggle', { visible: next });
+    const uiPrefs = window.KOSMOS.uiPrefs;
+    setHudLayer(uiPrefs, 'radar', !readHudLayers(uiPrefs).radar);
+    window.KOSMOS.hudLayer?.wake?.();
   }
 
   // ── Toggle plakietek flotowych (Obraz Operacyjny F1) ──────────────────
   // Stan w uiPrefs.fleetMapLabelsVisible (default ON — brak klucza ≠ false;
-  // nowe klucze uiPrefs bez migracji save). MapLabelLayer czyta uiPrefs per
+  // nowe klucze uiPrefs bez migracji save). Warstwa etykiet HUD czyta uiPrefs per
   // frame; event tylko budzi redraw overlayu przy pauzie (UIManager _dirty).
   _toggleFleetMapLabels() {
     if (!window.KOSMOS) return;

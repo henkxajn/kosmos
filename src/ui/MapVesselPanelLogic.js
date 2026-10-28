@@ -31,10 +31,11 @@ export function resolveMapSelectionSurface(vesselIds) {
 /**
  * Kotwica pływającego panelu statku (slice B, commit 2) — CZYSTA reguła, bez DOM i bez three.
  *
- * ⚠ KONWERSJA `/uiScale` JEST OBOWIĄZKOWA. `ThreeRenderer.getVesselScreenPosition` liczy z
- *   `window.innerWidth/Height`, czyli px CSS, a overlay 2D rysuje pod transformatą UI_SCALE
+ * ⚠ KONWERSJA `/uiScale` JEST OBOWIĄZKOWA. Pozycja ekranowa sprite'a (dawniej `ThreeRenderer.getVesselScreenPosition`,
+ *   usunięte w ARKUSZU HUD B-Z — od REFORMY ZAKŁADEK T4 jedyny wołający podaje `null`, czyli kotwicę zapasową) liczy się
+ *   z `window.innerWidth/Height`, czyli w px CSS, a overlay 2D rysuje pod transformatą UI_SCALE
  *   (`UIManager._draw`: `setTransform(UI_SCALE * _DPR, ...)`). Bez dzielenia pozycja rozjeżdża
- *   się na KAŻDEJ rozdzielczości ≠ 1280×720 (kanon: `MapLabelLogic.toLogicalPx`, Aneks A.3).
+ *   się na KAŻDEJ rozdzielczości ≠ 1280×720 (Aneks A.3; dawny kanon `MapLabelLogic.toLogicalPx` usunięty w B-Z).
  *   ⚠ `StationPanel:117-120` tej konwersji NIE robi — to defekt PRE-EXISTING, osobny finding;
  *   tutaj świadomie NIE powielamy tamtego wzorca.
  *
@@ -42,7 +43,7 @@ export function resolveMapSelectionSurface(vesselIds) {
  *   panelu: wracamy do kotwicy przy prawej krawędzi, czyli tam, gdzie kolumna A stała od 258.
  *   Chowanie panelu odebrałoby graczowi rozkazy dokładnie wtedy, gdy statek zniknął z kadru.
  *
- * @param {{x:number,y:number}|null} screenPos — px CSS z `getVesselScreenPosition`
+ * @param {{x:number,y:number}|null} screenPos — px CSS (pozycja sprite'a; `null` — kotwica zapasowa)
  * @param {number} uiScale
  * @param {{ox:number,oy:number,ow:number,oh:number}} bounds — obszar mapy (px LOGICZNE)
  * @param {number} panelW @param {number} panelH

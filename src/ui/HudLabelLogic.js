@@ -16,9 +16,6 @@
 //   • kratka cyfr (D-HUD-6): każda cyfra w komórce o szerokości najszerszej cyfry aktywnego fontu (Rajdhani nie ma `tnum`).
 import { stationGroupAnchorId } from '../utils/StationGroup.js';
 
-/** Flaga etykiet HUD — `true` wyłącznie przy `features.hudLabels === true` (brak klucza = OFF). */
-export const isHudLabelsOn = (features) => features?.hudLabels === true;
-
 // Rysunek i układ (px logiczne, ms). Strojenie na bramce (artboard właściciela „Kombinacja — szlif”).
 export const HUD_LABELS = Object.freeze({
   BAR_ALPHA_SELECTED: 0.72,     // pasek pod tekstem — zaznaczony
@@ -337,7 +334,7 @@ export function updateBorn(born, keys, nowMs) {
 
 // ── Etykiety CTRL (D-HUD-16) ────────────────────────────────────────────────────────────────────────────────────────
 
-/** Rola i krycie etykiety CTRL (przytrzymanie Ctrl — nazwy wszystkich obiektów) przy `hudLabels`. */
+/** Rola i krycie etykiety CTRL (przytrzymanie Ctrl — nazwy wszystkich obiektów). */
 export function ctrlLabelStyle(kind, roles) {
   switch (kind) {
     case 'vessel':

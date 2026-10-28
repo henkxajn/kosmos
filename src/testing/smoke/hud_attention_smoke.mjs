@@ -7,7 +7,7 @@
 // stanów z zaznaczeniem i alertem, nawiasy (kto ma, kto nie ma), pauza = nawiasy statyczne (spoczynek warstwy). Bez pinów na
 // stałe rysunku (liczby z tabeli stałych modułu, nie z literałów keepera). Moduły powstają w paczce B — import dynamiczny
 // (brak modułu = pin pada, suita się nie przerywa).
-//   U0  API i flaga (`hudAttention`: brak klucza = OFF)
+//   U0  API; flaga `hudAttention` usunięta (B-Z — na stałe ON)
 //   U1  ostrość: zaznaczenie (zbiór, prowadzący, ciało, stacja, flota) albo alert; ping wroga — nie
 //   U2  krycie etykiety: bez ostrości 1; z ostrością 1 dla zaznaczonej / przypiętej / alertowanej / najechanej, reszta LABEL_DIM
 //   U3  krycie trasy: zaznaczona / najechana / alertowana 1, reszta ROUTE_DIM (= stała H3 `HUD_ROUTES.ATTENTION_UNSELECTED`)
@@ -18,7 +18,10 @@
 //       zoomie; narożnik pod przypiętą etykietą pominięty; ramię ≤ BRACKET_ARM_PX i ≤ BRACKET_ARM_FRAC boku
 //   U7  oddech nawiasów na zegarze SYMULACJI: brak zegara — BREATH_HI; okres BREATH_MS; ta sama chwila — to samo krycie;
 //       warstwa (prawdziwy `HudLayer` + `HudFocusLayer`): pauza (zegar stoi) — spoczynek bez rysunku, zegar biegnie — klatki
-//   U8  flaga OFF: podwarstwa nawiasów pusta (bez wywołań ctx)
+//   U8  odznaczenie: podwarstwa nawiasów pusta (bez wywołań ctx)
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON, ścieżki OFF usunięte): U0c / U0d pinują brak predykatu
+//   i klucza flagi (dawniej: semantyka „brak klucza = OFF”); U3c — poziom trasy niezaznaczonej bez zaznaczenia = stała H3
+//   (dawniej przez usunięte `routeAttention`); U8 — odznaczenie zamiast flagi OFF.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -43,18 +46,17 @@ const A = AT?.HUD_ATTENTION ?? {};
 const call = (fn, ...a) => { try { return AT?.[fn]?.(...a); } catch (e) { return `ERR ${e.message}`; } };
 
 // ═══ U0 ══════════════════════════════════════════════════════════════════════
-header('U0  API i flaga');
+header('U0  API (flaga `hudAttention` usunięta — B-Z)');
 {
-  const need = ['isHudAttentionOn', 'HUD_ATTENTION', 'HUD_ATTENTION_DEFAULTS', 'focusActive', 'focusVesselIds', 'labelAttentionTarget',
+  const need = ['HUD_ATTENTION', 'HUD_ATTENTION_DEFAULTS', 'focusActive', 'focusVesselIds', 'labelAttentionTarget',
     'routeAttentionTarget', 'makeAttentionMemory', 'breathAlpha', 'bracketBox', 'bracketCorners', 'dropCornersUnder', 'tuneHudAttention',
     'resetHudAttention'];
   const missing = need.filter((n) => AT?.[n] === undefined);
   ok(missing.length === 0, `U0a: \`HudAttentionLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
   ok(typeof FL?.HudFocusLayer === 'function', 'U0b: `HudFocusLayer`');
-  ok(call('isHudAttentionOn', { hudAttention: true }) === true && call('isHudAttentionOn', {}) === false
-    && call('isHudAttentionOn', { hudAttention: 1 }) === false && call('isHudAttentionOn', null) === false,
-    'U0c: flaga — `true` wyłącznie przy `hudAttention === true` (brak klucza = OFF)');
-  ok(/\bhudAttention:\s*(true|false),/.test(strip(src('../../config/GameConfig.js'))), 'U0d: klucz `FEATURES.hudAttention` w GameConfig');
+  ok(!!AT && AT.isHudAttentionOn === undefined, 'U0c (B-Z): predykat flagi `isHudAttentionOn` usunięty — model uwagi bez rozgałęzień');
+  ok(!/\bhudAttention:\s*(true|false),/.test(strip(src('../../config/GameConfig.js'))) && FEATURES.hudAttention === undefined,
+    'U0d (B-Z): klucz `FEATURES.hudAttention` usunięty z GameConfig');
   ok(/new HudFocusLayer\(this\)\]/.test(strip(src('../../ui/HudLayer.js'))), 'U0e: podwarstwa nawiasów w domyślnych podwarstwach warstwy HUD (na wierzchu)');
 }
 
@@ -84,7 +86,8 @@ header('U2  krycie etykiety · U3 krycie trasy');
   ok(['selected', 'hovered', 'alerted'].every((k) => R({ [k]: true }) === 1), 'U3a: trasa zaznaczona / najechana / alertowana — 1,0');
   ok(near(R({}), A.ROUTE_DIM) && near(A.ROUTE_DIM, RT?.HUD_ROUTES?.ATTENTION_UNSELECTED),
     `U3b: trasa niezaznaczona — ROUTE_DIM (${A.ROUTE_DIM}) = stała H3 \`HUD_ROUTES.ATTENTION_UNSELECTED\` (${RT?.HUD_ROUTES?.ATTENTION_UNSELECTED})`);
-  ok(near(RT?.routeAttention?.({ selected: false, hovered: false }), R({})), 'U3c KONTROLA: przy OFF (H3) ten sam poziom trasy niezaznaczonej — bez zmiany wyglądu tras bez zaznaczenia');
+  ok(near(R({}), RT?.HUD_ROUTES?.ATTENTION_UNSELECTED) && RT?.routeAttention === undefined,
+    'U3c KONTROLA: trasa niezaznaczona = stała H3 (`ATTENTION_UNSELECTED`; dawne `routeAttention` — ścieżka OFF — usunięte w B-Z)');
 }
 
 // ═══ U4 ══════════════════════════════════════════════════════════════════════
@@ -215,8 +218,6 @@ header('U7  oddech nawiasów — zegar symulacji; pauza = statycznie');
     timeSystem: { get simClockMs() { return W0.sim; } },
     leftOutliner: { getReservedWidth: () => 150 }, rightOutliner: { getReservedWidth: () => 150 }, tacticalDock: { getReservedHeight: () => 0 },
   });
-  const was = FEATURES.hudAttention;
-  FEATURES.hudAttention = true;
   const calls = [];
   const ctx = new Proxy({}, { get: (o, p) => (p in o ? o[p] : (...a) => { calls.push(String(p)); }), set: (o, p, v) => { o[p] = v; return true; } });
   const cv = { width: 0, height: 0, getContext: () => ctx };
@@ -237,14 +238,13 @@ header('U7  oddech nawiasów — zegar symulacji; pauza = statycznie');
   const r1 = hud?.frame(5016);
   const d2 = focus?.debug?.();
   ok(r1 === 'drawn' && calls.length > 0 && d2?.brackets?.length === 1, 'U7h: zegar ruszył — klatka z nowym kryciem oddechu');
-  // ═══ U8 — flaga OFF ═══
+  // ═══ U8 — odznaczenie ═══
   calls.length = 0;
-  FEATURES.hudAttention = false;
+  W0.entity = null;
   W0.camEpoch++;
   hud?.frame(6000);
   const d3 = focus?.debug?.();
-  ok((d3?.brackets?.length ?? -1) === 0 && !calls.some((c) => c === 'stroke'), 'U8a: flaga OFF — nawiasów brak (podwarstwa pusta)');
-  FEATURES.hudAttention = was;
+  ok((d3?.brackets?.length ?? -1) === 0 && !calls.some((c) => c === 'stroke'), 'U8a: odznaczenie — nawiasów brak (podwarstwa pusta)');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

@@ -1,10 +1,9 @@
 // HudOrbitLogic — styl orbit w kolorach motywu (ARKUSZ HUD H0, D-HUD-7, D-HUD-15; HUD_PLAN.md §2.6, §4.1, §5.0).
 // Czysty moduł: bez three, bez DOM, zero kolorów na sztywno — barwy z tokenów motywu (`orbitLine`, `orbitColony`)
 // i ról HUD (`HudPalette.resolveHudRoles`: zaznaczona i najechana — `primary`, niestabilna — `alert`), czytanych przy
-// KAŻDYM wywołaniu. Używany WYŁĄCZNIE przy fladze `FEATURES.hudOrbits` (brak klucza = OFF); ścieżka OFF zostaje
-// w `ThreeRenderer` co do bitu (dzisiejsze hexy).
-//   • krycie = dzisiejsze × 0,8 (D-HUD-7); dzisiejsze — tabela ORBIT_BASE_OPACITY, lustro literałów ścieżki OFF
-//     (pilnowane keeperem `hud_orbits_smoke` na źródle `ThreeRenderer`); grubość bez zmian (1 px bufora, bez Line2);
+// KAŻDYM wywołaniu. Jedyny styl orbit od ARKUSZA HUD B-Z (flaga `hudOrbits` na stałe ON; dawne hexy `ThreeRenderer` —
+// ścieżka OFF — usunięte).
+//   • krycie = krycie sprzed H0 × 0,8 (D-HUD-7; tabela ORBIT_BASE_OPACITY); grubość bez zmian (1 px bufora, bez Line2);
 //   • dom i kolonie — `orbitColony`; reszta — `orbitLine`; zaznaczona — `primary` (planeta, księżyc, planetoida);
 //     najechana planeta — `primary` (dawne złoto najechania = złoto zaznaczenia); najechana planetoida — `orbitLine`
 //     w kryciu najechania; niestabilna planeta — `alert` w kryciu kolonii;
@@ -18,17 +17,13 @@ import { resolveHudRoles, themeToken, tokenRgbInt } from '../ui/HudPalette.js';
 // D-HUD-7: krycie orbit = dzisiejsze × 0,8.
 export const HUD_ORBIT_OPACITY_MULT = 0.8;
 
-// Dzisiejsze krycia ścieżki OFF (`ThreeRenderer`): planety — `_buildOrbit` / `_restoreOrbitDefaults` / `planet:hover`;
-// księżyce — `_addMoonMesh` / `_hideAllMoonOrbits` / `_showMoonOrbit`; planetoidy — `_buildPlanetoidOrbit` /
-// `_hideAllPlanetoidOrbits` / `body:selected` (0,35) / `planet:hover` (0,20).
+// Krycia orbit sprzed H0 (dawna ścieżka OFF `ThreeRenderer`, usunięta w B-Z) — podstawa krycia HUD (× 0,8): planety
+// (dom, kolonia, filtr, zaznaczona, najechana), księżyce (filtr, zaznaczony), planetoidy (filtr, zaznaczona, najechana).
 export const ORBIT_BASE_OPACITY = Object.freeze({
   planetHome: 0.15, planetColony: 0.10, planetFilter: 0.08, planetSelected: 0.7, planetHover: 0.5,
   moonFilter: 0.15, moonSelected: 0.30,
   planetoidFilter: 0.12, planetoidSelected: 0.35, planetoidHover: 0.20,
 });
-
-/** Flaga orbit HUD — `true` wyłącznie przy `features.hudOrbits === true` (brak klucza = OFF). */
-export const isHudOrbitsOn = (features) => features?.hudOrbits === true;
 
 /** Czy filtr orbit (menu ☰: 'all' | 'planets_moons' | 'planetoids' | 'none') pokazuje orbity rodzaju `kind`. */
 export function orbitFilterShows(filter, kind) {
@@ -113,10 +108,9 @@ export function applyOrbitStyle(line, style) {
 }
 
 /**
- * Klucz przebudowy orbit (`ThreeRenderer._syncHudOrbits`, co klatkę): `null` przy OFF (bez pracy — ścieżka OFF);
- * przy ON — epoka motywu + id domu gracza (po wczytaniu zapisu dom pojawia się po zbudowaniu sceny — Finding 510).
+ * Klucz przebudowy orbit (`ThreeRenderer._syncHudOrbits`, co klatkę): epoka motywu + id domu gracza (po wczytaniu zapisu
+ * dom pojawia się po zbudowaniu sceny — Finding 510).
  */
-export function hudOrbitSyncKey(features, epoch, homeId) {
-  if (!isHudOrbitsOn(features)) return null;
+export function hudOrbitSyncKey(epoch, homeId) {
   return `${epoch}|${homeId ?? ''}`;
 }

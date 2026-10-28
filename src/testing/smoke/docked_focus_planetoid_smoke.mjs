@@ -6,7 +6,8 @@
 // i Hv — kamera STOI; planeta (Fracht III) i księżyc (Kurier II) — kamera + karta. Dotyczy statków placówek na
 // planetoidach — prawy outliner, Dok taktyczny, Tab.
 // Po poprawce miejsce postoju szukane także w `_planetoids` — tej samej mapie, z której rysowane są placówki
-// (`getBodyWorldInfo`, `getBodyScreenPosition`): kamera na planetoidę + karta ciała, jak przy planecie.
+// (`getBodyWorldInfo`; dawniej także `getBodyScreenPosition` — usunięte w ARKUSZU HUD B-Z): kamera na planetoidę + karta
+// ciała, jak przy planecie.
 //
 // `ThreeRenderer` nie importuje się pod node — słuchacze `vessel:focus` i `body:selected` oraz `_updateCameraFocus`
 // wycięte ze źródła (wzór `zoom_floor`, `click_focus_rule`), WYKONANIE na atrapie `this`; kamera na PRAWDZIWYM

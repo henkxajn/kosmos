@@ -37,8 +37,8 @@
 //   L11 Finding 486 — `syncBodyCardOnSystemSwitch` (karta spoza układu docelowego → `body:deselected { reason }`; z układu
 //       docelowego → `body:selected { focus: false }`; bez karty → nic); StationPanel nie zamyka się przy tym
 //       odznaczeniu (KONTROLA: zwykłe odznaczenie zamyka); nasłuch `system:switched` w UIManagerze (pin źródłowy)
-//   L12 §7.18 — chipy układów nie rysują się (statki w dwóch układach — dawniej rząd chipów); plakietki flot zostają
-//       (KONTROLA)
+//   L12 §7.18 — chipy układów nie rysują się (statki w dwóch układach — dawniej rząd chipów); statki oglądanego układu
+//       opisuje warstwa etykiet HUD (KONTROLA)
 //
 // PINY (krok U2-4 — §7.16, decyzja 4, Finding 483):
 //   L13 klawisze — `outlinerKeyAction` (e.code Comma / Period / KeyB, z modyfikatorem — nic) i `applyOutlinerToggle`
@@ -57,9 +57,12 @@
 //   L16 prawy outliner — od ARKUSZ UI U3-2 kolumna nad mapą (`OutlinerColumn`, jak lewy): wejścia w UIManagerze bez
 //       własnej flagi widoczności (klawisz i decyzja 4 — wewnątrz kolumny), w warstwie lewego; bez szuflady (piny
 //       źródłowe; wykonanie — `right_outliner_smoke`)
-//   L17 Finding 483 — kolejność rysowania: etykiety mapy → lewy outliner → lista kolonii z belki → Dok / paski →
-//       pływające panele; kolejność kliku: pływające panele → lista kolonii → dziennik → lewy outliner → etykiety mapy
-//       (piny źródłowe, komentarze zdjęte)
+//   L17 Finding 483 — kolejność rysowania: etykiety CTRL → lewy outliner → lista kolonii z belki → Dok / paski →
+//       pływające panele (etykiety mapy — warstwa HUD na `#hud-canvas`, pod `#ui-canvas`); kolejność kliku: pływające
+//       panele → lista kolonii → dziennik → lewy outliner → … → etykiety warstwy HUD (piny źródłowe, komentarze zdjęte)
+//   ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — plakietki `MapLabelLayer` usunięte): L12 — statki opisuje warstwa etykiet
+//       HUD (`gatherVesselLabels`), chipów nie ma w żadnej warstwie; L16b / L17 — miejsce plakietek w łańcuchu kliku zajmuje
+//       klik etykiet warstwy HUD (`hudLayer.handleClick`), rysunek plakietek usunięty (etykiety CTRL zostają).
 //
 // PINY (ARKUSZ UI U3-0 — Finding 489):
 //   L18 statek GRACZA w niezbadanym układzie odsłania go na liście (`treeContext` czyta rejestr statków); statek
@@ -548,23 +551,22 @@ header('L11 Finding 486 — karta ciała przy przełączeniu układu');
 }
 
 // ═══ L12 ══════════════════════════════════════════════════════════════════════
-header('L12 §7.18 — chipy układów wyłączone, plakietki flot zostają');
+header('L12 §7.18 — chipy układów wyłączone; statki opisuje warstwa etykiet HUD (B-Z)');
 {
-  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
+  const ML = await import('../../ui/MapLabelLogic.js');
   const mk = (id, sys) => ({ id, name: id, shipId: 'hull_frigate', systemId: sys, status: 'idle', mission: null,
     position: { state: 'orbiting', x: 0, y: 0, dockedAt: null }, fuel: { current: 10, max: 10 }, modules: [] });
   const vs = [mk('v1', 'sys_home'), mk('v2', 'sys_home'), mk('v3', 'sys_A')];
-  K.vesselManager = { getAllVessels: () => vs, getVessel: (id) => vs.find((v) => v.id === id) ?? null };
-  K.uiPrefs = {};
-  const tr = { getVesselScreenPosition: (id) => (id === 'v1' ? { x: 400, y: 300 } : id === 'v2' ? { x: 404, y: 300 } : null),
-    getCameraDistance: () => 50 };
-  reset(); const m = new MapLabelLayer();
-  let threw = null; try { m.drawVesselLabels(recCtx(), tr, W, H, 1); } catch (e) { threw = e; }
-  ok(!threw, `L12-0 KONTROLA: \`drawVesselLabels\` bez wyjątku (${threw?.message ?? 'ok'})`);
-  const mll = src('../../ui/MapLabelLayer.js');
-  ok(!('_chipZones' in m) && !/_drawSystemChips|_chipZones|buildSystemChips|layoutSystemChips/.test(mll),
-    'L12a SEDNO: statki gracza w dwóch układach — ŻADEN chip układu (kod chipów usunięty w U3-3: bez pola, metody i importów)');
-  ok(m._vesselHitZones.length >= 1, `L12b KONTROLA: plakietka floty (klaster dwóch statków) nadal rysowana (${m._vesselHitZones.length})`);
+  const pos = { v1: { x: 400, y: 300 }, v2: { x: 404, y: 300 } };
+  let pts = null, threw = null;
+  try { pts = ML.gatherVesselLabels(vs, { activeSystemId: 'sys_home', getScreenPos: (id) => pos[id] ?? null }); } catch (e) { threw = e; }
+  ok(!threw && Array.isArray(pts), `L12-0 KONTROLA: \`gatherVesselLabels\` (wejście etykiet statków warstwy HUD) bez wyjątku (${threw?.message ?? 'ok'})`);
+  let mll = null; try { mll = src('../../ui/MapLabelLayer.js'); } catch { mll = null; }
+  const hl = src('../../ui/HudLabelLayer.js');
+  ok(mll === null && hl.length > 1000 && !/_drawSystemChips|_chipZones|buildSystemChips|layoutSystemChips/.test(hl),
+    'L12a SEDNO: statki gracza w dwóch układach — ŻADEN chip układu (kod chipów usunięty w U3-3; od B-Z bez `MapLabelLayer`, warstwa etykiet HUD bez chipów)');
+  ok((pts ?? []).length === 2 && pts.every((p) => p.kind === 'own') && !pts.some((p) => p.id === 'v3'),
+    `L12b KONTROLA: statki oglądanego układu nadal opisane (${(pts ?? []).map((p) => p.id).join(', ')}); statek innego układu — bez`);
 }
 
 // ═══ L19 ══════════════════════════════════════════════════════════════════════
@@ -713,9 +715,9 @@ header('L16 prawy outliner — kolumna w warstwie lewego; klawisz i decyzja 4 we
   const has = (sig, re) => re.test(body(ui, sig));
   ok(has('  isOverUI(rawX, rawY) {', /this\._outliner\?\.isOver\?\.\(x, y, W, H\)/), 'L16a blokada kamery (`isOver` kolumny — z jej widocznością)');
   const hc = body(ui, '  handleClick(x, y) {');
-  const iLO = hc.indexOf('this._leftOutliner?.hitTest?.('), iRO = hc.indexOf('this._outliner?.hitTest?.('), iLbl = hc.indexOf('this._mapLabelLayer?.handleClick?.(');
+  const iLO = hc.indexOf('this._leftOutliner?.hitTest?.('), iRO = hc.indexOf('this._outliner?.hitTest?.('), iLbl = hc.indexOf('hudLayer?.handleClick?.(');
   ok(iLO > 0 && iRO > iLO && iRO < iLbl && hc.split('this._outliner?.hitTest?.(').length === 2,
-    'L16b klik — jedno wywołanie, zaraz po lewym (pod listą kolonii i dziennikiem), przed etykietami mapy (decyzja 4)');
+    'L16b klik — jedno wywołanie, zaraz po lewym (pod listą kolonii i dziennikiem), przed etykietami mapy (warstwa HUD; decyzja 4)');
   ok(has('  handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {', /if \(this\._outliner\?\.handleWheel\?\.\(x, y, delta, W, H\)\) return true;/), 'L16c kółko (bez własnej bramki — widoczność sprawdza kolumna)');
   ok(has('  handleMouseMove(x, y) {', /this\._outliner\?\.updateHover\?\.\(x, y, W, H\)/), 'L16d najechanie');
   const dr = body(ui, '  _draw() {');
@@ -733,21 +735,21 @@ header('L17 Finding 483 — kolejność rysowania i kliku (piny źródłowe)');
   const ui = src('../../scenes/UIManager.js');
   const dr = body(ui, '  _draw() {');
   const at = (n) => dr.indexOf(n);
-  const dLbl = at('this._mapLabelLayer.draw('), dVL = at('this._mapLabelLayer.drawVesselLabels('), dAll = at('this._drawAllLabels(ctx, tr)');
+  const dAll = at('this._drawAllLabels(ctx, tr)');
   const dLO = at('this._leftOutliner.draw('), dTRD = at('this._topResourceDrawer.draw(ctx, W, H)'), dDock = at('this.tacticalDock.draw(');
   const dNav = at('this._bottomNavBar.draw('), dFG = at('this._drawFleetPanelHud('), dBr = at('this._drawSelectionBrackets(');
-  ok([dLbl, dVL, dAll, dLO, dTRD, dDock, dNav, dFG, dBr].every((i) => i > 0), 'L17-0 KONTROLA: wszystkie wywołania w `_draw` znalezione');
-  ok(dAll < dLO && dLbl < dLO && dVL < dLO, 'L17a SEDNO: etykiety mapy (plakietki kolonii / stacji / flot, CTRL) PRZED lewym outlinerem');
+  ok([dAll, dLO, dTRD, dDock, dNav, dFG, dBr].every((i) => i > 0), 'L17-0 KONTROLA: wszystkie wywołania w `_draw` znalezione');
+  ok(dAll < dLO && !/_mapLabelLayer/.test(ui), 'L17a SEDNO: etykiety CTRL PRZED lewym outlinerem; plakietek `MapLabelLayer` brak (B-Z — etykiety mapy na warstwie HUD)');
   ok(dLO < dTRD && dTRD < dDock && dTRD < dNav, 'L17b KONTROLA (od U2-2): lewy outliner → lista kolonii z belki → Dok taktyczny / paski');
-  ok(dTRD < dFG && dBr > dVL, 'L17c KONTROLA: lista kolonii POD panelem floty / grupy T6; ramki zaznaczenia nadal PO etykietach');
+  ok(dTRD < dFG && dBr > dAll, 'L17c KONTROLA: lista kolonii POD panelem floty / grupy T6; ramki zaznaczenia nadal PO etykietach');
   const hc = body(ui, '  handleClick(x, y) {');
   const c = (n) => hc.indexOf(n);
   const cFC = c('this._fleetPanelHudClick(x, y)'), cTRD = c('this._topResourceDrawer?.handleClick?.(');
-  const cLog = c('this._eventLogDrawer?.handleClick?.('), cLO = c('this._leftOutliner?.hitTest?.('), cLbl = c('this._mapLabelLayer?.handleClick?.(');
+  const cLog = c('this._eventLogDrawer?.handleClick?.('), cLO = c('this._leftOutliner?.hitTest?.('), cLbl = c('hudLayer?.handleClick?.(');
   ok([cFC, cTRD, cLog, cLO, cLbl].every((i) => i > 0) && !/stationPanel\??\.handleClick/.test(hc), 'L17d-0 KONTROLA: wszystkie wywołania w `handleClick` znalezione; klik panelu stacji usunięty (T4)');
   ok(cFC < cTRD && cTRD < cLog && cLog < cLO && cLO < cLbl,
-    'L17d SEDNO: klik — panel nad mapą (panel floty / grupy T6) → lista kolonii → dziennik → lewy outliner → etykiety mapy (tak jak leżą na ekranie)');
-  ok(c('this._mapLabelLayer?.handleClick?.(') === hc.lastIndexOf('this._mapLabelLayer?.handleClick?.('), 'L17e KONTROLA: jedno wywołanie kliku etykiet');
+    'L17d SEDNO: klik — panel nad mapą (panel floty / grupy T6) → lista kolonii → dziennik → lewy outliner → etykiety mapy (warstwa HUD; tak jak leżą na ekranie)');
+  ok(c('hudLayer?.handleClick?.(') === hc.lastIndexOf('hudLayer?.handleClick?.(') && !/_mapLabelLayer/.test(hc), 'L17e KONTROLA: jedno wywołanie kliku etykiet (warstwa HUD; plakietek `MapLabelLayer` brak)');
 }
 
 // ═══ L18 ══════════════════════════════════════════════════════════════════════

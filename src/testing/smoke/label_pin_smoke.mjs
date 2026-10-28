@@ -32,7 +32,7 @@
 //   P13 wejścia I3 (karta ciała ×9, panel stacji ×4) prowadzą do przypięcia; strojenie 1 (b): 1. klik w wiersz ciała z INNEGO
 //       układu w lewym outlinerze — wiersz podświetlony jak zaznaczenie (U2), przypięcie dopiero po 2. kliku (przełączenie)
 //   P14 budżet: treść przypięcia z pamięci (TTL), spoczynek — 0 wywołań ctx
-//   P15 bez warstwy etykiet HUD (`hudLabels` OFF) — reguła jednego przypięcia nie działa
+//   P15 poza trybem cywilizacji (warstwa etykiet HUD schowana) — reguła jednego przypięcia nie działa
 //   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `labelPin` na stałe ON —
 //     P0b–P0d (flaga) zastąpione pinem braku predykatów i klucza; sekcje OFF usunięte (P4d, P5e, P11z, P15a); P5i i P15 —
 //     „bez przypięcia” znaczy teraz bez warstwy etykiet HUD (`hudLabels`, flaga do paczki B); P11g — przeszkodą jest prostokąt
@@ -41,6 +41,9 @@
 //     zmiany treści z karty), lustro przycisku wobec tabeli `bodyCardAction`; P12 — pin braku karty ciała i rysunku / kliku
 //     panelu stacji w `UIManager` (P12a, P12b), panel stacji jako stan (P12c), przeszkody etykiet — wyłącznie panele T5 / T6
 //     (P12g); P12d usunięty (wywołania karty).
+//   ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flaga `hudLabels` na stałe ON; parametr `features` bramek przypięcia
+//     usunięty): P5i i P15 — „bez przypięcia” znaczy teraz poza trybem cywilizacji; P12e — słuchacz `body:selected` bez
+//     flag. Przełącznik flagi w keeperze usunięty.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -187,14 +190,13 @@ const setWorld = () => {
 setWorld();
 // Prawdziwy rejestr encji (lewy outliner i panel stacji czytają `EntityManager`, nie `K.entityManager`).
 for (const e of [...Object.values(ENT), ...STATIONS]) EntityManagerReal.add(e);
-FEATURES.hudLabels = true;
 // Panel stacji — prawdziwy (stan „otwarty” = przypięcie stacji przy ON; cykl życia ze słuchaczy).
 const stationPanel = SPm?.StationPanel ? new SPm.StationPanel() : null;
 K.stationPanel = stationPanel;
 // Spięcie `UIManager` (słuchacze — piny źródłowe w P12): zaznaczenie ciała + jedno przypięcie naraz.
-EventBus.on('body:selected', ({ entity }) => { W0.entity = entity?.id ?? null; LP?.enforceSinglePinOnBody?.({ K, features: FEATURES }); });
+EventBus.on('body:selected', ({ entity }) => { W0.entity = entity?.id ?? null; LP?.enforceSinglePinOnBody?.({ K }); });
 EventBus.on('body:deselected', () => { W0.entity = null; });
-EventBus.on('station:selected', () => { LP?.enforceSinglePinOnStation?.({ K, emit: (n, p) => EventBus.emit(n, p), features: FEATURES }); });
+EventBus.on('station:selected', () => { LP?.enforceSinglePinOnStation?.({ K, emit: (n, p) => EventBus.emit(n, p) }); });
 const mkCtx = () => {
   const o0 = { calls: [] };
   return new Proxy(o0, {
@@ -350,7 +352,7 @@ header('P4  jedno przypięcie naraz (ciało ↔ stacja)');
 // ═══ P5 ══════════════════════════════════════════════════════════════════════
 header('P5  Esc w kaskadzie (po zaznaczeniu statku, przed overlayem)');
 {
-  const esc = (o = {}) => call(LP?.escapeUnpin, { K, emit: (n, p) => EventBus.emit(n, p), features: FEATURES, overlayOpen: false, modalOpen: false, ...o });
+  const esc = (o = {}) => call(LP?.escapeUnpin, { K, emit: (n, p) => EventBus.emit(n, p), overlayOpen: false, modalOpen: false, ...o });
   reset(); selectBody('p_x'); emits.length = 0;
   ok(esc() === 'body' && countOf('body:deselected') === 1 && W0.entity === null, 'P5a: Esc — przypięte ciało zdjęte (`body:deselected` — jak „−” karty)');
   reset(); selectStation('st_1');
@@ -372,9 +374,9 @@ header('P5  Esc w kaskadzie (po zaznaczeniu statku, przed overlayem)');
   ok(/overlayOpen:\s*um\?\.overlayManager\?\.isAnyOpen\?\.\(\)\s*===\s*true/.test(pinCall) && /modalOpen:\s*!!document\.querySelector\('\.mission-modal-overlay, \.kosmos-modal-overlay'\)/.test(pinCall),
     'P5h: krok przypięcia dostaje stan overlayu i okna DOM (`.kosmos-modal-overlay` — raport ciała)');
   // Okno DOM (raport ciała z przypięcia) — Esc należy do okna: kaskada mapy stoi (bez tego otwierało się menu ☰ — zmierzone w grze).
-  ok(call(LP?.escapeHeldByModal, { K, features: FEATURES, domModalOpen: true }) === true && call(LP?.escapeHeldByModal, { K, features: FEATURES, domModalOpen: false }) === false
-    && call(LP?.escapeHeldByModal, { K, features: { ...FEATURES, hudLabels: false }, domModalOpen: true }) === false,
-    'P5i: okno DOM otwarte — Esc należy do okna (kaskada mapy stoi); bez okna albo bez warstwy etykiet HUD — kaskada jak dziś');
+  ok(call(LP?.escapeHeldByModal, { K, domModalOpen: true }) === true && call(LP?.escapeHeldByModal, { K, domModalOpen: false }) === false
+    && call(LP?.escapeHeldByModal, { K: { ...K, civMode: false }, domModalOpen: true }) === false,
+    'P5i: okno DOM otwarte — Esc należy do okna (kaskada mapy stoi); bez okna albo poza trybem cywilizacji — kaskada jak dziś');
   const iRcm = GS.indexOf('rcm.hide();', iKey), iMod = GS.indexOf('escapeHeldByModal({', iKey);
   ok(iRcm > iKey && iMod > iRcm && iMod < iVes && /domModalOpen: !!document\.querySelector\('\.kosmos-modal-overlay'\)/.test(GS.slice(iMod, iMod + 260)),
     `P5j: \`GameScene\` — strażnik okna DOM po menu PPM, PRZED zaznaczeniem statku i przypięciem (${iRcm} < ${iMod} < ${iVes})`);
@@ -842,7 +844,7 @@ header('P12 karta ciała i panel stacji usunięte z `UIManager` (T4); panel stac
   ok(!!spx && typeof spx._onHit === 'function' && typeof spx.show === 'function' && typeof spx.hide === 'function'
     && spx.draw === undefined && spx.handleClick === undefined && spx._hitTest === undefined && spx.tryBeginDrag === undefined,
     'P12c: `StationPanel` — stan przypięcia stacji (`show` / `hide` / `_onHit`: Zarządzaj, ✕) bez rysunku, kliku i przeciągania');
-  ok(/enforceSinglePinOnBody\(\{ K: window\.KOSMOS, features: GAME_CONFIG\.FEATURES \}\)/.test(UIM)
+  ok(/enforceSinglePinOnBody\(\{ K: window\.KOSMOS \}\)/.test(UIM) && !/isHudLabelsOn/.test(UIM)
     && /EventBus\.on\('station:selected', \(\) => \{\n\s*if \(enforceSinglePinOnStation\(/.test(UIM),
     'P12e: `UIManager` — jedno przypięcie naraz w słuchaczach `body:selected` i `station:selected`');
   ok(/if \(p\?\.reason === PIN_SWAP_REASON\) return;/.test(SPsrc), 'P12f: `StationPanel` nie zamyka się przy `pin_swap` (panel = przypięcie stacji)');
@@ -955,13 +957,13 @@ header('P14 budżet: treść przypięcia z pamięci, spoczynek');
 }
 
 // ═══ P15 ═════════════════════════════════════════════════════════════════════
-header('P15 bez warstwy etykiet HUD (`hudLabels` OFF) — reguła jednego przypięcia nie działa');
+header('P15 poza trybem cywilizacji — reguła jednego przypięcia nie działa');
 {
   reset(); selectBody('p_x');
-  const noHud = { ...FEATURES, hudLabels: false };
-  ok(call(LP?.enforceSinglePinOnStation, { K, emit: () => { throw new Error('emit'); }, features: noHud }) === false
-    && call(LP?.enforceSinglePinOnBody, { K, features: noHud }) === false && W0.entity === 'p_x',
-    'P15b: bez warstwy etykiet HUD — reguła jednego przypięcia nie działa (przypięcia nie ma)');
+  const noCiv = { ...K, civMode: false };
+  ok(call(LP?.enforceSinglePinOnStation, { K: noCiv, emit: () => { throw new Error('emit'); } }) === false
+    && call(LP?.enforceSinglePinOnBody, { K: noCiv }) === false && W0.entity === 'p_x',
+    'P15b: poza trybem cywilizacji (warstwa etykiet HUD schowana) — reguła jednego przypięcia nie działa (przypięcia nie ma)');
   reset();
 }
 

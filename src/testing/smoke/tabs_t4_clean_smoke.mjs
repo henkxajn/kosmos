@@ -22,6 +22,9 @@
 //
 // Sekcje: C0 narzędzie · C1 pliki modułów · C2 importy · C3 identyfikatory usuniętych powierzchni (+ następcy) · C4 flagi
 //         · C5 klucze i18n · C6 kontrole — co ZOSTAJE.
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON, `MapLabelLayer` usunięty): C6a — warstwa HUD zostaje
+//   bez flag (dawniej: flagi ARKUSZA HUD zostają i są ON); C6b — `MapLabelLayer` (plakietki ścieżki `hudLabels` OFF, decyzja
+//   Q1 z T4) zniknął razem z flagą — czystość B-Z pinuje `hud_bz_clean_smoke`.
 //
 // Uruchom: node src/testing/smoke/tabs_t4_clean_smoke.mjs
 
@@ -212,11 +215,12 @@ header('C5  klucze i18n — usunięte razem z powierzchniami; czytane przez zmie
 header('C6  KONTROLE — co ZOSTAJE (zielone po obu stronach)');
 {
   const F = GAME_CONFIG?.FEATURES ?? {};
-  ok(['hudOrbits', 'hudRadar', 'hudLabels', 'hudRoutes'].every((k) => F[k] === true),
-    'C6a: flagi ARKUSZA HUD (`hudOrbits`, `hudRadar`, `hudLabels`, `hudRoutes`) zostają i są ON');
+  const gsc = readClean('src/scenes/GameScene.js') ?? '';
+  ok(['hudOrbits', 'hudRadar', 'hudLabels', 'hudRoutes', 'hudAttention'].every((k) => F[k] === undefined) && /new HudLayer\(/.test(gsc),
+    'C6a: warstwa HUD zostaje — od B-Z bez flag (`hudOrbits`, `hudRadar`, `hudLabels`, `hudRoutes`, `hudAttention` usunięte), `GameScene` tworzy `HudLayer`');
   const files = ['src/ui/StationPanel.js', 'src/ui/FleetCommandPanel.js', 'src/ui/FleetGroupPanel.js', 'src/ui/FleetGroupPanelLogic.js',
     'src/ui/LabelPinLogic.js', 'src/ui/LabelHoverLogic.js', 'src/ui/ShipPanelHudLayer.js', 'src/ui/ShipPanelHudLogic.js',
-    'src/ui/FleetPanelHudLayer.js', 'src/ui/FleetPanelHudLogic.js', 'src/ui/HudLabelLayer.js', 'src/ui/MapLabelLayer.js',
+    'src/ui/FleetPanelHudLayer.js', 'src/ui/FleetPanelHudLogic.js', 'src/ui/HudLabelLayer.js',
     'src/ui/BodyDetailModal.js', 'src/ui/ColonyOverlay.js', 'src/ui/HudProjection.js'];
   const missing = files.filter((p) => !existsSync(join(ROOT, p)));
   ok(missing.length === 0, `C6b: ${files.length} modułów żywych powierzchni na miejscu` + (missing.length ? ' — brak: ' + missing.join(', ') : ''));

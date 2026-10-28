@@ -15,7 +15,7 @@
 // Treść rysują PODWARSTWY (`addSublayer`): `prepare(F)` → część klucza klatki (tanio, w każdej klatce), `collect(F, proj)` →
 // `{ count, animating, … }` (geometria w px logicznych), `draw(ctx, F, collected)`; opcjonalnie `debug()`, `destroy()`.
 // Rzut — jeden wspólny projektor (`HudProjection.makeHudProjector` z `ThreeRenderer.getHudView()`).
-// Paczka B (flaga `hudAttention`): stan klatki dla modelu uwagi i alertów (`F.att` — ostrość, alerty, warstwy chipów) i widok
+// Paczka B: stan klatki dla modelu uwagi i alertów (`F.att` — ostrość, alerty, warstwy chipów) i widok
 // alertów w px (`F.alertView(proj)` — położenia, linia treści wg wywiadu) liczone RAZ na klatkę, wspólne dla podwarstw; rejestr
 // alertów (`alerts`) żyje tu, zasilają go zdarzenia wykrycia (`HudRadarLayer`).
 // ⚠ Moduł importuje się pod node (keeper `hud_layer_smoke` — atrapa kanwy i ctx): bez three i bez DOM poza kanwą.
@@ -32,7 +32,7 @@ import { HudRadarLayer } from './HudRadarLayer.js';   // H1-2 — radar (D-HUD-3
 import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy statków (D-HUD-8, D-HUD-9, D-HUD-10)
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
 import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) — nawiasy zaznaczenia, pierścienie i wektor alertu
-import { isHudAttentionOn, focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
+import { focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
 import {
   HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
 } from './HudAlertLogic.js';
@@ -128,9 +128,8 @@ export class HudLayer {
     return r;
   }
 
-  /** Paczka B — obwiednia trwającego alertu obcego `foeId` (0–1; celownik wroga pulsuje w rytmie alertu); flaga OFF — 0. */
+  /** Paczka B — obwiednia trwającego alertu obcego `foeId` (0–1; celownik wroga pulsuje w rytmie alertu). */
   alertEnvelopeFor(foeId) {
-    if (!isHudAttentionOn(GAME_CONFIG.FEATURES)) return 0;
     return this.alerts.envelopeFor(foeId, simClockMs());
   }
 
@@ -369,23 +368,20 @@ export class HudLayer {
     };
     let key = `${tr?.getCameraMoveEpoch?.() ?? 0}|${themeEpoch()}|${F.activeSystemId}|${cssW}x${cssH}@${uiScale}*${pr}`
       + `|${sel.leadId ?? ''}|${sel.entityId ?? ''}`;
-    // Paczka B (flaga `hudAttention`): stan uwagi i alerty klatki — przed podwarstwami (każda czyta `F.att`); przy OFF — `null`.
-    const att = isHudAttentionOn(F.features) ? this._attentionFrame(K, sel, F) : null;
+    // Paczka B: stan uwagi i alerty klatki — przed podwarstwami (każda czyta `F.att`).
+    const att = this._attentionFrame(K, sel, F);
     F.att = att;
     let viewMemo = null, viewProj = null;
     F.alertView = (proj) => {
-      if (!att) return [];
       if (viewMemo && viewProj === proj) return viewMemo;
       viewProj = proj;
       return (viewMemo = this._alertView(F, proj));
     };
-    if (att) {
-      const Ly = att.layers;
-      key += `|A${att.focus ? 1 : 0}${Ly.radar ? 1 : 0}${Ly.routes ? 1 : 0}${Ly.labels ? 1 : 0}${Ly.orbits ? 1 : 0}`
-        + `:${sel.stationId ?? ''}:${sel.fleetId ?? ''}:${(sel.vesselIds ?? []).join(',')}`;
-      // Alerty biegną na zegarze symulacji — klatka przy każdym przyroście wieku (w pauzie wiek stoi → spoczynek).
-      for (const a of att.alerts) key += `|a${a.id}:${Math.round(a.age)}`;
-    }
+    const Ly = att.layers;
+    key += `|A${att.focus ? 1 : 0}${Ly.radar ? 1 : 0}${Ly.routes ? 1 : 0}${Ly.labels ? 1 : 0}${Ly.orbits ? 1 : 0}`
+      + `:${sel.stationId ?? ''}:${sel.fleetId ?? ''}:${(sel.vesselIds ?? []).join(',')}`;
+    // Alerty biegną na zegarze symulacji — klatka przy każdym przyroście wieku (w pauzie wiek stoi → spoczynek).
+    for (const a of att.alerts) key += `|a${a.id}:${Math.round(a.age)}`;
     for (const s of this._sublayers) key += '|' + (s.prepare?.(F) ?? '');
     if (key === this._lastKey && !this._animating && !this._wake) {
       const idleMs = this._now() - tStart;   // spoczynek: sama bramka i klucz (zero wywołań ctx)

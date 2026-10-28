@@ -1,6 +1,6 @@
 // HudProjection — ARKUSZ HUD H1 (D-HUD-1 (a); HUD_PLAN.md §4.2): JEDEN wspólny projektor warstwy HUD 2D. Punkt i okrąg
 // w płaszczyźnie ekliptyki (jednostki świata 3D, „j.”) → px LOGICZNE UI (skala jak `#ui-canvas`: px CSS / `UI_SCALE`).
-// Rachunek = `THREE.Vector3.project(camera)` + przeliczenie NDC → okno z `ThreeRenderer.getBodyScreenPosition`; głębia jak
+// Rachunek = `THREE.Vector3.project(camera)` + przeliczenie NDC → okno jak `ThreeRenderer.getStationScreenPosition`; głębia jak
 // `ThreeRenderer._viewDepth` (−z w przestrzeni widoku). Czysty: bez three i bez DOM — macierze kamery (kolumnowe, jak
 // `THREE.Matrix4.elements`), wymiary okna i skalę świata podaje `ThreeRenderer.getHudView()`.
 //   • okrąg: próbki w świecie — oś X świata = oś x układu, oś Z świata = oś y układu, więc kąt 0 = oś x układu (ramka

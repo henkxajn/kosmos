@@ -1,37 +1,40 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// KEEPER — ARKUSZ HUD H0-2: orbity w kolorach motywu za flagą `FEATURES.hudOrbits` (HUD_PLAN.md §2.6, §4.1; D-HUD-7,
-// D-HUD-15; Findingi 510, 511, 512).
+// KEEPER — ARKUSZ HUD H0-2: orbity w kolorach motywu (HUD_PLAN.md §2.6, §4.1; D-HUD-7, D-HUD-15; Findingi 510, 511, 512).
 // Uruchom: node src/testing/smoke/hud_orbits_smoke.mjs
 //
-// Przy ON: orbity planet / pierścienie księżyców / orbity planetoid w kolorach z tokenów `orbitLine` (domyślne, filtr)
+// Orbity planet / pierścienie księżyców / orbity planetoid w kolorach z tokenów `orbitLine` (domyślne, filtr)
 // i `orbitColony` (dom, kolonie); zaznaczona — rola `primary`; niestabilna — `alert` w kryciu kolonii; krycie =
-// dzisiejsze × 0,8; filtr „Żadne” chowa wszystkie orbity poza orbitą zaznaczonego ciała (511; D-HUD-7 uzupełnienie 3b,
-// 2026-10-22 — planeta, księżyc, planetoida); przebudowa przy zmianie flagi, epoki motywu (F7)
-// i domu (wczytanie zapisu — 510) co klatkę w pętli renderu (także w pauzie); po SHIFT widoczność z preferencji.
-// Przy OFF: dzisiejszy kod co do bitu (hexy 0x003828 / 0x005540 / 0x007852 …).
+// krycie sprzed H0 × 0,8; filtr „Żadne” chowa wszystkie orbity poza orbitą zaznaczonego ciała (511; D-HUD-7 uzupełnienie
+// 3b, 2026-10-22 — planeta, księżyc, planetoida); przebudowa przy zmianie epoki motywu (F7) i domu (wczytanie zapisu —
+// 510) co klatkę w pętli renderu (także w pauzie); po SHIFT widoczność z preferencji.
 //
 // `ThreeRenderer` nie importuje się pod node — jego metody i słuchacze WYCIĘTE ze źródła i WYKONANE na atrapie `this`
 // z atrapą THREE (wzór `click_focus_rule` T9 / `zoom_floor`); `HudOrbitLogic` / `HudPalette` — prawdziwe moduły
 // (import dynamiczny — powstają w H0: brak modułu na starym drzewie = pin pada, suita się nie przerywa).
-// PINY: SEDNO — pada na drzewie sprzed H0; KONTROLA — zielona po obu stronach (ścieżka OFF = dzisiejszy kod);
-// STRAŻNIK — zielony po obu stronach, ale pada, gdy ścieżka ON zepsuje własność, którą dziś daje kod sprzed H0
-// (zabija go mutacja — bateria `mutations/run_mutants.mjs`). Poprawka 3b (2026-10-22): piny O5a/O5b przecelowane,
-// O5e/O5f/O5h — SEDNO poprawki (padają na drzewie H0-2 sprzed 3b, `302b008`), O5i — KONTROLA, O5g — STRAŻNIK poprawki
-// (zielony na `302b008` i po 3b; na kotwicy `6496b38`, bez ścieżki ON, pada — tam najechanie w trakcie SHIFT odsłania
-// orbity do następnej klatki renderu).
-//   O0  API i montaż: moduł logiki, flaga `hudOrbits` (domyślnie ON), `_syncHudOrbits` w pętli renderu (nie w syncu fizyki)
-//   O1  kolory: ON — z tokenów (motyw z rozjechanymi tokenami + 5 motywów ekranu tytułowego); OFF — dzisiejsze hexy co do bitu
-//   O2  krycie × 0,8 (planety, księżyce, planetoidy, zaznaczona, najechana); tabela bazowa = krycia ścieżki OFF (wykonanie)
-//   O3  przebudowa: epoka motywu (F7) i flaga ON ↔ OFF — bez biegu gry; OFF + zmiana epoki — bez pracy
-//   O4  510 — orbita domu / kolonii po wczytaniu zapisu widoczna bez ticku (synchronizacja klatki), przy OFF — jak dziś
-//   O5  511 + 3b — filtr „Żadne” przy ON: widoczna WYŁĄCZNIE orbita zaznaczonego ciała (planeta 0,56, księżyc 0,24,
+// PINY: SEDNO — pada na drzewie sprzed H0; KONTROLA — zielona po obu stronach; STRAŻNIK — zielony po obu stronach, ale
+// pada, gdy styl orbit zepsuje własność, którą dawał kod sprzed H0 (zabija go mutacja — bateria `mutations/run_mutants.mjs`).
+// Poprawka 3b (2026-10-22): piny O5a/O5b przecelowane, O5e/O5f/O5h — SEDNO poprawki (padają na drzewie H0-2 sprzed 3b,
+// `302b008`), O5g — STRAŻNIK poprawki (zielony na `302b008` i po 3b; na kotwicy `6496b38`, bez stylu HUD, pada — tam
+// najechanie w trakcie SHIFT odsłania orbity do następnej klatki renderu).
+//   O0  API i montaż: moduł logiki, `_syncHudOrbits` w pętli renderu (nie w syncu fizyki); flaga `hudOrbits` i dawny
+//       styl orbit (hexy) usunięte (B-Z)
+//   O1  kolory z tokenów (motyw z rozjechanymi tokenami + 5 motywów ekranu tytułowego)
+//   O2  krycie × 0,8 (planety, księżyce, planetoidy, zaznaczona, najechana); tabela bazowa = krycia sprzed H0
+//   O3  przebudowa przy zmianie epoki motywu (F7) — bez biegu gry; zaznaczenie przeżywa przebudowę
+//   O4  510 — orbita domu / kolonii po wczytaniu zapisu widoczna bez ticku (synchronizacja klatki)
+//   O5  511 + 3b — filtr „Żadne”: widoczna WYŁĄCZNIE orbita zaznaczonego ciała (planeta 0,56, księżyc 0,24,
 //       planetoida 0,28 — `primary`); przeskakuje z zaznaczeniem, znika przy odznaczeniu; najechana — bez orbity; SHIFT
-//       chowa także zaznaczoną; przy OFF — jak dziś: dom i kolonia zostają, zaznaczona (złota 0,7) też
+//       chowa także zaznaczoną
 //   O6  SHIFT: przebudowa w trakcie czystego widoku → po wyjściu widoczność z filtra — z klatką renderu między przebudową
-//       a puszczeniem Shift (jak w grze; przy OFF orbity planetoid zostają ukryte na stałe — defekt sprzed H0, zmierzony
-//       w grze) i bez niej (okno jednej klatki — przy OFF orbita ukryta filtrem wraca); przy ON oba zamknięte
+//       a puszczeniem Shift (jak w grze) i bez niej (okno jednej klatki); oba zamknięte (przed H0 orbity planetoid
+//       zostawały ukryte na stałe — defekt zmierzony w grze)
 //   O7  najechanie: planeta — `primary` 0,4; planetoida — `orbitLine` 0,16; zjazd kursora — stan domyślny
 //   O8  klucz synchronizacji (czysta funkcja) i zwalnianie zasobów przy przebudowie planetoid
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flaga `hudOrbits` na stałe ON, dawny styl orbit usunięty): O0b / O0c / O0e
+//   — klucz i predykat flagi oraz metody dawnego stylu (`_restoreOrbitDefaults`, `_show*` / `_hideAll*`,
+//   `_rebuildPlanetoidOrbits`) z ich hexami usunięte; O1j–O1l, O3e–O3g, O4c, O5d, O5i, O6c, O6e (KONTROLE ścieżki OFF) —
+//   usunięte razem ze ścieżką; O2a — tabela bazowa = krycia sprzed H0 (dawniej wykonanie ścieżki OFF); O3d — druga zmiana
+//   motywu (dawniej ON → OFF); O8a — klucz bez flagi; O6 / O8b — przebudowa planetoid `_hudRebuildPlanetoidOrbits`.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -106,21 +109,17 @@ const setWorld = ({ home = HOME, colMgr = colonyManager } = {}) => {
   K.activeSystemId = 'sys_home'; K.homePlanet = home ?? undefined; K.colonyManager = colMgr ?? undefined;
 };
 
-// Flaga sterowana przez keeper (atrapa GAME_CONFIG w zasięgu metod) — definicja `hudOrbitsOn` WYCIĘTA ze źródła.
-const FLAGS = { hudOrbits: true };
-const GC = { FEATURES: FLAGS };
-const hudOrbitsSrc = TR.match(/const hudOrbitsOn = (\(\) => [^;]+);/)?.[1] ?? '';
-const hudOrbitsOn = compileWith(hudOrbitsSrc, { isHudOrbitsOn: HOL?.isHudOrbitsOn, GAME_CONFIG: GC }, null) ?? (() => false);
+// Atrapa GAME_CONFIG w zasięgu metod (od B-Z metody orbit nie czytają flag).
+const GC = { FEATURES: {} };
 const SCOPE = {
   THREE, S: (v) => v / 10, AU: GAME_CONFIG.AU_TO_PX, WORLD_SCALE: 10, EntityManager, GAME_CONFIG: GC, EventBus: { emit() {} },
-  hudOrbitsOn, themeEpoch: () => epoch(),
+  themeEpoch: () => epoch(),
   planetOrbitStyle: HOL?.planetOrbitStyle, moonOrbitStyle: HOL?.moonOrbitStyle, planetoidOrbitStyle: HOL?.planetoidOrbitStyle,
   applyOrbitStyle: HOL?.applyOrbitStyle, orbitPalette: HOL?.orbitPalette, hudOrbitSyncKey: HOL?.hudOrbitSyncKey,
   resolveTextureType: () => null, loadPlanetTextures: () => ({}), hashCode: () => 1, TEXTURE_VARIANTS: 3,
 };
-const METHODS = ['_buildOrbit', '_rebuildAllOrbits', '_restoreOrbitDefaults', 'setOrbitFilter', '_applyOrbitFilter',
-  '_addMoonMesh', '_showMoonOrbit', '_hideAllMoonOrbits', '_buildPlanetoidOrbit', '_showPlanetoidOrbit', '_hideAllPlanetoidOrbits',
-  '_rebuildPlanetoidOrbits', 'setCleanView', '_applyCleanViewVisibility',
+const METHODS = ['_buildOrbit', '_rebuildAllOrbits', 'setOrbitFilter', '_applyOrbitFilter',
+  '_addMoonMesh', '_buildPlanetoidOrbit', 'setCleanView', '_applyCleanViewVisibility',
   '_syncHudOrbits', '_hudRefreshAllOrbits', '_hudRebuildPlanetoidOrbits', '_hudOrbitState', '_hudStylePlanetOrbit',
   '_hudStyleMoonRing', '_hudStylePlanetoidOrbit', '_hudRestylePlanetOrbits', '_hudRestyleMoonRings', '_hudRestylePlanetoidOrbits',
   '_hudRestyleOrbits'];
@@ -171,24 +170,28 @@ const SPLIT = () => {
 // ═══ O0 ══════════════════════════════════════════════════════════════════════
 header('O0  API i montaż');
 {
-  ok(['planetOrbitStyle', 'moonOrbitStyle', 'planetoidOrbitStyle', 'applyOrbitStyle', 'orbitPalette', 'hudOrbitSyncKey', 'isHudOrbitsOn']
-    .every((k) => typeof HOL?.[k] === 'function'), 'O0a SEDNO: `src/renderer/HudOrbitLogic.js` — style orbit, paleta, klucz synchronizacji, flaga');
-  ok(GAME_CONFIG.FEATURES.hudOrbits === true, `O0b SEDNO: \`FEATURES.hudOrbits\` = true (domyślnie ON po bramce H0; jest: ${GAME_CONFIG.FEATURES.hudOrbits})`);
-  ok(HOL?.isHudOrbitsOn?.({}) === false && HOL?.isHudOrbitsOn?.({ hudOrbits: 1 }) === false && HOL?.isHudOrbitsOn?.({ hudOrbits: true }) === true,
-    'O0c SEDNO: brak klucza = OFF, tylko `=== true` włącza');
+  ok(['planetOrbitStyle', 'moonOrbitStyle', 'planetoidOrbitStyle', 'applyOrbitStyle', 'orbitPalette', 'hudOrbitSyncKey']
+    .every((k) => typeof HOL?.[k] === 'function'), 'O0a SEDNO: `src/renderer/HudOrbitLogic.js` — style orbit, paleta, klucz synchronizacji');
+  const gcSrc = strip(readFileSync(new URL('../../config/GameConfig.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
+  ok(GAME_CONFIG.FEATURES.hudOrbits === undefined && gcSrc.length > 1000 && !/\bhudOrbits:\s*(true|false)/.test(gcSrc),
+    `O0b (B-Z): klucz \`FEATURES.hudOrbits\` usunięty z GameConfig (jest: ${GAME_CONFIG.FEATURES.hudOrbits})`);
+  ok(!!HOL && HOL.isHudOrbitsOn === undefined && !/isHudOrbitsOn|hudOrbitsOn\(/.test(TR),
+    'O0c (B-Z): predykat flagi usunięty — `isHudOrbitsOn` w module i `hudOrbitsOn` w rendererze');
   const loop = methodBody(TR, '\n  _startLoop() {');
   const phys = listenerText('physics:updated');
   ok(/this\._syncHudOrbits\(\);/.test(loop) && !/_syncHudOrbits/.test(phys) && !/_syncHudOrbits/.test(methodBody(TR, '\n  _syncPlanetMeshes(')),
     'O0d SEDNO: `_syncHudOrbits()` w pętli renderu (`_startLoop` — także w pauzie), nie w syncu fizyki');
-  ok(!!hudOrbitsSrc && /GAME_CONFIG\.FEATURES/.test(hudOrbitsSrc), 'O0e SEDNO: `hudOrbitsOn` czyta flagę FUNKCJĄ z `GAME_CONFIG.FEATURES` (przestawienie w konsoli działa)');
+  ok(!/_restoreOrbitDefaults|_showMoonOrbit|_hideAllMoonOrbits|_showPlanetoidOrbit|_hideAllPlanetoidOrbits|_rebuildPlanetoidOrbits\(/.test(TR)
+    && !/0x007852|0x005540|0x553322|0xffc832/.test(TR) && /_hudRebuildPlanetoidOrbits\(\) \{/.test(TR),
+    'O0e (B-Z): dawny styl orbit usunięty — metody ścieżki OFF i jej hexy (dom 0x007852, kolonia / życie 0x005540, niestabilna 0x553322, zaznaczona 0xffc832); przebudowa planetoid — `_hudRebuildPlanetoidOrbits`');
   const missing = METHODS.filter((m) => !COMPILED[m]);
-  ok(missing.length === 0, `O0f SEDNO: metody ścieżki ON wycięte ze źródła i skompilowane (brak: ${missing.join(', ') || '—'})`);
+  ok(missing.length === 0, `O0f SEDNO: metody stylu orbit wycięte ze źródła i skompilowane (brak: ${missing.join(', ') || '—'})`);
 }
 
 // ═══ O1 ══════════════════════════════════════════════════════════════════════
-header('O1  kolory — ON z tokenów, OFF dzisiejsze hexy');
+header('O1  kolory z tokenów');
 {
-  setWorld(); FLAGS.hudOrbits = true; SPLIT();
+  setWorld(); SPLIT();
   const r = mkR({ filter: 'all' });
   select(r, SEL);
   const want = { line: tokInt(THEME.orbitLine), colony: tokInt(THEME.orbitColony), primary: tokInt(THEME.accent), alert: tokInt(HP?.resolveHudRoles?.()?.alert) };
@@ -215,45 +218,23 @@ header('O1  kolory — ON z tokenów, OFF dzisiejsze hexy');
       && ln(r5, 'p_unst')?.material.color.getHex() === tokInt(roles?.alert) && ln(r5, 'm1')?.material.color.getHex() === tokInt(THEME.orbitLine);
     ok(okc, `O1i SEDNO: ${id} — dom ${hx(ln(r5, 'p_home')?.material.color.getHex())} · zwykła ${hx(ln(r5, 'p_plain')?.material.color.getHex())} · niestabilna ${hx(ln(r5, 'p_unst')?.material.color.getHex())} (${roles?.alertSource})`);
   }
-  // OFF — dzisiejszy kod co do bitu
-  FLAGS.hudOrbits = false; SPLIT();
-  const o = mkR({ filter: 'all' });
-  select(o, SEL);
-  const oc = (id) => ln(o, id)?.material.color.getHex();
-  ok(oc('p_plain') === 0x003828 && oc('p_life') === 0x005540 && oc('p_home') === 0x007852,
-    `O1j KONTROLA: OFF — zwykła 0x003828, życie 0x005540, dom 0x007852 (jest: ${hx(oc('p_plain'))}, ${hx(oc('p_life'))}, ${hx(oc('p_home'))})`);
-  ok(oc('p_unst') === 0x553322 && oc('p_sel') === 0xffc832 && oc('m1') === 0x445566 && oc('pd1') === 0x554433,
-    `O1k KONTROLA: OFF — niestabilna 0x553322, zaznaczona 0xffc832, księżyc 0x445566, planetoida 0x554433`);
-  o._orbitFilter = 'planetoids'; o._applyOrbitFilter?.();
-  ok(oc('p_home') === 0x007852 && oc('p_col') === 0x005540, `O1l KONTROLA: OFF — \`_restoreOrbitDefaults\`: dom 0x007852, kolonia 0x005540`);
-  FLAGS.hudOrbits = true;
 }
 
 // ═══ O2 ══════════════════════════════════════════════════════════════════════
-header('O2  krycie × 0,8; tabela bazowa = krycia ścieżki OFF');
+header('O2  krycie × 0,8; tabela bazowa = krycia sprzed H0');
 {
   const B = HOL?.ORBIT_BASE_OPACITY ?? {};
-  // Tabela bazowa = to, co NAPRAWDĘ daje ścieżka OFF (wykonanie, nie regex)
-  setWorld(); FLAGS.hudOrbits = false; applyPreset(PRESET_THEMES.ambient_1);
-  const o = mkR({ filter: 'all' });
-  const off = { home: st(ln(o, 'p_home')).o, plain: st(ln(o, 'p_plain')).o, col: NaN };
-  o._orbitFilter = 'planetoids'; o._applyOrbitFilter?.(); off.col = st(ln(o, 'p_col')).o;
-  o._orbitFilter = 'all'; o._applyOrbitFilter?.();
-  off.moon = st(ln(o, 'm1')).o; off.pd = st(ln(o, 'pd1')).o;
-  select(o, SEL); off.sel = st(ln(o, 'p_sel')).o;
-  select(o, MOONS[0]); off.moonSel = st(ln(o, 'm1')).o;
-  select(o, PDS[0]); off.pdSel = st(ln(o, 'pd1')).o;
-  o['on:planet:hover']?.({ entityId: 'p_plain' }); off.hover = st(ln(o, 'p_plain')).o;
-  o['on:planet:hover']?.({ entityId: 'pd2' }); off.pdHover = st(ln(o, 'pd2')).o;
-  const pairs = [['planetHome', off.home], ['planetColony', off.col], ['planetFilter', off.plain], ['planetSelected', off.sel],
-    ['planetHover', off.hover], ['moonFilter', off.moon], ['moonSelected', off.moonSel], ['planetoidFilter', off.pd],
-    ['planetoidSelected', off.pdSel], ['planetoidHover', off.pdHover]];
+  // Krycia sprzed H0 — do B-Z mierzone WYKONANIEM dawnej ścieżki OFF (pin O2a zielony na `fabb4b2`); ścieżka usunięta w B-Z.
+  const exp = { home: 0.15, col: 0.10, plain: 0.08, unst: 0.10, moon: 0.15, pd: 0.12, sel: 0.7, moonSel: 0.30, pdSel: 0.35, hover: 0.5, pdHover: 0.20 };
+  const pairs = [['planetHome', exp.home], ['planetColony', exp.col], ['planetFilter', exp.plain], ['planetSelected', exp.sel],
+    ['planetHover', exp.hover], ['moonFilter', exp.moon], ['moonSelected', exp.moonSel], ['planetoidFilter', exp.pd],
+    ['planetoidSelected', exp.pdSel], ['planetoidHover', exp.pdHover]];
   const bad = pairs.filter(([k, v]) => !near(B[k], v));
   ok(Object.keys(B).length === 10 && bad.length === 0,
-    `O2a SEDNO: ORBIT_BASE_OPACITY = krycia ścieżki OFF (${pairs.map(([k, v]) => `${k} ${v}`).join(' · ')}${bad.length ? ' — RÓŻNE: ' + bad.map((b) => b[0]).join(', ') : ''})`);
+    `O2a: ORBIT_BASE_OPACITY = krycia sprzed H0 (${pairs.map(([k, v]) => `${k} ${v}`).join(' · ')}${bad.length ? ' — RÓŻNE: ' + bad.map((b) => b[0]).join(', ') : ''})`);
   ok(HOL?.HUD_ORBIT_OPACITY_MULT === 0.8, 'O2b SEDNO: mnożnik krycia 0,8 (D-HUD-7)');
-  // ON — krycie × 0,8 na żywych metodach
-  FLAGS.hudOrbits = true; SPLIT();
+  // Krycie × 0,8 na żywych metodach
+  SPLIT();
   const r = mkR({ filter: 'all' });
   const on = { home: st(ln(r, 'p_home')).o, col: st(ln(r, 'p_col')).o, plain: st(ln(r, 'p_plain')).o, unst: st(ln(r, 'p_unst')).o,
     moon: st(ln(r, 'm1')).o, pd: st(ln(r, 'pd1')).o };
@@ -262,15 +243,14 @@ header('O2  krycie × 0,8; tabela bazowa = krycia ścieżki OFF');
   select(r, PDS[0]); on.pdSel = st(ln(r, 'pd1')).o;
   r['on:planet:hover']?.({ entityId: 'p_plain' }); on.hover = st(ln(r, 'p_plain')).o;
   r['on:planet:hover']?.({ entityId: 'pd2' }); on.pdHover = st(ln(r, 'pd2')).o;
-  const exp = { home: 0.15, col: 0.10, plain: 0.08, unst: 0.10, moon: 0.15, pd: 0.12, sel: 0.7, moonSel: 0.30, pdSel: 0.35, hover: 0.5, pdHover: 0.20 };
   const wrong = Object.entries(exp).filter(([k, v]) => !near(on[k], v * 0.8));
-  ok(wrong.length === 0, `O2c SEDNO: ON — krycie × 0,8: ${Object.entries(on).map(([k, v]) => `${k} ${+v.toFixed(4)}`).join(' · ')}${wrong.length ? ' — ZŁE: ' + wrong.map((w) => w[0]).join(', ') : ''}`);
+  ok(wrong.length === 0, `O2c SEDNO: krycie × 0,8: ${Object.entries(on).map(([k, v]) => `${k} ${+v.toFixed(4)}`).join(' · ')}${wrong.length ? ' — ZŁE: ' + wrong.map((w) => w[0]).join(', ') : ''}`);
 }
 
 // ═══ O3 ══════════════════════════════════════════════════════════════════════
-header('O3  przebudowa: epoka motywu (F7), flaga ON ↔ OFF — bez biegu gry');
+header('O3  przebudowa: epoka motywu (F7) — bez biegu gry');
 {
-  setWorld(); FLAGS.hudOrbits = true; applyPreset(PRESET_THEMES.ambient_2);
+  setWorld(); applyPreset(PRESET_THEMES.ambient_2);
   const r = mkR({ filter: 'all' });
   select(r, MOONS[0]);
   r._syncHudOrbits?.();                                  // klatka 1 — klucz ustawiony
@@ -286,23 +266,11 @@ header('O3  przebudowa: epoka motywu (F7), flaga ON ↔ OFF — bez biegu gry');
     `O3b SEDNO: zmiana motywu → przebudowa w następnej klatce (${hx(first?.c)} → ${hx(st(ln(r, 'p_plain'))?.c)}; przebudowy: ${rebuilds})`);
   ok(st(ln(r, 'm1'))?.c === tokInt(THEME.accent) && near(st(ln(r, 'm1'))?.o, 0.24),
     'O3c SEDNO: zaznaczony księżyc po przebudowie — nadal `primary` 0,24 (zaznaczenie przeżywa przebudowę)');
-  const preOff = { m1: st(ln(r, 'm1'))?.c, pd1: st(ln(r, 'pd1'))?.o };   // świadek: przed przejściem ON → OFF stan ON
-  FLAGS.hudOrbits = false;                               // ON → OFF w konsoli
+  applyPreset(PRESET_THEMES.ambient_3);                  // druga zmiana motywu
   r._syncHudOrbits?.();
-  ok(rebuilds === 2 && st(ln(r, 'p_plain'))?.c === 0x003828 && near(st(ln(r, 'p_plain'))?.o, 0.08)
-    && st(ln(r, 'p_home'))?.c === 0x007852 && near(st(ln(r, 'p_home'))?.o, 0.15),
-    `O3d SEDNO: ON → OFF — dzisiejsze hexy i krycia (zwykła ${hx(st(ln(r, 'p_plain'))?.c)} ${st(ln(r, 'p_plain'))?.o}, dom ${hx(st(ln(r, 'p_home'))?.c)} ${st(ln(r, 'p_home'))?.o})`);
-  ok(preOff.m1 === tokInt(PRESET_THEMES.neon_cyber.accent) && near(preOff.pd1, 0.096)
-    && st(ln(r, 'm1'))?.c === 0x445566 && near(st(ln(r, 'm1'))?.o, 0.30) && st(ln(r, 'm2'))?.c === 0x445566 && near(st(ln(r, 'm2'))?.o, 0.15)
-    && st(ln(r, 'pd1'))?.c === 0x554433 && near(st(ln(r, 'pd1'))?.o, 0.12),
-    `O3e SEDNO: ON → OFF — pierścienie z ${hx(preOff.m1)} wracają do 0x445566 (zaznaczony 0,30, drugi 0,15), planetoida z ${preOff.pd1} do 0x554433 0,12 — jak dzisiejszy kod po zaznaczeniu`);
-  applyPreset(PRESET_THEMES.ambient_3);                  // OFF + zmiana motywu
-  r._syncHudOrbits?.();
-  ok(rebuilds === 2 && st(ln(r, 'p_plain'))?.c === 0x003828, `O3f SEDNO: OFF + zmiana motywu — bez przebudowy (ścieżka OFF bez pracy; przebudowy: ${rebuilds})`);
-  FLAGS.hudOrbits = true;                                // OFF → ON
-  r._syncHudOrbits?.();
-  ok(rebuilds === 3 && st(ln(r, 'p_plain'))?.c === tokInt(THEME.orbitLine) && st(ln(r, 'm1'))?.c === tokInt(THEME.accent),
-    `O3g SEDNO: OFF → ON — kolory z motywu bez biegu gry (${hx(st(ln(r, 'p_plain'))?.c)})`);
+  ok(rebuilds === 2 && st(ln(r, 'p_plain'))?.c === tokInt(THEME.orbitLine) && tokInt(THEME.orbitLine) !== tokInt(PRESET_THEMES.neon_cyber.orbitLine)
+    && st(ln(r, 'm1'))?.c === tokInt(THEME.accent) && near(st(ln(r, 'm1'))?.o, 0.24),
+    `O3d: druga zmiana motywu — druga przebudowa, kolory z nowego motywu, zaznaczony księżyc nadal \`primary\` 0,24 (${hx(st(ln(r, 'p_plain'))?.c)}; przebudowy: ${rebuilds})`);
   const ep = epoch(); applyTheme({ accent: THEME.accent });
   ok(epoch() === ep + 1, 'O3h SEDNO: `applyTheme` podbija epokę (wejście O3b)');
 }
@@ -311,24 +279,19 @@ header('O3  przebudowa: epoka motywu (F7), flaga ON ↔ OFF — bez biegu gry');
 header('O4  510 — orbita domu i kolonii po wczytaniu zapisu, bez ticku');
 {
   // Scena budowana PRZED odtworzeniem kolonii i domu (GameScene: initSystem → … → colonyManager.restore → setTimeout(dom)).
-  for (const on of [true, false]) {
-    FLAGS.hudOrbits = on; applyPreset(PRESET_THEMES.ambient_1);
+  {
+    applyPreset(PRESET_THEMES.ambient_1);
     setWorld({ home: null, colMgr: null });
     const r = mkR({ filter: 'planetoids' });
     const before = { home: ln(r, 'p_home')?.visible, col: ln(r, 'p_col')?.visible };
     setWorld();                                           // odtworzenie: kolonie + dom (bez ticku, bez `_syncPlanetMeshes`)
     r._syncHudOrbits?.();                                 // klatka pętli renderu (pauza: pętla działa, fizyka stoi)
     const after = { home: ln(r, 'p_home')?.visible, col: ln(r, 'p_col')?.visible, homeC: ln(r, 'p_home')?.material.color.getHex() };
-    if (on) {
-      ok(before.home === false && before.col === false, `O4a KONTROLA: przed odtworzeniem orbita domu i kolonii ukryta (stan sceny po wczytaniu)`);
-      ok(after.home === true && after.col === true && after.homeC === tokInt(THEME.orbitColony),
-        `O4b SEDNO: ON — po odtworzeniu, BEZ ticku: dom i kolonia widoczne, kolor \`orbitColony\` (${hx(after.homeC)})`);
-    } else {
-      ok(before.home === false && after.home === false && after.col === false,
-        'O4c KONTROLA: OFF — jak dziś: orbita domu i kolonii ukryta do pierwszej przebudowy (510 przy OFF zostaje)');
-    }
+    ok(before.home === false && before.col === false, `O4a KONTROLA: przed odtworzeniem orbita domu i kolonii ukryta (stan sceny po wczytaniu)`);
+    ok(after.home === true && after.col === true && after.homeC === tokInt(THEME.orbitColony),
+      `O4b SEDNO: po odtworzeniu, BEZ ticku: dom i kolonia widoczne, kolor \`orbitColony\` (${hx(after.homeC)})`);
   }
-  setWorld(); FLAGS.hudOrbits = true;
+  setWorld();
   // Dom ustawiony PÓŹNIEJ niż pierwsza klatka (kolejność zegara przeglądarki) — klucz zawiera id domu.
   applyPreset(PRESET_THEMES.ambient_2);
   setWorld({ home: null });
@@ -347,7 +310,7 @@ header('O5  511 + 3b — filtr „Żadne”: wyłącznie orbita zaznaczonego cia
   // D-HUD-7 uzupełnienie 3b (decyzja właściciela 2026-10-22): przy „Żadne” zostaje orbita ZAZNACZONEGO ciała — planety,
   // pierścień księżyca, orbita planetoidy (`primary`, krycie zaznaczonej × 0,8); reszta ukryta, także dom, kolonie
   // i najechana (511). Piny „tylko zaznaczona” niosą ŚWIADKA — linia widoczna jest TĄ zaznaczoną (pusta lista nie zdaje).
-  setWorld(); FLAGS.hudOrbits = true; applyPreset(PRESET_THEMES.ambient_3);
+  setWorld(); applyPreset(PRESET_THEMES.ambient_3);
   const r = mkR({ filter: 'all' });
   const vis = () => allOrbitLines(r).filter((l) => l?.visible);
   const only = (id) => { const v = vis(); return v.length === 1 && v[0] === ln(r, id); };
@@ -356,23 +319,16 @@ header('O5  511 + 3b — filtr „Żadne”: wyłącznie orbita zaznaczonego cia
   r['on:orbits:filterChanged']?.({ mode: 'none' });
   const after = visibleCount(r), s5 = st(ln(r, 'p_sel'));
   ok(before === allOrbitLines(r).length && before >= 10 && only('p_sel') && s5?.c === tokInt(THEME.accent) && near(s5?.o, 0.56),
-    `O5a SEDNO: ON — „Żadne” przy zaznaczonej planecie: ${before} → ${after} widocznych — wyłącznie zaznaczona, \`primary\` 0,56 (${hx(s5?.c)} ${s5?.o}); dom, kolonia i reszta ukryte`);
+    `O5a SEDNO: „Żadne” przy zaznaczonej planecie: ${before} → ${after} widocznych — wyłącznie zaznaczona, \`primary\` 0,56 (${hx(s5?.c)} ${s5?.o}); dom, kolonia i reszta ukryte`);
   r['on:planet:hover']?.({ entityId: 'p_plain' });
   const hovP = only('p_sel') && ln(r, 'p_plain')?.visible === false;
   r['on:planet:hover']?.({ entityId: 'pd2' });
   const hovPd = only('p_sel') && ln(r, 'pd2')?.visible === false;
-  ok(hovP && hovPd, `O5b SEDNO: ON — „Żadne” + najechanie (planeta, planetoida): najechana bez orbity, widoczna nadal wyłącznie zaznaczona (${hovP}, ${hovPd})`);
+  ok(hovP && hovPd, `O5b SEDNO: „Żadne” + najechanie (planeta, planetoida): najechana bez orbity, widoczna nadal wyłącznie zaznaczona (${hovP}, ${hovPd})`);
   r['on:planet:hover']?.({ entityId: null });
   r['on:orbits:filterChanged']?.({ mode: 'planetoids' });
   ok(ln(r, 'p_home')?.visible === true && ln(r, 'p_col')?.visible === true && ln(r, 'pd1')?.visible === true && ln(r, 'p_plain')?.visible === false,
     'O5c KONTROLA: kursor zjechał, powrót do „Planetoidy” — dom, kolonia i planetoidy widoczne, zwykła planeta nie (jak dziś)');
-  FLAGS.hudOrbits = false;
-  const o = mkR({ filter: 'all' });
-  o['on:orbits:filterChanged']?.({ mode: 'none' });
-  const offVis = allOrbitLines(o).filter((l) => l.visible);
-  ok(offVis.length === 2 && ln(o, 'p_home').visible && ln(o, 'p_col').visible,
-    `O5d KONTROLA: OFF — jak dziś: przy „Żadne” zostają dom i kolonia (${offVis.length})`);
-  FLAGS.hudOrbits = true;
   // Zaznaczenie przeskakuje: planeta → księżyc → planetoida (poprzednia orbita znika).
   r['on:orbits:filterChanged']?.({ mode: 'none' });
   select(r, MOONS[0]);
@@ -380,10 +336,10 @@ header('O5  511 + 3b — filtr „Żadne”: wyłącznie orbita zaznaczonego cia
   select(r, PDS[0]);
   const pOnly = only('pd1'), ps = st(ln(r, 'pd1'));
   ok(mOnly && ms?.c === tokInt(THEME.accent) && near(ms?.o, 0.24) && pOnly && ps?.c === tokInt(THEME.accent) && near(ps?.o, 0.28),
-    `O5e SEDNO: ON — „Żadne”: zaznaczenie przeskakuje — pierścień księżyca \`primary\` 0,24 (${mOnly}), potem orbita planetoidy \`primary\` 0,28 (${pOnly}); poprzednia znika`);
+    `O5e SEDNO: „Żadne”: zaznaczenie przeskakuje — pierścień księżyca \`primary\` 0,24 (${mOnly}), potem orbita planetoidy \`primary\` 0,28 (${pOnly}); poprzednia znika`);
   const preDesel = vis().length;                                   // świadek: 1 — zaznaczona planetoida
   r['on:body:deselected']?.();
-  ok(preDesel === 1 && visibleCount(r) === 0, `O5f SEDNO: ON — „Żadne” + odznaczenie: ${preDesel} → ${visibleCount(r)} — orbita zaznaczonego ciała znika`);
+  ok(preDesel === 1 && visibleCount(r) === 0, `O5f SEDNO: „Żadne” + odznaczenie: ${preDesel} → ${visibleCount(r)} — orbita zaznaczonego ciała znika`);
   // SHIFT przy „Żadne”: czysty widok chowa także zaznaczoną — również po restylu w trakcie (najechanie); po puszczeniu wraca.
   select(r, SEL);
   const preShift = vis().length;
@@ -392,16 +348,9 @@ header('O5  511 + 3b — filtr „Żadne”: wyłącznie orbita zaznaczonego cia
   const during = visibleCount(r);
   r['on:planet:hover']?.({ entityId: null });
   ok(r._cleanView === true && during === 0,
-    `O5g STRAŻNIK: ON — „Żadne” + SHIFT: czysty widok chowa także orbitę zaznaczonego ciała, również po restylu w trakcie (${during})`);
+    `O5g STRAŻNIK: „Żadne” + SHIFT: czysty widok chowa także orbitę zaznaczonego ciała, również po restylu w trakcie (${during})`);
   r.setCleanView?.(false);
-  ok(preShift === 1 && only('p_sel'), `O5h SEDNO: ON — „Żadne” po puszczeniu SHIFT: wraca wyłącznie orbita zaznaczonej (${preShift} → ${during} → ${vis().length})`);
-  // OFF — jak dziś: zaznaczenie przy „Żadne” pokazuje zaznaczoną (złotą) obok domu i kolonii.
-  FLAGS.hudOrbits = false;
-  select(o, SEL);
-  const offSel = allOrbitLines(o).filter((l) => l.visible), os = st(ln(o, 'p_sel'));
-  ok(offSel.length === 3 && os?.v === true && os?.c === 0xffc832 && near(os?.o, 0.7) && ln(o, 'p_home').visible && ln(o, 'p_col').visible,
-    `O5i KONTROLA: OFF — jak dziś: zaznaczenie przy „Żadne” — zaznaczona ${hx(os?.c)} ${os?.o} + dom + kolonia (${offSel.length})`);
-  FLAGS.hudOrbits = true;
+  ok(preShift === 1 && only('p_sel'), `O5h SEDNO: „Żadne” po puszczeniu SHIFT: wraca wyłącznie orbita zaznaczonej (${preShift} → ${during} → ${vis().length})`);
 }
 
 // ═══ O6 ══════════════════════════════════════════════════════════════════════
@@ -413,46 +362,36 @@ header('O6  SHIFT (czysty widok) — po wyjściu widoczność z preferencji');
   // ZMIERZONE w prawdziwej grze (sonda `probe_shift_running_h0.mjs`: Shift 6 s przy biegnącej grze, dwa okresowe
   // odświeżenia w czystym widoku): kod sprzed H0 — orbity planetoid 18/18 → 0/18 po puszczeniu i 0/18 po kolejnych 7 s
   // (`_rebuildPlanetoidOrbits` kopiuje widoczność ze starych, ukrytych linii); kod H0 przy ON — 18/18 i 18/18.
-  for (const on of [true, false]) {
-    for (const frame of [false, true]) {
-      setWorld(); FLAGS.hudOrbits = on; applyPreset(PRESET_THEMES.ambient_2);
-      const r = mkR({ filter: 'planetoids' });
-      r._syncHudOrbits?.();
-      const pre = allOrbitLines(r).map((l) => l.visible);
-      r.setCleanView?.(true);
-      const hiddenAll = visibleCount(r) === 0;
-      r._rebuildAllOrbits?.();                              // przebudowa w trakcie SHIFT (co 180 klatek w biegu / epoka)
-      r._rebuildPlanetoidOrbits?.();
-      const duringVis = visibleCount(r);
-      if (frame) r._applyCleanViewVisibility?.(true);      // klatka renderu przy czystym widoku (jak `_startLoop`)
-      r.setCleanView?.(false);
-      const post = allOrbitLines(r).map((l) => l.visible);
-      const same = pre.length === post.length && pre.every((v, i) => v === post[i]);
-      const homeVis = ln(r, 'p_home')?.visible === true;
-      if (on && !frame) {
-        ok(hiddenAll && duringVis === 0, `O6a SEDNO: ON — w czystym widoku orbity ukryte, także zaraz po przebudowie, przed klatką renderu (${duringVis})`);
-        ok(same && ln(r, 'p_plain')?.visible === false, `O6b SEDNO: ON — puszczenie Shift w oknie jednej klatki po przebudowie: widoczność z filtra „Planetoidy” (zwykła planeta ukryta; zgodne z przed SHIFT: ${same})`);
-      } else if (on && frame) {
-        const pdVis = [...r._planetoidOrbits.values()].filter((l) => l.visible).length;
-        ok(hiddenAll && same && homeVis && pdVis === r._planetoidOrbits.size && pdVis > 0 && ln(r, 'p_plain')?.visible === false,
-          `O6d SEDNO: ON — przebudowa planet i planetoid w trakcie SHIFT + klatka renderu (jak w grze): po wyjściu widoczność z filtra — orbity planetoid wracają ${pdVis}/${r._planetoidOrbits.size}, dom wraca (zgodne z przed SHIFT: ${same})`);
-      } else if (!on && !frame) {
-        ok(hiddenAll && ln(r, 'p_plain')?.visible === true,
-          'O6c KONTROLA: OFF — utajony wyścig sprzed H0: puszczenie Shift w oknie jednej klatki po przebudowie odsłania orbitę zwykłej planety mimo filtra');
-      } else {
-        const pdVis = [...r._planetoidOrbits.values()].filter((l) => l.visible).length;
-        ok(hiddenAll && homeVis && ln(r, 'p_plain')?.visible === false && r._planetoidOrbits.size > 0 && pdVis === 0,
-          `O6e KONTROLA: OFF — jak dziś w grze: przebudowa planetoid w trakcie SHIFT + klatka renderu → po wyjściu orbity planetoid UKRYTE ${pdVis}/${r._planetoidOrbits.size} (kopia widoczności z ukrytych linii; orbita domu wraca)`);
-      }
+  for (const frame of [false, true]) {
+    setWorld(); applyPreset(PRESET_THEMES.ambient_2);
+    const r = mkR({ filter: 'planetoids' });
+    r._syncHudOrbits?.();
+    const pre = allOrbitLines(r).map((l) => l.visible);
+    r.setCleanView?.(true);
+    const hiddenAll = visibleCount(r) === 0;
+    r._rebuildAllOrbits?.();                              // przebudowa w trakcie SHIFT (co 180 klatek w biegu / epoka)
+    r._hudRebuildPlanetoidOrbits?.();
+    const duringVis = visibleCount(r);
+    if (frame) r._applyCleanViewVisibility?.(true);      // klatka renderu przy czystym widoku (jak `_startLoop`)
+    r.setCleanView?.(false);
+    const post = allOrbitLines(r).map((l) => l.visible);
+    const same = pre.length === post.length && pre.every((v, i) => v === post[i]);
+    const homeVis = ln(r, 'p_home')?.visible === true;
+    if (!frame) {
+      ok(hiddenAll && duringVis === 0, `O6a SEDNO: w czystym widoku orbity ukryte, także zaraz po przebudowie, przed klatką renderu (${duringVis})`);
+      ok(same && ln(r, 'p_plain')?.visible === false, `O6b SEDNO: puszczenie Shift w oknie jednej klatki po przebudowie: widoczność z filtra „Planetoidy” (zwykła planeta ukryta; zgodne z przed SHIFT: ${same})`);
+    } else {
+      const pdVis = [...r._planetoidOrbits.values()].filter((l) => l.visible).length;
+      ok(hiddenAll && same && homeVis && pdVis === r._planetoidOrbits.size && pdVis > 0 && ln(r, 'p_plain')?.visible === false,
+        `O6d SEDNO: przebudowa planet i planetoid w trakcie SHIFT + klatka renderu (jak w grze): po wyjściu widoczność z filtra — orbity planetoid wracają ${pdVis}/${r._planetoidOrbits.size}, dom wraca (zgodne z przed SHIFT: ${same})`);
     }
   }
-  FLAGS.hudOrbits = true;
 }
 
 // ═══ O7 ══════════════════════════════════════════════════════════════════════
 header('O7  najechanie');
 {
-  setWorld(); FLAGS.hudOrbits = true; SPLIT();
+  setWorld(); SPLIT();
   const r = mkR({ filter: 'planetoids' });
   r['on:planet:hover']?.({ entityId: 'p_plain' });
   const h = st(ln(r, 'p_plain'));
@@ -469,14 +408,14 @@ header('O7  najechanie');
 header('O8  klucz synchronizacji i zasoby');
 {
   const k = HOL?.hudOrbitSyncKey;
-  ok(k?.({}, 3, 'p') === null && k?.({ hudOrbits: true }, 3, 'p') === '3|p' && k?.({ hudOrbits: true }, 4, 'p') !== k?.({ hudOrbits: true }, 3, 'p')
-    && k?.({ hudOrbits: true }, 3, null) !== k?.({ hudOrbits: true }, 3, 'p'), 'O8a SEDNO: klucz — null przy OFF; zmienia się z epoką i domem');
-  setWorld(); FLAGS.hudOrbits = true;
+  ok(k?.length === 2 && k?.(3, 'p') === '3|p' && k?.(4, 'p') !== k?.(3, 'p') && k?.(3, null) !== k?.(3, 'p') && typeof k?.(0, null) === 'string',
+    'O8a (B-Z): klucz — epoka motywu + dom, zmienia się z każdym z nich; bez flagi — zawsze napis, nigdy null');
+  setWorld();
   const r = mkR({ filter: 'all' });
   const old = [...r._planetoidOrbits.values()];
-  r._rebuildPlanetoidOrbits?.();
+  r._hudRebuildPlanetoidOrbits?.();
   ok(old.length === 2 && old.every((l) => l.geometry.disposed && l.material.disposed && !r.scene.objs.has(l)) && r._planetoidOrbits.size === 2,
-    'O8b STRAŻNIK: przebudowa planetoid zwalnia geometrię i materiał starych linii, zdejmuje je ze sceny (przy ON jak dziś)');
+    'O8b STRAŻNIK: przebudowa planetoid (`_hudRebuildPlanetoidOrbits`) zwalnia geometrię i materiał starych linii, zdejmuje je ze sceny');
   // Pamięć palety po WARTOŚCIACH tokenów: zmiana jednego tokenu (pole koloru w F7 — bez epoki) widoczna w następnym wywołaniu.
   applyPreset(PRESET_THEMES.ambient_1);
   const p1 = HOL?.orbitPalette?.();
@@ -488,6 +427,5 @@ header('O8  klucz synchronizacji i zasoby');
 }
 
 applyPreset(PRESET_THEMES.default);
-FLAGS.hudOrbits = true;
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

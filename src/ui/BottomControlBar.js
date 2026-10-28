@@ -18,15 +18,13 @@
 // `STAR_FLOOR_MULT` × promień rdzenia — poprawka 501) – `maxDist`; gałka co klatkę z
 // `_targetDist` (kółko i auto-zoom fokusu ją przesuwają), zapis wyłącznie `setTargetDist` (cel kamery nietknięty);
 // przeciąganie przez `UIManager.handleMouseDown/Move/Up`, kółko nad suwakiem — ten sam krok co nad mapą (`wheelZoom`).
-// CHIPY WARSTW (ARKUSZ HUD paczka B, B-3 — D-HUD-13, D-HUD-14; flaga `hudAttention`): nad mapą, od lewego końca pasa (miejsce
+// CHIPY WARSTW (ARKUSZ HUD paczka B, B-3 — D-HUD-13, D-HUD-14): nad mapą, od lewego końca pasa (miejsce
 // dawnego rzędu doku): [R] [T] [E] [O] (EN [S] [R] [L] [O]) w idiomie chipów T5 — włączony w roli `primary`, wyłączony w roli
 // `dim` (przekreślony albo bez nawiasów — `HUD_CHIPS.CHIP_OFF_STYLE`); klik przełącza warstwę (`uiPrefs.hudLayers`), podpowiedź
 // z klawiszem (6–9); pod overlayem — brak (jak suwak). Zegar, suwak, 🔔, ☰ i czip ⚔ — w tych samych px co bez chipów.
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';   // paczka B — flaga `hudAttention` (chipy warstw)
 import { resolveHudRoles } from './HudPalette.js';
-import { isHudAttentionOn } from './HudAttentionLogic.js';
 import {
   HUD_CHIPS, HUD_LAYER_KEYS, HUD_LAYER_KEY_LABEL, readHudLayers, toggleHudLayer, chipText, chipWidth, layoutLayerChips, chipAt,
 } from './HudLayerChipsLogic.js';
@@ -266,9 +264,9 @@ export class BottomControlBar {
     }
 
     // Paczka B — chipy warstw od lewego końca pasa (miejsce dawnego rzędu doku), do klastra po prawej (czip ⚔, suwak, 🔔);
-    // tylko nad mapą i przy fladze `hudAttention`. Rysowane PO klastrze — klaster liczony bez nich (te same px).
+    // tylko nad mapą. Rysowane PO klastrze — klaster liczony bez nich (te same px).
     this._layerChips = [];
-    if (mapMode && isHudAttentionOn(GAME_CONFIG.FEATURES)) {
+    if (mapMode) {
       this._drawLayerChips(ctx, bgLeft, stripTop, this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x);
     }
 

@@ -13,8 +13,10 @@
 //      kolumna i obszar mapy kończą się na tej samej linii (`outlinerBottomInset` = `insets.bottom`); Generator bez zmian
 //   (M2 — obszar karty ciała `BottomContext._bounds` — usunięty w REFORMIE ZAKŁADEK T4 razem z kartą)
 //   M3 `edgeIndicators` (wykonanie): kadr = prostokąt `opts.rect`; bez niego — cały ekran jak dotąd
-//   M4 `MapLabelLayer.drawVesselLabels` (wykonanie): statek pod lewą kolumną i statek pod pasem dolnym → strzałki przy
-//      krawędzi OBSZARU MAPY (494); lewy schowany → ten sam statek w kadrze (KONTROLA)
+//   M4 strzałki krawędzi warstwy etykiet HUD (B-Z; dawniej `MapLabelLayer.drawVesselLabels`): obszar mapy warstwy
+//      (`F.mapRect`) z `MapInsets.getMapInsets`, kadr strzałek = ten obszar (piny źródłowe); wykonanie na tym samym
+//      prostokącie: statek pod lewą kolumną i pod pasem dolnym → strzałki przy krawędzi OBSZARU MAPY (494); lewy schowany
+//      → ten sam statek w kadrze (KONTROLA)
 //   M5 Dok taktyczny: prześwit z `MapInsets.BOTTOM_STRIP_H` (pin źródłowy) — liczby bez zmian (wykonanie, KONTROLA)
 //   M6 `LayoutConfig` bez `TACTICAL_DOCK_CLOCK_CLEARANCE`
 //   M7 Dowództwo: `TIME_STRIP_H = BOTTOM_STRIP_H` (pin źródłowy)
@@ -24,6 +26,9 @@
 //   (M10 — źródło karty ciała — usunięty w REFORMIE ZAKŁADEK T4 razem z kartą)
 // ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): karta ciała (`BottomContext`) usunięta —
 //   M2 i M10 usunięte; pozostali konsumenci `MapInsets` (strzałki, Dok, Dowództwo, kadr „Obserwuj”) — bez zmian.
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — plakietki `MapLabelLayer` usunięte): M4 — strzałki krawędzi rysuje warstwa
+//   etykiet HUD (`HudLabelLayer._edgeArrows`) w obszarze mapy warstwy (`F.mapRect` z `getMapInsets`); dawne wykonanie
+//   `drawVesselLabels` zastąpione pinami źródłowymi montażu i wykonaniem `edgeIndicators` na prostokącie z `getMapInsets`.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -92,51 +97,27 @@ header('M3  edgeIndicators — kadr strzałek = prostokąt obszaru mapy');
 }
 
 // ═══ M4 ══════════════════════════════════════════════════════════════════════
-header('M4  MapLabelLayer — statki pod kolumną / pod pasem dostają strzałkę przy krawędzi obszaru mapy');
+header('M4  strzałki krawędzi warstwy etykiet HUD (B-Z) — statki pod kolumną / pod pasem przy krawędzi obszaru mapy');
 {
-  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
-  const mk = (id) => ({ id, name: id, shipId: 'hull_frigate', systemId: 'sys_home', status: 'idle', mission: null,
-    position: { state: 'orbiting', x: 0, y: 0, dockedAt: null }, fuel: { current: 10, max: 10 }, modules: [] });
-  // v2 + v4 — klaster dwóch statków w kadrze (plakietka; bez niej warstwa kończy klatkę przed strzałkami — kandydat
-  // na finding, poza U4-2); v1 pod lewą kolumną, v3 na pasku nawigacji.
-  const vs = [mk('v1'), mk('v2'), mk('v3'), mk('v4')];
-  const POS = { v1: { x: 100, y: 300 }, v2: { x: 640, y: 300 }, v3: { x: 640, y: H - 30 }, v4: { x: 644, y: 300 } };
-  K.vesselManager = { getAllVessels: () => vs, getVessel: (id) => vs.find((v) => v.id === id) ?? null };
-  K.uiPrefs = {}; K.activeSystemId = 'sys_home';
-  const tr = { getVesselScreenPosition: (id) => POS[id] ?? null, getCameraDistance: () => 50 };
-  const recCtx = () => {
-    const moves = [];
-    return new Proxy({}, {
-      get(o, k) {
-        if (k === '_moves') return moves;
-        if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
-        if (k === 'moveTo') return (x, y) => { moves.push({ x, y }); };
-        if (k in o) return o[k];
-        return () => {};
-      },
-      set(o, k, v) { o[k] = v; return true; },
-    });
-  };
-  setWorld({ left: 150, right: 0 });
-  const layer = new MapLabelLayer();
-  const ctx = recCtx();
-  let threw = null; try { layer.drawVesselLabels(ctx, tr, W, H, 1); } catch (e) { threw = e; }
-  const off = (layer._lastOffscreenPoints ?? []).map((p) => p.id);
-  ok(!threw && !off.includes('v2') && layer._vesselHitZones.length >= 1,
-    `M4-0 KONTROLA: rysowanie bez wyjątku (${threw?.message ?? 'ok'}); klaster w obszarze mapy (v2 + v4) — plakietka, bez strzałki`);
-  ok(off.includes('v1'), `M4a SEDNO (Finding 494): statek pod lewą kolumną (x 100) — poza kadrem obszaru mapy (poza kadrem: ${JSON.stringify(off)})`);
-  ok(off.includes('v3'), 'M4b SEDNO: statek pod pasem dolnym / paskiem nawigacji — poza kadrem obszaru mapy');
+  let mll = null; try { mll = src('../../ui/MapLabelLayer.js'); } catch { mll = null; }
+  const hud = src('../../ui/HudLayer.js'), hl = src('../../ui/HudLabelLayer.js');
+  const ea = body(hl, '  _edgeArrows(offScreen, F, map) {');
+  ok(mll === null && /import \{ getMapInsets \} from '\.\/MapInsets\.js';/.test(hud)
+    && /get mapRect\(\) \{[\s\S]{0,120}?const ins = getMapInsets\(K\);[\s\S]{0,40}?mapMemo = \{ x: ins\.left, y: ins\.top, w: Math\.max\(0, this\.W - ins\.left - ins\.right\), h: Math\.max\(0, this\.H - ins\.top - ins\.bottom\) \}/.test(hud),
+    'M4-0: plakietek `MapLabelLayer` brak (B-Z); warstwa HUD liczy obszar mapy (`F.mapRect`) z `MapInsets.getMapInsets` — jedno źródło wcięć');
+  ok(/const ER = \{ x0: map\.x, y0: map\.y, x1: map\.x \+ map\.w, y1: map\.y \+ map\.h \};/.test(ea) && (ea.match(/\{ rect: ER \}/g) ?? []).length === 2,
+    'M4a SEDNO (Finding 494): strzałki krawędzi warstwy etykiet HUD — `edgeIndicators` z kadrem = obszar mapy (własne i obce)');
+  // Wykonanie na prostokącie z `getMapInsets` (jak `F.mapRect` warstwy): lewy outliner 150, pas dolny.
+  const mapRect = () => { const ins = MI.getMapInsets(K); return { x0: ins.left, y0: ins.top, x1: W - ins.right, y1: H - ins.bottom }; };
   const EM = MLL.EDGE_MARGIN;
-  const tipLeft = ctx._moves.some((p) => p.x === 150 + EM - 6 && p.y === 300);
-  const tipBottom = ctx._moves.some((p) => p.y === H - NAV - STRIP - EM + 6);
-  ok(tipLeft && tipBottom,
-    `M4c SEDNO: strzałki narysowane przy krawędziach obszaru mapy (lewa x ${150 + EM - 6}, dolna y ${H - NAV - STRIP - EM + 6}) — groty: ${JSON.stringify(ctx._moves)}`);
+  setWorld({ left: 150, right: 0 });
+  const pts = [{ x: 100, y: 300, tone: 'ok' }, { x: 640, y: H - 30, tone: 'ok' }, { x: 640, y: 300, tone: 'ok' }];
+  const arr = MLL.edgeIndicators(pts, W, H, { rect: mapRect() });
+  ok(arr.length === 2 && arr.some((a) => a.edge === 'left' && a.x === 150 + EM) && arr.some((a) => a.edge === 'bottom' && a.y === H - NAV - STRIP - EM),
+    `M4b SEDNO: statek pod lewą kolumną i pod pasem dolnym — strzałki przy krawędziach obszaru mapy (lewa x ${150 + EM}, dolna y ${H - NAV - STRIP - EM}); statek w kadrze — bez (${JSON.stringify(arr.map((a) => [a.edge, a.x, a.y]))})`);
   setWorld({ left: 0, right: 0 });
-  const layer2 = new MapLabelLayer();
-  layer2.drawVesselLabels(recCtx(), tr, W, H, 1);
-  const off2 = (layer2._lastOffscreenPoints ?? []).map((p) => p.id);
-  ok(!off2.includes('v1') && !off2.includes('v2'), `M4d KONTROLA: lewy outliner schowany — statek przy x 100 w kadrze (poza kadrem: ${JSON.stringify(off2)})`);
-  delete K.vesselManager;
+  const arr2 = MLL.edgeIndicators([pts[0]], W, H, { rect: mapRect() });
+  ok(arr2.length === 0, `M4c KONTROLA: lewy outliner schowany — statek przy x 100 w kadrze (strzałek: ${arr2.length})`);
 }
 
 // ═══ M5–M10 ══════════════════════════════════════════════════════════════════

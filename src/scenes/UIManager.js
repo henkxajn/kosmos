@@ -50,7 +50,6 @@ import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
 import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
-import { MapLabelLayer }       from '../ui/MapLabelLayer.js';
 import { TacticalModeController } from '../ui/TacticalModeController.js';
 import { TacticalDock }        from '../ui/TacticalDock.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
@@ -67,9 +66,9 @@ import { Outliner }       from '../ui/Outliner.js';
 import { LeftOutliner, applyOutlinerToggle } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2 — lewy outliner (układy i ciała)
 import { getMapInsets }   from '../ui/MapInsets.js';      // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 import { syncBodyCardOnSystemSwitch, syncStationPanelOnSystemSwitch, clickObject, vesselTarget } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U2-3 (486), U3-2 (491, Tab)
-import { isHudLabelsOn, ctrlLabelStyle } from '../ui/HudLabelLogic.js';   // ARKUSZ HUD paczka A (H2) — etykiety na warstwie HUD
+import { ctrlLabelStyle } from '../ui/HudLabelLogic.js';   // ARKUSZ HUD paczka A (H2) — etykiety CTRL w rolach
 import { resolveHudRoles } from '../ui/HudPalette.js';                    // … etykiety CTRL w rolach (D-HUD-16)
-import { isHudAttentionOn, bracketBox } from '../ui/HudAttentionLogic.js';   // ARKUSZ HUD paczka B — nawiasy statku na warstwie HUD
+import { bracketBox } from '../ui/HudAttentionLogic.js';   // ARKUSZ HUD paczka B — nawiasy statku na warstwie HUD
 import { objectScreenDisc } from '../ui/HudProjection.js';                 // … tarcza statku (ten sam rzut co nawiasy)
 import { shipPanelHiddenByDock, shipRowKeys, resolveRowAnchor, computeShipPanelPlacement,
          syncShipPanelOnSystemSwitch } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 — panel statku przy outlinerze
@@ -370,9 +369,6 @@ export class UIManager {
     window.KOSMOS.shipPanelHud = this._shipPanelHud;
     window.KOSMOS.fleetGroupPanel = this.fleetGroupPanel;
 
-    // S3.4 FAZA 5 — etykiety kolonii+stacji na mapie 3D (overlay 2D, Trasa A). Non-exclusive:
-    // rysowany w draw() nad WebGL (gate mapLabels && civMode && !isAnyOpen), klik stacji PRZED overlayManager.
-    this._mapLabelLayer = new MapLabelLayer();
     // Faza 2 (Obraz Operacyjny) — tryb taktyczny Y; rejestr w KOSMOS (GameScene
     // keydown + warstwy czytają isActive).
     this._tacticalMode = new TacticalModeController();
@@ -914,15 +910,15 @@ export class UIManager {
       if (this._infoPanelTab === 'composition' && !entity.composition) {
         this._infoPanelTab = 'orbit';
       }
-      // REFORMA ZAKŁADEK T2 (D-TR-5 (a)) — jedno przypięcie naraz: przypięcie ciała zdejmuje przypięcie stacji (przy OFF — nic).
-      enforceSinglePinOnBody({ K: window.KOSMOS, features: GAME_CONFIG.FEATURES });
+      // REFORMA ZAKŁADEK T2 (D-TR-5 (a)) — jedno przypięcie naraz: przypięcie ciała zdejmuje przypięcie stacji.
+      enforceSinglePinOnBody({ K: window.KOSMOS });
       this._dirty = true;
     });
     EventBus.on('body:deselected', () => { this._selectedEntity = null; this._dirty = true; });
     // T2 (D-TR-5 (a)) — przypięcie stacji zdejmuje przypięcie ciała (`body:deselected` z powodem `pin_swap`: renderer bez
     // polecenia kamery, panel stacji go nie słucha). Słuchacz po panelu stacji (panel tworzony w konstruktorze — już „otwarty”).
     EventBus.on('station:selected', () => {
-      if (enforceSinglePinOnStation({ K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p), features: GAME_CONFIG.FEATURES })) this._dirty = true;
+      if (enforceSinglePinOnStation({ K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p) })) this._dirty = true;
     });
     // ARKUSZ UI U2-3 (Finding 486): przełączenie układu zamyka kartę ciała spoza układu docelowego; karta ciała z układu
     // docelowego zostaje, a renderer (przebudowa sceny wyzerowała jego zaznaczenie) dostaje je z powrotem — bez kamery.
@@ -2154,18 +2150,8 @@ export class UIManager {
     // ⚠ ARKUSZ UI U2-4 (Finding 483): klik etykiet mapy PO lewym outlinerze, liście kolonii z górnej belki, dolnych
     //   paskach i dzienniku — w tej samej kolejności, w jakiej leżą na ekranie (etykiety są NA mapie). Dawniej
     //   plakietka floty / chip układu zjadały klik w wiersz rozwiniętej listy kolonii.
-    // S3.4 FAZA 5 — klik etykiety STACJI na mapie → station:selected (PRZED overlayManager i raycastem 3D).
-    // Gate MIRROR draw (civMode && mapLabels && !isAnyOpen && !globeOpen) — inaczej klik trafia w stare
-    // hit-zony gdy warstwa nie była rysowana (np. podczas podglądu globusa).
-    // Obraz Operacyjny F1: także fleetMapLabels (plakietki/chipy) — zone-listy per
-    // powierzchnia są puste gdy dana flaga nie rysowała, więc OR jest bezpieczny.
-    // ARKUSZ HUD paczka A (H2): przy `hudLabels` plakietek nie ma (rysuje je warstwa HUD) — ich strefy z ostatniego rysunku
-    // byłyby nieaktualne; etykiety HUD klikane niżej, przed raycastem 3D (515).
-    if (window.KOSMOS?.civMode
-        && (GAME_CONFIG.FEATURES?.mapLabels || GAME_CONFIG.FEATURES?.fleetMapLabels)
-        && !isHudLabelsOn(GAME_CONFIG.FEATURES)
-        && !this.overlayManager.isAnyOpen()
-        && !window.KOSMOS?.planetGlobeOpen && this._mapLabelLayer?.handleClick?.(x, y)) return true;
+    // ARKUSZ HUD B-Z: dawne plakietki kolonii, stacji i flot (`MapLabelLayer` — ścieżka OFF `hudLabels`) usunięte; etykiety
+    // warstwy HUD klikane niżej, przed raycastem 3D (515).
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
     if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H)) {
       return true;
@@ -2201,7 +2187,7 @@ export class UIManager {
 
     // ARKUSZ HUD paczka A (H2) — etykiety warstwy HUD: przed raycastem 3D (karta ciała, dawniej nad nimi — 515, usunięta w
     // T4); punkt na tarczy ciała wygrywa (487, 503 — rozstrzyga warstwa); reguła D-UI-5 (`clickObject`) bez zmian.
-    if (window.KOSMOS?.civMode && isHudLabelsOn(GAME_CONFIG.FEATURES) && !this.overlayManager.isAnyOpen()
+    if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen()
         && !window.KOSMOS?.planetGlobeOpen && window.KOSMOS?.hudLayer?.handleClick?.(x, y, x * UI_SCALE, y * UI_SCALE)) return true;
 
     // Akcje gracza
@@ -2430,46 +2416,18 @@ export class UIManager {
     // ── Górny pasek surowców (wysuwany) — PO overlayManager (nad overlay'em), ale PRZED
     //    NavDrawer/Outliner/HUD: gdy nakładają się rogami, te malują się na wierzchu. ──
     // ══ ETYKIETY MAPY 3D — PRZENIESIONE TUTAJ (Shape 2, slice B) ═══════════════════════════
-    // ⚠ DEFEKT KOLEJNOŚCI MALOWANIA, NIE Z-INDEXU: wszystko leci w JEDNYM `_draw()` na JEDNYM
-    //   `#ui-canvas`, więc „na wierzchu" = „rysowane później". Etykiety stały na KOŃCU przebiegu,
-    //   a `MapLabelLayer` NIE MA ŻADNEGO CLIPU (zero `clip`/bounds w pliku) ⇒ malowały po
-    //   WSZYSTKICH OŚMIU powierzchniach rysowanych wcześniej: `combatHud`, dawny panel stacji,
-    //   dawne panele floty i grupy, panel statku (slice B), dawny dok paneli, dziennik
-    //   ORAZ Outliner.
-    // ⚠ To NIE był defekt panelu statku — on tylko ujawnił klasę. Dowód, że winna była POZYCJA
-    //   PRZEBIEGU: `_outliner.draw` ma nad sobą komentarz „Rysowany NA SAMYM WIERZCHU … nic go
-    //   nie zasłania", a etykiety zasłaniały go OD DAWNA. Shape 2 domyka tamten inwariant przy
-    //   okazji — dlatego nie ma osobnego findingu.
-    // ⚠ Precedens tej samej klasy stoi w bramce niżej: `!overlayManager.isAnyOpen()` powstało
-    //   z komentarzem „labele … przebijały przez panel" — ale objęło tylko overlaye
-    //   PEŁNOEKRANOWE. Panele PŁYWAJĄCE zostały poza tamtą bramką; ten przenos je obejmuje.
-    // ⚠ CO SIĘ NIE ZMIENIA: etykiety zostają POD ramkami RTS (`_drawSelectionBrackets`) i pod
-    //   badge'em trybu taktycznego — te rysują się po nich tak jak dotąd. Bramki (`mapLabels`,
-    //   `fleetMapLabels`, `!isAnyOpen()`, `!globeOpen`) NIETKNIĘTE — pin K2 tego pilnuje, bo
-    //   najtańszą złą naprawą byłoby DOGASZENIE etykiet („nie rysuj, gdy panel widoczny").
-    // ⚠ `const tr` przenosi się RAZEM z blokiem: jest czytane jeszcze niżej przez
-    //   `_drawSelectionBrackets`, a deklaracja WCZEŚNIEJ jest dla tamtych użyć bezpieczna.
-    // ⚠ ARKUSZ UI U2-4 (Finding 483): blok przeniesiony jeszcze niżej w hierarchii — PRZED lewy outliner, listę kolonii
-    //   z górnej belki, Dok taktyczny i dolne paski. Etykiety leżą NA mapie: wszystko, co leży nad mapą, maluje się po
-    //   nich (dawniej plakietki i chipy układów malowały się na wierszach rozwiniętej listy kolonii).
+    // ⚠ Kolejność malowania, nie z-index: wszystko w JEDNYM `_draw()` na JEDNYM `#ui-canvas` — „na wierzchu” = „rysowane
+    //   później”. Etykiety leżą NA mapie, więc stoją PRZED lewym outlinerem, listą kolonii z górnej belki, Dokiem taktycznym
+    //   i dolnymi paskami (U2-4, Finding 483) — wszystko, co leży nad mapą, maluje się po nich. Plakietki `MapLabelLayer`
+    //   (ścieżka OFF `hudLabels`) usunięte w ARKUSZU HUD B-Z — etykiety mapy rysuje warstwa HUD (`#hud-canvas`, pod
+    //   `#ui-canvas`); tu zostają etykiety CTRL.
+    // ⚠ `const tr` — czytane jeszcze niżej przez `_drawSelectionBrackets`.
     // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
     // Tylko gdy widoczna jest mapa 3D układu — pod otwartym overlayem (Stratcom,
     // kolonia itd.) labele nie mają sensu i przebijały przez panel.
     const tr = window.KOSMOS?.threeRenderer;
     if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
 
-    // S3.4 FAZA 5 — etykiety kolonii+stacji (pod ramkami statków; overlay 2D nad WebGL).
-    // ARKUSZ HUD paczka A (H2): przy `hudLabels` etykiety rysuje warstwa HUD (`HudLabelLayer`) — plakietki wyłączone.
-    if (civMode && tr && GAME_CONFIG.FEATURES?.mapLabels && !isHudLabelsOn(GAME_CONFIG.FEATURES)
-        && !this.overlayManager.isAnyOpen() && !globeOpen) {
-      this._mapLabelLayer.draw(ctx, tr, W, H, UI_SCALE);
-    }
-    // Obraz Operacyjny F1 — plakietki flotowe (OSOBNA flaga od mapLabels; toggle
-    // uiPrefs czyta layer wewnętrznie). OFF = zero kosztów (jeden boolean).
-    if (civMode && tr && GAME_CONFIG.FEATURES?.fleetMapLabels && !isHudLabelsOn(GAME_CONFIG.FEATURES)
-        && !this.overlayManager.isAnyOpen() && !globeOpen) {
-      this._mapLabelLayer.drawVesselLabels(ctx, tr, W, H, UI_SCALE);
-    }
     // ── ARKUSZ UI U2 — lewy outliner (układy i ciała): nad mapą, POD listą kolonii z górnej belki (rysowana zaraz niżej,
     //    §7.17) i pod pływającymi panelami. Widoczność wg decyzji 4 (`isShown` — bez overlaya, bez rozwiniętego Doku).
     //    Drzewo składane od zera w każdej klatce (A8 — tryb natychmiastowy); jednostki naziemne — ta sama lista co
@@ -2698,9 +2656,8 @@ export class UIManager {
   _drawAllLabels(ctx, tr) {
     const labels = tr.getAllVisibleLabels?.();
     if (!labels?.length) return;
-    // ARKUSZ HUD paczka A (D-HUD-16) — przy `hudLabels` kolory z ról motywu (własne / obce / wraki / ciała), cień w kolorze tła
-    // motywu; przy OFF — jak dziś.
-    const roles = isHudLabelsOn(GAME_CONFIG.FEATURES) ? resolveHudRoles(THEME) : null;
+    // ARKUSZ HUD paczka A (D-HUD-16) — kolory z ról motywu (własne / obce / wraki / ciała), cień w kolorze tła motywu.
+    const roles = resolveHudRoles(THEME);
     ctx.save();
     ctx.font = `10px ${THEME.fontFamily}`;
     ctx.textBaseline = 'middle';
@@ -2709,41 +2666,25 @@ export class UIManager {
       const sx = lbl.x / UI_SCALE;
       const sy = lbl.y / UI_SCALE;
       if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
-      if (roles) {
-        const st = ctrlLabelStyle(lbl.kind, roles);
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = THEME.bgPrimary;
-        ctx.fillText(name, sx + 9, sy + 1);
-        ctx.globalAlpha = st.alpha;
-        ctx.fillStyle = st.color;
-        ctx.fillText(name, sx + 8, sy);
-        ctx.globalAlpha = st.alpha * 0.7;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        continue;
-      }
-
-      // Subtelny shadow — poprawia czytelność bez ciężkich ramek
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      const st = ctrlLabelStyle(lbl.kind, roles);
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = THEME.bgPrimary;
       ctx.fillText(name, sx + 9, sy + 1);
-      // Główny text — pastel (rozjaśniony) żeby nie krzyczał
-      ctx.fillStyle = lbl.color ? this._softenColor(lbl.color) : 'rgba(160,220,200,0.85)';
+      ctx.globalAlpha = st.alpha;
+      ctx.fillStyle = st.color;
       ctx.fillText(name, sx + 8, sy);
-      // Bardzo mała kropka (jedynie lokalizator)
+      ctx.globalAlpha = st.alpha * 0.7;
       ctx.beginPath();
       ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = lbl.color ? this._softenColor(lbl.color, 0.7) : 'rgba(160,220,200,0.7)';
       ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }
 
-  // Slice 4 — ramki RTS + paski paliwa nad zaznaczonym WŁASNYM statkiem.
-  // getVesselScreenPosition zwraca px ekranu (window.innerW/H) → /UI_SCALE jak labele.
+  // Slice 4 — paski paliwa nad zaznaczonym WŁASNYM statkiem (ARKUSZ HUD paczka B — narożniki rysuje warstwa HUD).
   _drawSelectionBrackets(ctx, tr) {
-    // Slice 8 — rysuj ramki dla CAŁEGO zbioru (lead jaśniejszy, reszta przyciemniona).
+    // Slice 8 — dla CAŁEGO zbioru (paski — tylko prowadzący).
     // Zbiór zawsze zawiera lead przy single-select; fallback do leada gdy zbiór pusty.
     const ids = this._selectedVesselIds;
     if (ids && ids.size > 0) {
@@ -2753,53 +2694,20 @@ export class UIManager {
     }
   }
 
-  // Rysuje ramki RTS dla jednego statku. isLead = jaśniejsze + paski zasobów.
-  // ARKUSZ HUD paczka B (flaga `hudAttention`): narożniki i znacznik środka rysuje warstwa HUD (nawiasy w roli `primary`,
+  // ARKUSZ HUD paczka B: narożniki i znacznik środka zaznaczonego statku rysuje warstwa HUD (nawiasy w roli `primary`,
   // `HudFocusLayer`) — tu wyłącznie paski paliwa i warp prowadzącego, pod kwadratem nawiasów (`bracketBox`, ten sam rzut).
+  // Dawne ramki RTS (ścieżka OFF `hudAttention`) usunięte w B-Z.
   _drawBracketForVessel(ctx, tr, id, isLead) {
-    if (!id) return;
+    if (!id || !isLead) return;
     const v = window.KOSMOS?.vesselManager?.getVessel?.(id);
     if (!v || v.isWreck || isEnemyVessel(v)) return;  // tylko własne (brak przecieku HP/paliwa wroga)
-    if (isHudAttentionOn(GAME_CONFIG.FEATURES)) {
-      if (!isLead) return;
-      const d = objectScreenDisc(window.KOSMOS, 'vessel', id);
-      const box = d ? bracketBox({ cx: d.x, cy: d.y, discR: d.r, kind: 'vessel' }) : null;
-      if (!box || box.cx < 0 || box.cx > W || box.cy < 0 || box.cy > H) return;
-      this._drawVesselBars(ctx, v, box.cx, box.cy, box.half);
-      return;
-    }
-    const pos = tr.getVesselScreenPosition?.(id);
-    if (!pos) return;
-    const x = pos.x / UI_SCALE, y = pos.y / UI_SCALE;
-    if (x < 0 || x > W || y < 0 || y > H) return;
-    const s = 17, L = 7;
-    const mainA = isLead ? 0.95 : 0.55;   // reszta zbioru przyciemniona
-    ctx.save();
-    // Cień pod ramką — czytelność na jasnym tle (gwiazda/glow).
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-    ctx.lineWidth = 3.5;
-    const corner = (cx, cy, dx, dy) => {
-      ctx.beginPath();
-      ctx.moveTo(cx, cy + dy * L); ctx.lineTo(cx, cy); ctx.lineTo(cx + dx * L, cy);
-      ctx.stroke();
-    };
-    corner(x - s, y - s, +1, +1); corner(x + s, y - s, -1, +1);
-    corner(x - s, y + s, +1, -1); corner(x + s, y + s, -1, -1);
-    // Główne ramki — jasny mint, grubsze (widoczne z daleka).
-    ctx.strokeStyle = `rgba(140,255,200,${mainA})`;
-    ctx.lineWidth = isLead ? 2 : 1.5;
-    corner(x - s, y - s, +1, +1); corner(x + s, y - s, -1, +1);
-    corner(x - s, y + s, +1, -1); corner(x + s, y + s, -1, -1);
-    // Mały znacznik środka — lokalizator statku gdy z daleka to ledwie piksel.
-    ctx.fillStyle = `rgba(140,255,200,${isLead ? 0.9 : 0.55})`;
-    ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
-    // Paski zasobów pod ramką (paliwo + warp) — tylko dla leada (mniej clutter).
-    if (isLead) this._drawVesselBars(ctx, v, x, y, s);
-    ctx.restore();
+    const d = objectScreenDisc(window.KOSMOS, 'vessel', id);
+    const box = d ? bracketBox({ cx: d.x, cy: d.y, discR: d.r, kind: 'vessel' }) : null;
+    if (!box || box.cx < 0 || box.cx > W || box.cy < 0 || box.cy > H) return;
+    this._drawVesselBars(ctx, v, box.cx, box.cy, box.half);
   }
 
-  // Paski paliwa i warp prowadzącego pod ramką (`s` — połowa boku ramki; szerokość paska = bok). Wspólne dla ramki RTS i —
-  // ARKUSZ HUD paczka B — nawiasów HUD (kwadrat `bracketBox`).
+  // Paski paliwa i warp prowadzącego pod kwadratem nawiasów (`s` — połowa boku; szerokość paska = bok).
   _drawVesselBars(ctx, v, x, y, s) {
     ctx.save();
     const bw = s * 2, bh = 3, bx = x - s;
@@ -2851,18 +2759,6 @@ export class UIManager {
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
     ctx.restore();
-  }
-
-  // Zmiękcz kolor dla delikatnego tekstu — alpha 0.85 + lekko rozjaśniony.
-  _softenColor(hex, alpha = 0.85) {
-    if (!hex || hex[0] !== '#') return `rgba(180,220,200,${alpha})`;
-    const h = hex.slice(1);
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    // Wyblakły: miks z 180,180,180 w stosunku 60/40 — zachowuje ton ale ciszej
-    const mix = (c) => Math.round(c * 0.6 + 180 * 0.4);
-    return `rgba(${mix(r)},${mix(g)},${mix(b)},${alpha})`;
   }
 
   _drawConfirmDialog() {

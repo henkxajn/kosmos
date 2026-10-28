@@ -4060,7 +4060,7 @@ export class FleetManagerOverlay {
     ctx.textAlign = 'left';
   }
 
-  // ctx dla czystej logiki rejestru (wpięcia świata jak MapLabelLayer).
+  // ctx dla czystej logiki rejestru (wpięcia świata jak warstwa etykiet HUD).
   _registryCtx() {
     const K = window.KOSMOS;
     const vm = K?.vesselManager;

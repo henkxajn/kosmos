@@ -4,7 +4,7 @@
 // D-HUD-12; Findingi 509, 516, 527.
 // Uruchom: node src/testing/smoke/hud_routes_smoke.mjs
 //
-//   R0  API i flaga `hudRoutes` (brak klucza = OFF)
+//   R0  API; flaga `hudRoutes` usunięta (B-Z — na stałe ON)
 //   R1  zestaw rozkazów (D-HUD-8): misja w locie (cel — ciało / punkt), powrót (cel = baza), patrol (bieżący odcinek),
 //       pościg (do celu WIDOCZNEGO — inaczej bez trasy), przechwycenie (do punktu przechwycenia); walka, eskorta, dok,
 //       orbita, wrak — bez trasy; punkty pośrednie — tylko nieminięte
@@ -17,8 +17,12 @@
 //       krawędzi kadru
 //   R6  warstwa (stub świata, prawdziwy `HudLayer` + `HudRouteLayer`): trasa własna; obcy `rumor` — brak, `contact` + para
 //       wykrycia — jest; statek innego układu — brak; warp — glif w układzie odlotu, w układzie celu — nic; pauza — spoczynek
-//       (0 wywołań ctx), bieg — nowa klatka (marsz); flaga OFF — pusto
-//   R7  montaż (piny źródłowe): linie tras 3D (`LineDashedMaterial`) tworzone tylko przy OFF, przy ON zwolnione
+//       (0 wywołań ctx), bieg — nowa klatka (marsz); chip [T] wyłączony — pusto
+//   R7  montaż (piny źródłowe): linii tras 3D (`LineDashedMaterial`) brak (B-Z)
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON, ścieżki OFF usunięte): R0a / R0c / R0d — predykat,
+//   klucz flagi i dawny poziom trasy przy OFF (`routeAttention`) usunięte; R6m — chip [T] wyłączony (dawniej: flaga OFF);
+//   R7a–R7c — linie tras 3D, ich kolor (`_orderLineColor`, `fcOrderLines`) i zwalnianie usunięte. Przełącznik flagi
+//   w keeperze usunięty.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -41,15 +45,17 @@ const FEATURES = GAME_CONFIG.FEATURES;
 const AU = GAME_CONFIG.AU_TO_PX;
 
 // ═══ R0 ══════════════════════════════════════════════════════════════════════
-header('R0  API i flaga');
+header('R0  API (flaga `hudRoutes` usunięta — B-Z)');
 {
-  const need = ['isHudRoutesOn', 'HUD_ROUTES', 'routeSpec', 'warpSpec', 'inActiveSystem', 'detectedNowIds', 'foreignRouteVisible', 'routeVisible',
-    'warpVisible', 'marchOffset', 'routeAlpha', 'routeAttention', 'projectPolyline', 'warpScreenRay', 'remainingWaypoints', 'polylineRectExit'];
+  const need = ['HUD_ROUTES', 'routeSpec', 'warpSpec', 'inActiveSystem', 'detectedNowIds', 'foreignRouteVisible', 'routeVisible',
+    'warpVisible', 'marchOffset', 'routeAlpha', 'projectPolyline', 'warpScreenRay', 'remainingWaypoints', 'polylineRectExit'];
   const missing = need.filter((n) => RL?.[n] === undefined);
   ok(missing.length === 0, `R0a: \`HudRouteLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
   ok(typeof RLay?.HudRouteLayer === 'function', 'R0b: `HudRouteLayer`');
-  ok(/\bhudRoutes:\s*true,/.test(strip(src('../../config/GameConfig.js'))), 'R0c: `FEATURES.hudRoutes: true` w GameConfig');
-  ok(RL?.isHudRoutesOn?.({ hudRoutes: true }) === true && RL?.isHudRoutesOn?.({}) === false, 'R0d: flaga — brak klucza = OFF');
+  ok(!/\bhudRoutes:\s*(true|false),/.test(strip(src('../../config/GameConfig.js'))) && FEATURES.hudRoutes === undefined,
+    'R0c (B-Z): klucz `FEATURES.hudRoutes` usunięty z GameConfig');
+  ok(!!RL && RL.isHudRoutesOn === undefined && RL.routeAttention === undefined,
+    'R0d (B-Z): predykat flagi `isHudRoutesOn` i poziom trasy ścieżki OFF (`routeAttention`) usunięte');
 }
 
 // ═══ R1 ══════════════════════════════════════════════════════════════════════
@@ -202,7 +208,6 @@ const setWorld = () => {
   Object.defineProperty(K, 'activeSystemId', { get: () => W0.active, configurable: true, enumerable: true });
 };
 setWorld();
-FEATURES.hudRoutes = true;
 const mkCtx = () => {
   const t = { calls: [] };
   return new Proxy(t, {
@@ -281,26 +286,26 @@ header('R6  warstwa: własna, obca (rumor / contact + wykrycie), inny układ, wa
   W0.epoch++; H.frame(2250); d = H.dbg();
   ok(d?.warps?.[0]?.glyph?.name === 'Polaris', `R6n: warstwa — glif z nazwą celu trasy wieloprzeskokowej („${d?.warps?.[0]?.glyph?.name}”, przeskok: Lalande)`);
   delete K.galaxyData;
-  // Flaga OFF — pusto.
+  // Chip [T] wyłączony — pusto (dawniej: flaga OFF); kontrola — [T] z powrotem włączony: trasa zaznaczonego wraca.
   W0.vessels = [transport('v_own')]; W0.lead = 'v_own'; W0.ids = ['v_own'];
-  FEATURES.hudRoutes = false; W0.epoch++;
+  K.uiPrefs = { hudLayers: { routes: false } }; W0.epoch++;
   const off = H.frame(2300); d = H.dbg();
-  ok((d?.routes ?? []).length === 0 && (d?.warps ?? []).length === 0 && d?.on === false, `R6m: flaga OFF — bez tras HUD (${off})`);
-  FEATURES.hudRoutes = true;
+  ok((d?.routes ?? [1]).length === 0 && (d?.warps ?? [1]).length === 0, `R6m (B-Z): chip [T] wyłączony — bez tras HUD (${off})`);
+  K.uiPrefs = {}; W0.epoch++;
+  H.frame(2350); d = H.dbg();
+  ok((d?.routes ?? []).length === 1, `R6m KONTROLA: [T] z powrotem włączony — trasa zaznaczonego statku wraca (${(d?.routes ?? []).length}; pin nie jest jałowy)`);
 }
 
 // ═══ R7 ══════════════════════════════════════════════════════════════════════
-header('R7  montaż (piny źródłowe): linie tras 3D tylko przy OFF');
+header('R7  montaż (piny źródłowe): linii tras 3D brak (B-Z)');
 {
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
-  ok(/import \{ isHudRoutesOn \} from '\.\.\/ui\/HudRouteLogic\.js';/.test(tr) && /const hudRoutesOn = \(\) => isHudRoutesOn\(GAME_CONFIG\.FEATURES\);/.test(tr),
-    'R7a: flaga tras czytana przy każdym wywołaniu (przełączenie w konsoli działa bez przeładowania)');
+  ok(tr.length > 1000 && !/isHudRoutesOn|hudRoutesOn\(/.test(tr),
+    'R7a (B-Z): renderer bez flagi tras (import i pomocnik `hudRoutesOn` usunięte)');
   const creates = [...tr.matchAll(/new THREE\.LineDashedMaterial\(/g)].length;
-  const gated = (tr.match(/vessel\.mission && !isWreck && !hudRoutesOn\(\)/g) ?? []).length + (tr.match(/vessel\.mission && !hudRoutesOn\(\)/g) ?? []).length;
-  ok(gated >= 2 && /if \(hudRoutesOn\(\)\) \{[\s\S]{0,400}?\} else if \(!entry\.routeLine\) \{/.test(tr),
-    `R7b: tworzenie linii tras 3D bramkowane flagą (3 miejsca; \`LineDashedMaterial\` w pliku: ${creates})`);
-  ok(/if \(hudRoutesOn\(\)\) this\._disposeAllRouteLines\(\);/.test(tr) && /_disposeAllRouteLines\(\) \{/.test(tr),
-    'R7c: przy ON istniejące linie 3D zwalniane (pętla renderu)');
+  ok(creates === 1 && /this\._tradeLines\.push\(/.test(tr) && !/routeLine|_orderLineColor|fcOrderLines/.test(tr),
+    `R7b (B-Z): linie tras 3D i ich kolor usunięte — \`LineDashedMaterial\` w pliku: ${creates} (linie handlu)`);
+  ok(!/_disposeAllRouteLines|_disposeRouteLine/.test(tr), 'R7c (B-Z): zwalnianie linii tras 3D usunięte (nie ma czego zwalniać)');
   const hl = strip(src('../../ui/HudLayer.js'));
   ok(/_defaultSublayers\(\)\s*\{\s*return \[new HudRouteLayer\(this\), new HudRadarLayer\(this\)/.test(hl),
     'R7d: trasy — pierwsza podwarstwa gry (rysowane pod radarem i etykietami; glify warp zbierane przed etykietami)');

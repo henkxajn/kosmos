@@ -14,7 +14,6 @@ import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } fr
 import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
 import { systemDisplayName }  from '../ui/MapLabelLogic.js';
 import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 (D-TR-14)
-import { isHudLabelsOn } from '../ui/HudLabelLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedź mapy wygaszona na warstwie HUD
 import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
 import { coordTooltipBlocked } from '../ui/ShipPanelHudLogic.js';   // REFORMA ZAKŁADEK T5 — 530: dymek współrzędnych nie nad UI
 import { escapeClosesFleetPanel } from '../ui/FleetPanelHudLogic.js';   // REFORMA ZAKŁADEK T6 — Esc zamyka panel floty
@@ -161,7 +160,6 @@ import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { outlinerKeyAction } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2-4 — klawisze outlinerów (§7.16)
-import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';   // ARKUSZ HUD paczka B — flaga (klawisze warstw, 490)
 import { layerForKeyCode, layerKeyAllowed, toggleHudLayer } from '../ui/HudLayerChipsLogic.js';   // paczka B — klawisze 6–9 (D-HUD-14)
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
@@ -4775,8 +4773,8 @@ export class GameScene {
           return;
         }
         // REFORMA ZAKŁADEK T2 — okno DOM (raport ciała z przypięcia, `.kosmos-modal-overlay`) zamyka się własnym Esc; kaskada
-        // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰). Bez warstwy etykiet HUD — kaskada bez kroku.
-        if (escapeHeldByModal({ K: window.KOSMOS, features: GAME_CONFIG.FEATURES, domModalOpen: !!document.querySelector('.kosmos-modal-overlay') })) return;
+        // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰).
+        if (escapeHeldByModal({ K: window.KOSMOS, domModalOpen: !!document.querySelector('.kosmos-modal-overlay') })) return;
         // REFORMA ZAKŁADEK T6 — panel floty w idiomie etykiet: Esc zamyka panel floty (zdejmuje flotę) PRZED zaznaczeniem statków —
         // flota wygrywa mutex, więc Esc zamyka widoczny panel; przy otwartym overlayu i nad oknem DOM — nie (Esc należy do nich).
         if (escapeClosesFleetPanel({ fleetId: um?.getSelectedFleetId?.() ?? null,
@@ -4794,7 +4792,7 @@ export class GameScene {
         }
         // REFORMA ZAKŁADEK T2 (D-TR-5 (a), Finding 534): Esc zdejmuje przypięcie (ciało albo stacja) PO zaznaczeniu statku —
         // nie przy otwartym overlayu (przypięcie leży pod nim, Esc należy do overlayu) ani nad oknem DOM (raport ciała).
-        if (escapeUnpin({ K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p), features: GAME_CONFIG.FEATURES,
+        if (escapeUnpin({ K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p),
           overlayOpen: um?.overlayManager?.isAnyOpen?.() === true,
           modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay') })) {
           e.preventDefault();
@@ -4891,12 +4889,12 @@ export class GameScene {
         case 'Digit4': EventBus.emit('time:setMultiplier', { index: 4 }); EventBus.emit('time:play'); break; // 1m/s
         case 'Digit5': EventBus.emit('time:setMultiplier', { index: 5 }); EventBus.emit('time:play'); break; // 1r/s
         // ARKUSZ HUD paczka B (D-HUD-14) — warstwy HUD: 6 radar · 7 trasy · 8 etykiety · 9 orbity (kolejność chipów na pasie);
-        // wyłącznie z fokusem na mapie (tryb cywilizacji, bez overlayu, okna DOM i modyfikatorów); flaga `hudAttention`.
+        // wyłącznie z fokusem na mapie (tryb cywilizacji, bez overlayu, okna DOM i modyfikatorów).
         case 'Digit6':
         case 'Digit7':
         case 'Digit8':
         case 'Digit9': {
-          const layer = isHudAttentionOn(GAME_CONFIG.FEATURES) ? layerForKeyCode(e.code) : null;
+          const layer = layerForKeyCode(e.code);
           if (layer && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
             modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay, .se-overlay, .at-overlay, .ce-overlay'),
             planetSceneOpen: !!this.planetScene?.isOpen, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey })) {
@@ -5822,11 +5820,9 @@ export class GameScene {
       return;
     }
     const target = this._resolveClickTarget(clientX, clientY);
-    // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) / T4 — ciało i statek opisuje rozwinięcie etykiety HUD: bez podpowiedzi mapy (531, 536;
-    // od T4 także bez warstwy etykiet — `hudLabels` OFF zostawia same plakietki `MapLabelLayer`); POI — bez zmian; współrzędne
-    // tylko nad PUSTĄ mapą — nie pod etykietą HUD ani nad gwiazdą / stacją (obiektem z rozwinięciem; resolver zwraca dla nich
-    // „pustkę” — 530).
-    const lh = isHudLabelsOn(GAME_CONFIG.FEATURES);
+    // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) / T4 — ciało i statek opisuje rozwinięcie etykiety HUD: bez podpowiedzi mapy (531, 536);
+    // POI — bez zmian; współrzędne tylko nad PUSTĄ mapą — nie pod etykietą HUD ani nad gwiazdą / stacją (obiektem
+    // z rozwinięciem; resolver zwraca dla nich „pustkę” — 530).
     if (target && target.type !== 'empty' && target.type !== 'poi') {
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
@@ -5841,9 +5837,9 @@ export class GameScene {
       // M3 P2.3 — coord tooltip dla empty space (override P1.5 D2 = no tooltip)
       // 3D worldPoint to Three.js coords (XZ plane Y=0). Konwersja → gameplay px.
       const wp = target?.worldPoint;
-      const local = lh ? this.uiManager?.toLocalUI?.(clientX, clientY) : null;
-      const covered = lh && (this.threeRenderer?._hoverPlanetId != null
-        || window.KOSMOS?.hudLayer?.coversPoint?.(local?.x, local?.y) === true);
+      const local = this.uiManager?.toLocalUI?.(clientX, clientY);
+      const covered = this.threeRenderer?._hoverPlanetId != null
+        || window.KOSMOS?.hudLayer?.coversPoint?.(local?.x, local?.y) === true;
       if (!covered && wp && typeof wp.x === 'number' && typeof wp.z === 'number') {
         const gp = worldToGameplay(wp.x, wp.z);
         if (gp) {
@@ -6177,11 +6173,10 @@ export class GameScene {
     if (this.uiManager?.overlayManager?.isAnyOpen?.()) return;
     // Patrz _handleTacticalLeftClick — bypass isOverUI dla CANVAS targetów
     // (game viewport), DOM panele dalej blokowane.
-    // ARKUSZ HUD paczka B — Finding 490 (D-HUD-17, poprawka minimalna): przy `hudAttention` prawy klik pyta `isOverUI` także dla
-    // celu `CANVAS` — nad powierzchnią UI (kolumny, pas dolny z chipami warstw, belki, panele) bez menu mapy. Obejście `CANVAS`
-    // było dla overlayu (wtedy `isOverUI` = cały ekran), a ten przypadek wraca wyżej (`isAnyOpen`).
-    const isGameCanvas = e.target?.tagName === 'CANVAS';
-    if ((!isGameCanvas || isHudAttentionOn(GAME_CONFIG.FEATURES)) && this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
+    // ARKUSZ HUD paczka B — Finding 490 (D-HUD-17, poprawka minimalna): prawy klik pyta `isOverUI` także dla celu `CANVAS` —
+    // nad powierzchnią UI (kolumny, pas dolny z chipami warstw, belki, panele) bez menu mapy. Dawne obejście `CANVAS` było dla
+    // overlayu (wtedy `isOverUI` = cały ekran), a ten przypadek wraca wyżej (`isAnyOpen`).
+    if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
 
     let target = this._resolveClickTarget(e.clientX, e.clientY);
     if (!target) return;

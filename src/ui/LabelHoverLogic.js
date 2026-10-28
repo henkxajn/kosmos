@@ -1,6 +1,6 @@
 // LabelHoverLogic — REFORMA ZAKŁADEK T1 (TABS_REFORM_PLAN.md §5.2; D-TR-1 (a), D-TR-2 (a), D-TR-3 = tabele I7 §3.1 / §3.2 /
 // §3.4 / §3.3): czysta logika ROZWINIĘCIA informacyjnego etykiet warstwy HUD i ETYKIETY NA ŻĄDANIE. Rysunek, odczyt świata
-// i strefy kliku — `HudLabelLayer` (warstwa etykiet HUD — `hudLabels`; flaga kroku `labelHover` na stałe ON od T4).
+// i strefy kliku — `HudLabelLayer` (warstwa etykiet HUD; flagi `labelHover` i `hudLabels` na stałe ON od T4 i B-Z).
 //   • stan najechania na CZASIE REALNYM (działa w pauzie): wejście — rozwinięcie rośnie (fade-in `FADE_MS`); zejście
 //     kursora — rozwinięcie gaśnie przez `LINGER_MS` i znika; powrót przed końcem — bez ponownego fade-in; przejście na INNY
 //     obiekt — od razu nowy (naraz najwyżej JEDNO rozwinięcie z najechania; zaznaczone — osobno, stałe);

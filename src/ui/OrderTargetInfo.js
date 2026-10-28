@@ -16,7 +16,7 @@ import { t }             from '../i18n/i18n.js';
 // (pokazanie dystansu do eskortowanego jest mylące — to nie cel ataku).
 const ENEMY_TARGET_ORDERS = new Set(['engage', 'pursue', 'intercept']);
 
-// Ikona wg typu rozkazu (spójne z _drawMovementOrderLabel / _orderLineColor).
+// Ikona wg typu rozkazu (spójne z _drawMovementOrderLabel).
 const ORDER_ICON = { engage: '⊗', pursue: '⚔', intercept: '⊕' };
 
 // Ranga intelu (kopia VESSEL_LEVEL_RANK — IntelSystem nie eksportuje jej).

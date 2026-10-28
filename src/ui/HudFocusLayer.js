@@ -1,7 +1,8 @@
 // HudFocusLayer — ARKUSZ HUD paczka B (B-1, B-2; D-HUD-11, D-HUD-12, D-HUD-c; HUD_PLAN.md §4.5): podwarstwa NAWIASÓW
 // zaznaczenia i ALERTÓW na intruzie warstwy HUD 2D (`HudLayer`, na wierzchu — po etykietach tej klatki). Logika — czyste
 // `HudAttentionLogic` (nawiasy, oddech) i `HudAlertLogic` (pierścienie, wektor); tu: odczyt świata, rzut, rysunek Canvas 2D.
-//   • za flagą `FEATURES.hudAttention` (brak klucza = OFF; przy OFF podwarstwa pusta, a ramki RTS statków — `UIManager` — jak dziś);
+//   • nawiasy statków zastępują dawne ramki RTS (`UIManager._drawBracketForVessel` rysuje już tylko paski paliwa i warp; od B-Z
+//     bez ścieżki OFF);
 //   • nawiasy ⌜ ⌟ w roli `primary` wokół tarczy zaznaczonego ciała (`entityId`), przypiętej stacji (`stationId`) i zaznaczonych
 //     statków (zbiór — prowadzący jaśniej; statek zawsze, ciało / stacja od tarczy `BRACKET_MIN_DISC_PX`), oddech krycia na
 //     zegarze symulacji (pauza — statycznie); narożnik pod przypiętą albo rozwiniętą etykietą tej klatki — pominięty;
@@ -10,7 +11,7 @@
 //     kropkowany wektor od obiektu gracza do intruza; oba gasną z pulsem alertu; intruz niewidoczny (mgła wojny) — nic;
 //     kolonia ∞ — alert przez etykietę (`HudLabelLayer`), bez wektora.
 // ⚠ Moduł importuje się pod node (keeper `hud_attention_smoke` — atrapa ctx): bez three i bez DOM.
-import { isHudAttentionOn, HUD_ATTENTION, breathAlpha, bracketBox, bracketCorners, dropCornersUnder } from './HudAttentionLogic.js';
+import { HUD_ATTENTION, breathAlpha, bracketBox, bracketCorners, dropCornersUnder } from './HudAttentionLogic.js';
 import { HUD_ALERT } from './HudAlertLogic.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { systemIdOf } from '../utils/SystemScope.js';
@@ -54,7 +55,6 @@ export class HudFocusLayer {
   }
 
   prepare(F) {
-    if (!F.att) { this._prep = { on: false, targets: [] }; return 'f:0'; }
     const targets = this._targets(F);
     let key = 'f:1';
     for (const tg of targets) key += `|${tg.key}:${q(tg.world.x)},${q(tg.world.y)},${q(tg.world.z)}:${q(tg.world.r ?? 0)}:${tg.lead ? 1 : 0}`;
@@ -118,7 +118,6 @@ export class HudFocusLayer {
   }
 
   draw(ctx, F, c) {
-    if (!isHudAttentionOn(F.features)) return;
     const roles = F.roles;
     ctx.setLineDash([]);
     ctx.lineDashOffset = 0;

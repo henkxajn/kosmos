@@ -21,11 +21,10 @@
 //     `BOUNDARY_ROLE` = `primary` (wybór właściciela na bramce H1 — `dim` w 4 z 5 motywów to akcent × 0,32 i zlewał się
 //     z orbitami), ping — `primary`; ∞ — bez okręgu, bez odczytu; kropki tylko w oknie (`clipRunsToRect`);
 //   • kąty w ramce UKŁADU: 0 = oś x układu (oś X świata), rosnąco ku osi y układu (oś Z świata) — nie kamera (D-HUD-11);
-//   • błysk na granicy (D-HUD-4, H1-3): NIEzaznaczony obiekt gracza, gdy obcy wchodzi w jego zasięg — statek: para
-//     `vessel:proximityEnter` z graczem (`!sameFaction`), kolonia: `vessel:detectionChanged { detected: true }` + najbliższa
-//     kolonia gracza, w której zasięgu jest obcy (zasięg ∞ — bez granicy, bez błysku); krótki łuk ±15° na granicy
-//     w namiarze obcego, rola `alert`, 0,8 s czasu realnego, bez tekstu — mgła wojny: tylko fakt wejścia (ta sama geometria
-//     przy `rumor` i `contact`, bez nazwy i typu);
+//   • obcy w zasięgu (D-HUD-4): statek — para `vessel:proximityEnter` z graczem (`!sameFaction`, `proximityFlashPair`),
+//     kolonia — `vessel:detectionChanged { detected: true }` + najbliższa kolonia gracza, w której zasięgu jest obcy
+//     (`nearestCoveringColony`); alert, błysk na granicy i treść — paczka B (`HudAlertLogic`; dawny błysk H1 0,8 s czasu
+//     realnego — ścieżka OFF — usunięty w B-Z);
 //   • wielkości w px LOGICZNYCH UI (skala jak `#ui-canvas`).
 import { isEnemyVessel, isInService } from '../entities/Vessel.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
@@ -35,9 +34,6 @@ import { fmtDec } from './NumberFormatLogic.js';   // korekta 1b — odczyt zasi
 
 // Ta sama funkcja zasięgu co `ProximitySystem._getDetectionRangeAU` (keeper `hud_radar_smoke` pinuje tożsamość).
 export { vesselDetectionRangeAU };
-
-/** Flaga radaru HUD — `true` wyłącznie przy `features.hudRadar === true` (brak klucza = OFF). */
-export const isHudRadarOn = (features) => features?.hudRadar === true;
 
 // Rysunek i harmonogram (px logiczne, ms). Strojenie na bramce — wartości ze specyfikacji właściciela (artboard
 // „Kombinacja — szlif”).
@@ -67,17 +63,7 @@ export const HUD_RADAR = Object.freeze({
   PING_STOP_FRAME_FRAC: 0.6,                     // ping stoi: promień > 0,6 × min(szer., wys.) obszaru mapy
   PING_STOP_DISC_PX: 40,                         // ping stoi: tarcza ciała pod środkiem radaru ≥ 40 px
   SEG_PX: 6, SEG_MIN: 48, SEG_MAX: 512,          // próbkowanie okręgu: ~6 px na odcinek
-  FLASH_MS: 800,                                 // błysk na granicy — czas realny
-  FLASH_HALF_DEG: 15,                            // łuk ±15° wokół namiaru obcego
-  FLASH_WIDTH: 1.6, FLASH_ALPHA: 0.9,            // linia błysku
-  FLASH_GLOW_WIDTH: 5, FLASH_GLOW_ALPHA: 0.25,   // poświata błysku
-  FLASH_SEGMENTS: 16,
 });
-
-/** Czy warstwa radaru jest widoczna: tryb Y wymusza (jak dziś pierścienie 3D); poza nim — preferencja ☰ „Radar”. */
-export function radarLayerVisible(uiPrefs, tactical) {
-  return tactical === true || uiPrefs?.hudRadarVisible !== false;
-}
 
 /** Zaznaczone obiekty z radarem: statek wiodący (inaczej pierwszy z `vesselIds`) i ciało z karty. */
 export function radarSelection(sel) {
@@ -274,7 +260,8 @@ export function readoutCenter(r, w, h) {
 }
 
 /** Styl radaru z ról motywu (D-HUD-2): granica, podziałka i odczyt zasięgu — rola `boundaryRole` (domyślnie stała
- *  `BOUNDARY_ROLE`, korekta 1b), ping — `primary`; błysk — `alert`. Zero kolorów na sztywno. */
+ *  `BOUNDARY_ROLE`, korekta 1b), ping — `primary`; błysk alertu — `alert` (szerokości i krycie — `HUD_ALERT`). Zero kolorów
+ *  na sztywno. */
 export function radarStyle(roles, boundaryRole = HUD_RADAR.BOUNDARY_ROLE) {
   const R = HUD_RADAR;
   const quiet = roles[boundaryRole] ?? roles.primary;
@@ -288,32 +275,15 @@ export function radarStyle(roles, boundaryRole = HUD_RADAR.BOUNDARY_ROLE) {
       glow: { widths: R.PING_GLOW_WIDTHS, alpha: glowLayerAlpha(R.PING_GLOW_WIDTHS.length, R.PING_GLOW_ALPHA) },
       echo: { width: R.PING_ECHO_WIDTH, alpha: R.PING_ECHO_ALPHA, gap: R.PING_ECHO_GAP },
     },
-    flash: {
-      color: roles.alert,
-      line: { width: R.FLASH_WIDTH, alpha: R.FLASH_ALPHA },
-      glow: { width: R.FLASH_GLOW_WIDTH, alpha: R.FLASH_GLOW_ALPHA },
-    },
+    flash: { color: roles.alert },
   };
 }
 
-// ── H1-3 — błysk na granicy (D-HUD-4) ──────────────────────────────────────────────────────────────────────────────
+// ── Obcy w zasięgu (D-HUD-4) ───────────────────────────────────────────────────────────────────────────────────────
 
 /** Namiar (rad) z `from` do `to` w ramce UKŁADU (współrzędne logiki gry: 0 = oś x układu, rosnąco ku osi y) — nie kamera. */
 export function bearingRad(from, to) {
   return Math.atan2(to.y - from.y, to.x - from.x);
-}
-
-/** Łuk błysku [a0, a1] (rad, ramka układu) — ±15° wokół namiaru obcego. */
-export function flashArc(bearing) {
-  const h = (HUD_RADAR.FLASH_HALF_DEG * Math.PI) / 180;
-  return [bearing - h, bearing + h];
-}
-
-/** Krycie błysku (mnożnik) po `ageMs` ms czasu realnego: pełne na starcie, gaśnie do zera w 0,8 s; poza oknem — 0. */
-export function flashAlpha(ageMs) {
-  if (!(ageMs >= 0) || ageMs >= HUD_RADAR.FLASH_MS) return 0;
-  const t = ageMs / HUD_RADAR.FLASH_MS;
-  return 1 - t * t;
 }
 
 /**

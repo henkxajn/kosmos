@@ -33,6 +33,8 @@
 //     usunięte — decyzja właściciela Q1: przy `hudLabels` OFF zostają same plakietki `MapLabelLayer`): K7a / K7b / K7d —
 //     dymek statku i kolonii schowany, a podpowiedź mapy ciała / statku odwołana BEZ bramki warstwy etykiet; K7g — metod
 //     `_showColonyTooltip` / `_showVesselTooltip` w rendererze już nie ma.
+//   ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flaga `hudLabels` na stałe ON): K7d / K7e — podpowiedź mapy bez gałęzi flagi
+//     (`isHudLabelsOn` usunięte z `GameScene`); przełącznik flagi w keeperze usunięty.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -234,7 +236,6 @@ const setWorld = () => {
   });
 };
 setWorld();
-FEATURES.hudLabels = true;
 const mkCtx = () => {
   const o0 = { calls: [] };
   return new Proxy(o0, {
@@ -440,9 +441,11 @@ header('K7  dymki ciała i statku — usunięte (T4-4), zostają: budynek (K3), 
   ok(iB > 0 && !/isHudLabelsOn/.test(mm.slice(mm.indexOf('const markerHit'), iB)), 'K7c KONTROLA: podpowiedź budynku (K3) — bez bramki warstwy etykiet');
   const gs = strip(src('../../scenes/GameScene.js'));
   const m3 = gs.slice(gs.indexOf('  _tooltipHoverFromMain3D(clientX, clientY) {'), gs.indexOf('  _tooltipHoverFromTactical(clientX, clientY) {'));
-  ok(/const lh = isHudLabelsOn\(GAME_CONFIG\.FEATURES\);\s*if \(target && target\.type !== 'empty' && target\.type !== 'poi'\) \{\s*this\._scheduleEntityTooltip\(null, clientX, clientY\);\s*return;/.test(m3),
-    'K7d: `#kosmos-tooltip` ciała i statku — odwołany zawsze (531, 536; T4-4 — także bez warstwy etykiet HUD); POI — przechodzi');
-  ok(/const covered = lh && \(/.test(m3) && /if \(!covered && wp &&/.test(m3), 'K7e: współrzędne tylko nad PUSTĄ mapą — nie pod etykietą / gwiazdą / stacją z rozwinięciem (530)');
+  ok(/if \(target && target\.type !== 'empty' && target\.type !== 'poi'\) \{\s*this\._scheduleEntityTooltip\(null, clientX, clientY\);\s*return;/.test(m3)
+    && !/isHudLabelsOn/.test(m3),
+    'K7d: `#kosmos-tooltip` ciała i statku — odwołany zawsze (531, 536; B-Z — bez gałęzi flagi etykiet); POI — przechodzi');
+  ok(/const covered = this\.threeRenderer\?\._hoverPlanetId != null\s*\|\| window\.KOSMOS\?\.hudLayer\?\.coversPoint\?\.\(local\?\.x, local\?\.y\) === true;/.test(m3)
+    && /if \(!covered && wp &&/.test(m3), 'K7e: współrzędne tylko nad PUSTĄ mapą — nie pod etykietą / gwiazdą / stacją z rozwinięciem (530)');
   ok(/this\._scheduleCoordTooltip\(gp, clientX, clientY\)/.test(m3) && /this\._scheduleEntityTooltip\(target, clientX, clientY\);/.test(m3),
     'K7f KONTROLA: ścieżki współrzędnych i encji (POI) zostają w kodzie');
   ok(!/\b_showColonyTooltip\s*\(|\b_showVesselTooltip\s*\(/.test(tr) && /\b_showColonyTooltipEl\s*\(html, sx, sy\)\s*\{/.test(tr),

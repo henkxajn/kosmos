@@ -4,8 +4,9 @@
 // Uruchom: node src/testing/smoke/hud_radar_smoke.mjs
 //
 // PINY (SEDNO — pada na drzewie sprzed H1-2; KONTROLA — zielona po obu stronach). Moduły powstają w H1 — import dynamiczny
-// (brak modułu = pin pada, suita się nie przerywa); flaga `hudRadar` ustawiana JAWNIE w keeperze.
-//   R0  API: `HudRadarLogic`, `HudRadarLayer`, `DetectionRange`; flaga `hudRadar` w GameConfig (ON)
+// (brak modułu = pin pada, suita się nie przerywa). Od B-Z radar ma jedną ścieżkę (flagi `hudRadar` i `hudAttention` na
+// stałe ON): widoczność = chip [R], błysk na granicy — z alertu (paczka B) na zegarze symulacji.
+//   R0  API: `HudRadarLogic`, `HudRadarLayer`, `DetectionRange`; flaga `hudRadar` usunięta (B-Z)
 //   R1  promień statku = zasięg WYKRYCIA — TA SAMA funkcja co `ProximitySystem._getDetectionRangeAU` (pin źródłowy: oba
 //       moduły importują `vesselDetectionRangeAU` z `DetectionRange.js`, `ProximitySystem` bez własnej formuły; tożsamość
 //       eksportu) + wykonanie: liczby z prawdziwej `ProximitySystem` = liczby radaru (kadłuby 2,5 / 1,6 / 1,0 / nieznany,
@@ -26,24 +27,35 @@
 //       granica, podziałka i odczyt — rola `HUD_RADAR.BOUNDARY_ROLE` (korekta 1b: `primary` — wybór właściciela), ping — `primary`
 //   R8  rysunek: granica — kropki 1,5 px z okrągłym końcem co 6 px, krycie 0,35; podziałka 0,55; odczyt 0,6; ping —
 //       poświata (szczyt 0,22), linia 1,2 / 0,7, echo 0,6 / 0,25; szerokości STAŁE w px przy każdym zbliżeniu (508)
-//   R9  widoczność: flaga OFF → pusto; ☰ „Radar” = `uiPrefs.hudRadarVisible` (brak klucza = widoczna); tryb Y wymusza
-//   R10 pierścienie 3D (WYKONANIE `_syncSensorOverlay` ze źródła `ThreeRenderer`): ON — usunięte i nie powstają; OFF — jak
-//       dziś (KONTROLA: 15 w scenie jak ZF — także zadokowane, rezerwa, skok, kolonia AI); w pętli renderu — usunięcie
-//       przy ON także w pauzie
-//   R11 menu ☰ „Radar” (WYKONANIE metod `BottomBar`): ON — wartość i przełącznik `hudRadarVisible`; OFF — jak dziś
-//   — H1-3 (błysk na granicy, D-HUD-4) —
-//   R12 logika: namiar w ramce UKŁADU, łuk ±15°, krycie 1 → 0 w 0,8 s, para z graczem (`isEnemyVessel`), najbliższa kolonia
-//       gracza w zasięgu (układ obcego; AI i inny układ — nie; statek w skoku — nie)
-//   R13 warstwa (prawdziwe zdarzenia `EventBus`): `vessel:proximityEnter` → łuk na granicy NIEzaznaczonego statku w namiarze
-//       obcego (punkty = rzut łuku świata), rola `alert`, gaśnie w czasie realnym, potem spoczynek; bez błysku: swoi,
-//       zaznaczony, zadokowany, flaga OFF, inny układ; `vessel:detectionChanged` → najbliższa kolonia w zasięgu (∞ — bez
-//       błysku); mgła wojny — rekord błysku bez danych obcego, warstwa nie czyta wywiadu
+//   R9  widoczność = chip [R] (`uiPrefs.hudLayers.radar`; brak = widoczna; dawny `hudRadarVisible: false` gasi); tryb Y
+//       wymusza
+//   R10 pierścienie 3D usunięte (B-Z): renderer bez metod, mapy, stałych i flagi `m4SensorOverlay`; pętla renderu bez
+//       sprzątania pierścieni
+//   R11 menu ☰ „Radar” (WYKONANIE metod `BottomBar`) = chip [R]: wartość i przełącznik `hudLayers.radar`; dawny klucz
+//       `hudRadarVisible` czytany i usuwany przy zapisie
+//   — obcy w zasięgu (D-HUD-4) —
+//   R12 logika: namiar w ramce UKŁADU, para z graczem (`isEnemyVessel`), najbliższa kolonia gracza w zasięgu (układ
+//       obcego; AI i inny układ — nie; statek w skoku — nie); łuk błysku z alertu (`flashHalfAngle` — co najmniej ±15°),
+//       krycie — obwiednia alertu na zegarze symulacji
+//   R13 warstwa (prawdziwe zdarzenia `EventBus`): `vessel:proximityEnter` → alert i łuk na granicy ZAZNACZONEGO statku
+//       w namiarze obcego (punkty = rzut łuku świata), rola `alert`; pauza — stoi, bieg — gaśnie na zegarze symulacji,
+//       potem spoczynek; bez alertu: swoi, niezaznaczony poza trybem Y, zadokowany; inny układ — zapisany, nierysowany;
+//       `vessel:detectionChanged` → zaznaczona kolonia w zasięgu (∞ — alert bez błysku); mgła wojny — rekord błysku bez
+//       danych obcego, warstwa nie czyta wywiadu
 //   — korekta 1b (czytelność granicy — bramka H1 2026-10-23) —
 //   R14 granica: kropki 1,5 px z okrągłym końcem co 6 px (α 0,35), podziałka 10 px / główne 16 px (α 0,55), odczyt
 //       zasięgu „11,5 AU” / „1,0 AU” (α 0,6, separator wg języka — `fmtDec`) przy NAJWYŻSZEJ na ekranie kresce głównej, na
 //       zewnątrz granicy (decyzja właściciela 2026-10-23); ∞ — bez odczytu; granica, podziałka i odczyt w roli
 //       `BOUNDARY_ROLE`, ping w `primary`; kropki tylko w oknie (`clipRunsToRect`, faza `lineDashOffset` — koszt
 //       rasteryzacji przy okręgu większym od kadru)
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — radar przy ON; polecenie właściciela: keeper przecelowany, nie usunięty):
+//   R0c / R0d — klucz i predykat flagi oraz widoczność H1 (`radarLayerVisible`) usunięte; R9 — chip [R] zamiast flagi
+//   OFF i `hudRadarVisible`; R10 — pierścienie 3D (ścieżka OFF `hudRadar`) usunięte: zamiast wykonania — pin ich braku;
+//   R11 — ☰ „Radar” = chip [R] (dawniej `hudRadarVisible`, OFF — `sensorOverlayVisible`); R12b / R12c — łuk i krycie
+//   błysku z alertu (dawne `flashArc` ±15° i `flashAlpha` 0,8 s czasu realnego — ścieżka OFF `hudAttention` — usunięte);
+//   R13 — błysk z alertu: wyłącznie zaznaczony (w trybie Y — każdy własny), zegar symulacji (dawniej: niezaznaczony,
+//   czas realny); R6 — ramka klatki z `F.att` (stan warstwy jak w grze); R13 / R14 — warstwa z samym radarem (dawniej:
+//   domyślne podwarstwy przy etykietach i trasach wyłączonych flagami). Przełączniki flag w keeperze usunięte.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -106,7 +118,7 @@ const setWorld = () => {
   globalThis.innerWidth = 1600; globalThis.innerHeight = 1041;
   W0.cam = CAM_FAR;
   Object.assign(K, {
-    civMode: true, activeSystemId: 'sys_home', uiScale: 1.25, planetGlobeOpen: false, uiPrefs: { sensorOverlayVisible: true },
+    civMode: true, activeSystemId: 'sys_home', uiScale: 1.25, planetGlobeOpen: false, uiPrefs: {},
     uiManager: {
       _cleanView: false, overlayManager: { isAnyOpen: () => false },
       getSelectedVesselIds: () => [...W0.ids], getSelectedVesselId: () => W0.lead,
@@ -128,11 +140,6 @@ const setWorld = () => {
   });
 };
 setWorld();
-FEATURES.hudRadar = true;
-// ARKUSZ HUD paczka B — ten keeper pinuje radar z H1 (błysk 0,8 s na zegarze realnym, ☰ „Radar” = `hudRadarVisible`), czyli
-// ścieżkę OFF flagi `hudAttention`; ścieżkę ON (alerty ~1,6 s na zegarze symulacji, stan chipu [R]) pinują `hud_alert_smoke`
-// i `hud_layer_chips_smoke`.
-FEATURES.hudAttention = false;
 
 const mkCtx = () => {
   const t = { calls: [] };
@@ -151,18 +158,19 @@ const holderOf = (d, key) => d?.holders?.find((h) => h.key === key) ?? null;
 const select = ({ lead = null, ids = null, entity = null } = {}) => { W0.lead = lead; W0.ids = ids ?? (lead ? [lead] : []); W0.entity = entity; };
 
 // ═══ R0 ══════════════════════════════════════════════════════════════════════
-header('R0  API i flaga');
+header('R0  API (flaga `hudRadar` usunięta — B-Z)');
 {
-  const need = ['isHudRadarOn', 'HUD_RADAR', 'radarLayerVisible', 'radarSelection', 'colonySystemId', 'vesselRadarRangeAU', 'colonyRadarRangeAU',
+  const need = ['HUD_RADAR', 'radarSelection', 'colonySystemId', 'vesselRadarRangeAU', 'colonyRadarRangeAU',
     'radarHolders', 'pingPhase', 'pingRadiusFrac', 'pingFade', 'pingStopReason', 'tickAngles', 'ringSegments', 'glowLayerAlpha', 'radarStyle'];
   const missing = need.filter((n) => RL?.[n] === undefined);
   ok(missing.length === 0, `R0a SEDNO: \`HudRadarLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
   ok(typeof RLay?.HudRadarLayer === 'function' && typeof DR?.vesselDetectionRangeAU === 'function' && DR?.DETECTION_BASE_AU === 0.5,
     'R0b SEDNO: `HudRadarLayer` i `DetectionRange` (`vesselDetectionRangeAU`, `DETECTION_BASE_AU` 0,5)');
   const gc = strip(src('../../config/GameConfig.js'));
-  ok(/\bhudRadar:\s*true,/.test(gc), 'R0c SEDNO: `FEATURES.hudRadar: true` w GameConfig (ON po bramce H1)');
-  ok(RL?.isHudRadarOn?.({ hudRadar: true }) === true && RL?.isHudRadarOn?.({}) === false && RL?.isHudRadarOn?.({ hudRadar: 1 }) === false,
-    'R0d SEDNO: flaga — `true` wyłącznie przy `hudRadar === true` (brak klucza = OFF)');
+  ok(gc.length > 1000 && !/\bhudRadar:\s*(true|false),/.test(gc) && FEATURES.hudRadar === undefined,
+    'R0c (B-Z): klucz `FEATURES.hudRadar` usunięty z GameConfig');
+  ok(!!RL && RL.isHudRadarOn === undefined && RL.radarLayerVisible === undefined,
+    'R0d (B-Z): predykat flagi `isHudRadarOn` i widoczność H1 `radarLayerVisible` usunięte (widoczność = chip [R])');
 }
 
 // ═══ R1 ══════════════════════════════════════════════════════════════════════
@@ -314,6 +322,7 @@ header('R6  podziałka co 30°, kąt 0 = oś x układu (nie kamera)');
     setWorld(); select({ lead: 'v_kur' }); W0.sim = 5000; W0.cam = cam; W0.camEpoch++;
     const radar = RLay?.HudRadarLayer ? new RLay.HudRadarLayer(null) : null;
     const F = { K, now: 99999, sim: 5000, sel: { leadId: 'v_kur', vesselIds: ['v_kur'], activeSystemId: 'sys_home' }, activeSystemId: 'sys_home', features: FEATURES,
+      att: { layers: { radar: true, routes: true, labels: true, orbits: true }, alerts: [], focus: false },
       tactical: false, W: 1280, H: 832.8, mapRect: { x: 150, y: 0, w: 980, h: 740 }, roles: { primary: TC.THEME.accent } };
     radar?.prepare?.(F);
     const proj = P?.({ ...viewOf(cam), uiScale: 1.25 });
@@ -394,112 +403,77 @@ header('R8  rysunek: kropki, podziałka, ping; szerokości stałe w px (508)');
 }
 
 // ═══ R9 ══════════════════════════════════════════════════════════════════════
-header('R9  widoczność warstwy radaru');
+header('R9  widoczność warstwy radaru — chip [R] (B-Z)');
 {
-  ok(RL?.radarLayerVisible?.({}, false) === true && RL?.radarLayerVisible?.({ hudRadarVisible: false }, false) === false
-    && RL?.radarLayerVisible?.({ hudRadarVisible: false }, true) === true && RL?.radarLayerVisible?.({ sensorOverlayVisible: false }, false) === true,
-    'R9a SEDNO: ☰ „Radar” = `hudRadarVisible` (brak klucza = widoczna; stare `sensorOverlayVisible: false` nie gasi); tryb Y wymusza');
+  const CLm = await tryImport('../../ui/HudLayerChipsLogic.js');
+  const rd = (p) => CLm?.readHudLayers?.(p)?.radar;
+  ok(rd({}) === true && rd({ hudRadarVisible: false }) === false && rd({ sensorOverlayVisible: false }) === true && rd({ hudLayers: { radar: false } }) === false,
+    'R9a: widoczność = chip [R] (`hudLayers.radar`; brak = widoczna; dawny `hudRadarVisible: false` gasi, stare `sensorOverlayVisible: false` nie)');
   setWorld(); select({ lead: 'v_kur' }); W0.sim = 5000;
-  FEATURES.hudRadar = false;
+  const h0 = mkHud(); const r0 = h0.frame(1000);
+  K.uiPrefs = { hudLayers: { radar: false } };
   const h1 = mkHud(); const r1 = h1.frame(1000);
-  FEATURES.hudRadar = true;
   K.uiPrefs = { hudRadarVisible: false };
   const h2 = mkHud(); const r2 = h2.frame(1000); const vis2 = h2.dbg()?.visible;
   W0.tactical = true; const r3 = h2.frame(1000); W0.tactical = false;
-  ok(r1 === 'empty' && h1.ctx.calls.length === 0 && r2 === 'empty' && vis2 === false && r3 === 'drawn',
-    `R9b SEDNO: flaga OFF → pusto (${r1}); preferencja OFF → pusto (${r2}); tryb Y przy preferencji OFF → rysunek (${r3})`);
+  K.uiPrefs = {};
+  ok(r0 === 'drawn' && r1 === 'empty' && h1.ctx.calls.length === 0 && r2 === 'empty' && vis2 === false && r3 === 'drawn',
+    `R9b: chip [R] włączony → rysunek (${r0}); wyłączony → pusto (${r1}); stary zapis \`hudRadarVisible: false\` → pusto (${r2}); tryb Y przy wyłączonym → rysunek (${r3})`);
 }
 
 // ═══ R10 ═════════════════════════════════════════════════════════════════════
-header('R10  pierścienie 3D — wykonanie `_syncSensorOverlay` ze źródła ThreeRenderer');
+header('R10  pierścienie 3D usunięte (B-Z) — radar wyłącznie na warstwie HUD');
 {
   const TR = strip(src('../../renderer/ThreeRenderer.js'));
+  const GC = strip(src('../../config/GameConfig.js'));
   const methodBody = (code, sig) => { const i = code.indexOf(sig); return i < 0 ? '' : code.slice(i, code.indexOf('\n  }\n', i) + 4); };
-  const compileWith = (text, scope) => { if (!text) return null; try { const n = Object.keys(scope); return new Function(...n, '__s', 'return eval("(" + __s + ")");')(...n.map((k) => scope[k]), text); } catch (e) { console.log('    (kompilacja: ' + e.message + ')'); return null; } };
-  const constOf = (name) => Number(TR.match(new RegExp('const ' + name + '\\s*=\\s*([0-9a-fx.]+)'))?.[1]);
-  const FL = { m4SensorOverlay: true };
-  const GC = { FEATURES: FL, SENSOR_LOCK_AU: GAME_CONFIG.SENSOR_LOCK_AU };
-  const hudRadarSrc = TR.match(/const hudRadarOn = (\(\) => [^;]+);/)?.[1] ?? '';
-  const hudRadarOn = compileWith(hudRadarSrc, { isHudRadarOn: RL?.isHudRadarOn, GAME_CONFIG: GC }) ?? (() => false);
-  class Ring { constructor(a, b) { this.a = a; this.b = b; } dispose() { this.disposed = true; } }
-  class Mat { constructor(o) { Object.assign(this, o); } dispose() { this.disposed = true; } }
-  class Mesh { constructor(g, m) { this.geometry = g; this.material = m; this.rotation = {}; this.position = { set: (x, y, z) => { this.p = [x, y, z]; } }; } }
-  const THREE = { RingGeometry: Ring, MeshBasicMaterial: Mat, Mesh, DoubleSide: 2 };
-  const SCOPE = { THREE, GAME_CONFIG: GC, hudRadarOn, isEnemyVessel, S: (v) => v / 10, AU: 110,
-    EntityManager: { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_fob2: { x: -310, y: 125 }, p_ai: { x: 200, y: 200 }, p_out: { x: -400, y: -50 }, p_x: { x: 1, y: 1 } })[id] ?? null },
-    SENSOR_RING_VESSEL_COLOR: constOf('SENSOR_RING_VESSEL_COLOR'), SENSOR_RING_COLONY_COLOR: constOf('SENSOR_RING_COLONY_COLOR'),
-    SENSOR_RING_OPACITY: constOf('SENSOR_RING_OPACITY'), SENSOR_RING_SEGMENTS: constOf('SENSOR_RING_SEGMENTS'), SENSOR_RING_Y: constOf('SENSOR_RING_Y'),
-    SENSOR_RING_MAX_COLONY_AU: constOf('SENSOR_RING_MAX_COLONY_AU') };
-  const M = {};
-  for (const n of ['_syncSensorOverlay', '_upsertSensorRing', '_disposeSensorRing', '_disposeAllSensorRings']) {
-    const b = methodBody(TR, `\n  ${n}(`); M[n] = b ? compileWith('function ' + b.trim().slice(n.length), SCOPE) : null;
-  }
-  const mkR = () => {
-    const scene = { objs: new Set(), add(o) { this.objs.add(o); }, remove(o) { this.objs.delete(o); } };
-    const r = { scene, _sensorRingMeshes: new Map() };
-    for (const [n, f] of Object.entries(M)) r[n] = f ? (...a) => f.apply(r, a) : () => {};
-    return r;
-  };
-  // Świat jak ZF: 10 statków gracza w `sys_home` (2 w locie, 8 zadokowanych) + 5 kolonii gracza.
-  const ZF_V = [...['a', 'b'].map((i) => V('f_' + i)), ...'cdefghij'.split('').map((i) => V('d_' + i, { position: { x: 1, y: 1, state: 'docked', dockedAt: 'p_nz' } }))];
-  const ZF_C = ['p_nz', 'p_fob', 'p_out'].map((id) => mkCol(id)).concat([mkCol('p_x', { systemId: 'sys_home' }), mkCol('p_fob', { planetId: 'p_fob2' })]);
-  K.vesselManager = { _vessels: new Map(ZF_V.map((v) => [v.id, v])) };
-  K.colonyManager = { getAllColonies: () => ZF_C };
-  K.uiPrefs = { sensorOverlayVisible: true };
-  K.activeSystemId = 'sys_home';
-  FEATURES.hudRadar = false; FL.hudRadar = false;
-  const off = mkR(); off._syncSensorOverlay();
-  ok(off._sensorRingMeshes.size === 15 && off.scene.objs.size === 15, `R10a KONTROLA: OFF — dzisiejsze pierścienie 3D: ${off._sensorRingMeshes.size} (10 statków, także zadokowane, + 5 kolonii)`);
-  // Defekty ścieżki OFF zostają (OFF = dzisiejszy kod co do bitu).
-  K.vesselManager = { _vessels: new Map([['w', V('w', { systemId: null })], ['r', V('r', { serviceState: 'stored' })]]) };
-  K.colonyManager = { getAllColonies: () => [mkCol('p_ai', { ownerEmpireId: 'emp_1' })] };
-  const off2 = mkR(); off2._syncSensorOverlay();
-  ok(off2._sensorRingMeshes.has('v_w') && off2._sensorRingMeshes.has('v_r') && off2._sensorRingMeshes.has('col_p_ai'),
-    'R10b KONTROLA: OFF — statek w skoku (516), rezerwa (507) i kolonia AI (506) dalej z pierścieniem 3D (dzisiejszy kod)');
-  FL.hudRadar = true;
-  off._syncSensorOverlay();
-  ok(off._sensorRingMeshes.size === 0 && off.scene.objs.size === 0, `R10c SEDNO: ON — \`_syncSensorOverlay\` usuwa pierścienie 3D i nie tworzy nowych (${off._sensorRingMeshes.size})`);
+  ok(TR.length > 1000 && !/_syncSensorOverlay|_upsertSensorRing|_disposeSensorRing|_disposeAllSensorRings|_sensorRingMeshes|SENSOR_RING_/.test(TR),
+    'R10a (B-Z): `ThreeRenderer` bez pierścieni sensorów 3D (metody, mapa, stałe)');
+  ok(!/isHudRadarOn|hudRadarOn\(/.test(TR) && !/m4SensorOverlay/.test(TR) && GC.length > 1000 && !/\bm4SensorOverlay:\s*(true|false)/.test(GC)
+    && FEATURES.m4SensorOverlay === undefined,
+    'R10b (B-Z): bez flagi radaru i bez `m4SensorOverlay` (renderer i GameConfig)');
+  ok(!/EventBus\.on\('ui:sensorOverlayToggle'/.test(TR) && !/ui:sensorOverlayToggle/.test(strip(src('../../ui/BottomBar.js'))),
+    'R10c (B-Z): dawny przełącznik pierścieni 3D (`ui:sensorOverlayToggle`) — bez słuchacza w rendererze i bez nadawcy w ☰');
   const loop = methodBody(TR, '\n  _startLoop() {');
-  ok(/if \(this\._sensorRingMeshes\.size > 0 && hudRadarOn\(\)\) this\._disposeAllSensorRings\(\);/.test(loop) && loop.indexOf('hudRadarOn()') > loop.indexOf('this._syncHudOrbits();'),
-    'R10d SEDNO: pętla renderu usuwa pierścienie 3D przy ON co klatkę (także w pauzie, bez zdarzeń synchronizacji)');
-  const sync = methodBody(TR, '\n  _syncSensorOverlay() {');
-  ok(sync.indexOf('if (hudRadarOn()) {') > 0 && sync.indexOf('if (hudRadarOn()) {') < sync.indexOf('if (!GAME_CONFIG.FEATURES.m4SensorOverlay)')
-    && /if \(v\.systemId && v\.systemId !== activeSys\) continue;/.test(sync) && /GAME_CONFIG\.SENSOR_LOCK_AU,/.test(sync),
-    'R10e SEDNO: bramka ON na początku `_syncSensorOverlay`; dalsza treść (ścieżka OFF) — dzisiejszy kod (filtr układu, promień 0,3 AU)');
+  ok(/this\._syncHudOrbits\(\);/.test(loop) && !/SensorRing|hudRadarOn/.test(loop),
+    'R10d (B-Z): pętla renderu bez sprzątania pierścieni 3D (nie ma czego sprzątać)');
 }
 
 // ═══ R11 ═════════════════════════════════════════════════════════════════════
-header('R11  menu ☰ „Radar” — wykonanie metod BottomBar');
+header('R11  menu ☰ „Radar” = chip [R] — wykonanie metod BottomBar');
 {
   const bb = Object.create(BottomBar.prototype);
   Object.assign(bb, { _autosaveOption: 'year', _orbitMode: 'planetoids' });
   const row = () => bb._getMenuRows(true, true).find((r) => r.id === 'radar');
-  FEATURES.hudRadar = true;
   K.uiPrefs = { sensorOverlayVisible: false };
   const a = row();
-  bb._toggleSensorOverlay(); const b = row(); const pB = { ...K.uiPrefs };
+  bb._toggleSensorOverlay(); const b = row(); const pB = JSON.parse(JSON.stringify(K.uiPrefs));
   bb._toggleSensorOverlay(); const c = row();
-  ok(a?.valueOn === true && b?.valueOn === false && pB.hudRadarVisible === false && pB.sensorOverlayVisible === false && c?.valueOn === true && K.uiPrefs.hudRadarVisible === true,
-    `R11a SEDNO: ON — wartość z \`hudRadarVisible\` (brak = WŁ mimo starego \`sensorOverlayVisible: false\`); przełącznik pisze \`hudRadarVisible\` (${a?.valueOn} → ${b?.valueOn} → ${c?.valueOn}), \`sensorOverlayVisible\` nietknięte`);
-  FEATURES.hudRadar = false;
-  K.uiPrefs = { sensorOverlayVisible: false };
+  ok(a?.valueOn === true && b?.valueOn === false && pB.hudLayers?.radar === false && pB.sensorOverlayVisible === false && c?.valueOn === true
+    && K.uiPrefs.hudLayers?.radar === true,
+    `R11a: wartość i przełącznik z chipu [R] (\`hudLayers.radar\`; stare \`sensorOverlayVisible: false\` nie gasi i zostaje nietknięte) (${a?.valueOn} → ${b?.valueOn} → ${c?.valueOn})`);
+  K.uiPrefs = { hudRadarVisible: false };
   const d = row(); bb._toggleSensorOverlay(); const e = row();
-  ok(d?.valueOn === false && e?.valueOn === true && K.uiPrefs.sensorOverlayVisible === true && K.uiPrefs.hudRadarVisible === undefined,
-    'R11b KONTROLA: OFF — jak dziś: wartość i przełącznik `sensorOverlayVisible`');
-  FEATURES.hudRadar = true;
+  ok(d?.valueOn === false && e?.valueOn === true && K.uiPrefs.hudLayers?.radar === true && !('hudRadarVisible' in K.uiPrefs),
+    'R11b: stary zapis H1 (`hudRadarVisible: false`) — ☰ „Radar” WYŁ; przełącznik pisze `hudLayers.radar`, dawny klucz usunięty');
+  K.uiPrefs = {};
 }
 
 // ═══ R12 ═════════════════════════════════════════════════════════════════════
-header('R12  błysk — logika (D-HUD-4)');
+header('R12  obcy w zasięgu — logika (D-HUD-4)');
 {
+  const AL = await tryImport('../../ui/HudAlertLogic.js');
   const B = (a, b) => RL?.bearingRad?.(a, b);
   ok(near(B({ x: 0, y: 0 }, { x: 10, y: 0 }), 0) && near(B({ x: 0, y: 0 }, { x: 0, y: 10 }), Math.PI / 2) && near(B({ x: 5, y: 5 }, { x: -5, y: 5 }), Math.PI),
     'R12a SEDNO: namiar w ramce układu — oś x układu = 0, oś y = 90° (współrzędne logiki gry, bez kamery)');
-  const arc = RL?.flashArc?.(1);
-  ok(near(arc?.[0], 1 - Math.PI / 12) && near(arc?.[1], 1 + Math.PI / 12), 'R12b SEDNO: łuk błysku ±15° wokół namiaru');
-  const FA = (t) => RL?.flashAlpha?.(t);
-  ok(FA(0) === 1 && near(FA(400), 0.75) && FA(800) === 0 && FA(5000) === 0 && FA(-1) === 0 && RL?.HUD_RADAR?.FLASH_MS === 800,
-    'R12c SEDNO: krycie błysku 1 → 0 w 0,8 s czasu realnego (poza oknem — 0)');
+  const HA = (px) => AL?.flashHalfAngle?.(px);
+  const minArc = AL?.HUD_ALERT?.FLASH_MIN_ARC_PX;
+  ok(near(HA(1000), Math.PI / 12) && near(HA(minArc), 0.5) && near(HA(null), Math.PI / 12) && RL?.flashArc === undefined,
+    `R12b (B-Z): łuk błysku z alertu — co najmniej ±15° i co najmniej ${minArc} px na ekranie (\`flashHalfAngle\`); dawne \`flashArc\` usunięte`);
+  const ALM = AL?.HUD_ALERT?.ALERT_MS;
+  ok(AL?.alertEnvelope?.(0) === 1 && AL?.alertEnvelope?.(ALM) === 0 && AL?.alertEnvelope?.(ALM / 4) > 0 && AL?.alertEnvelope?.(ALM / 4) < 1
+    && RL?.flashAlpha === undefined && RL?.HUD_RADAR?.FLASH_MS === undefined,
+    `R12c (B-Z): krycie błysku — obwiednia alertu na zegarze symulacji (1 → 0 w ${ALM} ms); dawne \`flashAlpha\` i \`FLASH_MS\` (0,8 s czasu realnego) usunięte`);
   const pl = V('p1'), en = V('e1', { ownerEmpireId: 'emp_1', isEnemy: true }), en2 = V('e2', { ownerEmpireId: 'emp_2', isEnemy: true });
   const pr = (a, b) => RL?.proximityFlashPair?.(a, b);
   ok(pr(pl, en)?.holder === pl && pr(en, pl)?.holder === pl && pr(en, pl)?.foe === en && pr(pl, V('p2')) === null && pr(en, en2) === null
@@ -518,103 +492,128 @@ header('R12  błysk — logika (D-HUD-4)');
 }
 
 // ═══ R13 ═════════════════════════════════════════════════════════════════════
-header('R13  błysk — warstwa i prawdziwe zdarzenia');
+header('R13  błysk alertu — warstwa i prawdziwe zdarzenia (B-Z: wyłącznie z alertu, zegar symulacji)');
 {
   const EB = (await import('../../core/EventBus.js')).default;
   const P = (await tryImport('../../ui/HudProjection.js'))?.makeHudProjector;
+  const AL = await tryImport('../../ui/HudAlertLogic.js');
+  const AMS = AL?.HUD_ALERT?.ALERT_MS ?? NaN;
   TC.applyPreset(TC.PRESET_THEMES.ambient_1);
   const T = { now: 10000 };
+  // Domyślne podwarstwy gry zawierają radar (wybierany po klasie — paczka A / B: trasy, radar, etykiety, nawiasy).
+  {
+    const ctx = mkCtx(); const cv = { width: 0, height: 0, getContext: () => ctx };
+    const dh = HL?.HudLayer ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now }) : null;
+    const dr = dh?._sublayers?.find?.((s) => s instanceof (RLay?.HudRadarLayer ?? class {})) ?? null;
+    ok(dr instanceof (RLay?.HudRadarLayer ?? class {}) && dr._hud === dh,
+      'R13-0 SEDNO: domyślne podwarstwy warstwy HUD gry zawierają radar (`HudRadarLayer`, z rejestrem alertów warstwy)');
+    dh?.destroy?.();
+  }
+  // Warstwa z samym radarem (liczymy wywołania ctx radaru) i rejestrem alertów warstwy — jak podwarstwa gry.
   const mkHudT = () => {
     const ctx = mkCtx(); const cv = { width: 0, height: 0, getContext: () => ctx };
-    const hud = HL?.HudLayer ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now }) : null;   // domyślne podwarstwy gry (radar)
-    // ARKUSZ HUD paczka A: podwarstwy gry = trasy, radar, etykiety — radar wybierany po klasie, nie po indeksie.
-    const radar = hud?._sublayers?.find?.((s) => s instanceof (RLay?.HudRadarLayer ?? class {})) ?? null;
+    const radar = RLay?.HudRadarLayer ? new RLay.HudRadarLayer(null) : null;
+    const hud = HL?.HudLayer && radar ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now, sublayers: [radar] }) : null;
+    if (radar && hud) radar._hud = hud;
     return { ctx, hud, radar, frame: () => (hud ? hud.frame(T.now) : null), dbg: () => radar?.debug?.() ?? null };
   };
-  K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
-  setWorld(); K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
-  select({}); W0.sim = 5000; FEATURES.hudRadar = true;
-  // ARKUSZ HUD paczka A — etykiety (H2) i trasy (H3) wyłączone: liczymy wywołania ctx samego radaru (warstwa jak po H1).
-  FEATURES.hudLabels = false; FEATURES.hudRoutes = false;
+  const EM = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
+  setWorld(); K.entityManager = EM;
+  W0.sim = 5000; select({ lead: 'v_kur' });
   const h = mkHudT();
-  ok(h.radar instanceof (RLay?.HudRadarLayer ?? class {}), 'R13-0 SEDNO: domyślne podwarstwy warstwy HUD gry zawierają radar (`HudRadarLayer`)');
-  h.frame();
+  h.frame();                                   // zaznaczenie widziane — ping (czas realny)
+  T.now += 3000; h.frame();                    // ping skończony (2,4 s)
   const idle0 = h.frame();
   h.ctx.calls.length = 0;
   EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
   const r1 = h.frame(), d1 = h.dbg();
   const fl = d1?.flashes?.[0];
   const want = (Math.atan2(40 - 0, 400 - 500) * 180) / Math.PI;
-  ok(idle0 === 'idle' && r1 === 'drawn' && d1?.flashes?.length === 1 && fl?.key === 'v:v_kur' && near(fl?.angleDeg, +want.toFixed(1), 1e-9) && fl?.alpha === 1,
-    `R13a SEDNO: \`vessel:proximityEnter\` (Kurier ↔ Rajder) → błysk na granicy NIEzaznaczonego Kuriera w namiarze ${fl?.angleDeg}° (z pozycji logicznych: ${want.toFixed(1)}°)`);
-  // Punkty łuku = rzut łuku świata na granicy (środek = sprite, promień 11,52 AU).
+  ok(idle0 === 'idle' && r1 === 'drawn' && (h.hud?.alerts?.size ?? 0) === 1 && d1?.flashes?.length === 1 && fl?.key === 'v:v_kur'
+    && near(fl?.angleDeg, +want.toFixed(1), 1e-9) && fl?.alpha === 1,
+    `R13a SEDNO: \`vessel:proximityEnter\` (Kurier ↔ Rajder) → alert i błysk na granicy ZAZNACZONEGO Kuriera w namiarze ${fl?.angleDeg}° (z pozycji logicznych: ${want.toFixed(1)}°)`);
+  // Punkty łuku = rzut łuku świata na granicy (środek = sprite, promień 11,52 AU); połowa łuku z `flashHalfAngle`.
   const proj = P?.({ ...viewOf(CAM_FAR), uiScale: 1.25 });
-  const a0 = (Math.atan2(40, -100)) - Math.PI / 12;
+  const ctr = proj?.point?.(50, 0.3, 0);
+  const half = AL?.flashHalfAngle?.(ctr ? 126.72 * proj.pxPerWorld(ctr.depth) : null);
+  const a0 = Math.atan2(40, -100) - half;
   const p0 = proj?.point?.(50 + 126.72 * Math.cos(a0), 0.3, 0 + 126.72 * Math.sin(a0));
   const mv = h.ctx.calls.find((c) => c[0] === 'moveTo' && near(c[1], p0?.x, 1e-6) && near(c[2], p0?.y, 1e-6));
-  const flashStroke = h.ctx.calls.filter((c) => c[0] === '=strokeStyle').map((c) => c[1]);
-  ok(!!mv && flashStroke.includes(TC.THEME.danger) && !flashStroke.includes(TC.THEME.accent),
-    `R13b SEDNO: łuk zaczyna się w rzucie punktu granicy (namiar − 15°), kolor roli \`alert\` (Amber Noir: danger ${TC.THEME.danger}); bez okręgu radaru (statek niezaznaczony)`);
-  T.now += 400; const r2 = h.frame(); const a2 = h.dbg()?.flashes?.[0]?.alpha;
-  T.now += 450; const r3 = h.frame(); const n3 = h.dbg()?.flashes?.length;
+  const ss = h.ctx.calls.filter((c) => c[0] === '=strokeStyle').map((c) => c[1]);
+  const roles1 = HP.resolveHudRoles(TC.THEME);
+  ok(Number.isFinite(half) && half >= Math.PI / 12 - 1e-12 && !!mv && ss[ss.length - 1] === roles1.alert && roles1.alert === TC.THEME.danger,
+    `R13b SEDNO: łuk zaczyna się w rzucie punktu granicy (namiar − ${Number.isFinite(half) ? ((half * 180) / Math.PI).toFixed(1) : '—'}°, \`flashHalfAngle\`), rysowany ostatni w roli \`alert\` (Amber Noir: danger ${TC.THEME.danger})`);
+  // Krycie — obwiednia alertu na zegarze SYMULACJI: w pauzie stoi, w biegu gaśnie; po ALERT_MS — koniec, potem spoczynek.
+  T.now += 500; const rP = h.frame(); const aP = h.dbg()?.flashes?.[0]?.alpha;
+  W0.sim = 5000 + AMS * 0.25; const r2 = h.frame(); const a2 = h.dbg()?.flashes?.[0]?.alpha;
+  W0.sim = 5000 + AMS + 1; const r3 = h.frame(); const n3 = h.dbg()?.flashes?.length;
   const r4 = h.frame();
-  ok(r2 === 'drawn' && near(a2, 0.75, 1e-9) && r3 === 'drawn' && n3 === 0 && r4 === 'idle',
-    `R13c SEDNO: błysk gaśnie w czasie realnym (po 0,4 s krycie ${a2}); po 0,8 s jedna klatka czyszcząca, potem spoczynek (${r2} → ${r3} → ${r4})`);
-  // Bez błysku: swoi, zaznaczony, zadokowany, flaga OFF, inny układ.
+  ok(rP === 'idle' && aP === 1 && r2 === 'drawn' && a2 > 0 && a2 < 1 && r3 === 'drawn' && n3 === 0 && r4 === 'idle',
+    `R13c SEDNO: pauza — błysk stoi (${rP}, krycie ${aP}); bieg — gaśnie na zegarze symulacji (¼ czasu alertu: ${a2}); po ${AMS} ms jedna klatka czyszcząca, potem spoczynek (${r3} → ${r4})`);
+  // Bez alertu (i bez błysku): swoi, statek NIEzaznaczony poza trybem Y, zadokowany (bez radaru, 507).
   const none = [];
-  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_orb', distanceAU: 1, sameFaction: true }); none.push(h.radar?._flashes?.length ?? -1);
-  select({ lead: 'v_kur' }); h.frame();
-  EB.emit('vessel:proximityEnter', { vesselAId: 'v_foe', vesselBId: 'v_kur', distanceAU: 1, sameFaction: false }); none.push(h.radar?._flashes?.length ?? -1);
+  const tryEv = (e) => { h.hud?.alerts?.clear?.(); EB.emit('vessel:proximityEnter', e); none.push(h.hud?.alerts?.size ?? -1); };
+  tryEv({ vesselAId: 'v_kur', vesselBId: 'v_orb', distanceAU: 1, sameFaction: true });
   select({}); h.frame();
-  EB.emit('vessel:proximityEnter', { vesselAId: 'v_dock', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false }); none.push(h.radar?._flashes?.length ?? -1);
-  FEATURES.hudRadar = false;
-  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false }); none.push(h.radar?._flashes?.length ?? -1);
-  FEATURES.hudRadar = true;
-  ok(none.every((n) => n === 0), `R13d SEDNO: bez błysku — swoi, zaznaczony (ma pełny radar), zadokowany (bez radaru), flaga OFF (${none.join(', ')})`);
-  // Kolonia — obserwatorium: najbliższa kolonia gracza w zasięgu.
+  tryEv({ vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false });
+  select({ lead: 'v_dock' }); h.frame();
+  tryEv({ vesselAId: 'v_dock', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false });
+  ok(none.length === 3 && none.every((n) => n === 0),
+    `R13d SEDNO: bez alertu — swoi, NIEzaznaczony poza trybem Y (granica niewidoczna), zadokowany (bez radaru) (${none.join(', ')}; świadek: R13a — zaznaczony ma alert)`);
+  // Kolonia — obserwatorium: zaznaczone ciało z kolonią, obcy w jego zasięgu.
   const foe2 = V('v_foe2', { ownerEmpireId: 'emp_1', isEnemy: true, position: { x: -245, y: 120, state: 'in_transit', dockedAt: null } });
   VESSELS.push(foe2);
-  h.ctx.calls.length = 0;
+  select({ entity: 'p_fob' }); h.frame();
+  h.hud?.alerts?.clear?.(); h.ctx.calls.length = 0;
   EB.emit('vessel:detectionChanged', { vesselId: 'v_foe2', detected: true, vessel: foe2 });
   const r5 = h.frame(); const f5 = h.dbg()?.flashes?.[0];
   ok(r5 === 'drawn' && f5?.key === 'c:p_fob' && near(f5?.angleDeg, 0, 1e-9),
-    `R13e SEDNO: \`vessel:detectionChanged { detected: true }\` → błysk kolonii Fobos (najbliższa w zasięgu 1 AU) w namiarze ${f5?.angleDeg}°`);
-  T.now += 1000; h.frame(); h.frame();
-  const foe3 = V('v_foe3', { ownerEmpireId: 'emp_1', isEnemy: true, position: { x: 600, y: 0, state: 'in_transit', dockedAt: null } });
-  VESSELS.push(foe3);
-  const before = h.radar?._flashes?.length ?? -1;
-  EB.emit('vessel:detectionChanged', { vesselId: 'v_foe3', detected: true, vessel: foe3 });
-  EB.emit('vessel:detectionChanged', { vesselId: 'v_foe2', detected: false });
-  ok(before === 0 && h.radar?._flashes?.length === 0, 'R13f SEDNO: obcy złapany tylko przez Nową Ziemię (∞ — bez granicy) i `detected: false` — bez błysku');
-  // Mgła wojny: rekord błysku bez danych obcego; warstwa nie czyta wywiadu.
-  EB.emit('vessel:proximityEnter', { vesselAId: 'v_orb', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false });
-  const rec = h.radar?._flashes?.[0];
+    `R13e SEDNO: \`vessel:detectionChanged { detected: true }\` → błysk zaznaczonej kolonii Fobos (zasięg 1 AU) w namiarze ${f5?.angleDeg}°`);
+  // Mgła wojny: rekord błysku warstwy bez danych obcego; warstwa nie czyta wywiadu.
+  const rec = h.radar?._prep?.flashes?.[0];
   const recKeys = rec ? Object.keys(rec).sort().join(',') : '';
   const lay = strip(src('../../ui/HudRadarLayer.js'));
-  ok(recKeys === 'angle,id,key,kind,systemId,t0' && rec?.id === 'v_orb' && !/intelSystem|getVesselContact|isAtLeast|\.name\b/.test(lay),
-    `R13g SEDNO: mgła wojny — rekord błysku (${recKeys}) bez nazwy, typu i id obcego; warstwa nie czyta wywiadu (ta sama geometria przy rumor i contact)`);
-  // Inny układ: właściciel radaru w sys_067 przy oglądanym sys_home — nie rysowany.
-  T.now += 1000; h.frame(); h.frame();
+  ok(recKeys === 'angle,c,env,id,key,kind,rangeAU' && rec?.id === 'p_fob' && !/intelSystem|getVesselContact|isAtLeast|\.name\b/.test(lay),
+    `R13g SEDNO: mgła wojny — rekord błysku (${recKeys}) bez nazwy, typu i id obcego; warstwa nie czyta wywiadu (treść alertu wg wywiadu — \`hud_alert_smoke\` A1–A2)`);
+  // Zasięg ∞ (Nowa Ziemia, obserwatorium Lv4) — alert bez granicy i bez błysku (alert przez etykietę); `detected: false` — nic.
+  W0.sim += AMS + 1; h.frame();
+  const foe3 = V('v_foe3', { ownerEmpireId: 'emp_1', isEnemy: true, position: { x: 600, y: 0, state: 'in_transit', dockedAt: null } });
+  VESSELS.push(foe3);
+  select({ entity: 'p_nz' }); h.frame();
+  h.hud?.alerts?.clear?.();
+  EB.emit('vessel:detectionChanged', { vesselId: 'v_foe3', detected: true, vessel: foe3 });
+  const nInf = h.hud?.alerts?.size ?? -1;
+  h.frame(); const fInf = h.dbg()?.flashes?.length ?? -1;
+  h.hud?.alerts?.clear?.();
+  EB.emit('vessel:detectionChanged', { vesselId: 'v_foe3', detected: false });
+  ok(nInf === 1 && fInf === 0 && (h.hud?.alerts?.size ?? -1) === 0,
+    `R13f SEDNO: obcy w zasięgu ∞ zaznaczonej Nowej Ziemi — alert bez błysku (bez granicy; ${nInf} / ${fInf}); \`detected: false\` — bez alertu`);
+  // Inny układ: zaznaczony statek w sys_067 przy oglądanym sys_home — alert zapisany, błysk nierysowany.
+  W0.sim += AMS + 1; h.frame();
   const foeFar = V('v_foeFar', { ownerEmpireId: 'emp_1', isEnemy: true, systemId: 'sys_067', position: { x: 20, y: 10, state: 'in_transit', dockedAt: null } });
   VESSELS.push(foeFar);
+  select({ lead: 'v_far' }); h.frame();
+  h.hud?.alerts?.clear?.();
   EB.emit('vessel:proximityEnter', { vesselAId: 'v_far', vesselBId: 'v_foeFar', distanceAU: 1, sameFaction: false });
   const r8 = h.frame(); const d8 = h.dbg();
-  ok((h.radar?._flashes?.length ?? 0) === 1 && (d8?.flashes?.length ?? -1) === 0 && r8 !== 'drawn',
-    `R13h SEDNO: błysk statku z innego układu — zapisany (${h.radar?._flashes?.length}), nierysowany w oglądanym układzie (${r8})`);
+  ok((h.hud?.alerts?.size ?? 0) === 1 && (d8?.flashes?.length ?? -1) === 0,
+    `R13h SEDNO: alert statku z innego układu — zapisany (${h.hud?.alerts?.size}), nierysowany w oglądanym układzie (${r8}; błyski ${d8?.flashes?.length})`);
   // Neon Cyber — alert = warning (reguła B2).
   TC.applyPreset(TC.PRESET_THEMES.neon_cyber);
-  T.now += 1000; K.activeSystemId = 'sys_home'; h.frame(); h.frame();
-  h.ctx.calls.length = 0;
+  W0.sim += AMS + 1; select({ lead: 'v_kur' }); h.frame();
+  h.hud?.alerts?.clear?.(); h.ctx.calls.length = 0;
   EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
   h.frame();
   const ns = h.ctx.calls.filter((c) => c[0] === '=strokeStyle').map((c) => c[1]);
-  ok(ns.includes(TC.THEME.warning) && !ns.includes(TC.THEME.danger), `R13i SEDNO: Neon Cyber — błysk w roli \`alert\` = warning (${TC.THEME.warning}; reguła B2)`);
-  T.now += 1000; h.frame(); h.frame();
+  ok(ns[ns.length - 1] === TC.THEME.warning && !ns.includes(TC.THEME.danger), `R13i SEDNO: Neon Cyber — błysk w roli \`alert\` = warning (${TC.THEME.warning}; reguła B2)`);
+  h.hud?.alerts?.clear?.();
   EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
-  const beforeDestroy = h.radar?._flashes?.length ?? 0;   // świadek: przed zniszczeniem zdarzenie daje błysk
+  const beforeDestroy = h.hud?.alerts?.size ?? 0;   // świadek: przed zniszczeniem zdarzenie daje alert
+  const store = h.hud?.alerts;
   h.hud?.destroy?.();
+  store?.clear?.();
   EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
-  ok(beforeDestroy === 1 && (h.radar?._flashes?.length ?? -1) === 0, `R13j SEDNO: \`destroy\` — podwarstwa odpina słuchaczy (przed: ${beforeDestroy} błysk, po zniszczeniu i zdarzeniu: ${h.radar?._flashes?.length})`);
+  ok(beforeDestroy === 1 && (store?.size ?? -1) === 0, `R13j SEDNO: \`destroy\` — podwarstwa odpina słuchaczy (przed: ${beforeDestroy} alert, po zniszczeniu i zdarzeniu: ${store?.size})`);
   VESSELS.splice(VESSELS.length - 3, 3);
 }
 
@@ -631,14 +630,15 @@ header('R14  korekta 1b — granica czytelna: kropki, podziałka 10 / 16 px, odc
   ok(RT(11.52, 'pl') === '11,5 AU' && RT(1, 'pl') === '1,0 AU' && RT(6.912, 'pl') === '6,9 AU' && RT(11.52, 'en') === '11.5 AU'
     && RT(Infinity, 'pl') === null && RT(0, 'pl') === null,
     `R14a SEDNO: tekst odczytu — liczba z jednym miejscem po przecinku + „AU”: „${RT(11.52, 'pl')}”, „${RT(1, 'pl')}” (pl), „${RT(11.52, 'en')}” (en); ∞ i 0 — brak`);
-  // Warstwa jak w grze (domyślna podwarstwa radaru — `KOSMOS.hudLayer`); atrapa ctx z miarą tekstu 5 px na znak; stan ctx
-  // w chwili każdego `stroke` i `fillText`.
+  // Warstwa z samym radarem (podwarstwa gry — R13-0; bez etykiet, tras i nawiasów, jak dawniej przy wyłączonych flagach);
+  // atrapa ctx z miarą tekstu 5 px na znak; stan ctx w chwili każdego `stroke` i `fillText`.
   const T = { now: 50000 };
   const mkHudR = () => {
     const ctx = mkCtx(); ctx.measureText = (s) => ({ width: String(s).length * 5 }); ctx.calls.length = 0;
     const cv = { width: 0, height: 0, getContext: () => ctx };
-    const hud = HL?.HudLayer ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now }) : null;
-    const radar = hud?._sublayers?.find?.((s) => s instanceof (RLay?.HudRadarLayer ?? class {})) ?? null;   // paczka A — po klasie
+    const radar = RLay?.HudRadarLayer ? new RLay.HudRadarLayer(null) : null;
+    const hud = HL?.HudLayer && radar ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now, sublayers: [radar] }) : null;
+    if (radar && hud) radar._hud = hud;
     return { ctx, hud, radar, frame: () => (hud ? hud.frame(T.now) : null), dbg: () => radar?.debug?.() ?? null };
   };
   const ops = (calls) => {
@@ -651,7 +651,7 @@ header('R14  korekta 1b — granica czytelna: kropki, podziałka 10 / 16 px, odc
     }
     return res;
   };
-  setWorld(); select({}); W0.sim = 5000; W0.tactical = false; FEATURES.hudRadar = true;
+  setWorld(); select({}); W0.sim = 5000; W0.tactical = false;
   const h = mkHudR(); h.frame();
   select({ lead: 'v_kur' }); h.frame();                 // zaznaczenie — start pingu (czas realny)
   T.now += 600; h.ctx.calls.length = 0; h.frame();      // ping w 1/4 (u 0,25): granica, podziałka, odczyt, ping z echem

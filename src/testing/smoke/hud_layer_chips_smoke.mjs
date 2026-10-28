@@ -12,13 +12,18 @@
 //       modyfikatorów); bez kolizji (cyfry 1–5 — prędkości, mapa skrótów overlayów bez cyfr); `GameScene` przez tę logikę
 //   C3  ☰ „Radar” (WYKONANIE metod `BottomBar`) = to samo źródło co [R]: odczyt, przełącznik, stary zapis
 //   C4  [O] (WYKONANIE metod `ThreeRenderer` wyciętych ze źródła): wyłączony = filtr „Żadne” (3b: orbita zaznaczonego
-//       zostaje), wybór z menu ☰ nietknięty; przełączenie w pauzie — przestylowanie bez przebudowy geometrii; OFF — menu
+//       zostaje), wybór z menu ☰ nietknięty; przełączenie w pauzie — przestylowanie bez przebudowy geometrii; z powrotem
+//       włączony — filtr z menu
 //   C5  [E] (prawdziwy `HudLayer` + `HudLabelLayer`): etykiety stałe znikają, przypięcie i etykieta pod kursorem zostają,
 //       strzałki krawędzi — bez
 //   C6  [T] — bez tras; [R] — radar niewidoczny, tryb Y wymusza; uwaga tras: zaznaczona 1,0, reszta ROUTE_DIM
 //   C7  chipy na pasie (prawdziwy `BottomControlBar` na atrapie ctx): od lewego końca pasa, przed suwakiem zoomu; zegar,
 //       suwak, 🔔, ☰ i ⚔ w tych samych px co bez chipów (pin px); pod overlayem — brak; klik przełącza; oba warianty stanu
 //       wyłączonego (przekreślony / bez nawiasów); litery PL / EN; podpowiedź z klawiszem
+// ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON, ścieżki OFF usunięte): C2d — klawisze 6–9 bez
+//   gałęzi flagi; C3d — ☰ „Radar” nie dotyka dawnego przełącznika pierścieni 3D (`sensorOverlayVisible`,
+//   `ui:sensorOverlayToggle`); C4e — [O] z powrotem włączony, metody bez gałęzi flagi; C7d / C7e — wariant porównawczy
+//   „bez chipów” = pas z wyciętym rysunkiem chipów (dawniej: flaga OFF). Przełączniki flag w keeperze usunięte.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -43,10 +48,8 @@ const HOL = await tryImport('../../renderer/HudOrbitLogic.js');
 const { BottomBar } = await import('../../ui/BottomBar.js');
 const { BottomControlBar } = await import('../../ui/BottomControlBar.js');
 const { t, setLocale } = await import('../../i18n/i18n.js');
-const FEATURES = GAME_CONFIG.FEATURES;
+const EventBus = (await import('../../core/EventBus.js')).default;
 const call = (fn, ...a) => { try { return CL?.[fn]?.(...a); } catch (e) { return `ERR ${e.message}`; } };
-const WAS = { att: FEATURES.hudAttention, radar: FEATURES.hudRadar, labels: FEATURES.hudLabels, routes: FEATURES.hudRoutes, orbits: FEATURES.hudOrbits };
-FEATURES.hudAttention = true; FEATURES.hudRadar = true; FEATURES.hudLabels = true; FEATURES.hudRoutes = true; FEATURES.hudOrbits = true;
 const K = globalThis.window.KOSMOS ?? (globalThis.window.KOSMOS = {});
 
 // ═══ C0 ══════════════════════════════════════════════════════════════════════
@@ -95,9 +98,9 @@ header('C2  klawisze 6–9 — fokus na mapie, bez kolizji');
   const gs = strip(src('../../scenes/GameScene.js'));
   const i6 = gs.indexOf("case 'Digit6':");
   const blk = i6 < 0 ? '' : gs.slice(i6, gs.indexOf('break;', gs.indexOf("case 'Digit9':", i6)) + 6);
-  ok(/case 'Digit6':\s*case 'Digit7':\s*case 'Digit8':\s*case 'Digit9':/.test(gs) && /isHudAttentionOn\(GAME_CONFIG\.FEATURES\) \? layerForKeyCode\(e\.code\)/.test(blk)
-    && /layerKeyAllowed\(\{/.test(blk) && /toggleHudLayer\(window\.KOSMOS\.uiPrefs, layer\)/.test(blk),
-    'C2d: `GameScene` — Digit6–9 przez `layerForKeyCode` / `layerKeyAllowed` / `toggleHudLayer`, za flagą `hudAttention`');
+  ok(/case 'Digit6':\s*case 'Digit7':\s*case 'Digit8':\s*case 'Digit9':/.test(gs) && /const layer = layerForKeyCode\(e\.code\);/.test(blk)
+    && /layerKeyAllowed\(\{/.test(blk) && /toggleHudLayer\(window\.KOSMOS\.uiPrefs, layer\)/.test(blk) && !/isHudAttentionOn/.test(gs),
+    'C2d: `GameScene` — Digit6–9 przez `layerForKeyCode` / `layerKeyAllowed` / `toggleHudLayer` (B-Z: bez gałęzi flagi)');
   ok(['Digit6', 'Digit7', 'Digit8', 'Digit9'].every((c) => (gs.match(new RegExp(`case '${c}'`, 'g')) ?? []).length === 1)
     && ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].every((c) => new RegExp(`case '${c}': EventBus\\.emit\\('time:setMultiplier'`).test(gs)),
     'C2e KONTROLA: bez kolizji w `GameScene` — każda z cyfr 6–9 obsłużona raz; 1–5 nadal prędkości czasu');
@@ -121,11 +124,14 @@ header('C3  ☰ „Radar” = to samo źródło co chip [R] (wykonanie metod Bot
     'C3b SEDNO: przełącznik ☰ pisze `hudLayers.radar` (dawny klucz usunięty; `sensorOverlayVisible` nietknięte)');
   call('toggleHudLayer', K.uiPrefs, 'radar');
   ok(row()?.valueOn === false, 'C3c SEDNO: chip [R] wyłączony — ☰ „Radar” pokazuje WYŁ (jeden stan)');
-  FEATURES.hudAttention = false;
-  K.uiPrefs = { hudRadarVisible: false };
+  K.uiPrefs = { sensorOverlayVisible: false };
+  const toggles = [];
+  const onToggle = (e) => toggles.push(e);
+  EventBus.on('ui:sensorOverlayToggle', onToggle);
   bb._toggleSensorOverlay();
-  ok(K.uiPrefs.hudRadarVisible === true && K.uiPrefs.hudLayers === undefined, 'C3d KONTROLA: flaga OFF — jak H1 (`hudRadarVisible`)');
-  FEATURES.hudAttention = true;
+  EventBus.off?.('ui:sensorOverlayToggle', onToggle);
+  ok(K.uiPrefs.hudLayers?.radar === false && K.uiPrefs.sensorOverlayVisible === false && toggles.length === 0,
+    'C3d KONTROLA (B-Z): ☰ „Radar” bez dawnego przełącznika pierścieni 3D — `sensorOverlayVisible` nietknięte, bez `ui:sensorOverlayToggle`');
   K.uiPrefs = {};
 }
 
@@ -142,7 +148,7 @@ header('C4  [O] — filtr „Żadne” (3b), wybór z menu nietknięty');
       return new Function(...names, '__s', 'return eval("(" + __s + ")");')(...names.map((n) => scope[n]), 'function ' + b.trim().slice(name.length));
     } catch (e) { console.log('    (kompilacja ' + name + ': ' + e.message + ')'); return null; }
   };
-  const SCOPE = { GAME_CONFIG, isHudAttentionOn: AT?.isHudAttentionOn, readHudLayers: CL?.readHudLayers, orbitPalette: HOL?.orbitPalette,
+  const SCOPE = { GAME_CONFIG, readHudLayers: CL?.readHudLayers, orbitPalette: HOL?.orbitPalette,
     hudOrbitSyncKey: HOL?.hudOrbitSyncKey, themeEpoch: () => 7, window: globalThis.window };
   const ops = [];
   const r = {
@@ -168,9 +174,10 @@ header('C4  [O] — filtr „Żadne” (3b), wybór z menu nietknięty');
   const moonSel = HOL?.moonOrbitStyle?.({ ...st2, palette: pal, selected: true });
   ok(sel?.visible === true && moonSel?.visible === true && home?.visible === false && plain?.visible === false,
     'C4d SEDNO: 3b — orbita zaznaczonego ciała (planeta, księżyc) zostaje, reszta (także dom) ukryta');
-  FEATURES.hudAttention = false;
-  ok(r._hudOrbitState?.()?.filter === 'all', 'C4e KONTROLA: flaga OFF — filtr z menu (chip nie istnieje)');
-  FEATURES.hudAttention = true;
+  call('setHudLayer', K.uiPrefs, 'orbits', true);
+  const orbitSrc = ['_hudOrbitState', '_hudOrbitsLayerOff', '_syncHudOrbits'].map((n) => methodBody(`\n  ${n}(`)).join('\n');
+  ok(r._hudOrbitState?.()?.filter === 'all' && orbitSrc.length > 100 && !/isHud(Attention|Orbits)On/.test(orbitSrc),
+    'C4e KONTROLA: [O] z powrotem włączony — filtr z menu („Wszystkie”); metody bez gałęzi flagi (B-Z)');
   K.uiPrefs = {};
 }
 
@@ -316,7 +323,11 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   K.combatHud = { isMinimized: () => true, hasActiveEncounters: () => true };
   K.deepSpaceCombatSystem = { listActive: () => [{}] };
   setLocale('pl');
-  const draw = (strip) => { const b = new BottomControlBar(); const c = recCtx(); b.draw(c, W, H, TS, strip); return { b, c }; };
+  // `noChips` — wariant porównawczy bez chipów: rysunek chipów wycięty na instancji (klaster liczony przed nimi).
+  const draw = (strip, noChips = false) => {
+    const b = new BottomControlBar(); if (noChips) b._drawLayerChips = () => {};
+    const c = recCtx(); b.draw(c, W, H, TS, strip); return { b, c };
+  };
   const on = draw({ left: 150 });
   const chips = on.b.getLayerChips?.() ?? [];
   const C = CL?.HUD_CHIPS ?? {};
@@ -329,14 +340,13 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   const texts = on.c._calls.filter((x) => x.op === 'fillText').map((x) => x.args[0]);
   ok(['R', 'T', 'E', 'O'].every((L) => texts.includes(br(L))) && br('R').includes('R') && br('R') !== 'R',
     `C7c: PL — ${['R', 'T', 'E', 'O'].map(br).join(' ')}`);
-  FEATURES.hudAttention = false;
-  const off = draw({ left: 150 });
-  FEATURES.hudAttention = true;
+  const off = draw({ left: 150 }, true);
   const same = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
   ok(same(on.b._bellRect, off.b._bellRect) && same(on.b._menuRect, off.b._menuRect) && same(on.b._playRect, off.b._playRect)
     && on.b._speedRects.every((r, i) => same(r, off.b._speedRects[i])) && same(on.b._zoomRect, off.b._zoomRect) && same(on.b._chipRect, off.b._chipRect),
     'C7d SEDNO (pin px): zegar, suwak, 🔔, ☰ i ⚔ w tych samych px z chipami i bez nich');
-  ok((off.b.getLayerChips?.() ?? []).length === 0, 'C7e KONTROLA: flaga OFF — bez chipów (pas jak po T4)');
+  ok((off.b.getLayerChips?.() ?? []).length === 0 && (on.b.getLayerChips?.() ?? []).length === 4,
+    'C7e KONTROLA: wariant porównawczy bez chipów (rysunek chipów wycięty) — pas jak po T4; z chipami — cztery (pin C7d nie jest jałowy)');
   const ov = draw(null);
   ok((ov.b.getLayerChips?.() ?? []).length === 0, 'C7f: pod overlayem pełnoekranowym — bez chipów');
   const c0 = chips[1];
@@ -364,6 +374,5 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   K.uiPrefs = {}; K.combatHud = null; delete K.deepSpaceCombatSystem;
 }
 
-Object.assign(FEATURES, { hudAttention: WAS.att, hudRadar: WAS.radar, hudLabels: WAS.labels, hudRoutes: WAS.routes, hudOrbits: WAS.orbits });
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

@@ -70,7 +70,6 @@ export const GAME_CONFIG = {
     m4Notifications:      true,   // UIManager subskrybuje empire:fleet*/battle:resolved/vessel:proximityEnter
     m4FuelAwareRetreat:   true,   // AutoRetreatSystem fallback low_fuel_drift zamiast hard fail
     // ── M4 P2 — Sensor overlay + Enemy ghosts + Minimap (save v70) ────────
-    m4SensorOverlay:      true,   // ThreeRenderer._syncSensorOverlay (cyan/yellow rings) — rollback OFF dla regresji
     m4EnemyGhosts:        true,   // _syncVesselPositions intel-gated rendering (rumor/contact/detailed)
     // ── M4 P3 — Tick-based Deep-Space Combat (save v71) ───────────────────
     // Flip ON w P3-3 (fire exchange działa end-to-end). Gdy true: VCS deleguje
@@ -204,7 +203,6 @@ export const GAME_CONFIG = {
     fcConsole:            true,   // Slice 0 — fundament (selekcja + FX harness + helpery)
     fcCombatFx:           true,   // Slice 1 — smugi/błyski walki + kamera bitwy + retire kina DSCS
     fcScanFx:             true,   // Slice 2 — efekty skanu (snop/pierścień/ping)
-    fcOrderLines:         true,   // Slice 3 — animowane linie rozkazów (kolor/strumień/grot)
     fcBrackets:           true,   // Slice 4 — ramki zaznaczenia + paski HP/tarcza (#ui-canvas)
     fcInsignia:           true,   // Slice 5 — insygnia frakcji nad statkiem
     fcEnemyAlertMarker:   true,   // Pulsujący czerwony marker wykrytego wroga (≥rumor) na mapie 3D
@@ -233,18 +231,6 @@ export const GAME_CONFIG = {
     //   Nie eksploruje układu (bez podglądu/kolonizacji) — ujawnia tylko liczby ciał zdalnie.
     //   Bramkuje: startSystemScan, przycisk STRATCOM. Bez migracji save (pola z ?? {}).
     observatorySystemScan: true,
-    // ── S3.4 FAZA 5 — etykiety kolonii + stacji na mapie 3D (MapLabelLayer) ──
-    //   Overlay 2D tekstowych etykiet (Trasa A) nad WebGL: kolonia (ikona+nazwa+POP),
-    //   stacja (🛰+nazwa+pop/cap+badge status). Stacja klikalna → station:selected+focus.
-    //   Render W2.1 (plakietka + LOD K1 + stacking K2 + kosmetyka K4) — jedyny wariant
-    //   po cleanupie live-gate. Render/UI-only — brak migracji save. Stare romby
-    //   _colonyLabels usunięte (MapLabelLayer je zastąpił). Rollback OFF = brak etykiet.
-    mapLabels:            true,
-    // Obraz Operacyjny Faza 1 (M1-light) — plakietki flot/klastrów + strzałki
-    //   krawędziowe + chipy układów na mapie 3D. Osobna flaga od mapLabels
-    //   (kolonie/stacje) — rollback niezależny. Render/UI-only, bez migracji
-    //   save (toggle w uiPrefs.fleetMapLabelsVisible). OFF = zero kosztów w pętli.
-    fleetMapLabels:       true,
     // Obraz Operacyjny Faza 2 — tryb taktyczny (klawisz Y): preset kamery top-down,
     //   glify-billboardy, wymuszone warstwy, duchy ETA. Render/UI-only, bez migracji
     //   save. OFF = klawisz nieaktywny, zero kosztów w pętli.
@@ -515,80 +501,19 @@ export const GAME_CONFIG = {
     //     przywracać regresji, której ta flaga miała uniknąć (precedens V-260/D-V2z).
     sceneDepthUnification: true,
 
-    // ── ARKUSZ HUD H0 (D-HUD-7, D-HUD-15) — orbity w kolorach motywu ─────────────
-    // hudOrbits: orbity planet, pierścienie księżyców i orbity planetoid w kolorach z tokenów motywu UI
-    //   (`orbitLine` — domyślne i filtr, `orbitColony` — dom i kolonie; zaznaczona — rola HUD `primary`,
-    //   niestabilna — `alert`; `HudOrbitLogic.js`, role — `HudPalette.js`), krycie = dzisiejsze × 0,8, grubość
-    //   bez zmian. Filtr „Żadne” — tylko zaznaczona (511, 3b). Przebudowa przy zmianie flagi, epoki motywu
-    //   (F7) i domu gracza (wczytanie zapisu — Finding 510) — co klatkę w pętli renderu, także w pauzie
-    //   (`ThreeRenderer._syncHudOrbits`). Tokeny `orbitLine` / `orbitColony` dostają czytelnika (Finding 512).
-    //   ⚠ Brak klucza = OFF (idiom liveGasShaders); ścieżka OFF = dzisiejszy kod co do bitu (turkusowe hexy
-    //     w `ThreeRenderer` nietknięte).
-    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór dawnego `mapVesselPanelCompact`): ten wpis wchodzi
-    //     commitem H0-2 po bramce H0. Przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.hudOrbits = false`)
-    //     przebudowuje orbity od następnej klatki, także w pauzie; F5 wczytuje wartość z tego pliku.
-    hudOrbits: true,
-
-    // ── ARKUSZ HUD H1 (D-HUD-3, D-HUD-4, D-HUD-12, D-HUD-18, D-HUD-b) — radar na warstwie HUD 2D ────────────────────
-    // hudRadar: zasięgi radarów rysuje warstwa HUD 2D (`#hud-canvas`, `HudLayer` / `HudRadarLayer`, logika
-    //   `HudRadarLogic.js`): granica kropkami, podziałka co 30°, ping z zaznaczonego obiektu (pierwszy w chwili
-    //   zaznaczenia — czas realny; kolejne co 6 s na zegarze symulacji — stoją w pauzie; przy dużym pierścieniu albo dużej
-    //   tarczy ping stoi). Tylko ZAZNACZONY obiekt gracza (w trybie Y — wszystkie własne): statek w służbie (promień = zasięg
-    //   WYKRYCIA — Finding 505), kolonia gracza (obserwatorium; ∞ — bez okręgu); bez rezerwy (507), bez kolonii AI (506),
-    //   bez statku w skoku (516). Kolory z ról motywu. Preferencja ☰ „Radar” przy ON = `uiPrefs.hudRadarVisible`
-    //   (brak klucza = widoczna, bez migracji zapisu).
-    //   ⚠ Brak klucza = OFF; przy ON dzisiejsze pierścienie 3D (`ThreeRenderer._syncSensorOverlay`) wyłączone (Finding 508
-    //     znika z nimi), przy OFF — dzisiejszy kod co do bitu (pierścienie 3D wracają przy najbliższej synchronizacji
-    //     pierścieni: w biegu gry — od razu; w pauzie — po klatce gry albo przełączeniu ☰ „Radar”; samo wejście do układu
-    //     w pauzie ich nie odbudowuje — jak dziś: przebudowa sceny je usuwa, a odbudowuje je dopiero synchronizacja).
-    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `hudOrbits`): ten wpis wchodzi commitem H1-2 po
-    //     bramce H1. Przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.hudRadar = false`) działa od następnej klatki
-    //     warstwy HUD; F5 wczytuje wartość z tego pliku.
-    hudRadar: true,
-
-    // ── ARKUSZ HUD paczka A (HUD_PLAN.md §4.0 aneks 2026-10-23, §4.2a, §4.3, §4.4) — etykiety, trasy, karta z boku tarczy ──
-    // hudLabels (H2 — D-HUD-5, D-HUD-6, D-HUD-16): etykiety mapy rysuje warstwa HUD 2D (`HudLabelLayer`, logika
-    //   `HudLabelLogic.js`): tekst na pasku bez ramki, nitka do obiektu, kolonie wersalikami, statki małymi literami, zaznaczony
-    //   jedyny pogrubiony, druga linia dla zaznaczonego i najechanego, cyfry w kratce; stos planeta + księżyce + stacje — LOD
-    //   po średnicy tarczy kotwicy („NOWA ZIEMIA +2” → szyna → każdy przy swoim obiekcie); anti-overlap wszystkich etykiet
-    //   w kadrze obszaru mapy (514), pełne nazwy z „…” (513), strzałki krawędzi bez wczesnego wyjścia (497), fade-in 150 ms;
-    //   klik etykiety przed raycastem 3D (515 — karta ciała, dawniej nad nią, usunięta w REFORMIE ZAKŁADEK T4), tarcza ciała
-    //   wygrywa (487, 503); etykiety CTRL w rolach motywu (D-HUD-16).
-    //   Przy ON plakietki `MapLabelLayer` wyłączone (rysunek i klik); przy OFF — same plakietki `MapLabelLayer`: od REFORMY
-    //   ZAKŁADEK T4 (decyzja właściciela Q1) bez karty ciała, bez podpowiedzi DOM ciała i statku i bez rozwinięć / przypięć
-    //   etykiet (ich miejscem jest warstwa HUD); panel statku (T5) i panele floty / grupy (T6) — bez zmian.
-    // hudRoutes (H3 — D-HUD-8, D-HUD-9, D-HUD-10, D-HUD-12): trasy statków rysuje warstwa HUD 2D (`HudRouteLayer`, logika
-    //   `HudRouteLogic.js`): linia 1 px w roli `primary` (obce — `foreign`), krycie 0,6 → 0,15 wzdłuż długości (× 0,25 dla
-    //   niezaznaczonych), kreski w px ekranu z marszem na zegarze symulacji (stoi w pauzie), cel — kółko / chevron; patrol,
-    //   pościg i przechwycenie; skok warp — kreski do krawędzi kadru z glifem układu docelowego (tylko układ odlotu); obce —
-    //   tylko wykryte TERAZ i ≥ contact (509). Przy ON linie tras 3D (`LineDashedMaterial`) wyłączone; przy OFF — jak dziś.
-    //   ⚠ Brak klucza = OFF (idiom `hudRadar`); każda flaga czytana przy każdym rysunku — przestawienie w konsoli
-    //     (`KOSMOS.gameConfig.FEATURES.hudLabels = false` itd.) działa od następnej klatki; linie tras 3D po przestawieniu
-    //     `hudRoutes` na OFF wracają przy najbliższej synchronizacji statków (w pauzie — po klatce gry); F5 wczytuje plik.
-    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `hudRadar`): te wpisy wchodzą commitem paczki A po bramce
-    //     właściciela.
-    hudLabels: true,
-    hudRoutes: true,
-
-    // ── ARKUSZ HUD paczka B (H4 — D-HUD-11, D-HUD-12, D-HUD-13, D-HUD-14, D-HUD-17, D-HUD-c; HUD_PLAN.md §4.5) ──────────────
-    // hudAttention: model uwagi, alerty, nawiasy, chipy warstw i klawisze — JEDNA flaga paczki:
-    //   • uwaga (`HudAttentionLogic.js`): przy zaznaczeniu albo alercie etykiety niezaznaczone 0,38, trasy 0,25, zaznaczone /
-    //     przypięte / alertowane / najechane 1,0 (przejście 200 ms czasu realnego); nawiasy ⌜ ⌟ wokół zaznaczonego ciała,
-    //     stacji i statku z oddechem krycia na zegarze symulacji (pauza — statycznie); statek — nawiasy HUD w miejscu ramek RTS
-    //     (`UIManager._drawBracketForVessel` rysuje wtedy wyłącznie paski paliwa i warp);
-    //   • alerty (`HudAlertLogic.js`): obcy w zasięgu wykrycia obiektu zaznaczonego (w trybie Y — każdego własnego) — błysk na
-    //     granicy (najkrótszy łuk w px, dwa pulsy ~1,6 s na zegarze symulacji), dwa pierścienie na intruzie (albo celownik wroga
-    //     — jeden rysunek), kropkowany wektor i linia treści wg wywiadu — jeden komplet na intruza; kolonia ∞ — przez etykietę;
-    //     celownik wroga pulsuje na zegarze symulacji; 490 — prawy klik nad powierzchnią UI bez menu mapy (D-HUD-17);
-    //   • chipy warstw [R] [T] [E] [O] na pasie dolnym + klawisze 6–9 (`HudLayerChipsLogic.js`, `uiPrefs.hudLayers`).
-    //   ⚠ Brak klucza = OFF — ścieżka OFF = kod sprzed paczki B co do bitu. Czytana przy każdym rysunku / zdarzeniu — przestawienie
-    //     w konsoli (`KOSMOS.gameConfig.FEATURES.hudAttention = false`) działa od następnej klatki; F5 wczytuje plik.
-    hudAttention: true,
+    // ── ARKUSZ HUD — flagi H0–H4 na stałe ON od B-Z (2026-10-28; HUD_PLAN.md §4.6) ──
+    // `hudOrbits` (H0 — orbity w kolorach motywu), `hudRadar` (H1 — radar na warstwie HUD 2D), `hudLabels` (H2 — etykiety),
+    //   `hudRoutes` (H3 — trasy), `hudAttention` (paczka B — model uwagi, nawiasy, alerty z treścią, chipy warstw i klawisze
+    //   6–9): klucze usunięte, kod czyta ścieżkę ON bez rozgałęzień. Usunięte ścieżki OFF — dawny styl orbit (hexy), pierścienie
+    //   sensorów 3D (`_syncSensorOverlay`), plakietki `MapLabelLayer`, linie tras 3D, błysk H1 (0,8 s czasu realnego), ramki RTS
+    //   statku, dawne etykiety CTRL i puls celownika na zegarze realnym — wraz z flagami bez czytelnika: `m4SensorOverlay`,
+    //   `mapLabels`, `fleetMapLabels`, `fcOrderLines`. Warstwy HUD wyłącza gracz chipami [R] [T] [E] [O] (`uiPrefs.hudLayers`);
+    //   przestawienie dawnych kluczy w konsoli nie ma skutku.
 
     // ── REFORMA ZAKŁADEK — flagi kroków T1–T6 na stałe ON od T4 (2026-10-27; TABS_REFORM_PLAN.md §5.10) ──
     // `bodyCardSide` (493), `shipPanelOutliner` (T3), `labelHover` (T1), `labelPin` (T2), `shipPanelHud` (T5), `fleetPanelHud`
-    //   (T6): klucze usunięte, kod czyta ścieżkę ON bez rozgałęzień; przełącznikiem warstwy zostaje wyłącznie `hudLabels`
-    //   (do paczki B ARKUSZA HUD); przestawienie dawnych kluczy w konsoli nie ma już skutku.
+    //   (T6): klucze usunięte, kod czyta ścieżkę ON bez rozgałęzień; przełącznikiem warstwy był wyłącznie `hudLabels` (na stałe
+    //   ON od ARKUSZA HUD B-Z — wpis wyżej); przestawienie dawnych kluczy w konsoli nie ma już skutku.
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

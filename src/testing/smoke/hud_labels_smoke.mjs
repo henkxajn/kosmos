@@ -4,7 +4,7 @@
 // klatek — bez pinów na stałych rysunku). D-HUD-5, D-HUD-6, D-HUD-16; Findingi 497, 503, 513, 514, 515, 525.
 // Uruchom: node src/testing/smoke/hud_labels_smoke.mjs
 //
-//   L0  API i flaga `hudLabels` (brak klucza = OFF)
+//   L0  API; flaga `hudLabels` usunięta (B-Z — na stałe ON)
 //   L1  LOD stosu — deterministyczna funkcja średnicy tarczy kotwicy → stan („+N” / szyna / każdy przy swoim obiekcie)
 //   L2  anti-overlap i kadr na scenach ZF gy120 (wejście rozkładu zapisane z prawdziwej gry): 200 j. (dziś 10 par
 //       nakładających się plakietek), 450 j., 12 j. — zero nakładań etykiet, zero etykiet poza obszarem mapy; ta sama
@@ -14,11 +14,12 @@
 //   L5  warstwa (stub świata, prawdziwy `HudLayer` + `HudLabelLayer`): zwinięta grupa → klik zaznacza KOTWICĘ (przypiętą — wychodzi
 //       ze stosu), drugi klik — kamera (D-UI-5 bez zmian); środek gwiazdy przy 450 j. → bez strefy etykiety (503); szyna — strefa na
 //       wiersz (stacja → panel stacji); mgła wojny (unknown — brak, rumor — „?”, contact — nazwa; sprite ukryty — brak, 485);
-//       strzałki krawędzi bez etykiet w kadrze (497); flaga OFF i `uiPrefs.fleetMapLabelsVisible` — pusto
+//       strzałki krawędzi bez etykiet w kadrze (497); `uiPrefs.fleetMapLabelsVisible` — bez statków; poza trybem
+//       cywilizacji warstwa schowana — klik nie łapie
 //   L6  zegary: fade-in na czasie REALNYM (działa w pauzie), potem spoczynek — 0 wywołań ctx (budżet klatek)
-//   L7  montaż (piny źródłowe — UIManager nie importuje się pod node): plakietki `MapLabelLayer` (rysunek i klik) tylko
-//       przy OFF; klik etykiet HUD przed raycastem (karta ciała — dawniej nad etykietami, 515 — usunięta w T4); kursor do
-//       warstwy; kolejność podwarstw
+//   L7  montaż (piny źródłowe — UIManager nie importuje się pod node): plakietek `MapLabelLayer` brak (B-Z); klik
+//       etykiet HUD przed raycastem (karta ciała — dawniej nad etykietami, 515 — usunięta w T4); kursor do warstwy;
+//       kolejność podwarstw
 //   L8  ucinanie z „…” (513) — pełna nazwa, gdy się mieści
 //   L9  tarcza obiektu z projektora HUD (`HudProjection.objectScreenDisc` — przeniesione z `BodyCardSideLogic` w T4; piny
 //       dawnego `body_card_side_smoke` C2): ciało, statek, stacja; za kamerą — brak; stacja bliżej niż próg radaru — jest
@@ -36,6 +37,10 @@
 //     usunięty) — warianty OFF L5c, L5d, L5f usunięte (w trybie cywilizacji tej ścieżki już nie ma); jedynymi zostają L5c-T2,
 //     L5d-T2, L5f-T2. L5e (środek gwiazdy) stoi przed blokiem przypięcia — bez zaznaczenia. L7c — karta ciała usunięta (bez
 //     porządku „PO karcie”); L9 — piny `objectScreenDisc` z usuniętego `body_card_side_smoke` (C2).
+//   ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON, ścieżki OFF usunięte, `MapLabelLayer` usunięty):
+//     L0a / L0c / L0d — predykat i klucz flagi usunięte; L5o — warstwa schowana poza trybem cywilizacji (dawniej: flaga
+//     OFF); L7a / L7b — brak plakietek `MapLabelLayer` (moduł, import, rysunek, klik); L7c — klik etykiet HUD bez gałęzi
+//     flagi. Przełącznik flagi w keeperze usunięty.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -57,17 +62,17 @@ const HL = await tryImport('../../ui/HudLayer.js');
 const FEATURES = GAME_CONFIG.FEATURES;
 
 // ═══ L0 ══════════════════════════════════════════════════════════════════════
-header('L0  API i flaga');
+header('L0  API (flaga `hudLabels` usunięta — B-Z)');
 {
-  const need = ['isHudLabelsOn', 'HUD_LABELS', 'stackLOD', 'atLeastLOD', 'collapsedText', 'groupByAnchor', 'placeLabels', 'labelCandidates',
+  const need = ['HUD_LABELS', 'stackLOD', 'atLeastLOD', 'collapsedText', 'groupByAnchor', 'placeLabels', 'labelCandidates',
     'overlappingPairs', 'threadGeometry', 'railRows', 'railBlockSize', 'resolveLabelClick', 'layoutTabular', 'truncateText', 'fadeAlpha', 'updateBorn',
     'ctrlLabelStyle', 'insideRect'];
   const missing = need.filter((n) => LL?.[n] === undefined);
   ok(missing.length === 0, `L0a: \`HudLabelLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
   ok(typeof LLay?.HudLabelLayer === 'function', 'L0b: `HudLabelLayer`');
-  ok(/\bhudLabels:\s*true,/.test(strip(src('../../config/GameConfig.js'))), 'L0c: `FEATURES.hudLabels: true` w GameConfig');
-  ok(LL?.isHudLabelsOn?.({ hudLabels: true }) === true && LL?.isHudLabelsOn?.({}) === false && LL?.isHudLabelsOn?.({ hudLabels: 1 }) === false,
-    'L0d: flaga — `true` wyłącznie przy `hudLabels === true` (brak klucza = OFF)');
+  ok(!/\bhudLabels:\s*(true|false),/.test(strip(src('../../config/GameConfig.js'))) && FEATURES.hudLabels === undefined,
+    'L0c (B-Z): klucz `FEATURES.hudLabels` usunięty z GameConfig');
+  ok(!!LL && LL.isHudLabelsOn === undefined, 'L0d (B-Z): predykat flagi `isHudLabelsOn` usunięty — warstwa etykiet bez rozgałęzień');
 }
 
 // ═══ L1 ══════════════════════════════════════════════════════════════════════
@@ -243,7 +248,6 @@ const setWorld = () => {
   });
 };
 setWorld();
-FEATURES.hudLabels = true;
 const mkCtx = () => {
   const t = { calls: [] };
   return new Proxy(t, {
@@ -265,7 +269,7 @@ const labelBy = (d, key) => d?.labels?.find((l) => l.key === key) ?? null;
 const projLogical = (cam, p) => { const v = new T3.Vector3(p.x, p.y, p.z).project(cam); return { x: (v.x * 0.5 + 0.5) * 1600 / 1.25, y: (-v.y * 0.5 + 0.5) * 1041 / 1.25 }; };
 
 // ═══ L5 ══════════════════════════════════════════════════════════════════════
-header('L5  warstwa: zwinięta grupa, gwiazda (503), szyna, mgła wojny, strzałki (497), OFF');
+header('L5  warstwa: zwinięta grupa, gwiazda (503), szyna, mgła wojny, strzałki (497), warstwa schowana');
 {
   W0.cam = CAM_FAR; W0.camEpoch++;
   const H = mkHud();
@@ -355,11 +359,16 @@ header('L5  warstwa: zwinięta grupa, gwiazda (503), szyna, mgła wojny, strzał
   const d5 = H.dbg();
   ok((d5?.arrows ?? []).length === 0 && (d5?.labels ?? []).some((l) => l.kind === 'rail'), 'L5n: ☰ „Plakietki floty” wyłączone — bez statków, ciała zostają');
   delete K.uiPrefs.fleetMapLabelsVisible;
-  // Flaga OFF — warstwa pusta, zero stref.
-  FEATURES.hudLabels = false; W0.camEpoch++; H.frame(1700);
-  ok(H.dbg()?.on === false && (H.dbg()?.labels ?? [1]).length === 0 && zones().length === 0 && click(100, 100) === false,
-    'L5o: flaga OFF — bez etykiet i bez stref kliku');
-  FEATURES.hudLabels = true;
+  // Poza trybem cywilizacji — warstwa schowana: klik w strefę z ostatniej klatki nie łapie (dawniej: flaga OFF — pusto).
+  const zLast = zones()[0] ?? null;
+  K.civMode = false; W0.camEpoch++; const stHid = H.frame(1700);
+  const rHid = zLast ? click(zLast.x + zLast.w / 2, zLast.y + zLast.h / 2) : undefined;
+  K.civMode = true;
+  ok(!!zLast && rHid === false, `L5o (B-Z): poza trybem cywilizacji — warstwa schowana (${stHid}), klik w strefę etykiety „${zLast?.key}” nie łapie`);
+  W0.camEpoch++; H.frame(1750);
+  const zBack = zones().find((q) => q.key === zLast?.key) ?? null;
+  ok(!!zBack && click(zBack.x + zBack.w / 2, zBack.y + zBack.h / 2) === true,
+    'L5o KONTROLA: tryb cywilizacji z powrotem — ta sama strefa łapie klik (pin nie jest jałowy)');
   // Ramka zaznaczenia (`fcBrackets`) leży NAD warstwą HUD — etykieta zaznaczonego statku poza ramką i paskami zasobów.
   W0.vessels = [V('v_own', { name: 'Kurier', fleetId: null, position: { x: 680, y: 30, state: 'in_transit', dockedAt: null } })];
   W0.sprites = { v_own: { x: 6.8, y: 0.3, z: 0.4 } }; W0.intel = {}; W0.lead = 'v_own'; W0.ids = ['v_own'];
@@ -421,20 +430,19 @@ header('L6  zegary: fade-in na czasie realnym (także w pauzie), potem spoczynek
 }
 
 // ═══ L7 ══════════════════════════════════════════════════════════════════════
-header('L7  montaż (piny źródłowe): plakietki tylko przy OFF; klik HUD przed raycastem; kursor; kolejność podwarstw');
+header('L7  montaż (piny źródłowe): plakietek MapLabelLayer brak; klik HUD przed raycastem; kursor; kolejność podwarstw');
 {
   const ui = strip(src('../../scenes/UIManager.js'));
-  const drawLbl = ui.indexOf('this._mapLabelLayer.draw('), drawVes = ui.indexOf('this._mapLabelLayer.drawVesselLabels(');
-  ok(drawLbl > 0 && /mapLabels\s*&&\s*!isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(ui.slice(drawLbl - 300, drawLbl))
-    && /fleetMapLabels\s*&&\s*!isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(ui.slice(drawVes - 300, drawVes)),
-    'L7a: plakietki kolonii i flot (`MapLabelLayer`) rysowane tylko przy `hudLabels` OFF');
+  let mapLabelModule = true;
+  try { readFileSync(new URL('../../ui/MapLabelLayer.js', import.meta.url)); } catch { mapLabelModule = false; }
+  ok(!mapLabelModule && ui.length > 50000 && !/MapLabelLayer|_mapLabelLayer/.test(ui),
+    'L7a (B-Z): plakietki kolonii, stacji i flot (`MapLabelLayer`) usunięte — moduł, import i rysunek w UIManager');
   const hc = ui.slice(ui.indexOf('  handleClick(x, y) {'), ui.indexOf('  _getAllVesselsForColony('));
-  const iOld = hc.indexOf('this._mapLabelLayer?.handleClick?.('), iTop = hc.indexOf('this._bottomBar.hitTest('),
+  const iTop = hc.indexOf('this._bottomBar.hitTest('),
     iHud = hc.indexOf('hudLayer?.handleClick?.('), iAct = hc.indexOf('this._hitTestActionPanel(');
-  ok(iOld > 0 && /!isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(hc.slice(iOld - 300, iOld)),
-    'L7b: klik plakietek `MapLabelLayer` tylko przy OFF (przy ON ich strefy z ostatniego rysunku byłyby nieaktualne)');
-  ok(iTop > 0 && iHud > iTop && iAct > iHud && /isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(hc.slice(iTop, iHud))
-    && !/_bottomContext|_bodyCardEntity/.test(hc),
+  ok(hc.length > 0 && !/_mapLabelLayer|isHudLabelsOn/.test(hc),
+    'L7b (B-Z): klik — bez plakietek `MapLabelLayer` i bez gałęzi flagi etykiet');
+  ok(iTop > 0 && iHud > iTop && iAct > iHud && /civMode/.test(hc.slice(iTop, iHud)) && !/_bottomContext|_bodyCardEntity/.test(hc),
     `L7c: klik etykiet HUD po pasku dolnym, przed końcem łańcucha UI (pasek ${iTop} < HUD ${iHud} < akcje ${iAct}); karty ciała brak (T4)`);
   const mm = ui.slice(ui.indexOf('  handleMouseMove(x, y) {'), ui.indexOf('  handleMouseMove(x, y) {') + 600);
   ok(/hudLayer\?\.setPointer\?\.\(x \/ UI_SCALE, y \/ UI_SCALE, x, y, this\.isOverUI\(x, y\)\)/.test(mm), 'L7d: kursor do warstwy HUD (px logiczne + CSS, flaga „nad UI”)');

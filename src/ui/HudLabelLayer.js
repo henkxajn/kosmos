@@ -1,7 +1,7 @@
 // HudLabelLayer — ARKUSZ HUD H2 (D-HUD-5, D-HUD-6, D-HUD-12, D-HUD-16; HUD_PLAN.md §4.3): podwarstwa ETYKIET warstwy HUD 2D
 // (`HudLayer`). Logika — czysty `HudLabelLogic`; tu: odczyt świata (`F.K` = `window.KOSMOS`), rzut wspólnym projektorem,
 // pomiar tekstu, rysunek Canvas 2D w px logicznych i strefy kliku.
-//   • za flagą `FEATURES.hudLabels` (brak klucza = OFF; przy OFF podwarstwa pusta, a plakietki `MapLabelLayer` — jak dziś);
+//   • jedyne etykiety mapy od B-Z (flaga `hudLabels` na stałe ON; dawne plakietki `MapLabelLayer` — ścieżka OFF — usunięte);
 //   • encje jak dziś: kolonie i stacje GRACZA, floty i statki gracza, wrogowie wg mgły wojny (`gatherVesselLabels` — te same
 //     bramki wywiadu: `unknown` pomijany, `rumor` anonimowy „?”); statek bez widocznego sprite'a — bez etykiety (485);
 //   • tekst na półprzezroczystym ciemnym pasku bez ramki (`THEME.bgPrimary`, 0,72 zaznaczony / 0,55 reszta), podkreślenie =
@@ -16,12 +16,12 @@
 //   • fade-in 150 ms czasu realnego (działa w pauzie); poprzedni wybór miejsca wygrywa — bez skoków przy ruchu kamery;
 //   • klik (D-UI-5, `clickObject`) — wołany z `UIManager.handleClick` przed raycastem 3D; punkt na tarczy ciała wygrywa
 //     (487, 503); zwinięta etykieta zaznacza kotwicę; kolory WYŁĄCZNIE z ról motywu (`F.roles`).
-//   • paczka B (flaga `hudAttention` — `F.att`): MODEL UWAGI — przy zaznaczeniu albo alercie etykiety niezaznaczone
+//   • paczka B (`F.att`): MODEL UWAGI — przy zaznaczeniu albo alercie etykiety niezaznaczone
 //     `HUD_ATTENTION.LABEL_DIM`, zaznaczone / przypięte / alertowane / najechane 1,0 (przejście `FADE_MS` czasu realnego —
 //     `makeAttentionMemory`); ALERT — linia treści (rola `alert`) pod etykietą intruza (brak etykiety — etykieta na żądanie
 //     przy widocznym intruzie), kolonia ∞ — pasek etykiety w roli `alert` + linia treści; CHIP [E] wyłączony — etykiety stałe
 //     znikają, zostają przypięcie, etykiety na żądanie, najechane i nośniki alertu (strzałki krawędzi — bez); ramka statku
-//     jako przeszkoda — kwadrat nawiasów (`bracketBox`). Przy OFF — kod paczki A co do bitu.
+//     jako przeszkoda — kwadrat nawiasów (`bracketBox`).
 // ⚠ Moduł importuje się pod node (keeper `hud_labels_smoke` — atrapa ctx): bez three i bez DOM.
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
@@ -37,7 +37,7 @@ import { clusterScreenPoints } from './FleetPictureLogic.js';
 import { clickObject, vesselsTarget } from './ClickIntentLogic.js';
 import { colonyRadarRangeAU, readoutCenter } from './HudRadarLogic.js';
 import {
-  HUD_LABELS, LABEL_PRIO, isHudLabelsOn, stackLOD, atLeastLOD, collapsedText, groupByAnchor,
+  HUD_LABELS, LABEL_PRIO, stackLOD, atLeastLOD, collapsedText, groupByAnchor,
   threadGeometry, railRows, railBlockSize, resolveLabelClick, layoutTabular, truncateText, updateBorn, fadeAlpha,
   pointInRect, labelCandidates, rectOverlapArea,
 } from './HudLabelLogic.js';
@@ -70,7 +70,7 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { classifyStationDepot } from './StationPanelLogic.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';
-// ARKUSZ HUD paczka B (B-1, B-2) — model uwagi, nawiasy statku jako przeszkoda, alerty (flaga `hudAttention`).
+// ARKUSZ HUD paczka B (B-1, B-2) — model uwagi, nawiasy statku jako przeszkoda, alerty.
 import { labelAttentionTarget, makeAttentionMemory, bracketBox } from './HudAttentionLogic.js';
 import { HUD_ALERT } from './HudAlertLogic.js';
 
@@ -173,11 +173,9 @@ export class HudLabelLayer {
     return { bodyId: h.bodyId ?? null, vesselId: h.vesselId ?? null, labelKey: z?.key ?? null };
   }
 
-  /** Część klucza klatki: flaga, kolonie i stacje gracza w scenie (położenie, treść), statki z etykietami, zaznaczenie,
-   *  najechanie, tryb Y, język. */
+  /** Część klucza klatki: kolonie i stacje gracza w scenie (położenie, treść), statki z etykietami, zaznaczenie, najechanie,
+   *  tryb Y, język. */
   prepare(F) {
-    const on = isHudLabelsOn(F.features);
-    if (!on) { this._prep = { on: false }; this._zones = []; return 'l:0'; }
     // Font doładowany po pierwszym pomiarze (ekran ładowania) — pomiary i linie liczone od nowa, klatka przerysowana (klucz).
     const fontStatus = (typeof document !== 'undefined' && document.fonts?.status) || 'loaded';
     if (fontStatus !== this._fontStatus) { this._fontStatus = fontStatus; this._measure.clear(); this._lineCache.clear(); }
@@ -744,26 +742,23 @@ export class HudLabelLayer {
     const T = P.t1;
     const bodyCk = (b) => (b.kind === 'colony' ? 'body:' : 'station:') + b.id;
     const hovPrio = (ck) => (T.hov.key != null && ck === T.hoverContent ? LABEL_HOVER.HOVER_PRIO : null);
-    // ── Paczka B (`F.att`; przy OFF — `null`, wszystko niżej bez skutku): alerty klatki — linia treści pod etykietą intruza
-    //    (`foeAlert`), kolonia ∞ — przez etykietę kolonii (`colonyAlert`); najechanie (`isHovCk`) — dla uwagi i chipu [E] ──
-    const ATT = F.att ?? null;
+    // ── Paczka B (`F.att`): alerty klatki — linia treści pod etykietą intruza (`foeAlert`), kolonia ∞ — przez etykietę
+    //    kolonii (`colonyAlert`); najechanie (`isHovCk`) — dla uwagi i chipu [E] ──
+    const ATT = F.att;
     const foeAlert = new Map(), colonyAlert = new Map();
-    if (ATT) {
-      for (const a of F.alertView?.(proj) ?? []) {
-        const m = a.infinite ? colonyAlert : (a.visible && a.text && a.primary ? foeAlert : null);   // intruz — jeden alert (`primary`)
-        if (!m) continue;
-        const k = String(a.infinite ? a.holderId : a.foeId), prev = m.get(k);
-        if (!prev || a.env > prev.env) m.set(k, a);
-      }
+    for (const a of F.alertView?.(proj) ?? []) {
+      const m = a.infinite ? colonyAlert : (a.visible && a.text && a.primary ? foeAlert : null);   // intruz — jeden alert (`primary`)
+      if (!m) continue;
+      const k = String(a.infinite ? a.holderId : a.foeId), prev = m.get(k);
+      if (!prev || a.env > prev.env) m.set(k, a);
     }
     const usedFoe = new Set();
     const alertSize = THEME.fontSizeSmall ?? 9;
     const alertLine = (a) => (a?.text ? { ...this._line(a.text, { size: alertSize, maxW: R.MAX_NAME_PX + 40 }), role: 'alert', alpha: a.lineAlpha } : null);
     const isHovCk = (ck) => T.hov.key != null && ck != null && ck === T.hoverContent;
     // Kolonia z alertem ∞: linia treści (gdy intruz widoczny) i pasek w roli `alert` (obwiednia pulsów).
-    const colonyAlertOf = (b) => (ATT && b.kind === 'colony') ? (colonyAlert.get(String(b.id)) ?? null) : null;
+    const colonyAlertOf = (b) => (b.kind === 'colony' ? (colonyAlert.get(String(b.id)) ?? null) : null);
     const attBody = (it, b, ca, ck) => {
-      if (!ATT) return it;
       return Object.assign(it, { alerted: ATT.alertedColonies.has(String(b.id)), alertBar: ca ? ca.env * HUD_ALERT.COLONY_BAR_ALPHA : 0,
         hov: isHovCk(ck) });
     };
@@ -873,7 +868,7 @@ export class HudLabelLayer {
         const L = this._t1BodyLines(head.b, { selected, ck: bodyCk(head.b), collapsedOthers: proj1.length - 1 }, F, T);
         const lines = L.lines;
         // Paczka B — kolonia ∞ z alertem w zwiniętej grupie: alert na etykiecie grupy (pierwszy członek z alertem).
-        const gca = ATT ? (proj1.map((x) => colonyAlertOf(x.b)).find((a) => a) ?? null) : null;
+        const gca = proj1.map((x) => colonyAlertOf(x.b)).find((a) => a) ?? null;
         const gal = alertLine(gca);
         if (gal) lines.push(gal);
         const box = this._labelBox(lines);
@@ -887,10 +882,8 @@ export class HudLabelLayer {
           target };
         Object.assign(it, { expanded: L.expanded || !!gal, expFrom: 1, expAlpha: L.expAlpha });
         if (gal) it.alertLine = true;
-        if (ATT) {
-          Object.assign(it, { alerted: proj1.some((x) => x.b.kind === 'colony' && ATT.alertedColonies.has(String(x.b.id))),
-            alertBar: gca ? gca.env * HUD_ALERT.COLONY_BAR_ALPHA : 0, hov: isHovCk(bodyCk(head.b)) });
-        }
+        Object.assign(it, { alerted: proj1.some((x) => x.b.kind === 'colony' && ATT.alertedColonies.has(String(x.b.id))),
+          alertBar: gca ? gca.env * HUD_ALERT.COLONY_BAR_ALPHA : 0, hov: isHovCk(bodyCk(head.b)) });
         pushItem(pinIt(it, L.baseH));
         continue;
       }
@@ -913,7 +906,7 @@ export class HudLabelLayer {
       const anySel = rows.some((r) => r.selected);
       const it = { key: 'r:' + anchorId, kind: 'rail', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: size.w, h: size.h,
         rows, selected: anySel, role: 'primary', prio: anySel ? LABEL_PRIO.selected : LABEL_PRIO.group };
-      if (ATT) Object.assign(it, { alertLine: rows.some((r) => r.alertLine), alerted: rows.some((r) => r.alerted), hov: rows.some((r) => r.hov) });
+      Object.assign(it, { alertLine: rows.some((r) => r.alertLine), alerted: rows.some((r) => r.alerted), hov: rows.some((r) => r.hov) });
       const exp = rows.filter((r) => r.expanded);
       it.expanded = exp.length > 0;
       if (exp.some((r) => r.ck === T.hoverContent && T.hov.key != null)) it.prio = LABEL_HOVER.HOVER_PRIO;
@@ -972,17 +965,18 @@ export class HudLabelLayer {
       const pt = { ...p, x: sp.x, y: sp.y, r: (w.r > 0) ? w.r * proj.pxPerWorld(sp.depth) : 0 };
       if (pointInRect(pt.x, pt.y, map)) onScreen.push(pt); else offScreen.push(pt);
     }
-    // Ramki zaznaczenia (`UIManager._drawBracketForVessel`, flaga `fcBrackets`) leżą NAD warstwą HUD — etykiety ich unikają,
-    // a nitka zaznaczonego statku zaczyna się przy ramce (etykieta nie wchodzi pod narożniki ani pod paski zasobów).
+    // Nawiasy zaznaczonego statku (`HudFocusLayer`, flaga `fcBrackets`) i paski paliwa pod nimi
+    // (`UIManager._drawBracketForVessel`) — etykiety ich unikają, a nitka zaznaczonego statku zaczyna się przy nawiasach
+    // (etykieta nie wchodzi pod narożniki ani pod paski zasobów).
     const bracketIds = new Set();
-    const bracketHalf = new Map();   // paczka B — połowa boku nawiasów statku (`bracketBox`; bez flagi — ramka RTS)
+    const bracketHalf = new Map();   // paczka B — połowa boku nawiasów statku (`bracketBox`)
     if (F.features?.fcBrackets) {
       const selSet = new Set((sel.vesselIds ?? []).map(String));
       if (leadId != null) selSet.add(String(leadId));
       for (const p of onScreen) {
         if (p.kind !== 'own' || !selSet.has(String(p.id))) continue;
         bracketIds.add(String(p.id));
-        const half = ATT ? (bracketBox({ cx: p.x, cy: p.y, discR: p.r, kind: 'vessel' })?.half ?? R.BRACKET_HALF) : R.BRACKET_HALF;
+        const half = bracketBox({ cx: p.x, cy: p.y, discR: p.r, kind: 'vessel' })?.half ?? R.BRACKET_HALF;
         bracketHalf.set(String(p.id), half);
         const B = half + 2, isLead = leadId != null && String(p.id) === String(leadId);
         obstacles.push({ x: p.x - B, y: p.y - B, w: 2 * B, h: 2 * B + (isLead ? R.BRACKET_BARS : 0) });
@@ -1026,7 +1020,7 @@ export class HudLabelLayer {
       if (expanded) for (const s of T.content.get(ck) ?? []) lines.push(this._line(s, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
       // Paczka B — intruz z alertem: linia treści pod etykietą (najmocniejszy alert w klastrze).
       let fa = null;
-      if (ATT && isEnemy) for (const p of c.items) { const a = foeAlert.get(String(p.id)); if (a && (!fa || a.env > fa.env)) fa = a; }
+      if (isEnemy) for (const p of c.items) { const a = foeAlert.get(String(p.id)); if (a && (!fa || a.env > fa.env)) fa = a; }
       const al = alertLine(fa);
       if (al) { lines.push(al); usedFoe.add(String(fa.foeId)); }
       const t1 = { expanded, baseH, expAlpha: expanded ? T.alphaOf(ck) : 0, prio: expanded ? hovPrio(ck) : null };
@@ -1037,10 +1031,8 @@ export class HudLabelLayer {
         selected, role: isEnemy ? 'foreign' : 'primary', prio: t1.prio ?? (selected ? LABEL_PRIO.selected : isEnemy ? LABEL_PRIO.enemy : LABEL_PRIO.own),
         target: isEnemy ? { type: 'enemy', id: ids[0], systemId: sys } : vesselsTarget(ids, sys) };
       Object.assign(it, { expanded: t1.expanded || !!al, expFrom: 1, expAlpha: t1.expAlpha });
-      if (ATT) {
-        Object.assign(it, { alertLine: !!al, alerted: sids.some((id) => ATT.alertedVessels.has(id)),
-          focusSel: sids.some((id) => ATT.focusIds.has(id)), hov: (!!ck && isHovCk(ck)) || t1Hovered(c) || hk === 'lbl:' + key });
-      }
+      Object.assign(it, { alertLine: !!al, alerted: sids.some((id) => ATT.alertedVessels.has(id)),
+        focusSel: sids.some((id) => ATT.focusIds.has(id)), hov: (!!ck && isHovCk(ck)) || t1Hovered(c) || hk === 'lbl:' + key });
       return pinIt(it, t1.baseH);
     };
     // T1: statek najechany (także w trakcie wygasania rozwinięcia) — etykieta widoczna jak przy dzisiejszym najechaniu.
@@ -1054,20 +1046,18 @@ export class HudLabelLayer {
     for (const c of enemyClusters) pushItem(vesselItem(c, true));
     // Paczka B — alert bez etykiety intruza (plakietki floty wyłączone w ☰, intruz poza klastrami): etykieta NA ŻĄDANIE przy
     // widocznym intruzie, z samą linią treści (tożsamość wg wywiadu jest w linii); intruz niewidoczny — nic (mgła wojny).
-    if (ATT) {
-      for (const [fid, a] of foeAlert) {
-        if (usedFoe.has(fid) || !a.foeScr || !pointInRect(a.foeScr.x, a.foeScr.y, map)) continue;
-        const al = alertLine(a);
-        if (!al) continue;
-        const lines = [al], box = this._labelBox(lines);
-        pushItem({ key: 'ha:' + fid, kind: 'alert', ax: a.foeScr.x, ay: a.foeScr.y, clear: HUD_ALERT.RING_R1, w: box.w, h: box.h,
-          lines, selected: false, role: 'foreign', prio: LABEL_PRIO.selected, target: { type: 'enemy', id: fid, systemId: sys },
-          expanded: false, expFrom: 1, expAlpha: 1, alertLine: true, alerted: true, hov: false });
-      }
+    for (const [fid, a] of foeAlert) {
+      if (usedFoe.has(fid) || !a.foeScr || !pointInRect(a.foeScr.x, a.foeScr.y, map)) continue;
+      const al = alertLine(a);
+      if (!al) continue;
+      const lines = [al], box = this._labelBox(lines);
+      pushItem({ key: 'ha:' + fid, kind: 'alert', ax: a.foeScr.x, ay: a.foeScr.y, clear: HUD_ALERT.RING_R1, w: box.w, h: box.h,
+        lines, selected: false, role: 'foreign', prio: LABEL_PRIO.selected, target: { type: 'enemy', id: fid, systemId: sys },
+        expanded: false, expFrom: 1, expAlpha: 1, alertLine: true, alerted: true, hov: false });
     }
     // Paczka B — chip [E] wyłączony: etykiety stałe znikają; zostają przypięcie, etykiety na żądanie (najechanie, zaznaczenie),
     // etykiety najechane i nośniki alertu; strzałki krawędzi — bez.
-    const labelsOff = !!ATT && ATT.layers.labels === false;
+    const labelsOff = ATT.layers.labels === false;
     if (labelsOff) {   // filtr W MIEJSCU — rozkład niżej czyta tę samą listę co bez chipów
       const keep = items.filter((it) => it.pinLabel || it.demand || it.alertLine || it.hov);
       items.length = 0;
@@ -1097,23 +1087,20 @@ export class HudLabelLayer {
     const fading = updateBorn(this._born, placed.map((p) => p.key), F.now);
     // Paczka B — poziom uwagi każdej etykiety (wiersze szyny osobno): cel z zaznaczenia / przypięcia / alertu / najechania,
     // przejście czasu realnego (`makeAttentionMemory`); klucze nieobecne w klatce — zapomniane.
-    let attAnimating = false;
-    if (ATT) {
-      const mem = this._att;
-      mem.begin();
-      const alive = new Set();
-      const tgt = (x) => labelAttentionTarget({ focus: ATT.focus, selected: !!x.selected || !!x.focusSel, pinned: !!x.pinLabel,
-        alerted: !!x.alerted, hovered: !!x.hov || !!x.demand });
-      for (const p of placed) {
-        if (p.kind === 'rail') {
-          let mx = 0;
-          for (const r of p.rows) { r.att = mem.step(r.key, tgt(r), F.now); alive.add(r.key); mx = Math.max(mx, r.att); }
-          p.att = mx;
-        } else { p.att = mem.step(p.key, tgt(p), F.now); alive.add(p.key); }
-      }
-      mem.prune(alive);
-      attAnimating = mem.animating;
+    const mem = this._att;
+    mem.begin();
+    const alive = new Set();
+    const tgt = (x) => labelAttentionTarget({ focus: ATT.focus, selected: !!x.selected || !!x.focusSel, pinned: !!x.pinLabel,
+      alerted: !!x.alerted, hovered: !!x.hov || !!x.demand });
+    for (const p of placed) {
+      if (p.kind === 'rail') {
+        let mx = 0;
+        for (const r of p.rows) { r.att = mem.step(r.key, tgt(r), F.now); alive.add(r.key); mx = Math.max(mx, r.att); }
+        p.att = mx;
+      } else { p.att = mem.step(p.key, tgt(p), F.now); alive.add(p.key); }
     }
+    mem.prune(alive);
+    const attAnimating = mem.animating;
     // Strefy kliku — prostokąty tekstu (wiersze szyny osobno), w kolejności rysowania.
     const zones = [];
     // Zaznaczone rysowane ostatnie (na wierzchu); T2 — przypięta etykieta ostatnia z wszystkich (rysunek = klik: jej strefy
@@ -1238,7 +1225,7 @@ export class HudLabelLayer {
     ctx.setLineDash([]);
     for (const p of c.labels) {
       const color = roles[p.role] ?? roles.primary;
-      // Paczka B — poziom uwagi (przy OFF `att` brak — 1).
+      // Paczka B — poziom uwagi.
       const fade = (p.fade ?? 1) * (p.att ?? 1);
       const th = threadGeometry(p);
       // Nitka do obiektu — przechodzi w podkreślenie pod tekstem.
@@ -1262,7 +1249,7 @@ export class HudLabelLayer {
         ctx.fillStyle = color;
         for (const r of rr.rows) { ctx.beginPath(); ctx.arc(rr.railX, r.lineY, R.RAIL_DOT_R, 0, Math.PI * 2); ctx.fill(); }
         for (const r of rr.rows) {
-          // Paczka B — wiersz szyny z własnym poziomem uwagi (`r.att` — przy OFF brak) i paskiem alertu kolonii ∞.
+          // Paczka B — wiersz szyny z własnym poziomem uwagi (`r.att`) i paskiem alertu kolonii ∞.
           const rf = r.att != null ? (p.fade ?? 1) * r.att : fade;
           this._drawBox(ctx, { x: r.x, y: r.y, w: r.w, h: r.h }, r.lines, color, r.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, rf, p.side === 'W',
             r.expFrom ?? Infinity, r.expAlpha ?? 1, null, r.alertBar ?? 0);

@@ -60,13 +60,10 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMo
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
 import { orbitClockSec, simClockMs } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika); paczka B — puls celownika
-import { isHudOrbitsOn, planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
+import { planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
   hudOrbitSyncKey } from './HudOrbitLogic.js';   // ARKUSZ HUD H0 (D-HUD-7) — orbity w kolorach motywu
-import { isHudRadarOn } from '../ui/HudRadarLogic.js';   // ARKUSZ HUD H1 (D-HUD-3/4) — radar na warstwie HUD 2D
-import { isHudRoutesOn } from '../ui/HudRouteLogic.js';   // ARKUSZ HUD paczka A (H3, D-HUD-8) — trasy na warstwie HUD 2D
-// ARKUSZ HUD paczka B — chip [O] (`uiPrefs.hudLayers.orbits`), celownik wroga w rytmie alertu (flaga `hudAttention`);
-// kolory 3D w rolach motywu (D-HUD-16 — bez flagi).
-import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';
+// ARKUSZ HUD paczka B — chip [O] (`uiPrefs.hudLayers.orbits`), celownik wroga w rytmie alertu; kolory 3D w rolach motywu
+// (D-HUD-16). Radar, trasy i etykiety rysuje warstwa HUD 2D (`HudLayer`); od B-Z bez flag HUD i bez dawnych ścieżek 3D.
 import { readHudLayers } from '../ui/HudLayerChipsLogic.js';
 import { hudRoleHex } from '../ui/HudPalette.js';
 
@@ -98,16 +95,6 @@ const STAR_LUMINOSITY_EXP = 0.22;
 //   jedyna ścieżka rollbacku, jaką gate ma bez edycji pliku i F5.
 // ⚠ Idiom „brak klucza = OFF" (liveGasShaders / liveSunShader / dayNightAtmosphere).
 const logDepthOn = () => !!GAME_CONFIG.FEATURES?.sceneDepthUnification;
-// ARKUSZ HUD H0 (D-HUD-7, D-HUD-15) — orbity w kolorach motywu. Czytana FUNKCJĄ przy każdym użyciu: przestawienie
-// w konsoli działa od następnej klatki (`_syncHudOrbits` przebudowuje orbity), także w pauzie. Brak klucza = OFF.
-const hudOrbitsOn = () => isHudOrbitsOn(GAME_CONFIG.FEATURES);
-// ARKUSZ HUD H1 (D-HUD-1 a, D-HUD-3/4) — radar na warstwie HUD 2D: przy fladze dzisiejsze pierścienie 3D wyłączone (Finding
-// 508 znika z nimi). Czytana FUNKCJĄ przy każdym użyciu (konsola działa od następnej klatki). Brak klucza = OFF.
-const hudRadarOn = () => isHudRadarOn(GAME_CONFIG.FEATURES);
-// ARKUSZ HUD paczka A (H3, D-HUD-8) — trasy statków na warstwie HUD 2D: przy fladze dzisiejsze linie tras 3D
-// (`LineDashedMaterial`) nie powstają, a istniejące znikają od następnej klatki, także w pauzie. Czytana FUNKCJĄ przy każdym
-// użyciu (konsola działa od następnej klatki). Brak klucza = OFF — linie 3D co do bitu jak dziś.
-const hudRoutesOn = () => isHudRoutesOn(GAME_CONFIG.FEATURES);
 // ── Pokrętła warstwy chmur (V-278) ───────────────────────────────────────────
 // ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
 //   — _tickClouds przepisuje wynik do uniformów KAŻDEJ klatki, więc zmiana łapie się
@@ -163,20 +150,6 @@ const PREDICTION_CONE_LINE_ALPHA  = 0.6;
 const PREDICTION_CONE_BASE_ANGLE  = 0.5;   // rad — unit szerokości; runtime scale.x = angleWidth/baseAngle
 const PREDICTION_CONE_Y           = 0.05;  // wysokość nad orbitami (Y=0), pod statkami (Y≥0.3)
 
-// ── Sensor overlay (M4 P2) ──────────────────────────────────────────────
-// Wzorzec 1:1 z prediction cones: per-vessel/per-colony Map cache, RingGeometry
-// thin annulus (inner/outer w world units), MeshBasicMaterial transparent.
-// Hook: vessel:positionUpdate (kolonie też re-syncowane — orbitują).
-// Toggle: ui:sensorOverlayToggle event z BottomBar menu (radar row).
-const SENSOR_RING_VESSEL_COLOR = 0x44ccff;  // cyan
-const SENSOR_RING_COLONY_COLOR = 0xffcc44;  // amber/yellow
-const SENSOR_RING_OPACITY      = 0.15;
-const SENSOR_RING_SEGMENTS     = 96;        // gładkość okręgu
-const SENSOR_RING_Y            = 0.04;      // tuż pod prediction cone (0.05), nad orbitami (0)
-// Lv5 obserwatorium daje Infinity dla detection range — clamp do tej wartości
-// żeby uniknąć NaN/over-the-horizon ring covering całej sceny.
-const SENSOR_RING_MAX_COLONY_AU = 35.0;     // ≈ MAX_ORBIT_AU — cały układ widoczny
-
 // ── Reforma obserwatorium — szara zasłona niezbadanego ciała (podgląd) ──
 const BODY_VEIL_COLOR   = 0x8a8a99;         // szara mgła na niezbadanym ciele
 const BODY_VEIL_OPACITY = 0.72;             // 0=widać, 1=ukryte (grey-out do czasu skanu)
@@ -200,14 +173,6 @@ let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstur
 const TACTICAL_PING_THROTTLE_MS = 180;     // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
 // ARKUSZ UI U3-2 (Finding 487) — minimalny promień rdzenia sprite'a statku (px ekranu) dla kliku NA TARCZY ciała.
 const VESSEL_CORE_PICK_PX = 6;
-// 4f-2 — hover-podgląd trasy JEDNOZNACZNY: pełna nieprzezroczystość + jaśniejszy kolor + grubsza
-// linia (linewidth honorowane tylko tam, gdzie GPU je wspiera; głównym leverem jest kolor+opacity).
-// Bazowe linie w trybie Y lekko pogrubione podniesieniem bazowej opacity (0.4→0.55).
-const ROUTE_LINE_HOVER_OPACITY = 1.0;       // F4 Dok: opacity routeLine statku pod kursorem doku
-const ROUTE_LINE_BASE_OPACITY  = 0.55;      // baza materiału routeLine (mirror inline w tworzeniu; 4f-2 pogrub.)
-const ROUTE_LINE_HOVER_COLOR   = 0x9fffe6;  // 4f-2: jasny cyan-biały dla trasy pod kursorem
-const ROUTE_LINE_BASE_WIDTH    = 1;         // 4f-2: bazowa grubość (WebGL zwykle capuje do 1 px)
-const ROUTE_LINE_HOVER_WIDTH   = 3;         // 4f-2: ×2+ grubość na hover (best-effort wg GPU)
 // 4f-2 — puls „ducha ETA" statku pod kursorem: mocniejszy/szybszy (podgląd „który to statek").
 const GHOST_PULSE_HOVER_MIN    = 0.35;      // dolna granica pulsu (głębszy kontrast)
 const GHOST_PULSE_HOVER_MAX    = 1.0;       // górna granica pulsu (pełna jasność)
@@ -469,10 +434,9 @@ export class ThreeRenderer {
     this._planetoidOrbits  = new Map();   // planetoidId → Line (ukryte domyślnie)
     this._entityByUUID = new Map();   // mesh.uuid → entity
     this._clickable    = [];
-    this._vessels      = new Map();   // vesselId → { sprite, routeLine }
+    this._vessels      = new Map();   // vesselId → { sprite, … }
     this._stations     = new Map();   // stationId → { mesh } (S3.3b-S2, anchored orbital object)
     this._predictionConeMeshes = new Map();  // vesselId → { fillMesh, lineMesh, group } (M2b C4)
-    this._sensorRingMeshes     = new Map();  // key (`v_xxx` | `col_xxx`) → { mesh, type, radiusAU } (M4 P2)
     this._poiSprites           = new Map();  // poiId → { sprite, type } (M2b C7)
     this._poiTextureCache      = new Map();  // type → CanvasTexture (5 entries, M2b C7)
     this._tradeLines   = [];          // THREE.Line[] — linie handlu cywilnego
@@ -509,7 +473,7 @@ export class ThreeRenderer {
     this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
     this._tacticalGhosts       = new Map();  // F2: vesselId → Sprite-duch ETA w punkcie celu misji
     this._cleanView            = false;      // SHIFT-hold „czysty widok": ukryj linie/pierścienie/glify (tylko ciała + modele statków)
-    this._tacticalHoverVid     = null;       // F4 Dok: vesselId pod kursorem w doku (hover-podgląd: routeLine jaśniej + puls ducha)
+    this._tacticalHoverVid     = null;       // F4 Dok: vesselId pod kursorem w doku (hover-podgląd: trasa HUD + puls ducha)
     this._tacticalHoverYear    = null;       // F4 Dok OŚ: rok pod kursorem na osi → marker pozycji planety celu w tym roku
     this._lastTacticalPingMs   = 0;          // F4 Dok: throttle ping-FX przy kliku wiersza
     this._tacticalOrbitStyled  = null;       // 2g: [{m, opacity, transparent}] — restore restyle orbit
@@ -552,9 +516,9 @@ export class ThreeRenderer {
 
     // Tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
     this._orbitFilter = 'planetoids'; // domyślny — planetoidy widoczne, planety wg reguł
-    this._hudOrbitKey     = null;   // ARKUSZ HUD H0 — klucz przebudowy orbit (`_syncHudOrbits`; null = flaga OFF)
+    this._hudOrbitKey     = null;   // ARKUSZ HUD H0 — klucz przebudowy orbit (`_syncHudOrbits`; null — przed pierwszą klatką)
     this._hudOrbitLayerOff = false; // paczka B — chip [O] wyłączony w ostatniej klatce (`_syncHudOrbits`)
-    this._hudHoverOrbitId = null;   // ARKUSZ HUD H0 — ciało pod kursorem (styl orbit przy `hudOrbits`)
+    this._hudHoverOrbitId = null;   // ARKUSZ HUD H0 — ciało pod kursorem (styl orbit)
 
     // Współdzielona tekstura kropki życia — tworzona raz
     this._lifeDotTex    = ThreeRenderer._createLifeDotTexture();
@@ -566,7 +530,8 @@ export class ThreeRenderer {
 
     // ── Licznik do periodycznego odświeżania orbit ───────────
     this._orbitRebuildCounter = 0;
-    // S3.4 FAZA 5 — stare romby _colonyLabels USUNIĘTE (zastąpione MapLabelLayer, overlay 2D).
+    // S3.4 FAZA 5 — stare romby _colonyLabels USUNIĘTE (zastąpione MapLabelLayer, overlay 2D; od ARKUSZA HUD B-Z —
+    // warstwa etykiet HUD).
     // Selekcja ciała działa przez raycast planety/księżyca (_entityByUUID), nie przez romb.
 
     // ── Gwiazda ───────────────────────────────────────────────
@@ -794,11 +759,6 @@ export class ThreeRenderer {
     EventBus.on('physics:updated', safe(({ planets, star, moons = [] }) => {
       this._syncPlanetMeshes(planets, moons);
       if (star) this._syncStarPosition(star);
-      // M4 P2 — radar rings: colonies orbit z planetami, więc re-sync co physics tick
-      // (vessel:positionUpdate nie odpala się gdy brak vesseli w ruchu).
-      if (this._sensorRingMeshes.size > 0 || window.KOSMOS?.uiPrefs?.sensorOverlayVisible) {
-        this._syncSensorOverlay();
-      }
     }));
 
     // S3.3b-S2 — stacje orbitalne (encje, NIE vessele). Mesh dodawany/usuwany event-driven;
@@ -879,21 +839,7 @@ export class ThreeRenderer {
     EventBus.on('vessel:positionUpdate', safe(({ vessels }) => {
       this._syncVesselPositions(vessels);
       this._syncPredictionCones();   // M2b C4 — origin/dir/scale per active intercept
-      this._syncSensorOverlay();     // M4 P2 — radar rings (vessels + colonies)
     }));
-    // M4 P2 — toggle radar z BottomBar; pełny re-sync (lub teardown gdy off)
-    EventBus.on('ui:sensorOverlayToggle', safe(({ visible }) => {
-      if (!visible) {
-        this._disposeAllSensorRings();
-      } else {
-        this._syncSensorOverlay();
-      }
-    }));
-    // M4 P3 hotfix — sensor range zmienia się gdy obserwatorium budowane/zburzone.
-    // Bez tego sensor ring zostawał z poprzednim radiusem (stale visual).
-    EventBus.on('planet:buildResult',     safe(() => this._syncSensorOverlay()));
-    EventBus.on('planet:demolishResult',  safe(() => this._syncSensorOverlay()));
-    EventBus.on('planet:upgradeResult',   safe(() => this._syncSensorOverlay()));
     // Fog-of-war — ObservatorySystem zmienia widoczność wrogiego statku.
     // M4 P2: deleguje do _applyVesselIntelVisibility — uwzględnia rumor ghost
     // (sprite może pozostać widoczny w positionLastKnown nawet gdy detected=false).
@@ -907,7 +853,6 @@ export class ThreeRenderer {
         if (vessel) this._applyVesselIntelVisibility(vessel, entry);
       } else {
         entry.sprite.visible = !!detected;
-        if (entry.routeLine) entry.routeLine.visible = !!detected;
       }
     }));
     // M4 P2 — intel quality zmienia się (proximity_observation / aged_out / manual).
@@ -918,7 +863,7 @@ export class ThreeRenderer {
       const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
       if (vessel) this._applyVesselIntelVisibility(vessel, entry);
     }));
-    // Wrak — zmiana wizualna (szary, bez linii trasy, orbituje statycznie wokół
+    // Wrak — zmiana wizualna (szary, orbituje statycznie wokół
     // planety. Wcześniej było "dryfuj statycznie" ale wrak lądował w środku mesh'a
     // planety (y=0.02 < promień planety) i znikał wizualnie).
     EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {
@@ -931,13 +876,6 @@ export class ThreeRenderer {
       }
       entry.isWreck = true;
       entry.sprite.visible = true;
-      // Usuń linię trasy — wrak nie leci nigdzie
-      if (entry.routeLine) {
-        this.scene.remove(entry.routeLine);
-        entry.routeLine.geometry?.dispose();
-        entry.routeLine.material?.dispose();
-        entry.routeLine = null;
-      }
       // Orbit cache dla wraka — wyższa warstwa Y + wolna orbita + losowa faza.
       // To tworzy "cmentarzysko orbitalne" oddzielone wizualnie od żywych statków
       // gracza, które krążą na niskiej orbicie z typową prędkością.
@@ -1068,12 +1006,10 @@ export class ThreeRenderer {
       } else {
         this._colonyMarkers.hide();
       }
-      // Pokaż orbitę planetoidy po kliknięciu
-      this._showPlanetoidOrbit(entity.id, 0.35);
-      // Pokaż orbitę księżyca po kliknięciu (ukryta domyślnie)
-      this._hideAllMoonOrbits();
-      if (entity.type === 'moon') this._showMoonOrbit(entity.id);
-      // Odśwież orbity — zaznaczona planeta dostaje złotą orbitę
+      // ARKUSZ HUD H0 — orbity w stylu ze stanu (zaznaczona — rola `primary`): planetoidy i pierścienie księżyców
+      // przestylowane, planety przebudowane.
+      this._hudRestylePlanetoidOrbits();
+      this._hudRestyleMoonRings();
       this._rebuildAllOrbits();
     }));
 
@@ -1098,9 +1034,9 @@ export class ThreeRenderer {
       this._hideColonyTooltip();
       // Przywróć domyślny min zoom (sam próg — kamera się nie rusza)
       if (this._cameraController && !swap) this._cameraController.setMinDist(0.3);
-      // Ukryj orbity planetoidów i księżyców
-      this._hideAllPlanetoidOrbits();
-      this._hideAllMoonOrbits();
+      // ARKUSZ HUD H0 — orbity w stylu ze stanu (bez zaznaczenia)
+      this._hudRestylePlanetoidOrbits();
+      this._hudRestyleMoonRings();
       this._rebuildAllOrbits();
     }));
 
@@ -1230,7 +1166,7 @@ export class ThreeRenderer {
           const pEntry = this._planets.get(dockedAt);
           const mEntry = this._moons.get(dockedAt);
           // Finding 532: dok przy PLANETOIDZIE (placówka) — ta sama mapa, z której rysowane są placówki
-          // (`getBodyWorldInfo`, `getBodyScreenPosition`); dawniej szukano tylko w planetach i księżycach, więc 2. klik
+          // (`getBodyWorldInfo`); dawniej szukano tylko w planetach i księżycach, więc 2. klik
           // w statek zadokowany przy planetoidzie nie ruszał kamery ani nie otwierał karty ciała (reguła D-UI-5).
           const pdEntry = this._planetoids.get(dockedAt);
           const entity = pEntry ? this._entityByUUID.get(pEntry.mesh.uuid)
@@ -1287,30 +1223,9 @@ export class ThreeRenderer {
 
     // Hover na ciało → pokaż orbitę tymczasowo (planeta/planetoid) + HZ (gwiazda)
     EventBus.on('planet:hover', safe(({ entityId }) => {
-      // ARKUSZ HUD H0 (D-HUD-7) — przy `hudOrbits` styl orbit ze stanu (najechanie zapamiętane; „Żadne” — tylko zaznaczona).
-      if (hudOrbitsOn()) { this._hudHoverOrbitId = entityId ?? null; this._hudRestyleOrbits(); return; }
-      // Przywróć domyślną widoczność orbit planetoidów (nie zaznaczonych)
-      const showPlanetoids = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
-      this._planetoidOrbits.forEach((line, id) => {
-        if (id !== this._selectedEntityId) {
-          line.material.opacity = 0.12;
-          line.visible = showPlanetoids;
-        }
-      });
-      if (entityId) this._showPlanetoidOrbit(entityId, 0.20);
-
-      // Hover na planetę → pokaż jej orbitę złotą tymczasowo
-      this._orbits.forEach((line, id) => {
-        if (id === this._selectedEntityId) return; // zaznaczona — nie ruszaj
-        if (id === entityId) {
-          line.visible = true;
-          line.material.color.setHex(0xffc832);
-          line.material.opacity = 0.5;
-        } else {
-          // Przywróć domyślny stan (ukryta chyba że home/kolonia)
-          this._restoreOrbitDefaults(id, line);
-        }
-      });
+      // ARKUSZ HUD H0 (D-HUD-7) — styl orbit ze stanu (najechanie zapamiętane; „Żadne” — tylko zaznaczona).
+      this._hudHoverOrbitId = entityId ?? null;
+      this._hudRestyleOrbits();
     }));
   }
 
@@ -1354,9 +1269,9 @@ export class ThreeRenderer {
   // Slice 1e (Obraz Operacyjny F1) — po przebudowie sceny statki aktywnego układu
   // wracają NATYCHMIAST. _disposeAllMeshes czyści _vessels, a lazy re-add w
   // _syncVesselPositions działa dopiero na vessel:positionUpdate (tick czasu) —
-  // przy PAUZIE po powrocie do układu sprite'y nie istniały → getVesselScreenPosition
-  // zwracał null → plakietki/strzałki/klastry znikały (chipy zostawały, bo nie
-  // potrzebują pozycji). Idempotentne (_addVesselSprite guard na istniejący entry);
+  // przy PAUZIE po powrocie do układu sprite'y nie istniały → pozycja ekranowa statku
+  // brakowała → plakietki/strzałki/klastry znikały (dziś etykiety warstwy HUD czytają
+  // `getVesselWorldPosition` — ten sam warunek). Idempotentne (_addVesselSprite guard na istniejący entry);
   // docked pomijane (hangar — spójnie z _syncVesselPositions).
   _restoreActiveSystemVesselSprites() {
     const vm = window.KOSMOS?.vesselManager;
@@ -1450,11 +1365,6 @@ export class ThreeRenderer {
         entry.sprite.material?.dispose();
         this.scene.remove(entry.sprite);
       }
-      if (entry.routeLine) {
-        entry.routeLine.geometry?.dispose();
-        entry.routeLine.material?.dispose();
-        this.scene.remove(entry.routeLine);
-      }
     }
     this._vessels.clear();
 
@@ -1515,9 +1425,6 @@ export class ThreeRenderer {
 
     // Prediction cones (M2b C4) — switchSystem nie zostawia ghost mesh
     this._disposeAllPredictionCones();
-
-    // Sensor rings (M4 P2) — switchSystem nie zostawia ghost ringów
-    this._disposeAllSensorRings();
 
     // Markery wykrytych wrogów — switchSystem nie zostawia ghost markerów
     this._disposeAllEnemyAlertMarkers();
@@ -2457,7 +2364,7 @@ export class ThreeRenderer {
     if (this._orbitRebuildCounter >= 180) {
       this._orbitRebuildCounter = 0;
       this._rebuildAllOrbits();
-      this._rebuildPlanetoidOrbits();
+      this._hudRebuildPlanetoidOrbits();
     }
   }
 
@@ -2493,14 +2400,9 @@ export class ThreeRenderer {
 
     const ring = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({
-        color: 0x445566, transparent: true, opacity: 0.30,
-      })
+      new THREE.LineBasicMaterial({ color: 0x445566, transparent: true }),
     );
-    const showMoons = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
-    ring.visible = showMoons;  // widoczność wg filtra orbit
-    ring.material.opacity = showMoons ? 0.15 : 0;
-    if (hudOrbitsOn()) this._hudStyleMoonRing(moon.id, ring);   // ARKUSZ HUD H0 — kolor z motywu, krycie × 0,8
+    this._hudStyleMoonRing(moon.id, ring);   // ARKUSZ HUD H0 — styl ze stanu: kolor z motywu, krycie × 0,8, filtr orbit
     parentEntry.group.add(ring);
 
     // Sfera księżyca — w scenie, pozycja synchronizowana z moon.x/y
@@ -2550,27 +2452,6 @@ export class ThreeRenderer {
     this._clickable.push(mesh);
     this._entityByUUID.set(mesh.uuid, moon);
     this._moons.set(moon.id, { mesh, ring, parentEntry, moon });
-  }
-
-  // Pokaż orbitę konkretnego księżyca
-  _showMoonOrbit(moonId) {
-    if (hudOrbitsOn()) { this._hudRestyleMoonRings(); return; }   // ARKUSZ HUD H0 — styl ze stanu (zaznaczenie)
-    const entry = this._moons.get(moonId);
-    if (!entry?.ring) return;
-    entry.ring.material.opacity = 0.30;
-    entry.ring.visible = true;
-  }
-
-  // Ukryj/pokaż orbity księżyców (wg filtra)
-  _hideAllMoonOrbits() {
-    if (hudOrbitsOn()) { this._hudRestyleMoonRings(); return; }   // ARKUSZ HUD H0 — styl ze stanu (filtr, zaznaczenie)
-    const show = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
-    this._moons.forEach(entry => {
-      if (entry.ring) {
-        entry.ring.material.opacity = show ? 0.15 : 0;
-        entry.ring.visible = show;
-      }
-    });
   }
 
   // ── Znacznik na planecie: żółty (gracz) lub zielony (życie) ───
@@ -2656,53 +2537,16 @@ export class ThreeRenderer {
     return new THREE.CanvasTexture(c);
   }
 
-  // Przywraca domyślny stan widoczności orbity (ukryta chyba że home/kolonia/orbitFilter)
-  _restoreOrbitDefaults(planetId, line) {
-    if (hudOrbitsOn()) {   // ARKUSZ HUD H0 — styl ze stanu (dom, kolonia, filtr, zaznaczenie, najechanie)
-      const planet = EntityManager.get(planetId);
-      if (planet) this._hudStylePlanetOrbit(planet, line);
-      return;
-    }
-    const isHomePlanet = planetId === window.KOSMOS?.homePlanet?.id;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const isColonized = colMgr ? colMgr.getColony(planetId) != null : false;
-    const showAll = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
-    if (isHomePlanet) {
-      line.visible = true;
-      line.material.color.setHex(0x007852);
-      line.material.opacity = 0.15;
-    } else if (isColonized) {
-      line.visible = true;
-      line.material.color.setHex(0x005540);
-      line.material.opacity = 0.10;
-    } else if (showAll) {
-      line.visible = true;
-      line.material.opacity = 0.08;
-    } else {
-      line.visible = false;
-    }
-  }
-
   // Zmienia tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
   setOrbitFilter(mode) {
     this._orbitFilter = mode;
     this._applyOrbitFilter();
   }
 
-  // Aktualizuje widoczność wszystkich orbit wg aktualnego filtra
+  // Aktualizuje widoczność wszystkich orbit wg aktualnego filtra (ARKUSZ HUD H0 — styl ze stanu; „Żadne”: tylko zaznaczona —
+  // 511, 3b).
   _applyOrbitFilter() {
-    if (hudOrbitsOn()) { this._hudRestyleOrbits(); return; }   // ARKUSZ HUD H0 — „Żadne”: tylko zaznaczona (511, 3b)
-    // Orbity planet — przebuduj (uwzględnia _orbitFilter w _restoreOrbitDefaults)
-    this._orbits.forEach((line, id) => {
-      if (id === this._selectedEntityId) return; // zaznaczona — nie ruszaj
-      this._restoreOrbitDefaults(id, line);
-    });
-
-    // Orbity księżyców
-    this._hideAllMoonOrbits();
-
-    // Orbity planetoidów
-    this._hideAllPlanetoidOrbits();
+    this._hudRestyleOrbits();
   }
 
   // ── Orbity eliptyczne ─────────────────────────────────────────
@@ -2713,7 +2557,7 @@ export class ThreeRenderer {
     // co trzy sekundy przez całą partię.
     // Dispose jest tu BEZPIECZNY — sprawdzone, nie założone: _buildOrbit tworzy oba
     // obiekty ŚWIEŻO per planeta i trzyma je wyłącznie w this._orbits; dwa inne
-    // miejsca w tym pliku (_disposeAllMeshes i bliźniaczy _rebuildPlanetoidOrbits)
+    // miejsca w tym pliku (_disposeAllMeshes i bliźniaczy _hudRebuildPlanetoidOrbits)
     // disposują dokładnie te same obiekty od dawna. Linie handlu i pierścienie
     // księżyców mają własne geometrie/materiały i własny cykl życia.
     this._orbits.forEach(line => {
@@ -2740,30 +2584,6 @@ export class ThreeRenderer {
     const cx    = S(star.x) - c * Math.cos(angle);
     const cz    = S(star.y) - c * Math.sin(angle);
 
-    let color = 0x003828;       // domyślna orbita — ciemny teal
-    if (planet.lifeScore > 0)          color = 0x005540;   // życie — jaśniejszy teal
-    if (planet.id === window.KOSMOS?.homePlanet?.id) color = 0x007852;
-    if (planet.orbitalStability < 0.5) color = 0x553322;   // niestabilna — ciemny czerwony
-    if (planet.isSelected)             color = 0x00ccff;   // zaznaczona — info blue
-
-    // Widoczność i jasność: domyślnie ukryte, wyjątki dla home/koloni
-    const isHomePlanet = planet.id === window.KOSMOS?.homePlanet?.id;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const isColonized = colMgr ? colMgr.getColony(planet.id) != null : false;
-    const isFocused = planet.id === this._selectedEntityId;   // U1-2: zaznaczenie (nie cel kamery)
-    let orbitVisible = false;
-    let orbitOpacity = 0.35;
-    const showPlanets = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
-    if (isFocused) {
-      orbitVisible = true; orbitOpacity = 0.7; color = 0xffc832; // złota orbita — zaznaczona
-    } else if (isHomePlanet) {
-      orbitVisible = true; orbitOpacity = 0.15; // homePlanet — zawsze widoczna, przyciemniona
-    } else if (isColonized) {
-      orbitVisible = true; orbitOpacity = 0.10; // kolonizowana — widoczna, przyciemniona
-    } else if (showPlanets) {
-      orbitVisible = true; orbitOpacity = 0.08; // filtr — przyciemniona
-    }
-
     const STEPS  = 128;
     const points = [];
     for (let i = 0; i <= STEPS; i++) {
@@ -2777,14 +2597,11 @@ export class ThreeRenderer {
 
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({
-        color: new THREE.Color(color), transparent: true, opacity: orbitOpacity,
-      })
+      new THREE.LineBasicMaterial({ color: 0x003828, transparent: true }),
     );
-    line.visible = orbitVisible;
     this.scene.add(line);
     this._orbits.set(planet.id, line);
-    if (hudOrbitsOn()) this._hudStylePlanetOrbit(planet, line);   // ARKUSZ HUD H0 — kolory z motywu, krycie × 0,8
+    this._hudStylePlanetOrbit(planet, line);   // ARKUSZ HUD H0 — styl ze stanu: kolory z motywu, krycie × 0,8
   }
 
   // ── Planetoidy: indywidualne meshe + ukryte orbity ───────────────
@@ -2887,54 +2704,7 @@ export class ThreeRenderer {
     });
   }
 
-  // Pokaż orbitę konkretnej planetoidy (hover/click)
-  _showPlanetoidOrbit(entityId, opacity = 0.25) {
-    if (hudOrbitsOn()) { this._hudRestylePlanetoidOrbits(); return; }   // ARKUSZ HUD H0 — styl ze stanu
-    const line = this._planetoidOrbits.get(entityId);
-    if (!line) return;
-    line.material.opacity = opacity;
-    line.visible = true;
-  }
-
-  // Przywróć domyślną widoczność orbit planetoidów (wg filtra)
-  _hideAllPlanetoidOrbits() {
-    if (hudOrbitsOn()) { this._hudRestylePlanetoidOrbits(); return; }   // ARKUSZ HUD H0 — styl ze stanu
-    const show = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
-    this._planetoidOrbits.forEach(line => {
-      line.material.opacity = 0.12;
-      line.visible = show;
-    });
-  }
-
-  // Przebuduj geometrię orbit planetoidów (zachowaj widoczność)
-  _rebuildPlanetoidOrbits() {
-    if (hudOrbitsOn()) { this._hudRebuildPlanetoidOrbits(); return; }   // ARKUSZ HUD H0 — od zera, styl ze stanu
-    // Zapamiętaj stan widoczności
-    const wasVisible = new Map();
-    this._planetoidOrbits.forEach((line, id) => {
-      wasVisible.set(id, { visible: line.visible, opacity: line.material.opacity });
-      this.scene.remove(line);
-      line.geometry.dispose();
-      line.material.dispose();
-    });
-    this._planetoidOrbits.clear();
-
-    const rSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    EntityManager.getByTypeInSystem('planetoid', rSysId).forEach(p => {
-      this._buildPlanetoidOrbit(p);
-      // Przywróć wcześniejszy stan widoczności
-      const prev = wasVisible.get(p.id);
-      if (prev) {
-        const line = this._planetoidOrbits.get(p.id);
-        if (line) {
-          line.visible = prev.visible;
-          line.material.opacity = prev.opacity;
-        }
-      }
-    });
-  }
-
-  // Buduje linię orbity jednej planetoidy (domyślnie ukryta)
+  // Buduje linię orbity jednej planetoidy (styl ze stanu — filtr, zaznaczenie, najechanie)
   _buildPlanetoidOrbit(planetoid) {
     const orb  = planetoid.orbital;
     const star = this._star;
@@ -2960,29 +2730,26 @@ export class ThreeRenderer {
 
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({
-        color: 0x554433, transparent: true, opacity: 0.12,
-      })
+      new THREE.LineBasicMaterial({ color: 0x554433, transparent: true }),
     );
-    line.visible = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
     this.scene.add(line);
     this._planetoidOrbits.set(planetoid.id, line);
-    if (hudOrbitsOn()) this._hudStylePlanetoidOrbit(planetoid.id, line);   // ARKUSZ HUD H0 — kolor z motywu, krycie × 0,8
+    this._hudStylePlanetoidOrbit(planetoid.id, line);   // ARKUSZ HUD H0 — styl ze stanu: kolor z motywu, krycie × 0,8
   }
 
-  // ── ARKUSZ HUD H0 — orbity w kolorach motywu (D-HUD-7, D-HUD-15; flaga `hudOrbits`) ─────────────────────
-  // Ścieżka ON: styl KAŻDEJ orbity liczony ze stanu (filtr, zaznaczenie `_selectedEntityId`, najechanie, dom /
-  // kolonia, stabilność, czysty widok) i z tokenów motywu (`HudOrbitLogic`). Ścieżka OFF — kod wyżej, bez zmian.
+  // ── ARKUSZ HUD H0 — orbity w kolorach motywu (D-HUD-7, D-HUD-15) ─────────────────────────────────────────
+  // Styl KAŻDEJ orbity liczony ze stanu (filtr, zaznaczenie `_selectedEntityId`, najechanie, dom / kolonia, stabilność,
+  // czysty widok, chip [O]) i z tokenów motywu (`HudOrbitLogic`). Dawny styl (hexy — ścieżka OFF `hudOrbits`) usunięty w B-Z.
 
-  // Co klatkę (pętla renderu — także w pauzie): klucz = flaga + epoka motywu (`applyPreset` / `applyTheme`, np. F7
-  // w trakcie gry) + dom gracza (po wczytaniu zapisu dom ustawia blok odroczony `GameScene` — Finding 510: orbity
-  // domu i kolonii widoczne na pauzie bez biegu gry). OFF ⇒ klucz null ⇒ bez pracy; zmiana klucza ⇒ pełne odświeżenie.
+  // Co klatkę (pętla renderu — także w pauzie): klucz = epoka motywu (`applyPreset` / `applyTheme`, np. F7 w trakcie gry)
+  // + dom gracza (po wczytaniu zapisu dom ustawia blok odroczony `GameScene` — Finding 510: orbity domu i kolonii widoczne na
+  // pauzie bez biegu gry); zmiana klucza ⇒ pełne odświeżenie.
   _syncHudOrbits() {
-    const key = hudOrbitSyncKey(GAME_CONFIG.FEATURES, themeEpoch(), window.KOSMOS?.homePlanet?.id ?? null);
+    const key = hudOrbitSyncKey(themeEpoch(), window.KOSMOS?.homePlanet?.id ?? null);
     // Paczka B (B-3) — chip [O]: zmiana stanu warstwy ⇒ przestylowanie bez przebudowy geometrii (także w pauzie).
-    const layerOff = key != null && this._hudOrbitsLayerOff?.() === true;
+    const layerOff = this._hudOrbitsLayerOff?.() === true;
     if (key === this._hudOrbitKey) {
-      if (key != null && layerOff !== (this._hudOrbitLayerOff === true)) {
+      if (layerOff !== (this._hudOrbitLayerOff === true)) {
         this._hudOrbitLayerOff = layerOff;
         this._hudRestyleOrbits();
       }
@@ -2993,38 +2760,20 @@ export class ThreeRenderer {
     this._hudRefreshAllOrbits();
   }
 
-  // Paczka B (B-3) — czy chip [O] wyłączył orbity: flaga `hudAttention` i `uiPrefs.hudLayers.orbits === false`.
+  // Paczka B (B-3) — czy chip [O] wyłączył orbity (`uiPrefs.hudLayers.orbits === false`).
   _hudOrbitsLayerOff() {
-    return isHudAttentionOn(GAME_CONFIG.FEATURES) && readHudLayers(window.KOSMOS?.uiPrefs).orbits === false;
+    return readHudLayers(window.KOSMOS?.uiPrefs).orbits === false;
   }
 
-  // Pełne odświeżenie orbit ścieżką bieżącej flagi: planety i planetoidy od zera, pierścienie księżyców przestylowane.
-  // ON → OFF: stan dzisiejszego kodu — kolor bazowy pierścieni, filtr, zaznaczenie jak w `body:selected`.
+  // Pełne odświeżenie orbit: planety i planetoidy od zera, pierścienie księżyców przestylowane.
   _hudRefreshAllOrbits() {
     this._rebuildAllOrbits();
     this._hudRebuildPlanetoidOrbits();
-    if (hudOrbitsOn()) {
-      this._hudRestyleMoonRings();
-    } else {
-      this._hudHoverOrbitId = null;
-      this._moons.forEach((e) => {
-        const base = e.ring?.userData?.hudBaseHex;
-        if (base === undefined) return;
-        e.ring.material.color.setHex(base);
-        delete e.ring.userData.hudBaseHex;
-      });
-      this._hideAllMoonOrbits();
-      const sel = this._selectedEntityId;
-      if (sel) {
-        this._showPlanetoidOrbit(sel, 0.35);
-        if (this._moons.has(sel)) this._showMoonOrbit(sel);
-      }
-    }
+    this._hudRestyleMoonRings();
     if (this._cleanView) this._applyCleanViewVisibility(true);   // SHIFT trwa — nowe linie też ukryte
   }
 
-  // Orbity planetoid od zera — bez przenoszenia widoczności i krycia ze starych linii (`_rebuildPlanetoidOrbits` przenosi,
-  // więc po zmianie flagi zostawiłby krycie drugiej ścieżki).
+  // Orbity planetoid od zera (styl ze stanu — `_buildPlanetoidOrbit`): co ~180 klatek i przy pełnym odświeżeniu.
   _hudRebuildPlanetoidOrbits() {
     this._planetoidOrbits.forEach((line) => {
       this.scene.remove(line);
@@ -3055,9 +2804,7 @@ export class ThreeRenderer {
     }));
   }
 
-  // Kolor bazowy pierścienia (ścieżka OFF) zapamiętany przy pierwszym stylowaniu — przywraca go przejście ON → OFF.
   _hudStyleMoonRing(moonId, ring, st = this._hudOrbitState()) {
-    if (ring.userData.hudBaseHex === undefined) ring.userData.hudBaseHex = ring.material.color.getHex();
     applyOrbitStyle(ring, moonOrbitStyle({ ...st, selected: moonId === this._selectedEntityId }));
   }
 
@@ -3398,22 +3145,9 @@ export class ThreeRenderer {
     this._pingedEnemyId = vesselId;
   }
 
-  // Zwraca encję pod kursorem BEZ emitowania eventów (do dblclick)
-  // Pozycja planety na ekranie (px) — dla animacji przejścia do ColonyOverlay
-  getScreenPosition(entityId) {
-    const pEntry = this._planets.get(entityId);
-    if (!pEntry) return null;
-    const pos = pEntry.group.position.clone();
-    pos.project(this.camera);
-    return {
-      x: (pos.x * 0.5 + 0.5) * window.innerWidth,
-      y: (-pos.y * 0.5 + 0.5) * window.innerHeight,
-    };
-  }
-
-  // S4-2 — pozycja stacji na ekranie (px) — dawniej dla pływającego panelu stacji (usunięty w REFORMIE ZAKŁADEK T4); dziś
-  // dla plakietek stacji `MapLabelLayer`. Mirror getScreenPosition, ale czyta _stations i zwraca null gdy stacja za
-  // kamerą (NDC z poza [-1,1]) — wtedy plakietka się nie rysuje.
+  // S4-2 — pozycja stacji na ekranie (px) — dawniej dla pływającego panelu stacji (usunięty w REFORMIE ZAKŁADEK T4)
+  // i plakietek stacji `MapLabelLayer` (usunięte w ARKUSZU HUD B-Z); dziś dla etykiet CTRL (`getAllVisibleLabels`).
+  // Zwraca null, gdy stacja za kamerą (NDC z poza [-1,1]) — wtedy etykieta się nie rysuje.
   getStationScreenPosition(stationId) {
     const entry = this._stations.get(stationId);
     if (!entry?.mesh) return null;
@@ -3424,40 +3158,6 @@ export class ThreeRenderer {
       x: (pos.x * 0.5 + 0.5) * window.innerWidth,
       y: (-pos.y * 0.5 + 0.5) * window.innerHeight,
     };
-  }
-
-  // Redesign UI v1 (Slice 1) — ogólna pozycja ekranowa DOWOLNEGO ciała
-  // (planeta/księżyc/planetoida/gwiazda) — dawniej dla pływającej karty ciała (usunięta w REFORMIE ZAKŁADEK T4); dziś dla
-  // plakietek kolonii `MapLabelLayer` (warstwa etykiet HUD wyłączona).
-  // Mirror getStationScreenPosition (z-clamp), ale getScreenPosition pokrywał tylko
-  // planety → tu obsługujemy wszystkie typy. getWorldPosition (księżyce mogą być
-  // zagnieżdżone). Zwraca null gdy ciało za kamerą (NDC z poza [-1,1]).
-  getBodyScreenPosition(entityId) {
-    if (!entityId) return null;
-    let obj = null;
-    const pe = this._planets.get(entityId);
-    if (pe) obj = pe.group;
-    if (!obj) { const me = this._moons.get(entityId);      if (me) obj = me.mesh; }
-    if (!obj) { const ae = this._planetoids.get(entityId); if (ae) obj = ae.mesh; }
-    if (!obj && this._starGroup) {
-      const star = EntityManager.getByType('star')?.[0];
-      if (star && star.id === entityId) obj = this._starGroup;
-    }
-    if (!obj) return null;
-    const tmp = this._tmpLabelVec ?? (this._tmpLabelVec = new THREE.Vector3());
-    obj.getWorldPosition(tmp);
-    tmp.project(this.camera);
-    if (tmp.z < -1 || tmp.z > 1) return null;
-    return {
-      x: (tmp.x * 0.5 + 0.5) * window.innerWidth,
-      y: (-tmp.y * 0.5 + 0.5) * window.innerHeight,
-    };
-  }
-
-  // FAZA 5 (S3.4) — bieżący dystans kamery orbitalnej (zakres ~3..450) dla fade/scale etykiet mapy.
-  // null gdy kontroler nie podpięty (headless / przed initem).
-  getCameraDistance() {
-    return this._cameraController?._dist ?? null;
   }
 
   // B1 (W2.1): epoka ruchu kamery — UIManager odświeża overlay 2D (etykiety + ramki selekcji)
@@ -3902,15 +3602,13 @@ export class ThreeRenderer {
     for (const [, sp] of this._tacticalOrbitMarkers)  each(sp);
     for (const line of this._tradeLines)              each(line);
     for (const f of this._tradeFireflies)             each(f?.sprite);
-    for (const [, e] of this._vessels)                each(e?.routeLine);
-    for (const [, e] of this._sensorRingMeshes)       each(e?.mesh);
     for (const [, e] of this._predictionConeMeshes)   each(e?.group);
     for (const [, sp] of this._enemyAlertMarkers)     each(sp);
     for (const [, sp] of this._tacticalGlyphs)        each(sp);
     for (const [, b] of this._hpBars)                 { each(b.bg); each(b.fill); }   // POLISH P2b (D2)
-    // ARKUSZ HUD H0 — przy `hudOrbits` widoczność orbit po wyjściu z czystego widoku liczona z preferencji (filtr,
-    // zaznaczenie, najechanie), nie z `_cvVis`: linie przebudowane w trakcie SHIFT nie mają `_cvVis` i wracałyby wszystkie.
-    if (!hidden && hudOrbitsOn()) this._hudRestyleOrbits();
+    // ARKUSZ HUD H0 — widoczność orbit po wyjściu z czystego widoku liczona z preferencji (filtr, zaznaczenie, najechanie),
+    // nie z `_cvVis`: linie przebudowane w trakcie SHIFT nie mają `_cvVis` i wracałyby wszystkie.
+    if (!hidden) this._hudRestyleOrbits();
   }
 
   // ── Pętla renderowania ────────────────────────────────────────
@@ -3990,12 +3688,7 @@ export class ThreeRenderer {
         this._tickGasMaterials();        // C1a — uDetail + kierunek światła żywych gazowców
         this._tickSunMaterials();        // S1 — drabina gwiazdy (bramkowane liveSunShader)
         this._tickAtmoMaterials();       // V3/A0 — siła powłoki atmosfery (bramkowane dayNightAtmosphere)
-        this._syncHudOrbits();           // ARKUSZ HUD H0 — orbity w kolorach motywu: flaga, epoka motywu, dom (510)
-        // ARKUSZ HUD H1 — przy `hudRadar` pierścienie 3D znikają od następnej klatki, także w pauzie (zdarzenia
-        // `_syncSensorOverlay` w pauzie nie lecą); przy OFF — bez zmian.
-        if (this._sensorRingMeshes.size > 0 && hudRadarOn()) this._disposeAllSensorRings();
-        // ARKUSZ HUD paczka A (H3) — przy `hudRoutes` linie tras 3D znikają od następnej klatki, także w pauzie; przy OFF — bez zmian.
-        if (hudRoutesOn()) this._disposeAllRouteLines();
+        this._syncHudOrbits();           // ARKUSZ HUD H0 — orbity w kolorach motywu: epoka motywu, dom (510), chip [O]
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
@@ -4598,32 +4291,7 @@ export class ThreeRenderer {
       }
 
       this.scene.add(wrapper);
-
-      // Linia trasy — wraki NIE mają trasy (nic nie lecą). ARKUSZ HUD paczka A — przy `hudRoutes` trasę rysuje warstwa HUD 2D.
-      let routeLine = null;
-      if (vessel.mission && !isWreck && !hudRoutesOn()) {
-        const m = vessel.mission;
-        const isReturn = m.phase === 'returning';
-        let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
-        let ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
-        if (isNaN(tx)) tx = 0;
-        if (isNaN(ty)) ty = 0;
-        let vx = vessel.position.x, vy = vessel.position.y;
-        if (isNaN(vx)) vx = 0;
-        if (isNaN(vy)) vy = 0;
-        const points = [
-          new THREE.Vector3(S(vx), 0.3, S(vy)),  // start: statek (nad płaszczyzną)
-          new THREE.Vector3(S(tx), 0.0, S(ty)),   // cel: planeta (na równiku)
-        ];
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const lineMat = new THREE.LineDashedMaterial({
-          color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
-          transparent: true, opacity: ROUTE_LINE_BASE_OPACITY, linewidth: ROUTE_LINE_BASE_WIDTH,
-        });
-        routeLine = new THREE.Line(geo, lineMat);
-        routeLine.computeLineDistances();
-        this.scene.add(routeLine);
-      }
+      // Trasę statku rysuje warstwa HUD 2D (`HudRouteLayer`; dawne linie tras 3D usunięte w ARKUSZU HUD B-Z).
 
       // Wrogi statek: początkowa widoczność. Wrak jest widoczny ZAWSZE.
       // M4 P2: jeśli m4EnemyGhosts ON, wywołamy _applyVesselIntelVisibility po
@@ -4635,11 +4303,10 @@ export class ThreeRenderer {
         const obs = window.KOSMOS?.observatorySystem;
         const detected = obs?.isVesselDetected?.(vessel.id) ?? false;
         wrapper.visible = detected;
-        if (routeLine) routeLine.visible = detected;
       }
 
       this._vessels.set(vessel.id, {
-        sprite: wrapper, routeLine, color, isModel3D: true,
+        sprite: wrapper, color, isModel3D: true,
         enemyTint: isEnemy || isWreck,  // wszystkie sklonowane materiały do dispose
         isWreck,
         exhaust: exhaustCone,           // stożek wydechu (może być null) — modulowany co tick
@@ -4811,33 +4478,7 @@ export class ThreeRenderer {
     sprite.userData = { kosmosType: 'vessel', type: 'vessel', vesselId: vessel.id };
 
     this.scene.add(sprite);
-
-    // Linia trasy (przerywana, 2 punkty: statek → cel). ARKUSZ HUD paczka A — przy `hudRoutes` trasę rysuje warstwa HUD 2D.
-    let routeLine = null;
-    if (vessel.mission && !hudRoutesOn()) {
-      const m = vessel.mission;
-      const isReturn = m.phase === 'returning';
-      let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
-      let ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
-      if (isNaN(tx)) tx = 0;
-      if (isNaN(ty)) ty = 0;
-      let vx = vessel.position.x, vy = vessel.position.y;
-      if (isNaN(vx)) vx = 0;
-      if (isNaN(vy)) vy = 0;
-      const points = [
-        new THREE.Vector3(S(vx), 0.3, S(vy)),  // start: statek (nad płaszczyzną)
-        new THREE.Vector3(S(tx), 0.0, S(ty)),   // cel: planeta (na równiku)
-      ];
-
-      const geo = new THREE.BufferGeometry().setFromPoints(points);
-      const lineMat = new THREE.LineDashedMaterial({
-        color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
-        transparent: true, opacity: ROUTE_LINE_BASE_OPACITY, linewidth: ROUTE_LINE_BASE_WIDTH,
-      });
-      routeLine = new THREE.Line(geo, lineMat);
-      routeLine.computeLineDistances();
-      this.scene.add(routeLine);
-    }
+    // Trasę statku rysuje warstwa HUD 2D (`HudRouteLayer`; dawne linie tras 3D usunięte w ARKUSZU HUD B-Z).
 
     // Wrogi fallback sprite — widoczność initial. M4 P2 intel-aware ścieżka
     // po _vessels.set (wymaga entry); fallback legacy gdy flag off.
@@ -4845,10 +4486,9 @@ export class ThreeRenderer {
       const obs = window.KOSMOS?.observatorySystem;
       const detected = obs?.isVesselDetected?.(vessel.id) ?? false;
       sprite.visible = detected;
-      if (routeLine) routeLine.visible = detected;
     }
 
-    this._vessels.set(vessel.id, { sprite, routeLine, tex, color, enemyTint: isEnemy });
+    this._vessels.set(vessel.id, { sprite, tex, color, enemyTint: isEnemy });
 
     // M4 P2 — apply intel ghosts dla fallback sprite (po set, helper iteruje sprite materials)
     if (isEnemy && GAME_CONFIG.FEATURES.m4EnemyGhosts) {
@@ -4902,11 +4542,6 @@ export class ThreeRenderer {
     // Jeśli skończony hover był na tym statku — wyczyść
     if (this._hoverVesselId === vesselId) this._hoverVesselId = null;
 
-    if (entry.routeLine) {
-      this.scene.remove(entry.routeLine);
-      entry.routeLine.geometry.dispose();
-      entry.routeLine.material.dispose();
-    }
     this._vessels.delete(vesselId);
   }
 
@@ -5270,14 +4905,8 @@ export class ThreeRenderer {
 
       // ── Statek orbituje ciało — pozycja zarządzana przez OrbitalSpaceSystem ──
       // `_tickOrbitingVessels()` co klatkę pobiera pozycję z centralnego rejestru
-      // i ustawia sprite. Tu tylko usuwamy routeLine (nie lecimy nigdzie).
+      // i ustawia sprite.
       if (vessel.position?.state === 'orbiting') {
-        if (entry.routeLine) {
-          this.scene.remove(entry.routeLine);
-          entry.routeLine.geometry.dispose();
-          entry.routeLine.material.dispose();
-          entry.routeLine = null;
-        }
         // M2a: deep-space wrak (isWreck + wreckLocation + brak dockedAt) — wrak
         // nie ma orbity w OrbitalSpaceSystem, więc _tickOrbitingVessels go nie
         // poruszy. Sprite pozostawiłby ostatnią pozycję (lub (0,0,0) po load).
@@ -5295,7 +4924,7 @@ export class ThreeRenderer {
         continue;
       }
 
-      // ── Statek w locie — linia trasy + opadanie ku celowi ────────
+      // ── Statek w locie — opadanie ku celowi (trasę rysuje warstwa HUD 2D) ────────
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
@@ -5333,38 +4962,9 @@ export class ThreeRenderer {
           }
         }
 
-        if (hudRoutesOn()) {
-          // ARKUSZ HUD paczka A (H3) — trasę rysuje warstwa HUD 2D; linię 3D (jeśli była) zdejmuje pętla renderu.
-        } else if (!entry.routeLine) {
-          const savedColor = entry.color ?? 0xaaaaaa;
-          const pts = [
-            new THREE.Vector3(S(vx), shipY, S(vy)),
-            new THREE.Vector3(S(tx), 0.0, S(ty)),
-          ];
-          const geo = new THREE.BufferGeometry().setFromPoints(pts);
-          const lineMat = new THREE.LineDashedMaterial({
-            color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
-            transparent: true, opacity: ROUTE_LINE_BASE_OPACITY, linewidth: ROUTE_LINE_BASE_WIDTH,
-          });
-          entry.routeLine = new THREE.Line(geo, lineMat);
-          entry.routeLine.computeLineDistances();
-          this.scene.add(entry.routeLine);
-        } else {
-          const posArr = entry.routeLine.geometry.attributes.position.array;
-          posArr[0] = S(vx); posArr[1] = shipY; posArr[2] = S(vy);
-          posArr[3] = S(tx); posArr[4] = 0.0;   posArr[5] = S(ty);
-          entry.routeLine.geometry.attributes.position.needsUpdate = true;
-          entry.routeLine.computeLineDistances();
-        }
       } else {
         // Brak misji — statek na stałej wysokości
         entry.sprite.position.set(S(vx), 0.3, S(vy));
-        if (entry.routeLine) {
-          this.scene.remove(entry.routeLine);
-          entry.routeLine.geometry.dispose();
-          entry.routeLine.material.dispose();
-          entry.routeLine = null;
-        }
       }
 
       // M4 P2 — enemy intel-gated rendering (rumor ghost / contact dim / detailed full)
@@ -5439,7 +5039,6 @@ export class ThreeRenderer {
     if (!GAME_CONFIG.FEATURES.m4EnemyGhosts) {
       const detected = (window.KOSMOS?.observatorySystem?.isVesselDetected?.(vessel.id) ?? false) || revealed;
       entry.sprite.visible = detected;
-      if (entry.routeLine) entry.routeLine.visible = detected;
       return;
     }
 
@@ -5457,7 +5056,6 @@ export class ThreeRenderer {
 
     if (quality === 'unknown' && !revealed) {
       entry.sprite.visible = false;
-      if (entry.routeLine) entry.routeLine.visible = false;
       entry.intelQuality = 'unknown';
       return;
     }
@@ -5474,7 +5072,6 @@ export class ThreeRenderer {
       opacity = 0.3 * fade;
       if (opacity <= 0.05) {
         entry.sprite.visible = false;
-        if (entry.routeLine) entry.routeLine.visible = false;
         entry.intelQuality = 'rumor';
         entry.intelOpacity = 0;
         return;
@@ -5488,8 +5085,6 @@ export class ThreeRenderer {
     }
 
     entry.sprite.visible = true;
-    // routeLine widoczna tylko dla 'detailed' — niższe quality nie ujawniają trasy
-    if (entry.routeLine) entry.routeLine.visible = (quality === 'detailed');
 
     this._applyVesselOpacity(entry, opacity);
 
@@ -6180,161 +5775,12 @@ export class ThreeRenderer {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Sensor overlay (M4 P2) — cyan ring wokół własnych vesseli +
-  // yellow ring wokół własnych kolonii (obserwatorium detection).
-  // ─────────────────────────────────────────────────────────────
-  // Wzorzec 1:1 z _syncPredictionCones: Map cache, mark&sweep każdego
-  // syncu (activeKeys), dispose dla nieaktywnych. Lifecycle:
-  // - vessel:positionUpdate → re-sync wszystkich (pozycje vesseli + kolonii
-  //   się zmieniają — planety orbitują).
-  // - ui:sensorOverlayToggle (off) → _disposeAllSensorRings.
-  // Reaguje na FEATURES.m4SensorOverlay (rollback flag) oraz na
-  // window.KOSMOS.uiPrefs.sensorOverlayVisible (player toggle).
-
-  _syncSensorOverlay() {
-    // ARKUSZ HUD H1 — przy `hudRadar` radar rysuje warstwa HUD 2D (`HudRadarLayer`); pierścienie 3D wyłączone.
-    if (hudRadarOn()) {
-      if (this._sensorRingMeshes.size > 0) this._disposeAllSensorRings();
-      return;
-    }
-    if (!GAME_CONFIG.FEATURES.m4SensorOverlay) {
-      if (this._sensorRingMeshes.size > 0) this._disposeAllSensorRings();
-      return;
-    }
-    const visible = window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true;
-    if (!visible) {
-      if (this._sensorRingMeshes.size > 0) this._disposeAllSensorRings();
-      return;
-    }
-
-    const activeKeys = new Set();
-    const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
-
-    // 1) Własne vessele — cyan ring SENSOR_LOCK_AU
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (vMgr) {
-      for (const v of vMgr._vessels.values()) {
-        if (v.isWreck) continue;
-        if (isEnemyVessel(v)) continue;
-        if (v.systemId && v.systemId !== activeSys) continue;
-        if (!v.position || isNaN(v.position.x) || isNaN(v.position.y)) continue;
-        const key = `v_${v.id}`;
-        activeKeys.add(key);
-        this._upsertSensorRing(
-          key, v.position.x, v.position.y,
-          GAME_CONFIG.SENSOR_LOCK_AU,
-          SENSOR_RING_VESSEL_COLOR,
-        );
-      }
-    }
-
-    // 2) Własne kolonie — yellow ring (obserwatorium detection range)
-    const colMgr = window.KOSMOS?.colonyManager;
-    const obsSys = window.KOSMOS?.observatorySystem;
-    if (colMgr) {
-      for (const col of colMgr.getAllColonies()) {
-        if ((col.systemId ?? 'sys_home') !== activeSys) continue;
-        const planet = col.planet ?? EntityManager.get(col.planetId);
-        if (!planet || isNaN(planet.x) || isNaN(planet.y)) continue;
-        // Bazowo 1 AU; obserwatorium rozszerza. obsSys może nie istnieć w sandboxie.
-        let rangeAU = 1.0;
-        if (obsSys?.getVesselDetectionRangeAU) {
-          rangeAU = obsSys.getVesselDetectionRangeAU(col) ?? 1.0;
-        }
-        if (!Number.isFinite(rangeAU)) rangeAU = SENSOR_RING_MAX_COLONY_AU;
-        rangeAU = Math.min(rangeAU, SENSOR_RING_MAX_COLONY_AU);
-        if (rangeAU <= 0) continue;
-        const key = `col_${col.planetId}`;
-        activeKeys.add(key);
-        this._upsertSensorRing(
-          key, planet.x, planet.y, rangeAU,
-          SENSOR_RING_COLONY_COLOR,
-        );
-      }
-    }
-
-    // 3) Mark & sweep — usuń ringi dla zniknięcych encji
-    for (const k of [...this._sensorRingMeshes.keys()]) {
-      if (!activeKeys.has(k)) this._disposeSensorRing(k);
-    }
-  }
-
-  _upsertSensorRing(key, worldX, worldY, radiusAU, color) {
-    const radiusWU = S(radiusAU * AU);
-    let entry = this._sensorRingMeshes.get(key);
-    if (!entry || entry.radiusAU !== radiusAU || entry.color !== color) {
-      if (entry) this._disposeSensorRing(key);
-      // Cienki annulus: inner 99% × outer (1px-ish w world units zależnie od zoom,
-      // ale Three.js RingGeometry wymaga konkretnych liczb). Stała szerokość
-      // = ~3% promienia daje widoczny ring od 0.1 AU do 35 AU.
-      const inner = radiusWU * 0.985;
-      const outer = radiusWU;
-      const geom = new THREE.RingGeometry(inner, outer, SENSOR_RING_SEGMENTS);
-      const mat  = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: SENSOR_RING_OPACITY,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.rotation.x = -Math.PI / 2;  // płaszczyzna XZ (ekliptyka)
-      this.scene.add(mesh);
-      entry = { mesh, geom, mat, radiusAU, color };
-      this._sensorRingMeshes.set(key, entry);
-    }
-    entry.mesh.position.set(S(worldX), SENSOR_RING_Y, S(worldY));
-  }
-
-  _disposeSensorRing(key) {
-    const entry = this._sensorRingMeshes.get(key);
-    if (!entry) return;
-    this.scene.remove(entry.mesh);
-    entry.geom.dispose();
-    entry.mat.dispose();
-    this._sensorRingMeshes.delete(key);
-  }
-
-  _disposeAllSensorRings() {
-    for (const k of [...this._sensorRingMeshes.keys()]) {
-      this._disposeSensorRing(k);
-    }
-  }
-
-  // ARKUSZ HUD paczka A (H3) — zdejmij wszystkie linie tras 3D (przy `hudRoutes` trasy rysuje warstwa HUD 2D). Bez linii — nic.
-  _disposeAllRouteLines() {
-    for (const entry of this._vessels.values()) {
-      if (!entry?.routeLine) continue;
-      this.scene.remove(entry.routeLine);
-      entry.routeLine.geometry?.dispose?.();
-      entry.routeLine.material?.dispose?.();
-      entry.routeLine = null;
-    }
-  }
-
   // ════════════════════════════════════════════════════════════════════════
   // Fleet Command Console (Slice 0) — wspólny silnik FX + helpery selekcji/intel
   // ════════════════════════════════════════════════════════════════════════
 
-  // Pozycja statku na ekranie (px) — luka API (getScreenPosition jest planet-only).
-  // Mirror getStationScreenPosition: rzut world→NDC z z-clampem; null gdy za kamerą.
-  // Źródło prawdy dla 2D-zakotwiczonych UI per-statek (ramki, paski HP — Slice 4).
-  getVesselScreenPosition(vesselId) {
-    const entry = this._vessels.get(vesselId);
-    if (!entry?.sprite) return null;
-    const tmp = this._tmpLabelVec ?? (this._tmpLabelVec = new THREE.Vector3());
-    entry.sprite.getWorldPosition(tmp);
-    tmp.project(this.camera);
-    if (tmp.z < -1 || tmp.z > 1) return null;
-    return {
-      x: (tmp.x * 0.5 + 0.5) * window.innerWidth,
-      y: (-tmp.y * 0.5 + 0.5) * window.innerHeight,
-    };
-  }
-
   // Kolor frakcji statku (cache per ownerEmpireId). Own=mint, enemy=archetyp, wrak=szary.
-  // Używany przez smugi walki, tint insygniów, kolor linii rozkazu, pierścień selekcji.
+  // Używany przez smugi walki, tint insygniów, pierścień selekcji.
   _factionColorHex(vessel) {
     if (!vessel) return 0x888888;
     if (vessel.isWreck) return factionColorRaw({ isWreck: true });
@@ -7193,22 +6639,6 @@ export class ThreeRenderer {
     this._bodyVeil = null;
   }
 
-  // ── Slice 3 — kolor linii rozkazu wg typu ────────────────────────────────
-  // Rollback fcOrderLines=false → kolor frakcji (stare zachowanie).
-  _orderLineColor(vessel) {
-    if (!GAME_CONFIG.FEATURES?.fcOrderLines) return this._factionColorHex(vessel);
-    switch (vessel?.movementOrder?.type) {
-      case 'engage':              return 0xff5544;  // czerwony — atak
-      case 'pursue':
-      case 'intercept':           return 0xffaa44;  // amber — pościg
-      case 'patrol':              return 0x44ccff;  // cyan — patrol
-      case 'retreat':             return 0xcc88ff;  // fiolet — odwrót
-      case 'moveToPoint':         return 0x66ddaa;  // zielony — ruch
-      default:
-        return (vessel && !isEnemyVessel(vessel)) ? 0x66ddaa : 0xff8866;
-    }
-  }
-
   // ── Slice 6 — puls startu/przybycia statku (FX harness) ──────────────────
   _spawnMovementPulse(vessel) {
     if (!GAME_CONFIG.FEATURES?.fcMovementFx) return;
@@ -7380,7 +6810,7 @@ export class ThreeRenderer {
     return tex;
   }
 
-  // ctx dla buildShipEntry — wpięcia świata (jak MapLabelLayer).
+  // ctx dla buildShipEntry — wpięcia świata (jak warstwa etykiet HUD).
   _buildPictureCtx() {
     const K = window.KOSMOS;
     const vm = K?.vesselManager;
@@ -7395,34 +6825,12 @@ export class ThreeRenderer {
   }
 
   // ── F4 Dok taktyczny: hover-podgląd + ping ─────────────────────────────────
-  // Ustawia statek pod kursorem doku. Rozjaśnienie routeLine = event-driven set
-  // opacity materiału (dla WŁASNYCH nikt nie nadpisuje per-frame — trzyma się);
+  // Ustawia statek pod kursorem doku: podświetla jego trasę na warstwie HUD (`HudRouteLayer` czyta `_tacticalHoverVid`);
   // puls ducha ETA czyta _tacticalHoverVid w _upsertTacticalGhost (per-frame).
   setTacticalHoverVid(vid) {
     const next = vid ?? null;
     if (this._tacticalHoverVid === next) return;
-    const prev = this._tacticalHoverVid;
     this._tacticalHoverVid = next;
-    this._setRouteLineHover(prev, false);
-    this._setRouteLineHover(next, true);
-  }
-
-  _setRouteLineHover(vid, on) {
-    if (!vid) return;
-    const mat = this._vessels.get(vid)?.routeLine?.material;
-    if (!mat) return;
-    // 4f-2 — hover: pełna opacity + jasny kolor + grubsza linia; zdjęcie: powrót do bazy (kolor
-    // z rodzaju rozkazu — _orderLineColor odzwierciedla bieżący stan; opacity/width bazowe).
-    if (on) {
-      mat.opacity   = ROUTE_LINE_HOVER_OPACITY;
-      mat.linewidth = ROUTE_LINE_HOVER_WIDTH;
-      mat.color?.set?.(ROUTE_LINE_HOVER_COLOR);
-    } else {
-      mat.opacity   = ROUTE_LINE_BASE_OPACITY;
-      mat.linewidth = ROUTE_LINE_BASE_WIDTH;
-      const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
-      if (v && mat.color?.set) mat.color.set(this._orderLineColor(v));
-    }
   }
 
   // Rok pod kursorem na OSI doku → marker „gdzie będzie planeta celu w tym roku"
@@ -7874,19 +7282,12 @@ export class ThreeRenderer {
     }
     const vm = window.KOSMOS?.vesselManager;
     if (!vm) { if (this._enemyAlertMarkers.size) this._disposeAllEnemyAlertMarkers(); return; }
-    // ARKUSZ HUD paczka B (D-HUD-12, flaga `hudAttention`) — puls okresowy na zegarze SYMULACJI (pauza — celownik stoi; przed
-    // pierwszym tikiem — pełny), a w czasie alertu tego wroga celownik pulsuje w rytmie alertu (jeden rysunek z pierścieniami
-    // alertu warstwy HUD — `HudFocusLayer` ich wtedy nie rysuje). Flaga OFF — zegar realny, jak dotąd.
-    const attOn = isHudAttentionOn(GAME_CONFIG.FEATURES);
-    let pulse;
-    if (attOn) {
-      const sim = simClockMs();
-      pulse = sim == null ? 1 : 0.5 + 0.5 * Math.sin((sim / 1000) * 3.2);
-    } else {
-      const tt = this._clock.getElapsedTime();
-      pulse = 0.5 + 0.5 * Math.sin(tt * 3.2);   // 0..1, wspólna faza (radar-sync)
-    }
-    const hud = attOn ? window.KOSMOS?.hudLayer : null;
+    // ARKUSZ HUD paczka B (D-HUD-12) — puls okresowy na zegarze SYMULACJI (pauza — celownik stoi; przed pierwszym tikiem —
+    // pełny), a w czasie alertu tego wroga celownik pulsuje w rytmie alertu (jeden rysunek z pierścieniami alertu warstwy
+    // HUD — `HudFocusLayer` ich wtedy nie rysuje).
+    const sim = simClockMs();
+    const pulse = sim == null ? 1 : 0.5 + 0.5 * Math.sin((sim / 1000) * 3.2);
+    const hud = window.KOSMOS?.hudLayer;
     const alertHex = this._hud3dHex('alert');   // paczka B (D-HUD-16) — rola `alert` motywu
     const camPos = this.camera?.position;            // skala wg dystansu → stały rozmiar EKRANOWY
     const active = new Set();

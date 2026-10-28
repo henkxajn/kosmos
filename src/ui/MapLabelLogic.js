@@ -1,132 +1,12 @@
-// MapLabelLogic — czyste helpery dla etykiet kolonii/stacji na mapie 3D (FAZA 5, S3.4).
-// Node-importowalne (bez canvas/three) — testowalne headless. Widok w MapLabelLayer.js czyta te dane
-// i rysuje na #ui-canvas (overlay 2D, Trasa A z FAZY 0). Zbieranie danych oddzielone od renderu, żeby:
-//   (a) mgła wojny była JEDNYM miejscem (getPlayerColonies / stacje gracza — nigdy getAllColonies),
-//   (b) badge/status stacji dało się testować bez rysowania.
+// MapLabelLogic — czyste helpery etykiet mapy 3D (FAZA 5, S3.4; Obraz Operacyjny F1). Node-importowalne (bez canvas/three)
+// — testowalne headless. Od ARKUSZA HUD B-Z dane czyta warstwa etykiet HUD (`HudLabelLayer`): zbieracz statków aktywnego
+// układu z mgłą wojny (`gatherVesselLabels` — JEDNO miejsce), badge statusu stacji, strzałki krawędzi; `systemDisplayName` —
+// kanon nazwy układu dla wielu modułów. Dawne plakietki `MapLabelLayer` (LOD, anty-nakładanie, zbieracze kolonii i stacji,
+// `toLogicalPx`) — ścieżka OFF `hudLabels` — usunięte w B-Z.
 
-import { STATION_MODULES } from '../data/StationModuleData.js';
 import { buildShipEntry, worstTone } from './FleetPictureLogic.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { enemyVesselNamed } from '../utils/VesselReveal.js';   // Finding 568 — jedna reguła nazwy obcego statku
-
-// Ikony typu kolonii (dwujęzyczność nie dotyczy — emoji uniwersalne).
-export const COLONY_ICON = { home: '🏠', colony: '🏙️', outpost: '⛺' };
-export const STATION_ICON = '🛰️';
-
-// LOD (K1) — 3 poziomy wg dystansu kamery 3D (zakres orbitu 3..450). Przejścia PŁYNNE (cross-fade):
-//   dist ≤ PLAQUE_FULL             → pełna plakietka (plaqueAlpha 1)
-//   PLAQUE_FULL..PLAQUE_FADE       → cross-fade plakietka↓ / znacznik↑
-//   PLAQUE_FADE..MARKER_FADE       → sam znacznik (ikona [+badge], bez nazwy/POP) — „tu coś jest"
-//   MARKER_FADE..FADE_END          → znacznik zanika
-//   ≥ FADE_END                     → nic (declutter — imersja przy całym układzie w kadrze)
-export const LOD_PLAQUE_FULL = 150;
-export const LOD_PLAQUE_FADE = 215;
-export const LOD_MARKER_FADE = 300;
-export const LABEL_FADE_END  = 360;
-
-/**
- * Poziom szczegółowości etykiety wg dystansu (K1). Zwraca alfy obu reprezentacji (cross-fade płynny).
- * dist=null/NaN → pełna plakietka (brak danych = pokaż z bliska).
- * @returns {{plaqueAlpha:number, markerAlpha:number}}
- */
-export function labelLOD(dist) {
-  if (dist == null || !Number.isFinite(dist)) return { plaqueAlpha: 1, markerAlpha: 0 };
-  if (dist <= LOD_PLAQUE_FULL) return { plaqueAlpha: 1, markerAlpha: 0 };
-  if (dist < LOD_PLAQUE_FADE) {
-    const t = (dist - LOD_PLAQUE_FULL) / (LOD_PLAQUE_FADE - LOD_PLAQUE_FULL);
-    return { plaqueAlpha: 1 - t, markerAlpha: t };
-  }
-  if (dist <= LOD_MARKER_FADE) return { plaqueAlpha: 0, markerAlpha: 1 };
-  if (dist < LABEL_FADE_END) {
-    const t = (dist - LOD_MARKER_FADE) / (LABEL_FADE_END - LOD_MARKER_FADE);
-    return { plaqueAlpha: 0, markerAlpha: 1 - t };
-  }
-  return { plaqueAlpha: 0, markerAlpha: 0 };
-}
-
-// Podłoga alfy markera STACJI (0..1). Stacja gracza NIE znika przy oddaleniu: jej model GLB jest
-// sub-pikselowy przy dystansie dopasowania układu / w trybie Y (frameSystem ląduje na 380..450 —
-// dokładnie w paśmie declutter labelLOD), więc marker etykiety to JEDYNA jej reprezentacja. 0 =
-// przywróć stare declutterowanie stacji.
-export const STATION_MARKER_FLOOR = 0.9;
-
-/**
- * LOD etykiety STACJI — jak labelLOD, ale marker ma PODŁOGĘ (nie znika przy oddaleniu). Identyczny
- * fix jak clusterAlpha=1 dla plakietek statków (Slice 1e): frameSystem/tryb Y parkuje kamerę w dawnym
- * paśmie fade, przez co WŁASNA stacja gracza znikała naraz z etykietą (bug live-gate 4f). Kolonie
- * declutterują normalnie (mają widoczną planetę); stacje NIE (sub-pikselowy GLB). Podłoga TYLKO w
- * reżimie znacznika (plakietka już zgasła) — bez wskrzeszania markera w fazie plakietki (z bliska).
- * @returns {{plaqueAlpha:number, markerAlpha:number}}
- */
-export function stationLabelLOD(dist) {
-  const base = labelLOD(dist);
-  const markerAlpha = base.plaqueAlpha <= 0.02
-    ? Math.max(base.markerAlpha, STATION_MARKER_FLOOR)
-    : base.markerAlpha;
-  return { plaqueAlpha: base.plaqueAlpha, markerAlpha };
-}
-
-/**
- * Anty-nakładanie (K2) — deterministyczny greedy: sort po docelowym Y (potem X dla stabilności),
- * każdą kolidującą etykietę zsuń W DÓŁ pod najniższą nakładającą się (z odstępem gap). Bez fizyki,
- * bez iteracyjnych solverów. Kolizja = AABB (nakładanie w X ORAZ Y). `targetY` = pożądany środek
- * plakietki (punkt ciała + offset). Zwraca te same itemy z `drawY` + `displaced` (czy przesunięto).
- * @param {Array<{id,anchorX,targetY,w,h}>} items
- * @param {number} gap
- * @returns {Array<{id,anchorX,targetY,w,h,drawY,displaced}>}
- */
-export function stackLabels(items, gap = 3) {
-  const xOverlap = (a, b) =>
-    (a.anchorX - a.w / 2) < (b.anchorX + b.w / 2) && (a.anchorX + a.w / 2) > (b.anchorX - b.w / 2);
-
-  const sorted = [...items].sort((a, b) => (a.targetY - b.targetY) || (a.anchorX - b.anchorX));
-  const placed = [];   // utrzymywane rosnąco po drawY
-  const out = [];
-  for (const it of sorted) {
-    let drawY = it.targetY;
-    for (const p of placed) {   // placed rosnąco → zsuwanie łańcuchowe działa
-      if (!xOverlap(it, p)) continue;
-      const pBottom = p.drawY + p.h / 2;
-      const myTop = drawY - it.h / 2;
-      if (myTop < pBottom + gap && (drawY + it.h / 2) > (p.drawY - p.h / 2)) {
-        drawY = pBottom + gap + it.h / 2;   // zsuń pod ten box
-      }
-    }
-    const res = { ...it, drawY, displaced: Math.abs(drawY - it.targetY) > 0.5 };
-    out.push(res);
-    placed.push(res);
-    placed.sort((a, b) => a.drawY - b.drawY);
-  }
-  return out;
-}
-
-/**
- * Etykiety KOLONII GRACZA (mgła wojny: getPlayerColonies → filtr ownerEmpireId już w ColonyManager;
- * NIGDY getAllColonies). Zwraca tylko kolonie z ciałem widocznym na mapie (planeta/księżyc) — filtr
- * pozycji robi widok (getBodyScreenPosition null → pomija).
- * @returns {Array<{id,name,icon,kind,pop}>}
- */
-export function gatherColonyLabels(colMgr, homePid) {
-  if (!colMgr?.getPlayerColonies) return [];
-  const out = [];
-  for (const col of colMgr.getPlayerColonies()) {
-    const pid = col.planetId ?? col.planet?.id;
-    if (!pid) continue;
-    const isHome = pid === homePid;
-    const isOutpost = col.isOutpost === true;
-    const kind = isHome ? 'home' : isOutpost ? 'outpost' : 'colony';
-    // Outpost = mini-kolonia bez POPów (brak civSystem) → pop=null (nie pokazujemy 0).
-    const pop = isOutpost ? null : Math.round(col.civSystem?.population ?? 0);
-    out.push({
-      id: pid,
-      name: (col.planet?.name ?? col.name ?? pid ?? '').slice(0, 16),
-      icon: COLONY_ICON[kind],
-      kind,
-      pop,
-    });
-  }
-  return out;
-}
 
 /**
  * Badge statusu stacji (kolejność: budowa → brak załogi → deficyt energii). Emoji uniwersalne.
@@ -146,69 +26,9 @@ export function stationStatusBadges(station) {
 
 export const BADGE_ICON = { building: '🔨', no_crew: '👥', no_power: '⚡' };
 
-/**
- * Etykiety STACJI GRACZA (mgła wojny: tylko !ownerEmpireId — cudze stacje pomijamy, S3.5 wprowadzi
- * kontakty). Pozycję rozwiązuje widok przez getStationScreenPosition (null → pomija).
- * @returns {Array<{id,name,icon,kind,pop,popCapacity,badges}>}
- */
-export function gatherStationLabels(stationSystem) {
-  if (!stationSystem?.getAllStations) return [];
-  const out = [];
-  for (const st of stationSystem.getAllStations()) {
-    if ((st.ownerEmpireId ?? 'player') !== 'player') continue;   // tylko stacje gracza
-    out.push({
-      id: st.id,
-      name: (st.name ?? st.id ?? '').slice(0, 16),
-      icon: STATION_ICON,
-      kind: 'station',
-      pop: st.pop ?? 0,
-      popCapacity: st.popCapacity ?? 0,
-      badges: stationStatusBadges(st),
-    });
-  }
-  return out;
-}
-
 // ═══ Obraz Operacyjny — Faza 1 (M1-light): plakietki flotowe ═════════════════
 // Czyste helpery zbieracza etykiet statków. Słownik (tone/glif/alerty) WYŁĄCZNIE
 // z FleetPictureLogic (twarda reguła planu §0) — tu tylko filtracja/geometria.
-
-/**
- * px CSS (getVesselScreenPosition liczy z window.innerWidth/Height) → px LOGICZNE
- * overlayu 2D (transformata UI_SCALE). Aneks A.3 — bez tej konwersji pozycje
- * rozjeżdżają się na każdej rozdzielczości ≠ 1280×720.
- * @param {{x:number,y:number}|null} pos @param {number} uiScale
- * @returns {{x:number,y:number}|null}
- */
-export function toLogicalPx(pos, uiScale) {
-  if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return null;
-  const s = (Number.isFinite(uiScale) && uiScale > 0) ? uiScale : 1;
-  return { x: pos.x / s, y: pos.y / s };
-}
-
-// LOD plakietek STATKÓW (profil light) — osobne progi, NIE ruszamy labelLOD kolonii.
-//   clusterAlpha — plakietki flot/klastrów: ZAWSZE 1 (świadomość w tle to sedno M1).
-//     Slice 1e: fade dystansowy USUNIĘTY — frameSystem po przełączeniu układu ląduje
-//     na dist 380..450 (SYSTEM_FIT_DIST_PER_AU), czyli dokładnie w dawnym pasie fade
-//     → plakietki „znikały" po powrocie do układu (bug z playtestu Filipa).
-//   detailAlpha  — etykiety indywidualne (wybrany statek + statki z alertem) — tylko blisko.
-export const VESSEL_DETAIL_FULL  = 120;   // dist ≤ → pełne etykiety indywidualne
-export const VESSEL_DETAIL_FADE  = 180;   // fade out detali
-
-/**
- * LOD plakietek statków wg dystansu kamery (cross-fade jak labelLOD).
- * dist=null/NaN → pełny detal (brak danych = pokaż).
- * @returns {{clusterAlpha:number, detailAlpha:number}}
- */
-export function vesselLabelLOD(dist) {
-  if (dist == null || !Number.isFinite(dist)) return { clusterAlpha: 1, detailAlpha: 1 };
-  let detailAlpha = 0;
-  if (dist <= VESSEL_DETAIL_FULL) detailAlpha = 1;
-  else if (dist < VESSEL_DETAIL_FADE) {
-    detailAlpha = 1 - (dist - VESSEL_DETAIL_FULL) / (VESSEL_DETAIL_FADE - VESSEL_DETAIL_FULL);
-  }
-  return { clusterAlpha: 1, detailAlpha };
-}
 
 /**
  * Nazwa WYŚWIETLANA układu (slice 1e) — nigdy surowe id: wpis StarSystemManagera
@@ -234,7 +54,7 @@ export function systemDisplayName(systemId, sources = {}) {
  *
  * @param {object[]} vessels — vesselManager.getAllVessels()
  * @param {object} ctx —
- *   getScreenPos(id) → {x,y}|null   — px LOGICZNE (Layer: toLogicalPx(tr.getVesselScreenPosition))
+ *   getScreenPos(id) → {x,y}|null   — px LOGICZNE (warstwa etykiet HUD — rzut wspólnym projektorem)
  *   pictureCtx                      — ctx dla FleetPictureLogic.buildShipEntry
  *   enemyQuality(id) → 'unknown'|'rumor'|'contact'|'detailed'
  *   activeSystemId                  — filtr układu (tranzyt systemId=null NIE jest na tej mapie)

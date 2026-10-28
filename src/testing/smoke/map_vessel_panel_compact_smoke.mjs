@@ -47,11 +47,16 @@
 //     `_applyRightScroll` ma jednego wołającego (Rejestr).
 //   (S1 — kółko nad panelem T3 — usunięty w T4-3)
 //   S2  pin ŹRÓDŁOWY: clamp przewijania ma JEDNO źródło (`_applyRightScroll`), nie dwie kopie
-//   Z   KOLEJNOŚĆ: etykiety mapy rysowane PRZED klastrem paneli (Z1/Z1b panel statku,
-//       Z2 stationPanel+combatHud = fix KLASOWY, Z3 ramki RTS zostają nad etykietami)
+//   Z   KOLEJNOŚĆ: etykiety mapy POD klastrem paneli — od B-Z etykiety mapy leżą na `#hud-canvas` POD `#ui-canvas`
+//       (porządek DOM / z-index), a etykiety CTRL rysowane na `#ui-canvas` PRZED panelami (Z1/Z1b panel statku,
+//       Z2 panel floty / grupy T6 + combatHud = fix KLASOWY, Z3 ramki RTS zostają nad etykietami)
 //       + K1 (każde wywołanie RAZ — blokuje „naprawę przez skasowanie") i K2 (bramki
 //       etykiet nietknięte — blokuje „naprawę przez dogaszenie")
-//   E1  WYKONANIE: `MapLabelLayer` nadal produkuje plakietki (etykiety żyją)
+//   E1  WYKONANIE: domyślne podwarstwy warstwy HUD gry zawierają etykiety (`HudLabelLayer`) — etykiety żyją
+//   ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — plakietki `MapLabelLayer` i flagi `mapLabels` / `fleetMapLabels` / `hudLabels`
+//     usunięte): K1 / Z / K2 — mierzone wywołania etykiet na `#ui-canvas` to etykiety CTRL (`_drawAllLabels`), etykiety mapy
+//     — warstwa HUD pod `#ui-canvas` (pin porządku canvasów); E1 — wykonanie domyślnych podwarstw warstwy HUD zamiast
+//     dawnego `MapLabelLayer.draw`.
 //
 // ⚠ PIN M ODWRÓCONY 2026-09-09 (`false` → `true`): flaga dostała default-ON po zdanym
 //   live-gate'cie B1 (6/6) i gate'cie kolejności malowania (4/4, `23523af`). Stary kształt
@@ -383,8 +388,7 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
   const at   = (needle) => code.indexOf(needle);
   const cnt  = (needle) => code.split(needle).length - 1;
 
-  const iLabels = at('this._mapLabelLayer.draw(');
-  const iVessLb = at('this._mapLabelLayer.drawVesselLabels(');
+  const iLabels = at('this._drawAllLabels(ctx, tr)');
   const iPanel  = at('this._drawShipPanelHud(ctx, W, H)');
   const iFleet  = at('this._drawFleetPanelHud(');
   const iCombat = at('this.combatHud.draw(');
@@ -392,18 +396,21 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
 
   // K1 — ANTY-JAŁOWOŚĆ NOŚNA: każde wywołanie DOKŁADNIE RAZ. Bez tego „naprawa" polegająca
   //      na SKASOWANIU przebiegu etykiet przechodziłaby na zielono.
-  ok(cnt('this._mapLabelLayer.draw(') === 1,
-     `K1: _mapLabelLayer.draw wywołane dokładnie raz (jest: ${cnt('this._mapLabelLayer.draw(')})`);
-  ok(cnt('this._mapLabelLayer.drawVesselLabels(') === 1,
-     `K1: drawVesselLabels wywołane dokładnie raz (jest: ${cnt('this._mapLabelLayer.drawVesselLabels(')})`);
+  ok(cnt('this._drawAllLabels(') === 1,
+     `K1: etykiety CTRL (_drawAllLabels) wywołane dokładnie raz (jest: ${cnt('this._drawAllLabels(')})`);
   ok(cnt('this._drawShipPanelHud(') === 1,
      `K1: panel statku T5 (_drawShipPanelHud) wywołany dokładnie raz (jest: ${cnt('this._drawShipPanelHud(')})`);
-  ok(iLabels > 0 && iVessLb > 0 && iPanel > 0 && iFleet > 0 && iCombat > 0 && at('this.stationPanel.draw(') < 0,
-     'K1: wszystkie mierzone wywołania REALNIE znalezione w źródle (panel stacji nie rysuje się — T4)');
+  ok(iLabels > 0 && iPanel > 0 && iFleet > 0 && iCombat > 0 && at('this.stationPanel.draw(') < 0 && at('_mapLabelLayer') < 0,
+     'K1: wszystkie mierzone wywołania REALNIE znalezione w źródle (panel stacji nie rysuje się — T4; plakietek `MapLabelLayer` brak — B-Z)');
+  // Etykiety mapy (warstwa HUD) — osobny canvas POD `#ui-canvas`: każdy panel `#ui-canvas` leży nad nimi z konstrukcji.
+  const html = readFileSync(new URL('../../../index.html', import.meta.url), 'utf-8');
+  const zOf = (id) => Number(html.match(new RegExp('#' + id + '\\s*\\{\\s*z-index:\\s*(\\d+)'))?.[1]);
+  const iHudC = html.indexOf('<canvas id="hud-canvas">'), iUiC = html.indexOf('<canvas id="ui-canvas">');
+  ok(iHudC > 0 && iUiC > iHudC && zOf('hud-canvas') < zOf('ui-canvas'),
+     `Z0 (B-Z): etykiety mapy na \`#hud-canvas\` POD \`#ui-canvas\` (DOM ${iHudC} < ${iUiC}, z-index ${zOf('hud-canvas')} < ${zOf('ui-canvas')}) — panele nad nimi z konstrukcji`);
 
-  // Z1 / Z1b — etykiety przed panelem statku.
-  ok(iLabels < iPanel, `Z1: plakietki kolonii PRZED panelem statku (${iLabels} < ${iPanel})`);
-  ok(iVessLb < iPanel, `Z1b: plakietki flotowe PRZED panelem statku (${iVessLb} < ${iPanel})`);
+  // Z1 — etykiety CTRL przed panelem statku.
+  ok(iLabels < iPanel, `Z1: etykiety CTRL PRZED panelem statku (${iLabels} < ${iPanel})`);
   // Z1-T3 — panel stoi przy wierszu prawego outlinera: outliner rysowany PRZED panelem (układ listy z tej samej klatki),
   // łącznik z wierszem PO panelu (w `_drawShipPanelHud`).
   const iOutl = at('this._outliner.draw(');
@@ -413,22 +420,17 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
      `Z1-T3: prawy outliner PRZED panelem (${iOutl} < ${iPanel}), łącznik PO panelu w \`_drawShipPanelHud\` (${iDrawT5} < ${iTab})`);
 
   // Z2 — to jest fix KLASOWY, nie jednopanelowy.
-  ok(iLabels < iFleet && iVessLb < iFleet, `Z2: etykiety PRZED panelem floty / grupy T6 (${iLabels}/${iVessLb} < ${iFleet})`);
-  ok(iLabels < iCombat  && iVessLb < iCombat,  `Z2: etykiety PRZED combatHud (${iLabels}/${iVessLb} < ${iCombat})`);
+  ok(iLabels < iFleet, `Z2: etykiety CTRL PRZED panelem floty / grupy T6 (${iLabels} < ${iFleet})`);
+  ok(iLabels < iCombat, `Z2: etykiety CTRL PRZED combatHud (${iLabels} < ${iCombat})`);
 
   // Z3 — czego NIE wolno było przestawić: ramki RTS zostają NAD etykietami.
-  ok(iBrack > iLabels && iBrack > iVessLb,
-     `Z3: ramki RTS zaznaczenia dalej PO etykietach (${iBrack} > ${iLabels}/${iVessLb})`);
+  ok(iBrack > iLabels, `Z3: ramki RTS zaznaczenia dalej PO etykietach CTRL (${iBrack} > ${iLabels})`);
 
   // K2 — ANTY-JAŁOWOŚĆ: bramki etykiet NIETKNIĘTE. Najtańsza zła naprawa to DOGASZENIE
-  //      etykiet („nie rysuj, gdy panel widoczny") — ten pin ją blokuje. To jest wersja
-  //      „etykieta NIE nachodząca na panel nadal się rysuje", sprawdzalna bez pikseli.
-  const gateWin = code.slice(Math.max(0, iLabels - 400), iLabels + 200);
-  ok(gateWin.includes('mapLabels'), 'K2: bramka FEATURES.mapLabels dalej przy wywołaniu');
+  //      etykiet („nie rysuj, gdy panel widoczny") — ten pin ją blokuje.
+  const gateWin = code.slice(Math.max(0, iLabels - 200), iLabels + 60);
+  ok(gateWin.includes('_showAllLabels'), 'K2: bramka CTRL (`tr._showAllLabels`) dalej przy wywołaniu');
   ok(gateWin.includes('isAnyOpen()'), 'K2: bramka !isAnyOpen() dalej przy wywołaniu');
-  ok(gateWin.includes('globeOpen'), 'K2: bramka !globeOpen dalej przy wywołaniu');
-  const gateWin2 = code.slice(Math.max(0, iVessLb - 400), iVessLb + 200);
-  ok(gateWin2.includes('fleetMapLabels'), 'K2: bramka FEATURES.fleetMapLabels dalej przy wywołaniu');
   // ⚠ I nic NOWEGO: żadnej bramki „nie rysuj, gdy panel widoczny".
   ok(!gateWin.includes('_vesselPanelRect') && !gateWin.includes("_mapSurface() === 'vessel'"),
      'K2: etykiety NIE zostały dogaszone widocznością panelu (fix jest kolejnością, nie tłumieniem)');
@@ -443,33 +445,23 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
 //   `MapLabelLayer` (importuje się pod node — sprawdzone) i sprawdzamy, że dla fixture'u
 //   z kolonią wypuszcza NIEPUSTY zbiór rysowań. Gdyby ktoś „naprawił" z-order gasząc etykiety,
 //   ten pin pada niezależnie od K2.
-header('E1  PIN WYKONANIOWY — MapLabelLayer nadal rysuje plakietki (nie zgasiliśmy etykiet)');
+header('E1  PIN WYKONANIOWY — warstwa HUD gry ma podwarstwę etykiet (nie zgasiliśmy etykiet)');
 {
-  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
-  world();
-  const layer = new MapLabelLayer();
-  const drawn = [];
-  const recCtx = new Proxy({}, {
-    get: (t, k) => k === 'measureText' ? ((str) => ({ width: String(str).length * 6 }))
-      : (k === 'canvas' ? { width: 1920, height: 1080 }
-      : (typeof k === 'string' ? ((...a) => { if (k === 'fillText') drawn.push(String(a[0]).slice(0, 24)); }) : undefined)),
-    set: () => true,
-  });
-  // Atrapa ThreeRenderera: JEDNA kolonia z pozycją ekranową (px CSS — layer sam dzieli).
-  const tr = {
-    getAllVisibleLabels: () => [],
-    getColonyLabelItems: () => [{ id: 'p_home', kind: 'colony', name: 'Dom', main: 'Dom', sub: '' }],
-    getStationScreenPosition: () => null,
-    getVesselScreenPosition: () => null,
-    getScreenPosition: () => ({ x: 600, y: 400 }),
-    camera: { position: { length: () => 100 } },
-  };
-  let threw = null;
-  try { layer.draw(recCtx, tr, 1280, 720, 1.5); } catch (e) { threw = e; }
-  ok(threw === null, `warstwa etykiet wykonuje się bez wyjątku (${threw ? threw.message.slice(0, 60) : 'ok'})`);
-  ok(typeof layer.draw === 'function', 'KONTROLA: MapLabelLayer.draw istnieje i jest wołalna');
+  let HLm = null, HLLm = null, threw = null;
+  try { HLm = await import('../../ui/HudLayer.js'); HLLm = await import('../../ui/HudLabelLayer.js'); } catch (e) { threw = e; }
+  const ctx = new Proxy({}, { get: () => () => {}, set: () => true });
+  let hud = null;
+  try { hud = HLm ? new HLm.HudLayer({ width: 0, height: 0, getContext: () => ctx }, { autoStart: false }) : null; } catch (e) { threw = e; }
+  const lab = hud?._sublayers?.find?.((s) => s instanceof (HLLm?.HudLabelLayer ?? class {})) ?? null;
+  ok(threw === null && !!hud, `warstwa HUD (domyślne podwarstwy gry) tworzy się bez wyjątku (${threw ? threw.message.slice(0, 60) : 'ok'})`);
+  ok(!!lab && typeof lab.collect === 'function' && typeof lab.draw === 'function',
+    'E1: domyślne podwarstwy warstwy HUD zawierają etykiety (`HudLabelLayer` — zbieranie i rysunek)');
+  const { existsSync } = await import('node:fs');
+  const gone = !existsSync(new URL('../../ui/MapLabelLayer.js', import.meta.url));
+  const here = existsSync(new URL('../../ui/HudLabelLayer.js', import.meta.url));   // ta sama ścieżka — kontrola mechanizmu
+  ok(gone && here, 'KONTROLA (B-Z): dawny `MapLabelLayer` usunięty, `HudLabelLayer` na miejscu — etykiety mapy wyłącznie z warstwy HUD');
+  hud?.destroy?.();
 }
-
 
 console.log(`\n═══ ${pass}/${pass + fail} OK, ${fail} FAIL ═══`);
 process.exit(fail > 0 ? 1 : 0);
