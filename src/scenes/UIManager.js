@@ -69,6 +69,8 @@ import { getMapInsets }   from '../ui/MapInsets.js';      // ARKUSZ UI U2-2 — 
 import { syncBodyCardOnSystemSwitch, syncStationPanelOnSystemSwitch, clickObject, vesselTarget } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U2-3 (486), U3-2 (491, Tab)
 import { isHudLabelsOn, ctrlLabelStyle } from '../ui/HudLabelLogic.js';   // ARKUSZ HUD paczka A (H2) — etykiety na warstwie HUD
 import { resolveHudRoles } from '../ui/HudPalette.js';                    // … etykiety CTRL w rolach (D-HUD-16)
+import { isHudAttentionOn, bracketBox } from '../ui/HudAttentionLogic.js';   // ARKUSZ HUD paczka B — nawiasy statku na warstwie HUD
+import { objectScreenDisc } from '../ui/HudProjection.js';                 // … tarcza statku (ten sam rzut co nawiasy)
 import { shipPanelHiddenByDock, shipRowKeys, resolveRowAnchor, computeShipPanelPlacement,
          syncShipPanelOnSystemSwitch } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 — panel statku przy outlinerze
 import { enforceSinglePinOnStation, enforceSinglePinOnBody } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2
@@ -2752,10 +2754,20 @@ export class UIManager {
   }
 
   // Rysuje ramki RTS dla jednego statku. isLead = jaśniejsze + paski zasobów.
+  // ARKUSZ HUD paczka B (flaga `hudAttention`): narożniki i znacznik środka rysuje warstwa HUD (nawiasy w roli `primary`,
+  // `HudFocusLayer`) — tu wyłącznie paski paliwa i warp prowadzącego, pod kwadratem nawiasów (`bracketBox`, ten sam rzut).
   _drawBracketForVessel(ctx, tr, id, isLead) {
     if (!id) return;
     const v = window.KOSMOS?.vesselManager?.getVessel?.(id);
     if (!v || v.isWreck || isEnemyVessel(v)) return;  // tylko własne (brak przecieku HP/paliwa wroga)
+    if (isHudAttentionOn(GAME_CONFIG.FEATURES)) {
+      if (!isLead) return;
+      const d = objectScreenDisc(window.KOSMOS, 'vessel', id);
+      const box = d ? bracketBox({ cx: d.x, cy: d.y, discR: d.r, kind: 'vessel' }) : null;
+      if (!box || box.cx < 0 || box.cx > W || box.cy < 0 || box.cy > H) return;
+      this._drawVesselBars(ctx, v, box.cx, box.cy, box.half);
+      return;
+    }
     const pos = tr.getVesselScreenPosition?.(id);
     if (!pos) return;
     const x = pos.x / UI_SCALE, y = pos.y / UI_SCALE;
@@ -2782,18 +2794,24 @@ export class UIManager {
     ctx.fillStyle = `rgba(140,255,200,${isLead ? 0.9 : 0.55})`;
     ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
     // Paski zasobów pod ramką (paliwo + warp) — tylko dla leada (mniej clutter).
-    if (isLead) {
-      const bw = s * 2, bh = 3, bx = x - s;
-      let by = y + s + 4;
-      const bar = (frac, colFull, colLow) => {
-        frac = Math.max(0, Math.min(1, frac));
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, by, bw, bh);
-        ctx.fillStyle = frac > 0.3 ? colFull : colLow; ctx.fillRect(bx, by, bw * frac, bh);
-        by += bh + 2;
-      };
-      if (v.fuel && v.fuel.max > 0)         bar(v.fuel.current / v.fuel.max, '#44cc66', '#cc6644');
-      if (v.warpFuel && v.warpFuel.max > 0) bar(v.warpFuel.current / v.warpFuel.max, '#6688ff', '#445599');
-    }
+    if (isLead) this._drawVesselBars(ctx, v, x, y, s);
+    ctx.restore();
+  }
+
+  // Paski paliwa i warp prowadzącego pod ramką (`s` — połowa boku ramki; szerokość paska = bok). Wspólne dla ramki RTS i —
+  // ARKUSZ HUD paczka B — nawiasów HUD (kwadrat `bracketBox`).
+  _drawVesselBars(ctx, v, x, y, s) {
+    ctx.save();
+    const bw = s * 2, bh = 3, bx = x - s;
+    let by = y + s + 4;
+    const bar = (frac, colFull, colLow) => {
+      frac = Math.max(0, Math.min(1, frac));
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = frac > 0.3 ? colFull : colLow; ctx.fillRect(bx, by, bw * frac, bh);
+      by += bh + 2;
+    };
+    if (v.fuel && v.fuel.max > 0)         bar(v.fuel.current / v.fuel.max, '#44cc66', '#cc6644');
+    if (v.warpFuel && v.warpFuel.max > 0) bar(v.warpFuel.current / v.warpFuel.max, '#6688ff', '#445599');
     ctx.restore();
   }
 

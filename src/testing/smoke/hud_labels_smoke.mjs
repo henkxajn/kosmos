@@ -435,8 +435,9 @@ header('L7  montaż (piny źródłowe): plakietki tylko przy OFF; klik HUD przed
   const mm = ui.slice(ui.indexOf('  handleMouseMove(x, y) {'), ui.indexOf('  handleMouseMove(x, y) {') + 600);
   ok(/hudLayer\?\.setPointer\?\.\(x \/ UI_SCALE, y \/ UI_SCALE, x, y, this\.isOverUI\(x, y\)\)/.test(mm), 'L7d: kursor do warstwy HUD (px logiczne + CSS, flaga „nad UI”)');
   const hl = strip(src('../../ui/HudLayer.js'));
-  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), new HudLabelLayer\(this\)\];/.test(hl),
-    'L7e: podwarstwy gry — radar, potem etykiety na końcu (etykiety zbierane ostatnie — czytają przeszkody warstw zebranych wcześniej)');
+  // ARKUSZ HUD paczka B — po etykietach podwarstwa nawiasów i alertów (`HudFocusLayer`, czyta etykiety tej klatki).
+  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), new HudLabelLayer\(this\)(?:, new HudFocusLayer\(this\))?\];/.test(hl),
+    'L7e: podwarstwy gry — radar, potem etykiety (zbierane po radarze — czytają przeszkody warstw zebranych wcześniej); paczka B — nawiasy po etykietach');
 }
 
 // ═══ L8 ══════════════════════════════════════════════════════════════════════

@@ -11,6 +11,9 @@
 //   • skok warp: w układzie odlotu dłuższe kreski od punktu odlotu do krawędzi kadru + glif z nazwą układu DOCELOWEGO TRASY
 //     (trasa wieloprzeskokowa — cel trasy, kierunek — bieżący przeskok);
 //   • linia rysowana tylko w oknie (+ margines) — `clipRunsToRect` z fazą kresek (koszt rasteryzacji — Finding 527).
+//   • paczka B (flaga `hudAttention` — `F.att`): mnożnik uwagi z modelu uwagi — zaznaczona (także członek zaznaczonej floty)
+//     i najechana 1,0, reszta `HUD_ATTENTION.ROUTE_DIM` (przejście `FADE_MS` czasu realnego). Przy OFF — kod paczki A co do
+//     bitu.
 // ⚠ Moduł importuje się pod node (keeper `hud_routes_smoke` — atrapa ctx): bez three i bez DOM.
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
@@ -19,6 +22,7 @@ import { systemIdOf } from '../utils/SystemScope.js';
 import { parseColorToken } from './HudPalette.js';
 import { HUD_NEAR_CLIP } from './HudProjection.js';
 import { clipRunsToRect } from './HudRadarLogic.js';
+import { routeAttentionTarget, makeAttentionMemory } from './HudAttentionLogic.js';   // paczka B — model uwagi tras
 import {
   HUD_ROUTES, isHudRoutesOn, routeSpec, warpSpec, routeVisible, warpVisible, detectedNowIds, marchOffset, routeAlpha,
   routeAttention, projectPolyline, warpScreenRay,
@@ -40,6 +44,7 @@ export class HudRouteLayer {
     this._prep = { on: false, routes: [], warps: [] };
     this._last = { routes: [], warps: [] };
     this._glyphRects = [];          // prostokąty glifów warp (przeszkody etykiet)
+    this._att = makeAttentionMemory();   // paczka B — poziomy uwagi tras (przejście czasu realnego)
   }
 
   /** Część klucza klatki: flaga, trasy (statek, cel, punkty pośrednie), zaznaczenie, najechanie, zegar symulacji (marsz). */
@@ -72,6 +77,8 @@ export class HudRouteLayer {
     const sel = F.sel;
     const selIds = new Set((sel.vesselIds ?? []).map(String));
     if (sel.leadId != null) selIds.add(String(sel.leadId));
+    if (F.att) for (const id of F.att.focusIds) selIds.add(id);   // paczka B — także członkowie zaznaczonej floty
+    const alertIds = F.att?.alertedVessels ?? null;                // paczka B — statki w trwającym alercie
     const hovIds = new Set();
     if (tr?._tacticalHoverVid != null) hovIds.add(String(tr._tacticalHoverVid));
     if (F.hover?.vesselId != null) hovIds.add(String(F.hover.vesselId));
@@ -83,7 +90,8 @@ export class HudRouteLayer {
       const w = warpSpec(v, sys, { systemName });
       if (w) {
         if (warpVisible({ vessel: v, quality: qual(v), detectedNow: detNow(v.id) })) {
-          warps.push({ id: v.id, ...w, enemy: isEnemyVessel(v), selected: selIds.has(String(v.id)), hovered: hovIds.has(String(v.id)) });
+          warps.push({ id: v.id, ...w, enemy: isEnemyVessel(v), selected: selIds.has(String(v.id)), hovered: hovIds.has(String(v.id)),
+            alerted: !!alertIds?.has(String(v.id)) });
         }
         continue;
       }
@@ -91,16 +99,17 @@ export class HudRouteLayer {
       const spec = routeSpec(v, { gameYear, targetVisiblePos: visTarget });
       if (!spec) continue;
       if (spec.kind === 'pursue') spec.toWorld = tr?.getVesselWorldPosition?.(spec.targetId) ?? null;   // sprite celu
-      routes.push({ id: v.id, spec, enemy: isEnemyVessel(v), selected: selIds.has(String(v.id)), hovered: hovIds.has(String(v.id)) });
+      routes.push({ id: v.id, spec, enemy: isEnemyVessel(v), selected: selIds.has(String(v.id)), hovered: hovIds.has(String(v.id)),
+        alerted: !!alertIds?.has(String(v.id)) });
     }
     let key = `t:1`;
     for (const r of routes) {
       const s = tr?.getVesselWorldPosition?.(r.id);
       const tw = r.spec.toWorld;
       key += `|${r.id}:${r.spec.kind}:${s ? `${q(s.x)},${q(s.y)},${q(s.z)}` : '-'}:${q(r.spec.to.x)},${q(r.spec.to.y)}`
-        + `:${tw ? `${q(tw.x)},${q(tw.y)},${q(tw.z)}` : ''}:${r.spec.targetId ?? ''}:${r.spec.via.length}:${r.selected ? 1 : 0}${r.hovered ? 1 : 0}`;
+        + `:${tw ? `${q(tw.x)},${q(tw.y)},${q(tw.z)}` : ''}:${r.spec.targetId ?? ''}:${r.spec.via.length}:${r.selected ? 1 : 0}${r.hovered ? 1 : 0}${r.alerted ? 1 : ''}`;
     }
-    for (const w of warps) key += `|w${w.id}:${q(w.from.x)},${q(w.from.y)}:${q(w.dir.x)},${q(w.dir.y)}:${w.name}:${w.selected ? 1 : 0}${w.hovered ? 1 : 0}`;
+    for (const w of warps) key += `|w${w.id}:${q(w.from.x)},${q(w.from.y)}:${q(w.dir.x)},${q(w.dir.y)}:${w.name}:${w.selected ? 1 : 0}${w.hovered ? 1 : 0}${w.alerted ? 1 : ''}`;
     if ((routes.length || warps.length) && F.sim != null) key += `|m${Math.round(F.sim)}`;   // marsz — klatka przy biegu gry
     this._prep = { on: true, routes, warps };
     return key;
@@ -119,6 +128,15 @@ export class HudRouteLayer {
     const M = HUD_ROUTES.CLIP_PX;
     const view = { x0: -M, y0: -M, x1: F.W + M, y1: F.H + M };
     const pr = { depth: (x, y, z) => proj.depth(x, y, z), point: (x, y, z) => proj.point(x, y, z), near: HUD_NEAR_CLIP };
+    // Paczka B — mnożnik uwagi z pamięci przejść (czas realny); przy OFF — stała H3 (`routeAttention`).
+    const ATT = F.att ?? null;
+    if (ATT) this._att.begin();
+    const alive = ATT ? new Set() : null;
+    const attMult = (key, r) => {
+      if (!ATT) return routeAttention({ selected: r.selected, hovered: r.hovered });
+      alive.add(key);
+      return this._att.step(key, routeAttentionTarget({ selected: r.selected, hovered: r.hovered, alerted: r.alerted }), F.now);
+    };
     const out = [];
     for (const r of P.routes) {
       const v = vm?.getVessel?.(r.id);
@@ -155,7 +173,7 @@ export class HudRouteLayer {
       for (const run of runs) { runStart.push(total); for (let i = 2; i < run.length; i += 2) total += Math.hypot(run[i] - run[i - 2], run[i + 1] - run[i - 1]); }
       const pieces = [];
       runs.forEach((run, ri) => { for (const pc of clipRunsToRect([run], view)) pieces.push({ pts: pc.pts, s0: runStart[ri] + pc.offset }); });
-      const mult = routeAttention({ selected: r.selected, hovered: r.hovered });
+      const mult = attMult('r:' + r.id, r);
       out.push({ id: r.id, kind: r.spec.kind, toKind: r.spec.toKind, enemy: r.enemy, selected: r.selected, hovered: r.hovered,
         mult, total, pieces, target: ts ? { x: ts.x, y: ts.y } : null, glyphR, dirEnd,
         targetOnScreen: !!ts && ts.x >= 0 && ts.x <= F.W && ts.y >= 0 && ts.y <= F.H });
@@ -198,12 +216,14 @@ export class HudRouteLayer {
         glyph = { x: gx, y: gy, name: w.name, tx, ty, align, base, edge: ray.edge, box };
         this._glyphRects.push(box);
       }
-      warps.push({ id: w.id, enemy: w.enemy, selected: w.selected, hovered: w.hovered, mult: routeAttention({ selected: w.selected, hovered: w.hovered }),
+      warps.push({ id: w.id, enemy: w.enemy, selected: w.selected, hovered: w.hovered, mult: attMult('w:' + w.id, w),
         total, pieces, glyph, start: ray.pts[0] });
     }
     this._last = { routes: out, warps };
     const count = out.reduce((a, r) => a + r.pieces.length, 0) + warps.length;
-    return { count, animating: false, routes: out, warps };
+    let animating = false;
+    if (ATT) { this._att.prune(alive); animating = this._att.animating; }
+    return { count, animating, routes: out, warps };
   }
 
   /** Przeszkody dla etykiet (anti-overlap): glify i nazwy układów skoku warp przy krawędzi kadru. */

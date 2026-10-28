@@ -16,6 +16,10 @@
 //   • fade-in 150 ms czasu realnego (działa w pauzie); poprzedni wybór miejsca wygrywa — bez skoków przy ruchu kamery;
 //   • klik (D-UI-5, `clickObject`) — wołany z `UIManager.handleClick` przed raycastem 3D; punkt na tarczy ciała wygrywa
 //     (487, 503); zwinięta etykieta zaznacza kotwicę; kolory WYŁĄCZNIE z ról motywu (`F.roles`).
+//   • paczka B (flaga `hudAttention` — `F.att`): MODEL UWAGI — przy zaznaczeniu etykiety niezaznaczone
+//     `HUD_ATTENTION.LABEL_DIM`, zaznaczone / przypięte / najechane 1,0 (przejście `FADE_MS` czasu realnego —
+//     `makeAttentionMemory`); ramka statku jako przeszkoda — kwadrat nawiasów (`bracketBox`). Przy OFF — kod paczki A co do
+//     bitu.
 // ⚠ Moduł importuje się pod node (keeper `hud_labels_smoke` — atrapa ctx): bez three i bez DOM.
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
@@ -64,6 +68,8 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { classifyStationDepot } from './StationPanelLogic.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';
+// ARKUSZ HUD paczka B (B-1) — model uwagi, nawiasy statku jako przeszkoda (flaga `hudAttention`).
+import { labelAttentionTarget, makeAttentionMemory, bracketBox } from './HudAttentionLogic.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const q = (v) => Math.round(v * 1000);          // klucz klatki — położenie z dokładnością 0,001 j.
@@ -97,6 +103,7 @@ export class HudLabelLayer {
     this._pinZones = [];             // { kind: 'btn'|'name'|'body', id?, ck?, key, target?, x, y, w, h }
     this._pinOpen = null;            // { ck, list } — `toggleOpenList`
     this._pinCache = null;           // { key, t, v } — `_t2Content`
+    this._att = makeAttentionMemory();   // paczka B — poziomy uwagi etykiet (przejście czasu realnego)
   }
 
   // ── Pomiar tekstu (ctx warstwy; atrapa bez `measureText` — przybliżenie z rozmiaru fontu) ──────────────────────────
@@ -733,6 +740,13 @@ export class HudLabelLayer {
     const T = P.t1;
     const bodyCk = (b) => (b.kind === 'colony' ? 'body:' : 'station:') + b.id;
     const hovPrio = (ck) => (T.hov.key != null && ck === T.hoverContent ? LABEL_HOVER.HOVER_PRIO : null);
+    // ── Paczka B (`F.att`; przy OFF — `null`, wszystko niżej bez skutku): najechanie (`isHovCk`) — dla uwagi ──
+    const ATT = F.att ?? null;
+    const isHovCk = (ck) => T.hov.key != null && ck != null && ck === T.hoverContent;
+    const attBody = (it, b, ck) => {
+      if (!ATT) return it;
+      return Object.assign(it, { alerted: ATT.alertedColonies.has(String(b.id)), hov: isHovCk(ck) });
+    };
     // REFORMA ZAKŁADEK T2 (strojenie 1, zachowanie 5): tarcze, na które rozwinięcie i przypięcie nie wchodzą — tarcza swojego ciała
     // (`it.clear`), a do tego tarcza ciała-gospodarza stacji i tarcza kotwicy stosu (księżyc → planeta).
     const pinKeepOut = (kind, id) => {
@@ -821,6 +835,7 @@ export class HudLabelLayer {
             role: 'primary', prio: (L.expanded ? hovPrio(bodyCk(b)) : null) ?? (selected ? LABEL_PRIO.selected : b.home ? LABEL_PRIO.home : b.kind === 'colony' ? LABEL_PRIO.colony : LABEL_PRIO.station),
             target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
           Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
+          attBody(it, b, bodyCk(b));
           pushItem(pinIt(it, L.baseH, b.kind === 'station' ? 'station' : 'body', b.id));
         }
         continue;
@@ -844,6 +859,10 @@ export class HudLabelLayer {
           role: 'primary', prio: (L.expanded ? hovPrio(bodyCk(head.b)) : null) ?? (selected ? LABEL_PRIO.selected : LABEL_PRIO.group), members: proj1.map((x) => x.b.key),
           target };
         Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
+        if (ATT) {
+          Object.assign(it, { alerted: proj1.some((x) => x.b.kind === 'colony' && ATT.alertedColonies.has(String(x.b.id))),
+            hov: isHovCk(bodyCk(head.b)) });
+        }
         pushItem(pinIt(it, L.baseH));
         continue;
       }
@@ -856,12 +875,14 @@ export class HudLabelLayer {
         const row = { key: rkey, kind: b.kind, w: box.w, h: box.h, lines, selected,
           target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
         Object.assign(row, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha, baseH: L.baseH, ck: bodyCk(b) });
+        attBody(row, b, bodyCk(b));
         return row;
       });
       const size = railBlockSize(rows);
       const anySel = rows.some((r) => r.selected);
       const it = { key: 'r:' + anchorId, kind: 'rail', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: size.w, h: size.h,
         rows, selected: anySel, role: 'primary', prio: anySel ? LABEL_PRIO.selected : LABEL_PRIO.group };
+      if (ATT) Object.assign(it, { alerted: rows.some((r) => r.alerted), hov: rows.some((r) => r.hov) });
       const exp = rows.filter((r) => r.expanded);
       it.expanded = exp.length > 0;
       if (exp.some((r) => r.ck === T.hoverContent && T.hov.key != null)) it.prio = LABEL_HOVER.HOVER_PRIO;
@@ -882,6 +903,7 @@ export class HudLabelLayer {
           role: 'primary', prio: hovPrio(ck) ?? LABEL_PRIO.selected,
           target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys },
           expanded: true, expFrom: 1, expAlpha: L.expAlpha, pinLabel: true, pinHover: T2.hoverBtn };
+        attBody(it, b, ck);
         pushItem(pinPinned(it, L.baseH, b.kind === 'station' ? 'station' : 'body', b.id));
       }
     }
@@ -920,13 +942,16 @@ export class HudLabelLayer {
     // Ramki zaznaczenia (`UIManager._drawBracketForVessel`, flaga `fcBrackets`) leżą NAD warstwą HUD — etykiety ich unikają,
     // a nitka zaznaczonego statku zaczyna się przy ramce (etykieta nie wchodzi pod narożniki ani pod paski zasobów).
     const bracketIds = new Set();
+    const bracketHalf = new Map();   // paczka B — połowa boku nawiasów statku (`bracketBox`; bez flagi — ramka RTS)
     if (F.features?.fcBrackets) {
       const selSet = new Set((sel.vesselIds ?? []).map(String));
       if (leadId != null) selSet.add(String(leadId));
       for (const p of onScreen) {
         if (p.kind !== 'own' || !selSet.has(String(p.id))) continue;
         bracketIds.add(String(p.id));
-        const B = R.BRACKET_HALF + 2, isLead = leadId != null && String(p.id) === String(leadId);
+        const half = ATT ? (bracketBox({ cx: p.x, cy: p.y, discR: p.r, kind: 'vessel' })?.half ?? R.BRACKET_HALF) : R.BRACKET_HALF;
+        bracketHalf.set(String(p.id), half);
+        const B = half + 2, isLead = leadId != null && String(p.id) === String(leadId);
         obstacles.push({ x: p.x - B, y: p.y - B, w: 2 * B, h: 2 * B + (isLead ? R.BRACKET_BARS : 0) });
       }
     }
@@ -969,11 +994,15 @@ export class HudLabelLayer {
       const t1 = { expanded, baseH, expAlpha: expanded ? T.alphaOf(ck) : 0, prio: expanded ? hovPrio(ck) : null };
       const box = this._labelBox(lines);
       const ax = single ? c.items[0].x : c.x, ay = single ? c.items[0].y : c.y;
-      const bracketClear = single && bracketIds.has(String(c.items[0].id)) ? R.BRACKET_HALF * Math.SQRT2 : 0;
+      const bracketClear = single && bracketIds.has(String(c.items[0].id)) ? (bracketHalf.get(String(c.items[0].id)) ?? R.BRACKET_HALF) * Math.SQRT2 : 0;
       const it = { key, kind: isEnemy ? 'enemy' : 'vessel', ax, ay, clear: single ? Math.max(2, c.items[0].r, bracketClear) : 3, w: box.w, h: box.h, lines,
         selected, role: isEnemy ? 'foreign' : 'primary', prio: t1.prio ?? (selected ? LABEL_PRIO.selected : isEnemy ? LABEL_PRIO.enemy : LABEL_PRIO.own),
         target: isEnemy ? { type: 'enemy', id: ids[0], systemId: sys } : vesselsTarget(ids, sys) };
       Object.assign(it, { expanded: t1.expanded, expFrom: 1, expAlpha: t1.expAlpha });
+      if (ATT) {
+        Object.assign(it, { alerted: sids.some((id) => ATT.alertedVessels.has(id)),
+          focusSel: sids.some((id) => ATT.focusIds.has(id)), hov: (!!ck && isHovCk(ck)) || t1Hovered(c) || hk === 'lbl:' + key });
+      }
       return pinIt(it, t1.baseH);
     };
     // T1: statek najechany (także w trakcie wygasania rozwinięcia) — etykieta widoczna jak przy dzisiejszym najechaniu.
@@ -1007,6 +1036,25 @@ export class HudLabelLayer {
     for (const p of placed) if (p.yieldedToPin) this._pins.delete(p.key);
     updatePins(this._pins, placed, expandedKeys);
     const fading = updateBorn(this._born, placed.map((p) => p.key), F.now);
+    // Paczka B — poziom uwagi każdej etykiety (wiersze szyny osobno): cel z zaznaczenia / przypięcia / alertu / najechania,
+    // przejście czasu realnego (`makeAttentionMemory`); klucze nieobecne w klatce — zapomniane.
+    let attAnimating = false;
+    if (ATT) {
+      const mem = this._att;
+      mem.begin();
+      const alive = new Set();
+      const tgt = (x) => labelAttentionTarget({ focus: ATT.focus, selected: !!x.selected || !!x.focusSel, pinned: !!x.pinLabel,
+        alerted: !!x.alerted, hovered: !!x.hov || !!x.demand });
+      for (const p of placed) {
+        if (p.kind === 'rail') {
+          let mx = 0;
+          for (const r of p.rows) { r.att = mem.step(r.key, tgt(r), F.now); alive.add(r.key); mx = Math.max(mx, r.att); }
+          p.att = mx;
+        } else { p.att = mem.step(p.key, tgt(p), F.now); alive.add(p.key); }
+      }
+      mem.prune(alive);
+      attAnimating = mem.animating;
+    }
     // Strefy kliku — prostokąty tekstu (wiersze szyny osobno), w kolejności rysowania.
     const zones = [];
     // Zaznaczone rysowane ostatnie (na wierzchu); T2 — przypięta etykieta ostatnia z wszystkich (rysunek = klik: jej strefy
@@ -1025,7 +1073,7 @@ export class HudLabelLayer {
     const pinPlaced = T2 ? drawList.find((p) => p.pinLabel === true) : null;
     this._pinZones = pinPlaced ? this._t2Zones(pinPlaced, T2) : [];
     this._last = { labels: drawList, arrows, obstacles };
-    return { count: drawList.length + arrows.length, animating: fading || T?.animating === true, labels: drawList, arrows };
+    return { count: drawList.length + arrows.length, animating: fading || T?.animating === true || attAnimating, labels: drawList, arrows };
   }
 
   _cardRects(K) {
@@ -1122,7 +1170,8 @@ export class HudLabelLayer {
     ctx.setLineDash([]);
     for (const p of c.labels) {
       const color = roles[p.role] ?? roles.primary;
-      const fade = p.fade ?? 1;
+      // Paczka B — poziom uwagi (przy OFF `att` brak — 1).
+      const fade = (p.fade ?? 1) * (p.att ?? 1);
       const th = threadGeometry(p);
       // Nitka do obiektu — przechodzi w podkreślenie pod tekstem.
       ctx.strokeStyle = color;
@@ -1145,7 +1194,9 @@ export class HudLabelLayer {
         ctx.fillStyle = color;
         for (const r of rr.rows) { ctx.beginPath(); ctx.arc(rr.railX, r.lineY, R.RAIL_DOT_R, 0, Math.PI * 2); ctx.fill(); }
         for (const r of rr.rows) {
-          this._drawBox(ctx, { x: r.x, y: r.y, w: r.w, h: r.h }, r.lines, color, r.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, fade, p.side === 'W',
+          // Paczka B — wiersz szyny z własnym poziomem uwagi (`r.att` — przy OFF brak).
+          const rf = r.att != null ? (p.fade ?? 1) * r.att : fade;
+          this._drawBox(ctx, { x: r.x, y: r.y, w: r.w, h: r.h }, r.lines, color, r.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, rf, p.side === 'W',
             r.expFrom ?? Infinity, r.expAlpha ?? 1);
         }
         continue;
@@ -1272,6 +1323,9 @@ export class HudLabelLayer {
         ...(T ? { expanded: !!p.expanded || (p.kind === 'rail' && p.rows.some((r) => r.expanded)), pinned: !!p.pinned,
           rows: p.kind === 'rail' ? p.rows.map((r) => r.lines.map((l) => l.text)) : undefined } : {}),
         ...(p.pinLabel ? { pinLabel: true, pinShift: r1(p.pinShift ?? 0) } : {}),
+        // Paczka B — poziom uwagi; wiersze szyny — poziom każdego wiersza.
+        ...(p.att != null ? { att: +(+p.att).toFixed(3), alerted: !!p.alerted,
+          rowsAtt: p.kind === 'rail' ? p.rows.map((r) => +(+(r.att ?? 1)).toFixed(3)) : undefined } : {}),
       })),
       arrows: (L?.arrows ?? []).map((a) => ({ edge: a.edge, x: r1(a.x), y: r1(a.y), count: a.count, role: a.role })),
       zones: this._zones.length,

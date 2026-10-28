@@ -15,6 +15,8 @@
 // Treść rysują PODWARSTWY (`addSublayer`): `prepare(F)` → część klucza klatki (tanio, w każdej klatce), `collect(F, proj)` →
 // `{ count, animating, … }` (geometria w px logicznych), `draw(ctx, F, collected)`; opcjonalnie `debug()`, `destroy()`.
 // Rzut — jeden wspólny projektor (`HudProjection.makeHudProjector` z `ThreeRenderer.getHudView()`).
+// Paczka B (flaga `hudAttention`): stan klatki dla modelu uwagi (`F.att` — ostrość, zbiór statków w ostrości) liczony RAZ na
+// klatkę, wspólny dla podwarstw.
 // ⚠ Moduł importuje się pod node (keeper `hud_layer_smoke` — atrapa kanwy i ctx): bez three i bez DOM poza kanwą.
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME, themeEpoch } from '../config/ThemeConfig.js';
@@ -26,6 +28,8 @@ import { makeHudProjector } from './HudProjection.js';
 import { HudRadarLayer } from './HudRadarLayer.js';   // H1-2 — radar (D-HUD-3, D-HUD-4, D-HUD-b)
 import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy statków (D-HUD-8, D-HUD-9, D-HUD-10)
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
+import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1) — nawiasy zaznaczenia
+import { isHudAttentionOn, focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
 
 // [klatki rysunku] okno pomiaru kosztu (bramka H1: ≤ 0,5 ms na klatkę CPU)
 const COST_WINDOW = 120;
@@ -91,9 +95,35 @@ export class HudLayer {
     if (autoStart) this.start();
   }
 
-  /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, etykiety (na wierzchu —
-   *  ich anti-overlap czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify warp). */
-  _defaultSublayers() { return [new HudRouteLayer(this), new HudRadarLayer(this), new HudLabelLayer(this)]; }
+  /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, etykiety (ich anti-overlap
+   *  czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify warp), nawiasy
+   *  (na wierzchu — czytają etykiety tej klatki: narożnik pod przypiętą etykietą pominięty). */
+  _defaultSublayers() {
+    return [new HudRouteLayer(this), new HudRadarLayer(this), new HudLabelLayer(this), new HudFocusLayer(this)];
+  }
+
+  /**
+   * Paczka B — strojenie stałych z konsoli (bramka): `KOSMOS.hudLayer.tune({ LABEL_DIM: 0.3 })` — klucze modelu uwagi
+   * i nawiasów (`HUD_ATTENTION`); nieznane pominięte; `tune(null)` — wartości domyślne. Przeżywa do F5.
+   */
+  tune(patch = {}) {
+    const r = patch == null ? { ...resetHudAttention() } : { ...tuneHudAttention(patch) };
+    this._lastKey = null;
+    this._wake = true;
+    const um = (typeof window !== 'undefined') ? window.KOSMOS?.uiManager : null;
+    if (um) um._dirty = true;
+    return r;
+  }
+
+  /** Paczka B — stan klatki modelu uwagi: ostrość (zaznaczenie), zbiór statków w ostrości; wejście `alerted` modelu —
+   *  puste (bez rejestru alertów). */
+  _attentionFrame(K, sel, F) {
+    const fleet = sel.fleetId != null ? K.fleetSystem?.getFleet?.(sel.fleetId) : null;
+    return {
+      on: true, alerts: [], focus: focusActive(sel, 0), focusIds: focusVesselIds(sel, fleet?.memberIds ?? []),
+      alertedVessels: new Set(), alertedColonies: new Set(),
+    };
+  }
 
   addSublayer(s) {
     if (s) this._sublayers.push(s);
@@ -248,6 +278,12 @@ export class HudLayer {
     };
     let key = `${tr?.getCameraMoveEpoch?.() ?? 0}|${themeEpoch()}|${F.activeSystemId}|${cssW}x${cssH}@${uiScale}*${pr}`
       + `|${sel.leadId ?? ''}|${sel.entityId ?? ''}`;
+    // Paczka B (flaga `hudAttention`): stan uwagi klatki — przed podwarstwami (każda czyta `F.att`); przy OFF — `null`.
+    const att = isHudAttentionOn(F.features) ? this._attentionFrame(K, sel, F) : null;
+    F.att = att;
+    if (att) {
+      key += `|A${att.focus ? 1 : 0}:${sel.stationId ?? ''}:${sel.fleetId ?? ''}:${(sel.vesselIds ?? []).join(',')}`;
+    }
     for (const s of this._sublayers) key += '|' + (s.prepare?.(F) ?? '');
     if (key === this._lastKey && !this._animating && !this._wake) {
       const idleMs = this._now() - tStart;   // spoczynek: sama bramka i klucz (zero wywołań ctx)

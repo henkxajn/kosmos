@@ -570,6 +570,16 @@ export const GAME_CONFIG = {
     hudLabels: true,
     hudRoutes: true,
 
+    // ── ARKUSZ HUD paczka B (H4 — D-HUD-12, D-HUD-c; HUD_PLAN.md §4.5) ──────────────
+    // hudAttention: model uwagi i nawiasy — JEDNA flaga paczki:
+    //   • uwaga (`HudAttentionLogic.js`): przy zaznaczeniu etykiety niezaznaczone 0,38, trasy 0,25, zaznaczone /
+    //     przypięte / najechane 1,0 (przejście 200 ms czasu realnego); nawiasy ⌜ ⌟ wokół zaznaczonego ciała,
+    //     stacji i statku z oddechem krycia na zegarze symulacji (pauza — statycznie); statek — nawiasy HUD w miejscu ramek RTS
+    //     (`UIManager._drawBracketForVessel` rysuje wtedy wyłącznie paski paliwa i warp).
+    //   ⚠ Brak klucza = OFF — ścieżka OFF = kod sprzed paczki B co do bitu. Czytana przy każdym rysunku / zdarzeniu — przestawienie
+    //     w konsoli (`KOSMOS.gameConfig.FEATURES.hudAttention = false`) działa od następnej klatki; F5 wczytuje plik.
+    hudAttention: true,
+
     // ── REFORMA ZAKŁADEK — flagi kroków T1–T6 na stałe ON od T4 (2026-10-27; TABS_REFORM_PLAN.md §5.10) ──
     // `bodyCardSide` (493), `shipPanelOutliner` (T3), `labelHover` (T1), `labelPin` (T2), `shipPanelHud` (T5), `fleetPanelHud`
     //   (T6): klucze usunięte, kod czyta ścieżkę ON bez rozgałęzień; przełącznikiem warstwy zostaje wyłącznie `hudLabels`
