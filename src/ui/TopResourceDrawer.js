@@ -215,10 +215,9 @@ export class TopResourceDrawer {
 
     // UI v3 — bell/MENU/zegar przeniesione z górnego paska na dolny BottomControlBar → cały
     // górny pasek jest wolny. Aktywny wiersz i wiersze rozwinięte idą na PEŁNĄ szerokość
-    // (do prawej krawędzi, inset EDGE_R na trigger Outlinera).
+    // (do prawej krawędzi — ARKUSZ HUD paczka B, Finding 564: bez dawnego wcięcia 6 px na wyzwalacz outlinera).
     const px = 0;
-    const EDGE_R = 6;
-    const bandPw  = Math.max(120, (W - EDGE_R) - px);
+    const bandPw  = Math.max(120, W - px);
     const panelPw = bandPw;
     const panelTop = 0;
     const baseH = COSMIC.TOP_BAND_H;   // wysokość zunifikowanej belki (wspólna z TopBar)

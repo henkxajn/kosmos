@@ -105,7 +105,8 @@ export function planEngagementMarkers({ markers = [], encounters = [], activeSys
 // Bramka P2B (2026-10-18): pierścień „za duży i zbyt mocny … pulsuje w dużym zoomie”. Teraz: cienka linia o STAŁEJ
 // szerokości na ekranie (WIDTH_PX przy każdym zbliżeniu), stałe krycie, bez pulsu; promień bez zmian (środek dawnego pasa
 // 0,25–0,32 j. świata), pierścień w środku uczestników (P2b-1) i ukryty przy „Obserwuj” (CP14).
-export const ENGAGEMENT_RING = Object.freeze({ RADIUS: 0.285, WIDTH_PX: 1.5, OPACITY: 0.3, SEGMENTS: 64, COLOR: 0xff5544 });
+// ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli `alert` motywu (`ThreeRenderer._syncHud3dColors`; dawniej 0xff5544).
+export const ENGAGEMENT_RING = Object.freeze({ RADIUS: 0.285, WIDTH_PX: 1.5, OPACITY: 0.3, SEGMENTS: 64 });
 
 // Pozycje pasa pierścienia w płaszczyźnie XY (mesh obrócony o −π/2 wokół X), kolejność wierzchołków jak `RingGeometry`
 // z `phiSegments` = 1: najpierw okrąg wewnętrzny (segments + 1), potem zewnętrzny. Szerokość pasa w świecie na każdym

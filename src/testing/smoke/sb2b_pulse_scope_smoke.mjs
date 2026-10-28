@@ -65,7 +65,8 @@ assert(vis({ systemId: undefined, activeSystemId: 'sys_home', isEnemy: false, qu
 console.log('\nT6  źródło `ThreeRenderer._spawnMovementPulse`');
 {
   const tr = strip(readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf8'));
-  const m = tr.match(/\n  _spawnMovementPulse\(vessel, color\) \{[\s\S]*?\n  \}/);
+  // ARKUSZ HUD paczka B (D-HUD-16) — kolor pulsu w roli motywu: sygnatura bez parametru koloru (dawna postać też pasuje).
+  const m = tr.match(/\n  _spawnMovementPulse\(vessel(?:, color)?\) \{[\s\S]*?\n  \}/);
   const body = m?.[0] ?? '';
   const gate = body.indexOf('isMovementPulseVisible(');
   const ring = body.indexOf('new THREE.Mesh(');

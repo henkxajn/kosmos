@@ -117,7 +117,9 @@ let FL = null;
 try { FL = await import('../../ui/TopBarFormatLogic.js'); } catch (e) { console.log('  (brak TopBarFormatLogic:', e.message.split('\n')[0], ')'); }
 const fl = (name, ...a) => { try { return FL?.[name]?.(...a); } catch (e) { return `ERR ${e.message}`; } };
 
-const W = 1280, H = 720, EDGE_R = 6, BAND_H = 28;
+// ⚠ PRZECELOWANE (ARKUSZ HUD paczka B, Finding 564): pasmo belki do prawej krawędzi okna — dawne wcięcie `EDGE_R = 6`
+//   (wyzwalacz wysuwanego outlinera) usunięte z `TopResourceDrawer`, więc chevron „▾N” i kredyty kończą się na W.
+const W = 1280, H = 720, EDGE_R = 0, BAND_H = 28;
 const RES = [...Object.keys(MINED_RESOURCES), ...Object.keys(HARVESTED_RESOURCES), 'fuel'];
 const ORDER = [...RES, 'research', 'energy', 'prosperity', 'hubpool'];
 const PRESET = { stm: 'ambient_1', raj: 'neon_cyber', spm: 'default' };
@@ -239,6 +241,8 @@ for (const f of ['stm', 'raj', 'spm']) {
   ok(leftW >= 160, `B5 [niezmiennik] ${FONT_LABEL[f]}: strefa nazwy ≥ 160 (podłoga) — ${leftW}`);
   if (f === 'spm') ok(leftW < 200, `B6 Space Mono: strefa nazwy zwężona, bo budżet ujemny — ${leftW} (< 200)`);
   else ok(leftW === 200, `K2 [kontrola] ${FONT_LABEL[f]}: strefa nazwy bez zwężania — ${leftW}`);
+  // ARKUSZ HUD paczka B (Finding 564) — pasmo belki (strefa aktywnego wiersza) = W okna.
+  ok(d._triggerRect?.x === 0 && d._triggerRect?.w === W, `B7 SEDNO (564) ${FONT_LABEL[f]}: pasmo belki od 0 do W (jest x ${d._triggerRect?.x}, w ${d._triggerRect?.w})`);
 }
 
 // ═══ E — 18 tokenów (plakietka puli hubu): kredyty dalej w całości ═══════════════════════════

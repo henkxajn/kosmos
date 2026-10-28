@@ -64,9 +64,11 @@ import { isHudOrbitsOn, planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, a
   hudOrbitSyncKey } from './HudOrbitLogic.js';   // ARKUSZ HUD H0 (D-HUD-7) — orbity w kolorach motywu
 import { isHudRadarOn } from '../ui/HudRadarLogic.js';   // ARKUSZ HUD H1 (D-HUD-3/4) — radar na warstwie HUD 2D
 import { isHudRoutesOn } from '../ui/HudRouteLogic.js';   // ARKUSZ HUD paczka A (H3, D-HUD-8) — trasy na warstwie HUD 2D
-// ARKUSZ HUD paczka B — chip [O] (`uiPrefs.hudLayers.orbits`), celownik wroga w rytmie alertu (flaga `hudAttention`).
+// ARKUSZ HUD paczka B — chip [O] (`uiPrefs.hudLayers.orbits`), celownik wroga w rytmie alertu (flaga `hudAttention`);
+// kolory 3D w rolach motywu (D-HUD-16 — bez flagi).
 import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';
 import { readHudLayers } from '../ui/HudLayerChipsLogic.js';
+import { hudRoleHex } from '../ui/HudPalette.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -153,12 +155,10 @@ const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 const LIFE_GLOW_COL = 0x44ff88;
 
 // ── Prediction cone (M2b C4) ────────────────────────────────────────────
-// Wizualizacja niepewności intercept point: cyan trójkąt (fill + outline)
-// per-vessel. Geom/mat tworzone raz, runtime tylko transform (scale.x =
-// szerokość kąta, scale.z = długość zasięgu w world units).
-const PREDICTION_CONE_FILL_COLOR  = 0x00ffff;
+// Wizualizacja niepewności intercept point: trójkąt (fill + outline) per-vessel. Geom/mat tworzone raz, runtime tylko
+// transform (scale.x = szerokość kąta, scale.z = długość zasięgu w world units). ARKUSZ HUD paczka B (D-HUD-16) — kolor
+// w roli `primary` motywu (dawniej cyjan 0x00ffff), po zmianie motywu przemalowany (`_syncHud3dColors`).
 const PREDICTION_CONE_FILL_ALPHA  = 0.15;
-const PREDICTION_CONE_LINE_COLOR  = 0x00ffff;
 const PREDICTION_CONE_LINE_ALPHA  = 0.6;
 const PREDICTION_CONE_BASE_ANGLE  = 0.5;   // rad — unit szerokości; runtime scale.x = angleWidth/baseAngle
 const PREDICTION_CONE_Y           = 0.05;  // wysokość nad orbitami (Y=0), pod statkami (Y≥0.3)
@@ -181,9 +181,9 @@ const SENSOR_RING_MAX_COLONY_AU = 35.0;     // ≈ MAX_ORBIT_AU — cały układ
 const BODY_VEIL_COLOR   = 0x8a8a99;         // szara mgła na niezbadanym ciele
 const BODY_VEIL_OPACITY = 0.72;             // 0=widać, 1=ukryte (grey-out do czasu skanu)
 
-// ── Marker wykrytego wroga (≥rumor) — pulsujący czerwony alert na mapie 3D ──
-const ALERT_MARKER_COLOR = 0xff4466;        // czerwony (konwencja wroga, == factionColorRaw fallback)
-const ALERT_MARKER_SCALE = 0.7;             // bazowa skala billboardu (encircle ~0.3 sprite statku)
+// ── Marker wykrytego wroga (≥rumor) — pulsujący alert na mapie 3D ──
+// ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli `alert` motywu (dawniej 0xff4466), `_syncHud3dColors` po zmianie motywu.
+const ALERT_MARKER_SCALE = 0.7;           // bazowa skala billboardu (encircle ~0.3 sprite statku)
 const ALERT_MARKER_REF_DIST = 60;           // dystans kamery [WU] dający skalę bazową; dalej → skala rośnie (stały rozmiar ekranowy)
 const ALERT_MARKER_PULSE_MAX = 1.16;        // szczyt pulsu celownika (1 + 0,16 · puls) — limit ekranowy liczony dla szczytu
 const INSIGNIA_WORLD_SIZE = 0.32;           // [j.] rozmiar świata szewronu insygniów (bez limitu ekranowego)
@@ -196,8 +196,8 @@ const _HP_R = new THREE.Vector3();          // POLISH P2b (D2) — oś „w praw
 const _HP_U = new THREE.Vector3();          // POLISH P2b (D2) — oś „w górę” ekranu w świecie (paski HP)
 const _RING_P = new THREE.Vector3();        // POLISH P2b CLOSE (C6) — punkt okręgu pierścienia starcia (głębia widoku)
 let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstura białego błysku trafienia (jedna, współdzielona)
-const TACTICAL_PING_COLOR      = 0x66ddff;  // F4 Dok: kolor ping-FX kliku wiersza (cyan, spójny z sensor ringiem)
-const TACTICAL_PING_THROTTLE_MS = 180;      // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
+// F4 Dok: ping-FX kliku wiersza — ARKUSZ HUD paczka B (D-HUD-16): kolor w roli `primary` (dawniej 0x66ddff, `_spawnFx`).
+const TACTICAL_PING_THROTTLE_MS = 180;     // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
 // ARKUSZ UI U3-2 (Finding 487) — minimalny promień rdzenia sprite'a statku (px ekranu) dla kliku NA TARCZY ciała.
 const VESSEL_CORE_PICK_PX = 6;
 // 4f-2 — hover-podgląd trasy JEDNOZNACZNY: pełna nieprzezroczystość + jaśniejszy kolor + grubsza
@@ -262,7 +262,7 @@ const POI_SPRITE_SIZE = 8;    // world units — POI na world-coord pozycjach (n
 const POI_SPRITE_Y    = 0.02; // tuż nad orbitami (Y=0), poniżej cone (Y=0.05) i vesseli (Y≥0.3)
 
 const POI_TYPE_COLORS = Object.freeze({
-  waypoint: 0x5588ff,  // cyan-blue (różny od cone cyan 0x00ffff)
+  waypoint: 0x5588ff,  // cyan-blue (różny od stożka przechwycenia)
   patrol:   0x33ff66,  // green
   picket:   0xff3333,  // red
   rally:    0xffaa22,  // amber
@@ -1194,9 +1194,10 @@ export class ThreeRenderer {
     }));
 
     // Slice 6 — pulsy startu/przybycia (satysfakcjonujące sprzężenie zwrotne ruchu).
-    EventBus.on('vessel:launched', safe(({ vessel }) => this._spawnMovementPulse(vessel, 0x88ffcc)));
-    EventBus.on('vessel:arrived',  safe(({ vessel }) => this._spawnMovementPulse(vessel, 0x88ddff)));
-    EventBus.on('vessel:docked',   safe(({ vessel }) => this._spawnMovementPulse(vessel, 0x88ddff)));
+    // ARKUSZ HUD paczka B (D-HUD-16) — kolor pulsu w roli motywu (`_spawnMovementPulse`).
+    EventBus.on('vessel:launched', safe(({ vessel }) => this._spawnMovementPulse(vessel)));
+    EventBus.on('vessel:arrived',  safe(({ vessel }) => this._spawnMovementPulse(vessel)));
+    EventBus.on('vessel:docked',   safe(({ vessel }) => this._spawnMovementPulse(vessel)));
 
     // Centruj kamerę na statku (kliknięcie w liście floty / Outliner)
     EventBus.on('vessel:focus', safe(({ vesselId }) => {
@@ -4009,6 +4010,7 @@ export class ThreeRenderer {
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
         this._syncTacticalGlyphs();      // F2 tryb Y — glify-billboardy (no-op poza trybem)
         this._syncBodyScanVeil();        // reforma obserwatorium — szara zasłona niezbadanego ciała w podglądzie
+        this._syncHud3dColors();         // ARKUSZ HUD paczka B (D-HUD-16) — kolory 3D w rolach motywu (nowe i po zmianie motywu)
 
         // SHIFT „czysty widok" — po WSZYSTKICH syncach (część odtwarza obiekty co klatkę)
         // wymuś ukrycie linii/pierścieni/glifów, zostaw gwiazdę, planety i modele statków.
@@ -6122,8 +6124,9 @@ export class ThreeRenderer {
 
     const fillGeom = new THREE.BufferGeometry().setFromPoints([v0, v1, v2]);
     fillGeom.setIndex([0, 1, 2]);
+    const coneHex = this._hud3dHex('primary');   // paczka B (D-HUD-16) — rola `primary` motywu
     const fillMat = new THREE.MeshBasicMaterial({
-      color: PREDICTION_CONE_FILL_COLOR,
+      color: coneHex,
       transparent: true,
       opacity: PREDICTION_CONE_FILL_ALPHA,
       side: THREE.DoubleSide,
@@ -6134,7 +6137,7 @@ export class ThreeRenderer {
     // Outline: 0 → right → left → 0 (zamknięty trójkąt)
     const lineGeom = new THREE.BufferGeometry().setFromPoints([v0, v1, v2, v0]);
     const lineMat = new THREE.LineBasicMaterial({
-      color: PREDICTION_CONE_LINE_COLOR,
+      color: coneHex,
       transparent: true,
       opacity: PREDICTION_CONE_LINE_ALPHA,
     });
@@ -6143,7 +6146,7 @@ export class ThreeRenderer {
     const group = new THREE.Group();
     group.add(fillMesh);
     group.add(lineMesh);
-    return { fillMesh, lineMesh, group };
+    return { fillMesh, lineMesh, group, hudEpoch: themeEpoch() };
   }
 
   _updatePredictionConeTransform(entry, cone) {
@@ -6427,6 +6430,8 @@ export class ThreeRenderer {
       this._disposeFx(this._activeEffects.shift());
     }
     this._fxGroup.add(mesh);
+    // ARKUSZ HUD paczka B (D-HUD-16) — `cfg.hudRole` (`primary` / `foreign` / `alert`): kolor materiału z roli motywu.
+    if (cfg.hudRole) mesh.material?.color?.setHex?.(this._hud3dHex(cfg.hudRole));
     const ef = {
       mesh,
       startTime: performance.now(),
@@ -7019,8 +7024,9 @@ export class ThreeRenderer {
     let entry = this._engagementMarkers.get(encounterId);
     if (!entry) {
       // POLISH P2b CLOSE (C6, CP27) — cienki pas: szerokość na ekranie co klatkę (`_tickEngagementMarkers`), stałe krycie.
+      // ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli `alert` motywu nadaje `_syncHud3dColors` (pętla renderu, przed rysunkiem).
       const geom = new THREE.RingGeometry(ENGAGEMENT_RING.RADIUS - 0.001, ENGAGEMENT_RING.RADIUS + 0.001, ENGAGEMENT_RING.SEGMENTS);
-      const mat  = new THREE.MeshBasicMaterial({ color: ENGAGEMENT_RING.COLOR, transparent: true, opacity: ENGAGEMENT_RING.OPACITY,
+      const mat  = new THREE.MeshBasicMaterial({ transparent: true, opacity: ENGAGEMENT_RING.OPACITY,
         side: THREE.DoubleSide, depthWrite: false });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;
@@ -7204,7 +7210,7 @@ export class ThreeRenderer {
   }
 
   // ── Slice 6 — puls startu/przybycia statku (FX harness) ──────────────────
-  _spawnMovementPulse(vessel, color) {
+  _spawnMovementPulse(vessel) {
     if (!GAME_CONFIG.FEATURES?.fcMovementFx) return;
     // SB43 (Finding 415) — pierścień tylko dla statku z OGLĄDANEGO układu (w skoku warp — układu startu), a statku
     //   nie-gracza tylko przy wykryciu ≥ contact (`isMovementPulseVisible`). Statek z wydarzenia, nie z rejestru:
@@ -7221,10 +7227,12 @@ export class ThreeRenderer {
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.08, 0.13, 24),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
     );
     ring.position.set(S(p.x), 0.3, S(p.y)); ring.rotation.x = -Math.PI / 2;
-    this._spawnFx(ring, { kind: 'pulse', lifetime: FX_RING_MS, baseScale: 1, baseOpacity: 0.8 });
+    // ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli motywu (`_spawnFx`): własny statek `primary`, obcy `foreign` (dawniej
+    // 0x88ffcc przy starcie, 0x88ddff przy przylocie i doku — bez rozróżnienia własny / obcy).
+    this._spawnFx(ring, { kind: 'pulse', lifetime: FX_RING_MS, baseScale: 1, baseOpacity: 0.8, hudRole: isEnemy ? 'foreign' : 'primary' });
   }
 
   // Miękka tekstura glow (radial) — współdzielona dla smug silnika (i innych FX).
@@ -7454,11 +7462,12 @@ export class ThreeRenderer {
     }
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.08, 0.13, 24),
-      new THREE.MeshBasicMaterial({ color: TACTICAL_PING_COLOR, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false }),
     );
     ring.position.set(x, y, z);
     ring.rotation.x = -Math.PI / 2;
-    this._spawnFx(ring, { kind: 'ping', lifetime: FX_PING_MS, baseScale: 1, baseOpacity: 1 });
+    // ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli `primary` motywu nadaje `_spawnFx`.
+    this._spawnFx(ring, { kind: 'ping', lifetime: FX_PING_MS, baseScale: 1, baseOpacity: 1, hudRole: 'primary' });
   }
 
   _syncTacticalGlyphs() {
@@ -7878,6 +7887,7 @@ export class ThreeRenderer {
       pulse = 0.5 + 0.5 * Math.sin(tt * 3.2);   // 0..1, wspólna faza (radar-sync)
     }
     const hud = attOn ? window.KOSMOS?.hudLayer : null;
+    const alertHex = this._hud3dHex('alert');   // paczka B (D-HUD-16) — rola `alert` motywu
     const camPos = this.camera?.position;            // skala wg dystansu → stały rozmiar EKRANOWY
     const active = new Set();
     for (const [vid, entry] of this._vessels) {
@@ -7890,12 +7900,13 @@ export class ThreeRenderer {
       let m = this._enemyAlertMarkers.get(vid);
       if (!m) {
         m = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: this._getAlertReticleTex(), color: ALERT_MARKER_COLOR,
+          map: this._getAlertReticleTex(), color: alertHex,
           transparent: true, depthWrite: false,
         }));
         this.scene.add(m);
         this._enemyAlertMarkers.set(vid, m);
       }
+      if (m.userData.hudHex !== alertHex) { m.material.color.setHex(alertHex); m.userData.hudHex = alertHex; }   // motyw
       // Paczka B — w czasie alertu obwiednia alertu zastępuje puls okresowy (dwa impulsy, potem jak dotąd).
       const env = hud?.alertEnvelopeFor?.(vid) ?? 0;
       const pv = env > 0 ? env : pulse;
@@ -7915,6 +7926,38 @@ export class ThreeRenderer {
       m.scale.setScalar(base * (pulseScale / ALERT_MARKER_SCALE));
     }
     for (const k of [...this._enemyAlertMarkers.keys()]) if (!active.has(k)) this._disposeEnemyAlertMarker(k);
+  }
+
+  // ── ARKUSZ HUD paczka B (D-HUD-16) — kolory 3D w rolach motywu ─────────────────────────────────────────────────
+  // Rola HUD (`primary` / `foreign` / `alert`) jako 0xRRGGBB bieżącego motywu (`HudPalette.hudRoleHex`); pamięć na epokę
+  // motywu (`themeEpoch` — `applyPreset` / `applyTheme`, np. F7 w trakcie gry).
+  _hud3dHex(role) {
+    const ep = themeEpoch();
+    if (this._hud3dHexEpoch !== ep || !this._hud3dHexMemo) { this._hud3dHexEpoch = ep; this._hud3dHexMemo = {}; }
+    return this._hud3dHexMemo[role] ?? (this._hud3dHexMemo[role] = hudRoleHex(role));
+  }
+
+  // Co klatkę (pętla renderu, przed rysunkiem — także w pauzie): stożki przechwycenia (rola `primary`) i pierścienie starcia
+  // (`alert`) w barwie bieżącego motywu — pierścień tworzony bez koloru dostaje ją przed pierwszym rysunkiem, istniejące —
+  // po zmianie motywu. Celownik wroga barwi `_syncEnemyAlertMarkers`, efekty krótkotrwałe (ping, puls) — `_spawnFx`.
+  _syncHud3dColors() {
+    const ep = themeEpoch();
+    if (this._predictionConeMeshes.size) {
+      for (const [, e] of this._predictionConeMeshes) {
+        if (e.hudEpoch === ep) continue;
+        const hex = this._hud3dHex('primary');
+        e.fillMesh?.material?.color?.setHex(hex);
+        e.lineMesh?.material?.color?.setHex(hex);
+        e.hudEpoch = ep;
+      }
+    }
+    if (this._engagementMarkers.size) {
+      for (const [, e] of this._engagementMarkers) {
+        if (e.hudEpoch === ep) continue;
+        e.mat?.color?.setHex(this._hud3dHex('alert'));
+        e.hudEpoch = ep;
+      }
+    }
   }
 
   _disposeEnemyAlertMarker(vid) {

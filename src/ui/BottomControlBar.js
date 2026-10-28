@@ -176,7 +176,7 @@ export class BottomControlBar {
     const navSlots = navSlotLayout(navRect, NAV_GROUPS.length);
     const lastSlot = navSlots.length ? navSlots[navSlots.length - 1] : { x: W - 200, w: 200 };
     const lastSlotX     = lastSlot.x;
-    const lastSlotRight = lastSlot.x + lastSlot.w;   // = navRect.x + navRect.w (W - inset)
+    const lastSlotRight = lastSlot.x + lastSlot.w;   // = navRect.x + navRect.w (= W — bez wcięcia, Finding 564)
 
     // ── Od prawej: data → separator → prędkości → play → menu → bell ──
     const right = lastSlotRight - PAD;

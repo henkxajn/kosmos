@@ -16,6 +16,7 @@
 //         zmierzone na drzewie `e873127` — sonda `strip_geom_T4.mjs`, teczka T4); rząd doku (`getDockSpan`) usunięty
 //   B7    pas bez ramy także nad mapą (jedyny stroke() — separator przed datą)
 //   B8–B9 `isOver` i klik w tło pasa nad mapą — pochłonięte (kamera i mapa nie dostają zdarzenia)
+//   B10   (ARKUSZ HUD paczka B, Finding 564) pasek nawigacji = W okna, granice slotów w całych px, ostatni slot do W
 //   U1–U3 UIManager (pin źródłowy — moduł nie importuje się pod node): pas dostaje `MapInsets.left` tylko bez overlayu;
 //         doku paneli brak (T4)
 // ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): dok zminimalizowanych paneli (`PanelDock`)
@@ -93,9 +94,12 @@ header('B  pas dolny — tło, klaster zegara, suwak, czip ⚔');
     'B4 KONTROLA: klaster zegara (🔔 ☰ ▶ prędkości) w tym samym miejscu nad mapą i pod overlayem');
   // B5 — pin px (T4): liczby zmierzone na drzewie `e873127` (przed usunięciem rzędu doku), okno 1280×833, nad mapą (lewy 150).
   const at = (r, x, y, w, h) => !!r && r.x === x && r.y === y && r.w === w && r.h === h;
-  ok(at(mapBar._bellRect, 1097, 775, 16, 12) && at(mapBar._menuRect, 1115, 775, 16, 12) && at(mapBar._playRect, 1133, 775, 13, 12)
-    && at(mapBar._speedRects[0], 1149, 775, 13, 12) && at(mapBar._speedRects[4], 1205, 775, 13, 12) && at(mapBar._zoomRect, 991, 771, 100, 20),
-    `B5 SEDNO (pin px): 🔔 x 1097, ☰ 1115, ▶ 1133, prędkości 1149–1205, suwak zoomu x 991 w 100 — jak przed T4 (jest 🔔 ${mapBar._bellRect?.x}, suwak ${mapBar._zoomRect?.x})`);
+  // ⚠ PRZECELOWANE (ARKUSZ HUD paczka B, Finding 564): pasek nawigacji do W (bez wcięcia 6 px) — klaster zegara wyrównany do
+  //   prawego końca ostatniego slotu (W − PAD), więc +6 px względem dawnego W − 6 − PAD; w tej atrapie (6 px na znak) dawniej
+  //   trzymała go klamra „dzwonek ≥ lewa krawędź slotu + PAD” (1097), teraz klamra nie działa: 🔔 1098 (+1). Liczby po 564.
+  ok(at(mapBar._bellRect, 1098, 775, 16, 12) && at(mapBar._menuRect, 1116, 775, 16, 12) && at(mapBar._playRect, 1134, 775, 13, 12)
+    && at(mapBar._speedRects[0], 1150, 775, 13, 12) && at(mapBar._speedRects[4], 1206, 775, 13, 12) && at(mapBar._zoomRect, 992, 771, 100, 20),
+    `B5 SEDNO (pin px): 🔔 x 1098, ☰ 1116, ▶ 1134, prędkości 1150–1206, suwak zoomu x 992 w 100 — po 564 (jest 🔔 ${mapBar._bellRect?.x}, suwak ${mapBar._zoomRect?.x})`);
   ok(mapBar.getDockSpan === undefined && mapBar._dockSpan === undefined,
     'B5b SEDNO: rząd chipów doku usunięty (T4) — pas bez `getDockSpan`');
   // B6 — czip ⚔ (HUD walki zminimalizowany przy trwających starciach): na lewo od suwaka, px jak przed T4
@@ -105,8 +109,8 @@ header('B  pas dolny — tło, klaster zegara, suwak, czip ⚔');
   chipBar.draw(recCtx(), W, H, TS, { left: 150 });
   const ovChip = new BottomControlBar();
   ovChip.draw(recCtx(), W, H, TS);
-  ok(at(chipBar._chipRect, 931, 771, 56, 20) && at(ovChip._chipRect, 1032, 771, 56, 20),
-    `B6 SEDNO (pin px): czip ⚔ nad mapą x 931 (na lewo od suwaka), pod overlayem x 1032 (na lewo od zegara) — jak przed T4 (jest ${chipBar._chipRect?.x} / ${ovChip._chipRect?.x})`);
+  ok(at(chipBar._chipRect, 932, 771, 56, 20) && at(ovChip._chipRect, 1032, 771, 56, 20),
+    `B6 SEDNO (pin px): czip ⚔ nad mapą x 932 (na lewo od suwaka, +1 jak suwak — 564), pod overlayem x 1032 (na lewo od zegara, bez zmian) (jest ${chipBar._chipRect?.x} / ${ovChip._chipRect?.x})`);
   K.combatHud = null; delete K.deepSpaceCombatSystem; delete K.threeRenderer;
   ok(ops(cMap, 'stroke').length === 1 && ops(cMap, 'strokeRect').length === 5,
     `B7 KONTROLA: pas bez ramy także nad mapą — jedyny stroke() to separator (${ops(cMap, 'stroke').length}), 5 obrysów prędkości (${ops(cMap, 'strokeRect').length})`);
@@ -115,6 +119,24 @@ header('B  pas dolny — tło, klaster zegara, suwak, czip ⚔');
   ok(mapBar.isOver(300, stripTop + 10) && !mapBar.isOver(300, stripTop - 5),
     'B8 SEDNO: nad mapą `isOver` całego pasa (kamera nie dostaje zdarzenia); nad pasem — nie');
   ok(mapBar.handleClick(300, stripTop + 10) === true, 'B9 SEDNO: klik w puste tło pasa nad mapą pochłonięty (nie spada na mapę 3D)');
+}
+
+// ═══ B10 ══════════════════════════════════════════════════════════════════════
+header('B10  Finding 564 — pasek nawigacji do prawej krawędzi okna (bez wcięcia 6 px)');
+{
+  const widths = [1280, 1366, 1706.67, 1600];
+  const rows = widths.map((w) => { const r = bottomNavBarRect(w, H); return { w, r, s: navSlotLayout(r, NAV_GROUPS.length) }; });
+  ok(rows.every(({ w, r }) => r.x === 0 && near(r.w, w)), `B10a SEDNO: pasek nawigacji = W okna (x 0, w = W) przy ${widths.join(' / ')}`);
+  ok(rows.every(({ r, s }) => near(s[s.length - 1].x + s[s.length - 1].w, r.x + r.w) && s.slice(0, -1).every((sl) => Number.isInteger(sl.x) && Number.isInteger(sl.w))),
+    'B10b SEDNO: ostatni slot kończy się na prawej krawędzi; granice slotów w całych px (bez szwów półprzezroczystych kafli)');
+  const s1280 = rows[0].s;
+  ok(s1280.slice(0, -1).every((sl, i) => sl.x === i * 182 && sl.w === 182),
+    `B10c KONTROLA: przy 1280 sloty 0–5 jak z dawnym wcięciem (182 px, 1274 / 7; jest ${s1280.slice(0, -1).map((sl) => sl.w).join(',')})`);
+  ok(s1280[s1280.length - 1].x === 1092 && s1280[s1280.length - 1].w === 188,
+    `B10e SEDNO: ostatni slot 1092–1280 — szerszy o odzyskane 6 px (jest x ${s1280[s1280.length - 1].x}, w ${s1280[s1280.length - 1].w})`);
+  const bg = new BottomControlBar();
+  bg.draw(recCtx(), W, H, TS, { left: 150 });
+  ok(near(bg._bgRect.x + bg._bgRect.w, W), 'B10d KONTROLA: tło pasa nad mapą nadal do W');
 }
 
 // ═══ U ═══════════════════════════════════════════════════════════════════════

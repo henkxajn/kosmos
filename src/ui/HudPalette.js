@@ -178,6 +178,16 @@ export function resolveHudRoles(theme = THEME) {
 }
 
 /**
+ * Barwa roli HUD dla obiektów 3D (ARKUSZ HUD paczka B, D-HUD-16): liczba 0xRRGGBB z tokenu roli (bez krycia — krycie
+ * materiału ustala jego właściciel). Tokeny czytane przy każdym wywołaniu — zmiana motywu widoczna od razu; nieznana rola
+ * albo nieczytelny token — `primary`.
+ */
+export function hudRoleHex(role, theme = THEME) {
+  const roles = resolveHudRoles(theme);
+  return tokenRgbInt(roles[role] ?? roles.primary) ?? tokenRgbInt(roles.primary);
+}
+
+/**
  * Raport kontrastu ról motywu (keeper, bramka): każda para ról — ΔE2000 przy oku normalnym, w trzech symulacjach
  * daltonizmu i najgorszy przypadek, plus WCAG; `minWorst` — najgorsza para; `ok` ⇔ każda para ≥ HUD_MIN_DE.
  * Kolory ról z kryciem tokenu nałożonym na czerń (tło sceny mapy).
