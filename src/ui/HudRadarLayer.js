@@ -11,12 +11,19 @@
 //   • kolory z ról motywu (`F.roles`, czytane w każdej klatce rysunku) — zero hexów;
 //   • błysk na granicy (H1-3, D-HUD-4): zdarzenia wykrycia (`vessel:proximityEnter`, `vessel:detectionChanged`) → krótki
 //     łuk w roli `alert` na granicy NIEzaznaczonego obiektu gracza, w namiarze obcego, 0,8 s czasu realnego.
+//   • paczka B (flaga `hudAttention`, B-2): zdarzenie wykrycia → ALERT w rejestrze warstwy (`HudLayer.alerts`, zegar
+//     symulacji) — wyłącznie dla obiektu ZAZNACZONEGO (w trybie Y — każdego własnego), także kolonii z zasięgiem ∞ (bez
+//     granicy — alert przez etykietę); błysk na granicy: łuk co najmniej `HUD_ALERT.FLASH_MIN_ARC_PX` na ekranie, dwa pulsy
+//     `HUD_ALERT.ALERT_MS` (stoi w pauzie). Przy OFF — kod H1 co do bitu.
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';   // korekta 1b — font odczytu zasięgu
 import { getLocale } from '../i18n/i18n.js';         // korekta 1b — separator dziesiętny odczytu
 import { isEnemyVessel, isInService } from '../entities/Vessel.js';
 import { systemIdOf } from '../utils/SystemScope.js';
+import { simClockMs } from '../utils/SimClock.js';   // paczka B — start alertu na zegarze symulacji
+import { isHudAttentionOn } from './HudAttentionLogic.js';
+import { HUD_ALERT, HudAlertStore, flashHalfAngle } from './HudAlertLogic.js';
 import {
   HUD_RADAR, isHudRadarOn, radarLayerVisible, radarSelection, radarHolders, vesselRadarRangeAU, colonyRadarRangeAU,
   pingPhase, pingRadiusFrac, pingFade, pingStopReason, tickAngles, ringSegments, radarStyle,
@@ -61,8 +68,22 @@ export class HudRadarLayer {
     this._hud?.wake?.();
   }
 
+  // Paczka B — alert do rejestru warstwy (zegar symulacji); warstwa bez rejestru (keeper) — rejestr własny.
+  _pushAlert(rec) {
+    const store = this._hud?.alerts ?? (this._alertsLocal ??= new HudAlertStore());
+    store.push(rec, simClockMs());
+    this._hud?.wake?.();
+  }
+
+  // Paczka B — alert wyłącznie dla obiektu z WIDOCZNYM radarem: zaznaczonego, a w trybie Y — każdego własnego (jeden intruz
+  // wchodzi w zasięg wielu statków naraz — `ProximitySystem` emituje parę na statek; bez tej reguły stos wektorów i błysków).
+  _alertScopeTactical() {
+    return (typeof window !== 'undefined') && window.KOSMOS?.tacticalMode?.isActive === true;
+  }
+
   // Statek gracza wykrył obcego (para z graczem, `!sameFaction`) — błysk na granicy JEGO zasięgu wykrycia, gdy statek ma
-  // radar (w służbie, nie zadokowany — 507) i nie jest zaznaczony (zaznaczony ma pełny radar).
+  // radar (w służbie, nie zadokowany — 507) i nie jest zaznaczony (zaznaczony ma pełny radar). Paczka B — alert dla
+  // zaznaczonego (jego granica jest widoczna), w trybie Y — dla każdego własnego.
   _onProximityEnter({ vesselAId, vesselBId, sameFaction } = {}) {
     if (sameFaction === true || !isHudRadarOn(GAME_CONFIG.FEATURES)) return;
     const vm = (typeof window !== 'undefined') ? window.KOSMOS?.vesselManager : null;
@@ -71,26 +92,47 @@ export class HudRadarLayer {
     const h = pair.holder;
     if (!isInService(h) || h.position?.state === 'docked') return;
     const key = 'v:' + h.id;
-    if (this._isSelectedKey(key)) return;
+    const att = isHudAttentionOn(GAME_CONFIG.FEATURES);
+    if (!att && this._isSelectedKey(key)) return;
     const sys = systemIdOf(h);
     if (sys == null || sys !== systemIdOf(pair.foe)) return;
-    this._pushFlash({ key, kind: 'vessel', id: h.id, angle: bearingRad(h.position, pair.foe.position), systemId: sys });
+    const angle = bearingRad(h.position, pair.foe.position);
+    if (att) {
+      if (!this._alertScopeTactical() && !this._isSelectedKey(key)) return;
+      this._pushAlert({ id: `${key}|${pair.foe.id}`, kind: 'vessel', holderKey: key, holderId: h.id, foeId: pair.foe.id,
+        systemId: sys, angle, infinite: false });
+      return;
+    }
+    this._pushFlash({ key, kind: 'vessel', id: h.id, angle, systemId: sys });
   }
 
   // Kolonia gracza wykryła obcego (obserwatorium — zdarzenie bez kolonii) — najbliższa kolonia gracza, w której zasięgu
-  // jest obcy; zasięg ∞ — bez granicy, bez błysku.
+  // jest obcy; zasięg ∞ — bez granicy, bez błysku. Paczka B — alert dla zaznaczonego ciała z kolonią, gdy jego obserwatorium
+  // obejmuje obcego (także zasięg ∞ — przez etykietę), w trybie Y — dla najbliższej kolonii pokrywającej (jak H1).
   _onDetectionChanged({ vesselId, detected, vessel } = {}) {
     if (detected !== true || !isHudRadarOn(GAME_CONFIG.FEATURES)) return;
     const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
     const foe = vessel ?? K?.vesselManager?.getVessel?.(vesselId);
     if (!foe || foe.isWreck || !isEnemyVessel(foe)) return;
+    const att = isHudAttentionOn(GAME_CONFIG.FEATURES);
+    let colonies = K?.colonyManager?.getAllColonies?.() ?? [];
+    if (att && !this._alertScopeTactical()) {
+      const bid = this._sel.bodyId;
+      colonies = bid == null ? [] : colonies.filter((c) => String(c.planetId) === String(bid));
+    }
     const best = nearestCoveringColony({
-      foe, colonies: K?.colonyManager?.getAllColonies?.() ?? [], auToPx: AU_TO_PX,
+      foe, colonies, auToPx: AU_TO_PX,
       rangeOf: (c) => colonyRadarRangeAU(c, K?.observatorySystem),
       posOf: (c) => c.planet ?? K?.entityManager?.get?.(c.planetId) ?? null,
     });
-    if (!best || !Number.isFinite(best.rangeAU)) return;
+    if (!best) return;
     const key = 'c:' + best.colony.planetId;
+    if (att) {
+      this._pushAlert({ id: `${key}|${foe.id}`, kind: 'colony', holderKey: key, holderId: best.colony.planetId, foeId: foe.id,
+        systemId: colonySystemId(best.colony), angle: bearingRad(best.pos, foe.position), infinite: !Number.isFinite(best.rangeAU) });
+      return;
+    }
+    if (!Number.isFinite(best.rangeAU)) return;
     if (this._isSelectedKey(key)) return;
     this._pushFlash({ key, kind: 'colony', id: best.colony.planetId, angle: bearingRad(best.pos, foe.position),
       systemId: colonySystemId(best.colony) });
@@ -156,6 +198,25 @@ export class HudRadarLayer {
     if (anySelected) key += `|s${F.sim == null ? '-' : Math.round(F.sim)}`;
     // Błyski: obiekt w oglądanym układzie, nadal NIEzaznaczony, z granicą (zasięg skończony).
     const flashes = [];
+    // Paczka B — błyski z alertów klatki (`F.att.alerts` — oglądany układ, zegar symulacji): także zaznaczony obiekt; zasięg ∞ —
+    // bez granicy (alert przez etykietę).
+    if (F.att) {
+      for (const a of F.att.alerts) {
+        if (a.infinite) continue;
+        let rangeAU = 0;
+        if (a.kind === 'vessel') { const v = vm?.getVessel?.(a.holderId); rangeAU = v ? vesselRange(v) : 0; }
+        else { const c = cm?.getColony?.(a.holderId); rangeAU = c ? colonyRange(c) : 0; }
+        if (!(rangeAU > 0) || !Number.isFinite(rangeAU)) continue;
+        const v = a.kind === 'vessel' ? vm?.getVessel?.(a.holderId) : null;
+        const anchor = a.kind === 'colony' ? a.holderId : (v?.position?.state === 'docked' ? (v.position?.dockedAt ?? null) : null);
+        const at = this._centerOf(tr, vm, a.kind, a.holderId, anchor);
+        if (!at) continue;
+        flashes.push({ key: a.holderKey, kind: a.kind, id: a.holderId, angle: a.angle, env: a.env, c: at.c, rangeAU, att: true });
+        key += `|fa${a.id}:${pos(at.c)}`;
+      }
+      this._prep = { on, visible, holders, flashes };
+      return key;
+    }
     for (const f of this._flashes) {
       if (f.systemId !== F.activeSystemId || this._isSelectedKey(f.key)) continue;
       let rangeAU = 0;
@@ -227,16 +288,22 @@ export class HudRadarLayer {
       if (it.ring.runs.length) drawn++;
       items.push(it);
     }
-    // Błyski — łuk ±15° na granicy w namiarze obcego, gasnący w czasie realnym.
+    // Błyski — łuk ±15° na granicy w namiarze obcego, gasnący w czasie realnym. Paczka B — łuk co najmniej
+    // `FLASH_MIN_ARC_PX` na ekranie, krycie = obwiednia dwóch pulsów alertu (zegar symulacji — klatkę wymusza klucz warstwy).
     const flashes = [];
     for (const f of P.flashes) {
-      const alpha = flashAlpha(F.now - f.t0);
+      const alpha = f.att ? f.env : flashAlpha(F.now - f.t0);
       if (!(alpha > 0)) continue;
-      animating = true;
+      if (!f.att) animating = true;
       const c = world(f.c);
-      const [a0, a1] = flashArc(f.angle);
-      const arc = proj.arc(c.x, c.y, c.z, f.rangeAU * wpa, HUD_RADAR.FLASH_SEGMENTS, a0, a1);
-      flashes.push({ key: f.key, kind: f.kind, id: f.id, angle: f.angle, age: F.now - f.t0, alpha, arc });
+      let a0, a1;
+      if (f.att) {
+        const rW = f.rangeAU * wpa, ctr = proj.point(c.x, c.y, c.z);
+        const h = flashHalfAngle(ctr ? rW * proj.pxPerWorld(ctr.depth) : null);
+        a0 = f.angle - h; a1 = f.angle + h;
+      } else [a0, a1] = flashArc(f.angle);
+      const arc = proj.arc(c.x, c.y, c.z, f.rangeAU * wpa, f.att ? HUD_ALERT.FLASH_SEGMENTS : HUD_RADAR.FLASH_SEGMENTS, a0, a1);
+      flashes.push({ key: f.key, kind: f.kind, id: f.id, angle: f.angle, age: f.att ? null : F.now - f.t0, alpha, arc, att: !!f.att });
       if (arc.runs.length) drawn++;
     }
     this._last = items;
@@ -309,16 +376,19 @@ export class HudRadarLayer {
         }
       }
     }
-    // Błyski na granicy — rola `alert`: poświata, potem linia.
+    // Błyski na granicy — rola `alert`: poświata, potem linia (paczka B — szerokości i krycie z `HUD_ALERT`).
     for (const fl of collected.flashes ?? []) {
       if (!fl.arc?.runs?.length) continue;
+      const fs = fl.att
+        ? { glow: { alpha: HUD_ALERT.FLASH_GLOW_ALPHA, width: HUD_ALERT.FLASH_GLOW_WIDTH }, line: { alpha: HUD_ALERT.FLASH_ALPHA, width: HUD_ALERT.FLASH_WIDTH } }
+        : s.flash;
       ctx.strokeStyle = s.flash.color;
       ctx.beginPath(); runs(fl.arc);
-      ctx.globalAlpha = s.flash.glow.alpha * fl.alpha;
-      ctx.lineWidth = s.flash.glow.width;
+      ctx.globalAlpha = fs.glow.alpha * fl.alpha;
+      ctx.lineWidth = fs.glow.width;
       ctx.stroke();
-      ctx.globalAlpha = s.flash.line.alpha * fl.alpha;
-      ctx.lineWidth = s.flash.line.width;
+      ctx.globalAlpha = fs.line.alpha * fl.alpha;
+      ctx.lineWidth = fs.line.width;
       ctx.stroke();
     }
     ctx.globalAlpha = 1;

@@ -3730,6 +3730,8 @@ export default {
   'hudLabel.stationPop': '{0}/{1} POP',
   'hudLabel.detect':     'det. {0}',
   'hudLabel.lock':       'lock {0}',
+  // ── HUD SHEET pack B — alert (D-HUD-11) ──
+  'hudAlert.contact':    'contact',
 
   // ── TABS REFORM T1 — informational expansion of map labels (D-TR-3, I7 tables) ──
   'labelHover.deposits':   'deposits {0} · ★★★ {1}',

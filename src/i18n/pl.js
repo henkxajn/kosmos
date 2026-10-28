@@ -3731,6 +3731,8 @@ export default {
   'hudLabel.stationPop': '{0}/{1} POP',
   'hudLabel.detect':     'wykr. {0}',
   'hudLabel.lock':       'lock {0}',
+  // ── ARKUSZ HUD paczka B — alert (D-HUD-11) ──
+  'hudAlert.contact':    'kontakt',
 
   // ── REFORMA ZAKŁADEK T1 — rozwinięcie informacyjne etykiet mapy (D-TR-3, tabele I7) ──
   'labelHover.deposits':   'złoża {0} · ★★★ {1}',

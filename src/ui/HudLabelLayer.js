@@ -16,10 +16,11 @@
 //   • fade-in 150 ms czasu realnego (działa w pauzie); poprzedni wybór miejsca wygrywa — bez skoków przy ruchu kamery;
 //   • klik (D-UI-5, `clickObject`) — wołany z `UIManager.handleClick` przed raycastem 3D; punkt na tarczy ciała wygrywa
 //     (487, 503); zwinięta etykieta zaznacza kotwicę; kolory WYŁĄCZNIE z ról motywu (`F.roles`).
-//   • paczka B (flaga `hudAttention` — `F.att`): MODEL UWAGI — przy zaznaczeniu etykiety niezaznaczone
-//     `HUD_ATTENTION.LABEL_DIM`, zaznaczone / przypięte / najechane 1,0 (przejście `FADE_MS` czasu realnego —
-//     `makeAttentionMemory`); ramka statku jako przeszkoda — kwadrat nawiasów (`bracketBox`). Przy OFF — kod paczki A co do
-//     bitu.
+//   • paczka B (flaga `hudAttention` — `F.att`): MODEL UWAGI — przy zaznaczeniu albo alercie etykiety niezaznaczone
+//     `HUD_ATTENTION.LABEL_DIM`, zaznaczone / przypięte / alertowane / najechane 1,0 (przejście `FADE_MS` czasu realnego —
+//     `makeAttentionMemory`); ALERT — linia treści (rola `alert`) pod etykietą intruza (brak etykiety — etykieta na żądanie
+//     przy widocznym intruzie), kolonia ∞ — pasek etykiety w roli `alert` + linia treści; ramka statku jako przeszkoda —
+//     kwadrat nawiasów (`bracketBox`). Przy OFF — kod paczki A co do bitu.
 // ⚠ Moduł importuje się pod node (keeper `hud_labels_smoke` — atrapa ctx): bez three i bez DOM.
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
@@ -68,8 +69,9 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { classifyStationDepot } from './StationPanelLogic.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';
-// ARKUSZ HUD paczka B (B-1) — model uwagi, nawiasy statku jako przeszkoda (flaga `hudAttention`).
+// ARKUSZ HUD paczka B (B-1, B-2) — model uwagi, nawiasy statku jako przeszkoda, alerty (flaga `hudAttention`).
 import { labelAttentionTarget, makeAttentionMemory, bracketBox } from './HudAttentionLogic.js';
+import { HUD_ALERT } from './HudAlertLogic.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const q = (v) => Math.round(v * 1000);          // klucz klatki — położenie z dokładnością 0,001 j.
@@ -104,6 +106,7 @@ export class HudLabelLayer {
     this._pinOpen = null;            // { ck, list } — `toggleOpenList`
     this._pinCache = null;           // { key, t, v } — `_t2Content`
     this._att = makeAttentionMemory();   // paczka B — poziomy uwagi etykiet (przejście czasu realnego)
+    this._roles = null;              // paczka B — role motywu bieżącego rysunku (linia alertu, pasek kolonii ∞)
   }
 
   // ── Pomiar tekstu (ctx warstwy; atrapa bez `measureText` — przybliżenie z rozmiaru fontu) ──────────────────────────
@@ -740,12 +743,28 @@ export class HudLabelLayer {
     const T = P.t1;
     const bodyCk = (b) => (b.kind === 'colony' ? 'body:' : 'station:') + b.id;
     const hovPrio = (ck) => (T.hov.key != null && ck === T.hoverContent ? LABEL_HOVER.HOVER_PRIO : null);
-    // ── Paczka B (`F.att`; przy OFF — `null`, wszystko niżej bez skutku): najechanie (`isHovCk`) — dla uwagi ──
+    // ── Paczka B (`F.att`; przy OFF — `null`, wszystko niżej bez skutku): alerty klatki — linia treści pod etykietą intruza
+    //    (`foeAlert`), kolonia ∞ — przez etykietę kolonii (`colonyAlert`); najechanie (`isHovCk`) — dla uwagi ──
     const ATT = F.att ?? null;
+    const foeAlert = new Map(), colonyAlert = new Map();
+    if (ATT) {
+      for (const a of F.alertView?.(proj) ?? []) {
+        const m = a.infinite ? colonyAlert : (a.visible && a.text && a.primary ? foeAlert : null);   // intruz — jeden alert (`primary`)
+        if (!m) continue;
+        const k = String(a.infinite ? a.holderId : a.foeId), prev = m.get(k);
+        if (!prev || a.env > prev.env) m.set(k, a);
+      }
+    }
+    const usedFoe = new Set();
+    const alertSize = THEME.fontSizeSmall ?? 9;
+    const alertLine = (a) => (a?.text ? { ...this._line(a.text, { size: alertSize, maxW: R.MAX_NAME_PX + 40 }), role: 'alert', alpha: a.lineAlpha } : null);
     const isHovCk = (ck) => T.hov.key != null && ck != null && ck === T.hoverContent;
-    const attBody = (it, b, ck) => {
+    // Kolonia z alertem ∞: linia treści (gdy intruz widoczny) i pasek w roli `alert` (obwiednia pulsów).
+    const colonyAlertOf = (b) => (ATT && b.kind === 'colony') ? (colonyAlert.get(String(b.id)) ?? null) : null;
+    const attBody = (it, b, ca, ck) => {
       if (!ATT) return it;
-      return Object.assign(it, { alerted: ATT.alertedColonies.has(String(b.id)), hov: isHovCk(ck) });
+      return Object.assign(it, { alerted: ATT.alertedColonies.has(String(b.id)), alertBar: ca ? ca.env * HUD_ALERT.COLONY_BAR_ALPHA : 0,
+        hov: isHovCk(ck) });
     };
     // REFORMA ZAKŁADEK T2 (strojenie 1, zachowanie 5): tarcze, na które rozwinięcie i przypięcie nie wchodzą — tarcza swojego ciała
     // (`it.clear`), a do tego tarcza ciała-gospodarza stacji i tarcza kotwicy stosu (księżyc → planeta).
@@ -830,12 +849,15 @@ export class HudLabelLayer {
           const key = b.key, selected = isSelBody(b);
           const L = this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T);
           const lines = L.lines;
+          const ca = colonyAlertOf(b), al = alertLine(ca);     // paczka B — kolonia ∞ z alertem
+          if (al) lines.push(al);
           const box = this._labelBox(lines);
           const it = { key, kind: b.kind, ax: d.x, ay: d.y, clear: d.r, w: box.w, h: box.h, lines, selected,
             role: 'primary', prio: (L.expanded ? hovPrio(bodyCk(b)) : null) ?? (selected ? LABEL_PRIO.selected : b.home ? LABEL_PRIO.home : b.kind === 'colony' ? LABEL_PRIO.colony : LABEL_PRIO.station),
             target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
-          Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
-          attBody(it, b, bodyCk(b));
+          Object.assign(it, { expanded: L.expanded || !!al, expFrom: 1, expAlpha: L.expAlpha });
+          if (al) it.alertLine = true;
+          attBody(it, b, ca, bodyCk(b));
           pushItem(pinIt(it, L.baseH, b.kind === 'station' ? 'station' : 'body', b.id));
         }
         continue;
@@ -849,6 +871,10 @@ export class HudLabelLayer {
         // T1: najechana zwinięta „+N” — rozwinięcie GŁOWY grupy (ciało, które etykieta nazywa), bez rozwijania szyny.
         const L = this._t1BodyLines(head.b, { selected, ck: bodyCk(head.b), collapsedOthers: proj1.length - 1 }, F, T);
         const lines = L.lines;
+        // Paczka B — kolonia ∞ z alertem w zwiniętej grupie: alert na etykiecie grupy (pierwszy członek z alertem).
+        const gca = ATT ? (proj1.map((x) => colonyAlertOf(x.b)).find((a) => a) ?? null) : null;
+        const gal = alertLine(gca);
+        if (gal) lines.push(gal);
         const box = this._labelBox(lines);
         // T2: grupa bez przypiętego członka — kotwica wyszła do własnej etykiety, a głowa reszty nie jest kotwicą: klik zwiniętej
         // etykiety zaznacza obiekt, który etykieta nazywa (nie przypiętą kotwicę). Poza tym — kotwica (jak dziś).
@@ -858,10 +884,11 @@ export class HudLabelLayer {
         const it = { key, kind: 'group', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: box.w, h: box.h, lines, selected,
           role: 'primary', prio: (L.expanded ? hovPrio(bodyCk(head.b)) : null) ?? (selected ? LABEL_PRIO.selected : LABEL_PRIO.group), members: proj1.map((x) => x.b.key),
           target };
-        Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
+        Object.assign(it, { expanded: L.expanded || !!gal, expFrom: 1, expAlpha: L.expAlpha });
+        if (gal) it.alertLine = true;
         if (ATT) {
           Object.assign(it, { alerted: proj1.some((x) => x.b.kind === 'colony' && ATT.alertedColonies.has(String(x.b.id))),
-            hov: isHovCk(bodyCk(head.b)) });
+            alertBar: gca ? gca.env * HUD_ALERT.COLONY_BAR_ALPHA : 0, hov: isHovCk(bodyCk(head.b)) });
         }
         pushItem(pinIt(it, L.baseH));
         continue;
@@ -871,18 +898,21 @@ export class HudLabelLayer {
         const rkey = b.key, selected = isSelBody(b);
         const L = this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T);
         const lines = L.lines;
+        const ca = colonyAlertOf(b), al = alertLine(ca);       // paczka B — kolonia ∞ z alertem (wiersz szyny)
+        if (al) lines.push(al);
         const box = this._labelBox(lines);
         const row = { key: rkey, kind: b.kind, w: box.w, h: box.h, lines, selected,
           target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
-        Object.assign(row, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha, baseH: L.baseH, ck: bodyCk(b) });
-        attBody(row, b, bodyCk(b));
+        Object.assign(row, { expanded: L.expanded || !!al, expFrom: 1, expAlpha: L.expAlpha, baseH: L.baseH, ck: bodyCk(b) });
+        if (al) row.alertLine = true;
+        attBody(row, b, ca, bodyCk(b));
         return row;
       });
       const size = railBlockSize(rows);
       const anySel = rows.some((r) => r.selected);
       const it = { key: 'r:' + anchorId, kind: 'rail', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: size.w, h: size.h,
         rows, selected: anySel, role: 'primary', prio: anySel ? LABEL_PRIO.selected : LABEL_PRIO.group };
-      if (ATT) Object.assign(it, { alerted: rows.some((r) => r.alerted), hov: rows.some((r) => r.hov) });
+      if (ATT) Object.assign(it, { alertLine: rows.some((r) => r.alertLine), alerted: rows.some((r) => r.alerted), hov: rows.some((r) => r.hov) });
       const exp = rows.filter((r) => r.expanded);
       it.expanded = exp.length > 0;
       if (exp.some((r) => r.ck === T.hoverContent && T.hov.key != null)) it.prio = LABEL_HOVER.HOVER_PRIO;
@@ -897,13 +927,15 @@ export class HudLabelLayer {
       if (d && pointInRect(d.x, d.y, map)) {
         const ck = bodyCk(b);
         const L = this._t1BodyLines(b, { selected: true, ck }, F, T);
-        const lines = [...L.lines, ...this._t2Lines(T2)];
+        const ca = colonyAlertOf(b), al = alertLine(ca);       // paczka B — kolonia ∞ z alertem (linia przed wierszem akcji)
+        const lines = [...L.lines, ...(al ? [al] : []), ...this._t2Lines(T2)];
         const box = this._labelBox(lines);
         const it = { key: b.key, kind: b.kind, ax: d.x, ay: d.y, clear: d.r, w: box.w, h: box.h, lines, selected: true,
           role: 'primary', prio: hovPrio(ck) ?? LABEL_PRIO.selected,
           target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys },
           expanded: true, expFrom: 1, expAlpha: L.expAlpha, pinLabel: true, pinHover: T2.hoverBtn };
-        attBody(it, b, ck);
+        if (al) it.alertLine = true;
+        attBody(it, b, ca, ck);
         pushItem(pinPinned(it, L.baseH, b.kind === 'station' ? 'station' : 'body', b.id));
       }
     }
@@ -991,6 +1023,11 @@ export class HudLabelLayer {
       const expanded = !!ck && T.contentKeys.has(ck);
       const baseH = this._labelBox(lines).h;
       if (expanded) for (const s of T.content.get(ck) ?? []) lines.push(this._line(s, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
+      // Paczka B — intruz z alertem: linia treści pod etykietą (najmocniejszy alert w klastrze).
+      let fa = null;
+      if (ATT && isEnemy) for (const p of c.items) { const a = foeAlert.get(String(p.id)); if (a && (!fa || a.env > fa.env)) fa = a; }
+      const al = alertLine(fa);
+      if (al) { lines.push(al); usedFoe.add(String(fa.foeId)); }
       const t1 = { expanded, baseH, expAlpha: expanded ? T.alphaOf(ck) : 0, prio: expanded ? hovPrio(ck) : null };
       const box = this._labelBox(lines);
       const ax = single ? c.items[0].x : c.x, ay = single ? c.items[0].y : c.y;
@@ -998,9 +1035,9 @@ export class HudLabelLayer {
       const it = { key, kind: isEnemy ? 'enemy' : 'vessel', ax, ay, clear: single ? Math.max(2, c.items[0].r, bracketClear) : 3, w: box.w, h: box.h, lines,
         selected, role: isEnemy ? 'foreign' : 'primary', prio: t1.prio ?? (selected ? LABEL_PRIO.selected : isEnemy ? LABEL_PRIO.enemy : LABEL_PRIO.own),
         target: isEnemy ? { type: 'enemy', id: ids[0], systemId: sys } : vesselsTarget(ids, sys) };
-      Object.assign(it, { expanded: t1.expanded, expFrom: 1, expAlpha: t1.expAlpha });
+      Object.assign(it, { expanded: t1.expanded || !!al, expFrom: 1, expAlpha: t1.expAlpha });
       if (ATT) {
-        Object.assign(it, { alerted: sids.some((id) => ATT.alertedVessels.has(id)),
+        Object.assign(it, { alertLine: !!al, alerted: sids.some((id) => ATT.alertedVessels.has(id)),
           focusSel: sids.some((id) => ATT.focusIds.has(id)), hov: (!!ck && isHovCk(ck)) || t1Hovered(c) || hk === 'lbl:' + key });
       }
       return pinIt(it, t1.baseH);
@@ -1014,6 +1051,19 @@ export class HudLabelLayer {
       if (show) pushItem(vesselItem(c, false));
     }
     for (const c of enemyClusters) pushItem(vesselItem(c, true));
+    // Paczka B — alert bez etykiety intruza (plakietki floty wyłączone w ☰, intruz poza klastrami): etykieta NA ŻĄDANIE przy
+    // widocznym intruzie, z samą linią treści (tożsamość wg wywiadu jest w linii); intruz niewidoczny — nic (mgła wojny).
+    if (ATT) {
+      for (const [fid, a] of foeAlert) {
+        if (usedFoe.has(fid) || !a.foeScr || !pointInRect(a.foeScr.x, a.foeScr.y, map)) continue;
+        const al = alertLine(a);
+        if (!al) continue;
+        const lines = [al], box = this._labelBox(lines);
+        pushItem({ key: 'ha:' + fid, kind: 'alert', ax: a.foeScr.x, ay: a.foeScr.y, clear: HUD_ALERT.RING_R1, w: box.w, h: box.h,
+          lines, selected: false, role: 'foreign', prio: LABEL_PRIO.selected, target: { type: 'enemy', id: fid, systemId: sys },
+          expanded: false, expFrom: 1, expAlpha: 1, alertLine: true, alerted: true, hov: false });
+      }
+    }
     // Strzałki krawędzi — statki poza kadrem (zawsze, także bez żadnej etykiety w kadrze — 497); strony osobno (własne —
     // `primary`, wrogie — `foreign`), wróg w tym samym sektorze co własne — przesunięty wzdłuż krawędzi.
     const arrows = this._edgeArrows(offScreen, F, map);
@@ -1129,17 +1179,25 @@ export class HudLabelLayer {
 
   // `expFrom` / `expAlpha` (REFORMA ZAKŁADEK T1): linie od `expFrom` (rozwinięcie) z dodatkowym kryciem (fade-in / wygasanie);
   // domyślnie — bez zmian (wszystkie linie jak dziś). `hoverBtn` (T2): przycisk przypięcia pod kursorem.
-  _drawBox(ctx, box, lines, color, barAlpha, fade, alignRight = false, expFrom = Infinity, expAlpha = 1, hoverBtn = null) {
+  _drawBox(ctx, box, lines, color, barAlpha, fade, alignRight = false, expFrom = Infinity, expAlpha = 1, hoverBtn = null, alertBar = 0) {
     const R = HUD_LABELS;
     ctx.globalAlpha = barAlpha * fade;
     ctx.fillStyle = THEME.bgPrimary;
     ctx.fillRect(box.x, box.y, box.w, box.h);
+    // Paczka B — kolonia ∞ z alertem: pasek w roli `alert` (obwiednia pulsów) na ciemnym pasku.
+    if (alertBar > 0 && this._roles?.alert) {
+      ctx.globalAlpha = alertBar * fade;
+      ctx.fillStyle = this._roles.alert;
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+    }
     let y = box.y + R.PAD_Y;
     lines.forEach((ln, i) => {
       if (i > 0) y += R.LINE_GAP;
       const x = alignRight ? box.x + box.w - R.PAD_X - ln.w : box.x + R.PAD_X;
       const a = (i === 0 ? 1 : R.SUB_ALPHA) * fade * (i >= expFrom ? expAlpha : 1);
       if (ln.kind === 'actions') this._drawActions(ctx, ln, x, y, color, fade * (i >= expFrom ? expAlpha : 1), hoverBtn);
+      // Paczka B — linia treści alertu: rola `alert`, własne krycie (gaśnie z alertem; bez krycia rozwinięcia T1).
+      else if (ln.role) this._drawLine(ctx, ln, x, y + ln.size, this._roles?.[ln.role] ?? color, (ln.alpha ?? 1) * fade);
       else this._drawLine(ctx, ln, x, y + ln.size, color, a);
       y += ln.h;
     });
@@ -1165,6 +1223,7 @@ export class HudLabelLayer {
   draw(ctx, F, c) {
     const R = HUD_LABELS;
     const roles = F.roles;
+    this._roles = roles;
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'miter';
     ctx.setLineDash([]);
@@ -1194,10 +1253,10 @@ export class HudLabelLayer {
         ctx.fillStyle = color;
         for (const r of rr.rows) { ctx.beginPath(); ctx.arc(rr.railX, r.lineY, R.RAIL_DOT_R, 0, Math.PI * 2); ctx.fill(); }
         for (const r of rr.rows) {
-          // Paczka B — wiersz szyny z własnym poziomem uwagi (`r.att` — przy OFF brak).
+          // Paczka B — wiersz szyny z własnym poziomem uwagi (`r.att` — przy OFF brak) i paskiem alertu kolonii ∞.
           const rf = r.att != null ? (p.fade ?? 1) * r.att : fade;
           this._drawBox(ctx, { x: r.x, y: r.y, w: r.w, h: r.h }, r.lines, color, r.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, rf, p.side === 'W',
-            r.expFrom ?? Infinity, r.expAlpha ?? 1);
+            r.expFrom ?? Infinity, r.expAlpha ?? 1, null, r.alertBar ?? 0);
         }
         continue;
       }
@@ -1207,7 +1266,7 @@ export class HudLabelLayer {
       ctx.stroke();
       // T1 (I8.3): rozwinięta etykieta po stronie W rośnie W LEWO (prawa krawędź przy kotwicy) — tekst do prawej, nazwa stoi.
       this._drawBox(ctx, p, p.lines, color, p.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, fade, p.expanded === true && p.side === 'W',
-        p.expFrom ?? Infinity, p.expAlpha ?? 1, p.pinHover ?? null);
+        p.expFrom ?? Infinity, p.expAlpha ?? 1, p.pinHover ?? null, p.alertBar ?? 0);
     }
     // Strzałki krawędzi — trójkąt ku krawędzi + liczba.
     const DIRS = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
@@ -1323,9 +1382,9 @@ export class HudLabelLayer {
         ...(T ? { expanded: !!p.expanded || (p.kind === 'rail' && p.rows.some((r) => r.expanded)), pinned: !!p.pinned,
           rows: p.kind === 'rail' ? p.rows.map((r) => r.lines.map((l) => l.text)) : undefined } : {}),
         ...(p.pinLabel ? { pinLabel: true, pinShift: r1(p.pinShift ?? 0) } : {}),
-        // Paczka B — poziom uwagi; wiersze szyny — poziom każdego wiersza.
-        ...(p.att != null ? { att: +(+p.att).toFixed(3), alerted: !!p.alerted,
-          rowsAtt: p.kind === 'rail' ? p.rows.map((r) => +(+(r.att ?? 1)).toFixed(3)) : undefined } : {}),
+        // Paczka B — poziom uwagi, alert (linia treści, pasek kolonii ∞); wiersze szyny — poziom każdego wiersza.
+        ...(p.att != null ? { att: +(+p.att).toFixed(3), alerted: !!p.alerted, alertLine: !!p.alertLine,
+          alertBar: +(+(p.alertBar ?? 0)).toFixed(3), rowsAtt: p.kind === 'rail' ? p.rows.map((r) => +(+(r.att ?? 1)).toFixed(3)) : undefined } : {}),
       })),
       arrows: (L?.arrows ?? []).map((a) => ({ edge: a.edge, x: r1(a.x), y: r1(a.y), count: a.count, role: a.role })),
       zones: this._zones.length,

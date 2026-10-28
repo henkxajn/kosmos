@@ -7,6 +7,7 @@
 import { STATION_MODULES } from '../data/StationModuleData.js';
 import { buildShipEntry, worstTone } from './FleetPictureLogic.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { enemyVesselNamed } from '../utils/VesselReveal.js';   // Finding 568 — jedna reguła nazwy obcego statku
 
 // Ikony typu kolonii (dwujęzyczność nie dotyczy — emoji uniwersalne).
 export const COLONY_ICON = { home: '🏠', colony: '🏙️', outpost: '⛺' };
@@ -228,7 +229,8 @@ export function systemDisplayName(systemId, sources = {}) {
  * Zbieracz punktów etykiet statków AKTYWNEGO układu — wejście do clusterScreenPoints.
  * Mgła wojny: wrogowie wyłącznie przez ctx.enemyQuality (istniejące bramki intel):
  *   'unknown' → pomijany, 'rumor' → wpis ANONIMOWY (name '?', bez fleetId),
- *   'contact'/'detailed' → pełna nazwa. Wraki pomijane (entry.isWreck — 3f).
+ *   'contact'/'detailed' → pełna nazwa (Finding 568: `VesselReveal.enemyVesselNamed` — ta sama reguła co rozwinięcie T1
+ *   i linia treści alertu HUD). Wraki pomijane (entry.isWreck — 3f).
  *
  * @param {object[]} vessels — vesselManager.getAllVessels()
  * @param {object} ctx —
@@ -254,7 +256,7 @@ export function gatherVesselLabels(vessels, ctx = {}) {
     if (enemy) {
       const q = ctx.enemyQuality?.(v.id) ?? 'unknown';
       if (q === 'unknown') continue;                           // mgła wojny — niewykryty
-      const anonymous = q === 'rumor';
+      const anonymous = !enemyVesselNamed(q);
       out.push({
         x: pos.x, y: pos.y, id: v.id,
         name: anonymous ? '?' : entry.name,

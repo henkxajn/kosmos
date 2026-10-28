@@ -11,9 +11,9 @@
 //   • skok warp: w układzie odlotu dłuższe kreski od punktu odlotu do krawędzi kadru + glif z nazwą układu DOCELOWEGO TRASY
 //     (trasa wieloprzeskokowa — cel trasy, kierunek — bieżący przeskok);
 //   • linia rysowana tylko w oknie (+ margines) — `clipRunsToRect` z fazą kresek (koszt rasteryzacji — Finding 527).
-//   • paczka B (flaga `hudAttention` — `F.att`): mnożnik uwagi z modelu uwagi — zaznaczona (także członek zaznaczonej floty)
-//     i najechana 1,0, reszta `HUD_ATTENTION.ROUTE_DIM` (przejście `FADE_MS` czasu realnego). Przy OFF — kod paczki A co do
-//     bitu.
+//   • paczka B (flaga `hudAttention` — `F.att`): mnożnik uwagi z modelu uwagi — zaznaczona (także członek zaznaczonej floty),
+//     najechana i alertowana 1,0, reszta `HUD_ATTENTION.ROUTE_DIM` (przejście `FADE_MS` czasu realnego). Przy OFF — kod
+//     paczki A co do bitu.
 // ⚠ Moduł importuje się pod node (keeper `hud_routes_smoke` — atrapa ctx): bez three i bez DOM.
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';

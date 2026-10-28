@@ -161,6 +161,7 @@ import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { outlinerKeyAction } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2-4 — klawisze outlinerów (§7.16)
+import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';   // ARKUSZ HUD paczka B — flaga (490)
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
@@ -6157,8 +6158,11 @@ export class GameScene {
     if (this.uiManager?.overlayManager?.isAnyOpen?.()) return;
     // Patrz _handleTacticalLeftClick — bypass isOverUI dla CANVAS targetów
     // (game viewport), DOM panele dalej blokowane.
+    // ARKUSZ HUD paczka B — Finding 490 (D-HUD-17, poprawka minimalna): przy `hudAttention` prawy klik pyta `isOverUI` także dla
+    // celu `CANVAS` — nad powierzchnią UI (kolumny, pas dolny z chipami warstw, belki, panele) bez menu mapy. Obejście `CANVAS`
+    // było dla overlayu (wtedy `isOverUI` = cały ekran), a ten przypadek wraca wyżej (`isAnyOpen`).
     const isGameCanvas = e.target?.tagName === 'CANVAS';
-    if (!isGameCanvas && this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
+    if ((!isGameCanvas || isHudAttentionOn(GAME_CONFIG.FEATURES)) && this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
 
     let target = this._resolveClickTarget(e.clientX, e.clientY);
     if (!target) return;

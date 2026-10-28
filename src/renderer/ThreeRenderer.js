@@ -59,11 +59,13 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMo
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
-import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika)
+import { orbitClockSec, simClockMs } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika); paczka B — puls celownika
 import { isHudOrbitsOn, planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
   hudOrbitSyncKey } from './HudOrbitLogic.js';   // ARKUSZ HUD H0 (D-HUD-7) — orbity w kolorach motywu
 import { isHudRadarOn } from '../ui/HudRadarLogic.js';   // ARKUSZ HUD H1 (D-HUD-3/4) — radar na warstwie HUD 2D
 import { isHudRoutesOn } from '../ui/HudRouteLogic.js';   // ARKUSZ HUD paczka A (H3, D-HUD-8) — trasy na warstwie HUD 2D
+// ARKUSZ HUD paczka B — celownik wroga w rytmie alertu (flaga `hudAttention`).
+import { isHudAttentionOn } from '../ui/HudAttentionLogic.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -7845,10 +7847,19 @@ export class ThreeRenderer {
     }
     const vm = window.KOSMOS?.vesselManager;
     if (!vm) { if (this._enemyAlertMarkers.size) this._disposeAllEnemyAlertMarkers(); return; }
-    const tt = this._clock.getElapsedTime();
-    const pulse = 0.5 + 0.5 * Math.sin(tt * 3.2);   // 0..1, wspólna faza (radar-sync)
-    const opacity = 0.35 + 0.55 * pulse;            // 0.35..0.90 — nigdy niewidoczny
-    const pulseScale = ALERT_MARKER_SCALE * (1 + 0.16 * pulse);
+    // ARKUSZ HUD paczka B (D-HUD-12, flaga `hudAttention`) — puls okresowy na zegarze SYMULACJI (pauza — celownik stoi; przed
+    // pierwszym tikiem — pełny), a w czasie alertu tego wroga celownik pulsuje w rytmie alertu (jeden rysunek z pierścieniami
+    // alertu warstwy HUD — `HudFocusLayer` ich wtedy nie rysuje). Flaga OFF — zegar realny, jak dotąd.
+    const attOn = isHudAttentionOn(GAME_CONFIG.FEATURES);
+    let pulse;
+    if (attOn) {
+      const sim = simClockMs();
+      pulse = sim == null ? 1 : 0.5 + 0.5 * Math.sin((sim / 1000) * 3.2);
+    } else {
+      const tt = this._clock.getElapsedTime();
+      pulse = 0.5 + 0.5 * Math.sin(tt * 3.2);   // 0..1, wspólna faza (radar-sync)
+    }
+    const hud = attOn ? window.KOSMOS?.hudLayer : null;
     const camPos = this.camera?.position;            // skala wg dystansu → stały rozmiar EKRANOWY
     const active = new Set();
     for (const [vid, entry] of this._vessels) {
@@ -7867,6 +7878,11 @@ export class ThreeRenderer {
         this.scene.add(m);
         this._enemyAlertMarkers.set(vid, m);
       }
+      // Paczka B — w czasie alertu obwiednia alertu zastępuje puls okresowy (dwa impulsy, potem jak dotąd).
+      const env = hud?.alertEnvelopeFor?.(vid) ?? 0;
+      const pv = env > 0 ? env : pulse;
+      const opacity = 0.35 + 0.55 * pv;            // 0.35..0.90 — nigdy niewidoczny
+      const pulseScale = ALERT_MARKER_SCALE * (1 + 0.16 * pv);
       const p = entry.sprite.position;
       m.position.set(p.x, p.y, p.z);
       m.material.opacity = opacity;

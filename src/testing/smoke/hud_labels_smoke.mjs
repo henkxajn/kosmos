@@ -22,6 +22,10 @@
 //   L8  ucinanie z „…” (513) — pełna nazwa, gdy się mieści
 //   L9  tarcza obiektu z projektora HUD (`HudProjection.objectScreenDisc` — przeniesione z `BodyCardSideLogic` w T4; piny
 //       dawnego `body_card_side_smoke` C2): ciało, statek, stacja; za kamerą — brak; stacja bliżej niż próg radaru — jest
+//   L10 (ARKUSZ HUD paczka B, Finding 568 — decyzja właściciela 2026-10-28, wariant „b”) JEDNA reguła nazwy obcego statku:
+//       etykieta (`MapLabelLogic.gatherVesselLabels`), rozwinięcie T1 (`LabelHoverLogic.enemyVesselExpansionLines`) i linia
+//       treści alertu (`HudAlertLogic.alertIdentity`) — przy każdej jakości wywiadu ta sama odpowiedź „nazwa / bez nazwy” co
+//       `VesselReveal.enemyVesselNamed` (nazwa od `contact`); trzy powierzchnie pytają tę funkcję (pin źródłowy)
 //
 //   ⚠ PRZECELOWANE 2026-10-26 (REFORMA ZAKŁADEK T2, `TABS_REFORM_PLAN.md` §5.3, za zgodą): L5c–L5f opisują klik zwiniętej
 //     grupy i etykietę na tarczy przy `labelPin` OFF (dzisiejszy kod, piny bez zmian — blok L5 przestawia flagę). Przy ON
@@ -484,6 +488,35 @@ header('L9  tarcza obiektu z projektora HUD (`objectScreenDisc`)');
   const defNull = projD ? projD.point(ST.x, ST.y, ST.z) : 'brak';
   ok(!!dClose && Math.abs(dClose.x - 640) < 2 && dClose.r > 100 && defNull === null,
     `L9d: stacja 0,006 j. przed kamerą (bliżej niż próg radaru 0,01 j.) — tarcza jest (r ${dClose?.r?.toFixed?.(0)} px); KONTROLA: domyślny próg projektora ją odrzuca`);
+}
+
+// ═══ L10 ═════════════════════════════════════════════════════════════════════
+header('L10  Finding 568 — jedna reguła nazwy obcego statku (etykieta · rozwinięcie T1 · linia alertu)');
+{
+  const ML = await tryImport('../../ui/MapLabelLogic.js');
+  const LH = await tryImport('../../ui/LabelHoverLogic.js');
+  const AL = await tryImport('../../ui/HudAlertLogic.js');
+  const VR = await tryImport('../../utils/VesselReveal.js');
+  const I18 = await tryImport('../../i18n/i18n.js');
+  const tt = I18?.t ?? ((k) => k);
+  const NAME = 'Furiat', ROLE = 'Okręt testowy';
+  const foe = V('v_e', { name: NAME, isEnemy: true, ownerEmpireId: 'emp_1' });
+  const QS = ['unknown', 'rumor', 'contact', 'detailed', 'RUMOR', 'secret'];
+  const label = (q) => { try { return ML?.gatherVesselLabels?.([foe], { getScreenPos: () => ({ x: 10, y: 10 }), enemyQuality: () => q, activeSystemId: 'sys_home' })?.[0] ?? null; } catch (e) { return { err: e.message }; } };
+  const t1 = (q) => { try { return LH?.enemyVesselExpansionLines?.({ quality: q, roleLabel: ROLE }, tt)?.[0] ?? null; } catch { return null; } };
+  const alertId = (q) => { try { return AL?.alertIdentity?.({ quality: q, roleLabel: ROLE, name: NAME }, tt) ?? null; } catch { return null; } };
+  const rows = QS.map((q) => ({ q, named: VR?.enemyVesselNamed?.(q) === true, lbl: label(q), t1: t1(q), al: alertId(q) }));
+  const namedQs = rows.filter((r) => r.named).map((r) => r.q).join(',');
+  ok(typeof VR?.enemyVesselNamed === 'function' && namedQs === 'contact,detailed',
+    `L10a SEDNO: reguła — nazwa od \`contact\` (${namedQs || '—'}); każda inna jakość (także nieznany napis) — bez nazwy`);
+  const shown = rows.filter((r) => r.q !== 'unknown');
+  const agree = shown.every((r) => !!r.lbl && (r.lbl.name === NAME) === r.named && (r.al === NAME) === r.named
+    && (r.t1 === ROLE) === r.named && (r.named || r.t1 === tt('intel.unidentifiedContact')));
+  ok(agree, `L10b SEDNO: etykieta, rozwinięcie T1 i linia alertu — ta sama odpowiedź przy każdej jakości (${shown.map((r) => `${r.q}: ${r.lbl?.name ?? '—'} / ${r.t1 ?? '—'} / ${r.al ?? '—'}`).join(' · ')})`);
+  ok(label('unknown') === null && rows.find((r) => r.q === 'rumor')?.lbl?.name === '?' && rows.find((r) => r.q === 'contact')?.lbl?.name === NAME,
+    'L10c KONTROLA: `unknown` — bez etykiety, `rumor` — „?”, `contact` — nazwa (etykieta jak przed 568)');
+  const uses = ['../../ui/MapLabelLogic.js', '../../ui/LabelHoverLogic.js', '../../ui/HudAlertLogic.js'].filter((p) => /\benemyVesselNamed\(/.test(strip(src(p))));
+  ok(uses.length === 3, `L10d: trzy powierzchnie pytają \`VesselReveal.enemyVesselNamed\` (${uses.length}/3 — jedno źródło progu)`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

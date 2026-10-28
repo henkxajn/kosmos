@@ -15,11 +15,14 @@
 // Treść rysują PODWARSTWY (`addSublayer`): `prepare(F)` → część klucza klatki (tanio, w każdej klatce), `collect(F, proj)` →
 // `{ count, animating, … }` (geometria w px logicznych), `draw(ctx, F, collected)`; opcjonalnie `debug()`, `destroy()`.
 // Rzut — jeden wspólny projektor (`HudProjection.makeHudProjector` z `ThreeRenderer.getHudView()`).
-// Paczka B (flaga `hudAttention`): stan klatki dla modelu uwagi (`F.att` — ostrość, zbiór statków w ostrości) liczony RAZ na
-// klatkę, wspólny dla podwarstw.
+// Paczka B (flaga `hudAttention`): stan klatki dla modelu uwagi i alertów (`F.att` — ostrość, alerty) i widok
+// alertów w px (`F.alertView(proj)` — położenia, linia treści wg wywiadu) liczone RAZ na klatkę, wspólne dla podwarstw; rejestr
+// alertów (`alerts`) żyje tu, zasilają go zdarzenia wykrycia (`HudRadarLayer`).
 // ⚠ Moduł importuje się pod node (keeper `hud_layer_smoke` — atrapa kanwy i ctx): bez three i bez DOM poza kanwą.
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME, themeEpoch } from '../config/ThemeConfig.js';
+import { t, getLocale } from '../i18n/i18n.js';
+import { getPrimaryRole } from '../entities/Vessel.js';
 import { resolveHudRoles } from './HudPalette.js';
 import { readClickSelection } from './ClickIntentLogic.js';
 import { getMapInsets } from './MapInsets.js';
@@ -28,8 +31,13 @@ import { makeHudProjector } from './HudProjection.js';
 import { HudRadarLayer } from './HudRadarLayer.js';   // H1-2 — radar (D-HUD-3, D-HUD-4, D-HUD-b)
 import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy statków (D-HUD-8, D-HUD-9, D-HUD-10)
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
-import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1) — nawiasy zaznaczenia
+import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) — nawiasy zaznaczenia, pierścienie i wektor alertu
 import { isHudAttentionOn, focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
+import {
+  HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
+} from './HudAlertLogic.js';
+
+const AU_TO_PX = GAME_CONFIG.AU_TO_PX;     // px logiki gry na 1 AU (pozycje statków i ciał)
 
 // [klatki rysunku] okno pomiaru kosztu (bramka H1: ≤ 0,5 ms na klatkę CPU)
 const COST_WINDOW = 120;
@@ -90,24 +98,28 @@ export class HudLayer {
     this._size = { cssW: 0, cssH: 0, pr: 0 };
     this._gate = { shown: false, reason: 'start' };
     this._pointer = null;       // paczka A — kursor nad mapą: { lx, ly (px logiczne), rawX, rawY (px CSS), overUI }
+    this.alerts = new HudAlertStore();   // paczka B — rejestr alertów (zegar symulacji); zasilają go zdarzenia wykrycia
     this.stats = { frames: 0, passes: 0, draws: 0, clears: 0, lastMs: 0, maxMs: 0, costs: [] };
     for (const s of (sublayers ?? this._defaultSublayers())) this.addSublayer(s);
     if (autoStart) this.start();
   }
 
   /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, etykiety (ich anti-overlap
-   *  czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify warp), nawiasy
+   *  czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify warp), nawiasy i alerty
    *  (na wierzchu — czytają etykiety tej klatki: narożnik pod przypiętą etykietą pominięty). */
   _defaultSublayers() {
     return [new HudRouteLayer(this), new HudRadarLayer(this), new HudLabelLayer(this), new HudFocusLayer(this)];
   }
 
   /**
-   * Paczka B — strojenie stałych z konsoli (bramka): `KOSMOS.hudLayer.tune({ LABEL_DIM: 0.3 })` — klucze modelu uwagi
-   * i nawiasów (`HUD_ATTENTION`); nieznane pominięte; `tune(null)` — wartości domyślne. Przeżywa do F5.
+   * Paczka B — strojenie stałych z konsoli (bramka): `KOSMOS.hudLayer.tune({ LABEL_DIM: 0.3, ALERT_MS: 2000 })` — klucze
+   * modelu uwagi i nawiasów (`HUD_ATTENTION`) i alertów (`HUD_ALERT`); nieznane pominięte; `tune(null)` — wartości domyślne.
+   * Przeżywa do F5.
    */
   tune(patch = {}) {
-    const r = patch == null ? { ...resetHudAttention() } : { ...tuneHudAttention(patch) };
+    const r = patch == null
+      ? { ...resetHudAttention(), ...resetHudAlert() }
+      : { ...tuneHudAttention(patch), ...tuneHudAlert(patch) };
     this._lastKey = null;
     this._wake = true;
     const um = (typeof window !== 'undefined') ? window.KOSMOS?.uiManager : null;
@@ -115,14 +127,92 @@ export class HudLayer {
     return r;
   }
 
-  /** Paczka B — stan klatki modelu uwagi: ostrość (zaznaczenie), zbiór statków w ostrości; wejście `alerted` modelu —
-   *  puste (bez rejestru alertów). */
+  /** Paczka B — obwiednia trwającego alertu obcego `foeId` (0–1; celownik wroga pulsuje w rytmie alertu); flaga OFF — 0. */
+  alertEnvelopeFor(foeId) {
+    if (!isHudAttentionOn(GAME_CONFIG.FEATURES)) return 0;
+    return this.alerts.envelopeFor(foeId, simClockMs());
+  }
+
+  /** Paczka B — stan klatki modelu uwagi: alerty oglądanego układu, ostrość, zbiór statków w ostrości. */
   _attentionFrame(K, sel, F) {
+    const alerts = this.alerts.frame(F.sim).filter((a) => a.systemId === F.activeSystemId);
     const fleet = sel.fleetId != null ? K.fleetSystem?.getFleet?.(sel.fleetId) : null;
+    const alertedVessels = new Set(), alertedColonies = new Set();
+    for (const a of alerts) {
+      if (a.kind === 'vessel') alertedVessels.add(String(a.holderId)); else alertedColonies.add(String(a.holderId));
+      alertedVessels.add(String(a.foeId));
+    }
     return {
-      on: true, alerts: [], focus: focusActive(sel, 0), focusIds: focusVesselIds(sel, fleet?.memberIds ?? []),
-      alertedVessels: new Set(), alertedColonies: new Set(),
+      on: true, alerts, focus: focusActive(sel, alerts.length), focusIds: focusVesselIds(sel, fleet?.memberIds ?? []),
+      alertedVessels, alertedColonies,
     };
+  }
+
+  /**
+   * Paczka B — alerty klatki w px logicznych: środek obiektu gracza, położenie intruza widoczne dla gracza (mgła wojny —
+   * `alertFoeEndpoint`: `rumor` — ostatnio znane, `unknown` — brak), czy intruz ma celownik wroga, linia treści wg wywiadu
+   * (odległość w AU z położeń logiki gry, namiar na ekranie). Intruz niewidoczny — bez położenia i bez treści (fail-closed).
+   */
+  _alertView(F, proj) {
+    const att = F.att;
+    if (!att?.alerts?.length || !proj) return [];
+    const K = F.K, tr = K.threeRenderer, vm = K.vesselManager, intel = K.intelSystem, em = K.entityManager;
+    const wpa = proj.worldPerAU;
+    const loc = getLocale();
+    const out = [];
+    for (const a of att.alerts) {
+      // Obiekt gracza: statek — sprite (inaczej pozycja logiczna); kolonia — jej ciało.
+      let holderPos = null, holderScr = null, holderDiscPx = 0;
+      if (a.kind === 'vessel') {
+        const v = vm?.getVessel?.(a.holderId);
+        holderPos = v?.position ?? null;
+        const w = tr?.getVesselWorldPosition?.(a.holderId)
+          ?? (holderPos && wpa > 0 ? { x: holderPos.x * wpa / AU_TO_PX, y: 0.3, z: holderPos.y * wpa / AU_TO_PX } : null);
+        const p = w ? proj.point(w.x, w.y, w.z) : null;
+        if (p) holderScr = { x: p.x, y: p.y };
+      } else {
+        const body = em?.get?.(a.holderId) ?? null;
+        holderPos = body && Number.isFinite(body.x) && Number.isFinite(body.y) ? { x: body.x, y: body.y } : null;
+        const w = tr?.getBodyWorldInfo?.(a.holderId);
+        const p = w ? proj.point(w.x, w.y, w.z) : null;
+        if (p) { holderScr = { x: p.x, y: p.y }; holderDiscPx = w.r > 0 ? w.r * proj.pxPerWorld(p.depth) : 0; }
+      }
+      // Intruz — wyłącznie położenie, które gracz widzi (wywiad), i widoczny sprite.
+      const foe = vm?.getVessel?.(a.foeId) ?? null;
+      const rec = intel?.getVesselContact?.(a.foeId) ?? null;
+      const quality = rec?.quality ?? 'unknown';
+      const end = foe ? alertFoeEndpoint({ livePos: foe.position, quality, positionLastKnown: rec?.positionLastKnown ?? null }) : null;
+      let foeScr = null;
+      if (end) {
+        const e = tr?._vessels?.get?.(a.foeId);
+        const w = (e?.sprite && e.sprite.visible !== false) ? tr.getVesselWorldPosition?.(a.foeId) : null;
+        const p = w ? proj.point(w.x, w.y, w.z) : null;
+        if (p) foeScr = { x: p.x, y: p.y };
+      }
+      const visible = !!(end && foeScr);
+      const distAU = end ? distanceAU(holderPos, end, AU_TO_PX) : null;
+      const text = visible ? alertContentText({
+        quality, roleLabel: foe ? t(`fleetPicture.role.${getPrimaryRole(foe)}`) : null, name: foe?.name ?? null,
+        distAU, bearingDeg: screenBearingDeg(holderScr, foeScr),
+      }, { t, locale: loc }) : null;
+      out.push({ ...a, holderScr, holderDiscPx, foeScr, visible, text, distAU,
+        crosshair: visible && tr?._enemyAlertMarkers?.has?.(a.foeId) === true });
+    }
+    // Jeden komplet (pierścienie, wektor, linia treści) na intruza: alert obiektu zaznaczonego, inaczej (tryb Y) — najbliższego,
+    // przy remisie — najmłodszego. Błyski na granicach — wszystkich alertów (każdy widoczny radar).
+    const sel = F.sel ?? {};
+    const selV = new Set([...(sel.vesselIds ?? []), sel.leadId].filter((x) => x != null).map(String));
+    const selB = sel.entityId != null ? String(sel.entityId) : null;
+    const rank = (a) => [(a.kind === 'vessel' ? selV.has(String(a.holderId)) : selB === String(a.holderId)) ? 0 : 1,
+      Number.isFinite(a.distAU) ? a.distAU : Infinity, a.age ?? 0];
+    const less = (p, q) => { for (let i = 0; i < p.length; i++) { if (p[i] < q[i]) return true; if (p[i] > q[i]) return false; } return false; };
+    const best = new Map();
+    for (const a of out) {
+      const k = String(a.foeId), r = rank(a), cur = best.get(k);
+      if (!cur || less(r, cur.r)) best.set(k, { a, r });
+    }
+    for (const a of out) a.primary = best.get(String(a.foeId))?.a === a;
+    return out;
   }
 
   addSublayer(s) {
@@ -278,11 +368,20 @@ export class HudLayer {
     };
     let key = `${tr?.getCameraMoveEpoch?.() ?? 0}|${themeEpoch()}|${F.activeSystemId}|${cssW}x${cssH}@${uiScale}*${pr}`
       + `|${sel.leadId ?? ''}|${sel.entityId ?? ''}`;
-    // Paczka B (flaga `hudAttention`): stan uwagi klatki — przed podwarstwami (każda czyta `F.att`); przy OFF — `null`.
+    // Paczka B (flaga `hudAttention`): stan uwagi i alerty klatki — przed podwarstwami (każda czyta `F.att`); przy OFF — `null`.
     const att = isHudAttentionOn(F.features) ? this._attentionFrame(K, sel, F) : null;
     F.att = att;
+    let viewMemo = null, viewProj = null;
+    F.alertView = (proj) => {
+      if (!att) return [];
+      if (viewMemo && viewProj === proj) return viewMemo;
+      viewProj = proj;
+      return (viewMemo = this._alertView(F, proj));
+    };
     if (att) {
       key += `|A${att.focus ? 1 : 0}:${sel.stationId ?? ''}:${sel.fleetId ?? ''}:${(sel.vesselIds ?? []).join(',')}`;
+      // Alerty biegną na zegarze symulacji — klatka przy każdym przyroście wieku (w pauzie wiek stoi → spoczynek).
+      for (const a of att.alerts) key += `|a${a.id}:${Math.round(a.age)}`;
     }
     for (const s of this._sublayers) key += '|' + (s.prepare?.(F) ?? '');
     if (key === this._lastKey && !this._animating && !this._wake) {

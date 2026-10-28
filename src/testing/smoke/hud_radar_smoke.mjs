@@ -129,6 +129,10 @@ const setWorld = () => {
 };
 setWorld();
 FEATURES.hudRadar = true;
+// ARKUSZ HUD paczka B — ten keeper pinuje radar z H1 (błysk 0,8 s na zegarze realnym, ☰ „Radar” = `hudRadarVisible`), czyli
+// ścieżkę OFF flagi `hudAttention`; ścieżkę ON (alerty ~1,6 s na zegarze symulacji, stan chipu [R]) pinują `hud_alert_smoke`
+// i `hud_layer_chips_smoke`.
+FEATURES.hudAttention = false;
 
 const mkCtx = () => {
   const t = { calls: [] };

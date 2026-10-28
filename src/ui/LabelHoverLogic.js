@@ -16,6 +16,7 @@
 // Czysty: bez three, bez DOM i bez `window`; `t` i formatery liczb podaje wołający (keeper woła wszystko pod node).
 import { HUD_LABELS, labelCandidates, placeLabels } from './HudLabelLogic.js';
 import { resolveSystemReveal } from '../utils/SystemReveal.js';
+import { enemyVesselNamed } from '../utils/VesselReveal.js';   // Finding 568 — jedna reguła nazwy obcego statku
 
 // Stałe (ms czasu realnego, px logiczne). Strojenie na bramce.
 export const LABEL_HOVER = Object.freeze({
@@ -341,11 +342,12 @@ export function vesselExpansionLines(f, t) {
 
 /**
  * Obcy statek — treść wg wywiadu (504): poniżej `contact` — wyłącznie „niezidentyfikowany kontakt” (bez nazwy, roli
- * i danych); od `contact` — rola.
+ * i danych); od `contact` — rola (nazwę niesie etykieta). Próg — `VesselReveal.enemyVesselNamed` (Finding 568: ta sama
+ * reguła co etykieta i linia treści alertu HUD).
  * @param {{ quality:string, roleLabel?:string|null }} f
  */
 export function enemyVesselExpansionLines(f, t) {
-  const known = f?.quality === 'contact' || f?.quality === 'detailed';
+  const known = enemyVesselNamed(f?.quality);
   if (!known) return cap([t('intel.unidentifiedContact')]);
   return cap([f?.roleLabel ?? '']);
 }
