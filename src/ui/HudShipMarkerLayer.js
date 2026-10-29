@@ -2,7 +2,7 @@
 // podwarstwa warstwy HUD 2D (`HudLayer`) między radarem a etykietami — rysowana POD etykietami, zbierana PRZED nimi (etykiety
 // omijają znacznik jak nawiasy — `labelObstacles`). Logika — czysty `HudShipMarkerLogic`; tu: odczyt świata (`F.K` =
 // `window.KOSMOS`), rzut wspólnym projektorem i rysunek Canvas 2D w px logicznych.
-//   • zestaw statków = reguła insygnium (`ThreeRenderer._syncInsignia`, które przy fladze ON nie powstaje): sprite w scenie
+//   • zestaw statków = reguła dawnego insygnium frakcji (usuniętego w SM-Z): sprite w scenie
 //     i widoczny, nie wrak, obcy od `contact` albo w starciu z graczem — sprite'y istnieją wyłącznie w oglądanym układzie;
 //   • kierunek ruchu z logiki gry (`classifyMotion`) rzutowany na ekran: punkt statku i punkt przesunięty wzdłuż ruchu
 //     w świecie (płaszczyzna ekliptyki: x układu → oś X, y układu → oś Z);
@@ -15,7 +15,7 @@ import { orbitClockSec } from '../utils/SimClock.js';
 import { routeSpec, warpSpec } from './HudRouteLogic.js';
 import { makeAttentionMemory } from './HudAttentionLogic.js';
 import {
-  HUD_SHIP_MARKER, isHudShipMarkerOn, shipMarkerRelation, shipMarkerRole, shipMarkerVisible, classifyMotion,
+  HUD_SHIP_MARKER, shipMarkerRelation, shipMarkerRole, shipMarkerVisible, classifyMotion,
   screenDirection, screenAngleDeg, markerGeometry, markerZoomFade, markerAttentionTarget, markerAlpha, routeMotionPoint,
 } from './HudShipMarkerLogic.js';
 
@@ -35,7 +35,6 @@ export class HudShipMarkerLayer {
 
   /** Statki ze znacznikiem i ich stan (relacja, ruch, uwaga) — część klucza klatki. */
   prepare(F) {
-    if (!isHudShipMarkerOn(F.features)) { this._prep = { on: false, items: [] }; return 'sm:0'; }
     const K = F.K, tr = K.threeRenderer, vm = K.vesselManager, intel = K.intelSystem, dip = K.diplomacySystem;
     const orbital = K.orbitalSpaceSystem;
     const cleanView = tr?._cleanView === true || K.uiManager?._cleanView === true;

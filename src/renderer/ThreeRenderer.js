@@ -159,11 +159,9 @@ const BODY_VEIL_OPACITY = 0.72;             // 0=widać, 1=ukryte (grey-out do c
 const ALERT_MARKER_SCALE = 0.7;           // bazowa skala billboardu (encircle ~0.3 sprite statku)
 const ALERT_MARKER_REF_DIST = 60;           // dystans kamery [WU] dający skalę bazową; dalej → skala rośnie (stały rozmiar ekranowy)
 const ALERT_MARKER_PULSE_MAX = 1.16;        // szczyt pulsu celownika (1 + 0,16 · puls) — limit ekranowy liczony dla szczytu
-const INSIGNIA_WORLD_SIZE = 0.32;           // [j.] rozmiar świata szewronu insygniów (bez limitu ekranowego)
 // POLISH P2a (CP14 — limit ekranowy także dla efektów walki przy „Obserwuj”): rodzaje efektów w rozmiarze świata,
 // które z bliska zakrywały kadr (sonda P2a, scena 3 na 2: pierścień osłony rośnie do 0,30 j. promienia).
 const FX_WATCH_CAPPED = new Set(['flash', 'shieldRing', 'explosion', 'explosionRing']);
-const INSIGNIA_LIFT_RATIO = 0.4 / 0.32;     // zawieszenie szewronu nad statkiem w proporcji do rozmiaru (dawne 0,4 j. przy 0,32 j.)
 const _WATCH_V = new THREE.Vector3();       // POLISH P2a — wektor roboczy głębi widoku (`_viewDepth`)
 const _HP_R = new THREE.Vector3();          // POLISH P2b (D2) — oś „w prawo” ekranu w świecie (paski HP)
 const _HP_U = new THREE.Vector3();          // POLISH P2b (D2) — oś „w górę” ekranu w świecie (paski HP)
@@ -178,9 +176,6 @@ const GHOST_PULSE_HOVER_MIN    = 0.35;      // dolna granica pulsu (głębszy ko
 const GHOST_PULSE_HOVER_MAX    = 1.0;       // górna granica pulsu (pełna jasność)
 const GHOST_PULSE_HOVER_FREQ   = 7.5;       // częstotliwość pulsu (rad/s) — szybszy niż bazowy 3.2/6.0
 
-// ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
-// Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
-const _INSIGNIA_TEX_CACHE = new Map();      // colorHex → THREE.CanvasTexture
 const _GAS_LIGHT_DIR = new THREE.Vector3();
 const _SUN_TO_CAM    = new THREE.Vector3(); // scratch — kierunek gwiazda→kamera (S4) // scratch — kierunek do gwiazdy (C1a, bez alokacji per klatkę)
 
@@ -467,7 +462,6 @@ export class ThreeRenderer {
     this._glideLastMs          = null;       // POLISH P2b (D3, Finding 461) — czas realny ostatniej klatki płynnego zbliżenia
     // POLISH P2a (CP17) — statki aktywnych starć z udziałem gracza (zmiana zbioru → ponowne nałożenie widoczności wywiadu).
     this._combatRevealed       = new Set();
-    this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
     this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
     this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
     this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
@@ -3698,7 +3692,10 @@ export class ThreeRenderer {
         this._syncCombatReveal();        // POLISH P2a (CP17) — koniec starcia z graczem: widoczność wg wywiadu
         // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
-        this._syncInsignia();
+        // POLISH P2a (CP14) — macierz widoku z TEJ klatki (kontroler właśnie przestawił kamerę; render przelicza ją dopiero
+        // później): limit rozmiaru ekranowego pasków HP i celownika wroga bez opóźnienia o klatkę. Dawniej na początku
+        // `_syncInsignia` — insygnia frakcji usunięte (ZNACZNIK STATKU SM-Z: znacznik statku rysuje warstwa HUD 2D).
+        this.camera.updateMatrixWorld();
         this._syncCombatHpBars();        // POLISH P2b (D2, Finding 451, CP16) — paski HP uczestników aktywnego starcia
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
         this._syncTacticalGlyphs();      // F2 tryb Y — glify-billboardy (no-op poza trybem)
@@ -5780,7 +5777,7 @@ export class ThreeRenderer {
   // ════════════════════════════════════════════════════════════════════════
 
   // Kolor frakcji statku (cache per ownerEmpireId). Own=mint, enemy=archetyp, wrak=szary.
-  // Używany przez smugi walki, tint insygniów, pierścień selekcji.
+  // Używany przez paski HP starcia i glify trybu Y (wróg).
   _factionColorHex(vessel) {
     if (!vessel) return 0x888888;
     if (vessel.isWreck) return factionColorRaw({ isWreck: true });
@@ -5795,14 +5792,14 @@ export class ThreeRenderer {
   }
 
   // Centralna bramka fog-of-war: czy wrogi statek jest „widoczny" dla gracza
-  // (intel ≥ contact)? Own zawsze true. Używana przez pickability/insygnia/PPM.
+  // (intel ≥ contact)? Own zawsze true. Używana przez pickability/PPM.
   // Chroni reformę detekcji obserwatorium — bez niej smugi/selekcja zdradzają wroga.
   _isEnemyEndpointVisible(vesselId) {
     const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
     if (!v) return false;
     const isEnemy = isEnemyVessel(v);
     const q = isEnemy ? (window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality ?? 'unknown') : null;
-    // POLISH P2a (CP17) — wróg w aktywnym starciu z graczem jest widoczny niezależnie od wywiadu (salwa otwierająca, insygnia).
+    // POLISH P2a (CP17) — wróg w aktywnym starciu z graczem jest widoczny niezależnie od wywiadu (salwa otwierająca).
     return isEndpointVisibleInCombat({ isEnemy, quality: q, inPlayerEngagement: isEnemy && this._isCombatRevealed(vesselId) });
   }
 
@@ -6689,99 +6686,11 @@ export class ThreeRenderer {
   // wydechu (_addVesselModel3D → entry.exhaust, modulowany w _applyExhaust).
   // Helper _getGlowTex zostaje (potencjalny reuse dla innych FX).
 
-  // ── Slice 5 — insygnia frakcji (billboard nad statkiem, intel-gated) ─────
-  // Osobny overlay mark&sweep (jak sensor ringi) — unika threadowania async
-  // model-swap + intel-visibility. Wróg widoczny TYLKO ≥contact (brak przecieku tożsamości).
-  static _createInsigniaTexture(colorHex) {
-    if (_INSIGNIA_TEX_CACHE.has(colorHex)) return _INSIGNIA_TEX_CACHE.get(colorHex);
-    const sz = 64;
-    const cv = document.createElement('canvas'); cv.width = cv.height = sz;
-    const c = cv.getContext('2d');
-    const hex = '#' + (colorHex >>> 0).toString(16).padStart(6, '0').slice(-6);
-    c.strokeStyle = hex; c.fillStyle = hex; c.lineWidth = 7; c.lineJoin = 'round';
-    c.globalAlpha = 0.95;
-    c.beginPath();                         // szewron
-    c.moveTo(sz * 0.22, sz * 0.64);
-    c.lineTo(sz * 0.50, sz * 0.30);
-    c.lineTo(sz * 0.78, sz * 0.64);
-    c.stroke();
-    c.beginPath();                         // kropka pod szewronem
-    c.arc(sz * 0.50, sz * 0.74, sz * 0.07, 0, Math.PI * 2); c.fill();
-    const tex = new THREE.CanvasTexture(cv);
-    tex.needsUpdate = true;
-    _INSIGNIA_TEX_CACHE.set(colorHex, tex);
-    return tex;
-  }
-
-  _syncInsignia() {
-    // POLISH P2a (CP14) — macierz widoku z TEJ klatki (kontroler właśnie przestawił kamerę; render przelicza ją dopiero
-    // później): limit rozmiaru ekranowego szewronów i celownika (`_syncEnemyAlertMarkers` zaraz po) bez opóźnienia o klatkę.
-    this.camera.updateMatrixWorld();
-    // Znacznik statku w warstwie HUD (D-SM-1…6) zastępuje insygnium — przy fladze ON insygnium nie powstaje (sprite'y z poprzedniej
-    // klatki zwolnione), a odświeżenie macierzy kamery wyżej zostaje (czytają ją `_syncCombatHpBars` i `_syncEnemyAlertMarkers`).
-    if (!GAME_CONFIG.FEATURES?.fcInsignia || GAME_CONFIG.FEATURES?.hudShipMarker === true) {
-      if (this._insigniaSprites.size) this._disposeAllInsignia();
-      return;
-    }
-    const vm = window.KOSMOS?.vesselManager;
-    if (!vm) { if (this._insigniaSprites.size) this._disposeAllInsignia(); return; }
-    const active = new Set();
-    for (const [vid, entry] of this._vessels) {
-      if (!entry?.sprite?.visible) continue;       // ukryty ghost (unknown) → brak insygniów
-      const v = vm.getVessel?.(vid);
-      if (!v || v.isWreck) continue;
-      if (isEnemyVessel(v) && !this._isEnemyEndpointVisible(vid)) continue;  // wróg tylko ≥contact
-      active.add(vid);
-      this._upsertInsignia(vid, entry, v);
-    }
-    for (const k of [...this._insigniaSprites.keys()]) if (!active.has(k)) this._disposeInsignia(k);
-  }
-
-  _upsertInsignia(vid, entry, vessel) {
-    const col = this._factionColorHex(vessel);
-    let ins = this._insigniaSprites.get(vid);
-    if (!ins || ins._col !== col) {
-      if (ins) this._disposeInsignia(vid);
-      const tex = ThreeRenderer._createInsigniaTexture(col);
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-      sp.scale.set(INSIGNIA_WORLD_SIZE, INSIGNIA_WORLD_SIZE, INSIGNIA_WORLD_SIZE);
-      sp._col = col;
-      this.scene.add(sp);
-      ins = sp;
-      this._insigniaSprites.set(vid, ins);
-    }
-    const p = entry.sprite.position;
-    // POLISH P2a (CP14, Finding 458) — limit rozmiaru EKRANOWEGO: szewron w rozmiarze świata 0,32 j. rósł przy zbliżeniu
-    // do 120–200 px i zasłaniał model (8–9 px przy „Obserwuj”). Powyżej limitu — mniejszy w świecie; zawieszenie nad
-    // statkiem w tej samej proporcji (0,4 / 0,32). Poniżej limitu — bez zmian.
-    // Głębia liczona w punkcie UNIESIONEGO szewronu (krok wstępny w głębi statku, potem poprawka) — szewron leży wyżej niż
-    // statek, więc limit liczony w głębi statku przekraczał się o ~3 % (zmierzone, sonda P2a: 37 px przy limicie 36).
-    const capOpts = { capPx: COMBAT_WATCH.INSIGNIA_MAX_PX, fovDeg: this.camera.fov, H: window.innerHeight || 1 };
-    let size = capBillboardWorld(INSIGNIA_WORLD_SIZE, { ...capOpts, depth: this._viewDepth(p) });
-    ins.position.set(p.x, p.y + size * INSIGNIA_LIFT_RATIO, p.z);
-    size = capBillboardWorld(INSIGNIA_WORLD_SIZE, { ...capOpts, depth: this._viewDepth(ins.position) });
-    ins.position.y = p.y + size * INSIGNIA_LIFT_RATIO;
-    ins.scale.set(size, size, size);
-    ins.material.opacity = entry.intelOpacity ?? 1.0;  // dopasuj do ghost-opacity (contact 0.5)
-  }
-
-  _disposeInsignia(vid) {
-    const ins = this._insigniaSprites.get(vid);
-    if (!ins) return;
-    this.scene.remove(ins);
-    ins.material?.dispose?.();   // tekstura (map) współdzielona z cache — NIE dispose
-    this._insigniaSprites.delete(vid);
-  }
-
-  _disposeAllInsignia() {
-    for (const k of [...this._insigniaSprites.keys()]) this._disposeInsignia(k);
-  }
-
   // ── Faza 2 (Obraz Operacyjny) — glify trybu taktycznego ────────────────────
   // Billboard-glif o stałym rozmiarze EKRANOWYM (wzór _syncEnemyAlertMarkers)
   // nad każdym statkiem; model GLB (DZIECI wrappera) ukrywany na czas trybu —
-  // NIGDY cały wrapper (jego .visible bramkuje insygnia/markery/labele, a pozycja
-  // kotwiczy wszystkie nakładki). Cache tekstur per (glif|kolor) — wzór insygniów.
+  // NIGDY cały wrapper (jego .visible bramkuje markery, etykiety i znacznik statku w HUD, a pozycja
+  // kotwiczy wszystkie nakładki). Cache tekstur per (glif|kolor).
   // Słownik ról/tonów WYŁĄCZNIE z FleetPictureLogic (twarda reguła planu §0).
 
   // Stałe tuningu trybu Y (2g — nazwane do oceny wizualnej Filipa):
@@ -7259,7 +7168,7 @@ export class ThreeRenderer {
   // wykrytego przez statek LUB obserwatorium (intel ≥ rumor — gate _isEnemyTargetable).
   // Pozycja = entry.sprite.position (przy rumor zamrożona na positionLastKnown przez
   // _applyVesselIntelVisibility → BRAK przecieku mgły wojny; tożsamość nie ujawniona —
-  // marker to tylko „tu jest wróg"). Mark&sweep (wzór _syncInsignia) + wspólny puls.
+  // marker to tylko „tu jest wróg"). Mark&sweep + wspólny puls.
   _getAlertReticleTex() {
     if (this._alertReticleTex) return this._alertReticleTex;
     const sz = 64;

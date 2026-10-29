@@ -199,16 +199,11 @@ export const GAME_CONFIG = {
     // ── Fleet Command Console — reforma wizualna statków na mapie 3D ───────
     // Master + sub-gate per slice (rollback per-feature bez restartu). Render/
     // runtime-only — brak migracji save. Selekcja LPM, walka na żywej mapie,
-    // kamera bitwy, rozkazy z mapy, skan/linie/insygnia/ramki.
+    // kamera bitwy, rozkazy z mapy, skan/linie/ramki.
     fcConsole:            true,   // Slice 0 — fundament (selekcja + FX harness + helpery)
     fcCombatFx:           true,   // Slice 1 — smugi/błyski walki + kamera bitwy + retire kina DSCS
     fcScanFx:             true,   // Slice 2 — efekty skanu (snop/pierścień/ping)
     fcBrackets:           true,   // Slice 4 — ramki zaznaczenia + paski HP/tarcza (#ui-canvas)
-    fcInsignia:           true,   // Slice 5 — insygnia frakcji nad statkiem
-    // Znacznik statku w warstwie HUD (D-SM-1…6, HUD_PLAN.md §„Znacznik statku”): daszek w kierunku ruchu / romb bez ruchu,
-    //   w rolach motywu (własny `primary`, obcy `foreign`, wróg `alert`) — ZAMIAST insygnium frakcji 3D (`_syncInsignia` przy
-    //   ON go nie tworzy). Brak klucza = OFF = insygnium jak przed krokiem. Render-only, bez migracji save.
-    hudShipMarker:        true,
     fcEnemyAlertMarker:   true,   // Pulsujący czerwony marker wykrytego wroga (≥rumor) na mapie 3D
     fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
     fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
@@ -504,6 +499,12 @@ export const GAME_CONFIG = {
     //     Sfery znikałby całkowicie na gwiazdach K/G/F — OFF nie ma prawa
     //     przywracać regresji, której ta flaga miała uniknąć (precedens V-260/D-V2z).
     sceneDepthUnification: true,
+
+    // ── ZNACZNIK STATKU — flaga na stałe ON od SM-Z (2026-10-29; HUD_PLAN.md §„Znacznik statku”) ──
+    // `hudShipMarker` (znacznik statku w warstwie HUD 2D — daszek w kierunku ruchu, romb bez ruchu, role motywu; D-SM-1…6):
+    //   klucz usunięty, kod czyta ścieżkę ON bez rozgałęzień. Usunięta ścieżka OFF — insygnia frakcji 3D (`_syncInsignia`,
+    //   szewron z kropką w kolorze frakcji nad modelem; limit `COMBAT_WATCH.INSIGNIA_MAX_PX`) wraz z flagą bez czytelnika
+    //   `fcInsignia`; przestawienie dawnych kluczy w konsoli nie ma skutku.
 
     // ── ARKUSZ HUD — flagi H0–H4 na stałe ON od B-Z (2026-10-28; HUD_PLAN.md §4.6) ──
     // `hudOrbits` (H0 — orbity w kolorach motywu), `hudRadar` (H1 — radar na warstwie HUD 2D), `hudLabels` (H2 — etykiety),

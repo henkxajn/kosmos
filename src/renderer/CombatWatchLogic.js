@@ -17,7 +17,6 @@ export const COMBAT_WATCH = Object.freeze({
   MARGIN_PX: 40,          // [px] margines prostokąta bezpiecznego (od krawędzi ekranu i paneli)
   MIN_SAFE_SIDE_PX: 120,  // [px] krótszy bok prostokąta bezpiecznego; mniej → cały ekran z marginesem
   ZOOM_MIN_DIST: 0.05,    // [j.] najmniejszy dystans kółkiem na czas „Obserwuj” (jak fokus statku)
-  INSIGNIA_MAX_PX: 36,    // [px] najwyżej — szewron insygniów frakcji (CP14; audyt P2 §10.11 pyt. 2)
   RETICLE_MAX_PX: 44,     // [px] najwyżej — czerwony celownik wykrytego wroga (CP14)
   FX_REF_DEPTH: 6,        // [j.] przy „Obserwuj” efekt walki nie większy na ekranie niż w tej głębi — kadr auto-fokusu (≤ 6 j.)
   NEAR_DEPTH: 0.01,       // [j.] punkt bliżej kamery niż to (albo za nią) — rzut nieokreślony

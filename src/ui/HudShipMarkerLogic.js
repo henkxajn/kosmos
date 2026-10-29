@@ -1,12 +1,12 @@
 // HudShipMarkerLogic — ZNACZNIK STATKU na mapie 3D (krok po ARKUSZU HUD; D-SM-1…6, HUD_PLAN.md §„Znacznik statku”): czysta
-// logika znacznika warstwy HUD 2D, który zastępuje insygnium frakcji (`ThreeRenderer._syncInsignia` — szewron z kropką
-// w kolorze frakcji nad modelem). Rysunek — `HudShipMarkerLayer` (podwarstwa pod etykietami).
+// logika znacznika warstwy HUD 2D, który zastąpił insygnium frakcji (dawny sprite 3D — szewron z kropką w kolorze
+// frakcji nad modelem; usunięty w SM-Z). Rysunek — `HudShipMarkerLayer` (podwarstwa pod etykietami).
 // Czysty: bez three i bez DOM, bez `window`; ZERO kolorów na sztywno (rolę zwraca się nazwą — barwę podaje
 // `HudPalette.resolveHudRoles`). Wielkości w px LOGICZNYCH UI (skala jak `#ui-canvas`).
 //   • rola (D-SM-1): własny — `primary`, obcy — `foreign` (token `textPrimary`; bez rozróżniania imperiów kolorem — nazwa jest
 //     w etykiecie), wróg — `alert` (wojna z właścicielem statku albo pasmo opinii „wrogie”; statek wrogi bez imperium);
-//   • widoczność = reguła insygnium dziś (fail-closed): sprite statku w scenie i widoczny, nie wrak, obcy — wywiad ≥ `contact`
-//     albo uczestnik starcia z graczem (`isEndpointVisibleInCombat` — ta sama funkcja co bramka insygnium); statek bez
+//   • widoczność = reguła dawnego insygnium (fail-closed): sprite statku w scenie i widoczny, nie wrak, obcy — wywiad ≥
+//     `contact` albo uczestnik starcia z graczem (`isEndpointVisibleInCombat`); statek bez
 //     sprite'a (zadokowany, w innym układzie, w skoku po pierwszym tiku) — bez znacznika; czysty widok (SHIFT) — bez (D-SM-4);
 //   • glif (D-SM-2): pusty daszek obrócony w kierunku RUCHU na ekranie; bez ruchu — pusty romb nad tarczą. Kierunek ruchu
 //     z logiki gry (`classifyMotion`): skok warp — kierunek układu docelowego (ten sam co kreski H3, `HudRouteLogic.warpSpec`);
@@ -39,11 +39,6 @@ const M = HUD_SHIP_MARKER;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const finite2 = (d) => !!d && Number.isFinite(d.x) && Number.isFinite(d.y);
 
-/** Flaga kroku: `FEATURES.hudShipMarker` — brak klucza = OFF (insygnium jak dziś, warstwa bez znaczników). */
-export function isHudShipMarkerOn(features) {
-  return features?.hudShipMarker === true;
-}
-
 // ── Rola (D-SM-1) ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -64,10 +59,10 @@ export function shipMarkerRole(relation) {
   return 'primary';
 }
 
-// ── Widoczność (reguła insygnium; D-SM-4) ─────────────────────────────────────────────────────────────────────────────
+// ── Widoczność (reguła dawnego insygnium; D-SM-4) ──────────────────────────────────────────────────────────────────────
 
 /**
- * Czy statek dostaje znacznik — ta sama reguła co insygnium dziś (`ThreeRenderer._syncInsignia`), fail-closed.
+ * Czy statek dostaje znacznik — ta sama reguła co dawne insygnium frakcji (usunięte w SM-Z), fail-closed.
  * @param {{ hasSprite:boolean, spriteVisible:boolean, isWreck:boolean, isEnemy:boolean, quality?:string|null,
  *   inPlayerEngagement?:boolean, cleanView?:boolean }} p
  */
@@ -202,8 +197,8 @@ export function markerAttentionTarget({ focus = false, selected = false, alerted
 }
 
 /**
- * Krycie znacznika: (`SELECTED_ALPHA` — zaznaczony, inaczej `MARKER_ALPHA`) × poziom uwagi × krycie wywiadu (jak model
- * i insygnium: `contact` 0,5) × gaśnięcie przy bliskim zoomie.
+ * Krycie znacznika: (`SELECTED_ALPHA` — zaznaczony, inaczej `MARKER_ALPHA`) × poziom uwagi × krycie wywiadu (jak model:
+ * `contact` 0,5) × gaśnięcie przy bliskim zoomie.
  */
 export function markerAlpha({ selected = false, attention = 1, intelOpacity = 1, zoomFade = 1 } = {}) {
   const base = selected ? M.SELECTED_ALPHA : M.MARKER_ALPHA;

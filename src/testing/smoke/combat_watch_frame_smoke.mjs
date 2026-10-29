@@ -7,6 +7,9 @@
 //   szewrony 121–199 px, celownik 119–138 px, pierścień znacznika 121–165 px (P2 §10.3).
 // CP13: kamera śledzi środek walki; dystans z dopasowania do rozpiętości uczestników z marginesem, w granicach.
 // CP14: szewrony i celownik z limitem rozmiaru ekranowego; pierścień starcia ukryty przy „Obserwuj”.
+// PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-Z): szewrony insygniów frakcji usunięte (znacznik statku w warstwie HUD 2D
+//   ma rozmiar stały w px — keeper `hud_ship_marker_smoke`) — T8c bez limitu szewronu, T11g pinuje usunięcie, T11g2 —
+//   odświeżenie macierzy kamery w pętli renderu (dawniej na początku `_syncInsignia`).
 // ⚠ `ThreeRenderer` i kontroler kamery nie importują się pod node (THREE) ⇒ matematyka kadru żyje w czystym
 //   `CombatWatchLogic` (wykonanie), sprawdzana NIEZALEŻNYM rzutem keepera (pełne macierze 4×4: `lookAt` kamery +
 //   perspektywa jak `PerspectiveCamera`); renderer pinuje źródło (komentarze zdjęte). Panel walki — wykonaniem.
@@ -228,7 +231,7 @@ header('T8  limit rozmiaru billboardu');
   console.log(`     szewron przy głębi 0,45: dziś ${px(0.32, 0.45).toFixed(1)} px → ${capped != null ? px(capped, 0.45).toFixed(1) : '—'} px; przy 50: ${far != null ? px(far, 50).toFixed(2) : '—'} px`);
   assert(capped != null && Math.abs(px(capped, 0.45) - 36) < 1e-9, 'T8a z bliska: dokładnie limit (36 px), dziś ~550 px');
   assert(far === 0.32, 'T8b z daleka (poniżej limitu): rozmiar świata bez zmian — dzisiejszy wygląd');
-  assert(C.INSIGNIA_MAX_PX === 36 && C.RETICLE_MAX_PX === 44, 'T8c limity: szewron 36 px, celownik 44 px (CP14)');
+  assert(C.INSIGNIA_MAX_PX === undefined && C.RETICLE_MAX_PX === 44, 'T8c limity: celownik 44 px (CP14); szewron insygniów usunięty (SM-Z)');
 }
 
 // ═══ T9 ═══════════════════════════════════════════════════════════════════════
@@ -298,10 +301,11 @@ header('T11 źródło `ThreeRenderer`');
   const eng = handler('vessel:engaged');
   assert(/if \(this\._watch\) return;/.test(eng) && eng.indexOf('if (this._watch) return;') < eng.indexOf('focusOn'),
     'T11f auto-fokus nowego starcia nie przejmuje obserwowanej walki');
-  const ins = body('  _upsertInsignia(vid, entry, vessel) {');
-  assert(/capBillboardWorld\(INSIGNIA_WORLD_SIZE/.test(ins) && /INSIGNIA_MAX_PX/.test(ins) && /_viewDepth\(ins\.position\)/.test(ins) && /INSIGNIA_LIFT_RATIO/.test(ins),
-    'T11g szewron: limit ekranowy w głębi UNIESIONEGO szewronu, zawieszenie w proporcji do rozmiaru');
-  assert(/this\.camera\.updateMatrixWorld\(\)/.test(body('  _syncInsignia() {')), 'T11g2 macierz widoku kamery bieżąca przed limitem (bez opóźnienia o klatkę przy zbliżaniu)');
+  assert(!/_upsertInsignia|_syncInsignia|INSIGNIA_WORLD_SIZE|INSIGNIA_LIFT_RATIO|INSIGNIA_MAX_PX/.test(tr),
+    'T11g szewron insygniów usunięty (SM-Z) — znacznik statku rysuje warstwa HUD w rozmiarze stałym w px');
+  const mw = loop.indexOf('this.camera.updateMatrixWorld()');
+  assert(mw > 0 && loop.indexOf('this._syncCombatHpBars()') > mw && loop.indexOf('this._syncEnemyAlertMarkers()') > mw,
+    'T11g2 macierz widoku kamery odświeżona w pętli renderu PRZED paskami HP i celownikiem (bez opóźnienia o klatkę przy zbliżaniu)');
   const ret = body('  _syncEnemyAlertMarkers() {');
   assert(/capBillboardWorld\(ALERT_MARKER_SCALE \* distFactor/.test(ret) && /RETICLE_MAX_PX/.test(ret), 'T11h celownik: limit ekranowy');
   const mk = body('  _tickEngagementMarkers(nowMs) {');

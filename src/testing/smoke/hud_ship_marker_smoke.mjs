@@ -5,7 +5,10 @@
 //
 // Wyłącznie LOGIKA (protokół HUD_PLAN §4.0, aneks 2026-10-23): bez pinów na stałych rysunku — liczby z tabeli stałych modułu,
 // nie z literałów keepera. Moduły powstają w kroku SM-1 — import dynamiczny (brak modułu = pin pada, suita się nie przerywa).
-//   M0  API; flaga `hudShipMarker` (brak klucza = OFF); podwarstwa przed etykietami; insygnium 3D bramkowane flagą
+// PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-Z): flaga `hudShipMarker` na stałe ON (klucz usunięty), insygnia frakcji 3D
+// usunięte — piny flagi i ścieżki OFF (M0c, M0e, M7, M8a) przecelowane na krok na stałe i pin czystości.
+//   M0  API; bez flagi (klucz usunięty); podwarstwa przed etykietami; macierz kamery odświeżana w pętli renderu (dawniej
+//       w `_syncInsignia`) PRZED paskami HP i celownikiem
 //   M1  rola wg relacji (D-SM-1): własny `primary`, obcy `foreign`, wróg `alert` (wojna / opinia wroga / rajder bez imperium)
 //   M2  mgła wojny (reguła insygnium, fail-closed): obcy od `contact` albo w starciu z graczem; bez sprite'a, ukryty, wrak — nic
 //   M3  kąt z wektora: cztery kierunki na ekranie (prawdziwy rzut) + skok warp (kierunek kresek H3)
@@ -13,8 +16,8 @@
 //   M5  czysty widok (SHIFT) — bez znacznika (logika i warstwa)
 //   M6  model uwagi: bez ostrości MARKER_ALPHA; z ostrością zaznaczony SELECTED_ALPHA, reszta × LABEL_DIM; alert / najechanie
 //       1; wywiad × krycie sprite'a; przejście FADE_MS czasu realnego; bez oddechu; gaśnięcie przy bliskim zoomie (progi nawiasów)
-//   M7  OFF = pusto: flaga wyłączona — zero znaczników, zero wywołań ctx podwarstwy, zero przeszkód etykiet
-//   M8  ślad stref kliku warstwy HUD: znacznik nie ma strefy — klik i pokrycie w każdym punkcie siatki jak bez znacznika
+//   M7  krok na stałe (SM-Z): bez klucza flagi znaczniki są; pin czystości — insygnia 3D, ich limit i obie flagi usunięte
+//   M8  ślad stref kliku warstwy HUD: znacznik nie ma strefy — klik i pokrycie w każdym punkcie siatki jak bez podwarstwy
 //   M9  pauza: zegar stoi — spoczynek warstwy (zero wywołań ctx); zegar ruszył — nowa styczna orbity, klatka
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -124,29 +127,26 @@ const mkHud = ({ only = true } = {}) => {
   return { ctx, hud, lay, frame: (now) => (hud ? hud.frame(now) : null), dbg: () => lay?.debug?.() ?? null };
 };
 const byId = (d) => new Map((d?.markers ?? []).map((m) => [m.id, m]));
-const PREV_FLAG = FEATURES.hudShipMarker;
-FEATURES.hudShipMarker = true;
 
 // ═══ M0 ══════════════════════════════════════════════════════════════════════
-header('M0  API, flaga, miejsce podwarstwy, insygnium 3D bramkowane flagą');
+header('M0  API, bez flagi, miejsce podwarstwy, macierz kamery w pętli renderu');
 {
-  const need = ['HUD_SHIP_MARKER', 'HUD_SHIP_MARKER_DEFAULTS', 'isHudShipMarkerOn', 'shipMarkerRelation', 'shipMarkerRole', 'shipMarkerVisible',
+  const need = ['HUD_SHIP_MARKER', 'HUD_SHIP_MARKER_DEFAULTS', 'shipMarkerRelation', 'shipMarkerRole', 'shipMarkerVisible',
     'orbitTangent', 'classifyMotion', 'routeMotionPoint', 'screenDirection', 'screenAngleDeg', 'markerGeometry', 'markerZoomFade', 'markerAttentionTarget',
     'markerAlpha', 'tuneHudShipMarker', 'resetHudShipMarker'];
   const missing = need.filter((n) => LG?.[n] === undefined);
   ok(missing.length === 0, `M0a: \`HudShipMarkerLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
   ok(typeof LY?.HudShipMarkerLayer === 'function', 'M0b: `HudShipMarkerLayer`');
-  ok(call('isHudShipMarkerOn', {}) === false && call('isHudShipMarkerOn', { hudShipMarker: false }) === false
-    && call('isHudShipMarkerOn', { hudShipMarker: true }) === true && call('isHudShipMarkerOn', null) === false,
-  'M0c: flaga — brak klucza / false / brak FEATURES = OFF; true = ON');
+  ok(!!LG && LG.isHudShipMarkerOn === undefined && !('hudShipMarker' in FEATURES) && !('fcInsignia' in FEATURES),
+    'M0c: bez flagi — `FEATURES` bez kluczy `hudShipMarker` i `fcInsignia`, moduł bez `isHudShipMarkerOn` (krok na stałe ON, SM-Z)');
   const hl = strip(src('../../ui/HudLayer.js'));
   ok(/new HudRadarLayer\(this\), new HudShipMarkerLayer\(this\), new HudLabelLayer\(this\)/.test(hl),
     'M0d: podwarstwa znacznika po radarze, PRZED etykietami (zbierana przed nimi — przeszkody etykiet; rysowana pod nimi)');
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
-  const i0 = tr.indexOf('  _syncInsignia() {'), body = i0 >= 0 ? tr.slice(i0, tr.indexOf('\n  }\n', i0)) : '';
-  ok(/hudShipMarker\s*===\s*true/.test(body) && /_disposeAllInsignia\(\)/.test(body)
-    && body.indexOf('this.camera.updateMatrixWorld()') >= 0 && body.indexOf('this.camera.updateMatrixWorld()') < body.indexOf('hudShipMarker'),
-    'M0e: `_syncInsignia` przy fladze ON zwalnia insygnia i wraca — po odświeżeniu macierzy kamery (czytają ją paski HP i celownik)');
+  const i0 = tr.indexOf('  _startLoop() {'), loop = i0 >= 0 ? tr.slice(i0, tr.indexOf('\n  }\n', i0)) : '';
+  const mw = loop.indexOf('this.camera.updateMatrixWorld()'), hp = loop.indexOf('this._syncCombatHpBars()'), am = loop.indexOf('this._syncEnemyAlertMarkers()');
+  ok(mw > 0 && hp > mw && am > mw && !/_syncInsignia/.test(loop),
+    'M0e: pętla renderu odświeża macierz kamery PRZED paskami HP i celownikiem wroga (dawniej na początku `_syncInsignia`, usuniętego)');
   const H = mkHud();
   ok(typeof H.lay?.handleClick !== 'function' && typeof H.lay?.coversUiPoint !== 'function' && typeof H.lay?.pinButtonAt !== 'function'
     && typeof H.lay?.labelObstacles === 'function', 'M0f: podwarstwa bez strefy kliku (klik idzie dalej, do pickera statków 3D); przeszkody etykiet — tak');
@@ -340,23 +340,25 @@ header('M6  model uwagi, wywiad, bliski zoom (bez oddechu)');
 }
 
 // ═══ M7 ══════════════════════════════════════════════════════════════════════
-header('M7  OFF = pusto');
+// PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-Z): dawne „M7 OFF = pusto” — ścieżka OFF usunięta razem z flagą.
+header('M7  krok na stałe (SM-Z) — bez flagi znaczniki są; pin czystości');
 {
-  FEATURES.hudShipMarker = false;
   const H = mkHud();
   const r = H.frame(1000);
   const d = H.dbg();
-  const lay = H.lay;
-  ok((d?.markers?.length ?? -1) === 0 && d?.on === false && (lay?.labelObstacles?.() ?? [1]).length === 0 && !H.ctx.calls.includes('stroke') && r !== 'drawn',
-    `M7a SEDNO: flaga OFF — zero znaczników, zero przeszkód etykiet, zero wywołań ctx (${r}, ${H.ctx.calls.length} wywołań)`);
-  delete FEATURES.hudShipMarker;
-  const H2 = mkHud();
-  H2.frame(1000);
-  ok((H2.dbg()?.markers?.length ?? -1) === 0 && !H2.ctx.calls.includes('stroke'), 'M7b: brak klucza flagi = OFF');
-  FEATURES.hudShipMarker = true;
-  const H3 = mkHud();
-  H3.frame(1000);
-  ok((H3.dbg()?.markers?.length ?? 0) > 0 && H3.ctx.calls.includes('stroke'), 'M7c KONTROLA: flaga ON — znaczniki rysowane (ten sam świat)');
+  ok(!('hudShipMarker' in FEATURES) && (d?.markers?.length ?? 0) > 0 && d?.on === true && H.ctx.calls.includes('stroke') && r === 'drawn',
+    `M7a SEDNO: bez klucza flagi — znaczniki rysowane (${d?.markers?.length ?? 0}, ${r})`);
+  // Pin czystości (źródło, komentarze zdjęte): ścieżka insygniów 3D, jej limit ekranowy i obie flagi usunięte.
+  const tr = strip(src('../../renderer/ThreeRenderer.js'));
+  const cw = strip(src('../../renderer/CombatWatchLogic.js'));
+  const gc = strip(src('../../config/GameConfig.js'));
+  const ly = strip(src('../../ui/HudShipMarkerLayer.js'));
+  const INS = /_syncInsignia|_upsertInsignia|_disposeInsignia|_disposeAllInsignia|_createInsigniaTexture|_insigniaSprites|INSIGNIA_WORLD_SIZE|INSIGNIA_LIFT_RATIO|_INSIGNIA_TEX_CACHE|INSIGNIA_MAX_PX/;
+  ok(tr.length > 0 && !INS.test(tr) && !INS.test(cw), 'M7b SEDNO: `ThreeRenderer` i `CombatWatchLogic` bez ścieżki insygniów (metody, rejestr, stałe, limit)');
+  ok(gc.length > 0 && !/\bfcInsignia\s*:/.test(gc) && !/\bhudShipMarker\s*:/.test(gc) && !/hudShipMarker|isHudShipMarkerOn/.test(ly),
+    'M7c: `GameConfig` bez kluczy `fcInsignia` i `hudShipMarker`; podwarstwa bez bramki flagi');
+  ok(INS.test('  _syncInsignia() {') && INS.test('COMBAT_WATCH.INSIGNIA_MAX_PX') && /_syncEnemyAlertMarkers\(\)/.test(tr) && /RETICLE_MAX_PX/.test(cw)
+    && /\bfcEnemyAlertMarker\s*:/.test(gc), 'M7d KONTROLA PINU: wzorzec trafia w dawne nazwy; źródła wczytane (celownik wroga i jego flaga zostają)');
 }
 
 // ═══ M8 ══════════════════════════════════════════════════════════════════════
@@ -370,13 +372,13 @@ header('M8  ślad stref kliku warstwy HUD — znacznik bez strefy');
   for (let x = 0; x <= 1280; x += 40) for (let y = 0; y <= 832; y += 40) pts.push([x, y]);
   const trace = (hud) => pts.map(([x, y]) => `${hud.handleClick(x, y, x * 1.25, y * 1.25) ? 1 : 0}${hud.coversUiPoint(x, y) ? 1 : 0}${hud.pinButtonAt(x, y) == null ? 0 : 1}`).join('');
   const on = trace(H.hud);
-  FEATURES.hudShipMarker = false;
-  const H0 = mkHud();
-  H0.frame(1000);
-  const off = trace(H0.hud);
-  FEATURES.hudShipMarker = true;
+  // PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-Z): porównanie z warstwą BEZ podwarstwy znacznika (dawniej — flaga OFF).
+  const c0 = mkCtx();
+  const H0 = HL?.HudLayer ? new HL.HudLayer({ width: 0, height: 0, getContext: () => c0 }, { autoStart: false, now: () => 0, sublayers: [] }) : null;
+  H0?.frame(1000);
+  const off = H0 ? trace(H0) : null;
   ok(ms.length > 0 && on === off && /^0+$/.test(on),
-    `M8a SEDNO: ${pts.length} punktów (środki i glify ${ms.length} znaczników + siatka) — klik / pokrycie UI / przycisk przypięcia jak bez znacznika (0 różnic)`);
+    `M8a SEDNO: ${pts.length} punktów (środki i glify ${ms.length} znaczników + siatka) — klik / pokrycie UI / przycisk przypięcia jak bez podwarstwy znacznika (0 różnic)`);
   // Przeszkody etykiet: domyślnie prostokąt każdego znacznika; strojenie `MARKER_OBSTACLE: 0` — etykiety znacznika nie widzą.
   const n1 = H.lay?.labelObstacles?.()?.length ?? -1;
   H.hud.tune({ MARKER_OBSTACLE: 0 });
@@ -404,6 +406,5 @@ header('M9  pauza — spoczynek; zegar biegnie — nowa styczna orbity');
     `M9b: zegar ruszył — styczna orbity obrócona (${a0}° → ${a1}°), klatka narysowana`);
 }
 
-FEATURES.hudShipMarker = PREV_FLAG;
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

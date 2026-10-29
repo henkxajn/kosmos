@@ -57,7 +57,7 @@ export function isPlayerEngagement(encounter) {
 }
 
 // POLISH P2a (CP17, Findingi 455, 462) — czy statek jest widoczny NA MAPIE (koniec smugi salwy, model w pełnym kryciu,
-// insygnia): własny zawsze; wróg — wywiad ≥ contact ALBO uczestnik aktywnego starcia z graczem. Wróg w starciu z graczem
+// znacznik statku w HUD): własny zawsze; wróg — wywiad ≥ contact ALBO uczestnik aktywnego starcia z graczem. Wróg w starciu z graczem
 // jest „ujawniony” na potrzeby rysowania: panel walki nazywa go od pierwszej rundy (nazwa, kadłub, broń, log strzałów),
 // więc mapa nie zdradza niczego ponad panel. Dawniej salwa otwierająca (przy wywiadzie `rumor` — starcie rusza przy
 // 0,3123 AU, „sensor lock” przy 0,30 AU) nie była rysowana wcale, a model wroga przez całe starcie miał krycie 0,5.
