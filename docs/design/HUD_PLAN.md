@@ -12,6 +12,10 @@
 > na HEAD `ad65e47` (ARKUSZ UI zamknięty — `UI_PLAN.md` §4.7; origin = `ad65e47`, ahead 0); w fazie A zero zmian
 > w `src/`. Plan zacommitowany razem z podpisami — commit `docs(HUD A)` = kotwica H0. Podpisy właściciela 2026-10-21:
 > odczytania §1.1 (1)–(5), decyzje D-HUD-1…18, D-HUD-b/c bez zmian, cięcie H0 → H4 (§4), 504 — osobny drobny krok.
+> **Dodatek po zamknięciu arkusza — ZNACZNIK STATKU, ✅ 2026-10-29** (§9): `db97c64` SM-1 · `c6ad1cc` SM-Z —
+> zielony „ptaszek” nad statkiem (insygnium frakcji 3D) zastąpiony znacznikiem w warstwie HUD (daszek w kierunku ruchu,
+> romb bez ruchu, rola z relacji; D-SM-1…6); bramka właściciela PASS 2026-10-29 (bez strojenia); ✅ 574; 🟠 575,
+> ⚪ 576, 577 — brak otwartego kroku.
 > **Protokół od H2 — aneks 2026-10-23 (§4.0):** paczki A (H2 + H3 + 493) i B (H4), commit raz na paczkę (paczka A —
 > trzy commity kodu A-1 / A-2 / A-3 na prośbę właściciela), keepery wyłącznie dla logiki, walidator → arkusz kontaktowy
 > HTML na 5 motywach, bramka = oglądanie + pętla strojenia.
@@ -30,13 +34,13 @@
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\hud-phase-a\` — `probes/` (sondy), `results/` (JSON, zrzuty PNG,
 > `hexes_hud.txt` — pełna lista kolorów na sztywno), `HANDOVER_HUD_PHASE_A.md`.
 > **Oznaczenia** jak w `UI_PLAN.md`: `[code]` — odczyt źródła (linie przy `ad65e47`) · `[measured]` — pomiar w grze albo
-> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#573 (§3; 517–521 z H0,
+> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#577 (§3; 517–521 z H0,
 > 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek, 544–548 z T3, 549–552 z T1, 553–555 z T2,
-> 556–557 z T5, 558–564 z T6, 565–567 z T4 reformy zakładek, 568–572 z paczki B, 573 z B-Z); 488, 490, 493, 497, 502 i 503 —
+> 556–557 z T5, 558–564 z T6, 565–567 z T4 reformy zakładek, 568–572 z paczki B, 573 z B-Z, 574–577 ze znacznika statku); 488, 490, 493, 497, 502 i 503 —
 > `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie:
 > 517; po H0: 522; po H1: 528; po paczce A: 531; po inwentarzu reformy zakładek: 544; po T3 reformy zakładek: 549; po T1
 > reformy zakładek: 553; po T2 reformy zakładek: 556; po T5 reformy zakładek: 558; po T6 reformy zakładek: 565; po T4:
-> 568; po paczce B: 573; **po B-Z: 574**.
+> 568; po paczce B: 573; po B-Z: 574; **po znaczniku statku: 578**.
 
 ---
 
@@ -466,7 +470,7 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 
 ---
 
-## 3. Findingi #504–#573 (rejestr macierzysty; 517–521 z H0, 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek, 544–548 z T3, 549–552 z T1, 553–555 z T2, 556–557 z T5, 558–564 z T6, 565–567 z T4 reformy zakładek, 568–572 z paczki B, 573 z B-Z)
+## 3. Findingi #504–#577 (rejestr macierzysty; 517–521 z H0, 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek, 544–548 z T3, 549–552 z T1, 553–555 z T2, 556–557 z T5, 558–564 z T6, 565–567 z T4 reformy zakładek, 568–572 z paczki B, 573 z B-Z, 574–577 ze znacznika statku)
 
 | # | | Treść | Kierunek |
 |---|---|---|---|
@@ -540,6 +544,10 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **571** | ⚪ | **Dwa radary przy jednoczesnym zaznaczeniu statku i ciała** (punkt 6 bramki H1, §4.5) — wymaganie z bramki H1 bez kroku; alert paczki B dostaje wtedy oba obiekty. Paczka B (2026-10-28). | bez kroku (decyzja właściciela 2026-10-28) |
 | **572** | ⚪ | **Dwa pingi:** ping HUD (radar zaznaczonego) i ping zaznaczenia D-UI-10 (`pingVessel` — statek w doku zaznaczony z wiersza) — wymaganie scalenia z bramki H1 bez kroku. Paczka B (2026-10-28). | bez kroku (decyzja właściciela 2026-10-28) |
 | **573** | ⚪ | **Dawny przełącznik pierścieni 3D bez słuchacza.** `TacticalModeController` przy wejściu i wyjściu z trybu Y zapisuje `uiPrefs.sensorOverlayVisible` (`_applyLayerState`, `:69-72`; plan `TacticalModeLogic` — „wymuszona warstwa sensorów”) i emituje `ui:sensorOverlayToggle`; od B-Z nikt tego nie czyta — radar w trybie Y wymusza warstwa HUD (`F.tactical`), pole zostaje w zapisie (domyślne w `main.js:22`, migracja v70), a komentarz `:66-67` nadal mówi o pierścieniach. Bez skutku dla gracza. Z kodu (B-Z, 2026-10-28). | bez kroku — przy najbliższym dotknięciu trybu Y: zdjąć zapis i emisję (pole w zapisie zostaje — stare zapisy); pin braku słuchacza: `hud_bz_clean_smoke` C5a |
+| **574** | ✅ | **Insygnium frakcji (sprite 3D nad statkiem) widoczne w czystym widoku (SHIFT).** `_applyCleanViewVisibility` (`ThreeRenderer.js:3582` przy `f1554c9`) nie obejmował `_insigniaSprites`; zmierzone na `f1554c9`: warstwa HUD schowana (`reason: 'cleanView'`), insygnia widoczne — ZF r120 2 / 2 (prawdziwy klawisz SHIFT), Polonia r79 3 / 3. Z inwentarza kroku „Znacznik statku” (2026-10-29). | ✅ przy ON w SM-1 (`db97c64` — insygnium nie powstaje, znacznik statku leży w warstwie HUD schowanej w czystym widoku); powierzchnia usunięta w SM-Z (`c6ad1cc`). §9 |
+| **575** | 🟠 | **Trasa H3 i dziób modelu celują w bieżące położenie ruchomego celu, a statek leci do punktu przewidzianego na przylot.** `HudRouteLogic.routeSpec` (`to` = `mission.liveTargetX/Y`) i obrót modelu w `_syncVesselPositions` (ku `liveTargetX`), a `VesselManager._updatePositions` interpoluje start → `mission.targetX/Y`. Zmierzone (ZF r120): „Kurier” — daszek 21°, pierwszy odcinek kreski 53° (widok układu), 20° / 52° przy 30 j.; „Smok II” — 96° / 86°; prędkość „Kuriera” leży na odcinku start → punkt przewidziany co do 0,1°. Rozjazd stary (H3, dziób), znacznik ruchu go uwidacznia (K2 arkusza SM-1). Z kroku „Znacznik statku”. | → do decyzji: kreska i dziób do punktu przewidzianego albo bez zmian. §9 |
+| **576** | ⚪ | **Dymek współrzędnych pustej mapy („Pozycja: (x, y)”) wychodzi w czystym widoku (SHIFT)** — zaobserwowane raz (próbny przebieg K6 arkusza SM-1 na `f1554c9`, kursor nad mapą przy wciśniętym SHIFT); nie mierzone systemowo. Z kroku „Znacznik statku”. | → do decyzji (polerka). §9 |
+| **577** | ⚪ | **Celownik wroga 3D nad statkiem AI także w pokoju.** `_syncEnemyAlertMarkers` rysuje celownik (rola `alert`, D-HUD-16) nad każdym `isEnemyVessel` z wywiadem ≥ `rumor`, bez względu na wojnę — po D-SM-1 obcy w pokoju ma daszek `foreign` i celownik `alert` naraz (K3 arkusza SM-1). Z kroku „Znacznik statku”. | → do decyzji: celownik tylko dla wroga (jak D-SM-1) albo bez zmian. §9 |
 
 Rejestr #504–#516 po fazie A: **13 wpisów — 🟠 5** (504, 505, 506, 514, 516) **· ⚪ 8** (507–513, 515). Wszystkie
 otwarte; 504 — osobny drobny krok, reszta w krokach H0–H3. Pierwszy wolny: **517**.
@@ -611,6 +619,8 @@ Po B-Z (2026-10-28, `453a7c6`; flagi H0–H4 na stałe ON, ścieżki OFF usunię
 #504–#573 — **70 wpisów — ✅ 51** (50 jak wyżej + 523 — powierzchnia usunięta) **· 🟠 1** (504) **· ⚪ 18** (517, 518, 520–522,
 524, 526, 527, 555, 557, 563, 565, 567, 569–573; 573 — bez kroku). **ARKUSZ HUD ZAMKNIĘTY** — brak otwartego kroku; 504 —
 osobny drobny krok poza arkuszem. Pierwszy wolny: **574**.
+
+Po znaczniku statku (2026-10-29, `db97c64` SM-1 · `c6ad1cc` SM-Z — dodatek po zamknięciu arkusza, §9; bramka właściciela PASS bez strojenia — „Do potwierdzenia” 1–9 i odstępstwa przyjęte): rejestr #504–#577 — **74 wpisy — ✅ 52** (51 jak wyżej + 574) **· 🟠 2** (504, 575) **· ⚪ 20** (18 jak wyżej + 576, 577). Brak otwartego kroku. Pierwszy wolny: **578**.
 
 ---
 
@@ -1077,3 +1087,87 @@ bliskim zoomie. Wpisane do H4; oddychanie na zegarze z D-HUD-12.
 5. **Dosłowna reguła z zakresu sprawdzona liczbą.** „primary ostrzegawczy → alert = warning” brzmi dobrze i zawodzi
    w Amber Noir (0,44 ΔE w deuteranopii); pomiar wszystkich par na wszystkich motywach przed rekomendacją.
 6. **Długie listy — do pliku.** 223 kolory na sztywno — `results/hexes_hud.txt`; w planie tabela grup z liniami.
+
+---
+
+## 9. Znacznik statku — dodatek po zamknięciu arkusza (2026-10-29)
+
+> **Stan: ✅ WYKONANE 2026-10-29** — `db97c64` SM-1 · `c6ad1cc` SM-Z. Krok po zamknięciu arkusza (protokół §4.0,
+> aneks 2026-10-23, w wersji lekkiej: jeden krok, flaga, arkusz kontaktowy na 5 motywach, oko właściciela; po PASS —
+> sprzątanie SM-Z wzorem B-Z). Kotwica `f1554c9`. Bramka właściciela 2026-10-29: **PASS** bez strojenia — „Do
+> potwierdzenia” 1–9 i odstępstwa przyjęte, dwa piny listy podwarstw przecelowane za zgodą. Teczka:
+> `C:\Users\Komputer\kosmos-handover\hud-ship-marker\` (`RAPORT_SM.md`, arkusz `gate/kontakt_SM.html`, dowód SM-Z
+> `gate/kontakt_SMZ/` + `gate/diff_SMZ.json`).
+
+### 9.1 Decyzje właściciela D-SM-1…6 (2026-10-29)
+
+| # | Decyzja |
+|---|---|
+| **D-SM-1** | Kolor frakcji schodzi z mapy: własne — `primary`, obce — `foreign` (token `textPrimary`; bez rozróżniania imperiów kolorem — nazwa jest w etykiecie), wróg (stan wojny albo wrogi) — `alert`. `factionColorRaw` zostaje dla smug, wybuchów i pocisków. |
+| **D-SM-2** | Glif: pusty daszek 1 px obrócony w kierunku RUCHU na ekranie; statek bez ruchu (idle, zadokowany, w doku stacji) — pusty romb. Skok warp — daszek w kierunku krawędzi kadru jak kreski H3; orbitujący przy ciele — daszek (rusza się), zadokowany — romb. |
+| **D-SM-3** | Rozmiar stały w px ekranu (daszek ~10 × 7 px, romb ~8 px) przy tarczy statku w kierunku ruchu (odstęp = promień tarczy + `GAP`; romb — nad tarczą); gaśnie przy bliskim zoomie jak nawiasy (te same `FADE_LARGE_*`); model uwagi 0,38 / 1,0; bez oddechu. |
+| **D-SM-4** | Czysty widok (SHIFT) chowa znacznik — jak orbity H0 (Finding 574). |
+| **D-SM-5** | Bez chipu warstwy — znacznik jest statkiem, nie warstwą; [E] go nie dotyczy; tryb Y bez zmian. |
+| **D-SM-6** | Paski paliwa / warp 2D bez zmian; nawiasy zaznaczenia bez zmian (zaznaczony statek = nawiasy + znacznik 1,0). |
+
+### 9.2 Inwentarz (read-only na `f1554c9`)
+
+- **(a)** „Zielony ptaszek” = insygnium frakcji (Slice 5): `ThreeRenderer._syncInsignia` co klatkę za `FEATURES.fcInsignia` —
+  sprite (szewron z kropką, tekstura 64 px) 0,32 j. świata z limitem ekranowym 36 px (`COMBAT_WATCH.INSIGNIA_MAX_PX`,
+  POLISH P2a CP14), kolor `factionColorRaw` (własny `0x44cc66`), krycie z wywiadu; w widoku układu (~450 j.) podpikselowy.
+  W czystym widoku zostawał (574).
+- **(b)** Nie jest celem kliku — klik i zaznaczenie prostokątem rzutują `entry.sprite` (wrapper modelu), PPM filtruje
+  `userData.kosmosType` ⇒ nic nie zostaje jako geometria trafienia.
+- **(c)** Jedyny skutek uboczny: `_syncInsignia` odświeżało macierz kamery (`camera.updateMatrixWorld()`, CP14), czytaną
+  przez `_syncCombatHpBars` i `_syncEnemyAlertMarkers` — w SM-1 przed bramką flagi, w SM-Z w pętli renderu w tym samym miejscu.
+- **(d)** Kierunek ruchu z logiki gry: skok warp — kierunek układu docelowego (`HudRouteLogic.warpSpec`, ten sam co kreski
+  H3); orbita przy ciele — styczna orbity `OrbitalSpaceSystem` (θ = θ₀ + ω·t na zegarze orbit); inaczej `vessel.velocity`
+  (AU / rok cyw. — delta położenia w ostatnim tiku albo prędkość rozkazu MOS; zero przy doku, orbicie i wraku); w locie bez
+  prędkości (pauza tuż po wczytaniu albo po rozkazie) — geometria trasy do punktu przewidzianego na przylot (tylko własne).
+
+### 9.3 SM-1 (`db97c64`)
+
+NEW `HudShipMarkerLogic` (czysta) + `HudShipMarkerLayer` — podwarstwa po radarze, przed etykietami (zbierana przed nimi,
+rysowana pod nimi; prostokąty znaczników = przeszkody etykiet; bez strefy kliku); widoczność = reguła insygnium
+(fail-closed: statek bez sprite'a — bez znacznika; obcy od `contact` albo w starciu z graczem); rola z relacji
+(`WarGate.areAtWar`, pasmo opinii `hostile`, rajder bez imperium). Strojenie `KOSMOS.hudLayer.tune({ … })`: `MARKER_W` 10,
+`MARKER_H` 7, `DIAMOND_PX` 8, `MARKER_GAP_PX` 3, `MARKER_WIDTH` 1, `MARKER_ALPHA` 0,9, `SELECTED_ALPHA` 1,0, `MOTION_EPS`
+1e-4 AU / rok cyw., `MARKER_OBSTACLE` 1; wspólne z nawiasami `FADE_LARGE_FROM` / `FADE_LARGE_TO` 0,45 / 0,6, z etykietami
+`LABEL_DIM` 0,38 — bramka bez strojenia. Keeper `hud_ship_marker_smoke` 57 (bateria mutantów 9/9 — „znacznik dla
+niewykrytego” pada w 3 pinach); przecelowane za zgodą: `hud_bz_clean_smoke` C6a, `hud_labels_smoke` L7e. Dowód OFF: ślad
+deterministyczny warstwy HUD `f1554c9` ↔ flaga OFF — 45/45 klatek identycznych (czułość ON — 36/45 różnych); smoke w grze
+ZF r120 14/14, Polonia r79 6/6 na obu drzewach, 0 błędów konsoli; 60 kl./s, pełny przebieg HUD ≤ 0,253 ms.
+
+**Przyjęte na bramce** („Do potwierdzenia” i odstępstwa): (1) daszek pokazuje RUCH — kreska trasy H3 i dziób modelu celują
+w bieżące położenie celu, a statek leci do punktu przewidzianego (rozjazd stary, uwidoczniony — **575**); (2) znaczniki
+widać w widoku układu (insygnium było tam podpikselowe); (3) „wrogi” = pasmo opinii „wrogie”, także w rozejmie;
+(4) krycie × krycie wywiadu sprite'a; (5) etykiety omijają znacznik (przełącznik `MARKER_OBSTACLE`); (6) styczna orbity
+względem ciała; (7) skok warp — znacznik tylko do pierwszego tiku (potem statek opuszcza układ); (8) tryb Y — znacznik obok
+glifu; (9) celownik wroga 3D nad obcym w pokoju (**577**). Odstępstwo od D-SM-2: zadokowany statek nie ma sprite'a ⇒ bez
+rombu (fail-closed wygrywa; romb przy doku byłby nową decyzją).
+
+### 9.4 SM-Z (`c6ad1cc`)
+
+Flaga `hudShipMarker` na stałe ON (klucz usunięty), ścieżka insygnium usunięta: `_syncInsignia`, `_upsertInsignia`,
+`_disposeInsignia`, `_disposeAllInsignia`, `_createInsigniaTexture`, rejestr `_insigniaSprites`, `INSIGNIA_WORLD_SIZE`,
+`INSIGNIA_LIFT_RATIO`, `_INSIGNIA_TEX_CACHE`, `COMBAT_WATCH.INSIGNIA_MAX_PX` i flaga bez czytelnika `fcInsignia`
+(FEATURES 66 → 64); odświeżenie macierzy kamery zostaje w pętli renderu w tym samym miejscu (przed paskami HP i celownikiem).
+Keepery („PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-Z)”): `hud_ship_marker_smoke` 58 — bez gałęzi OFF, pin czystości
+(na `db97c64` 5 czerwonych — wyłącznie piny usunięcia); `combat_watch_frame_smoke` T8c / T11g / T11g2 (na `db97c64`
+3 czerwone). **Dowód metodą T4:** ślad deterministyczny warstwy HUD (prawdziwy `HudLayer` z domyślnymi podwarstwami, 45 klatek) `db97c64` ↔ SM-Z — 45/45 klatek identycznych (kontrola `db97c64` ↔ `db97c64` — 0; czułość `f1554c9` ↔ SM-Z — 36/45 różnych); arkusz w grze — 5 motywów × 12 kadrów, zrzuty bezstratne z płótnem 3D ukrytym i zegarami ujednoliconymi, scena deterministyczna (czas wstrzymany na pierwszej klatce pętli gry, ziarno `Math.random` przy przewinięciu do T0 i wypuszczeniu z doku, kąt orbit wczytanych statków z hasza id, kamera dociągnięta do celu, pamięć rozkładu etykiet wyczyszczona) — `db97c64` ↔ SM-Z **60/60 par 0 px**; ślad znaczników, stref etykiet, pickera statków (zbiór trafień), położeń sprite'ów i insygniów (0 w obu drzewach) — 0 różnic; kontrole metody: kadry niepuste (≥ 61 834 jasnych px; K6 — czysty widok chowa UI), różne kadry różnią się o ≥ 12 968 px; świadek: rozruch `db97c64` czytał `FEATURES.hudShipMarker = true` i miał rejestr insygniów, SM-Z — brak klucza i rejestru; 0 błędów konsoli w 20 rozruchach. Smoke w grze na SM-Z — ZF r120 14/14, Polonia r79 6/6, 0 błędów konsoli. Sweep **350/350**, `check-i18n` pl = en = **3399**; save v101 bez migracji.
+
+### 9.5 Findingi
+
+✅ **574** · 🟠 **575** · ⚪ **576** · ⚪ **577** — rejestr §3.
+
+### 9.6 Warsztat — lekcje kroku
+
+1. **Zapas kierunku trasy celuje w punkt PRZEWIDZIANY, nie bieżący** — `mission.targetX/Y` (tam interpoluje
+   `_updatePositions`), a nie `liveTargetX/Y` (tam celują kreska H3 i dziób modelu); inaczej daszek kłamie o kierunku lotu
+   w pierwszej klatce po rozkazie (575).
+2. **Para zrzutów z ruchomymi statkami między dwoma rozruchami wymaga determinizmu sceny, nie tylko zegarów UI:** czas
+   wstrzymany na pierwszej klatce pętli gry (bez tików przed pauzą), ziarno `Math.random` w tym samym wywołaniu co
+   przewinięcie do T0 i wypuszczenie z doku (kąt orbity jest losowy), kąt orbit wczytanych statków z hasza id, a przed
+   zrzutem — kamera dociągnięta do celu (lerp celu i dystansu bez „snapu”) i pamięć rozkładu etykiet wyczyszczona (`_prev`,
+   histereza klastrów, ustępowanie, przypięcia). W próbie bez nich różniło się 6 z 12 par — wszystkie z rozruchu (569,
+   strona rozwiniętej etykiety, orbita „Fregaty I”), żadna z kodu.

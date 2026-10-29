@@ -960,6 +960,21 @@
 >   osobny drobny krok poza arkuszem.
 > • **Pierwszy wolny numer: 574.**
 
+> **Aktualizacja 2026-10-29 (ZNACZNIK STATKU — dodatek po zamknięciu ARKUSZA HUD)** (rejestr macierzysty `HUD_PLAN.md` §3,
+> opis kroku §9).
+> • **SM-1** (`db97c64`) — zielony „ptaszek” (insygnium frakcji 3D) zastąpiony znacznikiem w warstwie HUD (daszek
+>   w kierunku ruchu, romb bez ruchu, rola z relacji; D-SM-1…6); bramka właściciela PASS 2026-10-29 bez strojenia.
+> • **SM-Z** (`c6ad1cc`) — flaga `hudShipMarker` na stałe ON, insygnia 3D i flaga `fcInsignia` usunięte; dowód metodą T4 —
+>   ślad deterministyczny warstwy HUD 45/45 klatek identycznych, arkusz w grze 60/60 par 0 px.
+> • ✅ **574** (insygnium widoczne w czystym widoku — zamknięty przy ON, powierzchnia usunięta). NOWE: 🟠 **575** (trasa H3
+>   i dziób modelu celują w bieżące położenie celu, statek leci do punktu przewidzianego), ⚪ **576** (dymek „Pozycja”
+>   w czystym widoku), ⚪ **577** (celownik wroga 3D nad obcym w pokoju) — wiersze w A11. Sweep **350/350**,
+>   `check-i18n` pl = en = **3399**; save v101 bez migracji.
+> • ⚠ Numer 574 zapisała roboczo także faza A „akcje po skoku warp” (2026-10-29, czeka na podpis, bez commita) —
+>   od tego wpisu 574–577 są zajęte; tamta faza bierze numery od 578.
+> • Rejestr #504–#577: 74 wpisy — ✅ 52 · 🟠 2 (504, 575) · ⚪ 20. Brak otwartego kroku.
+> • **Pierwszy wolny numer: 578.**
+
 
 ---
 
@@ -1040,7 +1055,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
 | **471-503** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki + dolny pas + U5; 2026-10-18–21; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1, 488-493 z bramki U2 i sesji U2, 494-496 z sesji U3 — zapisane przy zamknięciu, 497-501 z sesji i bramki U4 — zapisane przy zamknięciu, 502-503 z sesji i bramki 501 — zapisane przy zamknięciu U5) |
-| **504-573** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–28; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z) |
+| **504-577** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–29; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z, 574-577 ze znacznika statku — dodatek po zamknięciu, §9) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1342,6 +1357,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **571** | ⚪ | dwa radary przy jednoczesnym zaznaczeniu statku i ciała (wymaganie z bramki H1) | → bez kroku. `HUD_PLAN.md` §3 |
 | **572** | ⚪ | dwa pingi — ping HUD i ping zaznaczenia D-UI-10 (`pingVessel`) — scalenie z bramki H1 bez kroku | → bez kroku. `HUD_PLAN.md` §3 |
 | **573** | ⚪ | `TacticalModeController` zapisuje `uiPrefs.sensorOverlayVisible` i emituje `ui:sensorOverlayToggle` — od B-Z bez słuchacza i bez skutku (radar trybu Y wymusza warstwa HUD) | → bez kroku (przy najbliższym dotknięciu trybu Y). `HUD_PLAN.md` §3 |
+| **575** | 🟠 | trasa H3 (`HudRouteLogic.routeSpec`, `to` = `liveTargetX/Y`) i dziób modelu celują w bieżące położenie ruchomego celu, a statek leci do punktu przewidzianego (`mission.targetX/Y`) — „Kurier”: daszek 21°, kreska 53° (ZF r120); znacznik ruchu uwidacznia rozjazd | → do decyzji: kreska i dziób do punktu przewidzianego albo bez zmian. `HUD_PLAN.md` §3, §9 |
+| **576** | ⚪ | dymek współrzędnych pustej mapy („Pozycja: (x, y)”) wychodzi w czystym widoku (SHIFT) — zaobserwowane raz (próbny przebieg K6 arkusza SM-1) | → do decyzji (polerka). `HUD_PLAN.md` §3 |
+| **577** | ⚪ | celownik wroga 3D (`_syncEnemyAlertMarkers`, rola `alert`) nad każdym statkiem AI z wywiadem ≥ `rumor`, także w pokoju — obcy ma naraz daszek `foreign` i celownik `alert` | → do decyzji: celownik tylko dla wroga (jak D-SM-1) albo bez zmian. `HUD_PLAN.md` §3 |
 
 ---
 
