@@ -6717,7 +6717,12 @@ export class ThreeRenderer {
     // POLISH P2a (CP14) — macierz widoku z TEJ klatki (kontroler właśnie przestawił kamerę; render przelicza ją dopiero
     // później): limit rozmiaru ekranowego szewronów i celownika (`_syncEnemyAlertMarkers` zaraz po) bez opóźnienia o klatkę.
     this.camera.updateMatrixWorld();
-    if (!GAME_CONFIG.FEATURES?.fcInsignia) { if (this._insigniaSprites.size) this._disposeAllInsignia(); return; }
+    // Znacznik statku w warstwie HUD (D-SM-1…6) zastępuje insygnium — przy fladze ON insygnium nie powstaje (sprite'y z poprzedniej
+    // klatki zwolnione), a odświeżenie macierzy kamery wyżej zostaje (czytają ją `_syncCombatHpBars` i `_syncEnemyAlertMarkers`).
+    if (!GAME_CONFIG.FEATURES?.fcInsignia || GAME_CONFIG.FEATURES?.hudShipMarker === true) {
+      if (this._insigniaSprites.size) this._disposeAllInsignia();
+      return;
+    }
     const vm = window.KOSMOS?.vesselManager;
     if (!vm) { if (this._insigniaSprites.size) this._disposeAllInsignia(); return; }
     const active = new Set();

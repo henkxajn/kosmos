@@ -448,8 +448,10 @@ header('L7  montaż (piny źródłowe): plakietek MapLabelLayer brak; klik HUD p
   ok(/hudLayer\?\.setPointer\?\.\(x \/ UI_SCALE, y \/ UI_SCALE, x, y, this\.isOverUI\(x, y\)\)/.test(mm), 'L7d: kursor do warstwy HUD (px logiczne + CSS, flaga „nad UI”)');
   const hl = strip(src('../../ui/HudLayer.js'));
   // ARKUSZ HUD paczka B — po etykietach podwarstwa nawiasów i alertów (`HudFocusLayer`, czyta etykiety tej klatki).
-  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), new HudLabelLayer\(this\)(?:, new HudFocusLayer\(this\))?\];/.test(hl),
-    'L7e: podwarstwy gry — radar, potem etykiety (zbierane po radarze — czytają przeszkody warstw zebranych wcześniej); paczka B — nawiasy po etykietach');
+  // PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-1): między radarem a etykietami może stać znacznik statku (`HudShipMarkerLayer`)
+  //   — też zbierany przed etykietami (jego prostokąty są przeszkodami etykiet).
+  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), (?:new HudShipMarkerLayer\(this\), )?new HudLabelLayer\(this\)(?:, new HudFocusLayer\(this\))?\];/.test(hl),
+    'L7e: podwarstwy gry — radar (i znacznik statku), potem etykiety (zbierane po nich — czytają przeszkody warstw zebranych wcześniej); paczka B — nawiasy po etykietach');
 }
 
 // ═══ L8 ══════════════════════════════════════════════════════════════════════

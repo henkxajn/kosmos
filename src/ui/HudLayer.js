@@ -32,11 +32,13 @@ import { HudRadarLayer } from './HudRadarLayer.js';   // H1-2 — radar (D-HUD-3
 import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy statków (D-HUD-8, D-HUD-9, D-HUD-10)
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
 import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) — nawiasy zaznaczenia, pierścienie i wektor alertu
+import { HudShipMarkerLayer } from './HudShipMarkerLayer.js';   // znacznik statku (D-SM-1…6) — zamiast insygnium frakcji 3D
 import { focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
 import {
   HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
 } from './HudAlertLogic.js';
 import { readHudLayers, tuneHudChips, resetHudChips } from './HudLayerChipsLogic.js';
+import { tuneHudShipMarker, resetHudShipMarker } from './HudShipMarkerLogic.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;     // px logiki gry na 1 AU (pozycje statków i ciał)
 
@@ -105,22 +107,24 @@ export class HudLayer {
     if (autoStart) this.start();
   }
 
-  /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, etykiety (ich anti-overlap
-   *  czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify warp), nawiasy i alerty
-   *  (na wierzchu — czytają etykiety tej klatki: narożnik pod przypiętą etykietą pominięty). */
+  /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, znacznik statku (pod etykietami),
+   *  etykiety (ich anti-overlap czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify
+   *  warp, znaczniki statków), nawiasy i alerty (na wierzchu — czytają etykiety tej klatki: narożnik pod przypiętą etykietą
+   *  pominięty). */
   _defaultSublayers() {
-    return [new HudRouteLayer(this), new HudRadarLayer(this), new HudLabelLayer(this), new HudFocusLayer(this)];
+    return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudLabelLayer(this), new HudFocusLayer(this)];
   }
 
   /**
    * Paczka B — strojenie stałych z konsoli (bramka): `KOSMOS.hudLayer.tune({ LABEL_DIM: 0.3, ALERT_MS: 2000 })` — klucze
-   * modelu uwagi i nawiasów (`HUD_ATTENTION`), alertów (`HUD_ALERT`) i chipów (`HUD_CHIPS`); nieznane pominięte;
-   * `tune(null)` — wartości domyślne. Przeżywa do F5.
+   * modelu uwagi i nawiasów (`HUD_ATTENTION`), alertów (`HUD_ALERT`), chipów (`HUD_CHIPS`) i znacznika statku
+   * (`HUD_SHIP_MARKER`; `FADE_LARGE_*` wspólne z nawiasami); nieznane pominięte; `tune(null)` — wartości domyślne.
+   * Przeżywa do F5.
    */
   tune(patch = {}) {
     const r = patch == null
-      ? { ...resetHudAttention(), ...resetHudAlert(), ...resetHudChips() }
-      : { ...tuneHudAttention(patch), ...tuneHudAlert(patch), ...tuneHudChips(patch) };
+      ? { ...resetHudAttention(), ...resetHudAlert(), ...resetHudChips(), ...resetHudShipMarker() }
+      : { ...tuneHudAttention(patch), ...tuneHudAlert(patch), ...tuneHudChips(patch), ...tuneHudShipMarker(patch) };
     this._lastKey = null;
     this._wake = true;
     const um = (typeof window !== 'undefined') ? window.KOSMOS?.uiManager : null;

@@ -205,6 +205,10 @@ export const GAME_CONFIG = {
     fcScanFx:             true,   // Slice 2 — efekty skanu (snop/pierścień/ping)
     fcBrackets:           true,   // Slice 4 — ramki zaznaczenia + paski HP/tarcza (#ui-canvas)
     fcInsignia:           true,   // Slice 5 — insygnia frakcji nad statkiem
+    // Znacznik statku w warstwie HUD (D-SM-1…6, HUD_PLAN.md §„Znacznik statku”): daszek w kierunku ruchu / romb bez ruchu,
+    //   w rolach motywu (własny `primary`, obcy `foreign`, wróg `alert`) — ZAMIAST insygnium frakcji 3D (`_syncInsignia` przy
+    //   ON go nie tworzy). Brak klucza = OFF = insygnium jak przed krokiem. Render-only, bez migracji save.
+    hudShipMarker:        true,
     fcEnemyAlertMarker:   true,   // Pulsujący czerwony marker wykrytego wroga (≥rumor) na mapie 3D
     fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
     fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
