@@ -1,14 +1,15 @@
 # GALAXY_PLAN — the galaxy map becomes a mode of the main 3D view
 
-> **Status: Phase A — read-only audit + plan, SIGNED by the owner 2026-10-30 (§0.2, §5 column "Signed"); NIEBO in progress.**
+> **Status: Phase A — read-only audit + plan, SIGNED by the owner 2026-10-30 (§0.2, §5 column "Signed"); NIEBO ✅ DONE
+> 2026-10-30 (`6ea7cad`, §4 NIEBO — delivered); next G1 (not started).**
 > Anchor HEAD `e2f7943` (= origin/main).
-> Nothing is implemented. The only repo file written by this phase is this plan; the handover folder is
+> Phase A implemented nothing. The only repo file written by that phase is this plan; the handover folder is
 > `C:\Users\Komputer\kosmos-handover\galaxy-phase-a\` (`STOP_A.md`, probes, results). Measurements ran in a scratch clone
 > (`E:\kosmos-work\galaxy-phase-a\tree`, `git clone --shared`, read-only against the owner's objects) — the owner's tree
 > was not touched (no `src/` edits, no keepers, no commits). Committed with the owner's signatures in
 > `docs(GALAXY A): phase A plan + owner signatures` — the anchor of NIEBO.
 > **Next free finding number after this plan: 600** (this plan files **#588–#599**; 578–587 are taken in
-> `VESSEL_ORDERS_PLAN.md`).
+> `VESSEL_ORDERS_PLAN.md`; NIEBO filed none).
 
 ## §0 Owner's frame (signed 2026-10-30 — verbatim; not relitigated, the plan is built around it)
 
@@ -607,24 +608,24 @@ per-member reasons. Names on the preview and in the menu entry go through `revea
 ## §3 Findings register (#588 onward)
 
 Status icons: 🔴 defect with a measured gameplay consequence now · 🟠 defect / latent defect the arc must close or
-route around · ⚪ observation, hygiene or coupling. "Step" = where the arc meets it.
+route around · ⚪ observation, hygiene or coupling · ✅ closed. "Step" = where the arc meets it.
 
 | # | | Finding | Evidence | Step |
 |---|---|---|---|---|
 | **588** | 🟠 | **A hull in the W2 reserve can jump.** `WarpRouteSystem.canOrder` has no service-state term (`src/systems/WarpRouteSystem.js:47-55`) and neither has `VesselManager.dispatchInterstellar` (`:927-1026`); the stratcom warp list and blips list every `warpFuel.max > 0` hull (`FleetManagerOverlay.js:5745, :6830`). **Measured** (probe `probe_reserve_warp.mjs`, real `VesselManager` + `WarpRouteSystem`, full tank, docked): `serviceState 'stored'` → `canOrder ok`, `beginJourney ok`, `in_transit`, 0.5 warp core spent; `'mobilizing'` → the same; control `'active'` → the same (the probe measures the gate, not silence). A crewless hull reaches another system, where MOS then refuses every movement order (`vessel_in_reserve`, `MovementOrderSystem.js:280-295` — the hole W3-4 / D6 closed for movement orders, §S24 of the W3 audit; the warp path is its unclosed twin). The W2 exclusion set (`deploy_seams`) never listed the warp path | G3 (gate gets `isInService`; the right outliner shows reserve hulls dimmed with the reason — D-GX-12) |
 | **589** | 🟠 | **Warp-order surfaces print the target's real name without the reveal gate** (Finding 188 class, outside its tripwire): `_drawWarpOrderPanel` `"${ship} → ${sys.name}"` (`FleetManagerOverlay.js:7006`), the send picker `"→ ${targetStar.name}"` (`:8116`), the route log `warpRoute.started` via `_systemName` (`WarpRouteSystem.js:105-106, :204-207`), the mission log `vessel.interstellarLaunch` with `targetStar.name` (`VesselManager.js:1019-1021`). Reachable: select a warp ship, click a dim, unnamed star → the panel names it; sending the ship writes the name into the Log before arrival. The 188 keeper's T4 pins map label ≡ panel header only | G3 (menu entry, preview hop labels and logs through `reveal.name` — D-GX-18) |
 | **590** | 🟠 | **[ Beacon ] / [ Gate ] (F5 pin actions) have no mechanic.** The FMO handlers `cluster_beacon` / `cluster_gate` (`FleetManagerOverlay.js:2394-2401`) have **no producer anywhere in `src/`** (grep: no `type: 'cluster_beacon'` / `'cluster_gate'`); the backend (`StarSystemManager.js:27-35` listeners, `:207-236` `buildBeacon` / `buildJumpGate`) is **free, instant and tech-less**; a beacon multiplies warp speed into its system ×3 (`VesselManager.js:984`); the i18n keys are dead (`fleet.clusterBeacon/Gate/BuildBeacon/BuildGate`). Exposing the chips as written would hand out free infrastructure | G2 — **D-GX-17 (c) signed: the chips are omitted** (no pin action until a mechanic exists, §7 O5); the dead FMO handlers go with the tab in G5 |
-| **591** | ⚪ | **Background stars are world-anchored inside the camera's reach.** Shell r 300–1 000 WU around the origin (`ThreeRenderer.js:611-616`) while the camera reaches ~835 WU from the origin (MAX_DIST 450 from a target up to ~385 WU out); stars are depth-tested additive points (`:672-683`), so a star between the camera and a planet passes the depth test and draws over the planet. Derived from geometry, **not observed** | NIEBO (closed by D-GX-4) |
+| **591** | ✅ | **Background stars are world-anchored inside the camera's reach.** Shell r 300–1 000 WU around the origin (`ThreeRenderer.js:611-616`) while the camera reaches ~835 WU from the origin (MAX_DIST 450 from a target up to ~385 WU out); stars are depth-tested additive points (`:672-683`), so a star between the camera and a planet passes the depth test and draws over the planet. Derived from geometry, **not observed** | **NIEBO ✅ (`6ea7cad`)** — closed by D-GX-4: the dome follows the camera and is drawn first, with no depth test and no depth write, so a planet always covers the sky; the sky depends only on the camera's orientation (contact sheet k3) |
 | **592** | ⚪ | **The right-click menu is Polish in the EN client.** `RightClickMenu.show` renders `opt.labelPL` only (`src/ui/RightClickMenu.js:88`) although every option carries `labelEN` (`RightClickMenuOptions.js:39-118`, kept by `buildMenuOptions` `:205-211`); the disabled reason is a Polish literal (`'Najpierw wybierz statek'`, `:216`) although `tooltip.menu.requiresSelection` exists. `check-i18n` does not see it (labels are data — the class of Finding 113) | G3 (the new "Warp to X" entry must render per locale; fix the renderer once) |
 | **593** | ⚪ | **Stratcom "Send" is narrower than the warp gate.** The detail panel enables Send only for warp ships available at the ACTIVE colony (`FleetManagerOverlay.js:6526-6528`), and `cluster_send` dispatches only `docked` + `idle/refueling` (`:2333-2335`), while `canOrder` accepts `docked` and `orbiting` anywhere. A warp ship orbiting another body falls to the picker | G3 ([ Send ▼ ] lists by `canOrder`); dies in G5 |
 | **594** | ⚪ | **`warp_order_send` refusal drops the reason** — toast `fleet.warpOrderFailed` only (`FleetManagerOverlay.js:2379`), unlike `_toastReturnFailed` (`:6933-6946`, reason + Log entry) | G3 (menu entry refusal carries the reason) |
 | **595** | ⚪ | **Planar vs 3D distance.** The stratcom sensor gate uses the planar distance from home (`FleetManagerOverlay.js:5714-5719` `inSensor`, `:6218` enemy blips) while warp maths is 3D (`warpDist3D`); with `Z_SPREAD 5` a system 4.9 ly planar / 6.3 ly 3D reads "in range" at observatory Lv4 (5 ly) | G2 (D-GX-22) |
 | **596** | ⚪ | **The observatory range is centred on home whatever colony holds the observatory** — level from `getMaxObservatoryLevel()` (any colony), ring and blip gate centred on home (`FleetManagerOverlay.js:5651-5656, :6321, :6218`). Galaxy twin of Finding 191 | G2 (D-GX-22) |
-| **597** | ⚪ | **Dead sky config:** `GAME_CONFIG.BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND: 250` (`GameConfig.js:34-35`) and `THEME.starfield` + 10 per-theme overrides (`ThemeConfig.js:41, :484 … :761`) have zero readers | NIEBO — **retire** (signed 2026-10-30): the sky colour stays physical, not themed |
-| **598** | ⚪ | **Stale descriptions of the galaxy:** `GalaxyGenerator.js:3` "~42 układów", `:5` "3-18 LY" vs `SYSTEM_COUNT 72` / 2–22 ly; `GALAXY_SEED_PLAN.md:49-50` "`sys_000…sys_071`" — the ids are `sys_001…sys_071` (home is `sys_home`) | NIEBO (comment fix; no behaviour) |
+| **597** | ✅ | **Dead sky config:** `GAME_CONFIG.BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND: 250` (`GameConfig.js:34-35`) and `THEME.starfield` + 10 per-theme overrides (`ThemeConfig.js:41, :484 … :761`) have zero readers | **NIEBO ✅ (`6ea7cad`)** — retired (signed 2026-10-30): the sky colour stays physical, not themed (keeper `sky_catalog_smoke` T12) |
+| **598** | ✅ | **Stale descriptions of the galaxy:** `GalaxyGenerator.js:3` "~42 układów", `:5` "3-18 LY" vs `SYSTEM_COUNT 72` / 2–22 ly; `GALAXY_SEED_PLAN.md:49-50` "`sys_000…sys_071`" — the ids are `sys_001…sys_071` (home is `sys_home`) | **NIEBO ✅ (`6ea7cad`)** — comments fixed in `GalaxyGenerator.js` and `GALAXY_SEED_PLAN.md` (no behaviour) |
 | **599** | ⚪ | **The maths that the arc rewrites has no swept keeper.** Territory field / loops / contested / merge (`tmp_territory_b3`, gitignored), territory fog (`b4`, gitignored), payload (`b5`), flashes (`b6`), contours (`tmp_territory_contours_smoke`, tracked, not swept), holotable camera (`tmp_holotable_cam_smoke`, not swept), the scan backend (`tmp_obs_stratcom_scan_smoke`, gitignored); `b1` is already stale (asserts save v91). In the sweep only `influence_map_smoke` T8 reads `TerritoryField.js` (radius formula) | G2 (move the logic keepers into `src/testing/smoke/` when the plate payload changes) |
 
-**Next free number: 600.**
+**Next free number: 600** (NIEBO filed no new findings).
 
 ## §4 The cut: NIEBO → G1 → G2 → G3 → G4 → G5
 
@@ -646,6 +647,46 @@ gate, live gate in the owner's window (1600×1041 CSS, UI scale ≈ 1.25). Flags
 | **Contact sheet** | 1 theme is enough for the sky (no theme roles); one control frame on a second theme proves it. Frames: home default frame · MAX_DIST · a second system (the same frame, real-system stars moved) · the intro opening · after a load · Shift clean view; old (random) vs new |
 | **Tuning knobs** | filler count, magnitude curve (floor, slope, HDR cap), size curve, real-system boost, band axis unchanged |
 | **STOP** | code + probe numbers + contact sheet in `kosmos-handover\galaxy-niebo\`; owner looks / tunes; PASS → `feat(NIEBO)` + `docs(NIEBO)` |
+
+#### NIEBO — ✅ delivered 2026-10-30 (`6ea7cad`)
+
+Owner's look: steps 4 / 7 / 8 PASS after correction 1, PASS at `REAL_BOOST_MAG` 0.3; correction 2 committed without
+another look (owner: "PASS at 0.3"). Flag `skyCatalog` ON (permanent in G5).
+
+- **As planned:** `SkyCatalog.js` (72 real systems + `FILLER_COUNT` filler, own salt `0x5C7CA7` + warm-up, magnitude law
+  with a soft HDR cap, colour by class, empty sky before the galaxy exists) · `StarPointShader.js` (literals verbatim +
+  dome variant, `uRealFade` derived) · `ThreeRenderer` dome `_sky`, `setSkyGalaxy` from `GameScene` after mint / load,
+  recompute in `switchSystem`, live `skyTuning`, `getSkyInfo()` · 591, 597 and 598 closed (§3).
+- **Deviation:** `FILLER_COUNT` **14 000** (owner's pick; F7 said ~7 000 — the old sky's density was camera parallax:
+  660 stars in the default frame for the dome against 1 928 for the old shell, both at 7 000). Defaults
+  **14 000 / 0.3 / 4.5** (`FILLER_COUNT` / `REAL_BOOST_MAG` / `REAL_CAP`).
+- **Correction 1** (before PASS): the real-system boost acts AFTER the filler cap, with its own soft ceiling `REAL_CAP`
+  (+ `REAL_SIZE_GAIN`); before, the shared cap 2.6 swallowed it (Kochab, boost 0 → 2: brightest real star 2.562 → 2.579).
+  Gate instruments `KOSMOS.debug.skyLookHome()` / `skyLookAt(n)` (camera θ / φ only).
+- **Correction 2 — CTRL sky labels (O1, pulled into NIEBO by the owner's decision 2026-10-30):** NEW `HudSkyLabelLogic`
+  + `HudSkyLabelLayer` (a HUD sublayer, collected last, drawn first — `drawFirst`): brackets + name + "x,x LY" over the
+  real systems in the sky ONLY while CTRL is held (`_showAllLabels`, the key and semantics of the system-map CTRL labels);
+  hidden in Shift clean view, in Y mode and under any overlay; the discs of the sun, planets, moons and planetoids cover
+  the marker. Roles from the theme: own (home, a system with a player colony) `primary`, explored `textPrimary`,
+  unexplored `dim`. Name only at `reveal.name`, otherwise "???" (D-GX-18). One marker per screen cluster
+  (`clusterScreenPoints` with hysteresis, the nearest system wins); placement by the label layer's `placeLabels`,
+  avoiding its labels and the CTRL map labels. A direction at infinity is projected by NEW `HudProjection.direction()`.
+  Readout `fleet.clusterDistance` with the locale's decimal separator — no new key. No click zone.
+  `KOSMOS.debug.skyMarks(1)` forces the sublayer without CTRL (`_skyLabelsForced`; Shift, Y and overlays still hide it);
+  the correction-1 debug canvas (`SkyMarksDebug.js`, `skyMarkLabel`) is gone.
+- **A14 pulled forward:** NEW `utils/SystemRevealWorld.js` — the one assembler of the three reveal channels;
+  `FleetManagerOverlay._systemReveal`, `HudLabelLayer._t1NameVisible`, the sky labels and the instruments delegate
+  (behaviour unchanged — `sky_labels_smoke` S3, 16 states, three surfaces agree). G1's new surfaces assemble there.
+- **Keepers:** NEW `sky_catalog_smoke` 95 · NEW `sky_labels_smoke` 46 (CTRL × Shift × overlay × Y table, reveal gate,
+  roles, one per cluster, occlusion, projection against three's `Vector3.project`, end to end on a real galaxy, draw
+  order) · `log_depth_chunks_smoke` T7 re-aimed (the dome takes no chunks — D-D3 precedent) · sublayer-list pins re-aimed:
+  `hud_bz_clean_smoke` C6a, `hud_labels_smoke` L7e, `hud_attention_smoke` U0e. Sweep 354/354 · `check-i18n`
+  pl = en = 3401 · save v101 without migration.
+- **In game** (Kochab, owner's window 1600 × 1041, save ZF r120, Amber Noir): CTRL → 9 labels from 71 systems (3 own,
+  2 explored, 4 unexplored — one "???"); without CTRL, in Shift, in Y mode, under an overlay → 0; `skyMarks(1)` without
+  CTRL → 9; `skyLookHome()` + CTRL → "Kepler-4799 · 4,0 LY" in `primary`; 0 console errors. Contact sheet:
+  `kosmos-handover\galaxy-niebo\gate\kontakt_niebo.html` (KOREKTA 2).
+- **404 note:** every gate console shows 32 × "Failed to load resource" = 31 missing `assets/buildings/<id>.png` (30 of 61 building ids have a file) + `assets/icons/building_autonomous_spaceport.png` — the known silent emoji fallback (`BuildingTextures.js`), pre-existing, not NIEBO → §7 O16.
 
 ### G1 — the galaxy in the scene, entry points, outliners, hard cut
 
@@ -799,7 +840,7 @@ Expected balance at G5 (proposal, after D-GX-17 (c)): +14 added, ~37 retired (mo
 
 | # | Option | Why it came up | Cost / note |
 |---|---|---|---|
-| O1 | **Sky labels (P3)** — names of the brightest real systems in the background sky of system mode, reveal-gated | the 71 real systems are in the sky after NIEBO; the nearest are ~3 000× brighter than the filler | small HUD sublayer; must use `reveal.name` |
+| ~~O1~~ | ~~**Sky labels (P3)** — names of the brightest real systems in the background sky of system mode, reveal-gated~~ **CONSUMED — pulled into NIEBO by the owner's decision 2026-10-30** (CTRL sky labels, `6ea7cad`; §4 NIEBO — delivered) | the 71 real systems are in the sky after NIEBO; the nearest are ~3 000× brighter than the filler | done: a HUD sublayer shown only while CTRL is held, names through `reveal.name` |
 | O2 | **Zoom-slider detent** at the system / galaxy boundary (the slider spans both ranges, a notch marks the switch) | F3(d) makes `maxDist` mode-dependent; one continuous slider reads better than two | `ZoomSliderLogic` is pure — a detent is a mapping change |
 | O3 | **Orbit (yaw) drag in galaxy mode**, e.g. right-drag rotates around the target while left-drag pans | D-GX-3 recommends the holotable's fixed oblique + pan | camera branch only |
 | O4 | **Observatory range centred on the observatory's own system, 3D metric** | Findings 595 / 596 | changes what the player sees as "in sensor range" — a rules change |
@@ -809,8 +850,9 @@ Expected balance at G5 (proposal, after D-GX-17 (c)): +14 added, ~37 retired (mo
 | O8 | **Remember the map mode across save / load** | G1 always starts in system mode | trivial, but changes the first frame after load |
 | O9 | **Remove `assets/backgrounds/deep_space*.png`** after G5 | only the dying stratcom surfaces read them | asset deletion |
 | O10 | **Sky of `BattleView3D` from the catalogue** (it draws its own 600 random points) | NIEBO makes the main sky deterministic; the battle cinema stays random | renderer of the cinema |
-| O11 | **Dead config cleanup** (`BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND`, `THEME.starfield` ×11) if not done inside NIEBO | Finding 597 | trivial |
+| ~~O11~~ | ~~**Dead config cleanup** (`BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND`, `THEME.starfield` ×11) if not done inside NIEBO~~ **done inside NIEBO** (Finding 597, `6ea7cad`) | Finding 597 | — |
 | O12 | **The dead `galaxy` entry of `CIV_TABS`** (`CivPanelDrawer.js:38`, key letters that disagree with the keymap) | A9 | housekeeping |
 | O13 | **Stale tmp smokes** (`tmp_tabscaffold_smoke` `_hoverShipId`, `tmp_territory_b1` save v91, `warp_stratcom_smoke` W12e vacuous and its unparsed summary) | A10 | housekeeping; the swept one dies or is re-aimed in G5 anyway |
 | O14 | **`M` as an alias of the map toggle** after G5 (today M = mini-map → Stratcom) | D-GX-8 leaves M free after G5 | key map only |
 | O15 | **Enemy and allied territory history** (territory from the last intel snapshot instead of live ownership) | the plate shows live ownership for `contact+` empires | a fog-of-war rules question |
+| O16 | **Buildings PNG manifest** — `BuildingTextures.loadBuildingTextures` probes `assets/buildings/<id>.png` for every one of the 61 building ids and 31 have no file, so every start logs 31 × 404 (+ `assets/icons/building_autonomous_spaceport.png`); a manifest of the existing files would load only those | NIEBO gate consoles — 32 × "Failed to load resource" in every run (§4 NIEBO — delivered, 404 note) | trivial; a keeper that the manifest matches the folder; no visual change (the emoji fallback stays) |

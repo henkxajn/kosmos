@@ -1014,6 +1014,15 @@
 > • Następny: **NIEBO** — katalog nieba (`GALAXY_PLAN.md` §4; cel: 591, 597, 598).
 > • **Pierwszy wolny numer: 600.**
 
+> **Aktualizacja 2026-10-30 (ARC GALAXY — NIEBO ✅, `6ea7cad`)** — niebo z katalogu galaktyki za flagą `skyCatalog`
+> (kopuła za kamerą; domyślne 14 000 / 0,3 / 4,5) + etykiety nieba przy CTRL (O1 wciągnięte do NIEBO decyzją właściciela;
+> nazwa tylko przy `reveal.name`) + A14 wcześniej — `SystemRevealWorld`, jeden punkt składania mgły wojny. Bramka
+> właściciela: oglądanie 4 / 7 / 8 PASS, PASS przy REAL_BOOST_MAG 0,3.
+> • **ZAMKNIĘTE: ✅ 591 · 597 · 598** (wiersze w A12). Nowych numerów brak.
+> • Sweep **354/354**, `check-i18n` pl = en = **3401**; save v101 bez migracji.
+> • Następny: **G1** (`GALAXY_PLAN.md` §4).
+> • **Pierwszy wolny numer: 600.**
+
 
 ---
 
@@ -1415,14 +1424,14 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **588** | 🟠 | kadłub w rezerwie W2 skacze warpem — `WarpRouteSystem.canOrder` i `VesselManager.dispatchInterstellar` bez terminu `isInService` (zmierzone sondą: `stored` / `mobilizing` → skok, rdzeń zużyty); bliźniak dziury zamkniętej w W3-4 / D6 dla rozkazów ruchu | → G3 (D-GX-12). `GALAXY_PLAN.md` §3 |
 | **589** | 🟠 | powierzchnie rozkazu warp drukują prawdziwą nazwę celu bez bramki ujawnienia (`FleetManagerOverlay.js:7006`, `:8116`, `WarpRouteSystem.js:105-106`, `VesselManager.js:1019-1021`) — klasa 188 poza jej pinem | → G3 (D-GX-18). `GALAXY_PLAN.md` §3 |
 | **590** | 🟠 | [ Beacon ] / [ Gate ] bez mechaniki — handlery FMO bez producenta, backend darmowy, natychmiastowy, bez technologii | → D-GX-17 (c): chipy pominięte; mechanika = §7 O5 (bez terminu). `GALAXY_PLAN.md` §3 |
-| **591** | ⚪ | gwiazdy tła w zasięgu kamery mogą rysować się na planetach (powłoka 300–1 000 j. wokół początku układu; wyprowadzone z geometrii, nie zaobserwowane) | → NIEBO (kopuła za kamerą, D-GX-4). `GALAXY_PLAN.md` §3 |
+| **591** | ✅ | **ZAMKNIĘTY 2026-10-30** (`6ea7cad`, NIEBO) — gwiazdy tła w zasięgu kamery mogą rysować się na planetach (powłoka 300–1 000 j. wokół początku układu; wyprowadzone z geometrii, nie zaobserwowane) | kopuła za kamerą (D-GX-4): rysowana pierwsza, bez testu i zapisu głębi — planeta zawsze zasłania niebo. `GALAXY_PLAN.md` §3 |
 | **592** | ⚪ | menu prawego kliku po polsku w kliencie EN (`RightClickMenu.js:88` rysuje `labelPL`) + polski literał w `buildMenuOptions` | → G3. `GALAXY_PLAN.md` §3 |
 | **593** | ⚪ | „Wyślij” w STRATCOM węższe niż bramka skoku (tylko statki zadokowane przy aktywnej kolonii) | → G3; umiera w G5. `GALAXY_PLAN.md` §3 |
 | **594** | ⚪ | odmowa `warp_order_send` gubi powód (sam toast) | → G3. `GALAXY_PLAN.md` §3 |
 | **595** | ⚪ | odległość płaska w bramce sensora STRATCOM, 3D w skoku | → G2 (D-GX-22). `GALAXY_PLAN.md` §3 |
 | **596** | ⚪ | zasięg obserwatorium liczony od domu bez względu na kolonię z obserwatorium (galaktyczny bliźniak 191) | → G2 (D-GX-22). `GALAXY_PLAN.md` §3 |
-| **597** | ⚪ | martwa konfiguracja nieba (`BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND`, `THEME.starfield` + 10 presetów) | → NIEBO — wycofanie (podpis 2026-10-30). `GALAXY_PLAN.md` §3 |
-| **598** | ⚪ | nieaktualne opisy galaktyki (`GalaxyGenerator.js:3`, `:5`; `GALAXY_SEED_PLAN.md:49-50`) | → NIEBO (komentarze). `GALAXY_PLAN.md` §3 |
+| **597** | ✅ | **ZAMKNIĘTY 2026-10-30** (`6ea7cad`, NIEBO) — martwa konfiguracja nieba (`BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND`, `THEME.starfield` + 10 presetów) | wycofana (podpis 2026-10-30; pin `sky_catalog_smoke` T12). `GALAXY_PLAN.md` §3 |
+| **598** | ✅ | **ZAMKNIĘTY 2026-10-30** (`6ea7cad`, NIEBO) — nieaktualne opisy galaktyki (`GalaxyGenerator.js:3`, `:5`; `GALAXY_SEED_PLAN.md:49-50`) | komentarze poprawione (bez zmiany zachowania). `GALAXY_PLAN.md` §3 |
 | **599** | ⚪ | matematyka przepisywana w arcu bez keepera w sweepie (pole terytorium, kamera stołu, skan) | → G2. `GALAXY_PLAN.md` §3 |
 
 ---
