@@ -36,6 +36,7 @@ import { isEnemyVessel, canColonize as vesselCanColonize, getPrimaryRole } from 
 import { ROLE_GLYPHS, ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY, buildShipEntry } from './FleetPictureLogic.js';
 import { layoutButtonRows, toggleOpenList, openListFor } from './LabelPinLogic.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
+import { foreignActionsBodyId, foreignActionsContext, isForeignColonizeType } from '../utils/ForeignActions.js';
 
 // Stałe (px logiczne). Strojenie na bramce — z konsoli: `KOSMOS.shipPanelHud.tune({ W: 210 })` (przeżywa do F5).
 export const SHIP_PANEL_HUD_DEFAULTS = Object.freeze({
@@ -207,7 +208,10 @@ export function buildShipPanelModel(vessel, env = {}) {
       m.chips.push(chip('cluster_switch', t('fleet.clusterSwitch'), { type: 'cluster_switch', data: { systemId: isMission.toSystemId } }));
     }
   }
-  if (isMission?.type === 'exploration' && isMission.phase === 'orbiting_body') m.chips.push(...foreignOrbitChips(vessel, isMission, colMgr, m.info));
+  // Finding 578 (D-1) — akcje obce kluczuje PREDYKAT, nie kształt misji: trasa Atlas (stan C) jak dziś, plus bezczynna
+  // orbita ciała poza śladem kolonii (stan B — PPM „Lecisz do planety", rozkaz ruchu d2). Jedno źródło z rejestrem.
+  const foreignBodyId = foreignActionsBodyId(vessel, foreignActionsContext(K));
+  if (foreignBodyId) m.chips.push(...foreignOrbitChips(vessel, foreignBodyId, colMgr, m.info));
   if (isMission?.type === 'foreign_recon') {
     m.info.push(...foreignReconLines(isMission));
     m.chips.push(chip('abort_foreign_recon', `⏹ ${t('fleet.abortRecon')}`, { type: 'abort_foreign_recon', data: { vesselId: vid } }));
@@ -346,12 +350,12 @@ function manifestLines(mission, vessel) {
   return out;
 }
 
-/** Orbita obcego ciała (lustro panelu `exploration` / `orbiting_body`): recon ciała / układu, kolonizacja, rozładunek. */
-function foreignOrbitChips(vessel, mission, colMgr, info) {
+/** Orbita obcego ciała (lustro panelu rejestru; ciało z `foreignActionsBodyId`): recon ciała / układu, kolonizacja, rozładunek. */
+function foreignOrbitChips(vessel, bodyId, colMgr, info) {
   const out = [];
   const vid = vessel.id;
-  const body = findBody(mission.targetId);
-  info.push({ text: `🌍 ${t('fleet.orbitingBody', body?.name ?? mission.targetId)}` });
+  const body = findBody(bodyId);
+  info.push({ text: `🌍 ${t('fleet.orbitingBody', body?.name ?? bodyId)}` });
   const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
   const hullCaps = ship?.capabilities ?? [];
   const modCaps = vessel.modules?.length ? getModuleCapabilities(vessel.modules) : new Set();
@@ -359,21 +363,21 @@ function foreignOrbitChips(vessel, mission, colMgr, info) {
   const has = (c) => hullCaps.includes(c) || modCaps.has(c);
   if (has('recon')) {
     const analyzed = body?.analyzed ?? false;
-    out.push(chip('foreign_recon_body', t('fleet.foreignReconBody'), { type: 'foreign_recon_body', data: { vesselId: vid, targetId: mission.targetId } }, !analyzed));
+    out.push(chip('foreign_recon_body', t('fleet.foreignReconBody'), { type: 'foreign_recon_body', data: { vesselId: vid, targetId: bodyId } }, !analyzed));
     out.push(chip('foreign_recon_system', t('fleet.foreignReconSystem'), { type: 'foreign_recon_system', data: { vesselId: vid } }));
   }
   if (vesselCanColonize(vessel)) {
     const explored = body?.explored ?? false;
-    const colonized = colMgr?.getColony?.(mission.targetId) != null;
-    const validType = body && (['rocky', 'ice'].includes(body.planetType) || body.type === 'planetoid');
+    const colonized = colMgr?.getColony?.(bodyId) != null;
+    const validType = isForeignColonizeType(body);
     const can = explored && !colonized && validType;
     let label = t('fleet.foreignColonize');
     if (!explored) label += ` (${t('fleet.requiresExplored')})`;
     else if (colonized) label += ` (${t('fleet.alreadyColonized')})`;
-    out.push(chip('foreign_colonize', label, { type: 'foreign_colonize', data: { vesselId: vid, targetId: mission.targetId } }, !!can));
+    out.push(chip('foreign_colonize', label, { type: 'foreign_colonize', data: { vesselId: vid, targetId: bodyId } }, !!can));
   }
   if (has('cargo') && (vessel.cargoUsed ?? 0) > 0) {
-    out.push(chip('foreign_unload', `${t('fleet.foreignUnload')} (${Math.round(vessel.cargoUsed ?? 0)}t)`, { type: 'foreign_unload', data: { vesselId: vid, targetId: mission.targetId } }));
+    out.push(chip('foreign_unload', `${t('fleet.foreignUnload')} (${Math.round(vessel.cargoUsed ?? 0)}t)`, { type: 'foreign_unload', data: { vesselId: vid, targetId: bodyId } }));
   }
   return out;
 }

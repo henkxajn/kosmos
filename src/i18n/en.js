@@ -655,6 +655,8 @@ export default {
   // `reasonTargetOtherSystem`: "warp jump first" would lie about a ship that is already
   // jumping (Finding-141 class — a reason that does not describe the state of the world).
   'vessel.reasonVesselInWarpTransit': 'Vessel is in interstellar transit — wait for arrival',
+  // Finding 579 (D-4) — "Full Scan" at a body without a colony map (anomalies live only on a colony grid)
+  'vessel.reasonFullScanNoGrid': 'Full Scan needs a colony map on the orbited body',
   // W3-4 (D6) — a hull in reserve takes no movement orders (MovementOrderSystem.issueOrder)
   'vessel.reasonVesselInReserve': 'Hull in reserve — crew it first (Deploy)',
   // Attack-order (engage/pursue) rejection reasons — shown per skipped vessel
@@ -1642,7 +1644,7 @@ export default {
   'fleet.targetLabel': 'Target: {0} {1}',
   'fleet.starCluster': 'STAR CLUSTER',
   'fleet.clusterSend': '🚀 Send ship',
-  'fleet.clusterSwitch': '🔭 Switch view',
+  'fleet.clusterSwitch': '🗺 Switch view',
   'fleet.clusterReturn': '↩ Return to base',
   'fleet.arrivedAt': 'Arrived at {0}',
   'fleet.clusterSelectTarget': 'Select target in system',

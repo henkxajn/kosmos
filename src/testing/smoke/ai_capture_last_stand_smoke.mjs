@@ -325,6 +325,42 @@ console.log('T7 — Finding 111: trasa liczy się po TYPIE MISJI, nie po kadłub
     'T7 KONTROLA PINU: powód rozróżnia „kadłub jest, ale zaparkowany" od „nie ma żadnego" — ' +
     `bez tego gate mierzyłby ciszę (\`${describeNoReversal(parked)}\`)`);
 }
+// ── T7 (D-3, post-warp foreign actions) — bezczynny kolonizator na ORBICIE ciała ────────────────
+// Podpis D-3: taki statek, wg TEGO SAMEGO predykatu co przyciski „Kolonizuj" w panelu, jest ŻYWĄ trasą —
+// po PPM „Lecisz do planety" statek stoi `orbiting`+`idle`+`mission=null`, a „Kolonizuj" jest tam OSIĄGALNE.
+// Kontekst predykatu (`foreign`) podaje wołający (w grze: `ColonyManager._tickPlayerViability`); brak śladu kolonii
+// w kontekście = gracz bez kolonii — dokładnie stan, w którym predykat końca gry w ogóle pracuje.
+console.log('T7 (D-3) — bezczynny kolonizator na orbicie skolonizowalnego ciała poza śladem kolonii = żywa trasa');
+{
+  const body = { id: 'b_far', type: 'planet', planetType: 'rocky', systemId: 'sys_far', x: 0, y: 0 };
+  const gas  = { id: 'b_gas', type: 'planet', planetType: 'gas',   systemId: 'sys_far', x: 0, y: 0 };
+  const bodies = new Map([[body.id, body], [gas.id, gas]]);
+  const foreign = { getBody: (id) => bodies.get(id) ?? null, getColony: () => null };
+  const orbiter = (o = {}) => ({ modules: ['habitat_pod'], mission: null, status: 'idle', serviceState: 'active',
+    systemId: 'sys_far', position: { state: 'orbiting', dockedAt: 'b_far' }, ...o });
+  const viaD3 = (v, f = foreign) => canReverseFate({ vessels: [v], groundUnits: [], foreign: f });
+
+  const st = viaD3(orbiter());
+  assert(st.recolonization.hull === true,
+    'T7 (D-3) ŚWIADEK: kadłub z habitatem JEST (hull=true) — czerwień wiersza niżej to brak TRASY, nie brak statku');
+  assert(st.recolonization.ok === true,
+    'T7 (D-3) SEDNO: bezczynny kolonizator na orbicie skalistego, nieskolonizowanego ciała w układzie bez kolonii gracza ' +
+    `liczy się jako odwrót (D-1/D-2 ⇒ „Kolonizuj" jest tam w panelu) — powód \`${describeNoReversal(st)}\``);
+  assert(viaD3(orbiter({ modules: ['engine_ion'] })).recolonization.ok === false,
+    'T7 (D-3): bez modułu habitacyjnego — nie (kolonizuje przycisk przez `canColonize`)');
+  assert(viaD3(orbiter({ position: { state: 'orbiting', dockedAt: 'b_gas' } })).recolonization.ok === false,
+    'T7 (D-3): orbita gazowego olbrzyma — nie (ciało nieskolonizowalne)');
+  assert(viaD3(orbiter(), { ...foreign, getColony: (id) => (id === 'b_far' ? { planetId: 'b_far', ownerEmpireId: EMP } : null) })
+      .recolonization.ok === false,
+    'T7 (D-3): ciało już skolonizowane (cudza kolonia) — nie');
+  assert(viaD3(orbiter({ position: { state: 'docked', dockedAt: 'b_far' } })).recolonization.ok === false,
+    'T7 (D-3) KONTROLA: ZADOKOWANY = zaparkowany — Finding 111 bez zmian (D-3 liczy WYŁĄCZNIE orbitę ciała)');
+  assert(viaD3(orbiter({ status: 'on_mission', mission: { type: 'recon', phase: 'orbiting_body', targetId: 'b_far' } }))
+      .recolonization.ok === false,
+    'T7 (D-3) KONTROLA: zwiad zaparkowany na orbicie — nadal NIE (żywa misja ≠ bezczynność; pin Findingu 111)');
+  assert(viaD3(orbiter({ serviceState: 'stored' })).recolonization.ok === false,
+    'T7 (D-3): kadłub w REZERWIE — nie (W2: rezerwa nie działa)');
+}
 {
   // Pomiar, na którym stoi asercja o zwiadzie: misja PRZEŻYWA przylot i wisi BEZTERMINOWO.
   const { core, cm, home, tick } = boot();

@@ -37,6 +37,9 @@
 // ⚠ Ten moduł jest CZYSTY: bez importów systemów, bez `window`, bez EventBus. Kadencja, próg
 //   wytrzymania i emisja `game:over` mieszkają w `ColonyManager` — tam, gdzie jest tik i gdzie
 //   keeper może to uruchomić. Tu jest wyłącznie odpowiedź „czy JEST czym odwracać".
+//   ⚠ Wyjątek D-3 (Finding 578): bezczynny kolonizator na orbicie ciała, przy którym przycisk „Kolonizuj"
+//   w obcym układzie JEST (predykat `ForeignActions`), to żywa trasa — świat (ciała, kolonie) przychodzi
+//   WSTRZYKNIĘTYM kontekstem `foreign`, więc i ta gałąź nie czyta `window`.
 //   ⚠ `mission` i `_suspendedMission` to POLA STATKU, nie systemy — czytamy je tak samo, jak
 //   `modules` czy `isWreck`, więc zawężenie z Findingu 111 NIE dołożyło żadnej zależności.
 
@@ -45,6 +48,9 @@
 //   dokładnie ta klasa błędu, którą ten slice zamykał dwa razy (`hasLivingDefender`,
 //   `holdsDecisiveGround`). `canDropTroops`/`troopCapacity` to POLA statku, więc ich nie liczymy.
 import { canColonize } from '../entities/Vessel.js';
+// ⚠ DRUGI import (D-3, Finding 578): TEN SAM predykat akcji obcych co panel statku i rejestr — trzecia kopia reguły
+//   „gdzie Kolonizuj jest dostępne" byłaby nieutwardzonym bliźniakiem. Kontekst świata podaje wołający.
+import { foreignActionsBodyId, isForeignColonizeType } from './ForeignActions.js';
 
 /** Kanon „nieostemplowane = gracza" (lustro `ColonyManager.isPlayerColony` / `isEnemyVessel`). */
 const isPlayersVessel = (v) => !!v && !v.isWreck && (!v.ownerEmpireId || v.ownerEmpireId === 'player');
@@ -91,9 +97,13 @@ export function hasColonyCapableHull(vessels) {
   return (vessels ?? []).some(v => isPlayersVessel(v) && canColonize(v));
 }
 
-/** Czy KTÓRYKOLWIEK statek gracza ma DZIŚ żywe wyjście kończące się kolonią (następca zdolności). */
-export function hasLiveRecolonizationPath(vessels) {
-  return (vessels ?? []).some(v => isPlayersVessel(v) && _hasLiveColonyOutlet(v));
+/**
+ * Czy KTÓRYKOLWIEK statek gracza ma DZIŚ żywe wyjście kończące się kolonią (następca zdolności).
+ * @param {Array} vessels
+ * @param {object|null} foreign — kontekst `ForeignActions` (D-3); bez niego liczą się wyłącznie misje
+ */
+export function hasLiveRecolonizationPath(vessels, foreign = null) {
+  return (vessels ?? []).some(v => isPlayersVessel(v) && _hasLiveColonyOutlet(v, foreign));
 }
 
 /**
@@ -113,10 +123,26 @@ export function hasLiveRecolonizationPath(vessels) {
  *   `colony`, przerwany rozkazem ruchu, wypadał wtedy jako „brak odwrotu". To jedyny fałszywy negatyw
  *   znaleziony w projekcie tego predykatu i wyszedł dopiero na pomiarze.
  */
-function _hasLiveColonyOutlet(vessel) {
+function _hasLiveColonyOutlet(vessel, foreign = null) {
   const missionTypes = [vessel.mission?.type, vessel._suspendedMission?.type];
   if (missionTypes.some(mt => !!mt && COLONY_OUTLET_MISSIONS.has(mt))) return true;
-  return canColonize(vessel) && missionTypes.some(mt => !!mt && FOREIGN_FLOW_MISSIONS.has(mt));
+  if (!canColonize(vessel)) return false;
+  if (missionTypes.some(mt => !!mt && FOREIGN_FLOW_MISSIONS.has(mt))) return true;
+  return foreign != null && _hasForeignColonizeTarget(vessel, foreign);
+}
+
+/**
+ * D-3 (Finding 578) — bezczynny kolonizator na orbicie skolonizowalnego ciała, przy którym akcje obce SĄ
+ * (stan B: PPM „Lecisz do planety" / rozkaz ruchu po skoku warp). Jego „Kolonizuj" zakłada kolonię bez kolonii
+ * macierzystej (`_startForeignColonize` — zestaw startowy, nie magazyn), więc to żywa trasa — bez tego gra
+ * ogłaszała koniec (`colony_ship_no_route`) graczowi, który miał JEDEN KLIK do nowej kolonii.
+ * ⚠ „Skolonizowalne" = typ ciała jak dla „Kolonizuj" + brak kolonii; BEZ wymogu `explored` (podpis właściciela:
+ *   ciało można zbadać tym samym panelem). Zadokowany i zaparkowany po misji `recon` — dalej NIE liczą się (111).
+ */
+function _hasForeignColonizeTarget(vessel, foreign) {
+  const bodyId = foreignActionsBodyId(vessel, foreign);
+  if (!bodyId) return false;
+  return isForeignColonizeType(foreign.getBody?.(bodyId) ?? null) && !foreign.getColony?.(bodyId);
 }
 
 /**
@@ -124,13 +150,14 @@ function _hasLiveColonyOutlet(vessel) {
  * @param {object} snapshot
  * @param {Array}  snapshot.vessels      — wszystkie statki w rejestrze (filtrujemy tu)
  * @param {Array}  snapshot.groundUnits  — wszystkie jednostki naziemne (filtrujemy tu)
+ * @param {object} [snapshot.foreign]    — kontekst `ForeignActions` (D-3); `ColonyManager` składa go `foreignActionsContext`
  * @returns {{ok:boolean, invasion:{ok:boolean,ship:boolean,troops:boolean},
  *            recolonization:{ok:boolean,ship:boolean,hull:boolean}}}
  */
-export function canReverseFate({ vessels = [], groundUnits = [] } = {}) {
+export function canReverseFate({ vessels = [], groundUnits = [], foreign = null } = {}) {
   const dropShip = hasDropCapableShip(vessels);
   const troops   = hasTransportableTroops(groundUnits);
-  const colRoute = hasLiveRecolonizationPath(vessels);
+  const colRoute = hasLiveRecolonizationPath(vessels, foreign);
   const colHull  = hasColonyCapableHull(vessels);       // tylko do powodu (niżej), NIE do decyzji
 
   const invasion = { ok: dropShip && troops, ship: dropShip, troops };

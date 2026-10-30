@@ -50,6 +50,7 @@ import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / 
 import { warGateRefusal } from '../utils/WarGate.js';           // D13 / G2-2 — bramka wojny (away team)
 import { resolveTemplate } from '../utils/ShipTemplateResolver.js';   // AI STRIKES BACK S1 (SB22) — kadłub puli AI
 import { orbitClockSec } from '../utils/SimClock.js';                  // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
+import { describeOrderFail } from '../utils/CameraFrame.js';           // Finding 579 (D-4) — „<statek> (<powód>)” jak inne odmowy
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -1394,6 +1395,10 @@ export class VesselManager {
     const vessel = this._vessels.get(vesselId);
     if (!vessel || vessel.position.state !== 'orbiting') return;
     if (vessel.status !== 'idle') return;
+    // Finding 579 (D-4) — anomalie żyją WYŁĄCZNIE na siatce kolonii (`colony.grid`), więc przy ciele bez niej skan nie
+    // ma czego wykryć. Dotąd startował, trwał 0,5 civY i kończył się `return` bez słowa (`_completeFullScan`) —
+    // teraz odmowa przy STARCIE, głośna: wpis w Dzienniku, jak inne odmowy rozkazów. Bez wariantu „pusty wynik".
+    if (!this._fullScanGrid(targetId)) { this._refuseFullScan(vessel); return; }
 
     vessel.status = 'on_mission';
     vessel._fullScan = {
@@ -1401,6 +1406,17 @@ export class VesselManager {
       progress: 0,
       duration: 0.5, // 0.5 roku cywilizacyjnego
     };
+  }
+
+  /** Siatka kolonii orbitowanego ciała — jedyne miejsce, w którym „Pełny Skan" ma czego szukać. */
+  _fullScanGrid(targetId) {
+    return (targetId && window.KOSMOS?.colonyManager?.getColony?.(targetId)?.grid) || null;
+  }
+
+  /** Finding 579 (D-4) — odmowa „Pełnego Skanu" w Dzienniku: kanał `fleet`, `warn`, nazwa statku i powód (jeden nowy klucz). */
+  _refuseFullScan(vessel) {
+    const text = `${t('fleet.warpOrderFailed')} — ${describeOrderFail({ vesselId: vessel.id, reason: 'full_scan_no_grid' })}`;
+    window.KOSMOS?.eventLogSystem?.push?.({ text, channel: 'fleet', severity: 'warn', entityRef: vessel.id });
   }
 
   _tickFullScan(vessel, dt) {
@@ -1426,22 +1442,10 @@ export class VesselManager {
       }
     }
 
-    // Pobierz grid planety
-    const colMgr = window.KOSMOS?.colonyManager;
-    let grid = colMgr?.getColony(targetId)?.grid;
-    if (!grid) {
-      // Ciało bez kolonii — pobierz lub wygeneruj tymczasowy grid
-      // (anomalie istnieją tylko na gridach w ColonyOverlay)
-      // Generuj grid dla niezkolonizowanego ciała
-      const entity = this._findEntity(targetId);
-      if (entity) {
-        // Ciało bez gridu — full scan nie może wykryć anomalii
-        // (anomalie generowane przy tworzeniu gridu w ColonyOverlay)
-        return;
-      }
-    }
-
-    if (!grid) return;
+    // Pobierz grid planety. Finding 579 (D-4) — siatki może już nie być (kolonia zniknęła w trakcie skanu):
+    // ta sama głośna odmowa co przy starcie, nigdy cichy `return` ani „pusty wynik".
+    const grid = this._fullScanGrid(targetId);
+    if (!grid) { this._refuseFullScan(vessel); return; }
 
     let detectedCount = 0;
     grid.forEach(tile => {

@@ -43,6 +43,7 @@ import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal 
 import { systemIdOf } from '../utils/SystemScope.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
+import { foreignActionsBodyId, foreignActionsContext, isForeignColonizeType } from '../utils/ForeignActions.js';   // Finding 578 — akcje obce kluczuje predykat
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
@@ -7738,17 +7739,19 @@ export class FleetManagerOverlay {
       // usunęliśmy PRZYCISK, nie zdolność.
     }
 
-    // ── Panel orbiting_body — rozkazy kontekstowe w obcym układzie ──
-    if (isMission?.type === 'exploration' && isMission.phase === 'orbiting_body') {
+    // ── Panel orbity obcego ciała — rozkazy kontekstowe (Finding 578: PREDYKAT, nie kształt misji —
+    //    trasa Atlas `exploration`/`orbiting_body` jak dziś + bezczynna orbita poza śladem kolonii; jedno źródło z HUD) ──
+    const foreignBodyId = foreignActionsBodyId(vessel, foreignActionsContext(window.KOSMOS));
+    if (foreignBodyId) {
       cy += 4;
       ctx.strokeStyle = THEME.border;
       ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
       cy += 8;
 
       // Nagłówek — na orbicie ciała
-      const orbitBody = _findBody(isMission.targetId);
+      const orbitBody = _findBody(foreignBodyId);
       // Ciała niebieskie mają pole .name (NIE namePL/nameEN) — getName() zwróciłby surowe id (entity_N).
-      const orbitName = orbitBody?.name ?? isMission.targetId;
+      const orbitName = orbitBody?.name ?? foreignBodyId;
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.purple;
       ctx.fillText(`🌍 ${t('fleet.orbitingBody', orbitName)}`, x + pad, cy + 10);
@@ -7784,7 +7787,7 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'left';
         if (!isAnalyzed) {
           this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
-            type: 'foreign_recon_body', data: { vesselId: vessel.id, targetId: isMission.targetId } });
+            type: 'foreign_recon_body', data: { vesselId: vessel.id, targetId: foreignBodyId } });
         }
         cy += btnH + 4;
 
@@ -7809,10 +7812,8 @@ export class FleetManagerOverlay {
       if (vesselCanColonize(vessel)) {
         const colMgr4 = window.KOSMOS?.colonyManager;
         const isExploredCol = orbitBody?.explored ?? false;
-        const isColonized = colMgr4?.getColony(isMission.targetId) != null;
-        const validType = orbitBody && (
-          ['rocky', 'ice'].includes(orbitBody.planetType) || orbitBody.type === 'planetoid'
-        );
+        const isColonized = colMgr4?.getColony(foreignBodyId) != null;
+        const validType = isForeignColonizeType(orbitBody);
         const canColonize = isExploredCol && !isColonized && validType;
 
         ctx.fillStyle = canColonize ? 'rgba(0,255,120,0.08)' : 'rgba(100,100,100,0.08)';
@@ -7830,7 +7831,7 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'left';
         if (canColonize) {
           this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
-            type: 'foreign_colonize', data: { vesselId: vessel.id, targetId: isMission.targetId } });
+            type: 'foreign_colonize', data: { vesselId: vessel.id, targetId: foreignBodyId } });
         }
         cy += btnH + 4;
       }
@@ -7848,7 +7849,7 @@ export class FleetManagerOverlay {
         ctx.fillText(`${t('fleet.foreignUnload')} (${Math.round(vessel.cargoUsed ?? 0)}t)`, x + w / 2, cy + 15);
         ctx.textAlign = 'left';
         this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
-          type: 'foreign_unload', data: { vesselId: vessel.id, targetId: isMission.targetId } });
+          type: 'foreign_unload', data: { vesselId: vessel.id, targetId: foreignBodyId } });
         cy += btnH + 4;
       }
 

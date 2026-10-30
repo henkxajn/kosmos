@@ -45,6 +45,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { EmpireColonyBootstrap } from './EmpireColonyBootstrap.js';   // W3-1 — reuse resolvera tech imperium
 import { canReverseFate, describeNoReversal } from '../utils/PlayerViability.js';   // D9=W3 (AC-8)
+import { foreignActionsContext } from '../utils/ForeignActions.js';                  // D-3 (Finding 578)
 import { t } from '../i18n/i18n.js';
 
 // Rozmiary siatek hex per typ/masa ciała
@@ -335,6 +336,8 @@ export class ColonyManager {
     const state = canReverseFate({
       vessels:     [...(window.KOSMOS?.vesselManager?._vessels?.values?.() ?? [])],
       groundUnits: [...(window.KOSMOS?.groundUnitManager?._units?.values?.() ?? [])],
+      // D-3 (Finding 578) — kolonizator bezczynny na orbicie ciała z akcjami obcymi to żywa trasa (ten sam predykat co panele).
+      foreign:     foreignActionsContext({ colonyManager: this }),
     });
     if (state.ok) { this._viabilityLostFor = 0; return; }
 

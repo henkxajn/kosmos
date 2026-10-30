@@ -656,6 +656,8 @@ export default {
   // `reasonTargetOtherSystem`: „najpierw skok warp" byłoby kłamstwem dla statku, który
   // WŁAŚNIE skacze (klasa Findingu 141 — powód, który nie opisuje stanu świata).
   'vessel.reasonVesselInWarpTransit': 'Statek jest w skoku międzygwiezdnym — poczekaj na przylot',
+  // Finding 579 (D-4) — „Pełny Skan" przy ciele bez mapy kolonii (anomalie żyją wyłącznie na siatce kolonii)
+  'vessel.reasonFullScanNoGrid': 'Pełny Skan wymaga mapy kolonii na orbitowanym ciele',
   // W3-4 (D6) — kadłub w rezerwie nie przyjmuje rozkazów ruchu (MovementOrderSystem.issueOrder)
   'vessel.reasonVesselInReserve': 'Kadłub w rezerwie — najpierw obsadź go załogą (Rozmieść)',
   // Powody odrzucenia rozkazu ataku (engage/pursue) — pokazywane per pominięty statek
@@ -1643,7 +1645,7 @@ export default {
   'fleet.targetLabel': 'Cel: {0} {1}',
   'fleet.starCluster': 'STAR CLUSTER',
   'fleet.clusterSend': '🚀 Wyślij statek',
-  'fleet.clusterSwitch': '🔭 Przełącz widok',
+  'fleet.clusterSwitch': '🗺 Przełącz widok',
   'fleet.clusterReturn': '↩ Powrót do bazy',
   'fleet.arrivedAt': 'Dotarł do {0}',
   'fleet.clusterSelectTarget': 'Wybierz cel w układzie',
