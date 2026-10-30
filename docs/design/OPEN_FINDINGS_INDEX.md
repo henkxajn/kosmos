@@ -989,6 +989,21 @@
 > • Sweep **351/351**, `check-i18n` pl = en = **3400**; save v101 bez migracji.
 > • **Pierwszy wolny numer: 583.**
 
+> **Aktualizacja 2026-10-30 (SZEW ZUŻYCIA STATKU POZA WALKĄ — 582 · 102 · 107, NOWE 583–587)** (rejestry macierzyste
+> `VESSEL_ORDERS_PLAN.md` §„Findingi 578–582” i §„Findingi 583–587”, `COLONY_OWNERSHIP_GUARD_PLAN.md` dla 102 / 107;
+> audyt `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`).
+> • ✅ **582** · **102** · **107** (`fa69ae8`) — usunięcie statku poza walką idzie przez JEDEN szew `destroyVessel`, który
+>   emituje `vessel:removed { reason }` zamiast `vessel:docked`; `_startForeignColonize` przez szew; sieroty 107 w starych
+>   zapisach naprawiane przy wczytaniu. Wiersze zdjęte (A2, A7).
+> • ✅ **584** (przestarzałe `unlockPops(exp.crewCost)` na ścieżkach sukcesu kolonizacji — blokady domu 2,6 → 0)
+>   i ✅ **585** (koloniści znikali przy rozbiórce i przy utracie kolonii) — nowe, zamknięte w tym samym commicie.
+> • NOWE otwarte: 🔴 **583** (katastrofy misji zabijają POP domu, który nie wsiadł — 7,6 → 0,3, szansa 2 %; następny
+>   w kolejce; wiersz w A7), 🟠 **586** (wysiadanie przy zużyciu + koloniści przy placówce albo stacji; wiersz w A7),
+>   ⚪ **587** (linia 🗑 z id kadłuba zamiast nazwy statku; wiersz w A9).
+> • Bramka właściciela — testy 1–5 PASS 2026-10-30. Sweep **352/352**, `check-i18n` pl = en = **3401**; save v101 bez
+>   migracji.
+> • **Pierwszy wolny numer: 588.**
+
 
 ---
 
@@ -1071,6 +1086,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **471-503** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki + dolny pas + U5; 2026-10-18–21; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1, 488-493 z bramki U2 i sesji U2, 494-496 z sesji U3 — zapisane przy zamknięciu, 497-501 z sesji i bramki U4 — zapisane przy zamknięciu, 502-503 z sesji i bramki 501 — zapisane przy zamknięciu U5) |
 | **504-577** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–29; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z, 574-577 ze znacznika statku — dodatek po zamknięciu, §9) |
 | **578-582** | `VESSEL_ORDERS_PLAN.md` §Findingi 578–582 — akcje obce po skoku warp (2026-10-29–30; 578-580 z audytu fazy A i z fazy B, 581 z decyzji właściciela po bramce, 582 z bramki (a7); audyt `docs/audit/POST_WARP_FOREIGN_ACTIONS_AUDIT.md`) |
+| **583-587** | `VESSEL_ORDERS_PLAN.md` §Findingi 583–587 — szew zużycia statku poza walką (2026-10-30; 583-585 z audytu fazy A, 586 z rezerwy Q3 i z bramki, 587 z bramki; audyt `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1133,7 +1149,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **141** | 🟠 | **30 z 41** powodów odmowy bez klucza i18n; **6 z 15** producentów połyka odmowę całkowicie. Silnik mówi — UI połyka |
 | **145** | 🔴 | `OrderService.issueReturn:206` połyka `false` i zwraca `{ok:true}` — **fasada kłamie o sukcesie**, a sama odmowa jest fałszywa (`exploration` bez `returnYear` → NaN → „brak paliwa" statkowi z 27 AU zasięgu) |
 | **127** | ⚪ | `vessel:orderIssued` ma ZERO subskrybentów, a tabela w `CLAUDE.md` deklaruje dwóch |
-| **582** | 🟠 | `vessel:docked` przeciążony jako sygnał „usuń sprite” (`_startForeignColonize`, `destroyVessel`) ⇒ Dziennik pisze „wylądował” i „wrócił do bazy” statkowi ZUŻYTEMU albo ZNISZCZONEMU (zmierzone na żywo dla kolonizacji obcej, bramka 578 (a7)) — klasa 282 |
 
 ## A3 — VESSEL_ORDERS: to, co zamyka PODPISANY plan (VO-4 = P3 · VO-5 = P5 · VO-6/7 = P4)
 
@@ -1219,15 +1234,15 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **99** | afordancja kolonizacji **znika** zamiast pokazać się zablokowana z powodem |
 | **100** | `MissionSystem.createMission('colonize', …)` ma **ZERO** wołających produkcyjnych |
 | **101 · 105** | komentarz `MovementOrderSystem:1857` („orbiting bez `dockedAt`") jest nieprawdziwy — dwa niezależne potwierdzenia |
-| **102** | trasa „obca" blokuje POPy załogi **na zawsze** (surowy `_vessels.delete` zamiast `destroyVessel`) |
 | **103** | `_redirectInterstellarVessel` omija bramkowanie startu; paliwo **klampuje zamiast odmawiać** |
-| **104** | **dwie równoległe implementacje kolonizacji** — wspólna przyczyna 102 i 107 |
+| **104** | **dwie równoległe implementacje kolonizacji** — wspólna przyczyna 102 i 107 (oba ✅ `fa69ae8`; wspólny jest od dziś szew usunięcia statku, dwie implementacje zostają) |
 | **106** | przycisk kolonizacji zostaje **aktywny** po odmowie (defekt węższy niż pierwotny tytuł „ślepy zaułek") |
-| **107** | trasa „obca" **osierocą jednostki w ładowni desantowej** (`troop_bay`) |
 | **581** | ślad A1 a układ macierzysty bez portu: kadłub średni / duży ze stoczni stacji dostaje akcje obce (w tym „Kolonizuj” z darmowym zestawem startowym) przy ciałach własnego układu — świadomie przyjęte (A1 bez zmian), trasa przez stację niezmierzona |
+| **583** | 🔴 katastrofa misji zabija POP kolonii domowej, który nie wsiadł (7,6 → 0,3), gubi kolonistów i zwalnia załogę zamiast ją zabić; szansa bazowa 2 % — następny w kolejce (`VESSEL_ORDERS_PLAN.md` §583) |
+| **586** | 🟠 ładunek ludzki statku zużytego poza walką: oddziały giną `transport_lost` zamiast wysiąść (rozmieszczenie na mapie celu — **349**); koloniści znikają przy rozbiórce przy placówce albo stacji (`VESSEL_ORDERS_PLAN.md` §586) |
 
-> ⚠ 2026-10-30: od **578** trasa „obca” (`_startForeignColonize` — **102** / **107**) jest osiągalna naturalną drogą (PPM
-> „Lecisz do planety” w układzie poza śladem kolonii), więc ekspozycja obu rośnie; naturalny partner naprawy — **582**.
+> ✅ 2026-10-30: **102** i **107** zamknięte razem z **582** (`fa69ae8`) — `_startForeignColonize` usuwa statek przez szew
+> `destroyVessel`; wiersze zdjęte (reguła indeksu).
 
 ## A8 — AI: produkcja, desant, wiedza, zachowanie
 
@@ -1316,6 +1331,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 |---|---|---|---|
 | **165b** | ⬜ | tekst wpisu Dziennika renderowany PRZY EMISJI i persystowany (200 wpisów w save) ⇒ po zmianie języka Dziennik jest dwujęzyczny **z konstrukcji** | **jedyna pozycja z bumpem zapisu**; zaparkowana decyzją właściciela |
 | **167 residuum** | ⚪ | gałąź macierzysta pokazuje nazwę **PLANETY** w miejscu nazwy **UKŁADU** | widoczne w każdej bitwie u siebie |
+| **587** | ⚪ | linia Dziennika „🗑 Vessel decommissioned: {0}” podaje id KADŁUBA (`hull_medium`) zamiast nazwy statku — narrator szuka `SHIPS[shipId]`, a kadłuby `HULLS` go nie mają (zmierzone na bramce 582) | klasa 113 / 271; ten sam wzorzec przy `fleet:buildQueued` niezmierzony (`VESSEL_ORDERS_PLAN.md` §587) |
 | **159** | ⬜ | `map_body` ma tę samą klasę co 109, ale `commandTacticalMap:false` ⇒ **utajony**, wraca z flagą | NIE planować |
 | **dług baseline `check-i18n`** | 🟠 | **62 napisy w 11 plikach UI** siedzą w zapadce Findingu 177 (w tym 112/113/126 i 9 w martwym `PlanetScene`) | zapadka nie pozwala go **powiększyć**; spłata = osobna praca |
 | **76 · 93** | ⚪ | `BuildingSystem.deployFromCargo()` z `CLAUDE.md` **nie istnieje** · liczba keeperów w `CLAUDE.md` nieaktualna (dziś **186**) | Załącznik A przy sprzątaniu |

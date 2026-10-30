@@ -10,6 +10,9 @@ formalną i `moveToPoint` w tym samym układzie (który **nie działa**).
 `VesselManager.createAndRegister` i przez **prawdziwe** `_drawRight`/`_handleHit`, więc żaden stan
 nie był konstruowany ręcznie. Gra NIE była uruchamiana.
 **Numeracja findingów:** ciągła po 101 ⇒ **od 102**.
+**Stan 2026-10-30:** ✅ **102** i **107** zamknięte w `fa69ae8` — `_startForeignColonize` usuwa statek przez
+`destroyVessel` (audyt `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`, rejestr `COLONY_OWNERSHIP_GUARD_PLAN.md`).
+Treść niżej opisuje stan z 2026-08-20.
 
 ---
 

@@ -1289,6 +1289,14 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
     `_vessels.delete` zamiast `destroyVessel`) · **103** `_redirectInterstellarVessel` omija
     bramkowanie startu (brak portu, brak odrzucenia przy braku paliwa) · **104** dwie równoległe
     implementacje kolonizacji · **105** drugie potwierdzenie nieprawdziwego komentarza z 101.
+    ✅ **102 ZAMKNIĘTY 2026-10-30** — `fa69ae8` (slice „szew zużycia statku poza walką”, audyt
+    `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`, rejestr `VESSEL_ORDERS_PLAN.md` §Findingi 583–587):
+    `_startForeignColonize` usuwa statek przez `destroyVessel` (`reason: 'colonized'`) — załoga zwalniana
+    typowanie jak na ścieżce normalnej. Bramka test 1: blokady domu 3,6 → 2,9 (załoga 0,4 + udział zgonu
+    oddziału 0,3). Blokad już wyciekłych w starych zapisach nie da się odróżnić w księdze — zostają (jak W2
+    decyzja 8); żywy przypadek potwierdzony w grze przy bramce (`Kolonista:0.4`, `v_26` z bramki 578).
+    **104** zostaje otwarty — dwie implementacje kolonizacji nadal istnieją; wspólny jest od dziś szew usunięcia
+    statku.
 
 106. 🟠 **UI nie mówi, że start kolonizacji jest przy zerze kolonii ZABRONIONY — przycisk zostaje
      aktywny.** ⚠ **SKORYGOWANE 2026-08-20 (drugi pomiar, wykonaniowy) — pierwotnie zapisane jako
@@ -1317,6 +1325,12 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      na pokładzie zostają bez nosiciela. **Niezgłoszone przed 2026-08-20.**
      ⚠ Wspólna przyczyna z 102 i 104: **dwie równoległe implementacje kolonizacji**, z których jedna
      omija cały rytuał sprzątania drugiej.
+     ✅ **ZAMKNIĘTY 2026-10-30** — `fa69ae8` (razem z 102 — wpis wyżej): `_startForeignColonize` przez
+     `destroyVessel`, więc oddziały z `troop_bay` są rozliczane jak na ścieżce normalnej — giną
+     `transport_lost` (decyzja Q3: wysiadanie wymaga rozmieszczenia na mapie celu, Finding 349 → **586**).
+     Sieroty w starych zapisach naprawia `VesselManager.repairCargoOrphansAfterLoad()` przy wczytaniu
+     (sierota na kolonii właściciela wysiada, inna ginie `transport_lost`); bramka test 5:
+     `{disembarked:['gu_6'], killed:[]}`, brak `ORPHAN`.
 ---
 
 ## Findings — BUG MAPY STRATCOM (poza tematem tego arca, zapisane tu, bo to żywy rejestr)

@@ -625,6 +625,9 @@ Po znaczniku statku (2026-10-29, `db97c64` SM-1 · `c6ad1cc` SM-Z — dodatek po
 ⚠ 2026-10-30 — numery **578–582** nadał slice „akcje obce po skoku warp” poza tym arkuszem (rejestr `VESSEL_ORDERS_PLAN.md`
 §Findingi 578–582, `56e66b4`). Pierwszy wolny numer wspólnej numeracji: **583**.
 
+⚠ 2026-10-30 — numery **583–587** nadał slice „szew zużycia statku poza walką” (rejestr `VESSEL_ORDERS_PLAN.md`
+§Findingi 583–587, `fa69ae8`). Pierwszy wolny numer wspólnej numeracji: **588**.
+
 ---
 
 ## 4. Cięcie na kroki
