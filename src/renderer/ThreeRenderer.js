@@ -25,6 +25,7 @@ import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
 import { AtmosphereShader }  from './AtmosphereShader.js';
 import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
+import { STAR_VERT, STAR_FRAG, createSkyStarMaterial } from './StarPointShader.js';   // NIEBO — PSF gwiazd tła
 import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
@@ -38,6 +39,10 @@ import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { LIVE_SKY, buildSkyCatalog, skyFrom, allocSkyBuffers, skySeedOf, skyKnobSnapshot, skyKnobsChanged,
+         nearestRealSystems, skyDirectionTo, lookAnglesFor, SKY_LOOK, formatLy }
+  from '../utils/SkyCatalog.js';   // NIEBO (ARC GALAXY) — niebo z katalogu galaktyki
+import { systemRevealFromWorld } from '../utils/SystemRevealWorld.js';   // NIEBO — kanon mgły wojny (jeden punkt składania)
 import { systemIdOf } from '../utils/SystemScope.js';   // ARKUSZ UI U3-2 — termin układu pingu (Finding 477)
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
@@ -95,6 +100,12 @@ const STAR_LUMINOSITY_EXP = 0.22;
 //   jedyna ścieżka rollbacku, jaką gate ma bez edycji pliku i F5.
 // ⚠ Idiom „brak klucza = OFF" (liveGasShaders / liveSunShader / dayNightAtmosphere).
 const logDepthOn = () => !!GAME_CONFIG.FEATURES?.sceneDepthUnification;
+// ── NIEBO (ARC GALAXY, GALAXY_PLAN.md §4; D-GX-4/5/6) — niebo z katalogu galaktyki ───────────────────────────────
+// ⚠ FUNKCJA (idiom „brak klucza = OFF”), ale czytana dla budowy nieba RAZ — w konstruktorze renderera: kopuła albo
+//   dawna powłoka powstaje przy starcie gry, więc przestawienie flagi łapie się po przeładowaniu (F5 czyta
+//   GameConfig z pliku). Dawna powłoka nie ma uchwytów (`scene.add` wprost), więc przełączenie „w locie” wymagałoby
+//   zmiany ścieżki OFF — a ta ma zostać kodem sprzed kroku co do znaku.
+const skyCatalogOn = () => !!GAME_CONFIG.FEATURES?.skyCatalog;
 // ── Pokrętła warstwy chmur (V-278) ───────────────────────────────────────────
 // ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
 //   — _tickClouds przepisuje wynik do uniformów KAŻDEJ klatki, więc zmiana łapie się
@@ -300,6 +311,10 @@ export class ThreeRenderer {
     //   obiekt (lekcja sunTuning: kopia sprawia, że konsola zmienia pole, którego
     //   nikt nie czyta).
     this.cloudTuning = LIVE_CLOUDS;
+    // NIEBO — ten sam kontrakt dla nieba z katalogu: KOSMOS.threeRenderer.skyTuning.SLOPE = 0.35
+    // ⚠ ALIAS LIVE_SKY (nie kopia): _tickSky porównuje go co klatkę z migawką i przelicza niebo przy zmianie
+    //   (FILLER_COUNT przebudowuje katalog). Kopia oznaczałaby pokrętło, którego nikt nie czyta.
+    this.skyTuning = LIVE_SKY;
     this._sunCoronaU     = null;  // uniformy ŻYWEJ korony (null przy fladze OFF)
     this._sunStreamerPhase = 0;   // [rad] AKUMULOWANA faza dryfu smug (D-V2u)
     this._sunBreathPhase   = 0;   // [rad] AKUMULOWANA faza oddechu korony
@@ -536,6 +551,16 @@ export class ThreeRenderer {
     this._starCore   = null;          // mesh rdzenia — NAZWANY uchwyt (V-266)
     this._starCorona = null;          // billboard korony HDR (sync quaternion w pętli)
     this._starTwinkleUniform = null;  // referencja do uTime migotania gwiazd tła
+    // NIEBO (D-GX-4/6) — kopuła nieba za kamerą { group, points, nebula } (null przy fladze OFF — dawna powłoka nie ma
+    // uchwytów), katalog galaktyki (null, zanim galaktyka istnieje — niebo PUSTE), układ, z którego patrzymy.
+    this._sky         = null;
+    this._skyCatalog  = null;
+    this._skyGalaxy   = null;
+    this._skyBuf      = null;
+    this._skySystemId = 'sys_home';
+    this._skyKnobSnap = null;
+    this._skyStats    = null;
+    this._skyLabelsForced = false;   // NIEBO — przyrząd bramki: etykiety nieba bez CTRL (KOSMOS.debug.skyMarks(1)); rysuje HudSkyLabelLayer
     // ⚠ V-266 — USUNIĘTE: _starCoronaUniform („referencja do uTime korony") oraz
     //   _starPromCount („liczba protuberancji"). Oba były zapisywane dwa razy
     //   i NIGDY nieczytane; `git log -S` pokazuje, że weszły MARTWE już w c02574f,
@@ -592,6 +617,11 @@ export class ThreeRenderer {
   // W próżni gwiazdy NIE migoczą (scyntylacja = atmosfera) — zostawione śladowe
   // ±5% wolnego „oddechu" dla życia obrazu.
   _buildBackground() {
+    // NIEBO (D-GX-4) — przy fladze skyCatalog: kopuła za kamerą z katalogu galaktyki (_buildSkyDome). Niżej ścieżka
+    // OFF = niebo sprzed kroku CO DO ZNAKU (keeper `sky_catalog_smoke` — suma kodu wobec kotwicy e4e5717); literały
+    // PSF przeniesione do StarPointShader.js, mgławica do _buildNebula (wspólna dla obu ścieżek).
+    // ⚠ Komentarz „Top ~3% gwiazd ma intensywność >1.0” nad tą metodą jest NIEŚCISŁY — zmierzone: 16 % (b⁶ > 0,365).
+    if (skyCatalogOn()) { this._buildSkyDome(); return; }
     const N   = 7000;
     const pos   = new Float32Array(N * 3);
     const col   = new Float32Array(N * 3);
@@ -633,42 +663,10 @@ export class ThreeRenderer {
     geo.setAttribute('aSize',      new THREE.BufferAttribute(size, 1));
     geo.setAttribute('aPhase',     new THREE.BufferAttribute(phase, 1));
 
-    // ⚠ Podniesione do NAZWANYCH lokalnych (V4/D2), zeby transformacja glebi miala
-    //   JEDNO miejsce zastosowania, a keeper i sonda kompilacji mogly wyciagnac te
-    //   shadery po nazwie. Tresc GLSL przeniesiona CO DO ZNAKU.
-    const starVert = `
-        attribute float aIntensity;
-        attribute float aSize;
-        attribute float aPhase;
-        varying vec3  vColor;
-        varying float vI;
-        uniform float uTime;
-        uniform float uPx;
-
-        void main() {
-          vColor = color;
-          // Śladowy „oddech" ±5% (w próżni brak scyntylacji)
-          vI = aIntensity * (1.0 + 0.05 * sin(uTime * 0.3 + aPhase));
-          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * uPx;
-          gl_Position  = projectionMatrix * mvPos;
-        }
-      `;
-    const starFrag = `
-        varying vec3  vColor;
-        varying float vI;
-
-        void main() {
-          vec2  p  = gl_PointCoord - vec2(0.5);
-          float d2 = dot(p, p);
-          // Profil PSF: gaussowski rdzeń + słabszy szeroki ogon (jak glare optyki)
-          float core = exp(-d2 * 38.0);
-          float halo = exp(-d2 * 9.0) * 0.18;
-          float I = (core + halo) * vI;
-          if (I < 0.002) discard;
-          gl_FragColor = vec4(vColor * I, 1.0);   // additive — alpha bez znaczenia
-        }
-      `;
+    // ⚠ Podniesione do NAZWANYCH lokalnych (V4/D2), zeby transformacja glebi miala JEDNO miejsce zastosowania.
+    //   NIEBO: tresc GLSL przeniesiona CO DO ZNAKU do StarPointShader.js (STAR_VERT / STAR_FRAG).
+    const starVert = STAR_VERT;
+    const starFrag = STAR_FRAG;
     const starMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0.0 },
@@ -688,6 +686,12 @@ export class ThreeRenderer {
 
     this.scene.add(new THREE.Points(geo, starMat));
 
+    this.scene.add(this._buildNebula());
+  }
+
+  // ── Mgławica (NIEBO: wyjęta z _buildBackground CO DO ZNAKU — poza `return` zamiast `this.scene.add`) ──────────
+  // Wspólna dla dawnej powłoki (flaga skyCatalog OFF — dodawana do sceny) i kopuły nieba (ON — w grupie za kamerą).
+  _buildNebula() {
     // ── Mgławica — bardzo subtelna struktura FBM, peak luminancji ~0.014 linear
     // (na ekranie ~10-14/255 po ACES). Struktura i głębia bez rozjaśniania tła;
     // pas „drogi mlecznej" wokół nachylonej płaszczyzny. Statyczna (bez uniformów).
@@ -724,7 +728,169 @@ export class ThreeRenderer {
     });
     const nebula = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 32), nebMat);
     nebula.renderOrder = -2;   // rysuj przed resztą (additive na czystym tle)
-    this.scene.add(nebula);
+    return nebula;
+  }
+
+  // ── NIEBO (D-GX-4) — kopuła nieba za kamerą ─────────────────────────────────────────────────────────────────
+  // Gwiazdy i mgławica w JEDNEJ grupie, której położenie = położenie kamery (pętla renderu): obraz nieba zależy
+  // wyłącznie od ORIENTACJI kamery, więc jest ciągły przez każde przejście z konstrukcji (F2) i nie ma paralaksy kamery
+  // wobec gwiazd 300–1 000 j. dalej. Gwiazdy jak mgławica (D-D3): lista nieprzezroczysta, renderOrder −1, bez testu
+  // i zapisu głębi, addytywnie — planety zawsze je zasłaniają (koniec Finding 591).
+  // ⚠ Zanim galaktyka istnieje, niebo jest PUSTE (punkty niewidoczne) — nigdy pole z Math.random (D-GX-6). Katalog
+  //   podłącza setSkyGalaxy, wołane z GameScene zaraz po zmintowaniu albo wczytaniu `galaxyData`.
+  _buildSkyDome() {
+    const group = new THREE.Group();
+    group.name = 'skyDome';
+    const mat = createSkyStarMaterial(THREE, { pixelRatio: this._pixelRatio, realFade: 1.0 });
+    const points = new THREE.Points(new THREE.BufferGeometry(), mat);
+    points.renderOrder   = -1;      // po mgławicy (−2), przed resztą sceny (0)
+    points.frustumCulled = false;   // kopuła otacza kamerę; sfera ograniczająca pustej geometrii wycinałaby ją
+    points.visible       = false;   // do pierwszego przeliczenia z katalogu (setSkyGalaxy)
+    group.add(points);
+    const nebula = this._buildNebula();
+    group.add(nebula);
+    this.scene.add(group);
+    this._sky = { group, points, nebula };
+    this._starTwinkleUniform = mat.uniforms.uTime;   // oddech ±5 % — ten sam licznik w pętli co dawne niebo
+    this._starScaleUniform   = null;
+  }
+
+  /**
+   * NIEBO (D-GX-6) — podłącz galaktykę: katalog z `galaxyData.systems` + ziarna i przeliczenie nieba dla układu,
+   * z którego patrzymy. Wołane RAZ z GameScene po zmintowaniu / wczytaniu `galaxyData` — wczytanie nie przechodzi
+   * przez switchSystem (StarSystemManager.restore wymusza dom), więc to wywołanie pokrywa ścieżkę wczytania.
+   * Przy fladze OFF (dawna powłoka) — no-op. Brak galaktyki ⇒ niebo puste.
+   */
+  setSkyGalaxy(galaxyData) {
+    if (!this._sky) return null;
+    this._skyGalaxy = galaxyData ?? null;
+    this._rebuildSkyCatalog();
+    return this._recomputeSky('galaxy');
+  }
+
+  _rebuildSkyCatalog() {
+    const gd = this._skyGalaxy;
+    this._skyCatalog  = gd ? buildSkyCatalog(gd.systems, skySeedOf(gd), { fillerCount: LIVE_SKY.FILLER_COUNT }) : null;
+    this._skyKnobSnap = skyKnobSnapshot(LIVE_SKY);
+  }
+
+  /** NIEBO — przelicz kierunki / kolor / intensywność / rozmiar nieba z katalogu dla `_skySystemId`. */
+  _recomputeSky(reason = 'recompute') {
+    const sky = this._sky;
+    if (!sky) return null;
+    const cat = this._skyCatalog, points = sky.points;
+    if (!cat) {
+      points.visible = false;
+      this._skyStats = { reason, count: 0, ms: 0, systemId: this._skySystemId };
+      return this._skyStats;
+    }
+    const t0 = performance.now();
+    if (!this._skyBuf || this._skyBuf.capacity < cat.N) {
+      const b = allocSkyBuffers(cat.N), geo = new THREE.BufferGeometry();
+      geo.setAttribute('position',   new THREE.BufferAttribute(b.pos, 3));
+      geo.setAttribute('color',      new THREE.BufferAttribute(b.color, 3));
+      geo.setAttribute('aIntensity', new THREE.BufferAttribute(b.intensity, 1));
+      geo.setAttribute('aSize',      new THREE.BufferAttribute(b.size, 1));
+      geo.setAttribute('aPhase',     new THREE.BufferAttribute(b.phase, 1));
+      geo.setAttribute('aReal',      new THREE.BufferAttribute(b.real, 1));
+      points.geometry.dispose();
+      points.geometry = geo;
+      this._skyBuf = b;
+    }
+    const res = skyFrom(cat, this._skySystemId, this._skyBuf, LIVE_SKY);
+    const attrs = points.geometry.attributes;
+    for (const name of ['position', 'color', 'aIntensity', 'aSize', 'aPhase', 'aReal']) attrs[name].needsUpdate = true;
+    points.geometry.setDrawRange(0, res.count);
+    points.visible = res.count > 0;
+    this._skyStats = { ...res, reason, ms: performance.now() - t0, systemId: this._skySystemId,
+      N: cat.N, filler: cat.fillerCount, real: cat.realCount };
+    return this._skyStats;
+  }
+
+  /** NIEBO — pokrętła `skyTuning` co klatkę; przeliczenie wyłącznie przy zmianie (FILLER_COUNT — nowy katalog). */
+  _tickSky() {
+    const ch = skyKnobsChanged(this._skyKnobSnap, LIVE_SKY);
+    if (!ch.changed) return;
+    if (ch.rebuild) this._rebuildSkyCatalog();
+    else this._skyKnobSnap = skyKnobSnapshot(LIVE_SKY);
+    this._recomputeSky('tuning');
+  }
+
+  // ── NIEBO: przyrząd bramki — KOSMOS.threeRenderer.getSkyInfo() ───────────────────────────────────────────────
+  // Stan kopuły, katalogu i OSTATNIEGO przeliczenia (czas w ms, liczba punktów, najjaśniejszy prawdziwy układ,
+  // stosunek strumieni najjaśniejszy prawdziwy / najjaśniejsze tło). `flag` = bieżąca wartość w GameConfig —
+  // kopuła (`dome`) powstaje przy starcie gry, więc oba pola mogą się różnić po przestawieniu w konsoli.
+  getSkyInfo() {
+    const cat = this._skyCatalog, st = this._skyStats;
+    const ratio = st && st.maxFillerFlux > 0 ? st.maxRealFlux / st.maxFillerFlux : null;
+    return {
+      flag: skyCatalogOn(), dome: !!this._sky, galaxy: !!this._skyGalaxy, systemId: this._skySystemId,
+      catalog: cat ? { N: cat.N, real: cat.realCount, filler: cat.fillerCount, seed: cat.seed, streamSeed: cat.streamSeed } : null,
+      drawn: st?.count ?? 0, lastReason: st?.reason ?? null, lastMs: st ? +st.ms.toFixed(3) : null,
+      brightestReal: st?.brightestRealId ?? null,
+      maxRealI: st?.maxRealI != null ? +st.maxRealI.toFixed(3) : null,
+      maxFillerI: st?.maxFillerI != null ? +st.maxFillerI.toFixed(3) : null,
+      realOverFillerFlux: ratio != null ? +ratio.toFixed(1) : null,
+      realsAboveMaxFiller: st?.realsAboveMaxFiller ?? null,
+      marks: this._skyLabelsForced === true,
+      knobs: { ...LIVE_SKY },
+    };
+  }
+
+  // ── NIEBO: przyrządy bramki (DEBUG — nie funkcja gry, nie w uiPrefs; los w G5) ───────────────────────────────────
+  // KOSMOS.debug.skyLookHome() / skyLookAt(n) / skyMarks(1|0) — bez cudzysłowów (do wklejenia w konsolę). skyLookHome /
+  // skyLookAt obracają kamerę z każdego układu, także w czystym widoku SHIFT. skyMarks(1) wymusza etykiety nieba (podwarstwa
+  // HUD `HudSkyLabelLayer`) BEZ CTRL — zastępuje wyłącznie CTRL: SHIFT, tryb Y i overlay chowają je dalej (reguła warstwy).
+
+  /** Obróć kamerę (TYLKO θ / φ; dystans i cel bez zmian) ku gwieździe domu widzianej z aktywnego układu. */
+  skyLookHome() {
+    if (!this._sky || !this._skyCatalog) { console.warn('[sky] niebo z katalogu nieaktywne (flaga skyCatalog OFF albo brak galaktyki)'); return null; }
+    if (this._skySystemId === 'sys_home') {
+      console.log('[sky] jesteś w domu — dom nie jest gwiazdą twojego nieba (skyLookAt(1) — najbliższy sąsiad)');
+      return null;
+    }
+    const index = this._skyCatalog.index.get('sys_home');
+    return index == null ? null : this._skyLookAtIndex(index, 'Dom');
+  }
+
+  /** Obróć kamerę ku `n`-temu najbliższemu prawdziwemu układowi (1 = najbliższy) widzianemu z aktywnego układu. */
+  skyLookAt(n = 1) {
+    if (!this._sky || !this._skyCatalog) { console.warn('[sky] niebo z katalogu nieaktywne (flaga skyCatalog OFF albo brak galaktyki)'); return null; }
+    const list = nearestRealSystems(this._skyCatalog, this._skySystemId);
+    if (!list.length) return null;
+    const k = Math.min(list.length, Math.max(1, Math.floor(Number(n) || 1)));
+    if (k !== n) console.warn(`[sky] skyLookAt(${n}) → ${k} (zakres 1…${list.length})`);
+    return this._skyLookAtIndex(list[k - 1].index, `#${k}`);
+  }
+
+  /** Etykiety nieba bez CTRL (przyrząd bramki): 1 — wymuś, 0 — tylko CTRL. Rysuje podwarstwa HUD (`HudSkyLabelLayer`). */
+  setSkyMarks(on) {
+    this._skyLabelsForced = !!on;
+    window.KOSMOS?.hudLayer?.wake?.();
+    console.log(`[sky] etykiety nieba bez CTRL: ${this._skyLabelsForced ? 'ON' : 'OFF'}`);
+    return this._skyLabelsForced;
+  }
+
+  _skyLookAtIndex(index, label) {
+    const cc = this._cameraController, cat = this._skyCatalog;
+    const dir = skyDirectionTo(cat, this._skySystemId, index);
+    if (!cc || !dir) return null;
+    const a = lookAnglesFor(dir, SKY_LOOK.OFFSET_RAD);
+    cc._goalTheta = null; cc._goalPhi = null;
+    cc._theta = a.theta; cc._phi = a.phi;
+    const id = cat.ids[index];
+    const sys = (window.KOSMOS?.galaxyData?.systems ?? []).find((s) => String(s.id) === String(id));
+    let revealed = false;
+    try { revealed = systemRevealFromWorld(window.KOSMOS, sys).name === true; } catch { revealed = false; }
+    const name = revealed ? (sys?.name ?? id) : '???';
+    const b = this._skyBuf;
+    let I = null;
+    if (b) for (let k = 0; k < b.count; k++) if (b.src[k] === index) { I = b.intensity[k]; break; }
+    const Itxt = I == null ? '—' : I.toFixed(2).replace('.', ',');
+    console.log(`[sky] ${label}: ${name} [${id}] · ${formatLy(dir.distLy)} · I ${Itxt}`
+      + ` · gwiazda ${(a.offsetRad * 180 / Math.PI).toFixed(1).replace('.', ',')}° nad środkiem kadru${a.clamped ? ' (φ przycięte)' : ''}`);
+    return { label, id, name, distLy: +dir.distLy.toFixed(2), intensity: I == null ? null : +I.toFixed(3),
+      theta: +a.theta.toFixed(4), phi: +a.phi.toFixed(4), clamped: a.clamped };
   }
 
   // ── Oświetlenie ──────────────────────────────────────────────
@@ -1253,6 +1419,10 @@ export class ThreeRenderer {
   switchSystem(star, planets, planetesimals, moons = []) {
     this._disposeAllMeshes();
     this.initSystem(star, planets, planetesimals, moons);
+    // NIEBO (D-GX-6) — niebo z nowego układu: przelicz kierunki / kolor / rozmiar katalogu (no-op przy OFF i przed
+    // galaktyką). `star.systemId` = id z galaxyData (StarSystemManager oznacza nim każdą encję układu).
+    this._skySystemId = star?.systemId ?? window.KOSMOS?.activeSystemId ?? this._skySystemId;
+    this._recomputeSky('switchSystem');
     this._restoreActiveSystemVesselSprites();
     this._restoreActiveSystemStations();   // 4f-B: stacje aktywnego układu wracają po switchSystem
     // F2/2g: tryb taktyczny przeżywa zmianę układu (chip-switch w trybie Y) —
@@ -3675,6 +3845,10 @@ export class ThreeRenderer {
 
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
+
+        // NIEBO (D-GX-4) — kopuła nieba jedzie z kamerą (obraz nieba zależy tylko od ORIENTACJI — ciągły z konstrukcji);
+        // pokrętła nieba co klatkę (przeliczenie tylko przy zmianie). Przy fladze OFF `_sky` = null.
+        if (this._sky) { this._sky.group.position.copy(this.camera.position); this._tickSky(); }
 
         // Animacja świetlików handlowych
         if (this._tradeFireflies.length > 0) this._animateTradeFireflies(t);

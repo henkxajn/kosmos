@@ -14,6 +14,8 @@
 //     `null` przed pierwszym tikiem po wczytaniu — wtedy bez okresowych animacji).
 // Treść rysują PODWARSTWY (`addSublayer`): `prepare(F)` → część klucza klatki (tanio, w każdej klatce), `collect(F, proj)` →
 // `{ count, animating, … }` (geometria w px logicznych), `draw(ctx, F, collected)`; opcjonalnie `debug()`, `destroy()`.
+// Podwarstwa z `drawFirst === true` rysuje się PRZED pozostałymi niezależnie od miejsca na liście zbierania (NIEBO — etykiety
+// nieba: zbierane ostatnie, bo czytają etykiety mapy tej klatki, a leżą „w nieskończoności”, pod resztą HUD).
 // Rzut — jeden wspólny projektor (`HudProjection.makeHudProjector` z `ThreeRenderer.getHudView()`).
 // Paczka B: stan klatki dla modelu uwagi i alertów (`F.att` — ostrość, alerty, warstwy chipów) i widok
 // alertów w px (`F.alertView(proj)` — położenia, linia treści wg wywiadu) liczone RAZ na klatkę, wspólne dla podwarstw; rejestr
@@ -33,6 +35,7 @@ import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
 import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) — nawiasy zaznaczenia, pierścienie i wektor alertu
 import { HudShipMarkerLayer } from './HudShipMarkerLayer.js';   // znacznik statku (D-SM-1…6) — zamiast insygnium frakcji 3D
+import { HudSkyLabelLayer } from './HudSkyLabelLayer.js';       // NIEBO (ARC GALAXY, O1) — etykiety nieba przy CTRL
 import { focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
 import {
   HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
@@ -110,9 +113,9 @@ export class HudLayer {
   /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, znacznik statku (pod etykietami),
    *  etykiety (ich anti-overlap czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify
    *  warp, znaczniki statków), nawiasy i alerty (na wierzchu — czytają etykiety tej klatki: narożnik pod przypiętą etykietą
-   *  pominięty). */
+   *  pominięty); NIEBO — etykiety nieba (zbierane ostatnie: omijają etykiety tej klatki; rysowane pierwsze — `drawFirst`). */
   _defaultSublayers() {
-    return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudLabelLayer(this), new HudFocusLayer(this)];
+    return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudLabelLayer(this), new HudFocusLayer(this), new HudSkyLabelLayer(this)];
   }
 
   /**
@@ -409,8 +412,13 @@ export class HudLayer {
     const k = (this.canvas.width / cssW) * uiScale;   // px logiczne → px bufora
     ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.clearRect(0, 0, F.W, F.H);
-    for (let i = 0; i < this._sublayers.length; i++) {
-      if (parts[i]?.count > 0) this._sublayers[i].draw?.(ctx, F, parts[i]);
+    // Najpierw podwarstwy `drawFirst` (etykiety nieba — pod resztą HUD), potem pozostałe w kolejności listy.
+    for (const first of [true, false]) {
+      for (let i = 0; i < this._sublayers.length; i++) {
+        const s = this._sublayers[i];
+        if ((s.drawFirst === true) !== first) continue;
+        if (parts[i]?.count > 0) s.draw?.(ctx, F, parts[i]);
+      }
     }
     this._shown = count > 0;
     this.stats.draws++;

@@ -1,8 +1,9 @@
 // GalaxyGenerator — generator danych galaktycznych (okoliczne układy gwiezdne)
 //
-// Generuje ~42 układów wokół macierzystego systemu gracza.
+// Generuje 72 układy (SYSTEM_COUNT — dom + 71) wokół macierzystego systemu gracza.
 // Seeded PRNG (Mulberry32) z JAWNEGO seeda → determinizm.
-// Rozkład Poisson-disk w sferze 3-18 LY z rozłożonym Z (grubość dysku).
+// Rozkład Poisson-disk w dysku: odległość od domu 2–22 LY (równomierna w promieniu — gęściej przy domu),
+// z = ±5 LY (grubość dysku), min. odstęp par 2 LY. Id: `sys_home` + `sys_001…sys_071` (Finding 598, NIEBO).
 //
 // ⚠ GALAXY_SEED (docs/design/GALAXY_SEED_PLAN.md): seed jest ARGUMENTEM, nie
 // pochodną `star.id`. Wcześniej generator liczył `hashString(star.id)`, a `star.id`

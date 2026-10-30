@@ -597,6 +597,15 @@ export class GameScene {
         console.table(info.shells);
         return info;
       },
+      // NIEBO (ARC GALAXY) — przyrządy bramki nieba z katalogu (DEBUG, nie funkcja gry; bez cudzysłowów):
+      //   KOSMOS.debug.skyLookHome() — kamera (tylko θ/φ, dystans bez zmian) ku gwieździe domu z aktywnego układu;
+      //   KOSMOS.debug.skyLookAt(1)  — ku n-temu najbliższemu prawdziwemu układowi (1 = najbliższy);
+      //   KOSMOS.debug.skyMarks(1)   — etykiety nieba (nawiasy + nazwa + „x,x LY”) BEZ trzymania CTRL; skyMarks(0) — tylko
+      //   CTRL. Rysuje je podwarstwa HUD (`HudSkyLabelLayer`): SHIFT, tryb Y i overlay chowają je także przy wymuszeniu.
+      //   skyLook* wypisują nazwę (bramką reveal.name), odległość w ly i bieżącą intensywność HDR.
+      skyLookHome: () => window.KOSMOS?.threeRenderer?.skyLookHome?.() ?? null,
+      skyLookAt:   (n) => window.KOSMOS?.threeRenderer?.skyLookAt?.(n) ?? null,
+      skyMarks:    (on) => window.KOSMOS?.threeRenderer?.setSkyMarks?.(on) ?? null,
       // KOSMOS.debug.replayIntro()      — odtwórz sam lot kinowy startu (kalibracja bez nowej gry).
       // KOSMOS.debug.replayIntro(true)  — lot + ekrany narracyjne (LOG → MANUAL → nazwy).
       replayIntro: (withText) => {
@@ -2163,6 +2172,10 @@ export class GameScene {
       // Zapis: seed i cała galaktyka przychodzą z pliku — ZERO re-derywacji.
       window.KOSMOS.galaxyData = savedData.civ4x.galaxyData;
     }
+    // NIEBO (ARC GALAXY, D-GX-6) — niebo z katalogu galaktyki: JEDNO wywołanie zaraz po tym, jak `galaxyData` jest
+    // zmintowane albo wczytane (obie gałęzie wyżej). Wczytanie nie przechodzi przez switchSystem
+    // (StarSystemManager.restore wymusza dom), więc to wywołanie pokrywa ścieżkę wczytania. Przy fladze OFF — no-op.
+    this.threeRenderer?.setSkyGalaxy?.(window.KOSMOS.galaxyData);
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,

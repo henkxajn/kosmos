@@ -56,8 +56,8 @@ import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { readGarrisonReadout, formatGarrisonReadout } from '../utils/GarrisonReadout.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
-import { resolveSystemReveal } from '../utils/SystemReveal.js';
-import { isSystemExplored, HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
+import { systemRevealFromWorld } from '../utils/SystemRevealWorld.js';
+import { HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
 import { STATIONS } from '../data/StationData.js';
 // REFORMA ZAKŁADEK T2 — przypięcie etykiety z akcjami (flaga kroku `labelPin` na stałe ON od T4; w trybie cywilizacji).
 import {
@@ -405,16 +405,12 @@ export class HudLabelLayer {
     return v;
   }
 
-  /** Nazwa ciała dla etykiety na żądanie — oś MIEJSCA kanonu mgły wojny (`SystemReveal.name`) oglądanego układu. */
+  /** Nazwa ciała dla etykiety na żądanie — oś MIEJSCA kanonu mgły wojny (`SystemReveal.name`) oglądanego układu;
+   *  kanały składa jeden moduł (`SystemRevealWorld`, NIEBO — A14). */
   _t1NameVisible(F) {
     const K = F.K, sys = F.activeSystemId;
     const rec = (K.galaxyData?.systems ?? []).find((s) => s?.id === sys) ?? (sys === HOME_SYSTEM_ID ? { id: sys, isHome: true } : null);
-    const intel = K.intelSystem;
-    return resolveSystemReveal(rec, {
-      explored: isSystemExplored(rec),
-      scanned: !!K.observatorySystem?.getSystemScanResult?.(sys),
-      intelAtLeast: (lvl) => intel?.isAtLeast?.(rec?.empireId, lvl) === true,
-    }).name === true;
+    return systemRevealFromWorld(K, rec).name === true;
   }
 
   /**

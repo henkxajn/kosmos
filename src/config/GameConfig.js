@@ -30,9 +30,8 @@ export const GAME_CONFIG = {
   DISK_MIN_AU: 0.1,
   DISK_MAX_AU: 12.0,
 
-  // Tło
-  BACKGROUND_COLOR: 0x0a0a1a,
-  STAR_COUNT_BACKGROUND: 250,
+  // Tło — NIEBO (Finding 597): `BACKGROUND_COLOR` i `STAR_COUNT_BACKGROUND` usunięte (zero czytelników; niebo jest
+  // fizyczne — katalog galaktyki, `src/utils/SkyCatalog.js` — a nie z konfiguracji ani z motywu).
 
   // ── Feature flagi (Milestone 1/2 — Combat Foundation) ────────────────────
   // Kill-switch dla nowych systemów. OFF-by-default — instancjonowane lazily
@@ -499,6 +498,18 @@ export const GAME_CONFIG = {
     //     Sfery znikałby całkowicie na gwiazdach K/G/F — OFF nie ma prawa
     //     przywracać regresji, której ta flaga miała uniknąć (precedens V-260/D-V2z).
     sceneDepthUnification: true,
+
+    // ── ARC GALAXY / NIEBO — NIEBO Z KATALOGU GALAKTYKI (GALAXY_PLAN.md §4; D-GX-4/5/6, F7) ──────────────
+    //   ON  = niebo tła to TA SAMA galaktyka co mapa: 71 prawdziwych układów widzianych z aktywnego układu
+    //         + FILLER_COUNT gwiazd tła (domyślnie 14 000 — wybór właściciela; powłoka 30–3 000 ly, rozkład objętościowy) z ziarna galaktyki
+    //         (`src/utils/SkyCatalog.js`), prawo magnitudo z miękkim sufitem HDR; gwiazdy i mgławica jako KOPUŁA
+    //         za kamerą (D-D3 — lista nieprzezroczysta, bez testu głębi: planety zawsze zasłaniają niebo, 591);
+    //         przeliczenie przy switchSystem i przy podłączeniu galaktyki (także wczytanie). Zanim galaktyka
+    //         istnieje, niebo jest PUSTE (nigdy pole z Math.random). Pokrętła: KOSMOS.threeRenderer.skyTuning.
+    //   OFF = niebo sprzed kroku CO DO ZNAKU (7 000 punktów z Math.random w powłoce wokół początku świata).
+    //   ⚠ Czytana przy budowie nieba w konstruktorze renderera — przestawienie łapie się po przeładowaniu.
+    //   ⚠ Brak klucza = OFF (idiom liveGasShaders / liveSunShader).
+    skyCatalog:           true,
 
     // ── ZNACZNIK STATKU — flaga na stałe ON od SM-Z (2026-10-29; HUD_PLAN.md §„Znacznik statku”) ──
     // `hudShipMarker` (znacznik statku w warstwie HUD 2D — daszek w kierunku ruchu, romb bez ruchu, role motywu; D-SM-1…6):

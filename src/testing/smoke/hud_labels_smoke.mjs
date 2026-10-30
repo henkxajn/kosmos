@@ -450,7 +450,9 @@ header('L7  montaż (piny źródłowe): plakietek MapLabelLayer brak; klik HUD p
   // ARKUSZ HUD paczka B — po etykietach podwarstwa nawiasów i alertów (`HudFocusLayer`, czyta etykiety tej klatki).
   // PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-1): między radarem a etykietami może stać znacznik statku (`HudShipMarkerLayer`)
   //   — też zbierany przed etykietami (jego prostokąty są przeszkodami etykiet).
-  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), (?:new HudShipMarkerLayer\(this\), )?new HudLabelLayer\(this\)(?:, new HudFocusLayer\(this\))?\];/.test(hl),
+  // PRZECELOWANE 2026-10-30 (NIEBO): po nawiasach może stać podwarstwa etykiet nieba (`HudSkyLabelLayer`) — zbierana po
+  //   etykietach (omija ich prostokąty), rysowana pierwsza (`drawFirst`).
+  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), (?:new HudShipMarkerLayer\(this\), )?new HudLabelLayer\(this\)(?:, new HudFocusLayer\(this\))?(?:, new HudSkyLabelLayer\(this\))?\];/.test(hl),
     'L7e: podwarstwy gry — radar (i znacznik statku), potem etykiety (zbierane po nich — czytają przeszkody warstw zebranych wcześniej); paczka B — nawiasy po etykietach');
 }
 

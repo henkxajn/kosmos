@@ -186,7 +186,9 @@ header('C6  KONTROLE — co ZOSTAJE (zielone po obu stronach)');
   const hl = readClean('src/ui/HudLayer.js') ?? '', gs = readClean('src/scenes/GameScene.js') ?? '', ui = readClean('src/scenes/UIManager.js') ?? '';
   const tr = readClean('src/renderer/ThreeRenderer.js') ?? '';
   // PRZECELOWANE 2026-10-29 (ZNACZNIK STATKU SM-1): między radarem a etykietami podwarstwa znacznika statku (`HudShipMarkerLayer`).
-  ok(/_defaultSublayers\(\)\s*\{\s*return \[new HudRouteLayer\(this\), new HudRadarLayer\(this\), new HudShipMarkerLayer\(this\), new HudLabelLayer\(this\), new HudFocusLayer\(this\)\];/.test(hl)
+  // PRZECELOWANE 2026-10-30 (NIEBO, etykiety nieba przy CTRL): na końcu listy podwarstwa nieba (`HudSkyLabelLayer`) — zbierana
+  //   ostatnia, rysowana pierwsza (`drawFirst`; keeper `sky_labels_smoke` S9).
+  ok(/_defaultSublayers\(\)\s*\{\s*return \[new HudRouteLayer\(this\), new HudRadarLayer\(this\), new HudShipMarkerLayer\(this\), new HudLabelLayer\(this\), new HudFocusLayer\(this\), new HudSkyLabelLayer\(this\)\];/.test(hl)
       && /new HudLayer\(document\.getElementById\('hud-canvas'\)\)/.test(gs) && /hudLayer\?\.handleClick\?\.\(/.test(ui),
     'C6a: warstwa HUD — trasy, radar, znacznik statku, etykiety, nawiasy; `GameScene` tworzy ją na `#hud-canvas`; `UIManager` przekazuje klik');
   ok(/^\s{2}getAllVisibleLabels\s*\(/m.test(tr) && /^\s{2}getStationScreenPosition\s*\(/m.test(tr) && /this\._drawAllLabels\(ctx, tr\)/.test(ui),

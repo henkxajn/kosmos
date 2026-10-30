@@ -42,6 +42,10 @@
 //   T7  WPIECIE (D2): flaga czytana FUNKCJA, obie sciezki KAZDEJ fabryki, derywacje
 //       liczone RAZ na starcie modulu, mglawica przez depthTest zamiast chunkow,
 //       zlote sumy sciezki OFF nietkniete, komentarz przy `return` korony poprawiony.
+//       ⚠ PRZECELOWANE w NIEBO (ARC GALAXY, GALAXY_PLAN.md §4, D-GX-4): literal starfielda przeniesiony co do
+//       znaku do StarPointShader.js; dawna powloka (flaga skyCatalog OFF) dalej naklada chunki przez flage —
+//       ten pin zostaje, czyta stale STAR_VERT / STAR_FRAG. Kopula nieba (ON) jest BEZ chunkow i bez testu
+//       glebi — precedens mglawicy D-D3 (rysowana pierwsza, na liscie nieprzezroczystej, nigdy nie pisze glebi).
 
 import fs from 'fs';
 import {
@@ -248,8 +252,14 @@ ok('flaga czytana FUNKCJĄ, nie stałą modułową (inaczej konsola nie złapie 
 ok('idiom „brak klucza = OFF" (!! zamiast !== false)',
    /logDepthOn = \(\) => !!GAME_CONFIG/.test(rendCode) && !/sceneDepthUnification !== false/.test(rendCode));
 ok('flaga istnieje w GameConfig i jest domyślnie ON', /sceneDepthUnification:\s*true/.test(strip(cfgSrc)));
-ok('starfield: obie ścieżki przez flagę',
-   rendCode.includes('logDepthOn() ? withLogDepthVertex(starVert)') && rendCode.includes('logDepthOn() ? withLogDepthFragment(starFrag)'));
+// ⚠ NIEBO: literał starfielda w StarPointShader.js; dawna powłoka (skyCatalog OFF) — chunki przez flagę jak w D2.
+ok('starfield (dawna powłoka, skyCatalog OFF): obie ścieżki przez flagę, literały ze StarPointShader.js',
+   rendCode.includes('logDepthOn() ? withLogDepthVertex(starVert)') && rendCode.includes('logDepthOn() ? withLogDepthFragment(starFrag)')
+   && rendCode.includes('const starVert = STAR_VERT;') && rendCode.includes('const starFrag = STAR_FRAG;'));
+const spsCode = strip(read('../../renderer/StarPointShader.js'));
+ok('kopuła nieba (skyCatalog ON): BEZ chunków, bez testu i zapisu głębi — precedens mgławicy D-D3',
+   spsCode.includes('vertexShader:   STAR_VERT_SKY') && spsCode.includes('depthTest:    false') && spsCode.includes('depthWrite:   false')
+   && !spsCode.includes('withLogDepth') && !/^import /m.test(spsCode));
 ok('chmury: obie ścieżki przez flagę',
    rendCode.includes('logDepthOn() ? withLogDepthVertex(cloudVert)') && rendCode.includes('logDepthOn() ? withLogDepthFragment(cloudFrag)'));
 ok('mgławica: depthTest wyłączany flagą, BEZ chunków (D-D3)',

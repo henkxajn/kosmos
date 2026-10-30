@@ -57,7 +57,9 @@ header('U0  API (flaga `hudAttention` usunięta — B-Z)');
   ok(!!AT && AT.isHudAttentionOn === undefined, 'U0c (B-Z): predykat flagi `isHudAttentionOn` usunięty — model uwagi bez rozgałęzień');
   ok(!/\bhudAttention:\s*(true|false),/.test(strip(src('../../config/GameConfig.js'))) && FEATURES.hudAttention === undefined,
     'U0d (B-Z): klucz `FEATURES.hudAttention` usunięty z GameConfig');
-  ok(/new HudFocusLayer\(this\)\]/.test(strip(src('../../ui/HudLayer.js'))), 'U0e: podwarstwa nawiasów w domyślnych podwarstwach warstwy HUD (na wierzchu)');
+  // PRZECELOWANE 2026-10-30 (NIEBO): po nawiasach stoi na liście podwarstwa etykiet nieba (`HudSkyLabelLayer`) — rysowana
+  //   PIERWSZA (`drawFirst`), więc nawiasy nadal leżą na wierzchu (kolejność rysowania — keeper `sky_labels_smoke` S9).
+  ok(/new HudFocusLayer\(this\)(?:, new HudSkyLabelLayer\(this\))?\]/.test(strip(src('../../ui/HudLayer.js'))), 'U0e: podwarstwa nawiasów w domyślnych podwarstwach warstwy HUD (na wierzchu)');
 }
 
 // ═══ U1 ══════════════════════════════════════════════════════════════════════

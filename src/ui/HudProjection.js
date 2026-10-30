@@ -64,6 +64,22 @@ export function makeHudProjector(v) {
     pxPerWorld(depth) { return depth > 0 ? focal / depth : Infinity; },
 
     /**
+     * NIEBO (etykiety nieba) — kierunek W NIESKOŃCZONOŚCI (wektor świata) → `{ x, y }` (px logiczne) albo `null` (za kamerą).
+     * Rzut punktu jednorodnego z w = 0: obrót widoku bez przesunięcia, rzut bez wyrazów stałych. Gwiazda kopuły nieba leży na
+     * kamerze + kierunek × R (kopuła jedzie z kamerą), więc jej rzut nie zależy od R i równa się rzutowi kierunku.
+     */
+    direction(dx, dy, dz) {
+      const vx = V[0] * dx + V[4] * dy + V[8] * dz;
+      const vy = V[1] * dx + V[5] * dy + V[9] * dz;
+      const vz = V[2] * dx + V[6] * dy + V[10] * dz;
+      const cx = P[0] * vx + P[4] * vy + P[8] * vz;
+      const cy = P[1] * vx + P[5] * vy + P[9] * vz;
+      const cw = P[3] * vx + P[7] * vy + P[11] * vz;
+      if (!(cw > 1e-9) || !(-vz > 0)) return null;
+      return { x: ((cx / cw) * 0.5 + 0.5) * W, y: (-(cy / cw) * 0.5 + 0.5) * H };
+    },
+
+    /**
      * Łuk okręgu w płaszczyźnie y = `cy` (środek `cx, cz`, promień `r` j.) od kąta `a0` do `a1` (rad, ramka układu).
      * @returns {{ runs: number[][], maxR: number, clipped: boolean, center: object|null }} — `runs`: ciągłe odcinki
      *   łamanej [x0, y0, x1, y1, …] (px logiczne); `maxR` — największa odległość próbki od rzutu środka (∞, gdy

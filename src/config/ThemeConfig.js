@@ -38,7 +38,6 @@ export const THEME = {
   // Mapa kosmiczna
   orbitLine:    'rgba(0,255,180,0.055)',  // orbity planet (nieaktywne)
   orbitColony:  'rgba(0,255,180,0.16)',   // orbita z kolonią
-  starfield:    '#b0f0e0',   // kolor gwiazd w tle
   vignetteEnd:  'rgba(2,4,5,0.88)',       // ciemna winietka na krawędziach
   // Fonty
   fontFamily:   "'Space Mono', monospace",
@@ -481,7 +480,6 @@ export const PRESET_THEMES = {
     mint:         '#99aa44',
     orbitLine:    'rgba(196,152,48,0.06)',
     orbitColony:  'rgba(196,152,48,0.20)',
-    starfield:    '#ffe8c0',
     vignetteEnd:  'rgba(6,5,4,0.90)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   false,
@@ -514,7 +512,6 @@ export const PRESET_THEMES = {
     mint:         '#44bbaa',
     orbitLine:    'rgba(64,144,192,0.06)',
     orbitColony:  'rgba(64,144,192,0.20)',
-    starfield:    '#d8f0ff',
     vignetteEnd:  'rgba(4,6,8,0.90)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   false,
@@ -547,7 +544,6 @@ export const PRESET_THEMES = {
     mint:         '#66bbaa',
     orbitLine:    'rgba(160,96,192,0.06)',
     orbitColony:  'rgba(160,96,192,0.20)',
-    starfield:    '#f0d0ff',
     vignetteEnd:  'rgba(6,4,8,0.90)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   false,
@@ -580,7 +576,6 @@ export const PRESET_THEMES = {
     mint:         '#55cc99',
     orbitLine:    'rgba(80,160,96,0.06)',
     orbitColony:  'rgba(80,160,96,0.20)',
-    starfield:    '#d0ffe0',
     vignetteEnd:  'rgba(4,6,4,0.90)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   false,
@@ -615,7 +610,6 @@ export const PRESET_THEMES = {
     mint:         '#aacc55',
     orbitLine:    'rgba(196,152,48,0.06)',
     orbitColony:  'rgba(196,152,48,0.19)',
-    starfield:    '#ffe8c0',
     vignetteEnd:  'rgba(6,5,4,0.88)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   true,
@@ -649,7 +643,6 @@ export const PRESET_THEMES = {
     mint:         '#44ffcc',
     orbitLine:    'rgba(64,144,192,0.06)',
     orbitColony:  'rgba(64,144,192,0.19)',
-    starfield:    '#d8f0ff',
     vignetteEnd:  'rgba(4,6,8,0.88)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   true,
@@ -683,7 +676,6 @@ export const PRESET_THEMES = {
     mint:         '#66ddaa',
     orbitLine:    'rgba(160,96,192,0.06)',
     orbitColony:  'rgba(160,96,192,0.19)',
-    starfield:    '#f0d0ff',
     vignetteEnd:  'rgba(6,4,8,0.88)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   true,
@@ -719,7 +711,6 @@ export const PRESET_THEMES = {
     mint:         '#44ffaa',
     orbitLine:    'rgba(255,34,136,0.06)',
     orbitColony:  'rgba(255,34,136,0.20)',
-    starfield:    '#e0c8d8',
     vignetteEnd:  'rgba(8,2,10,0.90)',
     fontFamily:   "'Rajdhani', sans-serif",
     fontSizeTiny:   9,
@@ -758,7 +749,6 @@ export const PRESET_THEMES = {
     mint:         '#44ffaa',
     orbitLine:    'rgba(255,34,136,0.06)',
     orbitColony:  'rgba(255,34,136,0.19)',
-    starfield:    '#e0c8d8',
     vignetteEnd:  'rgba(8,2,10,0.88)',
     fontFamily:   "'Rajdhani', sans-serif",
     fontSizeTiny:   9,
@@ -798,7 +788,6 @@ export const PRESET_THEMES = {
     mint:         '#66ffcc',
     orbitLine:    'rgba(80,160,96,0.06)',
     orbitColony:  'rgba(80,160,96,0.19)',
-    starfield:    '#d0ffe0',
     vignetteEnd:  'rgba(4,6,4,0.88)',
     fontFamily:   "'Share Tech Mono', monospace",
     crtEnabled:   true,

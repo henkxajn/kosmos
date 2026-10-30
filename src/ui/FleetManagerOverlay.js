@@ -31,7 +31,7 @@ import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { DEFAULT_OBLIQUE_PITCH, panScreenToWorld } from '../renderer/HolotableCamera.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { isSystemExplored } from '../utils/SystemExploration.js';
-import { resolveSystemReveal } from '../utils/SystemReveal.js';
+import { systemRevealFromWorld } from '../utils/SystemRevealWorld.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 // REFORMA ZAKŁADEK T3 (D-TR-13) — rozbiórka z potwierdzeniem.
@@ -5685,19 +5685,15 @@ export class FleetManagerOverlay {
   // `known` = zbadane/home/intel-empire; `inSensor` = w zasięgu sensorów obserwatorium
   // (wykrywanie OBECNOŚCI statków own/enemy ograniczone do tego promienia).
   // Zwraca { home, list:[{s,d2,reveal,inSensor}] (sort wg odległości), rangeLY }.
-  // ── Mgła wojny: JEDEN punkt składania rekordu widoczności (Finding 188) ────
-  // Trzy kanały (eksploracja / skan STRATCOM / drabina wywiadu) schodzą się TUTAJ i nigdzie
-  // indziej. Każda powierzchnia — nagłówek panelu, etykieta gwiazdy 2D, jasność gwiazdy 3D,
-  // pierścień wrogości — czyta pole tego samego rekordu. Rozjazd predykatów nazwy (mapa
-  // wydawała ją na `rumor`, panel dopiero po zbadaniu) był połową Findingu 188.
+  // ── Mgła wojny: rekord widoczności układu (Finding 188) ────
+  // Trzy kanały (eksploracja / skan STRATCOM / drabina wywiadu) składa JEDEN moduł —
+  // `SystemRevealWorld.systemRevealFromWorld` (NIEBO, A14: wyciągnięty z tego miejsca, bo etykiety
+  // nieba i etykiety mapy układu pytają o to samo). Każda powierzchnia mapy galaktyki — nagłówek
+  // panelu, etykieta gwiazdy 2D, jasność gwiazdy 3D, pierścień wrogości — czyta pole tego samego
+  // rekordu. Rozjazd predykatów nazwy (mapa wydawała ją na `rumor`, panel dopiero po zbadaniu)
+  // był połową Findingu 188.
   _systemReveal(sys) {
-    const intel  = window.KOSMOS?.intelSystem;
-    const obsSys = window.KOSMOS?.observatorySystem;
-    return resolveSystemReveal(sys, {
-      explored:     isSystemExplored(sys),
-      scanned:      !!obsSys?.getSystemScanResult?.(sys?.id),
-      intelAtLeast: (lvl) => !!intel?.isAtLeast?.(sys?.empireId, lvl),
-    });
+    return systemRevealFromWorld(window.KOSMOS, sys);
   }
 
   _stratcomVisibleSystems() {

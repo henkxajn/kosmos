@@ -47,7 +47,8 @@ home-systemy AI, `objective`, oraz nazwy/pozycje/typy spektralne gwiazd w galakt
 **galaktyka wokół** niego. Gracz więc już teraz widzi inny dom w każdej partii; to maskowało defekt.
 
 ⚠ **Korekta 3.** Id układów **nie zmienią się nigdy** — `GalaxyGenerator.js:146` numeruje pozycyjnie
-(`sys_000…sys_071`), a `SystemGenerator.js:819/:882` re-derywuje zawartość obcych układów z
+(`sys_home` + `sys_001…sys_071`; korekta 598, NIEBO 2026-10-30), a `SystemGenerator.js:819/:882`
+re-derywuje zawartość obcych układów z
 `hashString(galaxyStar.id)`. Zawartość przesunie się tylko POŚREDNIO, bo `:829-833` czyta
 `spectralType`/`mass`/`luminosity` z wpisu galaktyki. Liczba układów to zawsze **72** (sprawdzone
 empirycznie na 500 losowych seedach — obalona teza, że inny seed może dać mniej).
