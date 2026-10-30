@@ -1004,6 +1004,16 @@
 >   migracji.
 > • **Pierwszy wolny numer: 588.**
 
+> **Aktualizacja 2026-10-30 (ARC GALAXY — faza A: audyt read-only + podpisy D-GX-1…22; NIEBO w toku)** (nowy arc:
+> mapa galaktyki jako tryb głównego widoku 3D; rejestr macierzysty `GALAXY_PLAN.md` §3). Audyt na HEAD `e2f7943` (sondy
+> w klonie: skala galaktyki na 40 ziarnach, rezerwa a skok warp, koszt nieba); podpisy właściciela 2026-10-30 —
+> D-GX-1…22 jak rekomendacja poza **D-GX-17 (c)** (chipy [ Beacon ] / [ Gate ] pominięte do czasu mechaniki, O5);
+> 597 wycofane w NIEBO; cięcie NIEBO → G1 → G2 → G3 → G4 → G5 (`GALAXY_PLAN.md` §4). Kod: zero zmian (commit
+> dokumentacji = kotwica NIEBO).
+> • **NOWE: #588–#599** (z audytu fazy A) — wiersze w A12: 🟠 **588** · **589** · **590**; ⚪ **591**–**599**.
+> • Następny: **NIEBO** — katalog nieba (`GALAXY_PLAN.md` §4; cel: 591, 597, 598).
+> • **Pierwszy wolny numer: 600.**
+
 
 ---
 
@@ -1087,6 +1097,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **504-577** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–29; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z, 574-577 ze znacznika statku — dodatek po zamknięciu, §9) |
 | **578-582** | `VESSEL_ORDERS_PLAN.md` §Findingi 578–582 — akcje obce po skoku warp (2026-10-29–30; 578-580 z audytu fazy A i z fazy B, 581 z decyzji właściciela po bramce, 582 z bramki (a7); audyt `docs/audit/POST_WARP_FOREIGN_ACTIONS_AUDIT.md`) |
 | **583-587** | `VESSEL_ORDERS_PLAN.md` §Findingi 583–587 — szew zużycia statku poza walką (2026-10-30; 583-585 z audytu fazy A, 586 z rezerwy Q3 i z bramki, 587 z bramki; audyt `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`) |
+| **588-599** | `GALAXY_PLAN.md` §3 Findings register — arc GALAXY (mapa galaktyki jako tryb głównego widoku 3D; 2026-10-30; 588-599 z audytu fazy A) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1396,6 +1407,23 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **575** | 🟠 | trasa H3 (`HudRouteLogic.routeSpec`, `to` = `liveTargetX/Y`) i dziób modelu celują w bieżące położenie ruchomego celu, a statek leci do punktu przewidzianego (`mission.targetX/Y`) — „Kurier”: daszek 21°, kreska 53° (ZF r120); znacznik ruchu uwidacznia rozjazd | → do decyzji: kreska i dziób do punktu przewidzianego albo bez zmian. `HUD_PLAN.md` §3, §9 |
 | **576** | ⚪ | dymek współrzędnych pustej mapy („Pozycja: (x, y)”) wychodzi w czystym widoku (SHIFT) — zaobserwowane raz (próbny przebieg K6 arkusza SM-1) | → do decyzji (polerka). `HUD_PLAN.md` §3 |
 | **577** | ⚪ | celownik wroga 3D (`_syncEnemyAlertMarkers`, rola `alert`) nad każdym statkiem AI z wywiadem ≥ `rumor`, także w pokoju — obcy ma naraz daszek `foreign` i celownik `alert` | → do decyzji: celownik tylko dla wroga (jak D-SM-1) albo bez zmian. `HUD_PLAN.md` §3 |
+
+## A12 — Arc GALAXY: mapa galaktyki jako tryb głównego widoku 3D (rejestr `GALAXY_PLAN.md` §3)
+
+| # | | opis | uwaga |
+|---|---|---|---|
+| **588** | 🟠 | kadłub w rezerwie W2 skacze warpem — `WarpRouteSystem.canOrder` i `VesselManager.dispatchInterstellar` bez terminu `isInService` (zmierzone sondą: `stored` / `mobilizing` → skok, rdzeń zużyty); bliźniak dziury zamkniętej w W3-4 / D6 dla rozkazów ruchu | → G3 (D-GX-12). `GALAXY_PLAN.md` §3 |
+| **589** | 🟠 | powierzchnie rozkazu warp drukują prawdziwą nazwę celu bez bramki ujawnienia (`FleetManagerOverlay.js:7006`, `:8116`, `WarpRouteSystem.js:105-106`, `VesselManager.js:1019-1021`) — klasa 188 poza jej pinem | → G3 (D-GX-18). `GALAXY_PLAN.md` §3 |
+| **590** | 🟠 | [ Beacon ] / [ Gate ] bez mechaniki — handlery FMO bez producenta, backend darmowy, natychmiastowy, bez technologii | → D-GX-17 (c): chipy pominięte; mechanika = §7 O5 (bez terminu). `GALAXY_PLAN.md` §3 |
+| **591** | ⚪ | gwiazdy tła w zasięgu kamery mogą rysować się na planetach (powłoka 300–1 000 j. wokół początku układu; wyprowadzone z geometrii, nie zaobserwowane) | → NIEBO (kopuła za kamerą, D-GX-4). `GALAXY_PLAN.md` §3 |
+| **592** | ⚪ | menu prawego kliku po polsku w kliencie EN (`RightClickMenu.js:88` rysuje `labelPL`) + polski literał w `buildMenuOptions` | → G3. `GALAXY_PLAN.md` §3 |
+| **593** | ⚪ | „Wyślij” w STRATCOM węższe niż bramka skoku (tylko statki zadokowane przy aktywnej kolonii) | → G3; umiera w G5. `GALAXY_PLAN.md` §3 |
+| **594** | ⚪ | odmowa `warp_order_send` gubi powód (sam toast) | → G3. `GALAXY_PLAN.md` §3 |
+| **595** | ⚪ | odległość płaska w bramce sensora STRATCOM, 3D w skoku | → G2 (D-GX-22). `GALAXY_PLAN.md` §3 |
+| **596** | ⚪ | zasięg obserwatorium liczony od domu bez względu na kolonię z obserwatorium (galaktyczny bliźniak 191) | → G2 (D-GX-22). `GALAXY_PLAN.md` §3 |
+| **597** | ⚪ | martwa konfiguracja nieba (`BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND`, `THEME.starfield` + 10 presetów) | → NIEBO — wycofanie (podpis 2026-10-30). `GALAXY_PLAN.md` §3 |
+| **598** | ⚪ | nieaktualne opisy galaktyki (`GalaxyGenerator.js:3`, `:5`; `GALAXY_SEED_PLAN.md:49-50`) | → NIEBO (komentarze). `GALAXY_PLAN.md` §3 |
+| **599** | ⚪ | matematyka przepisywana w arcu bez keepera w sweepie (pole terytorium, kamera stołu, skan) | → G2. `GALAXY_PLAN.md` §3 |
 
 ---
 
