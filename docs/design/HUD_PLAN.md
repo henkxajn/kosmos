@@ -622,6 +622,9 @@ osobny drobny krok poza arkuszem. Pierwszy wolny: **574**.
 
 Po znaczniku statku (2026-10-29, `db97c64` SM-1 · `c6ad1cc` SM-Z — dodatek po zamknięciu arkusza, §9; bramka właściciela PASS bez strojenia — „Do potwierdzenia” 1–9 i odstępstwa przyjęte): rejestr #504–#577 — **74 wpisy — ✅ 52** (51 jak wyżej + 574) **· 🟠 2** (504, 575) **· ⚪ 20** (18 jak wyżej + 576, 577). Brak otwartego kroku. Pierwszy wolny: **578**.
 
+⚠ 2026-10-30 — numery **578–582** nadał slice „akcje obce po skoku warp” poza tym arkuszem (rejestr `VESSEL_ORDERS_PLAN.md`
+§Findingi 578–582, `56e66b4`). Pierwszy wolny numer wspólnej numeracji: **583**.
+
 ---
 
 ## 4. Cięcie na kroki

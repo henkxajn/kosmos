@@ -975,6 +975,20 @@
 > • Rejestr #504–#577: 74 wpisy — ✅ 52 · 🟠 2 (504, 575) · ⚪ 20. Brak otwartego kroku.
 > • **Pierwszy wolny numer: 578.**
 
+> **Aktualizacja 2026-10-30 (AKCJE OBCE PO SKOKU WARP — 578–582)** (rejestr macierzysty `VESSEL_ORDERS_PLAN.md`
+> §„Findingi 578–582”; audyt i wykonanie `docs/audit/POST_WARP_FOREIGN_ACTIONS_AUDIT.md`).
+> • ✅ **578** (`56e66b4`) — akcje obce kluczuje predykat stanu statku (`utils/ForeignActions.js`), nie kształt misji:
+>   statek po PPM „Lecisz do planety” poza śladem kolonii gracza (ślad PER STATEK, A1) dostaje „Kolonizuj” / „Recon” /
+>   „Rozładuj”; ten sam predykat w końcu gry (D-3). ✅ **579** — „Pełny Skan” bez siatki kolonii odmawia głośno (D-4).
+>   ✅ **580** — recon całego układu bez `targetId` ⇒ ciało z `dockedAt`. Bramka właściciela (a)–(f) PASS 2026-10-30.
+> • NOWE: ⚪ **581** (ślad A1 a układ macierzysty bez portu — trasa przez stację, świadomie przyjęte; wiersz w A7),
+>   🟠 **582** (`vessel:docked` jako sygnał „usuń sprite” ⇒ Dziennik „wylądował” / „wrócił do bazy” statkowi zużytemu
+>   albo zniszczonemu, klasa 282; wiersz w A2).
+> • **121** rozpuszczony dla lotu na ciało (wiersz w A3). ⚠ 578 zwiększa ekspozycję **102** / **107** (A7) —
+>   `_startForeignColonize` jest osiągalne naturalną drogą.
+> • Sweep **351/351**, `check-i18n` pl = en = **3400**; save v101 bez migracji.
+> • **Pierwszy wolny numer: 583.**
+
 
 ---
 
@@ -1056,6 +1070,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
 | **471-503** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki + dolny pas + U5; 2026-10-18–21; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1, 488-493 z bramki U2 i sesji U2, 494-496 z sesji U3 — zapisane przy zamknięciu, 497-501 z sesji i bramki U4 — zapisane przy zamknięciu, 502-503 z sesji i bramki 501 — zapisane przy zamknięciu U5) |
 | **504-577** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–29; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z, 574-577 ze znacznika statku — dodatek po zamknięciu, §9) |
+| **578-582** | `VESSEL_ORDERS_PLAN.md` §Findingi 578–582 — akcje obce po skoku warp (2026-10-29–30; 578-580 z audytu fazy A i z fazy B, 581 z decyzji właściciela po bramce, 582 z bramki (a7); audyt `docs/audit/POST_WARP_FOREIGN_ACTIONS_AUDIT.md`) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1118,13 +1133,14 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **141** | 🟠 | **30 z 41** powodów odmowy bez klucza i18n; **6 z 15** producentów połyka odmowę całkowicie. Silnik mówi — UI połyka |
 | **145** | 🔴 | `OrderService.issueReturn:206` połyka `false` i zwraca `{ok:true}` — **fasada kłamie o sukcesie**, a sama odmowa jest fałszywa (`exploration` bez `returnYear` → NaN → „brak paliwa" statkowi z 27 AU zasięgu) |
 | **127** | ⚪ | `vessel:orderIssued` ma ZERO subskrybentów, a tabela w `CLAUDE.md` deklaruje dwóch |
+| **582** | 🟠 | `vessel:docked` przeciążony jako sygnał „usuń sprite” (`_startForeignColonize`, `destroyVessel`) ⇒ Dziennik pisze „wylądował” i „wrócił do bazy” statkowi ZUŻYTEMU albo ZNISZCZONEMU (zmierzone na żywo dla kolonizacji obcej, bramka 578 (a7)) — klasa 282 |
 
 ## A3 — VESSEL_ORDERS: to, co zamyka PODPISANY plan (VO-4 = P3 · VO-5 = P5 · VO-6/7 = P4)
 
 | # | | opis | trafia do |
 |---|---|---|---|
 | **120** | 🟠 | statek w locie ma **jedną** akcję; menu to zaszyty automat na `position.state` | P3 |
-| **121** | 🟠 | `moveToPoint` bezpowrotnie gasi panel obcego układu (rekon, kolonizacja, rozładunek, powrót) | P4 |
+| **121** | ⚪ | `moveToPoint` bezpowrotnie gasi panel obcego układu (rekon, kolonizacja, rozładunek, powrót) — ⚠ **2026-10-30: ROZPUSZCZONY dla lotu na CIAŁO przez 578** (predykat `ForeignActions`); zostaje dryf w pusty punkt (bez ciała — bez akcji obcych z projektu) | reszta: P4 |
 | **128** | ⚪ | `survey.canExecute` dopuszcza `orbiting`, menu pokazuje wyłącznie w kubełku `docked` | P3 |
 | **129** | ⚪ | `arriveAtTarget(a, b)` — drugi argument nie istnieje w sygnaturze | P4 |
 | **132** | 🟠 | `drop_troops` bierze cel z `position.dockedAt` bez guardu na `null` | VO-4 (R-8) |
@@ -1208,6 +1224,10 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **104** | **dwie równoległe implementacje kolonizacji** — wspólna przyczyna 102 i 107 |
 | **106** | przycisk kolonizacji zostaje **aktywny** po odmowie (defekt węższy niż pierwotny tytuł „ślepy zaułek") |
 | **107** | trasa „obca" **osierocą jednostki w ładowni desantowej** (`troop_bay`) |
+| **581** | ślad A1 a układ macierzysty bez portu: kadłub średni / duży ze stoczni stacji dostaje akcje obce (w tym „Kolonizuj” z darmowym zestawem startowym) przy ciałach własnego układu — świadomie przyjęte (A1 bez zmian), trasa przez stację niezmierzona |
+
+> ⚠ 2026-10-30: od **578** trasa „obca” (`_startForeignColonize` — **102** / **107**) jest osiągalna naturalną drogą (PPM
+> „Lecisz do planety” w układzie poza śladem kolonii), więc ekspozycja obu rośnie; naturalny partner naprawy — **582**.
 
 ## A8 — AI: produkcja, desant, wiedza, zachowanie
 

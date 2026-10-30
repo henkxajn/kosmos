@@ -510,6 +510,11 @@ a nie teleport.
 121. 🟠 **Pułapka obcego układu: `moveToPoint` bezpowrotnie gasi panel obcych rozkazów.** Bramka
      `FMO:7405` (`type==='exploration' && phase==='orbiting_body'`). **ZMIERZONE:** true → false → false
      (po przylocie `mission=null`). Gracz traci rekonesans, kolonizację, rozładunek i powrót — bez komunikatu.
+     ⚠ **2026-10-30 — ROZPUSZCZONY dla lotu na CIAŁO przez Finding 578** (`56e66b4`, `VESSEL_ORDERS_PLAN.md`
+     §Findingi 578–582): statek po przylocie (`orbiting` + `idle` + `mission = null` + `dockedAt = ciało`) poza śladem
+     kolonii gracza dostaje akcje obce z predykatu `utils/ForeignActions.js`. Zostaje: dryf w pusty punkt
+     (`dockedAt = null` — bez ciała, więc bez akcji obcych z projektu) i układ w śladzie kolonii (D-2 — tam działa
+     normalna ścieżka); „Powrót” zdjęty wcześniej (Finding 145 — powrót przez mapę galaktyki).
 122. 🟠 **`MissionSystem._calcDistance:2674` kotwiczy w `homePlanet`, nie w statku.** **ZMIERZONE:** 1.813 AU
      dla statku stojącego **0.000 AU** od celu. Idzie w `travelTime`, `fuelCost` i pre-check paliwa dla
      `colony`/`mining`/`recon`. `_launchTransport:836-846` ma już poprawkę — reszta nie.
