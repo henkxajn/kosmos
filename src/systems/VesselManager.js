@@ -18,7 +18,8 @@
 //     vessel:launched       → { vessel, mission }
 //     vessel:arrived        → { vessel, mission }
 //     vessel:returning      → { vessel }
-//     vessel:docked         → { vessel }
+//     vessel:docked         → { vessel }                        (WYŁĄCZNIE prawdziwy dok — Finding 582)
+//     vessel:removed        → { vesselId, vessel, reason, atBodyId }  (statek usunięty POZA walką — `destroyVessel`)
 //     vessel:refueled       → { vessel }
 //     vessel:positionUpdate → { vessels[] } (batch, co tick)
 
@@ -36,6 +37,7 @@ import {
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
   addMissionLog, getEnduranceDefaults, isEnemyVessel,
   consumeWarpFuel, needsWarpRefuel, refuelWarp, canJump, canColonize, isInService,
+  unloadColonists, unloadGroundUnit,   // 582 / 107 — istniejące ścieżki wyładunku (Q4, naprawa sierot)
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
@@ -47,7 +49,7 @@ import { isSameSystem, systemIdOf } from '../utils/SystemScope.js';
 import { markSystemExplored } from '../utils/SystemExploration.js';
 import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / OG-3b
-import { warGateRefusal } from '../utils/WarGate.js';           // D13 / G2-2 — bramka wojny (away team)
+import { warGateRefusal, cargoUnloadRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny (away team); D13a — ładownia (107)
 import { resolveTemplate } from '../utils/ShipTemplateResolver.js';   // AI STRIKES BACK S1 (SB22) — kadłub puli AI
 import { orbitClockSec } from '../utils/SimClock.js';                  // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
 import { describeOrderFail } from '../utils/CameraFrame.js';           // Finding 579 (D-4) — „<statek> (<powód>)” jak inne odmowy
@@ -1226,11 +1228,27 @@ export class VesselManager {
   }
 
   /**
-   * Oznacz statek jako zużyty/zniszczony (colony_ship, katastrofa, walka orbitalna).
-   * Usuwa z rejestru + z colony.fleet. Jednostki naziemne w troop bay GINĄ razem
-   * ze statkiem (emituje groundUnit:destroyed z cause='transport_lost').
+   * Usuń statek POZA walką — JEDYNY szew zużycia (kolonizacja normalna i obca, upgrade placówki, rozbiórka, utrata
+   * kolonii, `consumeShip`). Strata w walce idzie osobno: `vessel:wrecked`, a sprzątanie wraku — `vessel:destroyed`.
+   *
+   * Rozliczenie, w tej kolejności:
+   *   1. załoga (W2) wraca do kolonii-płatnika (`_settleCrewOnLoss(…, 'released')`);
+   *   2. koloniści na pokładzie dołączają do kolonii GRACZA, przy której statek stoi (Q4, Finding 585). Wołający, dla
+   *      którego koloniści byli już ludnością startową nowej kolonii, zeruje `vessel.colonists` przed wywołaniem;
+   *   3. jednostki naziemne z ładowni giną `transport_lost` (`_killCargoGroundUnits`). Wyładunek na kolonię (Q3) jest
+   *      ODŁOŻONY: ścieżka ładowni stawia jednostkę na współrzędnych ciała ZAŁADUNKU, a siatki ciał są różne
+   *      (Finding 349) — Finding 586;
+   *   4. wypięcie z `colony.fleet` i z rejestru;
+   *   5. `vessel:removed { vesselId, vessel, reason, atBodyId }` (Finding 582 — dawniej `vessel:docked`, z którego dwaj
+   *      narratorzy Dziennika robili „wylądował” i „wrócił do bazy” o statku, którego już nie ma).
+   *
+   * @param {string} vesselId
+   * @param {{ reason?: string, legacyDockedEmit?: boolean }} [opts]
+   *   `reason` — jeden z `VESSEL_REMOVAL_REASONS` (`utils/VesselRemoval.js`); domyślnie `consumed`.
+   *   `legacyDockedEmit` — WYŁĄCZNIE gałęzie katastrof (Finding 583, poza zakresem 582): zachowanie sprzed 582 bit w bit —
+   *   bez rozliczenia kolonistów, `vessel:docked` zamiast `vessel:removed`. Do zdjęcia w slice 583.
    */
-  destroyVessel(vesselId) {
+  destroyVessel(vesselId, { reason = 'consumed', legacyDockedEmit = false } = {}) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return;
 
@@ -1241,7 +1259,10 @@ export class VesselManager {
     // odporności na podwójne naliczenie (audyt W2 §C-3).
     this._settleCrewOnLoss(vessel, 'released');
 
-    // Jednostki naziemne w ładowni giną razem ze statkiem (dramaturgia desantu)
+    // Q4 (Finding 585) — koloniści na pokładzie nie znikają razem ze statkiem.
+    if (!legacyDockedEmit) this._settleColonistsOnRemoval(vessel);
+
+    // Jednostki naziemne w ładowni giną razem ze statkiem (Q3 — rezerwa `transport_lost`, Finding 586)
     this._killCargoGroundUnits(vessel);
 
     // Usuń z colony.fleet
@@ -1254,8 +1275,27 @@ export class VesselManager {
 
     this._vessels.delete(vesselId);
 
-    // Usuń sprite z renderera
-    EventBus.emit('vessel:docked', { vessel }); // reuse — usunie sprite
+    if (legacyDockedEmit) {
+      EventBus.emit('vessel:docked', { vessel });   // Finding 583 — katastrofy: zachowanie sprzed 582 (usuwa sprite)
+      return;
+    }
+    // Finding 582 — usunięcie to NIE dok: renderer usuwa sprite, orbita zwolniona, Dziennik wg powodu.
+    EventBus.emit('vessel:removed', { vesselId, vessel, reason, atBodyId: vessel.position?.dockedAt ?? null });
+  }
+
+  /**
+   * Q4 (Finding 585) — koloniści na pokładzie usuwanego statku dołączają do PEŁNEJ kolonii gracza, przy której statek
+   * stoi (dok albo orbita — `position.dockedAt`). Inaczej (statek w locie, przy ciele bez kolonii, przy placówce, statek
+   * obcego) — bez zmian: znikają razem ze statkiem. Istniejąca ścieżka: `unloadColonists` (dodaje jako `laborer`).
+   * @returns {string|null} id kolonii, która ich przyjęła
+   */
+  _settleColonistsOnRemoval(vessel) {
+    if (!((vessel?.colonists ?? 0) > 0) || isEnemyVessel(vessel)) return null;
+    const hostId = vessel.position?.dockedAt ?? null;
+    const host = hostId ? window.KOSMOS?.colonyManager?.getColony?.(hostId) : null;
+    if (!host?.civSystem || host.isOutpost || !isPlayerColony(host)) return null;
+    unloadColonists(vessel, host.civSystem);
+    return host.planetId;
   }
 
   /**
@@ -1284,6 +1324,43 @@ export class VesselManager {
     }
     vessel.groundUnits = [];
     vessel.troopBayUsed = 0;
+  }
+
+  /**
+   * Finding 107 — JEDNORAZOWA naprawa przy wczytaniu zapisu. Jednostka naziemna `in_cargo`, której nie wiezie żaden żywy
+   * statek, to sierota kolonizacji obcej sprzed 582/102/107 (surowe `delete` statku). Reguła Q3 w miejscu ostatniej znanej
+   * kolonii — `unit.planetId`, czyli ciała ZAŁADUNKU, więc zapamiętane q/r należą do JEGO siatki (inaczej niż przy zużyciu
+   * statku na innym ciele — Findingi 349 / 586): jeśli to kolonia właściciela jednostki i ścieżka ładowni przepuszcza
+   * (`cargoUnloadRefusal`, D13a), jednostka wraca na ląd ścieżką transportu (`unloadGroundUnit` z jej q/r); inaczej ginie
+   * `transport_lost`, jak przy utracie nośnika (`_killCargoGroundUnits`). Statku nie ma — obie ścieżki dostają zastępczy
+   * nośnik, który niesie wyłącznie listę ładowni. Idempotentna: drugie wywołanie nie znajduje sierot.
+   * Woła ją blok wczytania `GameScene` zaraz po `GroundUnitManager.restore` (statki i kolonie z własnością już są).
+   * Odczyt: `_lastCargoOrphanRepair`.
+   * @returns {{ disembarked: string[], killed: string[] }}
+   */
+  repairCargoOrphansAfterLoad() {
+    const out = { disembarked: [], killed: [] };
+    const gum = window.KOSMOS?.groundUnitManager;
+    if (!gum?.getAllUnits) return out;
+    const carried = new Set();
+    for (const v of this._vessels.values()) for (const id of (v.groundUnits ?? [])) carried.add(id);
+    const colMgr = window.KOSMOS?.colonyManager;
+    for (const unit of gum.getAllUnits()) {
+      if (unit.status !== 'in_cargo' || carried.has(unit.id)) continue;
+      const owner  = unit.owner ?? 'player';
+      const colony = unit.planetId ? colMgr?.getColony?.(unit.planetId) : null;
+      const owned  = !!colony && (owner === 'player' ? isPlayerColony(colony) : colony.ownerEmpireId === owner);
+      const standIn = { groundUnits: [unit.id], troopBayUsed: 0, colonyId: unit.planetId ?? null };
+      if (owned && !cargoUnloadRefusal(owner, unit.planetId)
+          && unloadGroundUnit(standIn, unit, unit.planetId, unit.q ?? 0, unit.r ?? 0)) {
+        out.disembarked.push(unit.id);
+        continue;
+      }
+      this._killCargoGroundUnits(standIn);
+      out.killed.push(unit.id);
+    }
+    this._lastCargoOrphanRepair = out;
+    return out;
   }
 
   /**
@@ -3608,15 +3685,12 @@ export class VesselManager {
       colMgr.createOutpost(targetId, startResources, gameYear);
     }
 
-    // Zniszcz statek (colony ship jest jednorazowy)
-    const colonyId = vessel.colonyId;
-    const colony = colMgr.getColony(colonyId);
-    if (colony) {
-      const idx = colony.fleet.indexOf(vesselId);
-      if (idx !== -1) colony.fleet.splice(idx, 1);
-    }
-    this._vessels.delete(vesselId);
-    EventBus.emit('vessel:docked', { vessel }); // usunie sprite
+    // Statek zużyty JEDNYM szwem z kolonizacją normalną (102 · 107 · 582): `destroyVessel` zwalnia załogę do kolonii-
+    //   płatnika, rozlicza ładownię (`transport_lost`) i emituje `vessel:removed` zamiast `vessel:docked`. Dawne surowe
+    //   `delete` zostawiało załogę zablokowaną na zawsze (102) i jednostki „w ładowni” bez statku (107). Koloniści są już
+    //   ludnością startową nowej kolonii — zero, żeby Q4 (`_settleColonistsOnRemoval`) nie dodało ich jej drugi raz.
+    vessel.colonists = 0;
+    this.destroyVessel(vesselId, { reason: 'colonized' });
   }
 
   /**

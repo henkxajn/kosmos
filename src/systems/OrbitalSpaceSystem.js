@@ -86,6 +86,12 @@ export class OrbitalSpaceSystem {
       if (vesselId) this.releaseOrbit(vesselId);
     });
 
+    // Finding 582 — statek usunięty POZA walką (`VesselManager.destroyVessel`): orbita zwolniona jak przy doku
+    //   (dawniej usunięcie szło przez fałszywy `vessel:docked`).
+    EventBus.on('vessel:removed', ({ vesselId }) => {
+      if (vesselId) this.releaseOrbit(vesselId);
+    });
+
     // Wrak — transitionToWreck wywołuje się z EnemyAttackHandler bezpośrednio,
     // ale zostawiamy też listener dla przyszłych ścieżek (np. random destruction)
     EventBus.on('vessel:wrecked', ({ vesselId }) => {

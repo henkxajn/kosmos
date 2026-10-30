@@ -830,6 +830,12 @@ export class ThreeRenderer {
       if (this._focusVesselId === vessel.id) this._focusVesselId = null;
       this._removeVesselSprite(vessel.id);
     }));
+    // Finding 582 — statek usunięty POZA walką (`VesselManager.destroyVessel`): sprite i śledzenie kamery jak przy doku,
+    //   bez pulsu „dokowania” (dawniej usunięcie szło przez fałszywy `vessel:docked`).
+    EventBus.on('vessel:removed', safe(({ vesselId }) => {
+      if (this._focusVesselId === vesselId) this._focusVesselId = null;
+      this._removeVesselSprite(vesselId);
+    }));
     EventBus.on('vessel:positionUpdate', safe(({ vessels }) => {
       this._syncVesselPositions(vessels);
       this._syncPredictionCones();   // M2b C4 — origin/dir/scale per active intercept

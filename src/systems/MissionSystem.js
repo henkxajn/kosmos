@@ -1876,7 +1876,7 @@ export class MissionSystem {
       }
       if (exp.vesselId && vMgr) {
         addMissionLog(vMgr.getVessel(exp.vesselId), this._gameYear, 'KATASTROFA — statek utracony!', 'danger');
-        vMgr.destroyVessel(exp.vesselId);
+        vMgr.destroyVessel(exp.vesselId, { legacyDockedEmit: true });   // Finding 583 — katastrofa poza zakresem 582
       }
       this._emit('mission:disaster', 'expedition:disaster', { expedition: exp });
       return;
@@ -1983,11 +1983,11 @@ export class MissionSystem {
         }
       }
 
-      // Odblokuj zarezerwowane POPy na kolonii źródłowej (crewCost lock bufora)
-      const originColMig = colMgr?.getColony(exp.originColonyId);
-      if (originColMig?.civSystem?.unlockPops) {
-        originColMig.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
-      }
+      // ⚠ Finding 584 — TU BYŁO `unlockPops(exp.crewCost, exp.crewStrata)` na kolonii źródłowej. Blokady misji nie ma
+      //   od be24960 (2026-03-11: przeniesiona na budowę, potem W2-4 — na rozmieszczenie, do księgi STATKU), a `crewStrata`
+      //   nie jest nigdzie ustawiane, więc nietypowane `_distributeUnlock` zdejmowało do 8 POP CUDZYCH blokad: załóg
+      //   okrętów w służbie, garnizonów, oczekujących zwrotów — tu także własnej załogi statku, który przeżywa.
+      //   Zmierzone na kotwicy 37cb526: blokady domu 2.6 → 0. Ten sam wpis w gałęziach upgrade'u i nowej kolonii.
 
       exp.status = 'completed';
       exp.gained = delivered;
@@ -2041,10 +2041,8 @@ export class MissionSystem {
       // Wyzeruj colonists na statku (rozładowani do kolonii)
       if (arrivingVessel) arrivingVessel.colonists = 0;
 
-      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
-      const originColUpgrade = colMgr?.getColony(exp.originColonyId);
-      if (originColUpgrade) originColUpgrade.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
-      if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
+      // ⚠ Finding 584 — bez `unlockPops(exp.crewCost)` (patrz gałąź migracji): załogę rozlicza `destroyVessel` z księgi statku.
+      if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId, { reason: 'outpost_upgraded' });
 
       exp.status = 'completed';
       exp.gained = startResources;
@@ -2067,7 +2065,14 @@ export class MissionSystem {
     const colonistsLoaded = colonyVessel?.colonists ?? 0;
 
     if (exp.vesselId && vMgr) {
-      vMgr.destroyVessel(exp.vesselId);
+      if (roll < disasterThreshold) {
+        // ⚠ Finding 583 — gałąź katastrofy poza zakresem 582: zachowanie sprzed 582 bit w bit (`vessel:docked`).
+        vMgr.destroyVessel(exp.vesselId, { legacyDockedEmit: true });
+      } else {
+        // Koloniści są ludnością startową nowej kolonii (niżej) — zero, żeby `destroyVessel` (Q4) nie liczył ich drugi raz.
+        if (colonyVessel) colonyVessel.colonists = 0;
+        vMgr.destroyVessel(exp.vesselId, { reason: 'colonized' });
+      }
     }
 
     if (roll < disasterThreshold) {
@@ -2098,9 +2103,7 @@ export class MissionSystem {
     exp.gained = startResources;
     exp.status = 'completed';
 
-    // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
-    const originColFounded = colMgr?.getColony(exp.originColonyId);
-    if (originColFounded) originColFounded.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
+    // ⚠ Finding 584 — bez `unlockPops(exp.crewCost)` (patrz gałąź migracji): załogę rozliczył `destroyVessel` wyżej.
 
     // Załadowani koloniści ze statku (loadColonists w UI fizycznie usuwa POPy ze źródła).
     // Brak kolonistów (legacy save w locie): fallback do min 2 POP — out-of-thin-air,
@@ -2671,7 +2674,7 @@ export class MissionSystem {
         EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originColRecon.civSystem.population, planetId: exp.originColonyId });
       }
       if (exp.vesselId && vMgr) {
-        vMgr.destroyVessel(exp.vesselId);
+        vMgr.destroyVessel(exp.vesselId, { legacyDockedEmit: true });   // Finding 583 — katastrofa poza zakresem 582
       } else {
         const colMgr = window.KOSMOS?.colonyManager;
         const activePid = colMgr?.activePlanetId;

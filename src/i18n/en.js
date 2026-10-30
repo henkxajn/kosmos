@@ -1067,6 +1067,7 @@ export default {
   'log.popDiedStarvation':  'POP lost (starvation) in {0}. Population: {1}',
   // W2 — deploy model (crew charged at deploy). {1} is POP; the unit is stated in the text.
   'log.crewLost':           '⚰ Crew of "{0}" died with the ship ({1} POP)',
+  'log.vesselLostWithColony': '✖ {0} lost with colony {1}',   // Finding 582 — statek w hangarze utraconej kolonii
   'log.deployStarted':      '⚓ "{0}" — deployment started (1 month, crew {1} POP)',
   'log.deployComplete':     '⚓ "{0}" entered service',
   'log.withdrawStarted':    '📦 "{0}" — withdrawal to reserve started (1 month)',

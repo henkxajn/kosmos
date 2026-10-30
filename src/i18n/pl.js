@@ -1067,6 +1067,7 @@ export default {
   'log.popDiedStarvation':  'Strata POPa (głód) w {0}. Populacja: {1}',
   // W2 — model rozmieszczenia (załoga przy deploy). {1} to POP, jednostka w tekście.
   'log.crewLost':           '⚰ Załoga „{0}" zginęła razem z okrętem ({1} POP)',
+  'log.vesselLostWithColony': '✖ {0} utracony razem z kolonią {1}',   // Finding 582 — statek w hangarze utraconej kolonii
   'log.deployStarted':      '⚓ „{0}" — rozpoczęto rozmieszczenie (1 miesiąc, załoga {1} POP)',
   'log.deployComplete':     '⚓ „{0}" wszedł do służby',
   'log.withdrawStarted':    '📦 „{0}" — rozpoczęto wycofanie do rezerwy (1 miesiąc)',

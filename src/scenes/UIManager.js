@@ -75,6 +75,7 @@ import { shipPanelHiddenByDock, shipRowKeys, resolveRowAnchor, computeShipPanelP
 import { enforceSinglePinOnStation, enforceSinglePinOnBody } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2
 import { ShipPanelHudLayer } from '../ui/ShipPanelHudLayer.js';            // REFORMA ZAKŁADEK T5 — panel statku w idiomie etykiet
 import { shouldDropMissionConfig } from '../ui/ShipPanelHudLogic.js';
+import { removalJournalKey } from '../utils/VesselRemoval.js';   // Finding 582 — Dziennik usunięcia statku wg powodu
 import { FleetPanelHudLayer } from '../ui/FleetPanelHudLayer.js';          // REFORMA ZAKŁADEK T6 — panele floty i grupy w idiomie etykiet
 import { fleetHudSurface, fleetRowKeys, dropFleetOnShipSelection,
          shouldDropFleetPicker, dropFleetOnEmptyMapClick, pickerBannerHidden } from '../ui/FleetPanelHudLogic.js';
@@ -1170,6 +1171,16 @@ export class UIManager {
     EventBus.on('vessel:docked', ({ vessel }) => {
       if (isEnemyVessel(vessel)) return;
       this._addNotification(t('log.el.vesselReturned', vessel.name), 'fleet', 'info');
+    });
+    // Finding 582 — statek zużyty albo usunięty POZA walką (`VesselManager.destroyVessel`). Linia wyłącznie dla powodu,
+    //   którego nie opowiada zdarzenie macierzyste (`removalJournalKey`): kolonizacja → 🏙 z `colony:founded`, rozbiórka
+    //   → 🗑 z `fleet:disbanded`; własną linię ma `colony_lost` (przejęcie i zniszczenie mówią tylko o kolonii).
+    EventBus.on('vessel:removed', ({ vessel, reason, atBodyId }) => {
+      if (!vessel || isEnemyVessel(vessel)) return;   // GATE 1 — bramka właściciela
+      const key = removalJournalKey(reason);
+      if (!key) return;
+      const where = window.KOSMOS?.colonyManager?.getColony?.(atBodyId)?.name ?? atBodyId ?? '?';
+      this._addNotification(t(key, vessel.name, where), 'fleet', 'warn');
     });
 
     // Autosave

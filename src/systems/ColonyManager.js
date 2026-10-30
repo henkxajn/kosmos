@@ -741,13 +741,13 @@ export class ColonyManager {
     const vMgr = window.KOSMOS?.vesselManager;
     const destroyedVesselIds = [];
 
-    // Zniszcz statki w hangarze tej kolonii
+    // Zniszcz statki w hangarze tej kolonii (582 — `vessel:removed{colony_lost}`; koloniści z pokładu giną z kolonią — Q4)
     if (vMgr && colony.fleet?.length > 0) {
       for (const vesselId of [...colony.fleet]) {
         const vessel = vMgr.getVessel(vesselId);
         if (vessel && vessel.position.state === 'docked') {
           destroyedVesselIds.push(vesselId);
-          vMgr.destroyVessel(vesselId);
+          vMgr.destroyVessel(vesselId, { reason: 'colony_lost' });
         }
       }
     }
@@ -865,13 +865,14 @@ export class ColonyManager {
     const vMgr = window.KOSMOS?.vesselManager;
     const empireReg = window.KOSMOS?.empireRegistry;
     const destroyedVesselIds = [];
-    // Zniszcz statki w hangarze przejętej kolonii
+    // Zniszcz statki w hangarze przejętej kolonii (582 — `vessel:removed{colony_lost}`; statki giną PRZED zmianą
+    //   właściciela niżej, więc koloniści z pokładu dołączają do kolonii i zostają z nią — Q4, jak ludzie przy 380)
     if (vMgr && colony.fleet?.length > 0) {
       for (const vesselId of [...colony.fleet]) {
         const vessel = vMgr.getVessel(vesselId);
         if (vessel && vessel.position.state === 'docked') {
           destroyedVesselIds.push(vesselId);
-          vMgr.destroyVessel(vesselId);
+          vMgr.destroyVessel(vesselId, { reason: 'colony_lost' });
         }
       }
     }
@@ -2450,8 +2451,8 @@ export class ColonyManager {
       // Usuń z fleet
       const idx = colony.fleet.indexOf(vesselId);
       if (idx !== -1) colony.fleet.splice(idx, 1);
-      // Zniszcz w VesselManager
-      vMgr.destroyVessel(vesselId);
+      // Zniszcz w VesselManager (582 — `vessel:removed{consumed}`)
+      vMgr.destroyVessel(vesselId, { reason: 'consumed' });
       EventBus.emit('fleet:shipConsumed', { planetId, shipId: shipIdOrVesselId });
       return true;
     }
@@ -2534,10 +2535,11 @@ export class ColonyManager {
     //   z KSIĘGI STATKU (`crewLocked` + `crewStrataLocked` + `crewColonyId`) — a że księga jest
     //   zerowana na wejściu, jest to też jedyne naliczenie.
 
-    // Usuń statek
+    // Usuń statek — `destroyVessel` rozlicza załogę, kolonistów na pokładzie (dołączają do kolonii doku — Q4, Finding 585;
+    //   dawniej znikali, bo zwrot obejmował tylko ładunek) i ładownię; emituje `vessel:removed{dismantled}` (582).
     const fleetIdx = colony.fleet.indexOf(vesselId);
     if (fleetIdx !== -1) colony.fleet.splice(fleetIdx, 1);
-    vMgr.destroyVessel(vesselId);
+    vMgr.destroyVessel(vesselId, { reason: 'dismantled' });
 
     EventBus.emit('fleet:disbanded', { vesselId, shipId: vessel.shipId, planetId: vessel.colonyId });
   }

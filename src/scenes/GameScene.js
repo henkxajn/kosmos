@@ -2381,6 +2381,10 @@ export class GameScene {
       // Przywróć GroundUnitManager
       if (c4x.groundUnitManager) {
         this.groundUnitManager.restore(c4x.groundUnitManager);
+        // Finding 107 — zapis sprzed 582/102/107: jednostki „w ładowni” bez żywego statku (kolonizacja obca usuwała statek
+        //   surowym `delete`) wracają na ląd kolonii załadunku albo giną `transport_lost`. Statki i kolonie z własnością są
+        //   już przywrócone (wyżej). Odczyt: `KOSMOS.vesselManager._lastCargoOrphanRepair`. Pin: `vessel_consumption_smoke` C10.
+        this.vesselManager?.repairCargoOrphansAfterLoad?.();
         // G2-4 F3 (Finding 366) — stary zapis: jednostki gracza w pokoju na ciele innego imperium dostają flagę wycofania
         //   (uzgodnienie na pierwszym ticku, termin od chwili wczytania). Pin: `g2_peace_followups_smoke` B3f.
         this.withdrawalSystem?.armLoadReconcile?.();
