@@ -1022,6 +1022,15 @@
 > • Sweep **354/354**, `check-i18n` pl = en = **3401**; save v101 bez migracji.
 > • Następny: **G1** (`GALAXY_PLAN.md` §4).
 > • **Pierwszy wolny numer: 600.**
+>
+> **Aktualizacja 2026-10-31 (ARC GALAXY — G1 ✅, `ccdd26e`)** — płyta galaktyki w głównym widoku 3D za flagą `galaxyView`
+> (K = 200, aktywny układ w początku świata; klawisz G, pigułka [ UKŁAD ] [ GALAKTYKA ], korzeń lewego outlinera; powrót
+> z kamerą 1:1; oba outlinery w trybie galaktyki; nazwy płyty w warstwie HUD). Bramka właściciela: lista 10/10 PASS,
+> odstępstwa 1–3 przyjęte, domyślne `galaxyTuning` bez zmian (`GALAXY_PLAN.md` §4 G1 — delivered).
+> • **NOWE: #600** ⚪ (wiersz w A12) — właściciel układu w danych galaktyki = ostatni zapis.
+> • Sweep **358/358**, `check-i18n` pl = en = **3409**; save v101 bez migracji.
+> • Następny: **G2** (`GALAXY_PLAN.md` §4).
+> • **Pierwszy wolny numer: 601.**
 
 
 ---
@@ -1106,7 +1115,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **504-577** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–29; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z, 574-577 ze znacznika statku — dodatek po zamknięciu, §9) |
 | **578-582** | `VESSEL_ORDERS_PLAN.md` §Findingi 578–582 — akcje obce po skoku warp (2026-10-29–30; 578-580 z audytu fazy A i z fazy B, 581 z decyzji właściciela po bramce, 582 z bramki (a7); audyt `docs/audit/POST_WARP_FOREIGN_ACTIONS_AUDIT.md`) |
 | **583-587** | `VESSEL_ORDERS_PLAN.md` §Findingi 583–587 — szew zużycia statku poza walką (2026-10-30; 583-585 z audytu fazy A, 586 z rezerwy Q3 i z bramki, 587 z bramki; audyt `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`) |
-| **588-599** | `GALAXY_PLAN.md` §3 Findings register — arc GALAXY (mapa galaktyki jako tryb głównego widoku 3D; 2026-10-30; 588-599 z audytu fazy A) |
+| **588-600** | `GALAXY_PLAN.md` §3 Findings register — arc GALAXY (mapa galaktyki jako tryb głównego widoku 3D; 2026-10-30–31; 588-599 z audytu fazy A, 600 z kroku G1) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1433,6 +1442,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **597** | ✅ | **ZAMKNIĘTY 2026-10-30** (`6ea7cad`, NIEBO) — martwa konfiguracja nieba (`BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND`, `THEME.starfield` + 10 presetów) | wycofana (podpis 2026-10-30; pin `sky_catalog_smoke` T12). `GALAXY_PLAN.md` §3 |
 | **598** | ✅ | **ZAMKNIĘTY 2026-10-30** (`6ea7cad`, NIEBO) — nieaktualne opisy galaktyki (`GalaxyGenerator.js:3`, `:5`; `GALAXY_SEED_PLAN.md:49-50`) | komentarze poprawione (bez zmiany zachowania). `GALAXY_PLAN.md` §3 |
 | **599** | ⚪ | matematyka przepisywana w arcu bez keepera w sweepie (pole terytorium, kamera stołu, skan) | → G2. `GALAXY_PLAN.md` §3 |
+| **600** | ⚪ | układ galaktyki ma JEDNO pole właściciela, wygrywa ostatni zapis (`EmpireRegistry.syncToGalaxyData:362` przy wczytaniu, `ColonyManager.transferColony:960`, `captureColonyForPlayer:1009`) — oś właściciela kanonu mgły pyta o wywiad niewłaściwego imperium; zmierzone na ZF r120 (stolica emp_002 w Castor ostemplowana emp_test_enemy — kolonia debugowa na księżycu Castor e-II; emp_002 bez układu na liście galaktyki); osiągalność w normalnej grze niezmierzona | → G2 / G3 (przypięcie i menu skoku czytają oś właściciela); decyzja osobna. `GALAXY_PLAN.md` §3 |
 
 ---
 

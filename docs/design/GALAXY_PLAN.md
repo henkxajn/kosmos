@@ -1,15 +1,16 @@
 # GALAXY_PLAN — the galaxy map becomes a mode of the main 3D view
 
 > **Status: Phase A — read-only audit + plan, SIGNED by the owner 2026-10-30 (§0.2, §5 column "Signed"); NIEBO ✅ DONE
-> 2026-10-30 (`6ea7cad`, §4 NIEBO — delivered); next G1 (not started).**
+> 2026-10-30 (`6ea7cad`, §4 NIEBO — delivered); G1 ✅ DONE 2026-10-31 (`ccdd26e`, §4 G1 — delivered); next G2 (not
+> started).**
 > Anchor HEAD `e2f7943` (= origin/main).
 > Phase A implemented nothing. The only repo file written by that phase is this plan; the handover folder is
 > `C:\Users\Komputer\kosmos-handover\galaxy-phase-a\` (`STOP_A.md`, probes, results). Measurements ran in a scratch clone
 > (`E:\kosmos-work\galaxy-phase-a\tree`, `git clone --shared`, read-only against the owner's objects) — the owner's tree
 > was not touched (no `src/` edits, no keepers, no commits). Committed with the owner's signatures in
 > `docs(GALAXY A): phase A plan + owner signatures` — the anchor of NIEBO.
-> **Next free finding number after this plan: 600** (this plan files **#588–#599**; 578–587 are taken in
-> `VESSEL_ORDERS_PLAN.md`; NIEBO filed none).
+> **Next free finding number: 601** (this plan files **#588–#600** — 588–599 from phase A, 600 from G1; 578–587 are taken
+> in `VESSEL_ORDERS_PLAN.md`; NIEBO filed none).
 
 ## §0 Owner's frame (signed 2026-10-30 — verbatim; not relitigated, the plan is built around it)
 
@@ -625,7 +626,9 @@ route around · ⚪ observation, hygiene or coupling · ✅ closed. "Step" = whe
 | **598** | ✅ | **Stale descriptions of the galaxy:** `GalaxyGenerator.js:3` "~42 układów", `:5` "3-18 LY" vs `SYSTEM_COUNT 72` / 2–22 ly; `GALAXY_SEED_PLAN.md:49-50` "`sys_000…sys_071`" — the ids are `sys_001…sys_071` (home is `sys_home`) | **NIEBO ✅ (`6ea7cad`)** — comments fixed in `GalaxyGenerator.js` and `GALAXY_SEED_PLAN.md` (no behaviour) |
 | **599** | ⚪ | **The maths that the arc rewrites has no swept keeper.** Territory field / loops / contested / merge (`tmp_territory_b3`, gitignored), territory fog (`b4`, gitignored), payload (`b5`), flashes (`b6`), contours (`tmp_territory_contours_smoke`, tracked, not swept), holotable camera (`tmp_holotable_cam_smoke`, not swept), the scan backend (`tmp_obs_stratcom_scan_smoke`, gitignored); `b1` is already stale (asserts save v91). In the sweep only `influence_map_smoke` T8 reads `TerritoryField.js` (radius formula) | G2 (move the logic keepers into `src/testing/smoke/` when the plate payload changes) |
 
-**Next free number: 600** (NIEBO filed no new findings).
+| **600** | ⚪ | **A galaxy system has ONE owner field and the last writer wins.** `EmpireRegistry.syncToGalaxyData` (on load) clears every `galaxyData.systems[].empireId`, then stamps each empire's colony systems unconditionally in `listAll()` order (`src/systems/EmpireRegistry.js:343-365`, the write at `:362`); `ColonyManager.transferColony` stamps the capturer on the whole system (`:960`) and `captureColonyForPlayer` clears it (`:1009`) even when the previous owner keeps other colonies there. Every reader of the owner axis (`SystemReveal` through `SystemRevealWorld`: the G1 galaxy list and plate names, the sky labels, the Stratcom panel) then asks the intel of the wrong empire. **Measured** on ZF r120: emp_002's capital system Castor (`homeSystemId sys_040`, colony `entity_163`) is stamped `emp_test_enemy`, whose debug colony sits on the moon Castor e-II (`entity_165`) — the galaxy list shows Castor as Rój Testowy at contact and emp_002 (rumor) has no system at all; the G1 contact sheet had to stage its rumor frame. Reachability in normal play (two AI empires in one system; the player capturing a non-capital colony in an AI home system) **NOT measured** | G2 / G3 (the pin and the warp menu read the owner axis); candidates: the system owner = the capital's empire, or colonies per empire in the reveal canon — own decision |
+
+**Next free number: 601** (NIEBO filed no new findings; G1 filed #600).
 
 ## §4 The cut: NIEBO → G1 → G2 → G3 → G4 → G5
 
@@ -704,6 +707,51 @@ another look (owner: "PASS at 0.3"). Flag `skyCatalog` ON (permanent in G5).
 | **Keepers (logic)** | NEW `galaxy_mode_logic_smoke` (plans + 1:1 restore; anchor = active system; rebase invariance; camera values in system mode identical to HEAD; galaxy zoom law) · NEW `galaxy_outliner_smoke` (galaxy list = `reveal.name`; dim; info line by the canon; two-axis foreign colonies; own colonies always; the system-mode tree byte-identical) · NEW `galaxy_ship_tree_smoke` (warp filter, mixed fleet dimming, transit, reserve) · NEW `galaxy_pick_smoke` (nearest centre among projected stars; HUD zones first; the system pickers never run in galaxy mode) · **re-aim** `overlay_tab_entry_smoke` T6 (G leaves the keymap) |
 | **Contact sheet** | 5 themes × frames: system view with the pill · galaxy default · left outliner expanded (own colony, foreign rumor / contact, unexplored dim) · right outliner with a mixed fleet · a selected star · back to the system (same frame as before) |
 | **STOP** | `kosmos-handover\galaxy-g1\`; PASS → `feat(G1)` + `docs(G1)` |
+
+#### G1 — ✅ delivered 2026-10-31 (`ccdd26e`)
+
+Owner's look: the 10-point look-list PASS, the three deviations accepted, every `galaxyTuning` default kept as staged
+(`PRESET_DIST_MUL` 1 · `SIZE_GAIN` 4.5 · `I_GAIN` 1.6 · `PAN_GRAB` 1). Flag `galaxyView` ON (permanent in G5).
+
+- **As planned:** NEW `GalaxyPlate.js` (one group in ly, `scale = K` 200, `position = −P_active·K`, 72 PSF points sized by
+  luminosity, unexplored ×0.5, home + selected halo, layer `GALAXY_LAYER`; the plate variant of `StarPointShader` is
+  DERIVED from `STAR_VERT` by two inserts) · NEW `GalaxyModeLogic.js` (pure) + NEW `GalaxyModeController.js`
+  (`KOSMOS.galaxyMode`; snapshot → restore 1:1; `galaxy:modeChanged` / `galaxy:selectionChanged`; entry exits Y mode and
+  the picker; entering a system = exit + `switchActiveSystem`, the active one = `resetToSystemView`; not saved) · camera
+  mode branch (wheel ×1.12 / ×0.89 per normalised 100 px, range 6–120 ly·K, preset pitch 0.92 / yaw 0.6 / Stratcom fit
+  ≈ 57 ly·K, pan on the fixed oblique ±30 ly·K, `applyView`, far 5 000 / 40 000; the system branch byte-identical) ·
+  renderer: camera layer switch (system objects stay in the scene on layer 0, invisible to the galaxy camera), the 71 real
+  sky stars off (`uRealFade` 0), a branch at the top of `handleClick` / `handleMouseMove` (R2 — the system pickers never
+  run), `galaxyStarAt` through the HUD projector, 0.25 s fade, follow / watch / auto-focus suspended in the mode, any
+  camera focus on a system object exits first · HUD S0: a separate sublayer list for the galaxy mode + NEW
+  `HudGalaxyLabelLayer` (uppercase names at `reveal.name` or own presence, never "???", roles own `primary` / explored
+  `textPrimary` / unexplored `dim`, `placeLabels` with a new `candidatesOf` — "centred under the star" first, the default
+  unchanged; brackets ⌜⌟ on the selected star; a click on a name = a click on its star) · entry points: key G / Shift+G
+  before the overlay keymap (`g` leaves `OverlayManager._keyMap` at ON; with an overlay open G closes it and enters), the
+  pill [ UKŁAD ] [ GALAKTYKA ] in the free span of the bottom strip, the left outliner's root row; Esc (when nothing else
+  is open), Enter (enter the selected star), Home (preset) · outliners per D-GX-10 / 11 / 12 (NEW `GalaxyOutlinerLogic.js`)
+  · the right-click map menu, the coordinate tooltip, box-select and Y are off in the mode; M keeps opening Stratcom until G5.
+- **Deviations (accepted):** (1) enterable = generated ∧ (explored ∨ own presence) — presence keeps pre-186 saves
+  enterable (Findings 480 / 489; Diphda in ZF r120 holds player colonies at `explored = false`); (2) the system HUD
+  sublayers do not run at all in the galaxy mode (stronger than "count 0"); (3) NEW live knob `PRESET_DIST_MUL` (default
+  1 = the signed 57 ly; read by every Home) — the old Stratcom draws the galaxy ~1.4× larger at the same fit rule (FOV 50°
+  against the game camera's 55°, a narrower map window); the contact sheet compares 1 / 0.8 / 0.7.
+- **Small additions found on the sheet:** the info line drawn in `textSecondary` (`textDim` was unreadable at the small
+  font); a line cut by the 150-px column shows its full text as a tooltip; gate instruments
+  `KOSMOS.debug.galaxyEnter / galaxyExit / galaxySelectNearest(n) / galaxyEnterSelected / galaxyInfo` and the readout
+  `KOSMOS.threeRenderer.getGalaxyInfo()`.
+- **Keepers:** NEW `galaxy_mode_logic_smoke` 69 · `galaxy_outliner_smoke` 41 · `galaxy_ship_tree_smoke` 23 ·
+  `galaxy_pick_smoke` 31 (renderer and scene methods executed from source on a recording `this`: in the galaxy mode a click
+  touches only `_galaxyActive` + `_galaxyClick`) · `overlay_tab_entry_smoke` T6 re-aimed (`g` leaves the keymap at ON; both
+  flag states checked). Sweep 358/358 · `check-i18n` pl = en = 3 409 (the 8 G1 keys of §6) · save v101 without migration.
+- **In game** (ZF r120, owner's window 1600 × 1041, GPU; 5 title themes + OFF control + preset variants): in every theme G
+  enters, a click selects Kochab, G returns with the camera 1:1, a double click enters Kochab, the plate re-anchors on
+  Kochab, Esc returns 1:1; HUD frame with the plate names 0.1 ms median / 0.2 p95 at 72 stars (15 named) against 0.2 / 0.3
+  in the system mode; 0 console errors in 7 runs; OFF control — no pill, no root row, G opens Stratcom,
+  `galaxyMode.enter()` = false. Contact sheet `kosmos-handover\galaxy-g1\gate\kontakt_g1.html`; three frames staged for
+  lack of state in the save (a rumor empire with a system — Finding 600; a mixed fleet; a reserve hull).
+- **Notes for G2 (no number):** at the signed preset the dense core around home gets long label threads (the anti-overlap
+  never hides a name — accepted at the look); the 404 note of NIEBO stands (§7 O16). G1 filed **#600** (§3).
 
 ### G2 — flight, gesture, dive, galaxy chrome, territory
 
