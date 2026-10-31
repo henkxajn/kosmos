@@ -51,6 +51,7 @@ import { CombatHUD }           from '../ui/CombatHUD.js';
 import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
 import { TacticalModeController } from '../ui/TacticalModeController.js';
+import { GalaxyModeController } from '../ui/GalaxyModeController.js';   // ARC GALAXY G1 — tryb galaktyki głównego widoku
 import { TacticalDock }        from '../ui/TacticalDock.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
@@ -374,6 +375,11 @@ export class UIManager {
     // keydown + warstwy czytają isActive).
     this._tacticalMode = new TacticalModeController();
     if (window.KOSMOS) window.KOSMOS.tacticalMode = this._tacticalMode;
+
+    // ARC GALAXY G1 (GALAXY_PLAN.md §4 G1) — tryb galaktyki głównego widoku 3D (klawisz G, pigułka pasa, korzeń lewego
+    // outlinera); rejestr w KOSMOS (renderer, warstwa HUD, outlinery czytają `isActive`). Flaga OFF — `enter` nic nie robi.
+    this._galaxyMode = new GalaxyModeController();
+    if (window.KOSMOS) window.KOSMOS.galaxyMode = this._galaxyMode;
 
     // Faza 4 (Obraz Operacyjny) — „Dok taktyczny": pas dowodzenia w trybie Y (gate
     // FEATURES.tacticalDock). Non-exclusive; self-managed przez tactical:modeChanged.
@@ -2437,7 +2443,8 @@ export class UIManager {
     // Tylko gdy widoczna jest mapa 3D układu — pod otwartym overlayem (Stratcom,
     // kolonia itd.) labele nie mają sensu i przebijały przez panel.
     const tr = window.KOSMOS?.threeRenderer;
-    if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
+    // ARC GALAXY G1 — etykiety CTRL obiektów UKŁADU nie nad płytą galaktyki (obiekty układu ukryte w trybie galaktyki).
+    if (tr?._showAllLabels && !this.overlayManager.isAnyOpen() && !this._galaxyMode?.isActive) this._drawAllLabels(ctx, tr);
 
     // ── ARKUSZ UI U2 — lewy outliner (układy i ciała): nad mapą, POD listą kolonii z górnej belki (rysowana zaraz niżej,
     //    §7.17) i pod pływającymi panelami. Widoczność wg decyzji 4 (`isShown` — bez overlaya, bez rozwiniętego Doku).
@@ -2520,7 +2527,7 @@ export class UIManager {
 
     // Slice 4 — ramki RTS + paski paliwa dla zaznaczonego (własnego) statku.
     if (civMode && tr && GAME_CONFIG.FEATURES?.fcBrackets
-        && !this.overlayManager.isAnyOpen() && !globeOpen) {
+        && !this.overlayManager.isAnyOpen() && !globeOpen && !this._galaxyMode?.isActive) {   // ARC GALAXY G1 — paski statku układu nie nad płytą
       this._drawSelectionBrackets(ctx, tr);
     }
     // Slice 8 — prostokąt box-select (gdy aktywny drag); nad mapą, pod overlayami.

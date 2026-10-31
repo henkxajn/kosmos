@@ -26,6 +26,7 @@ export class TacticalModeController {
     if (this._active) return;
     if (GAME_CONFIG.FEATURES?.tacticalMode !== true) return;
     const K = window.KOSMOS;
+    if (K?.galaxyMode?.isActive) return;   // ARC GALAXY G1 (D-GX-8) — Y w trybie galaktyki nic nie robi
     const cam = K?.threeRenderer?._cameraController;
     if (!cam?.snapshotView) return;
 

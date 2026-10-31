@@ -17,6 +17,7 @@ import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   /
 import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
 import { coordTooltipBlocked } from '../ui/ShipPanelHudLogic.js';   // REFORMA ZAKŁADEK T5 — 530: dymek współrzędnych nie nad UI
 import { escapeClosesFleetPanel } from '../ui/FleetPanelHudLogic.js';   // REFORMA ZAKŁADEK T6 — Esc zamyka panel floty
+import { isGalaxyToggleKey, galaxyLyToWorld } from '../ui/GalaxyModeLogic.js';   // ARC GALAXY G1 — klawisz G, przyrządy bramki
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -606,6 +607,37 @@ export class GameScene {
       skyLookHome: () => window.KOSMOS?.threeRenderer?.skyLookHome?.() ?? null,
       skyLookAt:   (n) => window.KOSMOS?.threeRenderer?.skyLookAt?.(n) ?? null,
       skyMarks:    (on) => window.KOSMOS?.threeRenderer?.setSkyMarks?.(on) ?? null,
+      // ARC GALAXY G1 — przyrządy bramki trybu galaktyki (DEBUG, bez cudzysłowów — do wklejenia w konsolę):
+      //   KOSMOS.debug.galaxyEnter() / galaxyExit() — wejście / wyjście (jak klawisz G);
+      //   KOSMOS.debug.galaxySelectNearest(n) — zaznacz n-tą najbliższą gwiazdę od aktywnego układu (1 = najbliższa);
+      //   KOSMOS.debug.galaxyEnterSelected() — wejście w zaznaczony układ (jak [Enter]); galaxyInfo() — stan trybu i płyty.
+      galaxyEnter: () => window.KOSMOS?.galaxyMode?.enter?.('debug') ?? false,
+      galaxyExit:  () => window.KOSMOS?.galaxyMode?.exit?.('debug') ?? false,
+      galaxyEnterSelected: () => window.KOSMOS?.galaxyMode?.enterSelected?.() ?? false,
+      galaxySelectNearest: (n = 1) => {
+        const K = window.KOSMOS;
+        const systems = K?.galaxyData?.systems ?? [];
+        const act = systems.find((s) => String(s.id) === String(K?.activeSystemId ?? 'sys_home'));
+        const a = act ? galaxyLyToWorld(act) : { x: 0, y: 0, z: 0 };
+        const list = systems.filter((s) => s !== act).map((s) => {
+          const w = galaxyLyToWorld(s);
+          return { id: String(s.id), name: s.name, d: Math.hypot(w.x - a.x, w.y - a.y, w.z - a.z) };
+        }).sort((p, q) => p.d - q.d);
+        const k = Math.min(list.length, Math.max(1, Math.floor(Number(n) || 1)));
+        const pick = list[k - 1];
+        if (!pick) return null;
+        K?.galaxyMode?.select?.(pick.id);
+        console.log(`[galaxy] #${k}: ${pick.id} · ${pick.d.toFixed(1).replace('.', ',')} ly`);
+        return { n: k, id: pick.id, distLy: +pick.d.toFixed(2) };
+      },
+      galaxyInfo: () => {
+        const info = window.KOSMOS?.threeRenderer?.getGalaxyInfo?.() ?? null;
+        const hud = window.KOSMOS?.hudLayer?.debugState?.() ?? null;
+        const out = { ...info, selected: window.KOSMOS?.galaxyMode?.selectedSystemId ?? null,
+          labels: hud?.galaxySublayers?.[0] ?? null, hudCostMs: hud?.costMs ?? null, hudMode: hud?.mode ?? null };
+        console.log('[galaxy]', out);
+        return out;
+      },
       // KOSMOS.debug.replayIntro()      — odtwórz sam lot kinowy startu (kalibracja bez nowej gry).
       // KOSMOS.debug.replayIntro(true)  — lot + ekrany narracyjne (LOG → MANUAL → nazwy).
       replayIntro: (withText) => {
@@ -4807,6 +4839,16 @@ export class GameScene {
           um.clearSelection();
           return;
         }
+        // ARC GALAXY G1 (D-GX-8) — Esc w trybie galaktyki, gdy nie ma czego innego zamknąć (picker, menu kontekstowe, okno DOM,
+        // panel floty, zaznaczenie statku — wyżej; overlay, dialog potwierdzenia, menu ☰ — tu), wraca do układu. Przypięcie
+        // trybu układu leży pod płytą (niewidoczne) — Esc go nie zdejmuje, wraca razem z układem.
+        if (window.KOSMOS?.galaxyMode?.isActive && !um?.overlayManager?.isAnyOpen?.() && !um?._confirmDialog?.visible
+            && !um?._bottomBar?.menuOpen && !document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) {
+          e.preventDefault();
+          window.KOSMOS.galaxyMode.exit('esc');
+          um?.markDirty?.();
+          return;
+        }
         // REFORMA ZAKŁADEK T2 (D-TR-5 (a), Finding 534): Esc zdejmuje przypięcie (ciało albo stacja) PO zaznaczeniu statku —
         // nie przy otwartym overlayu (przypięcie leży pod nim, Esc należy do overlayu) ani nad oknem DOM (raport ciała).
         if (escapeUnpin({ K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p),
@@ -4821,6 +4863,14 @@ export class GameScene {
       if (e.key === 'Enter' && um?.isPickerActive?.()) {
         e.preventDefault();
         um.finalizePickerMode();
+        return;
+      }
+      // ARC GALAXY G1 — [Enter] w trybie galaktyki: wejście w zaznaczony układ (gdy da się otworzyć — bramka 186).
+      if (e.key === 'Enter' && window.KOSMOS?.galaxyMode?.isActive && !um?.overlayManager?.isAnyOpen?.()
+          && !document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) {
+        e.preventDefault();
+        window.KOSMOS.galaxyMode.enterSelected();
+        um?.markDirty?.();
         return;
       }
 
@@ -4864,6 +4914,18 @@ export class GameScene {
         }
       }
 
+      // ARC GALAXY G1 (D-GX-8) — G (także Shift+G) przełącza tryb galaktyki głównego widoku, PRZED keymapą overlayów (wpis `g`
+      // zdjęty z `OverlayManager._keyMap` przy fladze); z otwartym overlayem — overlay się zamyka i tryb galaktyki wchodzi.
+      if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.galaxyView && isGalaxyToggleKey(e)) {
+        e.preventDefault();
+        const om = this.uiManager.overlayManager;
+        const gm = window.KOSMOS.galaxyMode;
+        if (om.isAnyOpen()) { om.closeActive(); gm?.enter?.('key'); }
+        else gm?.toggle?.('key');
+        this.uiManager.markDirty();
+        return;
+      }
+
       // Klawisze overlay (F/P/E/T) — civMode
       if (window.KOSMOS?.civMode) {
         if (this.uiManager.overlayManager.handleKey(e.key)) { this.uiManager.markDirty(); return; }
@@ -4881,7 +4943,9 @@ export class GameScene {
         case 'Home':
         case 'KeyH':
           e.preventDefault();
-          this.threeRenderer?.resetToSystemView?.();
+          // ARC GALAXY G1 — w trybie galaktyki Home = preset galaktyki (skos 0,92 / azymut 0,6 / kadr całej galaktyki).
+          if (window.KOSMOS?.galaxyMode?.isActive) window.KOSMOS.galaxyMode.applyPreset();
+          else this.threeRenderer?.resetToSystemView?.();
           break;
         case 'KeyY':
           // Obraz Operacyjny F2 — tryb taktyczny (Y zamiast zajętego T — decyzja
@@ -5825,6 +5889,11 @@ export class GameScene {
   }
 
   _tooltipHoverFromMain3D(clientX, clientY) {
+    // ARC GALAXY G1 — nad płytą galaktyki ani współrzędne układu, ani podpowiedź obiektu układu.
+    if (window.KOSMOS?.galaxyMode?.isActive) {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
     // Fullscreen overlay zakrywa mapę 3D — żaden hover nie trafia
     if (this.uiManager?.overlayManager?.isAnyOpen?.()) {
       this._scheduleEntityTooltip(null, clientX, clientY);
@@ -6035,6 +6104,7 @@ export class GameScene {
     const onMap = (e) => {
       if (this.planetScene?.isOpen) return false;
       if (this.uiManager?.overlayManager?.isAnyOpen?.()) return false;
+      if (window.KOSMOS?.galaxyMode?.isActive) return false;   // ARC GALAXY G1 — box-select statków układu nie w trybie galaktyki
       const tgt = e.target;
       const isCanvasish = tgt?.tagName === 'CANVAS' || tgt?.id === 'event-layer' || tgt?.id === 'three-canvas';
       if (!isCanvasish) return false;
@@ -6093,6 +6163,9 @@ export class GameScene {
     // podczas gdy renderer fokusował kamerę — zmierzone). Slice 8: CTRL+klik = przełączenie zbioru.
     const vid = pick?.vesselId ?? null;
     const multi = !!(GAME_CONFIG.FEATURES?.fcMultiSelect && e.ctrlKey);
+    // ARC GALAXY G1 (R2) — tryb galaktyki: wynik pickera płyty (`lastClickPick.object` 'galaxyStar' — gwiazda zachowuje
+    // zaznaczenie statku; pustka je zdejmuje); bez pickera celu i bez raycastu sceny układu.
+    if (window.KOSMOS?.galaxyMode?.isActive) { this._selectFromClickPick(null, multi, null, pick?.object ?? null); return; }
     if (isMapCanvas) {
       if (!GAME_CONFIG.FEATURES?.fcConsole) return;
       if (!this.uiManager?.isPickerActive?.()) {
@@ -6171,6 +6244,7 @@ export class GameScene {
 
   _handleTacticalRightClick(e) {
     if (this.planetScene?.isOpen) return;
+    if (window.KOSMOS?.galaxyMode?.isActive) return;   // ARC GALAXY G1 — menu mapy w trybie galaktyki wraca w G3
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
     // P1.3.5 post-fix #1 (D2 reinforcement) — Strategy A pełna:

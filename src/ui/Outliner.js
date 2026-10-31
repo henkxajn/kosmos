@@ -19,6 +19,10 @@
 //   • Decyzja 3 (U3-3): sekcje sprzed U3 zniknęły — KOLONIE, stacje, JEDN. NAZIEMNE i kolejkę (⏳N) ma lewy outliner,
 //     EKSPEDYCJE usunięte (status i aktywność statku są w podpowiedzi wiersza), FLOTA zastąpiona drzewem.
 //
+//   • ARC GALAXY G1 (GALAXY_PLAN.md §4 G1; D-GX-10, D-GX-12): w trybie galaktyki — statki z napędem warp
+//     (`GalaxyOutlinerLogic.buildGalaxyShipView`): flota zostaje, gdy ≥ 1 członek ma napęd (reszta przygaszona z powodem),
+//     „W drodze” zostaje, kadłub w rezerwie przygaszony z powodem `vessel.reasonVesselInReserve`; kolejność sekcji z własnej
+//     reguły (własne układy najpierw, potem odległość), nie z listy lewego. Panele statku i floty dokują do wiersza jak dotąd.
 // Importuje się pod node (keeper `right_outliner_smoke` — prawdziwy `draw` / `hitTest` / `updateHover` na atrapie ctx).
 
 import { THEME }          from '../config/ThemeConfig.js';
@@ -31,6 +35,7 @@ import { isEnemyVessel }   from '../entities/Vessel.js';
 import { buildShipEntry }  from './FleetPictureLogic.js';
 import { buildShipTree, MARKER_TONES, TRANSIT } from './ShipTreeLogic.js';
 import { buildSystemTree } from './SystemTreeLogic.js';
+import { buildGalaxyShipView, galaxyShipSectionOrder, galaxyWorldContext } from './GalaxyOutlinerLogic.js';   // ARC GALAXY G1
 import { CLICK_INTENT, clickObject, vesselTarget, fleetTarget, readClickSelection } from './ClickIntentLogic.js';   // ARKUSZ UI U1-3 / U3-2 (D-UI-5)
 import { OutlinerColumn, OUTLINER_PAD } from './OutlinerColumn.js';
 
@@ -58,6 +63,14 @@ export class Outliner extends OutlinerColumn {
     // D-UI-10 (§7.12): zaznaczenie z mapy / Tab / dowolnej powierzchni → rozwinięcie układu wiersza + przewinięcie.
     EventBus.on('ui:selectionChanged', (p) => { if (p?.vesselId != null) this._reveal(`vessel:${p.vesselId}`); });
     EventBus.on('ui:fleetSelectionChanged', (p) => { if (p?.fleetId != null) this._reveal(`fleet:${p.fleetId}`); });
+    // ARC GALAXY G1 — przewinięcie listy osobno dla trybu układu i galaktyki.
+    this._scrollMemo = { system: 0, galaxy: 0 };
+    EventBus.on('galaxy:modeChanged', (p) => {
+      const into = p?.active === true ? 'galaxy' : 'system';
+      this._scrollMemo[into === 'galaxy' ? 'system' : 'galaxy'] = this._scrollY;
+      this._scrollY = this._scrollMemo[into] ?? 0;
+      this._markDirty();
+    });
   }
 
   _reveal(key) { this._revealKey = key; this._markDirty(); }
@@ -84,9 +97,23 @@ export class Outliner extends OutlinerColumn {
   }
 
   _tree(K, input, active) {
-    const vessels = input.vessels ?? (K?.vesselManager?.getAllVessels?.() ?? []).filter((v) => !isEnemyVessel(v));
+    let vessels = input.vessels ?? (K?.vesselManager?.getAllVessels?.() ?? []).filter((v) => !isEnemyVessel(v));
     const pc = this._pictureCtx(K);
-    const order = input.systems ?? this._systemOrder(K, input);
+    let order = input.systems ?? null;
+    // ARC GALAXY G1 (D-GX-12) — tryb galaktyki: statki z napędem warp (+ floty mieszane, tranzyt), przygaszenia z powodem;
+    // kolejność sekcji z reguły galaktyki (D-GX-10), nie z listy lewego.
+    let dim = null;
+    if (K?.galaxyMode?.isActive === true) {
+      const view = buildGalaxyShipView({ vessels, fleets: K?.fleetSystem?.listFleets?.() ?? [] });
+      vessels = view.vessels;
+      dim = view.dim;
+      if (!order) {
+        const world = galaxyWorldContext(K, { colonies: input.treeColonies ?? input.colonies, groundUnits: input.groundUnits });
+        order = galaxyShipSectionOrder({ systems: world.systems, presence: world.presence,
+          systemName: (id) => EntityManager.getStarOfSystem(id)?.name ?? null });
+      }
+    }
+    if (!order) order = this._systemOrder(K, input);
     const build = () => buildShipTree({
       vessels,
       entryOf:        (v) => buildShipEntry(v, pc),
@@ -102,7 +129,19 @@ export class Outliner extends OutlinerColumn {
     const sec = key.startsWith('vessel:') ? tree.index.get(key.slice(7))?.section
       : key.startsWith('fleet:') ? tree.fleetIndex.get(key.slice(6)) : null;
     if (sec && sec !== TRANSIT && !this.isExpanded(sec, active)) { this._setExpanded(sec, true, active); tree = build(); }
+    if (dim) Outliner._markDim(tree, dim);
     return tree;
+  }
+
+  // ARC GALAXY G1 — przygaszenie wierszy statków trybu galaktyki (klucz powodu w `row.dimReason`).
+  static _markDim(tree, dim) {
+    const mark = (r) => {
+      if (r.kind === 'fleet') { for (const m of r.members ?? []) mark(m); return; }
+      const k = dim.get(String(r.id));
+      if (k) r.dimReason = k;
+    };
+    for (const r of tree.transit?.rows ?? []) mark(r);
+    for (const s of tree.systems ?? []) for (const g of s.groups ?? []) for (const r of g.rows ?? []) mark(r);
   }
 
   // ── Rysowanie (szablon — `OutlinerColumn.draw`) ───────────────────────────────────────────────────────────────
@@ -269,10 +308,10 @@ export class Outliner extends OutlinerColumn {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
     const glyph = r.glyph ?? '○';
-    ctx.fillStyle = this._markerColor(r.marker);
+    ctx.fillStyle = r.dimReason ? THEME.textDim : this._markerColor(r.marker);   // ARC GALAXY G1 — przygaszony (bez napędu / rezerwa)
     ctx.fillText(glyph, tx, iy + 12);
     tx += ctx.measureText(glyph).width + 3;
-    ctx.fillStyle = isSel || this._hoverKey === key ? THEME.textPrimary : THEME.textSecondary;
+    ctx.fillStyle = r.dimReason ? THEME.textDim : (isSel || this._hoverKey === key ? THEME.textPrimary : THEME.textSecondary);
     ctx.fillText(this._fit(ctx, r.name, right - tx), tx, iy + 12);
     this._shadow(ctx, false);
     this._clickTargets.push({ type: 'vessel', vesselId: r.id, row: r, x: g.x, y: iy, w: g.w, h: ROW_H });
@@ -336,6 +375,7 @@ export class Outliner extends OutlinerColumn {
     const e = r.entry ?? {};
     const mc = this._markerColor(r.marker);
     const lines = [{ text: `${r.glyph ?? ''} ${r.name}`.trim(), header: true }];
+    if (r.dimReason) lines.push({ text: t(r.dimReason), color: THEME.warning ?? THEME.textSecondary });   // ARC GALAXY G1 — powód przygaszenia
     if (r.role) lines.push({ text: t(`fleetPicture.role.${r.role}`), color: THEME.textDim });
     const alerts = e.alerts ?? [];
     if (r.marker === 'combat') lines.push({ text: t('fleetPicture.alert.combat'), color: mc });

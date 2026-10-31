@@ -43,6 +43,10 @@ import { LIVE_SKY, buildSkyCatalog, skyFrom, allocSkyBuffers, skySeedOf, skyKnob
          nearestRealSystems, skyDirectionTo, lookAnglesFor, SKY_LOOK, formatLy }
   from '../utils/SkyCatalog.js';   // NIEBO (ARC GALAXY) — niebo z katalogu galaktyki
 import { systemRevealFromWorld } from '../utils/SystemRevealWorld.js';   // NIEBO — kanon mgły wojny (jeden punkt składania)
+import { GalaxyPlate } from './GalaxyPlate.js';   // ARC GALAXY G1 — płyta galaktyki w tej samej scenie (F1)
+import { GALAXY_K, GALAXY_LAYER, CAMERA_FAR, GALAXY_FADE_MS, GALAXY_PICK_HALF_PX, LIVE_GALAXY, pickGalaxyStar }
+  from '../ui/GalaxyModeLogic.js';
+import { makeHudProjector } from '../ui/HudProjection.js';   // ARC GALAXY G1 — rzut gwiazd płyty (ten sam co warstwa HUD)
 import { systemIdOf } from '../utils/SystemScope.js';   // ARKUSZ UI U3-2 — termin układu pingu (Finding 477)
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
@@ -561,6 +565,15 @@ export class ThreeRenderer {
     this._skyKnobSnap = null;
     this._skyStats    = null;
     this._skyLabelsForced = false;   // NIEBO — przyrząd bramki: etykiety nieba bez CTRL (KOSMOS.debug.skyMarks(1)); rysuje HudSkyLabelLayer
+    // ARC GALAXY G1 (GALAXY_PLAN.md §4 G1) — tryb galaktyki: płyta (leniwie, przy pierwszym wejściu), stan trybu (ustawia
+    // `GalaxyModeController` przez `setGalaxyMode`), początek rozjaśnienia płyty (twarde cięcie 0,25 s), pokrętła wyglądu
+    // płyty z konsoli — KOSMOS.threeRenderer.galaxyTuning.SIZE_GAIN = 6 (ALIAS `LIVE_GALAXY`, nie kopia).
+    this._galaxyK       = GALAXY_K;   // [j. / ly] — skala płyty dla `getHudView().worldPerLY` (S1)
+    this._galaxyPlate   = null;
+    this._galaxyActive  = false;
+    this._galaxyFadeT0  = 0;
+    this._galaxyHoverId = null;
+    this.galaxyTuning   = LIVE_GALAXY;
     // ⚠ V-266 — USUNIĘTE: _starCoronaUniform („referencja do uTime korony") oraz
     //   _starPromCount („liczba protuberancji"). Oba były zapisywane dwa razy
     //   i NIGDY nieczytane; `git log -S` pokazuje, że weszły MARTWE już w c02574f,
@@ -893,6 +906,135 @@ export class ThreeRenderer {
       theta: +a.theta.toFixed(4), phi: +a.phi.toFixed(4), clamped: a.clamped };
   }
 
+  // ── ARC GALAXY G1 — tryb galaktyki w tej samej scenie (GALAXY_PLAN.md §4 G1; F1, D-GX-1/2/3, R2, R3) ─────────────
+  // Płyta to grupa sceny na warstwie `GALAXY_LAYER`; tryb przełącza WARSTWĘ KAMERY (system — 0, jak przed krokiem;
+  // galaktyka — tylko płyta + kopuła nieba), płaszczyznę dalszą (5 000 → 40 000) i gaśnie 71 prawdziwych gwiazd nieba
+  // (`uRealFade` 0 — punkty płyty je zastępują; kierunki nieba zostają z ostatniego aktywnego układu, D-GX-6). Obiekty
+  // układu zostają w scenie bez zmian (warstwa 0 — niewidoczne dla kamery galaktyki); wybory trybu układu nie biegną
+  // (gałąź na górze `handleClick` / `handleMouseMove` — R2: ukryte siatki dalej łapią raycast).
+
+  /** Płyta galaktyki — leniwie przy pierwszym wejściu; kopuła nieba dostaje warstwę płyty (widoczna w obu trybach). */
+  _ensureGalaxyPlate() {
+    if (this._galaxyPlate) return this._galaxyPlate;
+    const plate = new GalaxyPlate(THREE, { pixelRatio: this._pixelRatio, logDepth: logDepthOn() });
+    this.scene.add(plate.group);
+    this._sky?.points?.layers?.enable?.(GALAXY_LAYER);
+    this._sky?.nebula?.layers?.enable?.(GALAXY_LAYER);
+    this._galaxyPlate = plate;
+    return plate;
+  }
+
+  /**
+   * Przełączenie sceny (woła `GalaxyModeController`): warstwa kamery, płaszczyzna dalsza, płyta, prawdziwe gwiazdy nieba.
+   * Kamery NIE rusza (widok ustawia kontroler kamery — `applyView`).
+   * @param {boolean} on
+   * @param {{ systems?:Array, activeId?:string, selectedId?:string|null, brightOf?:Function }} [ctx]
+   */
+  setGalaxyMode(on, ctx = {}) {
+    on = !!on;
+    const cam = this.camera;
+    if (on) {
+      const plate = this._ensureGalaxyPlate();
+      plate.setSystems(ctx.systems ?? [], { brightOf: ctx.brightOf });
+      plate.setAnchor(ctx.systems ?? [], ctx.activeId);
+      plate.setSelected(ctx.selectedId ?? null);
+      plate.setFade(0);
+      plate.setVisible(true);
+      this._galaxyFadeT0 = performance.now();
+      cam.layers.set(GALAXY_LAYER);
+      cam.far = CAMERA_FAR.galaxy;
+      // Najechanie trybu układu gaśnie (ciało, statek, podpowiedź budynku) — wybory układu nie biegną w trybie galaktyki.
+      if (this._hoverPlanetId != null) { this._hoverPlanetId = null; EventBus.emit('planet:hover', { entityId: null }); }
+      this._hoverVesselId = null;
+      this._hideColonyTooltip();
+    } else {
+      this._galaxyPlate?.setVisible(false);
+      this._galaxyPlate?.setFade(0);
+      cam.layers.set(0);
+      cam.far = CAMERA_FAR.system;
+      if (this._galaxyHoverId != null) {
+        const layer = typeof document !== 'undefined' ? document.getElementById('event-layer') : null;
+        if (layer) layer.style.cursor = 'default';
+      }
+      this._galaxyHoverId = null;
+    }
+    cam.updateProjectionMatrix();
+    const u = this._sky?.points?.material?.uniforms?.uRealFade;
+    if (u) u.value = on ? 0 : 1;
+    this._galaxyActive = on;
+  }
+
+  /** Zaznaczona gwiazda płyty (halo) — woła kontroler przy każdej zmianie zaznaczenia. */
+  setGalaxySelected(id) { this._galaxyPlate?.setSelected(id ?? null); }
+
+  // Polecenie kamery na obiekt UKŁADU (fokus statku / ciała / stacji, „Obserwuj”, przebudowa sceny) w trybie galaktyki —
+  // najpierw wyjście z trybu (kamera systemu z migawki 1:1), potem polecenie jak zawsze. Poza trybem — nic.
+  _leaveGalaxyFor(reason) {
+    if (this._galaxyActive) window.KOSMOS?.galaxyMode?.exit?.(reason);
+  }
+
+  /** Gwiazdy płyty w świecie [j.] (aktywny układ w początku) — warstwa HUD i wybór gwiazdy. */
+  getGalaxyStarsWorld() {
+    return (this._galaxyActive && this._galaxyPlate) ? this._galaxyPlate.starsWorld() : [];
+  }
+
+  /** Gwiazda pod punktem okna (px CSS) — najbliższy środek wśród rzutów (`pickGalaxyStar`, reguła Findingu 109). */
+  galaxyStarAt(rawX, rawY) {
+    if (!this._galaxyActive || !this._galaxyPlate) return null;
+    const view = this.getHudView();
+    if (!view) return null;
+    const K = window.KOSMOS;
+    const s = K?.uiScale > 0 ? K.uiScale : Math.min(view.cssW / 1280, view.cssH / 720);
+    const proj = makeHudProjector({ ...view, uiScale: s });
+    if (!proj) return null;
+    const pts = [];
+    for (const st of this._galaxyPlate.starsWorld()) {
+      const p = proj.point(st.x, st.y, st.z);
+      if (p) pts.push({ id: st.id, x: p.x, y: p.y });
+    }
+    return pickGalaxyStar(pts, rawX / s, rawY / s, GALAXY_PICK_HALF_PX);
+  }
+
+  // Klik w trybie galaktyki: gwiazda (zaznaczenie / dwuklik = wejście) albo pustka (odznaczenie) — decyduje kontroler.
+  _galaxyClick(sx, sy) {
+    const id = this.galaxyStarAt(sx, sy);
+    this.lastClickPick = { vesselId: null, object: id != null ? 'galaxyStar' : null };
+    window.KOSMOS?.galaxyMode?.onPlateClick?.(id, performance.now());
+    return id != null;
+  }
+
+  // Najechanie w trybie galaktyki: gwiazda pod kursorem (kursor „rączka”); bez najechania ciał i statków układu.
+  _galaxyHover(sx, sy) {
+    const id = window.KOSMOS?.uiManager?.isOverUI?.(sx, sy) === true ? null : this.galaxyStarAt(sx, sy);
+    if (id !== this._galaxyHoverId) {
+      this._galaxyHoverId = id;
+      const layer = typeof document !== 'undefined' ? document.getElementById('event-layer') : null;
+      if (layer) layer.style.cursor = id != null ? 'pointer' : 'default';
+    }
+  }
+
+  // Pętla renderu — rozjaśnienie płyty po wejściu (czas realny), pokrętła wyglądu, oddech punktów (zegar nieba).
+  _tickGalaxyPlate(t) {
+    const plate = this._galaxyPlate;
+    if (!plate || !this._galaxyActive) return;
+    const k = Math.min(1, Math.max(0, (performance.now() - this._galaxyFadeT0) / GALAXY_FADE_MS));
+    if (plate.fade !== k) plate.setFade(k);
+    plate.tick();
+    plate.setTime(t);
+  }
+
+  /** Odczyt bramki: `KOSMOS.threeRenderer.getGalaxyInfo()` — tryb, kamera (warstwa, far, dystans), płyta. */
+  getGalaxyInfo() {
+    const cc = this._cameraController, r1 = (v) => (Number.isFinite(v) ? +v.toFixed(1) : null);
+    return {
+      active: this._galaxyActive, K: GALAXY_K, layerMask: this.camera.layers.mask, far: this.camera.far,
+      camera: cc ? { mode: cc.mode, dist: r1(cc._dist), targetDist: r1(cc._targetDist), minDist: r1(cc.minDist), maxDist: r1(cc.maxDist),
+        theta: +cc._theta.toFixed(4), phi: +cc._phi.toFixed(4), target: { x: r1(cc._goalTarget.x), y: r1(cc._goalTarget.y), z: r1(cc._goalTarget.z) } } : null,
+      skyRealFade: this._sky?.points?.material?.uniforms?.uRealFade?.value ?? null,
+      plate: this._galaxyPlate?.info() ?? null,
+    };
+  }
+
   // ── Oświetlenie ──────────────────────────────────────────────
   _buildLights() {
     // Ambient — słabe, chłodne wypełnienie (nocna strona LEDWO czytelna, nie szara).
@@ -1139,6 +1281,8 @@ export class ThreeRenderer {
     // klik/focus (Dziennik, Obserwatorium, Dowództwo, starty scenariusza / intro) zachowują dzisiejsze zachowanie;
     // pierwszy klik reguły emituje `focus: false` → zaznaczenie i karta ciała, kamera STOI.
     EventBus.on('body:selected', safe(({ entity, focus = true }) => {
+      // ARC GALAXY G1 — polecenie kamery na ciało układu wraca z trybu galaktyki (samo zaznaczenie — nie).
+      if (focus !== false) this._leaveGalaxyFor?.('focus');
       this._selectedEntityId = entity.id;
       this._pingedEnemyId = null;   // U1-3: inne zaznaczenie — pamięć pingu wroga gaśnie
       if (focus !== false) {
@@ -1236,6 +1380,7 @@ export class ThreeRenderer {
     EventBus.on('vessel:engaged', safe(({ sideA = [], sideB = [], location, encounterId }) => {
       if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
       if (window.KOSMOS?.uiPrefs?.battleAutoFocus === false) return;
+      if (this._galaxyActive) return;   // ARC GALAXY G1 — automat nie wyrywa gracza z trybu galaktyki
       // POLISH P2a (CP7, Finding 453) — starcie w innym układzie: kamera zostaje (punkt starcia jest w ramce INNEGO układu).
       if (!isEngagementInView({ encounterSystemId: location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
       // POLISH P2a (CP13) — gracz obserwuje inną walkę („Obserwuj”): nowe starcie nie zabiera mu kamery.
@@ -1271,6 +1416,7 @@ export class ThreeRenderer {
     // (`starSystemManager.switchActiveSystem` — ta sama droga co chipy układów), potem kadr; nieznany układ — nic.
     EventBus.on('camera:watchBattle', safe(({ encounterId, systemId, x, y }) => {
       if (!this._cameraController || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      this._leaveGalaxyFor?.('watch');   // ARC GALAXY G1 — „Obserwuj” = widok układu
       const act = watchBattleAction({ encounterSystemId: systemId, activeSystemId: window.KOSMOS?.activeSystemId });
       if (!act.frame) return;
       if (act.switchTo && window.KOSMOS?.starSystemManager?.switchActiveSystem?.(act.switchTo) !== true) return;
@@ -1304,6 +1450,7 @@ export class ThreeRenderer {
     // Centruj kamerę na statku (kliknięcie w liście floty / Outliner)
     EventBus.on('vessel:focus', safe(({ vesselId }) => {
       if (!this._cameraController) return;
+      this._leaveGalaxyFor?.('focus');   // ARC GALAXY G1 — kamera na statek = widok układu
       this._pendingVesselFocus = null;
       const entry = this._vessels.get(vesselId);
       if (entry) {
@@ -1371,6 +1518,7 @@ export class ThreeRenderer {
     // Mirror vessel:focus; _updateCameraFocus śledzi stację co klatkę (anchored, ale planeta orbituje).
     EventBus.on('station:focus', safe(({ stationId }) => {
       if (!this._cameraController) return;
+      this._leaveGalaxyFor?.('focus');   // ARC GALAXY G1 — kamera na stację = widok układu
       const entry = this._stations.get(stationId);
       if (!entry?.mesh) return;
       const pos = entry.mesh.position;
@@ -1417,6 +1565,9 @@ export class ThreeRenderer {
   // ── Przełączanie układu gwiezdnego (dispose + reinit) ──────────────────
   // Wywoływane przez StarSystemManager.switchActiveSystem()
   switchSystem(star, planets, planetesimals, moons = []) {
+    // ARC GALAXY G1 — przebudowa sceny układu zawsze w trybie układu: najpierw wyjście z galaktyki (kamera systemu
+    // z migawki), potem kadr nowego układu (`frameSystem` w `initSystem`). Wejście w układ z galaktyki = wyjście + przełączenie.
+    this._leaveGalaxyFor?.('switch');
     this._disposeAllMeshes();
     this.initSystem(star, planets, planetesimals, moons);
     // NIEBO (D-GX-6) — niebo z nowego układu: przelicz kierunki / kolor / rozmiar katalogu (no-op przy OFF i przed
@@ -2312,7 +2463,8 @@ export class ThreeRenderer {
 
   // ── Aktualizacja celu kamery na śledzonym ciele ──────────────
   _updateCameraFocus() {
-    if (!this._cameraController) return;
+    // ARC GALAXY G1 — w trybie galaktyki śledzenie obiektu układu wstrzymane (cel kamery = płyta); po wyjściu wraca.
+    if (!this._cameraController || this._galaxyActive) return;
 
     // Helper: focusOn z guardem NaN. W podglądzie obserwatorium — twardy lock
     // (focusOnInstant, bez lerp-lag) → ciało stoi w miejscu mimo ruchu po orbicie.
@@ -3239,6 +3391,8 @@ export class ThreeRenderer {
   // dawniej scena miała własne pickery (`_getVesselAtScreen` bez preferencji statku najechanego; raycast sceny, który
   // przy kliku obok statku zwracał „pustkę” — zmierzone, U1).
   handleClick(screenX, screenY, mods = {}) {
+    // ARC GALAXY G1 (R2) — tryb galaktyki: wybór gwiazdy płyty; pickery trybu układu (statek, stacja, ciała) NIE biegną.
+    if (this._galaxyActive) return this._galaxyClick(screenX, screenY);
     const K = window.KOSMOS;
     const env = { K, emit: (name, payload) => EventBus.emit(name, payload) };
     // Obiekt w scenie leży w OGLĄDANYM układzie (scena rysuje tylko jego) — cel kliku bierze ten układ wprost.
@@ -3350,6 +3504,7 @@ export class ThreeRenderer {
       cssW: window.innerWidth,
       cssH: window.innerHeight,
       worldPerAU: AU / WORLD_SCALE,
+      worldPerLY: this._galaxyK ?? null,   // ARC GALAXY G1 (S1) — skala płyty galaktyki [j. / ly]
     };
   }
 
@@ -3519,6 +3674,8 @@ export class ThreeRenderer {
   }
 
   handleMouseMove(screenX, screenY) {
+    // ARC GALAXY G1 (R2) — tryb galaktyki: najechanie gwiazdy płyty; raycast ciał i picker statków NIE biegną.
+    if (this._galaxyActive) { this._galaxyHover(screenX, screenY); return; }
     this._mouse.x =  (screenX / window.innerWidth)  * 2 - 1;
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
     this._ray.setFromCamera(this._mouse, this.camera);
@@ -3839,9 +3996,10 @@ export class ThreeRenderer {
         // POLISH P2b (D3, Finding 461) — płynne zbliżenie uczestników oglądanego starcia, PRZED kamerą i efektami (kadr
         // „Obserwuj”, auto-fokus, końce smug i paski HP czytają pozycje sprite'ów z tej klatki).
         this._tickCombatGlide();
-        if (this._watch) this._updateWatchCamera();
+        // ARC GALAXY G1 — w trybie galaktyki kamera należy do płyty: „Obserwuj” i auto-fokus starcia wstrzymane (wracają po wyjściu).
+        if (this._watch && !this._galaxyActive) this._updateWatchCamera();
         // POLISH P2b (D1, Finding 467) — auto-fokus starcia: cel śledzi środek walki (co klatkę, także w pauzie gry).
-        if (this._autoFocus) this._updateAutoFocusCamera();
+        if (this._autoFocus && !this._galaxyActive) this._updateAutoFocusCamera();
 
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
@@ -3849,6 +4007,8 @@ export class ThreeRenderer {
         // NIEBO (D-GX-4) — kopuła nieba jedzie z kamerą (obraz nieba zależy tylko od ORIENTACJI — ciągły z konstrukcji);
         // pokrętła nieba co klatkę (przeliczenie tylko przy zmianie). Przy fladze OFF `_sky` = null.
         if (this._sky) { this._sky.group.position.copy(this.camera.position); this._tickSky(); }
+        // ARC GALAXY G1 — płyta: rozjaśnienie po wejściu (0,25 s), pokrętła `galaxyTuning`, oddech punktów.
+        if (this._galaxyActive) this._tickGalaxyPlate(t);
 
         // Animacja świetlików handlowych
         if (this._tradeFireflies.length > 0) this._animateTradeFireflies(t);
@@ -4275,6 +4435,7 @@ export class ThreeRenderer {
   // statku, złota orbita) — bez zmian. Podgląd obserwatorium i lot intro trzymają kamerę — wtedy nic.
   resetToSystemView() {
     if (!this._cameraController?.frameSystem) return false;
+    if (this._galaxyActive) return false;   // ARC GALAXY G1 — w trybie galaktyki nie ma kadru układu (Home = preset galaktyki)
     if (this._observatoryPreviewActive || this._cinematicDriver) return false;
     if (this._watch) this._endWatch();
     this._autoFocus        = null;

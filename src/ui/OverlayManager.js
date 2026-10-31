@@ -43,6 +43,9 @@ export class OverlayManager {
     // całkowicie nieaktywne (handleKey → entry undefined → return false, bez console.log).
     // ON = przywraca 'p' → 'population'. Zob. GameConfig.FEATURES.populationOverlay.
     if (GAME_CONFIG.FEATURES.populationOverlay) this._keyMap['p'] = 'population';
+    // ARC GALAXY G1 (D-GX-8) — G przełącza tryb galaktyki głównego widoku (`GameScene`, PRZED tą keymapą); M dalej otwiera
+    // zakładkę Stratcom (do G5). Flaga OFF — G otwiera Stratcom jak przed krokiem.
+    if (GAME_CONFIG.FEATURES?.galaxyView) delete this._keyMap['g'];
   }
 
   register(id, overlay) {

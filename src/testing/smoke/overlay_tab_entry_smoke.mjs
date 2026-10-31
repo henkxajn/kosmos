@@ -25,12 +25,18 @@
 //   T3  KONTROLA PINU: `_switchTab` i `close()` nadal sprzataja (straznik regresji, zielony od zawsze)
 //   T4  PIN DECYZJI: wejscie na TE SAMA zakladke NIE resetuje stanu (early-return zostaje)
 //   T5  intencja wejscia przezywa `_switchTab` (klawisz K: focusSection/tacticalView/showWrecks)
-//   T6  PIN ZRODLOWY (wykonaniowy): `{id,opts}` w keymapie to dokladnie g/m/k, wszystkie → 'fleet'
+//   T6  PIN ZRODLOWY (wykonaniowy): `{id,opts}` w keymapie to dokladnie g/m/k (flaga galaxyView OFF) albo m/k (ON),
+//       wszystkie → 'fleet'
+// ⚠ T6 PRZECELOWANY 2026-10-30 (ARC GALAXY G1, D-GX-8 — GALAXY_PLAN.md §4 G1): klawisz G przelacza TRYB GALAKTYKI glownego
+//   widoku (`GameScene`, przed keymapa) i przy fladze `galaxyView` opuszcza `OverlayManager._keyMap`. Zbior producentow
+//   re-show zostaje zamkniety w jednym overlayu — przy fladze ON to dokladnie m/k; przy OFF dawne g/m/k (stan sprzed kroku).
+//   Oba stany sprawdzane — flaga przestawiana przed konstrukcja keymapy (czytana w konstruktorze).
 //   T7  `open({})` (sciezka Outlinera) NIE zmienia zakladki i NIE wola `_switchTab`
 
 import '../headless/env.js';           // MUSI byc pierwszy
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { OverlayManager } from '../../ui/OverlayManager.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -173,16 +179,25 @@ console.log('\nT5 — klawisz K: intencja wejscia nie zostaje zjedzona przez `_s
 }
 
 // ── T6 — PIN ZRODLOWY (wykonaniowy): zbior producentow re-show jest zamkniety ──
-console.log('\nT6 — PIN ZRODLOWY: wpisy keymapy w formie {id, opts} to dokladnie g/m/k → fleet');
+console.log('\nT6 — PIN ZRODLOWY: wpisy keymapy w formie {id, opts} to dokladnie g/m/k (galaxyView OFF) albo m/k (ON) → fleet');
 {
-  const om = new OverlayManager();
-  const objKeys = Object.keys(om._keyMap).filter(k => typeof om._keyMap[k] !== 'string').sort();
-  assert(JSON.stringify(objKeys) === JSON.stringify(['g', 'k', 'm']),
-    `wpisy {id,opts} = ${JSON.stringify(objKeys)} (oczekiwane g/k/m)`);
-  assert(objKeys.every(k => om._keyMap[k].id === 'fleet'),
-    'wszystkie trzy celuja w overlay `fleet` — klasa zamknieta w jednym overlayu');
-  assert(typeof om._keyMap['f'] === 'string',
+  const flag0 = GAME_CONFIG.FEATURES.galaxyView;
+  const objKeysOf = (on) => {
+    GAME_CONFIG.FEATURES.galaxyView = on;
+    const om = new OverlayManager();
+    GAME_CONFIG.FEATURES.galaxyView = flag0;
+    return { om, keys: Object.keys(om._keyMap).filter(k => typeof om._keyMap[k] !== 'string').sort() };
+  };
+  const on = objKeysOf(true), off = objKeysOf(false);
+  assert(JSON.stringify(on.keys) === JSON.stringify(['k', 'm']) && !('g' in on.om._keyMap),
+    `galaxyView ON: wpisy {id,opts} = ${JSON.stringify(on.keys)} (oczekiwane k/m), \`g\` poza keymapa (przelacznik trybu galaktyki)`);
+  assert(JSON.stringify(off.keys) === JSON.stringify(['g', 'k', 'm']),
+    `galaxyView OFF: wpisy {id,opts} = ${JSON.stringify(off.keys)} (oczekiwane g/k/m — stan sprzed kroku)`);
+  assert(on.keys.every(k => on.om._keyMap[k].id === 'fleet') && off.keys.every(k => off.om._keyMap[k].id === 'fleet'),
+    'wszystkie celuja w overlay `fleet` — klasa zamknieta w jednym overlayu (oba stany flagi)');
+  assert(typeof on.om._keyMap['f'] === 'string' && typeof off.om._keyMap['f'] === 'string',
     'kontrola pinu: wpis `f` jest stringiem ⇒ idzie galezia toggle (_hideOverlay), nie re-show');
+  assert(GAME_CONFIG.FEATURES.galaxyView === flag0, 'kontrola: flaga przywrocona po tescie');
 }
 
 // ── T7 — sciezka Outlinera: brak `opts.tab` ⇒ zakladka nietknieta, `_switchTab` niewolane ──

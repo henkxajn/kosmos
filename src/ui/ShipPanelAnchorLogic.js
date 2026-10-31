@@ -182,7 +182,8 @@ export function syncShipPanelOnSystemSwitch({ vesselIds, vessel, systemId, clear
  * @param {'body'|'station'|null} objectHit
  */
 export function keepShipSelectionOnMapClick(objectHit) {
-  return objectHit === 'body' || objectHit === 'station';
+  // ARC GALAXY G1 — gwiazda płyty galaktyki (`'galaxyStar'`) jak ciało: zaznaczenie statku zostaje (wybór celu z galaktyki).
+  return objectHit === 'body' || objectHit === 'station' || objectHit === 'galaxyStar';
 }
 
 /**

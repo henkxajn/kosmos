@@ -36,6 +36,7 @@ import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etyki
 import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) — nawiasy zaznaczenia, pierścienie i wektor alertu
 import { HudShipMarkerLayer } from './HudShipMarkerLayer.js';   // znacznik statku (D-SM-1…6) — zamiast insygnium frakcji 3D
 import { HudSkyLabelLayer } from './HudSkyLabelLayer.js';       // NIEBO (ARC GALAXY, O1) — etykiety nieba przy CTRL
+import { HudGalaxyLabelLayer } from './HudGalaxyLabelLayer.js'; // ARC GALAXY G1 — nazwy płyty (lista trybu galaktyki, S0/S3)
 import { focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
 import {
   HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
@@ -84,10 +85,11 @@ export function hudUiScale(K, cssW, cssH) {
 export class HudLayer {
   /**
    * @param {HTMLCanvasElement|null} canvas — `#hud-canvas`
-   * @param {{ raf?:Function, caf?:Function, now?:Function, autoStart?:boolean, sublayers?:object[] }} [opts] — zegar
-   *   i pętla wstrzykiwane w keeperze; `sublayers` — lista podwarstw (domyślnie: podwarstwy gry)
+   * @param {{ raf?:Function, caf?:Function, now?:Function, autoStart?:boolean, sublayers?:object[], galaxySublayers?:object[] }}
+   *   [opts] — zegar i pętla wstrzykiwane w keeperze; `sublayers` — lista podwarstw trybu układu (domyślnie: podwarstwy gry);
+   *   `galaxySublayers` — lista podwarstw trybu galaktyki (ARC GALAXY G1, S3; domyślnie: nazwy płyty)
    */
-  constructor(canvas, { raf = null, caf = null, now = null, autoStart = true, sublayers = null } = {}) {
+  constructor(canvas, { raf = null, caf = null, now = null, autoStart = true, sublayers = null, galaxySublayers = null } = {}) {
     this.canvas = canvas ?? null;
     this.ctx = canvas?.getContext?.('2d') ?? null;
     // ⚠ Funkcje okna wołane BEZ odbiorcy — `this._raf(loop)` z gołym `requestAnimationFrame` przekazałby warstwę jako `this`
@@ -107,6 +109,12 @@ export class HudLayer {
     this.alerts = new HudAlertStore();   // paczka B — rejestr alertów (zegar symulacji); zasilają go zdarzenia wykrycia
     this.stats = { frames: 0, passes: 0, draws: 0, clears: 0, lastMs: 0, maxMs: 0, costs: [] };
     for (const s of (sublayers ?? this._defaultSublayers())) this.addSublayer(s);
+    // ARC GALAXY G1 (HUD S0 / S3) — tryb galaktyki ma WŁASNĄ listę podwarstw; w trybie galaktyki podwarstwy trybu układu nie
+    // biegną (zero zebranych elementów, zero kliku i najechania), w trybie układu nie biegnie lista galaktyki. `_mode` — tryb
+    // ostatniej klatki (kierunek kliku i najechania = to, co narysowane).
+    this._galaxySublayers = [];
+    for (const s of (galaxySublayers ?? this._defaultGalaxySublayers())) if (s) this._galaxySublayers.push(s);
+    this._mode = 'system';
     if (autoStart) this.start();
   }
 
@@ -116,6 +124,16 @@ export class HudLayer {
    *  pominięty); NIEBO — etykiety nieba (zbierane ostatnie: omijają etykiety tej klatki; rysowane pierwsze — `drawFirst`). */
   _defaultSublayers() {
     return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudLabelLayer(this), new HudFocusLayer(this), new HudSkyLabelLayer(this)];
+  }
+
+  /** ARC GALAXY G1 — podwarstwy trybu galaktyki: nazwy płyty (G2 dołoży przypięcie, szynę statków, ping, trasy). */
+  _defaultGalaxySublayers() {
+    return [new HudGalaxyLabelLayer(this)];
+  }
+
+  /** Lista podwarstw trybu ostatniej klatki (klik, najechanie, pokrycie). */
+  _activeSublayers() {
+    return this._mode === 'galaxy' ? this._galaxySublayers : this._sublayers;
   }
 
   /**
@@ -248,8 +266,9 @@ export class HudLayer {
    */
   handleClick(x, y, rawX, rawY) {
     if (!this._gate.shown || !this._shown) return false;
-    for (let i = this._sublayers.length - 1; i >= 0; i--) {
-      if (this._sublayers[i].handleClick?.(x, y, rawX, rawY) === true) { this._wake = true; return true; }
+    const list = this._activeSublayers();
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].handleClick?.(x, y, rawX, rawY) === true) { this._wake = true; return true; }
     }
     return false;
   }
@@ -260,14 +279,14 @@ export class HudLayer {
    */
   hoverObjectKey() {
     if (!this._gate.shown) return null;
-    for (const s of this._sublayers) { const k = s.hoverObjectKey?.(); if (k != null) return k; }
+    for (const s of this._activeSublayers()) { const k = s.hoverObjectKey?.(); if (k != null) return k; }
     return null;
   }
 
   /** REFORMA ZAKŁADEK T1 — czy punkt (px logiczne) leży pod obiektem z rozwinięciem (etykieta, stacja, najechanie). */
   coversPoint(lx, ly) {
     if (!this._gate.shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return false;
-    return this._sublayers.some((s) => s.coversPoint?.(lx, ly) === true);
+    return this._activeSublayers().some((s) => s.coversPoint?.(lx, ly) === true);
   }
 
   /**
@@ -276,13 +295,13 @@ export class HudLayer {
    */
   coversUiPoint(lx, ly) {
     if (!this._gate.shown || !this._shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return false;
-    return this._sublayers.some((s) => s.coversUiPoint?.(lx, ly) === true);
+    return this._activeSublayers().some((s) => s.coversUiPoint?.(lx, ly) === true);
   }
 
   /** REFORMA ZAKŁADEK T2 — przycisk przypięcia pod punktem (px logiczne; `null` — brak / warstwa schowana): kursor „rączki”. */
   pinButtonAt(lx, ly) {
     if (!this._gate.shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return null;
-    for (const s of this._sublayers) { const b = s.pinButtonAt?.(lx, ly); if (b != null) return b; }
+    for (const s of this._activeSublayers()) { const b = s.pinButtonAt?.(lx, ly); if (b != null) return b; }
     return null;
   }
 
@@ -300,7 +319,9 @@ export class HudLayer {
     if (this._rafId != null && this._caf) this._caf(this._rafId);
     this._rafId = null;
     for (const s of this._sublayers) s.destroy?.();
+    for (const s of this._galaxySublayers ?? []) s.destroy?.();
     this._sublayers = [];
+    this._galaxySublayers = [];
     this._clear();
   }
 
@@ -349,10 +370,14 @@ export class HudLayer {
 
     const tr = K.threeRenderer;
     const sel = readClickSelection(K);
+    // ARC GALAXY G1 (S0) — tryb w klatce: lista podwarstw galaktyki zamiast listy układu (zero elementów trybu układu).
+    const mode = K.galaxyMode?.isActive === true ? 'galaxy' : 'system';
+    this._mode = mode;
+    const layers = mode === 'galaxy' ? this._galaxySublayers : this._sublayers;
     let rolesMemo = null, mapMemo = null, hoverMemo = null;
     const ptr = this._pointer;
     const F = {
-      K, now, sim: simClockMs(), sel, cssW, cssH, pr, uiScale, W: cssW / uiScale, H: cssH / uiScale,
+      K, now, sim: simClockMs(), sel, cssW, cssH, pr, uiScale, W: cssW / uiScale, H: cssH / uiScale, mode,
       pointer: ptr,
       // Najechanie MAPY (paczka A): statek pod kursorem — wyłącznie widoczne sprite'y (485); ciało — raycast tarcz renderera.
       get hover() {
@@ -374,7 +399,7 @@ export class HudLayer {
       },
     };
     let key = `${tr?.getCameraMoveEpoch?.() ?? 0}|${themeEpoch()}|${F.activeSystemId}|${cssW}x${cssH}@${uiScale}*${pr}`
-      + `|${sel.leadId ?? ''}|${sel.entityId ?? ''}`;
+      + `|${sel.leadId ?? ''}|${sel.entityId ?? ''}|M${mode}`;
     // Paczka B: stan uwagi i alerty klatki — przed podwarstwami (każda czyta `F.att`).
     const att = this._attentionFrame(K, sel, F);
     F.att = att;
@@ -389,7 +414,7 @@ export class HudLayer {
       + `:${sel.stationId ?? ''}:${sel.fleetId ?? ''}:${(sel.vesselIds ?? []).join(',')}`;
     // Alerty biegną na zegarze symulacji — klatka przy każdym przyroście wieku (w pauzie wiek stoi → spoczynek).
     for (const a of att.alerts) key += `|a${a.id}:${Math.round(a.age)}`;
-    for (const s of this._sublayers) key += '|' + (s.prepare?.(F) ?? '');
+    for (const s of layers) key += '|' + (s.prepare?.(F) ?? '');
     if (key === this._lastKey && !this._animating && !this._wake) {
       const idleMs = this._now() - tStart;   // spoczynek: sama bramka i klucz (zero wywołań ctx)
       this.stats.idleLastMs = idleMs;
@@ -402,7 +427,7 @@ export class HudLayer {
     this.stats.passes++;
     const view = tr?.getHudView?.() ?? null;
     const proj = view ? makeHudProjector({ ...view, uiScale }) : null;
-    const parts = this._sublayers.map((s) => s.collect?.(F, proj) ?? null);
+    const parts = layers.map((s) => s.collect?.(F, proj) ?? null);
     let count = 0, animating = false;
     for (const c of parts) { count += c?.count ?? 0; if (c?.animating) animating = true; }
     this._animating = animating;
@@ -414,8 +439,8 @@ export class HudLayer {
     ctx.clearRect(0, 0, F.W, F.H);
     // Najpierw podwarstwy `drawFirst` (etykiety nieba — pod resztą HUD), potem pozostałe w kolejności listy.
     for (const first of [true, false]) {
-      for (let i = 0; i < this._sublayers.length; i++) {
-        const s = this._sublayers[i];
+      for (let i = 0; i < layers.length; i++) {
+        const s = layers[i];
         if ((s.drawFirst === true) !== first) continue;
         if (parts[i]?.count > 0) s.draw?.(ctx, F, parts[i]);
       }
@@ -447,6 +472,8 @@ export class HudLayer {
       costMs: { last: r4(this.stats.lastMs), max: r4(this.stats.maxMs), median: r4(q(0.5)), p95: r4(q(0.95)), n: c.length },
       idleMs: { last: r4(this.stats.idleLastMs ?? null), max: r4(this.stats.idleMaxMs ?? null) },
       sublayers: this._sublayers.map((s) => s.debug?.() ?? null),
+      mode: this._mode,
+      galaxySublayers: (this._galaxySublayers ?? []).map((s) => s.debug?.() ?? null),
     };
   }
 }

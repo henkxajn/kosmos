@@ -511,6 +511,18 @@ export const GAME_CONFIG = {
     //   ⚠ Brak klucza = OFF (idiom liveGasShaders / liveSunShader).
     skyCatalog:           true,
 
+    // ── ARC GALAXY / G1 — MAPA GALAKTYKI JAKO TRYB GŁÓWNEGO WIDOKU 3D (GALAXY_PLAN.md §4 G1; D-GX-1/2/3/8–12) ──────────
+    //   ON  = klawisz G (także Shift+G), pigułka [ UKŁAD ] [ GALAKTYKA ] na pasie dolnym i wiersz „GALAKTYKA” lewego outlinera
+    //         przełączają widok 3D na płytę galaktyki w TEJ SAMEJ scenie (`renderer/GalaxyPlate.js`, K = 200 j./ly, aktywny układ
+    //         w początku świata); twarde cięcie z rozjaśnieniem 0,25 s; kamera galaktyki (skos 0,92 / azymut 0,6, zoom
+    //         mnożnikowy, przeciąganie = pan); nazwy płyty w warstwie HUD; oba outlinery w trybie galaktyki; Esc / G / „← Układ”
+    //         — powrót (kamera systemu 1:1); dwuklik gwiazdy / [Enter] / 2. klik wiersza — wejście w układ (bramka 186).
+    //         M dalej otwiera zakładkę Stratcom (do G5).
+    //   OFF = jak przed krokiem (G otwiera Stratcom, brak pigułki i wiersza korzenia; tryb nieosiągalny).
+    //   ⚠ Brak klucza = OFF (idiom `!!FEATURES.x`). Klawisz G czyta flagę przy każdym naciśnięciu; keymapa overlayów
+    //     (wpis `g`) — przy starcie gry (F5 po przestawieniu w konsoli).
+    galaxyView:           true,
+
     // ── ZNACZNIK STATKU — flaga na stałe ON od SM-Z (2026-10-29; HUD_PLAN.md §„Znacznik statku”) ──
     // `hudShipMarker` (znacznik statku w warstwie HUD 2D — daszek w kierunku ruchu, romb bez ruchu, role motywu; D-SM-1…6):
     //   klucz usunięty, kod czyta ścieżkę ON bez rozgałęzień. Usunięta ścieżka OFF — insygnia frakcji 3D (`_syncInsignia`,

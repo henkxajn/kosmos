@@ -2546,6 +2546,11 @@ export default {
   'leftOutliner.unrecognized': '{0} — unidentified body',
   'leftOutliner.groundUnits': 'Ground units: {0} — click: body map',
   'leftOutliner.queue': 'Queued: {0}',
+  'leftOutliner.galaxyRoot': 'GALAXY',
+  'leftOutliner.backToSystem': '← System: {0}',
+  'leftOutliner.galaxyInfo': '{0} ly · {1} · colonies: {2}',
+  'leftOutliner.cannotEnter': 'No view — nobody has been there',
+  'leftOutliner.foreignColoniesUnknown': 'foreign colonies: ?',
   'leftOutliner.keyHint': '“,” left panel · “.” right panel · “B” both',
   // ARKUSZ UI U3-2 — right outliner (ships): header, "In transit" section (D-UI-8, §7.3), type buckets (D-UI-6, §7.1)
   'rightOutliner.ships': 'SHIPS [{0}]',
@@ -2594,6 +2599,9 @@ export default {
 
   // === BottomBar ===
   'bottomBar.stab': 'STAB:',
+  'bottomBar.mapSystem': 'SYSTEM',
+  'bottomBar.mapGalaxy': 'GALAXY',
+  'bottomBar.mapModeHint': 'Map view — key G',
   'bottomBar.zoomHint': 'Camera zoom: drag (left — farther) or use the mouse wheel',
 
   // === FleetManagerOverlay / FleetTabPanel ===

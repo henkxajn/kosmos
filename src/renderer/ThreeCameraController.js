@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { galaxyZoomStep, galaxyPanStep, LIVE_GALAXY } from '../ui/GalaxyModeLogic.js';   // ARC GALAXY G1 — gałąź trybu galaktyki
 
 const DRAG_THRESHOLD = 5;  // px — poniżej = kliknięcie, powyżej = orbit
 
@@ -60,6 +61,12 @@ export class ThreeCameraController {
     // Callback: (clientX, clientY) => bool — blokuje kamerę gdy kursor nad UI
     this._isOverUI = null;
 
+    // ARC GALAXY G1 (D-GX-3) — tryb kamery: 'system' (wszystko jak przed krokiem, bit w bit) | 'galaxy' (zakres galaktyki,
+    // zoom mnożnikowy, przeciąganie = pan po stałym skosie). `_galaxy` — konfiguracja z `GalaxyModeLogic.galaxyCameraConfig`
+    // (min / max dystansu, środek i połowa zakresu panu) — ustawia `GalaxyModeController` przez `setMode`.
+    this._mode   = 'system';
+    this._galaxy = null;
+
     // B1 (W2.1): epoka ruchu kamery — inkrementowana w update() gdy pozycja kamery FAKTYCZNIE
     // się zmienia (drag / zoom-lerp / pan-lerp / follow / frameSystem). UIManager czyta ją w
     // pętli rysowania i odświeża overlay 2D (etykiety mapy + ramki selekcji) co klatkę, dopóki
@@ -95,7 +102,10 @@ export class ThreeCameraController {
       if (!this._hasMoved && Math.sqrt(tdx*tdx + tdy*tdy) > DRAG_THRESHOLD) {
         this._hasMoved = true;
       }
-      if (this._hasMoved) {
+      if (this._hasMoved && this._mode === 'galaxy') {
+        // ARC GALAXY G1 (D-GX-3) — przeciąganie = PAN po stałym skosie (bez obrotu); gałąź systemu niżej bez zmian.
+        this._galaxyPan(dx, dy);
+      } else if (this._hasMoved) {
         // Wejście gracza przerywa animację kątów (tryb taktyczny nie blokuje sterowania).
         this._goalTheta = null;
         this._goalPhi   = null;
@@ -112,6 +122,9 @@ export class ThreeCameraController {
     // max 450 = widoczność orbit do ~40 AU (dla układów 9-11 planet)
     window.addEventListener('wheel', (e) => {
       e.preventDefault();
+      // ARC GALAXY G1 — tryb zdarzenia kółka do normalizacji kroku galaktyki (gałąź układu go nie czyta; także kółko nad
+      // suwakiem zoomu — ten sam event, `UIManager.handleWheel` → `wheelZoom`).
+      this._wheelDeltaMode = e.deltaMode ?? 0;
       // Blokuj zoom gdy overlay jest otwarty (scroll obsługuje UIManager)
       if (window.KOSMOS?.overlayManager?.isAnyOpen()) return;
       // Blokuj zoom gdy kursor jest nad elementem UI (nad suwakiem zoomu ten sam krok woła UIManager — `wheelZoom`)
@@ -120,12 +133,61 @@ export class ThreeCameraController {
     }, { passive: false });
   }
 
+  // ── ARC GALAXY G1 (D-GX-3) — tryb kamery ─────────────────────────────────────────────────────────────────────────
+  /**
+   * Tryb kamery: 'system' (gałąź sprzed kroku, bit w bit) albo 'galaxy' z konfiguracją `{ minDist, maxDist, panCenter,
+   * panHalf }` (`GalaxyModeLogic.galaxyCameraConfig`). Samo przełączenie kamery nie rusza — widok ustawia `applyView`.
+   */
+  setMode(mode, cfg = null) {
+    if (mode === 'galaxy' && cfg) { this._mode = 'galaxy'; this._galaxy = { ...cfg }; }
+    else { this._mode = 'system'; this._galaxy = null; }
+  }
+
+  get mode() { return this._mode; }
+
+  /**
+   * Widok NATYCHMIAST (bez lerpa) — twarde cięcie trybu galaktyki (wejście: preset; wyjście: migawka 1:1). Cel PRZED
+   * dystansem (podłoga efektywna systemu zależy od celu — jak `flyTo`).
+   */
+  applyView({ theta, phi, dist, target } = {}) {
+    this._goalTheta = null;
+    this._goalPhi   = null;
+    if (Number.isFinite(theta)) this._theta = theta;
+    if (Number.isFinite(phi))   this._phi = phi;
+    if (target && Number.isFinite(target.x) && Number.isFinite(target.z)) {
+      this._goalTarget.set(target.x, target.y ?? 0, target.z);
+      this._target.set(target.x, target.y ?? 0, target.z);
+    }
+    if (Number.isFinite(dist)) { this.setTargetDist(dist); this._dist = this._targetDist; }
+    this._applyCamera();
+  }
+
+  // Pan celu po płaszczyźnie celu w trybie galaktyki (wzór Stratcomu H2): zakres ±panHalf wokół środka galaktyki.
+  _galaxyPan(dx, dy) {
+    const g = this._galaxy;
+    if (!g) return;
+    const t = galaxyPanStep({ x: this._goalTarget.x, z: this._goalTarget.z }, dx, dy, {
+      dist: this._dist, fov: this.camera?.fov ?? 55, yaw: this._theta,
+      viewportHpx: (typeof window !== 'undefined' && window.innerHeight) || 800,
+      center: g.panCenter, half: g.panHalf, grab: LIVE_GALAXY.PAN_GRAB !== 0,
+    });
+    this._goalTarget.set(t.x, this._goalTarget.y, t.z);
+    this._target.set(t.x, this._target.y, t.z);
+  }
+
   /**
    * Krok zoomu kółka myszy — wspólny dla kółka nad mapą i nad suwakiem zoomu na pasie dolnym (ARKUSZ UI U4-4,
    * decyzja (d): „ten sam krok”). Zmienia wyłącznie `_targetDist` (cel kamery nietknięty).
    * @param {number} deltaY — surowe `WheelEvent.deltaY`
+   * @param {number} [deltaMode] — `WheelEvent.deltaMode` (ARC GALAXY G1: normalizacja kroku wyłącznie w trybie galaktyki)
    */
-  wheelZoom(deltaY) {
+  wheelZoom(deltaY, deltaMode = this._wheelDeltaMode ?? 0) {
+    // ARC GALAXY G1 (D-GX-3) — tryb galaktyki: zoom MNOŻNIKOWY ×1,12 / ×0,89 na znormalizowane 100 px, w zakresie galaktyki.
+    if (this._mode === 'galaxy' && this._galaxy) {
+      this._targetDist = galaxyZoomStep(this._targetDist, deltaY, this._galaxy, deltaMode,
+        (typeof window !== 'undefined' && window.innerHeight) || 800);
+      return;
+    }
     // Adaptacyjna czułość: wolniej przy bliskim zoomie → precyzja.
     // Fix#5: drobniejsze kroki w zakresie statku (0.05–0.6) → łatwiej trafić pośredni zoom.
     const zoomSpeed = this._targetDist < 0.15 ? 0.0006
@@ -240,6 +302,7 @@ export class ThreeCameraController {
    * `_minDist`. Liczona przy każdym kroku zoomu; sama kamery nie rusza (jak `setMinDist`).
    */
   get minDist() {
+    if (this._mode === 'galaxy' && this._galaxy) return this._galaxy.minDist;   // ARC GALAXY G1 — podłoga galaktyki
     const R = this._starCoreRadius, g = this._goalTarget;
     if (!(R > 0) || !g) return this._minDist;
     const inZone = Math.hypot(g.x, g.y, g.z) <= STAR_ZONE_MULT * R;   // strefa — odległość CELU od środka gwiazdy
@@ -248,11 +311,15 @@ export class ThreeCameraController {
 
   // Ustaw docelowy dystans kamery (auto-zoom, płynny lerp w update)
   setTargetDist(dist) {
+    if (this._mode === 'galaxy' && this._galaxy) {   // ARC GALAXY G1 — zakres galaktyki
+      this._targetDist = Math.max(this._galaxy.minDist, Math.min(this._galaxy.maxDist, dist));
+      return;
+    }
     this._targetDist = Math.max(this.minDist, Math.min(MAX_DIST, dist));
   }
 
-  /** Sufit dystansu kamery od celu [j.] — zakres suwaka zoomu (ARKUSZ UI U4-4). */
-  get maxDist() { return MAX_DIST; }
+  /** Sufit dystansu kamery od celu [j.] — zakres suwaka zoomu (ARKUSZ UI U4-4); w trybie galaktyki — sufit galaktyki (G1). */
+  get maxDist() { return (this._mode === 'galaxy' && this._galaxy) ? this._galaxy.maxDist : MAX_DIST; }
 
   // POLISH P2a (CP17, Finding 459) — dystans NATYCHMIAST (bez lerpa): auto-fokus starcia ma być na miejscu przed
   // pierwszą salwą (lerp 0,08 na klatkę dolatywał z kadru układu 1408 ms — rundy 1–4 mijały przed dolotem).

@@ -22,9 +22,15 @@
 // dawnego rzędu doku): [R] [T] [E] [O] (EN [S] [R] [L] [O]) w idiomie chipów T5 — włączony w roli `primary`, wyłączony w roli
 // `dim` (przekreślony albo bez nawiasów — `HUD_CHIPS.CHIP_OFF_STYLE`); klik przełącza warstwę (`uiPrefs.hudLayers`), podpowiedź
 // z klawiszem (6–9); pod overlayem — brak (jak suwak). Zegar, suwak, 🔔, ☰ i czip ⚔ — w tych samych px co bez chipów.
+// PIGUŁKA TRYBU MAPY (ARC GALAXY G1, D-GX-9; flaga `galaxyView`): [ UKŁAD ] [ GALAKTYKA ] (EN [ SYSTEM ] [ GALAXY ]) na środku
+// wolnego odcinka pasa — między ostatnim chipem warstw a klastrem po prawej (czip ⚔ albo suwak zoomu); idiom chipów (segment
+// aktywny — rola `primary`, nieaktywny — `dim`), podpowiedź `bottomBar.mapModeHint` (klawisz G — ten sam przełącznik); pod
+// overlayem — brak (jak suwak). Pozostałe elementy pasa w tych samych px co bez pigułki.
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';   // ARC GALAXY G1 — flaga pigułki trybu mapy
 import { resolveHudRoles } from './HudPalette.js';
+import { layoutMapModePill, mapModePillAt, mapPillSegmentText, mapPillSegmentWidth } from './GalaxyModeLogic.js';
 import {
   HUD_CHIPS, HUD_LAYER_KEYS, HUD_LAYER_KEY_LABEL, readHudLayers, toggleHudLayer, chipText, chipWidth, layoutLayerChips, chipAt,
 } from './HudLayerChipsLogic.js';
@@ -77,6 +83,56 @@ export class BottomControlBar {
     this._zoomDragMoved = false;
     this._hover     = null;   // 'bell'|'menu'|'play'|`speed${i}`|`chip:${warstwa}`|null
     this._layerChips = [];    // paczka B — chipy warstw z ostatniej klatki: [{ layer, x, y, w, h }] (puste pod overlayem / przy OFF)
+    this._mapPill = [];       // ARC GALAXY G1 — segmenty pigułki trybu mapy: [{ mode, x, y, w, h }] (puste pod overlayem / przy OFF)
+  }
+
+  /** ARC GALAXY G1 — segmenty pigułki trybu mapy z ostatniej klatki (bramka, keeper). */
+  getMapModePill() { return this._mapPill.map((c) => ({ ...c })); }
+
+  _pillLabel(mode) { return mode === 'galaxy' ? t('bottomBar.mapGalaxy') : t('bottomBar.mapSystem'); }
+
+  // ARC GALAXY G1 — pigułka na środku wolnego odcinka pasa (od ostatniego chipu warstw do klastra po prawej).
+  _drawMapModePill(ctx, spanLeft, stripTop, spanRight) {
+    const font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.font = font;
+    const measure = (str) => ctx.measureText(str).width;
+    const widths = ['system', 'galaxy'].map((m) => mapPillSegmentWidth(this._pillLabel(m), measure));
+    this._mapPill = layoutMapModePill({ spanLeft, spanRight, stripTop, stripH: STRIP_H, widths });
+    if (!this._mapPill.length) return;
+    const roles = resolveHudRoles(THEME);
+    const galaxy = window.KOSMOS?.galaxyMode?.isActive === true;
+    const C = HUD_CHIPS;
+    for (const seg of this._mapPill) {
+      const on = (seg.mode === 'galaxy') === galaxy;
+      if (this._hover === 'pill:' + seg.mode && !on) {
+        ctx.globalAlpha = C.CHIP_HOVER_FILL;
+        ctx.fillStyle = roles.primary;
+        ctx.fillRect(seg.x, seg.y, seg.w, seg.h);
+      }
+      ctx.globalAlpha = on ? C.CHIP_ALPHA : C.CHIP_OFF_ALPHA;
+      ctx.fillStyle = on ? roles.primary : roles.dim;
+      ctx.font = font;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(mapPillSegmentText(this._pillLabel(seg.mode)), seg.x + seg.w / 2, seg.y + seg.h / 2 + 0.5);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  _drawMapModeTip(ctx, W) {
+    const text = t('bottomBar.mapModeHint');
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const w = Math.ceil(ctx.measureText(text).width) + 12, h = 16;
+    const a = this._mapPill[0], b = this._mapPill[this._mapPill.length - 1];
+    const cx = (a.x + b.x + b.w) / 2;
+    const x = Math.max(4, Math.min(W - w - 4, cx - w / 2));
+    const y = a.y - 4 - h;
+    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 6, y + h / 2 + 0.5);
+    ctx.textBaseline = 'alphabetic';
   }
 
   /** Paczka B — chipy warstw z ostatniej klatki (bramka, keeper). */
@@ -269,10 +325,19 @@ export class BottomControlBar {
     if (mapMode) {
       this._drawLayerChips(ctx, bgLeft, stripTop, this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x);
     }
+    // ARC GALAXY G1 (D-GX-9) — pigułka trybu mapy w wolnym odcinku między chipami warstw a klastrem po prawej; tylko nad mapą.
+    this._mapPill = [];
+    if (mapMode && GAME_CONFIG.FEATURES?.galaxyView) {
+      const lastChip = this._layerChips[this._layerChips.length - 1];
+      const spanLeft = lastChip ? lastChip.x + lastChip.w + HUD_CHIPS.CHIP_GAP : bgLeft + HUD_CHIPS.CHIP_GAP;
+      const spanRight = (this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x) - HUD_CHIPS.CHIP_GAP;
+      this._drawMapModePill(ctx, spanLeft, stripTop, spanRight);
+    }
 
     // Podpowiedź suwaka zoomu (U4-4) — nad pasem, przy suwaku.
     if (this._zoomRect && this._hover === 'zoom' && !this._zoomDragging) this._drawZoomTip(ctx, W);
     if (typeof this._hover === 'string' && this._hover.startsWith('chip:') && this._layerChips.length) this._drawLayerChipTip(ctx, W);
+    if (typeof this._hover === 'string' && this._hover.startsWith('pill:') && this._mapPill.length) this._drawMapModeTip(ctx, W);
   }
 
   // Suwak zoomu (U4-4): końcówki „−” (daleko) / „+” (blisko), tor i gałka — wyłącznie `fillRect` (bez obrysów).
@@ -429,6 +494,15 @@ export class BottomControlBar {
       this._markDirty();
       return true;
     }
+    // ARC GALAXY G1 — pigułka trybu mapy: segment nieaktywny przełącza tryb (ten sam przełącznik co klawisz G); aktywny — nic.
+    const seg = mapModePillAt(this._mapPill, x, y);
+    if (seg) {
+      const gm = window.KOSMOS?.galaxyMode;
+      const galaxy = gm?.isActive === true;
+      if ((seg.mode === 'galaxy') !== galaxy) gm?.toggle?.('pill');
+      this._markDirty();
+      return true;
+    }
     // Bell → dropdown powiadomień (otwiera W GÓRĘ: bez topY, barH = wys. od dołu ekranu do paska)
     if (this._in(this._bellRect, x, y)) {
       const scale = window.KOSMOS?.uiScale ?? 1;
@@ -474,6 +548,7 @@ export class BottomControlBar {
     else if (this._in(this._playRect, x, y)) h = 'play';
     else if (this._in(this._zoomRect, x, y)) h = 'zoom';   // U4-4 — suwak zoomu
     else if (chipAt(this._layerChips, x, y)) h = 'chip:' + chipAt(this._layerChips, x, y).layer;   // paczka B — chip warstwy
+    else if (mapModePillAt(this._mapPill, x, y)) h = 'pill:' + mapModePillAt(this._mapPill, x, y).mode;   // ARC GALAXY G1 — pigułka
     else { for (let i = 0; i < 5; i++) if (this._in(this._speedRects[i], x, y)) { h = `speed${i}`; break; } }
     if (h !== this._hover) { this._hover = h; this._markDirty(); }
   }

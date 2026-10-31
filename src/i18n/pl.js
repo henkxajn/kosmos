@@ -2548,6 +2548,12 @@ export default {
   'leftOutliner.groundUnits': 'Jednostki naziemne: {0} — klik: mapa ciała',
   'leftOutliner.queue': 'W kolejce: {0}',
   'leftOutliner.keyHint': '„,” lewy panel · „.” prawy panel · „B” oba',
+  // ARC GALAXY G1 — wiersz korzenia lewego outlinera i lista trybu galaktyki (GALAXY_PLAN.md §6)
+  'leftOutliner.galaxyRoot': 'GALAKTYKA',
+  'leftOutliner.backToSystem': '← Układ: {0}',
+  'leftOutliner.galaxyInfo': '{0} ly · {1} · kolonie: {2}',
+  'leftOutliner.cannotEnter': 'Brak widoku — nikt tu nie dotarł',
+  'leftOutliner.foreignColoniesUnknown': 'obce kolonie: ?',
   // ARKUSZ UI U3-2 — prawy outliner (statki): nagłówek, sekcja „W drodze” (D-UI-8, §7.3), kubełki typu (D-UI-6, §7.1)
   'rightOutliner.ships': 'STATKI [{0}]',
   'rightOutliner.inTransit': 'W drodze',
@@ -2596,6 +2602,10 @@ export default {
   // === BottomBar ===
   'bottomBar.stab': 'STAB:',
   'bottomBar.zoomHint': 'Zoom kamery: przeciągnij (w lewo — dalej) albo kółko myszy',
+  // ARC GALAXY G1 — pigułka trybu mapy na pasie dolnym (GALAXY_PLAN.md §6)
+  'bottomBar.mapSystem': 'UKŁAD',
+  'bottomBar.mapGalaxy': 'GALAKTYKA',
+  'bottomBar.mapModeHint': 'Widok mapy — klawisz G',
 
   // === FleetManagerOverlay / FleetTabPanel ===
   'fleetPanel.legendColony': '● Kolonia',

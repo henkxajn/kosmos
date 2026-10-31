@@ -71,6 +71,52 @@ export function deriveRealFadeVert(src) {
 export const STAR_VERT_SKY = deriveRealFadeVert(STAR_VERT);   // liczone RAZ, na starcie modułu
 export const STAR_FRAG_SKY = STAR_FRAG;
 
+// ── Wariant płyty galaktyki (ARC GALAXY G1, GALAXY_PLAN.md §4 G1, F5): gaśnięcie CAŁEJ płyty (`uFade`) ─────────────
+// Twarde cięcie trybu galaktyki rozjaśnia płytę w 0,25 s (0 → 1). Ta sama DERYWACJA co wariant kopuły: dwie wstawki
+// w kotwicach STAR_VERT (uniform po `uPx`, mnożenie po przypisaniu oddechu), reszta co do znaku; brak kotwicy RZUCA.
+// ⚠ Płyta jest uczestnikiem sceny, nie kopułą: chunki głębi logarytmicznej (V4) nakłada WOŁAJĄCY (`GalaxyPlate`), test
+//   głębi włączony, bez zapisu (addytywnie) — przy wylocie G2 płyta i układ będą w kadrze naraz.
+export const PLATE_FADE_DECL_UNIFORM = '        uniform float uFade;\n';
+export const PLATE_FADE_APPLY        = '          vI *= uFade;\n';
+
+export function derivePlateFadeVert(src) {
+  if (typeof src !== 'string') throw new TypeError('derivePlateFadeVert: źródło musi być stringiem');
+  if (src.includes('uFade')) throw new Error('derivePlateFadeVert: źródło już ma uFade');
+  let out = src;
+  for (const [anchor, add] of [[ANCHOR_UNIFORM, PLATE_FADE_DECL_UNIFORM], [ANCHOR_APPLY, PLATE_FADE_APPLY]]) {
+    const i = out.indexOf(anchor);
+    if (i < 0 || out.indexOf(anchor, i + 1) >= 0) throw new Error('derivePlateFadeVert: kotwica nie występuje dokładnie raz: ' + anchor.trim());
+    out = out.slice(0, i + anchor.length) + add + out.slice(i + anchor.length);
+  }
+  return out;
+}
+
+export const STAR_VERT_PLATE = derivePlateFadeVert(STAR_VERT);   // liczone RAZ, na starcie modułu
+export const STAR_FRAG_PLATE = STAR_FRAG;
+
+/**
+ * Materiał punktów PŁYTY galaktyki: lista przezroczysta (po nieprzezroczystych), test głębi tak, zapis nie, addytywnie,
+ * kolory wierzchołków — atrybuty jak niebo (`aIntensity`, `aSize`, `aPhase`); `uFade` 0…1 (gaśnięcie całej płyty).
+ * @param <class 'object'> THREE — moduł three (wstrzykiwany)
+ * @param {Object} [opts] — pixelRatio, fade (start), vertexShader / fragmentShader (wołający podaje wariant z chunkami V4)
+ */
+export function createPlateStarMaterial(THREE, { pixelRatio = 1, fade = 0, vertexShader = STAR_VERT_PLATE, fragmentShader = STAR_FRAG_PLATE } = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0.0 },
+      uPx:   { value: pixelRatio },   // gl_PointSize jest w device px
+      uFade: { value: fade },         // 0 = płyta zgaszona, 1 = w pełni (twarde cięcie 0,25 s)
+    },
+    vertexShader,
+    fragmentShader,
+    vertexColors: true,
+    transparent:  true,
+    depthTest:    true,
+    depthWrite:   false,
+    blending: THREE.AdditiveBlending,
+  });
+}
+
 /**
  * Materiał gwiazd KOPUŁY nieba (flaga skyCatalog): lista nieprzezroczysta, bez testu i zapisu głębi, addytywnie
  * (D-D3 — jak mgławica), atrybuty jak dawne niebo + `aReal`.
@@ -94,4 +140,5 @@ export function createSkyStarMaterial(THREE, { pixelRatio = 1, realFade = 1.0 } 
   });
 }
 
-export const StarPointShader = { STAR_VERT, STAR_FRAG, STAR_VERT_SKY, STAR_FRAG_SKY, deriveRealFadeVert, createSkyStarMaterial };
+export const StarPointShader = { STAR_VERT, STAR_FRAG, STAR_VERT_SKY, STAR_FRAG_SKY, deriveRealFadeVert, createSkyStarMaterial,
+  STAR_VERT_PLATE, STAR_FRAG_PLATE, derivePlateFadeVert, createPlateStarMaterial };

@@ -159,17 +159,18 @@ export function labelCandidates(it) {
 /**
  * Anti-overlap i kadr — rozkład etykiet (deterministyczny przy tych samych wejściach i `prev`).
  * @param {Array<{key, ax, ay, w, h, clear?, prio?}>} items — prostokąty etykiet (px logiczne) i kotwice
- * @param {{ rect:{x,y,w,h}, obstacles?:object[], prev?:Map<string, number> }} o — kadr (obszar mapy), przeszkody, poprzedni
- *   wybór kandydata (klucz → indeks)
+ * @param {{ rect:{x,y,w,h}, obstacles?:object[], prev?:Map<string, number>, candidatesOf?:Function }} o — kadr (obszar
+ *   mapy), przeszkody, poprzedni wybór kandydata (klucz → indeks); `candidatesOf(it)` — generator kandydatów (domyślnie
+ *   `labelCandidates`; ARC GALAXY G1 — etykiety płyty dokładają kandydata „pod gwiazdą, wyśrodkowana”, strona 'C')
  * @returns {{ placed: Array<object>, hidden: string[] }} — `placed`: item + `x, y, side, below, cand, overlap, attach`
  */
-export function placeLabels(items, { rect, obstacles = [], prev = null } = {}) {
+export function placeLabels(items, { rect, obstacles = [], prev = null, candidatesOf = labelCandidates } = {}) {
   const R = HUD_LABELS;
   const sorted = [...(items ?? [])].sort((a, b) => ((a.prio ?? 9) - (b.prio ?? 9)) || cmpKey(a.key, b.key));
   const placed = [], hidden = [];
   for (const it of sorted) {
     if (!(it.w > 0 && it.h > 0) || !rect || it.w > rect.w - 2 * R.EDGE || it.h > rect.h - 2 * R.EDGE) { hidden.push(it.key); continue; }
-    const cands = labelCandidates(it);
+    const cands = candidatesOf(it);
     const pi = prev?.get?.(it.key);
     const tryOrder = [];
     if (Number.isInteger(pi) && pi >= 0 && pi < cands.length) tryOrder.push(pi);
@@ -193,7 +194,7 @@ export function placeLabels(items, { rect, obstacles = [], prev = null } = {}) {
       bestScore = NaN;
     }
     const p = { ...it, x: c.x, y: c.y, side: c.side, below: c.below, cand: best, overlap: Number.isFinite(bestScore) ? bestScore : null };
-    p.attach = { x: c.side === 'E' ? p.x : p.x + p.w, y: p.y + p.h };
+    p.attach = c.side === 'C' ? { x: p.x + p.w / 2, y: p.y } : { x: c.side === 'E' ? p.x : p.x + p.w, y: p.y + p.h };
     placed.push(p);
   }
   return { placed, hidden };

@@ -23,12 +23,21 @@
 //     ciała z WŁASNĄ kolonią — podpowiedź kolonii (POP, prosperity, zasoby, budynki; obserwacja D — dawniej w prawym
 //     Outlinerze); kolonia AI — bez (mgła wojny).
 //
+//   • ARC GALAXY G1 (GALAXY_PLAN.md §4 G1; D-GX-9, D-GX-10, D-GX-11): w trybie układu — pierwszy wiersz „GALAKTYKA”
+//     (korzeń drzewa; klik = tryb galaktyki; flaga `galaxyView`); w trybie galaktyki — lista układów galaktyki
+//     (`GalaxyOutlinerLogic.buildGalaxySystemList`): pierwszy wiersz „← Układ: <aktywny>” (wyjście), wiersz układu — 1. klik
+//     zaznaczenie gwiazdy na płycie, 2. klik albo [Enter] — wejście (gdy da się otworzyć; inaczej podpowiedź), strzałka —
+//     rozwinięcie (domyślnie rozwinięta gwiazda zaznaczona): linia informacji, właściciel, własne kolonie i stacje (klik =
+//     wejście z fokusem na obiekcie), obce kolonie wg dwóch osi. Drzewo trybu układu bez zmian.
 // Importuje się pod node (keeper `left_outliner_smoke` — prawdziwy `draw` + `hitTest` na atrapie ctx).
 
 import { THEME }           from '../config/ThemeConfig.js';
+import { GAME_CONFIG }     from '../config/GameConfig.js';   // ARC GALAXY G1 — flaga `galaxyView` (wiersz korzenia)
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
-import { t, getName, getShort } from '../i18n/i18n.js';
+import { t, getName, getShort, getLocale } from '../i18n/i18n.js';
+import { fmtDec }          from './NumberFormatLogic.js';
+import { buildGalaxySystemList, galaxyWorldContext, UNKNOWN_PLACE_GLYPH } from './GalaxyOutlinerLogic.js';   // ARC GALAXY G1
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { isPlayerColony }  from '../utils/ColonyOwnership.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';   // ARKUSZ UI U3-0 — statki gracza dla widoczności układów (489)
@@ -87,6 +96,35 @@ export class LeftOutliner extends OutlinerColumn {
   constructor() {
     super('left');
     EventBus.on('body:selected', (p) => this._onBodySelected(p?.entity));
+    // ARC GALAXY G1 — rozwinięcia wierszy galaktyki (jawny stan użytkownika, sesja; domyślnie rozwinięta gwiazda zaznaczona),
+    // przewinięcie listy osobno dla trybu układu i galaktyki, zaznaczenie gwiazdy → odsłonięcie wiersza.
+    this._galaxyExpanded = new Map();
+    this._scrollMemo = { system: 0, galaxy: 0 };
+    EventBus.on('galaxy:modeChanged', (p) => {
+      const into = p?.active === true ? 'galaxy' : 'system';
+      this._scrollMemo[into === 'galaxy' ? 'system' : 'galaxy'] = this._scrollY;
+      this._scrollY = this._scrollMemo[into] ?? 0;
+      this._markDirty();
+    });
+    EventBus.on('galaxy:selectionChanged', (p) => {
+      if (p?.systemId != null) this._revealKey = `gsys:${p.systemId}`;
+      this._markDirty();
+    });
+  }
+
+  /** ARC GALAXY G1 — tryb galaktyki aktywny (lista galaktyki zamiast drzewa układów). */
+  _galaxyActive(K) { return K?.galaxyMode?.isActive === true; }
+
+  /** ARC GALAXY G1 — rozwinięcie wiersza galaktyki: jawny stan użytkownika, inaczej gwiazda zaznaczona. */
+  _galaxyExpandedOf(id, selectedId) {
+    if (this._galaxyExpanded.has(id)) return this._galaxyExpanded.get(id) === true;
+    return selectedId != null && String(id) === String(selectedId);
+  }
+
+  _toggleGalaxyExpanded(id, selectedId) {
+    const next = !this._galaxyExpandedOf(id, selectedId);
+    const dflt = selectedId != null && String(id) === String(selectedId);
+    if (next === dflt) this._galaxyExpanded.delete(id); else this._galaxyExpanded.set(id, next);
   }
 
   // D-UI-10 (§7.12): zaznaczenie ciała (z mapy albo dowolnej powierzchni) rozwija jego układ, gdy zwinięty, i przewija
@@ -129,9 +167,12 @@ export class LeftOutliner extends OutlinerColumn {
   }
 
   _model(K, input) {
+    if (this._galaxyActive(K)) return this._galaxyModel(K, input);
     const active = this._active(K);
     const tree = buildSystemTree(this.treeContext(K, input, active));
     const items = [];
+    // ARC GALAXY G1 (D-GX-9) — korzeń drzewa: pierwszy wiersz „GALAKTYKA” (klik = tryb galaktyki); nagłówek bez zmian.
+    if (GAME_CONFIG.FEATURES?.galaxyView) items.push({ kind: 'galaxyRoot', key: 'galaxyRoot', h: SYS_H });
     for (const s of tree.systems) {
       items.push({ kind: 'system', key: `system:${s.systemId}`, node: s, h: SYS_H });
       for (const r of (s.bodies ?? [])) {
@@ -150,9 +191,142 @@ export class LeftOutliner extends OutlinerColumn {
   }
 
   _drawItem(ctx, g, iy, it, model) {
-    if (it.kind === 'system') this._drawSystemRow(ctx, g, iy, it.node, model.active);
+    if (it.kind === 'galaxyRoot' || it.kind === 'galaxyBack') this._drawGalaxyRootRow(ctx, g, iy, it);
+    else if (it.kind === 'gsys') this._drawGalaxySystemRow(ctx, g, iy, it.row);
+    else if (it.kind === 'gline') this._drawGalaxyLine(ctx, g, iy, it);
+    else if (it.kind === 'gcol' || it.kind === 'gsta') this._drawGalaxyOwnRow(ctx, g, iy, it);
+    else if (it.kind === 'system') this._drawSystemRow(ctx, g, iy, it.node, model.active);
     else if (it.kind === 'station') this._drawStationRow(ctx, g, iy, it.row, model.sel);
     else this._drawBodyRow(ctx, g, iy, it.row, model.sel);
+  }
+
+  // ── ARC GALAXY G1 — lista trybu galaktyki ─────────────────────────────────────────────────────────────────────────
+  _galaxyModel(K, input) {
+    const world = galaxyWorldContext(K, { colonies: input.colonies, groundUnits: input.groundUnits });
+    const sel = world.selectedId;
+    const list = buildGalaxySystemList({ ...world, expanded: (id) => this._galaxyExpandedOf(id, sel) });
+    const active = String(world.activeSystemId);
+    const activeRow = list.byId.get(active);
+    const activeName = activeRow?.name ?? EntityManager.getStarOfSystem?.(active)?.name ?? active;
+    const loc = getLocale();
+    const items = [{ kind: 'galaxyBack', key: 'galaxyBack', h: SYS_H, name: activeName }];
+    for (const r of list.rows) {
+      items.push({ kind: 'gsys', key: `gsys:${r.systemId}`, row: r, h: SYS_H });
+      if (!r.expanded) continue;
+      items.push({ kind: 'gline', key: `ginfo:${r.systemId}`, row: r, h: ROW_H, depth: 1, tone: 'info',
+        text: t('leftOutliner.galaxyInfo', fmtDec(r.distanceLY, 1, loc), r.spectral ?? '?', r.colonyCount) });
+      items.push({ kind: 'gline', key: `gowner:${r.systemId}`, row: r, h: ROW_H, depth: 1, tone: 'owner', text: this._ownerText(K, r.owner) });
+      for (const c of r.ownColonies) items.push({ kind: 'gcol', key: `gcol:${c.bodyId}`, row: r, col: c, h: ROW_H });
+      for (const st of r.ownStations) items.push({ kind: 'gsta', key: `gsta:${st.stationId}`, row: r, st, h: ROW_H });
+      for (const f of (r.foreign.kind === 'names' ? r.foreign.colonies : [])) {
+        const pop = Number.isFinite(f.population) ? ` · ${Math.round(f.population)} POP` : '';
+        items.push({ kind: 'gline', key: `gfor:${f.bodyId}`, row: r, h: ROW_H, depth: 1, tone: 'foreign', text: `${PRESENCE_GLYPH.foreign} ${f.name}${pop}` });
+      }
+      if (r.foreign.kind === 'unknown' || r.foreign.more) {
+        items.push({ kind: 'gline', key: `gforq:${r.systemId}`, row: r, h: ROW_H, depth: 1, tone: 'foreign', text: t('leftOutliner.foreignColoniesUnknown') });
+      }
+    }
+    return {
+      title:   t('leftOutliner.systems', list.rows.length),
+      keyHint: '[ , ]',
+      items,
+      result:  list,
+      active,
+      sel:     readClickSelection(K),
+      galaxy:  true,
+    };
+  }
+
+  // Właściciel układu — klucze panelu Stratcom (`fleet.stratcomEmpire*`): imperium wg osi właściciela, gracz, obcy, nieznany.
+  _ownerText(K, owner) {
+    if (owner?.kind === 'player') return t('fleet.stratcomEmpire', t('territory.playerEmpire'));
+    if (owner?.kind === 'identity') return t('fleet.stratcomEmpire', K?.empireRegistry?.get?.(owner.empireId)?.name ?? '?');
+    if (owner?.kind === 'foreign') return t('fleet.stratcomEmpireForeign');
+    return t('fleet.stratcomEmpireUnknown');
+  }
+
+  // Wiersz korzenia: w trybie układu „GALAKTYKA” (wejście), w trybie galaktyki „← Układ: <aktywny>” (wyjście).
+  _drawGalaxyRootRow(ctx, g, iy, it) {
+    const back = it.kind === 'galaxyBack';
+    if (this._hoverKey === it.kind) {
+      ctx.fillStyle = THEME.accentDim ?? 'rgba(0,255,180,0.07)';
+      ctx.fillRect(g.x, iy, g.w, SYS_H);
+    }
+    ctx.textAlign = 'left';
+    this._shadow(ctx, true);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    const glyph = back ? '' : '✦';
+    let tx = g.x + PAD;
+    if (glyph) { ctx.fillText(glyph, tx, iy + 13); tx += ARROW_W - 2; }
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    if ('letterSpacing' in ctx && !back) ctx.letterSpacing = '1px';
+    const text = back ? t('leftOutliner.backToSystem', it.name ?? '') : t('leftOutliner.galaxyRoot');
+    ctx.fillText(this._fit(ctx, text, g.x + g.w - PAD - tx), tx, iy + 13);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    this._shadow(ctx, false);
+    this._clickTargets.push({ type: it.kind, x: g.x, y: iy, w: g.w, h: SYS_H });
+  }
+
+  _drawGalaxySystemRow(ctx, g, iy, r) {
+    const key = `gsys:${r.systemId}`;
+    if (r.isSelected) { ctx.fillStyle = THEME.accentMed ?? 'rgba(0,255,180,0.13)'; ctx.fillRect(g.x, iy, g.w, SYS_H); }
+    else if (this._hoverKey === key) { ctx.fillStyle = THEME.accentDim ?? 'rgba(0,255,180,0.07)'; ctx.fillRect(g.x, iy, g.w, SYS_H); }
+    if (r.isActive) { ctx.fillStyle = THEME.accent; ctx.fillRect(g.x, iy + 2, 2, SYS_H - 4); }
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left';
+    this._shadow(ctx, true);
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(r.expanded ? '▾' : '▸', g.x + PAD, iy + 13);
+    let tx = g.x + PAD + ARROW_W - 2;
+    const glyph = r.dim ? UNKNOWN_PLACE_GLYPH
+      : r.group === 1 || (r.isHome && r.ownColonies.length) ? PRESENCE_GLYPH.colony
+      : r.group === 2 ? PRESENCE_GLYPH.outpost
+      : r.owner?.kind === 'identity' ? PRESENCE_GLYPH.foreign : '';
+    if (glyph) {
+      ctx.fillStyle = r.dim ? THEME.textDim : (r.owner?.kind === 'identity' && !r.own ? (THEME.warning ?? THEME.textSecondary) : THEME.textPrimary);
+      ctx.fillText(glyph, tx, iy + 13);
+      tx += ctx.measureText(glyph).width + 3;
+    }
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = r.dim ? THEME.textDim : r.isActive ? THEME.accent : THEME.textPrimary;
+    ctx.fillText(this._fit(ctx, r.name, g.x + g.w - PAD - tx), tx, iy + 13);
+    this._shadow(ctx, false);
+    this._clickTargets.push({ type: 'gsys', systemId: r.systemId, enterable: r.enterable, x: g.x, y: iy, w: g.w, h: SYS_H,
+      arrowX: g.x + PAD + ARROW_W });
+  }
+
+  // Linia rozwinięcia (informacja, właściciel, obce kolonie) — tekst bez akcji; obcięta do kolumny — pełny tekst w podpowiedzi.
+  _drawGalaxyLine(ctx, g, iy, it) {
+    const tx = g.x + PAD + ARROW_W - 2 + (it.depth ?? 1) * INDENT - INDENT;
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left';
+    this._shadow(ctx, true);
+    ctx.fillStyle = it.tone === 'foreign' ? (THEME.warning ?? THEME.textSecondary) : THEME.textSecondary;
+    const shown = this._fit(ctx, it.text, g.x + g.w - PAD - 2 - tx);
+    ctx.fillText(shown, tx, iy + 12);
+    this._shadow(ctx, false);
+    this._clickTargets.push({ type: 'gline', systemId: it.row.systemId, text: it.text, cut: shown !== String(it.text ?? ''),
+      x: g.x, y: iy, w: g.w, h: ROW_H });
+  }
+
+  // Własna kolonia / stacja w rozwinięciu — klik = wejście w układ z fokusem na obiekcie.
+  _drawGalaxyOwnRow(ctx, g, iy, it) {
+    const isCol = it.kind === 'gcol';
+    const key = isCol ? `gcol:${it.col.bodyId}` : `gsta:${it.st.stationId}`;
+    if (this._hoverKey === key) { ctx.fillStyle = THEME.accentDim ?? 'rgba(0,255,180,0.07)'; ctx.fillRect(g.x, iy, g.w, ROW_H); }
+    const tx = g.x + PAD + ARROW_W - 2;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left';
+    this._shadow(ctx, true);
+    ctx.fillStyle = THEME.textPrimary;
+    const text = isCol ? `${it.col.isOutpost ? PRESENCE_GLYPH.outpost : PRESENCE_GLYPH.colony} ${it.col.name}` : `🛰 ${it.st.name}`;
+    ctx.fillText(this._fit(ctx, text, g.x + g.w - PAD - 2 - tx), tx, iy + 12);
+    this._shadow(ctx, false);
+    this._clickTargets.push(isCol
+      ? { type: 'gcol', bodyId: it.col.bodyId, systemId: it.row.systemId, enterable: it.row.enterable, x: g.x, y: iy, w: g.w, h: ROW_H }
+      : { type: 'gsta', stationId: it.st.stationId, systemId: it.row.systemId, enterable: it.row.enterable, x: g.x, y: iy, w: g.w, h: ROW_H });
   }
 
   _drawSystemRow(ctx, g, iy, s, active) {
@@ -244,6 +418,20 @@ export class LeftOutliner extends OutlinerColumn {
   // ── Wejście (trafienie — szablon `OutlinerColumn.hitTest`) ───────────────────────────────────────────────────────
   _onHit(z, x, y, K) {
     const env = this._env(K);
+    // ARC GALAXY G1 — korzeń (wejście / wyjście), wiersze listy galaktyki, własne kolonie i stacje w rozwinięciu.
+    const gm = K?.galaxyMode;
+    if (z.type === 'galaxyRoot') { gm?.enter?.('outliner'); return; }
+    if (z.type === 'galaxyBack') { gm?.exit?.('outliner'); return; }
+    if (z.type === 'gsys') {
+      if (x < z.arrowX) { this._toggleGalaxyExpanded(z.systemId, gm?.selectedSystemId ?? null); this._markDirty(); return; }
+      // D-UI-5: 1. klik — zaznaczenie gwiazdy na płycie; 2. klik w zaznaczoną — wejście (gdy da się otworzyć).
+      if (String(gm?.selectedSystemId ?? '') === String(z.systemId)) gm?.enterSystem?.(z.systemId);
+      else gm?.select?.(z.systemId);
+      return;
+    }
+    if (z.type === 'gcol') { const body = EntityManager.get(z.bodyId); if (body) gm?.enterBody?.(body); return; }
+    if (z.type === 'gsta') { const st = EntityManager.get(z.stationId) ?? K?.stationSystem?.getStation?.(z.stationId); if (st) gm?.enterStation?.(st); return; }
+    if (z.type === 'gline') return;
     if (z.type === 'system') {
       if (x < z.arrowX) { this.toggleExpanded(z.systemId, this._active(K)); this._markDirty(); return; }
       // D-UI-5: klik w układ = przejście do niego (kadr `frameSystem`); klik w bieżący = domyślny widok (§7.9).
@@ -273,11 +461,19 @@ export class LeftOutliner extends OutlinerColumn {
   }
 
   _hoverKeyOf(z) {
+    if (z.type === 'galaxyRoot' || z.type === 'galaxyBack') return z.type;   // ARC GALAXY G1
+    if (z.type === 'gsys' || z.type === 'gline') return `${z.type}:${z.systemId}`;
+    if (z.type === 'gcol') return `gcol:${z.bodyId}`;
+    if (z.type === 'gsta') return `gsta:${z.stationId}`;
     const id = z.type === 'system' ? z.systemId : z.type === 'station' ? z.stationId : z.bodyId;
     return `${z.type}:${id}`;
   }
 
   _hoverTip(z, x, y, K) {
+    // ARC GALAXY G1 — korzeń: klawisz trybu mapy; wiersz bez wejścia (nikt tam nie dotarł) — powód.
+    if (z.type === 'galaxyRoot') return { text: t('bottomBar.mapModeHint'), x, y };
+    if ((z.type === 'gsys' || z.type === 'gcol' || z.type === 'gsta') && z.enterable === false) return { text: t('leftOutliner.cannotEnter'), x, y };
+    if (z.type === 'gline' && z.cut) return { text: z.text, x, y };   // linia obcięta do kolumny — pełny tekst
     if (z.type === 'ground') return { text: t('leftOutliner.groundUnits', z.count), x, y };
     // Obserwacja C (podpisane (a)): ⏳N zostaje, podpowiedź wylicza pozycje kolejki (to samo źródło co liczba).
     if (z.type === 'queue') return { lines: queueTipLines(K?.colonyManager?.getColony?.(z.bodyId) ?? null, z.count), x, y };
