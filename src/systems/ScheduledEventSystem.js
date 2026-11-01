@@ -56,6 +56,10 @@ export class ScheduledEventSystem {
     // Odliczaj tymczasowe efekty (w civYears — zgodne z ekonomia 4X)
     this._tickTempEffects(civDeltaYears);
 
+    // Opcja ☰ „Zdarzenia losowe” OFF: trwające efekty (wyżej) dobiegają końca, nowe się nie wyzwalają
+    // (akumulator stoi — po włączeniu nic nie wybucha naraz).
+    if (window.KOSMOS?.uiPrefs?.randomEventsEnabled === false) return;
+
     // Akumuluj czas do następnego eventu (w orbitalnych latach — 3-5 lat gry)
     this._accumulator += deltaYears;
     if (this._accumulator < this._nextTrigger) return;

@@ -196,6 +196,10 @@ export class RandomEventSystem {
       }
     }
 
+    // Opcja ☰ „Zdarzenia losowe” OFF: trwające efekty, łańcuchy i ostrzeżenia dobiegają końca (wyżej),
+    // ale NOWE zdarzenia się nie losują (cooldown stoi — po włączeniu nic nie wybucha naraz).
+    if (window.KOSMOS?.uiPrefs?.randomEventsEnabled === false) return;
+
     // Cooldown
     this._cooldown -= 1;
     if (this._cooldown > 0) return;

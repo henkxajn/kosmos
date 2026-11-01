@@ -306,6 +306,13 @@ export class BottomBar {
         this._toggleSensorOverlay();
         this._updateDomMenu();
         break;
+      case 'randomEvents': {
+        // brak klucza ≠ false (default ON); uiPrefs w zapisie, bez migracji
+        window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
+        window.KOSMOS.uiPrefs.randomEventsEnabled = window.KOSMOS.uiPrefs.randomEventsEnabled === false;
+        this._updateDomMenu();
+        break;
+      }
       case 'fleetLabels':
         this._toggleFleetMapLabels();
         this._updateDomMenu();
@@ -443,6 +450,7 @@ export class BottomBar {
     const radarOn = readHudLayers(window.KOSMOS?.uiPrefs).radar;
     // Obraz Operacyjny F1 — plakietki flotowe (default ON: brak klucza ≠ false)
     const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
+    const randomEventsOn = window.KOSMOS?.uiPrefs?.randomEventsEnabled !== false;
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
@@ -453,6 +461,7 @@ export class BottomBar {
       { id: 'orbits',   label: t('menu.orbits'), value: orbitLabel, valueOn: true },
       { id: 'radar',   label: t('menu.radar'),  value: radarOn ? t('menu.on') : t('menu.off'), valueOn: radarOn },
       { id: 'fleetLabels', label: t('menu.fleetLabels'), value: fleetLblOn ? t('menu.on') : t('menu.off'), valueOn: fleetLblOn },
+      { id: 'randomEvents', label: t('menu.randomEvents'), value: randomEventsOn ? t('menu.on') : t('menu.off'), valueOn: randomEventsOn },
       { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
       { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },
     ];
