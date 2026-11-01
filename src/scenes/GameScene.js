@@ -4800,9 +4800,11 @@ export class GameScene {
       // zostaw samą grafikę układu i modele statków. Box-select (SHIFT+LPM) działa dalej —
       // marquee rysuje się mimo ukrytego UI. Znika po puszczeniu Shift (keyup/blur).
       // Nie łączymy z CTRL (koliduje z „pokaż wszystkie etykiety"); tylko w widoku układu.
-      if (e.key === 'Shift' && !e.ctrlKey && window.KOSMOS?.civMode
+      // TOGGLE (nie hold): każde naciśnięcie Shift przełącza UI on/off (wygodne do nagrywania rolek).
+      if (e.key === 'Shift' && !e.ctrlKey && !e.repeat && window.KOSMOS?.civMode
+          && !this._introLockActive
           && !this.uiManager?.overlayManager?.isAnyOpen?.() && !this.planetScene?.isOpen) {
-        this._setCleanView(true);
+        this._setCleanView(!this._cleanViewActive);
       }
 
       // ── M3 P1.3 — picker / menu / selection keyboard (priorytet PRZED overlay/menu/Space) ──
@@ -5014,9 +5016,7 @@ export class GameScene {
           this.uiManager?.markDirty?.();
         }
       }
-      // Puszczenie Shift → wyjdź z czystego widoku. NIE podczas lotu intro — lock chroni
-      // clean-view (inaczej stray keyup gasił go i wracał pasek symulacji).
-      if (!this._introLockActive && (e.key === 'Shift' || !e.shiftKey)) this._setCleanView(false);
+      // Czysty widok to teraz toggle — puszczenie Shift go NIE wyłącza.
     });
     // Edge case: utrata focusu okna podczas trzymania CTRL / Shift
     window.addEventListener('blur', () => {
@@ -5024,7 +5024,7 @@ export class GameScene {
         this.threeRenderer.setShowAllLabels(false);
         this.uiManager?.markDirty?.();
       }
-      if (!this._introLockActive) this._setCleanView(false);   // lock chroni clean-view lotu intro
+      // blur nie wyłącza czystego widoku (toggle)
     });
   }
 
