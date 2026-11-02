@@ -246,6 +246,13 @@ header('G10 klik płyty: zaznaczenie / dwuklik / pustka');
     `G10a 1. klik — zaznaczenie; ta sama gwiazda ≤ 400 ms — wejście; po 500 ms — zaznaczenie; inna gwiazda — zaznaczenie; pustka — odznaczenie`);
   const b2 = f?.(b?.memo, 'sys_7', 1350);
   ok(b2?.action === 'select', 'G10b po wejściu pamięć dwukliku wyzerowana (trzeci klik nie wchodzi drugi raz)');
+  const sel = { selectedId: 'sys_7', dive: false };
+  const fo = f?.(a?.memo, 'sys_7', 1500, undefined, sel);
+  const fi = f?.(a?.memo, 'sys_7', 1500, undefined, { selectedId: 'sys_7', dive: true });
+  const fd = f?.(a?.memo, 'sys_7', 1200, undefined, { selectedId: 'sys_7', dive: false });
+  const fx = f?.(a?.memo, 'sys_8', 1500, undefined, sel);
+  ok(fo?.action === 'focus' && fi?.action === 'enter' && fd?.action === 'enter' && fx?.action === 'select',
+    'G10c T2: 2. klik w zaznaczoną (>400 ms) — fokus; z bliska (dive) — wejście; dwuklik zawsze wejście; inna gwiazda — zaznaczenie');
 
   header('G11 bramka wejścia (186)');
   const g = GL?.isSystemEnterable;
@@ -283,6 +290,23 @@ header('G14 wygląd punktów płyty');
   ok(bright?.intensity > 1, 'G14c najjaśniejsze ponad próg bloomu (HDR > 1, F5)');
   ok(JSON.stringify(GL?.haloIds?.('sys_home', 'sys_7')) === '["sys_home","sys_7"]' && JSON.stringify(GL?.haloIds?.('sys_home', 'sys_home')) === '["sys_home"]'
     && JSON.stringify(GL?.haloIds?.('sys_home', null)) === '["sys_home"]', 'G14d halo: dom zawsze, zaznaczona dodatkowo (bez duplikatu)');
+
+  // G2 T3 — prawdziwa gwiazda płyty „bliżej” niż tło nieba: szczyt ≥ 2× najjaśniejsze tło, barwa bardziej nasycona.
+  const SC = await import('../../utils/SkyCatalog.js');
+  const sat = (c) => (Math.max(...c) - Math.min(...c)) / Math.max(...c);
+  const syst = [];
+  for (let i = 0; i < 72; i++) syst.push({ id: 's' + i, x: (i % 9) * 6 - 24, y: Math.floor(i / 9) * 6 - 24, z: (i % 5) - 2, spectralType: 'GKMFA'[i % 5], luminosity: [1, 0.4, 0.04, 3, 10][i % 5] });
+  let maxFiller = 0;
+  for (const seed of [1, 7, 42, 1234]) {
+    const cat = SC.buildSkyCatalog(syst, seed), out = SC.allocSkyBuffers(cat.N + 8);
+    for (const o of ['s0', 's13', 's40']) maxFiller = Math.max(maxFiller, SC.skyFrom(cat, o, out).maxFillerI);
+  }
+  const peak = L?.({ luminosity: 400, spectralType: 'G' }, { explored: true });
+  ok(maxFiller > 2 && peak?.intensity >= 2 * maxFiller, `G14e T3 szczyt płyty ${peak?.intensity?.toFixed(2)} ≥ 2× najjaśniejsze tło ${maxFiller.toFixed(3)} (było 2,60 vs 2,543)`);
+  ok(['G', 'F', 'K', 'M', 'A'].every((c) => sat(GL.plateStarColor(c, GL.LIVE_GALAXY.PLATE_SAT)) > sat(SC.SKY_CLASS_RGB[c]) + 1e-9),
+    'G14f T3 barwa klasy na płycie bardziej nasycona niż na niebie (każda klasa)');
+  ok(JSON.stringify(GL.plateStarColor('G', 1)) === JSON.stringify([...SC.SKY_CLASS_RGB.G]) && Math.max(...GL.plateStarColor('K', 1.7)) === 1,
+    'G14g T3 kontrola: sat = 1 daje barwę nieba co do bitu; maksimum kanału zostaje 1');
 
   header('G15 kandydaci etykiet płyty');
   const it = { key: 'g:a', ax: 400, ay: 300, w: 60, h: 14, clear: 5, gapBelow: 3 };

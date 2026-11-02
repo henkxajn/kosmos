@@ -2444,7 +2444,8 @@ export class UIManager {
     // kolonia itd.) labele nie mają sensu i przebijały przez panel.
     const tr = window.KOSMOS?.threeRenderer;
     // ARC GALAXY G1 — etykiety CTRL obiektów UKŁADU nie nad płytą galaktyki (obiekty układu ukryte w trybie galaktyki).
-    if (tr?._showAllLabels && !this.overlayManager.isAnyOpen() && !this._galaxyMode?.isActive) this._drawAllLabels(ctx, tr);
+    // G2-1 — także nie w trakcie lotu kamery (obiekty układu gasną albo jeszcze się nie pojawiły).
+    if (tr?._showAllLabels && !this.overlayManager.isAnyOpen() && !this._galaxyMode?.isActive && !this._galaxyMode?.isFlying) this._drawAllLabels(ctx, tr);
 
     // ── ARKUSZ UI U2 — lewy outliner (układy i ciała): nad mapą, POD listą kolonii z górnej belki (rysowana zaraz niżej,
     //    §7.17) i pod pływającymi panelami. Widoczność wg decyzji 4 (`isShown` — bez overlaya, bez rozwiniętego Doku).
@@ -2527,7 +2528,8 @@ export class UIManager {
 
     // Slice 4 — ramki RTS + paski paliwa dla zaznaczonego (własnego) statku.
     if (civMode && tr && GAME_CONFIG.FEATURES?.fcBrackets
-        && !this.overlayManager.isAnyOpen() && !globeOpen && !this._galaxyMode?.isActive) {   // ARC GALAXY G1 — paski statku układu nie nad płytą
+        && !this.overlayManager.isAnyOpen() && !globeOpen && !this._galaxyMode?.isActive
+        && !this._galaxyMode?.isFlying) {   // ARC GALAXY G1 — paski statku układu nie nad płytą (G2-1 — ani w locie)
       this._drawSelectionBrackets(ctx, tr);
     }
     // Slice 8 — prostokąt box-select (gdy aktywny drag); nad mapą, pod overlayami.

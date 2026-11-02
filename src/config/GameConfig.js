@@ -523,6 +523,19 @@ export const GAME_CONFIG = {
     //     (wpis `g`) — przy starcie gry (F5 po przestawieniu w konsoli).
     galaxyView:           true,
 
+    // ── ARC GALAXY / G2 — LOT, GEST, NURKOWANIE, CHROM I TERYTORIUM PŁYTY (GALAXY_PLAN.md §4 G2; D-GX-7, 13–17 (c), 22) ──────
+    //   ON  = wylot / wlot lotem kamery zamiast twardego cięcia (~1,4 s / ~1,2 s; G, pigułka, wiersz korzenia, Esc, [Enter],
+    //         dwuklik, [ Wejdź ]; Esc w trakcie lotu = stan końcowy; pokrętło `galaxyTuning.FLIGHT = 0` albo
+    //         `prefers-reduced-motion` — twarde cięcie G1); gest kółka: 2 ząbki za sufitem układu → wylot, za podłogą galaktyki →
+    //         nurkowanie w cel z nawiasami ⌜⌟; chrom płyty w idiomie etykiet (rozwinięcie najechania, przypięcie z akcjami
+    //         [ Wejdź ] [ Wyślij ▼ ] (G3) [ Skanuj ] — jedyny przyszły dom skanu układu), reguła gęstości nazw, szyna statków przy
+    //         gwieździe, ping obserwatorium z domu, szlaki i trasy, blipy obcych skoków; chipy [R] [T] [E] w znaczeniu płyty, [O]
+    //         ukryty; terytorium na płycie (rozlane światło z pola, krawędź z gradientu, szew sporny, zasłony), aureole
+    //         własności, słupki tylko dla układów gracza i gwiazdy zaznaczonej.
+    //   OFF = G1 co do bitu (twarde cięcie, same nazwy płyty, bez terytorium).
+    //   ⚠ Brak klucza = OFF; wymaga `galaxyView`. Czytana przy każdym przejściu i co klatkę warstwy HUD / płyty.
+    galaxyLook:           true,
+
     // ── ZNACZNIK STATKU — flaga na stałe ON od SM-Z (2026-10-29; HUD_PLAN.md §„Znacznik statku”) ──
     // `hudShipMarker` (znacznik statku w warstwie HUD 2D — daszek w kierunku ruchu, romb bez ruchu, role motywu; D-SM-1…6):
     //   klucz usunięty, kod czyta ścieżkę ON bez rozgałęzień. Usunięta ścieżka OFF — insygnia frakcji 3D (`_syncInsignia`,

@@ -210,13 +210,22 @@ export function isSystemEnterable({ generated = false, explored = false, presenc
 
 /**
  * Co zrobić z klikiem w płytę. `prev` = { id, t } poprzedniego kliku w gwiazdę (mutowana pamięć wołającego).
- * @returns {{ action: 'select'|'enter'|'deselect', id: string|null, memo: {id:string|null, t:number} }}
+ * Reguła: 1. klik — zaznaczenie · 2. klik w zaznaczoną — fokus kamery (z bliska `ctx.dive` — wejście) · dwuklik — wejście.
+ * @param {{ selectedId?:string|null, dive?:boolean }} [ctx] — zaznaczona gwiazda i czy kamera jest w zasięgu nurkowania
+ * @returns {{ action: 'select'|'focus'|'enter'|'deselect', id: string|null, memo: {id:string|null, t:number} }}
  */
-export function plateClickAction(prev, id, now, ms = GALAXY_DOUBLE_CLICK_MS) {
+export function plateClickAction(prev, id, now, ms = GALAXY_DOUBLE_CLICK_MS, ctx = {}) {
   if (id == null) return { action: 'deselect', id: null, memo: { id: null, t: -Infinity } };
   const k = String(id);
   const dbl = prev && prev.id === k && Number.isFinite(prev.t) && (now - prev.t) <= ms;
-  return dbl ? { action: 'enter', id: k, memo: { id: null, t: -Infinity } } : { action: 'select', id: k, memo: { id: k, t: now } };
+  if (dbl) return { action: 'enter', id: k, memo: { id: null, t: -Infinity } };
+  // 2. klik w zaznaczoną gwiazdę (wolniej niż dwuklik): z bliska (zasięg nurkowania) — wejście, inaczej — fokus kamery.
+  if (ctx?.selectedId != null && String(ctx.selectedId) === k) {
+    return ctx.dive === true
+      ? { action: 'enter', id: k, memo: { id: null, t: -Infinity } }
+      : { action: 'focus', id: k, memo: { id: k, t: now } };
+  }
+  return { action: 'select', id: k, memo: { id: k, t: now } };
 }
 
 // ── Wygląd punktów płyty (F5: ten sam PSF co niebo; rozmiar z jasności; niezbadane × 0,5; dom / zaznaczony — halo) ─────
@@ -227,15 +236,43 @@ export const LIVE_GALAXY = {
   LUM_LO: 0.03,          // [L☉] jasność dająca najmniejszy punkt
   LUM_HI: 4.0,           // [L☉] jasność dająca największy punkt
   SIZE_MIN: 3.0,         // [px] punkt najsłabszej gwiazdy
-  SIZE_GAIN: 4.5,        // [px] przyrost do najjaśniejszej
+  SIZE_GAIN: 6.5,        // [px] przyrost do najjaśniejszej (G2 T3: było 4,5 — prawdziwa gwiazda „bliżej” niż tło)
   SIZE_EXP: 0.8,         // krzywa rozmiaru
   I_MIN: 1.0,            // intensywność najsłabszej (próg bloomu = 1,0)
-  I_GAIN: 1.6,           // przyrost intensywności (HDR > 1 → bloom)
+  I_GAIN: 4.2,           // przyrost intensywności (HDR > 1 → bloom); G2 T3: było 1,6 — szczyt 5,2 ≥ 2× sufit tła (CAP 2,6)
+  PLATE_SAT: 1.7,        // G2 T3: nasycenie barwy klasy względem nieba (1 = barwa nieba; > 1 — wyraźniejsza)
   UNEXPLORED_MUL: 0.5,   // niezbadane — mnożnik intensywności (F5 „unexplored at 0.5”)
   HALO_SIZE_MUL: 3.4,    // halo domu / zaznaczonej — rozmiar × rozmiar gwiazdy
   HALO_I: 0.55,          // halo — intensywność
   PAN_GRAB: 1,           // 1 — przeciąganie: zawartość jedzie za kursorem; 0 — odczucie Stratcomu (czyta kontroler kamery)
   PRESET_DIST_MUL: 1,    // mnożnik dystansu presetu (Home): 1 = fitDist Stratcomu ≈ 57 ly (D-GX-3); < 1 — bliżej (Stratcom ma FOV 50°, gra 55°)
+  // ── ARC GALAXY G2 (flaga `galaxyLook`) — każde pole ma czytelnika (V-266) ──
+  // G2-1 lot (czyta `GalaxyModeController`): FLIGHT 0 = twarde cięcie G1 (jak przy `prefers-reduced-motion`).
+  FLIGHT: 1,             // 1 — wylot / wlot lotem kamery; 0 — twarde cięcie z rozjaśnieniem 0,25 s (G1)
+  FLIGHT_OUT_MS: 1400,   // [ms czasu realnego] wylot do galaktyki (D-GX-14 ~1,4 s)
+  FLIGHT_IN_MS: 1200,    // [ms] wlot do układu (D-GX-14 ~1,2 s)
+  FLIGHT_EASE: 2,        // łagodzenie: 0 — liniowe, 1 — smoothstep, 2 — smootherstep (jak lot intro)
+  FLIGHT_APPROACH_LY: 6, // [ly] wlot: dystans nad gwiazdą celu w chwili przełączenia (podłoga galaktyki)
+  // G2-2 przypięcie (czyta `HudGalaxyLabelLayer`): 1 — [ Skanuj ] tylko w zasięgu obserwatorium (STRATCOM_LY_BY_LEVEL od domu,
+  // D-GX-22); 0 — bez członu zasięgu (jak przycisk panelu Stratcom: wyłącznie tier obserwatorium i limit).
+  SCAN_RANGE_GATE: 1,
+  // G2-3 terytorium (czyta `GalaxyTerritory` — uniformy co klatkę; TERR_GRID_LY — przeliczenie `TerritoryField`).
+  TERR_GRID_LY: 0.75,    // [ly] komórka siatki pola (GAME_CONFIG.TERRITORY.GRID_LY; 0,5 przy widocznych załamaniach — D-GX-15)
+  TERR_POOL_ALPHA: 0.07, // krycie rozlanego światła (skala; rdzeń = × TERR_CORE_MULT, front przy izolinii = × TERR_FRONT)
+  TERR_CORE_MULT: 2.0,   // rdzeń (pole ≥ ~2,6 ISO)
+  TERR_FRONT: 0.3,       // front przy izolinii — światło gaśnie od rdzenia ku granicy („rozlane”, nie płaskie)
+  TERR_RIM_PX: 1.4,      // [px ekranu] szerokość jasnej krawędzi (izolinia z gradientu pola)
+  TERR_RIM_I: 0.9,       // jasność krawędzi
+  TERR_SEAM_PX: 1.8,     // [px] szerokość szwu spornego (pola dwóch właścicieli równe)
+  TERR_SEAM_I: 1.4,      // jasność szwu (gorąca biel; addytywnie — połowa na każdą stronę)
+  TERR_SEAM_STYLE: 0,    // styl szwu spornego: 0 = biały (obecny, domyślny) · 1 = barwy obu imperiów przeplatane wzdłuż szwu (kreskowanie, bez bieli) · 2 = bez szwu, obie krawędzie nakładają się przy zmniejszonym kryciu (czyta GalaxyTerritory.tick przez seamStyleParams)
+  TERR_BREATH: 0.015,    // oddech krycia (1–2 %)
+  TERR_CURTAIN_LY: 0.55, // [ly] wysokość zasłony granicy
+  TERR_CURTAIN_A: 0.2,   // krycie zasłony u podstawy (gaśnie z wysokością)
+  // G2-3 aureole i słupki (czyta `GalaxyPlate`)
+  OWNER_HALO_MUL: 2.6,   // aureola własności — rozmiar × rozmiar gwiazdy
+  OWNER_HALO_I: 0.42,    // aureola własności — intensywność (barwa imperium)
+  RISER_ALPHA: 0.4,      // słupek gwiazda → płaszczyzna płyty (układy gracza + zaznaczona)
 };
 
 /** Migawka pokręteł płyty / czy zmienione (wzór `SkyCatalog.skyKnobsChanged`). */
@@ -247,8 +284,14 @@ export function galaxyKnobsChanged(snap, k = LIVE_GALAXY) {
 }
 
 /** Barwa klasy widmowej (liniowe RGB, jak niebo — ciągłość przy wylocie, F2). */
-export function plateStarColor(spectralType) {
-  return [...(SKY_CLASS_RGB[spectralType] ?? SKY_CLASS_RGB.G)];
+export function plateStarColor(spectralType, sat = 1) {
+  const c = [...(SKY_CLASS_RGB[spectralType] ?? SKY_CLASS_RGB.G)];
+  if (!(sat > 0) || sat === 1) return c;
+  // Nasycenie wokół średniej kanałów, kanały ≥ 0, maksimum kanału znów 1 (jak paleta nieba).
+  const m = (c[0] + c[1] + c[2]) / 3;
+  const o = c.map((v) => Math.max(0, m + (v - m) * sat));
+  const mx = Math.max(...o, 1e-6);
+  return o.map((v) => v / mx);
 }
 
 /**
@@ -262,7 +305,7 @@ export function plateStarLook(sys, { explored = false } = {}, k = LIVE_GALAXY) {
   const size = k.SIZE_MIN + k.SIZE_GAIN * Math.pow(t, k.SIZE_EXP);
   let intensity = k.I_MIN + k.I_GAIN * t;
   if (explored !== true) intensity *= k.UNEXPLORED_MUL;
-  return { size, intensity, color: plateStarColor(sys?.spectralType) };
+  return { size, intensity, color: plateStarColor(sys?.spectralType, k.PLATE_SAT) };
 }
 
 /** Halo domu i zaznaczonej gwiazdy — większy PSF z tą samą barwą. */

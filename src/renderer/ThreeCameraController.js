@@ -129,6 +129,8 @@ export class ThreeCameraController {
       if (window.KOSMOS?.overlayManager?.isAnyOpen()) return;
       // Blokuj zoom gdy kursor jest nad elementem UI (nad suwakiem zoomu ten sam krok woła UIManager — `wheelZoom`)
       if (this._isOverUI && this._isOverUI(e.clientX, e.clientY)) return;
+      // ARC GALAXY G2-1 (D-GX-7) — gest semantyczny (czyta stan kamery PRZED krokiem zoomu) i lot w toku; `true` = połknięte.
+      if (window.KOSMOS?.galaxyMode?.onWheel?.(e, this) === true) return;
       this.wheelZoom(e.deltaY);
     }, { passive: false });
   }
