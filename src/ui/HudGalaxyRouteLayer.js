@@ -1,0 +1,149 @@
+// HudGalaxyRouteLayer — ARC GALAXY, krok G2-2 (docs/design/GALAXY_PLAN.md §4 G2; D-GX-16; rama F5): podwarstwa SZLAKÓW i TRAS
+// płyty galaktyki w idiomie tras warstwy HUD (`HudRouteLayer` — te same kreski, marsz na zegarze symulacji, przycięcie do okna).
+//   • SZLAKI (H6, `TerritoryRenderLogic.computeOwnedLanes` — minimalne drzewo rozpinające układy GRACZA): kreski w roli
+//     `primary`, stałe krycie, marsz kresek na `simClockMs` (stoi w pauzie) — zamiast płynącego światła 2D Stratcomu;
+//   • TRASY: własny statek w skoku warp — od punktu tranzytu do układu celu skoku (rola `primary`, krycie gasnące ku celowi
+//     — `routeAlpha`); FLOTA (≥ 2 członków na jednym przeskoku) — jedna trasa od układu ODLOTU do celu (T5); statek zaznaczony z trasą wieloprzeskokową — pozostałe przeskoki; obcy w skoku z wywiadem o STATKU
+//     `contact` / `detailed` w zasięgu obserwatorium — linia skoku w roli `foreign` (kanon Stratcomu; `rumor` — bez linii);
+//   • chip [T] (D-GX-16: „trasy + szlaki”) — wyłączony: nic; krycie całości × rozjaśnienie chromu trybu galaktyki.
+// Flaga `galaxyLook` OFF — podwarstwa milczy (klucz stały, zero elementów).
+// ⚠ Moduł importuje się pod node (atrapa świata w keeperze): bez three i bez DOM.
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { HUD_NEAR_CLIP } from './HudProjection.js';
+import { clipRunsToRect } from './HudRadarLogic.js';
+import { HUD_ROUTES, marchOffset, routeAlpha, projectPolyline } from './HudRouteLogic.js';
+import { strokeRoutePieces } from './HudRouteLayer.js';
+import { computeOwnedLanes } from './TerritoryRenderLogic.js';
+import { GALAXY_K, GALAXY_FADE_MS, plateWorldOf } from './GalaxyModeLogic.js';
+import { galaxyShipRail, galaxyEnemyBlips, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
+import { buildFleetIndex, groupTransitByFleet, routeEndpoints } from './GalaxyShipMarkerLogic.js';
+import { observatoryRangeLY } from '../utils/ObservatoryRange.js';
+
+// Rysunek (px logiczne). Strojenie okiem — bez pinów keepera.
+export const HUD_GALAXY_ROUTES = Object.freeze({
+  LANE_DASH: Object.freeze([4, 8]),   // szlak — rzadsze kreski
+  LANE_ALPHA: 0.42,
+  LANE_WIDTH: 1.2,
+  ROUTE_WIDTH: 1,
+});
+
+const q = (v) => Math.round(v * 10);
+
+export class HudGalaxyRouteLayer {
+  constructor(hud = null) {
+    this._hud = hud;
+    this.mode = 'galaxy';
+    this._prep = { on: false };
+    this._last = { lanes: [], routes: [] };
+  }
+
+  _on() { return !!GAME_CONFIG.FEATURES?.galaxyView && !!GAME_CONFIG.FEATURES?.galaxyLook; }
+
+  prepare(F) {
+    const K = F.K, gm = K?.galaxyMode, tr = K?.threeRenderer;
+    if (!this._on() || gm?.isActive !== true || !F.att?.layers?.routes || typeof tr?.getGalaxyAnchorLy !== 'function') {
+      this._prep = { on: false };
+      return 'gr:0';
+    }
+    const systems = K.galaxyData?.systems ?? [];
+    const byId = new Map(systems.map((s) => [String(s.id), s]));
+    // Szlaki gracza (MST po układach z własnością gracza — `TerritoryService`).
+    const owned = (K.territoryService?.getOwnedSystems?.('player') ?? []).map((o) => byId.get(String(o.systemId))).filter(Boolean);
+    const edges = owned.length >= 2 ? computeOwnedLanes(owned.map((s) => ({ x: s.x ?? 0, y: s.y ?? 0, z: s.z ?? 0 }))) : [];
+    const lanes = edges.map(([i, j]) => [owned[i], owned[j]]);
+    // Trasy własne (tranzyt warp) i obce (kontakt w zasięgu obserwatorium).
+    const vessels = K.vesselManager?.getAllVessels?.() ?? [];
+    const rail = galaxyShipRail({ vessels, systems });
+    const home = systems.find((s) => s?.isHome === true) ?? { x: 0, y: 0 };
+    const rangeLY = observatoryRangeLY(K.observatorySystem?.getMaxObservatoryLevel?.() ?? 0);
+    const enemies = galaxyEnemyBlips({ vessels, systems, home, rangeLY,
+      qualityOf: (id) => K.intelSystem?.getVesselContact?.(id)?.quality ?? 'unknown' }).filter((b) => b.mode === 'contact');
+    const sel = F.sel ?? {};
+    const lead = sel.leadId ?? sel.vesselIds?.[0] ?? null;
+    const routes = [];
+    // Flota w tranzycie = JEDNA trasa od układu odlotu do celu (te same grupy co znaczniki szyny); pojedynczy statek —
+    // od punktu tranzytu (T5). Zaznaczony członek nie zmienia trasy — podświetla znacznik.
+    const selIds = new Set([...(sel.vesselIds ?? []), ...(sel.leadId != null ? [sel.leadId] : [])].map(String));
+    const fleetIdx = buildFleetIndex(K.fleetSystem?.listFleets?.() ?? [], vessels);
+    const groups = groupTransitByFleet(rail.transit, (id) => fleetIdx.get(String(id)) ?? null, selIds);
+    for (const g of groups) {
+      const ep = routeEndpoints(g, byId);
+      if (ep) routes.push({ id: g.key, from: ep.from, to: ep.to, enemy: false });
+    }
+    for (const b of enemies) {
+      const to = byId.get(String(b.toId));
+      if (to) routes.push({ id: b.v.id, from: { x: b.gx, y: b.gy, z: b.gz }, to, enemy: true });
+    }
+    // Statek zaznaczony z trasą wieloprzeskokową — pozostałe przeskoki (od celu bieżącego skoku).
+    let hops = null;
+    const lv = lead != null ? K.vesselManager?.getVessel?.(lead) : null;
+    const wr = lv?.warpRoute;
+    if (wr && Array.isArray(wr.hops) && Number.isInteger(wr.legIndex)) {
+      const rest = wr.hops.slice(Math.max(0, wr.legIndex)).map((id) => byId.get(String(id))).filter(Boolean);
+      if (rest.length >= 2) hops = rest;
+    }
+    const anchor = tr.getGalaxyAnchorLy();
+    let key = `gr:2:${q(anchor.x)},${q(anchor.y)},${q(anchor.z)}`;
+    for (const [a, b] of lanes) key += `|l${a.id}-${b.id}`;
+    for (const r of routes) key += `|r${r.id}:${q(r.from.x)},${q(r.from.y)}:${r.to.id}:${r.enemy ? 1 : 0}`;
+    if (hops) key += `|h${hops.map((s) => s.id).join(',')}`;
+    if ((lanes.length || routes.length || hops) && F.sim != null) key += `|m${Math.round(F.sim)}`;
+    this._prep = { on: true, lanes, routes, hops, anchor };
+    return key;
+  }
+
+  _pieces(ptsLy, anchor, proj, view) {
+    const pr = { depth: (x, y, z) => proj.depth(x, y, z), point: (x, y, z) => proj.point(x, y, z), near: HUD_NEAR_CLIP };
+    const pts = ptsLy.map((p) => plateWorldOf(p, anchor, GALAXY_K));
+    const runs = projectPolyline(pts, pr);
+    let total = 0;
+    const runStart = [];
+    for (const run of runs) { runStart.push(total); for (let i = 2; i < run.length; i += 2) total += Math.hypot(run[i] - run[i - 2], run[i + 1] - run[i - 1]); }
+    const pieces = [];
+    runs.forEach((run, ri) => { for (const pc of clipRunsToRect([run], view)) pieces.push({ pts: pc.pts, s0: runStart[ri] + pc.offset }); });
+    return { pieces, total };
+  }
+
+  collect(F, proj) {
+    const P = this._prep;
+    if (!P.on || !proj) { this._last = { lanes: [], routes: [] }; return { count: 0, animating: false, lanes: [], routes: [] }; }
+    const M = HUD_ROUTES.CLIP_PX;
+    const view = { x0: -M, y0: -M, x1: F.W + M, y1: F.H + M };
+    const lanes = [], routes = [];
+    for (const [a, b] of P.lanes) {
+      const g = this._pieces([a, b], P.anchor, proj, view);
+      if (g.pieces.length) lanes.push({ ids: [a.id, b.id], ...g });
+    }
+    for (const r of P.routes) {
+      const g = this._pieces([r.from, r.to], P.anchor, proj, view);
+      if (g.pieces.length) routes.push({ id: r.id, enemy: r.enemy, ...g });
+    }
+    if (P.hops) {
+      const g = this._pieces(P.hops, P.anchor, proj, view);
+      if (g.pieces.length) routes.push({ id: 'hops', enemy: false, hops: true, ...g });
+    }
+    const tr = F.K?.threeRenderer;
+    const alpha = galaxyChromeAlpha({ flightAlpha: tr?._galaxyChromeAlpha, now: F.now, fadeT0: tr?._galaxyFadeT0, fadeMs: GALAXY_FADE_MS });
+    this._last = { lanes, routes };
+    return { count: lanes.length + routes.length, animating: alpha < 1, lanes, routes, alpha };
+  }
+
+  draw(ctx, F, c) {
+    const roles = F.roles, R = HUD_ROUTES, G = HUD_GALAXY_ROUTES;
+    const a = c.alpha ?? 1;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 1;
+    const marchL = marchOffset(F.sim, G.LANE_DASH[0] + G.LANE_DASH[1]);
+    const marchR = marchOffset(F.sim, R.WARP_DASH[0] + R.WARP_DASH[1]);
+    for (const l of c.lanes) strokeRoutePieces(ctx, l.pieces, l.total, roles.primary, 1, G.LANE_DASH, marchL, G.LANE_WIDTH, () => G.LANE_ALPHA * a);
+    for (const r of c.routes) {
+      strokeRoutePieces(ctx, r.pieces, r.total, r.enemy ? roles.foreign : roles.primary, 1, R.WARP_DASH, marchR, G.ROUTE_WIDTH,
+        (u) => routeAlpha(u, 1) * a);
+    }
+  }
+
+  debug() {
+    return { id: 'galaxyRoutes', on: this._prep.on, lanes: this._last.lanes.length, routes: this._last.routes.length };
+  }
+}

@@ -35,6 +35,110 @@ const AU_TO_PX = GAME_CONFIG.AU_TO_PX;     // px logiki gry na 1 AU (pozycje sta
 const TICK_INNER = 0.999;                  // punkt pomocniczy kierunku kreski podziałki (część promienia)
 const q = (v) => Math.round(v * 1000);     // klucz klatki — położenie z dokładnością 0,001 j.
 
+// ── ARC GALAXY G2-2 — geometria i rysunek PIERŚCIENIA radaru wyciągnięte z warstwy (wcześniej w `collect` / `draw` tej klasy,
+//    bez zmian w rachunku i kolejności rysowania); czyta je także ping obserwatorium płyty galaktyki (`HudGalaxyPingLayer`,
+//    D-GX-22 — „H1 ring geometry from HudRadarLayer”). ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Geometria pierścienia w px logicznych: okrąg w płaszczyźnie równoległej do ekliptyki na wysokości środka `c` (świat),
+ * promień `rW` [j.], granica przycięta do okna `view` (kropki tylko na ekranie — `clipRunsToRect`), podziałka co 30°
+ * i odczyt zasięgu przy najwyższej na ekranie kresce głównej (`readoutText` — `null`: bez odczytu).
+ * @returns {{ ring:object, ringPx:number, boundary:Array, ticks:Array, readout:object|null, ppw:number }}
+ */
+export function radarRingGeometry(proj, c, rW, { view, readoutText = null, ctr = null } = {}) {
+  const center = ctr ?? proj.point(c.x, c.y, c.z);
+  const ppw = center ? proj.pxPerWorld(center.depth) : Infinity;
+  const ring = proj.arc(c.x, c.y, c.z, rW, ringSegments(rW * ppw));
+  const boundary = clipRunsToRect(ring.runs, view);
+  const ticks = [];
+  const angles = tickAngles();
+  for (let k = 0; k < angles.length; k++) {
+    const cs = Math.cos(angles[k]), sn = Math.sin(angles[k]);
+    const o = proj.point(c.x + rW * cs, c.y, c.z + rW * sn);
+    const i = proj.point(c.x + rW * TICK_INNER * cs, c.y, c.z + rW * TICK_INNER * sn);
+    if (!o || !i) continue;
+    const dx = i.x - o.x, dy = i.y - o.y, d = Math.hypot(dx, dy);
+    if (!(d > 0)) continue;
+    const len = isMajorTick(k) ? HUD_RADAR.TICK_MAJOR_LEN : HUD_RADAR.TICK_LEN;   // główne 0°, 90°, 180°, 270°
+    ticks.push([o.x, o.y, o.x + (dx / d) * len, o.y + (dy / d) * len, k]);
+  }
+  return { ring, ringPx: ring.maxR, boundary, ticks, readout: radarReadout(ticks, readoutText), ppw };
+}
+
+/** Pierścienie pingu (linia i echo tuż za nią) w postępie `u` — promień jak granica × `pingRadiusFrac(u)`. */
+export function radarPingRings(proj, c, rW, u, ppw) {
+  const rp = rW * pingRadiusFrac(u);
+  const pingRing = proj.arc(c.x, c.y, c.z, rp, ringSegments(rp * ppw));
+  const gapW = Number.isFinite(ppw) && ppw > 0 ? HUD_RADAR.PING_ECHO_GAP / ppw : 0;
+  const echoRing = (rp - gapW > 0) ? proj.arc(c.x, c.y, c.z, rp - gapW, ringSegments((rp - gapW) * ppw)) : null;
+  return { pingRing, echoRing };
+}
+
+/**
+ * Rysunek pierścienia (granica z kropek, podziałka, odczyt, ping) — styl `s` z `radarStyle(roles)`; `alpha` — mnożnik krycia
+ * całości (płyta galaktyki: rozjaśnienie chromu; warstwa układu — 1).
+ */
+export function drawRadarRing(ctx, it, s, alpha = 1) {
+  const runs = (r) => {
+    for (const run of r?.runs ?? []) {
+      ctx.moveTo(run[0], run[1]);
+      for (let i = 2; i < run.length; i += 2) ctx.lineTo(run[i], run[i + 1]);
+    }
+  };
+  // Granica zasięgu — kropki (kreska zerowej długości z okrągłym końcem = kropka o średnicy szerokości linii).
+  ctx.strokeStyle = s.boundary.color;
+  ctx.globalAlpha = s.boundary.alpha * alpha;
+  ctx.lineWidth = s.boundary.width;
+  ctx.lineCap = s.boundary.cap;
+  ctx.setLineDash(s.boundary.dash);
+  for (const b of it.boundary) {
+    ctx.lineDashOffset = b.offset;   // faza kropek jak na całej ścieżce
+    ctx.beginPath(); ctx.moveTo(b.pts[0], b.pts[1]);
+    for (let i = 2; i < b.pts.length; i += 2) ctx.lineTo(b.pts[i], b.pts[i + 1]);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+  ctx.lineCap = 'butt';
+  // Podziałka co 30° — kreski do wewnątrz, główne (0°, 90°, 180°, 270°) dłuższe.
+  if (it.ticks.length) {
+    ctx.strokeStyle = s.tick.color;
+    ctx.globalAlpha = s.tick.alpha * alpha;
+    ctx.lineWidth = s.tick.width;
+    ctx.beginPath();
+    for (const t of it.ticks) { ctx.moveTo(t[0], t[1]); ctx.lineTo(t[2], t[3]); }
+    ctx.stroke();
+  }
+  // Odczyt zasięgu — font motywu, bez tła, na zewnątrz granicy przy najwyższej na ekranie kresce głównej.
+  if (it.readout) {
+    const size = THEME.fontSizeSmall;
+    ctx.font = `${size}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = s.readout.color;
+    ctx.globalAlpha = s.readout.alpha * alpha;
+    const w = ctx.measureText(it.readout.text)?.width;
+    const p = readoutCenter(it.readout, Number.isFinite(w) ? w : it.readout.text.length * size * 0.6, size);
+    ctx.fillText(it.readout.text, p.x, p.y);
+  }
+  // Ping — poświata (nałożone szerokie warstwy), ostra linia, echo tuż za nią; gaśnie na granicy.
+  if (it.ping && it.pingRing?.runs?.length) {
+    const f = pingFade(it.ping.u) * alpha;
+    ctx.strokeStyle = s.ping.color;
+    ctx.beginPath(); runs(it.pingRing);
+    for (const w of s.ping.glow.widths) { ctx.globalAlpha = s.ping.glow.alpha * f; ctx.lineWidth = w; ctx.stroke(); }
+    ctx.globalAlpha = s.ping.line.alpha * f;
+    ctx.lineWidth = s.ping.line.width;
+    ctx.stroke();
+    if (it.echoRing?.runs?.length) {
+      ctx.beginPath(); runs(it.echoRing);
+      ctx.globalAlpha = s.ping.echo.alpha * f;
+      ctx.lineWidth = s.ping.echo.width;
+      ctx.stroke();
+    }
+  }
+}
+
 export class HudRadarLayer {
   constructor(hud = null) {
     this._hud = hud;
@@ -208,24 +312,16 @@ export class HudRadarLayer {
         ring: null, boundary: [], ticks: [], readout: null, pingRing: null, echoRing: null };
       if (!h.circle) { items.push(it); continue; }                // zasięg ∞ — bez okręgu
       const rW = h.rangeAU * wpa;
-      const ppw = ctr ? proj.pxPerWorld(ctr.depth) : Infinity;
-      it.ring = proj.arc(c.x, c.y, c.z, rW, ringSegments(rW * ppw));
-      it.ringPx = it.ring.maxR;
-      it.boundary = clipRunsToRect(it.ring.runs, view);           // kropki tylko w oknie (koszt — K11 S5), ta sama faza
+      // Granica (kropki tylko w oknie — koszt K11 S5, ta sama faza), podziałka i odczyt zasięgu przy najwyższej na ekranie
+      // kresce głównej (decyzja właściciela 2026-10-23) — `radarRingGeometry` (ARC GALAXY G2-2: wspólna z pingiem płyty).
+      const g = radarRingGeometry(proj, c, rW, { view, readoutText: rangeReadoutText(h.rangeAU, getLocale()), ctr });
+      const ppw = g.ppw;
+      it.ring = g.ring;
+      it.ringPx = g.ringPx;
+      it.boundary = g.boundary;
       it.discPx = (h.discR > 0 && ctr) ? 2 * h.discR * ppw : null;
-      const angles = tickAngles();
-      for (let k = 0; k < angles.length; k++) {
-        const cs = Math.cos(angles[k]), sn = Math.sin(angles[k]);
-        const o = proj.point(c.x + rW * cs, c.y, c.z + rW * sn);
-        const i = proj.point(c.x + rW * TICK_INNER * cs, c.y, c.z + rW * TICK_INNER * sn);
-        if (!o || !i) continue;
-        const dx = i.x - o.x, dy = i.y - o.y, d = Math.hypot(dx, dy);
-        if (!(d > 0)) continue;
-        const len = isMajorTick(k) ? HUD_RADAR.TICK_MAJOR_LEN : HUD_RADAR.TICK_LEN;   // główne 0°, 90°, 180°, 270°
-        it.ticks.push([o.x, o.y, o.x + (dx / d) * len, o.y + (dy / d) * len, k]);
-      }
-      // Odczyt zasięgu przy najwyższej na ekranie kresce głównej (decyzja właściciela 2026-10-23), na zewnątrz granicy.
-      it.readout = radarReadout(it.ticks, rangeReadoutText(h.rangeAU, getLocale()));
+      it.ticks = g.ticks;
+      it.readout = g.readout;
       if (h.selected) {
         const st = this._starts.get(h.key);
         const ph = st ? pingPhase({ realNowMs: F.now, realStartMs: st.real, simNowMs: F.sim, simStartMs: st.sim }) : null;
@@ -233,10 +329,9 @@ export class HudRadarLayer {
         if (ph && !it.stop) {
           it.ping = ph;
           animating = true;
-          const rp = rW * pingRadiusFrac(ph.u);
-          it.pingRing = proj.arc(c.x, c.y, c.z, rp, ringSegments(rp * ppw));
-          const gapW = Number.isFinite(ppw) && ppw > 0 ? HUD_RADAR.PING_ECHO_GAP / ppw : 0;
-          if (rp - gapW > 0) it.echoRing = proj.arc(c.x, c.y, c.z, rp - gapW, ringSegments((rp - gapW) * ppw));
+          const pr = radarPingRings(proj, c, rW, ph.u, ppw);
+          it.pingRing = pr.pingRing;
+          if (pr.echoRing) it.echoRing = pr.echoRing;
         }
       }
       if (it.ring.runs.length) drawn++;
@@ -272,58 +367,8 @@ export class HudRadarLayer {
     ctx.lineJoin = 'round';
     for (const it of collected.items) {
       if (!it.ring?.runs?.length) continue;
-      // Granica zasięgu — kropki (kreska zerowej długości z okrągłym końcem = kropka o średnicy szerokości linii).
-      ctx.strokeStyle = s.boundary.color;
-      ctx.globalAlpha = s.boundary.alpha;
-      ctx.lineWidth = s.boundary.width;
-      ctx.lineCap = s.boundary.cap;
-      ctx.setLineDash(s.boundary.dash);
-      for (const b of it.boundary) {
-        ctx.lineDashOffset = b.offset;   // faza kropek jak na całej ścieżce
-        ctx.beginPath(); ctx.moveTo(b.pts[0], b.pts[1]);
-        for (let i = 2; i < b.pts.length; i += 2) ctx.lineTo(b.pts[i], b.pts[i + 1]);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-      ctx.lineDashOffset = 0;
-      ctx.lineCap = 'butt';
-      // Podziałka co 30° — kreski do wewnątrz, główne (0°, 90°, 180°, 270°) dłuższe.
-      if (it.ticks.length) {
-        ctx.strokeStyle = s.tick.color;
-        ctx.globalAlpha = s.tick.alpha;
-        ctx.lineWidth = s.tick.width;
-        ctx.beginPath();
-        for (const t of it.ticks) { ctx.moveTo(t[0], t[1]); ctx.lineTo(t[2], t[3]); }
-        ctx.stroke();
-      }
-      // Odczyt zasięgu — font motywu, bez tła, na zewnątrz granicy przy najwyższej na ekranie kresce głównej.
-      if (it.readout) {
-        const size = THEME.fontSizeSmall;
-        ctx.font = `${size}px ${THEME.fontFamily}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = s.readout.color;
-        ctx.globalAlpha = s.readout.alpha;
-        const w = ctx.measureText(it.readout.text)?.width;
-        const p = readoutCenter(it.readout, Number.isFinite(w) ? w : it.readout.text.length * size * 0.6, size);
-        ctx.fillText(it.readout.text, p.x, p.y);
-      }
-      // Ping — poświata (nałożone szerokie warstwy), ostra linia, echo tuż za nią; gaśnie na granicy.
-      if (it.ping && it.pingRing?.runs?.length) {
-        const f = pingFade(it.ping.u);
-        ctx.strokeStyle = s.ping.color;
-        ctx.beginPath(); runs(it.pingRing);
-        for (const w of s.ping.glow.widths) { ctx.globalAlpha = s.ping.glow.alpha * f; ctx.lineWidth = w; ctx.stroke(); }
-        ctx.globalAlpha = s.ping.line.alpha * f;
-        ctx.lineWidth = s.ping.line.width;
-        ctx.stroke();
-        if (it.echoRing?.runs?.length) {
-          ctx.beginPath(); runs(it.echoRing);
-          ctx.globalAlpha = s.ping.echo.alpha * f;
-          ctx.lineWidth = s.ping.echo.width;
-          ctx.stroke();
-        }
-      }
+      // Granica (kropki), podziałka, odczyt i ping — `drawRadarRing` (ARC GALAXY G2-2: wspólny z pingiem płyty galaktyki).
+      drawRadarRing(ctx, it, s);
     }
     // Błyski na granicy — rola `alert`: poświata, potem linia (szerokości i krycie z `HUD_ALERT`).
     for (const fl of collected.flashes ?? []) {

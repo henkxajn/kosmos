@@ -33,6 +33,7 @@ import { resolveHudRoles } from './HudPalette.js';
 import { layoutMapModePill, mapModePillAt, mapPillSegmentText, mapPillSegmentWidth } from './GalaxyModeLogic.js';
 import {
   HUD_CHIPS, HUD_LAYER_KEYS, HUD_LAYER_KEY_LABEL, readHudLayers, toggleHudLayer, chipText, chipWidth, layoutLayerChips, chipAt,
+  chipLayersFor,
 } from './HudLayerChipsLogic.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import EventBus from '../core/EventBus.js';
@@ -151,6 +152,13 @@ export class BottomControlBar {
     const measure = (s) => ctx.measureText(s).width;
     const widths = HUD_LAYER_KEYS.map((L) => chipWidth(this._chipLetter(L), measure));
     this._layerChips = layoutLayerChips({ x0: bgLeft, stripTop, stripH: STRIP_H, widths, limitX });
+    // ARC GALAXY G2-2 (D-GX-16) — tryb galaktyki: chip [O] schowany, jego miejsce zostaje puste (pigułka trybu nie skacze).
+    const lastAll = this._layerChips[this._layerChips.length - 1];
+    this._layerSpanEnd = lastAll ? lastAll.x + lastAll.w : null;
+    if (GAME_CONFIG.FEATURES?.galaxyView && GAME_CONFIG.FEATURES?.galaxyLook) {
+      const keep = chipLayersFor(window.KOSMOS?.galaxyMode?.isActive === true);
+      this._layerChips = this._layerChips.filter((c) => keep.includes(c.layer));
+    }
     const roles = resolveHudRoles(THEME);
     const on = readHudLayers(window.KOSMOS?.uiPrefs);
     const C = HUD_CHIPS;
@@ -322,14 +330,14 @@ export class BottomControlBar {
     // Paczka B — chipy warstw od lewego końca pasa (miejsce dawnego rzędu doku), do klastra po prawej (czip ⚔, suwak, 🔔);
     // tylko nad mapą. Rysowane PO klastrze — klaster liczony bez nich (te same px).
     this._layerChips = [];
+    this._layerSpanEnd = null;
     if (mapMode) {
       this._drawLayerChips(ctx, bgLeft, stripTop, this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x);
     }
     // ARC GALAXY G1 (D-GX-9) — pigułka trybu mapy w wolnym odcinku między chipami warstw a klastrem po prawej; tylko nad mapą.
     this._mapPill = [];
     if (mapMode && GAME_CONFIG.FEATURES?.galaxyView) {
-      const lastChip = this._layerChips[this._layerChips.length - 1];
-      const spanLeft = lastChip ? lastChip.x + lastChip.w + HUD_CHIPS.CHIP_GAP : bgLeft + HUD_CHIPS.CHIP_GAP;
+      const spanLeft = this._layerSpanEnd != null ? this._layerSpanEnd + HUD_CHIPS.CHIP_GAP : bgLeft + HUD_CHIPS.CHIP_GAP;
       const spanRight = (this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x) - HUD_CHIPS.CHIP_GAP;
       this._drawMapModePill(ctx, spanLeft, stripTop, spanRight);
     }

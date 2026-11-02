@@ -22,6 +22,14 @@ export const HUD_LAYER_CODES = Object.freeze({ Digit6: 'radar', Digit7: 'routes'
 /** Klawisz (cyfra) warstwy — podpowiedź chipu. */
 export const HUD_LAYER_KEY_LABEL = Object.freeze({ radar: '6', routes: '7', labels: '8', orbits: '9' });
 
+/**
+ * ARC GALAXY G2-2 (D-GX-16) — warstwy z chipem w danym trybie mapy: tryb galaktyki (flaga `galaxyLook`) — [R] = ping
+ * obserwatorium, [T] = szlaki + trasy, [E] = nazwy płyty; [O] (orbity układu) bez chipu i bez klawisza 9. Tryb układu — wszystkie.
+ */
+export function chipLayersFor(galaxyActive) {
+  return galaxyActive ? HUD_LAYER_KEYS.filter((L) => L !== 'orbits') : HUD_LAYER_KEYS.slice();
+}
+
 // Stałe (px logiczne). Strojenie na bramce — z konsoli: `KOSMOS.hudLayer.tune({ CHIP_OFF_STYLE: 'bare' })`.
 export const HUD_CHIPS_DEFAULTS = Object.freeze({
   CHIP_H: 16,               // wysokość chipu (rząd w pasie 20 px)

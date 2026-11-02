@@ -78,6 +78,7 @@ import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getDesc, getShort, getLocale } from '../i18n/i18n.js';
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
+import { observatoryRangeLY } from '../utils/ObservatoryRange.js';   // ARC GALAXY G2 — zasięg Stratcomu (D-GX-22)
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
 // bierzemy z zarejestrowanej instancji (window.KOSMOS.overlayManager.overlays.unit_design).
@@ -215,7 +216,7 @@ const DESIGN_EDITOR_HIT_TYPES = new Set([
 // Lv1-3 nie wykrywają OBCYCH statków warp (gwiazdy nadal zawsze widoczne jako mapa nawigacyjna).
 // Bramka dotyczy WYŁĄCZNIE cudzych statków (mgła wojny) — własną flotę widać zawsze,
 // niezależnie od obserwatorium (patrz _stratcomOwnShipBlips).
-const STRATCOM_LY_BY_LEVEL = [0, 0, 0, 0, 5, 10, 15];  // idx = poziom obserwatorium imperium
+// ARC GALAXY G2 (D-GX-22) — tabela poziom → ly przeniesiona bez zmian do `utils/ObservatoryRange.js` (jedno źródło).
 const LANE_FLOW_PX_PER_SEC = 22;   // H6: „płynące światło" warp-lane (marsz dashа px/s)
 const STRATCOM_MAX_BLIPS = 14;   // miękki limit liczby gwiazd na radarze (czytelność)
 const STRATCOM_GLOW    = true;  // animowana iluminacja tarczy radaru (ciągły redraw); false = wyłącz
@@ -5649,10 +5650,8 @@ export class FleetManagerOverlay {
   // Zasięg radaru w latach świetlnych — JEDYNE źródło. Baza = „działanie w ciemno";
   // obserwatorium rozszerza (przyszłe sieci radioteleskopów OR-ują tu swój zasięg).
   _getStratcomRangeLY() {
-    const obs = window.KOSMOS?.observatorySystem;
-    const raw = obs?.getMaxObservatoryLevel?.() ?? 0;
-    const lvl = Math.min(raw, STRATCOM_LY_BY_LEVEL.length - 1);
-    return STRATCOM_LY_BY_LEVEL[lvl];
+    // ARC GALAXY G2 (D-GX-22) — jedno źródło z pingiem płyty, blipami i bramką [ Skanuj ] (`utils/ObservatoryRange.js`).
+    return observatoryRangeLY(window.KOSMOS?.observatorySystem?.getMaxObservatoryLevel?.() ?? 0);
   }
 
   // Tryb renderu blipu statku warp na Stratcom (fog-of-war). Wołane gdy statek jest JUŻ w zasięgu

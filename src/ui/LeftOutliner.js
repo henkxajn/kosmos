@@ -38,6 +38,7 @@ import EntityManager       from '../core/EntityManager.js';
 import { t, getName, getShort, getLocale } from '../i18n/i18n.js';
 import { fmtDec }          from './NumberFormatLogic.js';
 import { buildGalaxySystemList, galaxyWorldContext, UNKNOWN_PLACE_GLYPH } from './GalaxyOutlinerLogic.js';   // ARC GALAXY G1
+import { galaxyOwnerText, galaxyInfoText } from './GalaxyChromeLogic.js';   // ARC GALAXY G2 — anty-lustro (ta sama treść co przypięcie)
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { isPlayerColony }  from '../utils/ColonyOwnership.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';   // ARKUSZ UI U3-0 — statki gracza dla widoczności układów (489)
@@ -214,7 +215,7 @@ export class LeftOutliner extends OutlinerColumn {
       items.push({ kind: 'gsys', key: `gsys:${r.systemId}`, row: r, h: SYS_H });
       if (!r.expanded) continue;
       items.push({ kind: 'gline', key: `ginfo:${r.systemId}`, row: r, h: ROW_H, depth: 1, tone: 'info',
-        text: t('leftOutliner.galaxyInfo', fmtDec(r.distanceLY, 1, loc), r.spectral ?? '?', r.colonyCount) });
+        text: galaxyInfoText(r, { t, fmtLy: (v) => fmtDec(v, 1, loc) }) });
       items.push({ kind: 'gline', key: `gowner:${r.systemId}`, row: r, h: ROW_H, depth: 1, tone: 'owner', text: this._ownerText(K, r.owner) });
       for (const c of r.ownColonies) items.push({ kind: 'gcol', key: `gcol:${c.bodyId}`, row: r, col: c, h: ROW_H });
       for (const st of r.ownStations) items.push({ kind: 'gsta', key: `gsta:${st.stationId}`, row: r, st, h: ROW_H });
@@ -238,11 +239,9 @@ export class LeftOutliner extends OutlinerColumn {
   }
 
   // Właściciel układu — klucze panelu Stratcom (`fleet.stratcomEmpire*`): imperium wg osi właściciela, gracz, obcy, nieznany.
+  // ARC GALAXY G2 — ta sama funkcja co linia przypięcia gwiazdy (`GalaxyChromeLogic.galaxyOwnerText`, anty-lustro).
   _ownerText(K, owner) {
-    if (owner?.kind === 'player') return t('fleet.stratcomEmpire', t('territory.playerEmpire'));
-    if (owner?.kind === 'identity') return t('fleet.stratcomEmpire', K?.empireRegistry?.get?.(owner.empireId)?.name ?? '?');
-    if (owner?.kind === 'foreign') return t('fleet.stratcomEmpireForeign');
-    return t('fleet.stratcomEmpireUnknown');
+    return galaxyOwnerText(owner, { t, empireName: (id) => K?.empireRegistry?.get?.(id)?.name ?? null });
   }
 
   // Wiersz korzenia: w trybie układu „GALAKTYKA” (wejście), w trybie galaktyki „← Układ: <aktywny>” (wyjście).

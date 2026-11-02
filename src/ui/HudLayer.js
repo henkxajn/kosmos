@@ -37,6 +37,9 @@ import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) —
 import { HudShipMarkerLayer } from './HudShipMarkerLayer.js';   // znacznik statku (D-SM-1…6) — zamiast insygnium frakcji 3D
 import { HudSkyLabelLayer } from './HudSkyLabelLayer.js';       // NIEBO (ARC GALAXY, O1) — etykiety nieba przy CTRL
 import { HudGalaxyLabelLayer } from './HudGalaxyLabelLayer.js'; // ARC GALAXY G1 — nazwy płyty (lista trybu galaktyki, S0/S3)
+import { HudGalaxyRouteLayer } from './HudGalaxyRouteLayer.js'; // ARC GALAXY G2-2 — szlaki i trasy płyty (chip [T])
+import { HudGalaxyPingLayer } from './HudGalaxyPingLayer.js';   // ARC GALAXY G2-2 — ping obserwatorium (chip [R])
+import { HudGalaxyRailLayer } from './HudGalaxyRailLayer.js';   // ARC GALAXY G2-2 — szyna statków i blipy skoku warp
 import { focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
 import {
   HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
@@ -106,6 +109,7 @@ export class HudLayer {
     this._size = { cssW: 0, cssH: 0, pr: 0 };
     this._gate = { shown: false, reason: 'start' };
     this._pointer = null;       // paczka A — kursor nad mapą: { lx, ly (px logiczne), rawX, rawY (px CSS), overUI }
+    this._flightAlpha = 1;      // ARC GALAXY G2-1 — krycie kanwy HUD w trakcie lotu (CSS `opacity`; 1 poza lotem)
     this.alerts = new HudAlertStore();   // paczka B — rejestr alertów (zegar symulacji); zasilają go zdarzenia wykrycia
     this.stats = { frames: 0, passes: 0, draws: 0, clears: 0, lastMs: 0, maxMs: 0, costs: [] };
     for (const s of (sublayers ?? this._defaultSublayers())) this.addSublayer(s);
@@ -126,9 +130,23 @@ export class HudLayer {
     return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudLabelLayer(this), new HudFocusLayer(this), new HudSkyLabelLayer(this)];
   }
 
-  /** ARC GALAXY G1 — podwarstwy trybu galaktyki: nazwy płyty (G2 dołoży przypięcie, szynę statków, ping, trasy). */
+  /** ARC GALAXY G1 — podwarstwy trybu galaktyki: nazwy płyty. G2-2 (flaga `galaxyLook`; przy OFF nowe podwarstwy milczą):
+   *  szlaki i trasy (pod spodem), ping obserwatorium, szyna statków, nazwy z rozwinięciem i przypięciem (ostatnie — ich
+   *  anti-overlap czyta przeszkody zebrane wcześniej w tej klatce: odczyt pingu, wiersze szyny, blipy). */
   _defaultGalaxySublayers() {
-    return [new HudGalaxyLabelLayer(this)];
+    return [new HudGalaxyRouteLayer(this), new HudGalaxyPingLayer(this), new HudGalaxyRailLayer(this), new HudGalaxyLabelLayer(this)];
+  }
+
+  /**
+   * ARC GALAXY G2-1 — krycie kanwy HUD w trakcie lotu (HUD trybu układu gaśnie na wylocie i wraca na końcu wlotu; chrom
+   * galaktyki gaśnie / rozjaśnia się sam — `galaxyChromeAlpha`). CSS `opacity` kanwy — podwarstwy bez zmian.
+   */
+  setFlightAlpha(a) {
+    const v = Math.max(0, Math.min(1, Number.isFinite(a) ? a : 1));
+    if (v === this._flightAlpha) return;
+    this._flightAlpha = v;
+    if (this.canvas?.style) this.canvas.style.opacity = v >= 1 ? '' : String(v);
+    this._wake = true;
   }
 
   /** Lista podwarstw trybu ostatniej klatki (klik, najechanie, pokrycie). */
@@ -354,7 +372,9 @@ export class HudLayer {
     this.stats.frames++;
     const tStart = this._now();   // koszt klatki: od bramki (z `prepare` podwarstw) do końca rysunku
     const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
-    const gate = hudGate(K);
+    let gate = hudGate(K);
+    // ARC GALAXY G2-1 — lot z kanwą przy zerowym kryciu: bez rysunku (HUD trybu układu zgaszony, chrom galaktyki jeszcze nie).
+    if (gate.shown && K?.galaxyMode?.isFlying === true && !(this._flightAlpha > 0)) gate = { shown: false, reason: 'flight' };
     this._gate = gate;
     if (!gate.shown) {
       this._clear();

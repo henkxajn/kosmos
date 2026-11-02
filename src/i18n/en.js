@@ -2552,6 +2552,10 @@ export default {
   'leftOutliner.galaxyInfo': '{0} ly · {1} · colonies: {2}',
   'leftOutliner.cannotEnter': 'No view — nobody has been there',
   'leftOutliner.foreignColoniesUnknown': 'foreign colonies: ?',
+  // ARC GALAXY G2-2 — pin buttons of a plate star (chip brackets added by the chip idiom)
+  'galaxyPin.enter': 'Enter',
+  'galaxyPin.send': 'Send ▼',
+  'galaxyPin.noBodyData': 'scan: no body data',
   'leftOutliner.keyHint': '“,” left panel · “.” right panel · “B” both',
   // ARKUSZ UI U3-2 — right outliner (ships): header, "In transit" section (D-UI-8, §7.3), type buckets (D-UI-6, §7.1)
   'rightOutliner.ships': 'SHIPS [{0}]',

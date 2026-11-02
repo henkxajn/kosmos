@@ -159,12 +159,15 @@ export function labelCandidates(it) {
 /**
  * Anti-overlap i kadr — rozkład etykiet (deterministyczny przy tych samych wejściach i `prev`).
  * @param {Array<{key, ax, ay, w, h, clear?, prio?}>} items — prostokąty etykiet (px logiczne) i kotwice
- * @param {{ rect:{x,y,w,h}, obstacles?:object[], prev?:Map<string, number>, candidatesOf?:Function }} o — kadr (obszar
- *   mapy), przeszkody, poprzedni wybór kandydata (klucz → indeks); `candidatesOf(it)` — generator kandydatów (domyślnie
- *   `labelCandidates`; ARC GALAXY G1 — etykiety płyty dokładają kandydata „pod gwiazdą, wyśrodkowana”, strona 'C')
+ * @param {{ rect:{x,y,w,h}, obstacles?:object[], prev?:Map<string, number>, candidatesOf?:Function,
+ *   hideOnOverlap?:Function }} o — kadr (obszar mapy), przeszkody, poprzedni wybór kandydata (klucz → indeks);
+ *   `candidatesOf(it)` — generator kandydatów (domyślnie `labelCandidates`; ARC GALAXY G1 — etykiety płyty dokładają
+ *   kandydata „pod gwiazdą, wyśrodkowana”, strona 'C'); `hideOnOverlap(it)` — ARC GALAXY G2 (D-GX-16, reguła gęstości):
+ *   etykieta, dla której zwraca `true`, NIE kładzie się, gdy żaden kandydat nie jest wolny od nakładania (trafia do `hidden`);
+ *   brak opcji — jak dotąd (zawsze najmniejsze nakładanie)
  * @returns {{ placed: Array<object>, hidden: string[] }} — `placed`: item + `x, y, side, below, cand, overlap, attach`
  */
-export function placeLabels(items, { rect, obstacles = [], prev = null, candidatesOf = labelCandidates } = {}) {
+export function placeLabels(items, { rect, obstacles = [], prev = null, candidatesOf = labelCandidates, hideOnOverlap = null } = {}) {
   const R = HUD_LABELS;
   const sorted = [...(items ?? [])].sort((a, b) => ((a.prio ?? 9) - (b.prio ?? 9)) || cmpKey(a.key, b.key));
   const placed = [], hidden = [];
@@ -184,6 +187,7 @@ export function placeLabels(items, { rect, obstacles = [], prev = null, candidat
       for (const p of placed) s += rectOverlapArea(box, p, R.GAP);
       if (s < bestScore) { bestScore = s; best = i; if (s === 0) break; }
     }
+    if (typeof hideOnOverlap === 'function' && !(bestScore === 0) && hideOnOverlap(it) === true) { hidden.push(it.key); continue; }
     let c;
     if (best >= 0) c = cands[best];
     else {   // żaden kandydat nie mieści się w kadrze — pierwszy kandydat wciśnięty w kadr

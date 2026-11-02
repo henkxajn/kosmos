@@ -2555,6 +2555,10 @@ export default {
   'leftOutliner.galaxyInfo': '{0} ly · {1} · kolonie: {2}',
   'leftOutliner.cannotEnter': 'Brak widoku — nikt tu nie dotarł',
   'leftOutliner.foreignColoniesUnknown': 'obce kolonie: ?',
+  // ARC GALAXY G2-2 — przyciski przypięcia gwiazdy płyty (nawiasy chipu dokłada idiom chipów)
+  'galaxyPin.enter': 'Wejdź',
+  'galaxyPin.send': 'Wyślij ▼',
+  'galaxyPin.noBodyData': 'skan: brak danych o ciałach',
   // ARKUSZ UI U3-2 — prawy outliner (statki): nagłówek, sekcja „W drodze” (D-UI-8, §7.3), kubełki typu (D-UI-6, §7.1)
   'rightOutliner.ships': 'STATKI [{0}]',
   'rightOutliner.inTransit': 'W drodze',

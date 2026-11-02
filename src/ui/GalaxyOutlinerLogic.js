@@ -37,6 +37,15 @@ export const GALAXY_GROUP = Object.freeze({ HOME: 0, COLONY: 1, OUTPOST: 2, OTHE
 /** Znacznik miejsca nieznanego (jak ciało nierozpoznane w trybie układu). */
 export const UNKNOWN_PLACE_GLYPH = '○';
 
+/**
+ * ARC GALAXY G2 (anty-lustro — trzy powierzchnie): JEDNA reguła „nazwa układu znana” — `reveal.name` (kanon `SystemReveal`)
+ * ∨ własna obecność gracza (dom, kolonia, placówka, stacja, statek, wojska). Czytają ją: wiersz lewego outlinera
+ * (`buildGalaxySystemList`), nazwa na płycie (`HudGalaxyLabelLayer`) i nagłówek przypięcia (`GalaxyChromeLogic`).
+ */
+export function isGalaxyNameKnown(rec, own) {
+  return rec?.name === true || own === true;
+}
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 // ── Obecność gracza w układach (reguła D-UI-3) ───────────────────────────────────────────────────────────────────────
@@ -99,6 +108,8 @@ export function systemPresenceIndex({ colonies = [], stations = [], vessels = []
  * @param {(id:string) => boolean} [ctx.expanded] — czy wiersz rozwinięty
  * @param {(bodyId:string) => string|null} [ctx.bodyName] — nazwa ciała
  * @param {(colony:object) => number|null} [ctx.population] — populacja kolonii [POP]
+ * @param {boolean} [ctx.includeUnknown] — ARC GALAXY G2: także układy bez nazwy (`known: false`) — treść przypięcia
+ *   i najechania gwiazdy bez nazwy; lista lewego outlinera NIE używa (domyślnie `false` — wynik G1 bez zmian)
  * @returns {{ rows: object[], byId: Map<string, object> }}
  */
 export function buildGalaxySystemList(ctx = {}) {
@@ -119,8 +130,8 @@ export function buildGalaxySystemList(ctx = {}) {
     const rec = (typeof ctx.reveal === 'function' ? ctx.reveal(sys) : null) ?? {};
     const pres = presence.get(id) ?? null;
     const own = isHome || pres?.own === true;
-    const known = rec.name === true || own;
-    if (!known) continue;   // brak nazwy i brak obecności — układ poza listą (mgła wojny)
+    const known = isGalaxyNameKnown(rec, own);
+    if (!known && ctx.includeUnknown !== true) continue;   // brak nazwy i brak obecności — układ poza listą (mgła wojny)
     const placeKnown = rec.place === true || own;
     const group = isHome ? GALAXY_GROUP.HOME
       : pres?.pop ? GALAXY_GROUP.COLONY

@@ -17,7 +17,10 @@ import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   /
 import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
 import { coordTooltipBlocked } from '../ui/ShipPanelHudLogic.js';   // REFORMA ZAKŁADEK T5 — 530: dymek współrzędnych nie nad UI
 import { escapeClosesFleetPanel } from '../ui/FleetPanelHudLogic.js';   // REFORMA ZAKŁADEK T6 — Esc zamyka panel floty
-import { isGalaxyToggleKey, galaxyLyToWorld } from '../ui/GalaxyModeLogic.js';   // ARC GALAXY G1 — klawisz G, przyrządy bramki
+import { isGalaxyToggleKey, galaxyLyToWorld, LIVE_GALAXY } from '../ui/GalaxyModeLogic.js';   // ARC GALAXY G1 — klawisz G, przyrządy bramki
+import { galaxyLookOn } from '../ui/GalaxyModeController.js';                              // ARC GALAXY G2 — flaga wyglądu
+import { galaxyScanChip, runGalaxyPinAction } from '../ui/GalaxyChromeLogic.js';           // ARC GALAXY G2-2 — przyrząd skanu
+import { observatoryRangeLY, inObservatoryRange, planarDistanceLY } from '../utils/ObservatoryRange.js';   // G2 — D-GX-22
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -158,7 +161,7 @@ import { ELEMENTS }          from '../data/ElementsData.js';      // POWER TEST
 import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
 import { t, getLocale } from '../i18n/i18n.js';
-import { isSystemExploredId } from '../utils/SystemExploration.js';
+import { isSystemExploredId, isSystemExplored } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { outlinerKeyAction } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2-4 — klawisze outlinerów (§7.16)
 import { layerForKeyCode, layerKeyAllowed, toggleHudLayer } from '../ui/HudLayerChipsLogic.js';   // paczka B — klawisze 6–9 (D-HUD-14)
@@ -634,8 +637,79 @@ export class GameScene {
         const info = window.KOSMOS?.threeRenderer?.getGalaxyInfo?.() ?? null;
         const hud = window.KOSMOS?.hudLayer?.debugState?.() ?? null;
         const out = { ...info, selected: window.KOSMOS?.galaxyMode?.selectedSystemId ?? null,
-          labels: hud?.galaxySublayers?.[0] ?? null, hudCostMs: hud?.costMs ?? null, hudMode: hud?.mode ?? null };
+          labels: hud?.galaxySublayers?.find?.((s) => s?.id === 'galaxyLabels') ?? null, hudCostMs: hud?.costMs ?? null, hudMode: hud?.mode ?? null,
+          flightInfo: window.KOSMOS?.galaxyMode?.flightInfo?.() ?? null };
         console.log('[galaxy]', out);
+        return out;
+      },
+      // ARC GALAXY G2 — przyrządy bramki lotu, przypięcia i terytorium (DEBUG, bez cudzysłowów — do wklejenia w konsolę):
+      //   KOSMOS.debug.galaxyFlyOut() — wylot do galaktyki (lotem, jak klawisz G);
+      //   KOSMOS.debug.galaxyFlyIn(0) — wlot z powrotem do aktywnego układu (migawka kamery 1:1, jak G / Esc);
+      //   KOSMOS.debug.galaxyFlyIn(1) — wlot w n-ty najbliższy układ, w który da się wejść (1 = najbliższy; bramka D-GX-13);
+      //   KOSMOS.debug.galaxyScanNearest(1) — przypnij n-ty najbliższy obcy układ od domu i naciśnij [ Skanuj ] jego przypięcia
+      //   (ta sama tabela stanów i ta sama droga co przycisk; przycisk wyłączony — powód jak w podpowiedzi);
+      //   KOSMOS.debug.galaxyTerritoryInfo() — terytorium płyty: pole, warstwy, aureole, słupki, koszt przeliczenia [ms].
+      galaxyFlyOut: () => {
+        const gm = window.KOSMOS?.galaxyMode;
+        const out = { ok: gm?.enter?.('debug') === true, flight: gm?.flightInfo?.() ?? null };
+        console.log('[galaxy] flyOut', out);
+        return out;
+      },
+      galaxyFlyIn: (n = 0) => {
+        const K = window.KOSMOS, gm = K?.galaxyMode;
+        if (!gm?.isActive || gm.isFlying) { console.warn('[galaxy] flyIn: najpierw tryb galaktyki, bez lotu w toku'); return null; }
+        const k = Math.max(0, Math.floor(Number(n) || 0));
+        let ok = false, id = null;
+        if (k === 0) ok = gm.exit('debug') === true;
+        else {
+          const systems = K?.galaxyData?.systems ?? [];
+          const actId = String(K?.activeSystemId ?? 'sys_home');
+          const act = systems.find((s) => String(s.id) === actId);
+          const a = act ? galaxyLyToWorld(act) : { x: 0, y: 0, z: 0 };
+          const list = systems.filter((s) => String(s.id) !== actId && gm.canEnter(s.id)).map((s) => {
+            const w = galaxyLyToWorld(s);
+            return { id: String(s.id), d: Math.hypot(w.x - a.x, w.y - a.y, w.z - a.z) };
+          }).sort((p, q) => p.d - q.d);
+          const pick = list.length ? list[Math.min(list.length, k) - 1] : null;
+          if (!pick) { console.warn('[galaxy] flyIn: brak układu, w który da się wejść'); return null; }
+          id = pick.id;
+          gm.select(id);
+          ok = gm.enterSystem(id) === true;
+        }
+        const out = { ok, id, flight: gm.flightInfo?.() ?? null };
+        console.log('[galaxy] flyIn', out);
+        return out;
+      },
+      galaxyScanNearest: (n = 1) => {
+        const K = window.KOSMOS, gm = K?.galaxyMode, obs = K?.observatorySystem;
+        const systems = K?.galaxyData?.systems ?? [];
+        const home = systems.find((s) => s?.isHome === true) ?? { x: 0, y: 0 };
+        const list = systems.filter((s) => s && s.isHome !== true)
+          .map((s) => ({ s, d: planarDistanceLY(s, home) })).sort((p, q) => p.d - q.d);
+        const k = Math.min(list.length, Math.max(1, Math.floor(Number(n) || 1)));
+        const pick = list[k - 1];
+        if (!pick) return null;
+        const id = String(pick.s.id);
+        if (gm?.isActive) gm.select(id);
+        const level = obs?.getMaxObservatoryLevel?.() ?? 0;
+        const rangeLY = observatoryRangeLY(level);
+        const chip = galaxyScanChip({ isHome: false, explored: isSystemExplored(pick.s), maxTier: obs?.getMaxSystemScanTier?.() ?? 0,
+          resultTier: obs?.getSystemScanResult?.(id)?.tier ?? null, scanning: !!obs?.getSystemScanProgress?.(id),
+          atLimit: !!obs && (obs.getActiveSystemScans?.()?.length ?? 0) >= (obs.getMaxConcurrentSystemScans?.() ?? 1),
+          inRange: inObservatoryRange(pick.s, home, rangeLY), rangeGate: Number(LIVE_GALAXY.SCAN_RANGE_GATE) !== 0 });
+        const btn = chip ? { id: chip.id, enabled: chip.enabled === true, reason: chip.reasonKey ? t(chip.reasonKey) : null } : null;
+        const result = btn && (btn.id === 'scan' || btn.id === 'scanMore')
+          ? runGalaxyPinAction(btn, { systemId: id, K, t,
+            toast: (text) => EventBus.emit('ui:toast', { text, color: THEME.warning ?? '#ffcc44', durationMs: 3000 }) })
+          : (btn?.id === 'scanCancel' ? 'already_scanning' : 'no_chip');
+        const out = { n: k, id, distLy: +pick.d.toFixed(2), observatoryLevel: level, rangeLY, chip: btn, result,
+          progress: obs?.getSystemScanProgress?.(id) ?? null };
+        console.log('[galaxy] scanNearest', out);
+        return out;
+      },
+      galaxyTerritoryInfo: () => {
+        const out = window.KOSMOS?.threeRenderer?.getGalaxyTerritoryInfo?.() ?? null;
+        console.log('[galaxy] territory', out);
         return out;
       },
       // KOSMOS.debug.replayIntro()      — odtwórz sam lot kinowy startu (kalibracja bez nowej gry).
@@ -4786,6 +4860,11 @@ export class GameScene {
         if (e.key === 'Escape') { e.preventDefault(); this._abortIntroFlight?.(); }
         return;
       }
+      // ARC GALAXY G2-1 (D-GX-14) — lot kamery trybu galaktyki (wzór lotu intro): klawisze bezczynne, Esc → stan końcowy lotu.
+      if (window.KOSMOS?.galaxyMode?.isFlying) {
+        if (e.key === 'Escape') { e.preventDefault(); window.KOSMOS.galaxyMode.finishFlight(); this.uiManager?.markDirty?.(); }
+        return;
+      }
 
       // CTRL-hold → pokaż labele wszystkich obiektów 3D (planety, statki, wraki).
       // Znika po puszczeniu (keyup).
@@ -4847,7 +4926,9 @@ export class GameScene {
         if (window.KOSMOS?.galaxyMode?.isActive && !um?.overlayManager?.isAnyOpen?.() && !um?._confirmDialog?.visible
             && !um?._bottomBar?.menuOpen && !document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) {
           e.preventDefault();
-          window.KOSMOS.galaxyMode.exit('esc');
+          // ARC GALAXY G2-2 (idiom przypięcia, D-TR-5) — przypięta (zaznaczona) gwiazda schodzi PIERWSZA; kolejny Esc — powrót.
+          if (galaxyLookOn() && window.KOSMOS.galaxyMode.selectedSystemId != null) window.KOSMOS.galaxyMode.select(null);
+          else window.KOSMOS.galaxyMode.exit('esc');
           um?.markDirty?.();
           return;
         }
@@ -4978,7 +5059,9 @@ export class GameScene {
         case 'Digit8':
         case 'Digit9': {
           const layer = layerForKeyCode(e.code);
-          if (layer && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
+          // ARC GALAXY G2-2 (D-GX-16) — w trybie galaktyki [O] nie ma chipu: klawisz 9 bez skutku.
+          const noChip = layer === 'orbits' && galaxyLookOn() && window.KOSMOS?.galaxyMode?.isActive === true;
+          if (layer && !noChip && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
             modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay, .se-overlay, .at-overlay, .ce-overlay'),
             planetSceneOpen: !!this.planetScene?.isOpen, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey })) {
             e.preventDefault();

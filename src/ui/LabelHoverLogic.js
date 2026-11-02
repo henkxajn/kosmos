@@ -419,25 +419,27 @@ export function makeYieldMemory() {
  * przypiętych — dokładnie `placeLabels`.
  * @returns {{ placed: Array<object>, hidden: string[] }}
  */
-export function placeLabelsPinned(items, { rect, obstacles = [], prev = null } = {}) {
+export function placeLabelsPinned(items, { rect, obstacles = [], prev = null, candidatesOf = labelCandidates, hideOnOverlap = null } = {}) {
+  // ARC GALAXY G2 — `candidatesOf` (etykiety płyty: kandydat „pod gwiazdą, wyśrodkowana”, strona 'C') i `hideOnOverlap`
+  // (reguła gęstości D-GX-16) przekazywane dalej; domyślnie — jak dotąd (`labelCandidates`, bez chowania).
   const R = HUD_LABELS;
   const pinned = [], free = [];
   for (const it of items ?? []) (it?.pin ? pinned : free).push(it);
-  if (!pinned.length) return placeLabels(free, { rect, obstacles, prev });
+  if (!pinned.length) return placeLabels(free, { rect, obstacles, prev, candidatesOf, hideOnOverlap });
   const placedPins = [], hidden = [];
   for (const it of pinned) {
     if (!(it.w > 0 && it.h > 0) || !rect || it.w > rect.w - 2 * R.EDGE || it.h > rect.h - 2 * R.EDGE) { hidden.push(it.key); continue; }
-    const cands = labelCandidates({ ...it, h: it.pin.baseH > 0 ? it.pin.baseH : it.h });
+    const cands = candidatesOf({ ...it, h: it.pin.baseH > 0 ? it.pin.baseH : it.h });
     const ci = Number.isInteger(it.pin.cand) && it.pin.cand >= 0 && it.pin.cand < cands.length ? it.pin.cand : 0;
     const c = cands[ci];
     const x = clampV(c.x, rect.x + R.EDGE, rect.x + rect.w - R.EDGE - it.w);
     const y = clampV(c.y, rect.y + R.EDGE, rect.y + rect.h - R.EDGE - it.h);
     const p = { ...it, x, y, side: c.side, below: c.below, cand: ci, overlap: null, pinned: true };
-    p.attach = { x: c.side === 'E' ? p.x : p.x + p.w, y: p.y + p.h };
+    p.attach = c.side === 'C' ? { x: p.x + p.w / 2, y: p.y } : { x: c.side === 'E' ? p.x : p.x + p.w, y: p.y + p.h };
     placedPins.push(p);
   }
   const g = R.GAP;
   const pinObstacles = placedPins.map((p) => ({ x: p.x - g, y: p.y - g, w: p.w + 2 * g, h: p.h + 2 * g }));
-  const res = placeLabels(free, { rect, obstacles: [...(obstacles ?? []), ...pinObstacles], prev });
+  const res = placeLabels(free, { rect, obstacles: [...(obstacles ?? []), ...pinObstacles], prev, candidatesOf, hideOnOverlap });
   return { placed: [...placedPins, ...res.placed], hidden: [...hidden, ...res.hidden] };
 }

@@ -32,10 +32,45 @@ const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const q = (v) => Math.round(v * 1000);
 
 /** Kolor roli z kryciem (gradient krycia wymaga `rgba`). */
-function rgba(token, a) {
+export function rgba(token, a) {
   const c = parseColorToken(String(token ?? ''));
   if (!c) return token;
   return `rgba(${c.r},${c.g},${c.b},${Math.max(0, Math.min(1, a * c.a)).toFixed(4)})`;
+}
+
+/**
+ * Kreski trasy po kawałkach przyciętych do okna (`pieces` — `{ pts, s0 }`): krycie gasnące wzdłuż długości (`routeAlpha` ×
+ * `mult`), faza wzoru ciągła wzdłuż trasy (`lineDashOffset = s − march`), gradient na odcinku, gdy krycie się zmienia.
+ * ARC GALAXY G2-2 — wyciągnięte z `HudRouteLayer._strokePieces` bez zmian (czytają też szlaki i trasy płyty galaktyki —
+ * `HudGalaxyRouteLayer`); `alphaOf(u)` — własne prawo krycia (domyślnie `routeAlpha(u, mult)`).
+ */
+export function strokeRoutePieces(ctx, pieces, total, color, mult, dash, march, width, alphaOf = null) {
+  const A = typeof alphaOf === 'function' ? alphaOf : (u) => routeAlpha(u, mult);
+  ctx.lineWidth = width;
+  ctx.setLineDash(dash);
+  for (const pc of pieces) {
+    let s = pc.s0;
+    for (let i = 2; i < pc.pts.length; i += 2) {
+      const x0 = pc.pts[i - 2], y0 = pc.pts[i - 1], x1 = pc.pts[i], y1 = pc.pts[i + 1];
+      const l = Math.hypot(x1 - x0, y1 - y0);
+      if (!(l > 0)) continue;
+      const a0 = A(total > 0 ? s / total : 0), a1 = A(total > 0 ? (s + l) / total : 1);
+      let style = rgba(color, a0);
+      if (Math.abs(a1 - a0) > 0.004 && typeof ctx.createLinearGradient === 'function') {
+        const g = ctx.createLinearGradient(x0, y0, x1, y1);
+        if (g?.addColorStop) { g.addColorStop(0, rgba(color, a0)); g.addColorStop(1, rgba(color, a1)); style = g; }
+      }
+      ctx.strokeStyle = style;
+      ctx.lineDashOffset = s - march;          // faza wzoru ciągła wzdłuż trasy; marsz przesuwa wzór ku celowi
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      s += l;
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
 }
 
 export class HudRouteLayer {
@@ -227,31 +262,7 @@ export class HudRouteLayer {
   labelObstacles() { return this._glyphRects; }
 
   _strokePieces(ctx, pieces, total, color, mult, dash, march, width) {
-    ctx.lineWidth = width;
-    ctx.setLineDash(dash);
-    for (const pc of pieces) {
-      let s = pc.s0;
-      for (let i = 2; i < pc.pts.length; i += 2) {
-        const x0 = pc.pts[i - 2], y0 = pc.pts[i - 1], x1 = pc.pts[i], y1 = pc.pts[i + 1];
-        const l = Math.hypot(x1 - x0, y1 - y0);
-        if (!(l > 0)) continue;
-        const a0 = routeAlpha(total > 0 ? s / total : 0, mult), a1 = routeAlpha(total > 0 ? (s + l) / total : 1, mult);
-        let style = rgba(color, a0);
-        if (Math.abs(a1 - a0) > 0.004 && typeof ctx.createLinearGradient === 'function') {
-          const g = ctx.createLinearGradient(x0, y0, x1, y1);
-          if (g?.addColorStop) { g.addColorStop(0, rgba(color, a0)); g.addColorStop(1, rgba(color, a1)); style = g; }
-        }
-        ctx.strokeStyle = style;
-        ctx.lineDashOffset = s - march;          // faza wzoru ciągła wzdłuż trasy; marsz przesuwa wzór ku celowi
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.stroke();
-        s += l;
-      }
-    }
-    ctx.setLineDash([]);
-    ctx.lineDashOffset = 0;
+    strokeRoutePieces(ctx, pieces, total, color, mult, dash, march, width);
   }
 
   draw(ctx, F, c) {
