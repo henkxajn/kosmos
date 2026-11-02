@@ -47,6 +47,9 @@ import { GalaxyPlate } from './GalaxyPlate.js';   // ARC GALAXY G1 — płyta ga
 import { GALAXY_K, GALAXY_LAYER, CAMERA_FAR, GALAXY_FADE_MS, GALAXY_PICK_HALF_PX, LIVE_GALAXY, pickGalaxyStar }
   from '../ui/GalaxyModeLogic.js';
 import { makeHudProjector } from '../ui/HudProjection.js';   // ARC GALAXY G1 — rzut gwiazd płyty (ten sam co warstwa HUD)
+import { GalaxyTerritory } from './GalaxyTerritory.js';     // ARC GALAXY G2-3 — terytorium na płycie (rozlane światło, zasłony)
+import { buildPlateTerritoryPayload, plateTerritoryVisibility, plateOwnerHalos, plateRiserIds } from '../ui/GalaxyTerritoryLogic.js';
+import { subPixelHidden } from '../ui/GalaxyFlightLogic.js'; // ARC GALAXY G2-1 — siatki poniżej 0,5 px chowane w trakcie lotu
 import { systemIdOf } from '../utils/SystemScope.js';   // ARKUSZ UI U3-2 — termin układu pingu (Finding 477)
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
@@ -574,6 +577,19 @@ export class ThreeRenderer {
     this._galaxyFadeT0  = 0;
     this._galaxyHoverId = null;
     this.galaxyTuning   = LIVE_GALAXY;
+    // ARC GALAXY G2 (flaga `galaxyLook`) — lot (stan klatki od sterownika `GalaxyModeController`: gaśnięcie obiektów układu,
+    // płyty, prawdziwych gwiazd nieba, krycie chromu), terytorium płyty (leniwie), przeliczenie ładunku (zdarzenie
+    // `territory:changed` albo co `GALAXY_LOOK_MS` — mgła wywiadu zmienia tryb terytorium bez zdarzenia pola).
+    this._galaxyFlight       = null;   // { kind, systemFade, plateFade, realFade, chromeAlpha }
+    this._galaxyChromeAlpha  = null;   // krycie podwarstw HUD trybu galaktyki w trakcie lotu (`null` — poza lotem)
+    this._galaxyTerritory    = null;
+    this._galaxyTerrDirty    = true;
+    this._galaxyLookNext     = 0;
+    this._galaxyLookStats    = { payloadMs: 0, applyMs: 0, rebuilds: 0, gridLy: null };
+    EventBus.on('territory:changed', () => { this._galaxyTerrDirty = true; });
+    // G2-2 — skan układu ukończony: jasność gwiazdy płyty wg mgły (miejsce poznane) od razu, bez ponownego wejścia w tryb.
+    this._galaxyPlateCtx     = null;
+    EventBus.on('observatory:systemScanned', () => this._refreshGalaxyPlateLook());
     // ⚠ V-266 — USUNIĘTE: _starCoronaUniform („referencja do uTime korony") oraz
     //   _starPromCount („liczba protuberancji"). Oba były zapisywane dwa razy
     //   i NIGDY nieczytane; `git log -S` pokazuje, że weszły MARTWE już w c02574f,
@@ -933,8 +949,33 @@ export class ThreeRenderer {
   setGalaxyMode(on, ctx = {}) {
     on = !!on;
     const cam = this.camera;
+    // ARC GALAXY G2-1 — przejście LOGICZNE w trakcie lotu: warstwy kamery, płaszczyzna dalsza, gaśnięcie płyty i prawdziwych
+    // gwiazd nieba należą do sterownika lotu (`setGalaxyFlightFrame` / `endGalaxyFlight`); tu tylko stan trybu (R2 — wybory
+    // trybu układu nie biegną) i start rozjaśnienia chromu (`chromeT0`).
+    if (ctx.flight === true) {
+      if (on) {
+        this._galaxyFadeT0 = Number.isFinite(ctx.chromeT0) ? ctx.chromeT0 : performance.now();
+        if (this._hoverPlanetId != null) { this._hoverPlanetId = null; EventBus.emit('planet:hover', { entityId: null }); }
+        this._hoverVesselId = null;
+        this._hideColonyTooltip();
+      } else {
+        cam.layers.set(0);
+        cam.far = CAMERA_FAR.system;
+        cam.updateProjectionMatrix();
+        this._galaxyPlate?.setVisible(false);
+        this._galaxyPlate?.setFade(0);
+        if (this._galaxyHoverId != null) {
+          const layer = typeof document !== 'undefined' ? document.getElementById('event-layer') : null;
+          if (layer) layer.style.cursor = 'default';
+        }
+        this._galaxyHoverId = null;
+      }
+      this._galaxyActive = on;
+      return;
+    }
     if (on) {
       const plate = this._ensureGalaxyPlate();
+      this._galaxyPlateCtx = ctx;
       plate.setSystems(ctx.systems ?? [], { brightOf: ctx.brightOf });
       plate.setAnchor(ctx.systems ?? [], ctx.activeId);
       plate.setSelected(ctx.selectedId ?? null);
@@ -962,6 +1003,13 @@ export class ThreeRenderer {
     const u = this._sky?.points?.material?.uniforms?.uRealFade;
     if (u) u.value = on ? 0 : 1;
     this._galaxyActive = on;
+  }
+
+  /** G2-2 — ponowna jasność gwiazd płyty (mgła: miejsce poznane po skanie) z kontekstu ostatniego wejścia w tryb. */
+  _refreshGalaxyPlateLook() {
+    const plate = this._galaxyPlate, ctx = this._galaxyPlateCtx;
+    if (!plate || !ctx || !GAME_CONFIG.FEATURES?.galaxyLook) return;
+    plate.setSystems(ctx.systems ?? [], { brightOf: ctx.brightOf });
   }
 
   /** Zaznaczona gwiazda płyty (halo) — woła kontroler przy każdej zmianie zaznaczenia. */
@@ -1016,11 +1064,194 @@ export class ThreeRenderer {
   // Pętla renderu — rozjaśnienie płyty po wejściu (czas realny), pokrętła wyglądu, oddech punktów (zegar nieba).
   _tickGalaxyPlate(t) {
     const plate = this._galaxyPlate;
-    if (!plate || !this._galaxyActive) return;
-    const k = Math.min(1, Math.max(0, (performance.now() - this._galaxyFadeT0) / GALAXY_FADE_MS));
-    if (plate.fade !== k) plate.setFade(k);
+    if (!plate || !(this._galaxyActive || this._galaxyFlight)) return;
+    if (!this._galaxyFlight) {   // G2-1 — w trakcie lotu gaśnięciem płyty steruje sterownik lotu
+      const k = Math.min(1, Math.max(0, (performance.now() - this._galaxyFadeT0) / GALAXY_FADE_MS));
+      if (plate.fade !== k) plate.setFade(k);
+    }
     plate.tick();
     plate.setTime(t);
+    this._tickGalaxyLook(t);
+  }
+
+  // ── ARC GALAXY G2-1 — lot kamery między układem a płytą (oś czasu — `GalaxyFlightLogic`, sterownik — `GalaxyModeController`) ──
+  // Wylot: obie warstwy kamery (układ gaśnie, płyta się rozjaśnia), far galaktyki; wlot: do przełączenia sama płyta, potem
+  // układ (`setGalaxyMode(false, { flight: true })`). Obiekty układu gasną w RENDERZE (`_applyFlightFade` przed
+  // `composer.render()` i cofnięte zaraz po nim — reszta gry nigdy nie widzi zmienionego krycia ani widoczności).
+
+  /** Początek lotu: płyta przygotowana (wylot — zakotwiczona, zgaszona, widoczna), warstwy i far kamery. */
+  beginGalaxyFlight(kind, ctx = {}) {
+    const cam = this.camera;
+    const plate = this._ensureGalaxyPlate();
+    if (kind === 'out') {
+      this._galaxyPlateCtx = ctx;
+      plate.setSystems(ctx.systems ?? [], { brightOf: ctx.brightOf });
+      plate.setAnchor(ctx.systems ?? [], ctx.activeId);
+      plate.setSelected(ctx.selectedId ?? null);
+      plate.setFade(0);
+      plate.setVisible(true);
+      cam.layers.set(0);
+      cam.layers.enable(GALAXY_LAYER);
+      if (this._hoverPlanetId != null) { this._hoverPlanetId = null; EventBus.emit('planet:hover', { entityId: null }); }
+      this._hoverVesselId = null;
+      this._hideColonyTooltip();
+    } else {
+      cam.layers.set(GALAXY_LAYER);
+    }
+    cam.far = CAMERA_FAR.galaxy;
+    cam.updateProjectionMatrix();
+    this._galaxyFlight = { kind, systemFade: kind === 'out' ? 1 : 0, plateFade: kind === 'out' ? 0 : 1,
+      realFade: kind === 'out' ? 1 : 0, chromeAlpha: kind === 'out' ? 0 : 1 };
+    this._galaxyChromeAlpha = this._galaxyFlight.chromeAlpha;
+    this._galaxyTerrDirty = true;
+  }
+
+  /** Klatka lotu (sterownik): gaśnięcie obiektów układu, płyty, prawdziwych gwiazd nieba, krycie chromu galaktyki. */
+  setGalaxyFlightFrame({ systemFade = 1, plateFade = 0, realFade = 1, chromeAlpha = null } = {}) {
+    const f = this._galaxyFlight;
+    if (!f) return;
+    f.systemFade = systemFade; f.plateFade = plateFade; f.realFade = realFade; f.chromeAlpha = chromeAlpha;
+    this._galaxyPlate?.setFade(plateFade);
+    const u = this._sky?.points?.material?.uniforms?.uRealFade;
+    if (u) u.value = realFade;
+    this._galaxyChromeAlpha = Number.isFinite(chromeAlpha) ? chromeAlpha : null;
+  }
+
+  /** Koniec lotu: scena trybu docelowego (`'galaxy'` — sama płyta w pełni; `'system'` — sam układ, płyta schowana). */
+  endGalaxyFlight(mode) {
+    const cam = this.camera;
+    this._galaxyFlight = null;
+    this._galaxyChromeAlpha = null;
+    const u = this._sky?.points?.material?.uniforms?.uRealFade;
+    if (mode === 'galaxy') {
+      cam.layers.set(GALAXY_LAYER);
+      cam.far = CAMERA_FAR.galaxy;
+      this._galaxyPlate?.setVisible(true);
+      this._galaxyPlate?.setFade(1);
+      if (u) u.value = 0;
+    } else {
+      cam.layers.set(0);
+      cam.far = CAMERA_FAR.system;
+      this._galaxyPlate?.setVisible(false);
+      this._galaxyPlate?.setFade(0);
+      if (u) u.value = 1;
+    }
+    cam.updateProjectionMatrix();
+  }
+
+  /** Kotwica płyty [ly, osie świata] — położenie aktywnego układu (warstwa HUD: rzut punktów galaktyki spoza gwiazd). */
+  getGalaxyAnchorLy() {
+    const a = this._galaxyPlate?._anchor;
+    return a ? { x: a.x, y: a.y, z: a.z } : { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * Gaśnięcie obiektów UKŁADU w trakcie lotu — wyłącznie na czas renderu: linie, punkty i sprite'y z materiałem przezroczystym
+   * dostają krycie × `systemFade` (materiał wspólny — raz), nieprzezroczyste chowają się przy `systemFade` < 0,5; siatki chowają
+   * się, gdy tarcza w rzucie ma poniżej 0,5 px (`subPixelHidden`). Zwraca funkcję cofającą (wołaną zaraz po renderze).
+   */
+  _applyFlightFade() {
+    const f = this._galaxyFlight;
+    const cam = this.camera;
+    if (!f || !cam || !(cam.layers.mask & 1)) return null;
+    const fade = Math.max(0, Math.min(1, f.systemFade));
+    const skip = new Set([this._sky?.group, this._galaxyPlate?.group].filter(Boolean));
+    const mats = new Map(), hidden = [];
+    const focal = cam.projectionMatrix.elements[5] * ((window.innerHeight || 720) / 2);
+    const V = cam.matrixWorldInverse.elements;
+    const sph = this._flightSph ?? (this._flightSph = new THREE.Sphere());
+    const hide = (o) => { if (o.visible) { o.visible = false; hidden.push(o); } };
+    for (const root of this.scene.children) {
+      if (skip.has(root)) continue;
+      root.traverseVisible((o) => {
+        if (!(o.layers.mask & 1)) return;
+        if (o.isLine || o.isPoints || o.isSprite) {
+          if (fade <= 0.001) { hide(o); return; }
+          const ms = Array.isArray(o.material) ? o.material : [o.material];
+          let opaque = false;
+          for (const m of ms) { if (!m) continue; if (m.transparent) { if (!mats.has(m)) mats.set(m, m.opacity); } else opaque = true; }
+          if (opaque && fade < 0.5) hide(o);
+          return;
+        }
+        if (o.isMesh) {
+          const g = o.geometry;
+          if (!g) return;
+          if (!g.boundingSphere) g.computeBoundingSphere();
+          if (!g.boundingSphere) return;
+          sph.copy(g.boundingSphere).applyMatrix4(o.matrixWorld);
+          const c = sph.center;
+          const depth = -(V[2] * c.x + V[6] * c.y + V[10] * c.z + V[14]);
+          if (subPixelHidden(sph.radius, depth, focal)) hide(o);
+        }
+      });
+    }
+    for (const [m, op] of mats) m.opacity = op * fade;
+    return () => {
+      for (const [m, op] of mats) m.opacity = op;
+      for (const o of hidden) o.visible = true;
+    };
+  }
+
+  // ── ARC GALAXY G2-3 — terytorium, aureole własności, słupki (flaga `galaxyLook`) ──────────────────────────────────
+  _tickGalaxyLook(t) {
+    const plate = this._galaxyPlate;
+    const K = window.KOSMOS;
+    if (!plate || !GAME_CONFIG.FEATURES?.galaxyLook) {
+      if (this._galaxyTerritory) this._galaxyTerritory.group.visible = false;
+      plate?.setOwnerHalos?.([]);
+      plate?.setRisers?.([], 0xffffff);
+      return;
+    }
+    if (!this._galaxyTerritory) {
+      this._galaxyTerritory = new GalaxyTerritory(THREE, { layer: GALAXY_LAYER, logDepth: logDepthOn() });
+      plate.group.add(this._galaxyTerritory.group);
+      this._galaxyTerrDirty = true;
+    }
+    const terr = this._galaxyTerritory;
+    terr.group.visible = true;
+    const now = performance.now();
+    // Pokrętło siatki pola (D-GX-15): zmiana → przeliczenie `TerritoryField` na nowej siatce.
+    const cfgT = GAME_CONFIG.TERRITORY;
+    const gk = Number(LIVE_GALAXY.TERR_GRID_LY);
+    if (cfgT && gk > 0.1 && cfgT.GRID_LY !== gk) { cfgT.GRID_LY = gk; K?.territoryField?.recompute?.(); this._galaxyTerrDirty = true; }
+    if (this._galaxyTerrDirty || now >= this._galaxyLookNext) {
+      this._galaxyTerrDirty = false;
+      this._galaxyLookNext = now + 1000;
+      const t0 = performance.now();
+      const tf = K?.territoryField, intel = K?.intelSystem, war = K?.warSystem, ts = K?.territoryService;
+      const territories = tf?.getAllTerritories?.() ?? [];
+      const vis = plateTerritoryVisibility(territories, { intelLevelOf: (o) => intel?.getLevel?.(o), isAtWarWith: (o) => !!war?.getWarWith?.(o) });
+      const payload = buildPlateTerritoryPayload(territories, vis);
+      const t1 = performance.now();
+      const dimHex = this._hud3dHex?.('dim') ?? hudRoleHex('dim');
+      const rebuilt = terr.apply(payload, { colorOf: (hex) => new THREE.Color(hex), outlineColor: new THREE.Color(dimHex), iso: cfgT?.ISO ?? 0.5 });
+      const t2 = performance.now();
+      this._galaxyLookStats = { payloadMs: +(t1 - t0).toFixed(3), applyMs: +(t2 - t1).toFixed(3), rebuilds: terr._rebuilds, rebuilt,
+        gridLy: cfgT?.GRID_LY ?? null, owners: payload.layers.length };
+      // Aureole własności (C) i słupki (układy gracza + zaznaczona).
+      const systems = K?.galaxyData?.systems ?? [];
+      plate.setOwnerHalos(plateOwnerHalos({ systems, ownerOf: (id) => ts?.getSystemOwner?.(id) ?? null,
+        colorOf: (o) => ts?.getEmpireColor?.(o) ?? '#888888', intelAtLeast: (o, lvl) => intel?.isAtLeast?.(o, lvl) === true }));
+    }
+    const owned = (K?.territoryService?.getOwnedSystems?.('player') ?? []).map((o) => o.systemId);
+    plate.setRisers(plateRiserIds({ ownedIds: owned, selectedId: K?.galaxyMode?.selectedSystemId ?? null }),
+      this._hud3dHex?.('primary') ?? hudRoleHex('primary'));
+    terr.tick({ time: t, fade: plate.fade, knobs: LIVE_GALAXY });
+  }
+
+  /** Odczyt bramki: `KOSMOS.debug.galaxyTerritoryInfo()` — terytorium płyty, pole, aureole, słupki, koszt przeliczenia. */
+  getGalaxyTerritoryInfo() {
+    const tf = window.KOSMOS?.territoryField;
+    const all = tf?.getAllTerritories?.() ?? [];
+    return {
+      flag: !!GAME_CONFIG.FEATURES?.galaxyLook,
+      field: all.map((td) => ({ ownerId: td.ownerId, color: td.color, loops: td.loops?.length ?? 0, field: td.field?.length ?? 0,
+        grid: td.maskBounds ? `${td.maskBounds.nx}x${td.maskBounds.ny}@${(+td.maskBounds.cell).toFixed(3)}` : null })),
+      plate: this._galaxyTerritory?.info?.() ?? null,
+      stats: { ...this._galaxyLookStats },
+      ownerHalos: this._galaxyPlate?.ownerHalos?.geometry?.drawRange?.count ?? 0,
+      risers: this._galaxyPlate?._riserIds?.length ?? 0,
+    };
   }
 
   /** Odczyt bramki: `KOSMOS.threeRenderer.getGalaxyInfo()` — tryb, kamera (warstwa, far, dystans), płyta. */
@@ -1032,6 +1263,9 @@ export class ThreeRenderer {
         theta: +cc._theta.toFixed(4), phi: +cc._phi.toFixed(4), target: { x: r1(cc._goalTarget.x), y: r1(cc._goalTarget.y), z: r1(cc._goalTarget.z) } } : null,
       skyRealFade: this._sky?.points?.material?.uniforms?.uRealFade?.value ?? null,
       plate: this._galaxyPlate?.info() ?? null,
+      flight: this._galaxyFlight ? { ...this._galaxyFlight } : null,   // ARC GALAXY G2-1
+      chromeAlpha: this._galaxyChromeAlpha,
+      look: !!GAME_CONFIG.FEATURES?.galaxyLook,
     };
   }
 
@@ -2464,7 +2698,8 @@ export class ThreeRenderer {
   // ── Aktualizacja celu kamery na śledzonym ciele ──────────────
   _updateCameraFocus() {
     // ARC GALAXY G1 — w trybie galaktyki śledzenie obiektu układu wstrzymane (cel kamery = płyta); po wyjściu wraca.
-    if (!this._cameraController || this._galaxyActive) return;
+    // G2-1 — także w trakcie lotu (kamera należy do sterownika lotu).
+    if (!this._cameraController || this._galaxyActive || this._galaxyFlight) return;
 
     // Helper: focusOn z guardem NaN. W podglądzie obserwatorium — twardy lock
     // (focusOnInstant, bez lerp-lag) → ciało stoi w miejscu mimo ruchu po orbicie.
@@ -3997,9 +4232,9 @@ export class ThreeRenderer {
         // „Obserwuj”, auto-fokus, końce smug i paski HP czytają pozycje sprite'ów z tej klatki).
         this._tickCombatGlide();
         // ARC GALAXY G1 — w trybie galaktyki kamera należy do płyty: „Obserwuj” i auto-fokus starcia wstrzymane (wracają po wyjściu).
-        if (this._watch && !this._galaxyActive) this._updateWatchCamera();
+        if (this._watch && !this._galaxyActive && !this._galaxyFlight) this._updateWatchCamera();
         // POLISH P2b (D1, Finding 467) — auto-fokus starcia: cel śledzi środek walki (co klatkę, także w pauzie gry).
-        if (this._autoFocus && !this._galaxyActive) this._updateAutoFocusCamera();
+        if (this._autoFocus && !this._galaxyActive && !this._galaxyFlight) this._updateAutoFocusCamera();
 
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
@@ -4007,8 +4242,9 @@ export class ThreeRenderer {
         // NIEBO (D-GX-4) — kopuła nieba jedzie z kamerą (obraz nieba zależy tylko od ORIENTACJI — ciągły z konstrukcji);
         // pokrętła nieba co klatkę (przeliczenie tylko przy zmianie). Przy fladze OFF `_sky` = null.
         if (this._sky) { this._sky.group.position.copy(this.camera.position); this._tickSky(); }
-        // ARC GALAXY G1 — płyta: rozjaśnienie po wejściu (0,25 s), pokrętła `galaxyTuning`, oddech punktów.
-        if (this._galaxyActive) this._tickGalaxyPlate(t);
+        // ARC GALAXY G1 — płyta: rozjaśnienie po wejściu (0,25 s), pokrętła `galaxyTuning`, oddech punktów (G2 — także w locie,
+        // terytorium, aureole, słupki).
+        if (this._galaxyActive || this._galaxyFlight) this._tickGalaxyPlate(t);
 
         // Animacja świetlików handlowych
         if (this._tradeFireflies.length > 0) this._animateTradeFireflies(t);
@@ -4048,8 +4284,14 @@ export class ThreeRenderer {
 
         // Pipeline HDR: Render → Bloom(próg 1.0) → OutputPass (ACES+sRGB).
         // Fallback: bezpośredni render gdy composer padł (ACES aplikuje renderer, brak bloomu).
-        if (this._composer) this._composer.render();
-        else this.renderer.render(this.scene, this.camera);
+        // ARC GALAXY G2-1 — w trakcie lotu obiekty układu gasną TYLKO na czas renderu (cofnięte zaraz po nim).
+        const undoFlight = this._galaxyFlight ? this._applyFlightFade() : null;
+        try {
+          if (this._composer) this._composer.render();
+          else this.renderer.render(this.scene, this.camera);
+        } finally {
+          if (undoFlight) undoFlight();
+        }
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
       }

@@ -138,6 +138,9 @@ export class TerritoryField {
       }
       this._territories.set(ownerId, {
         ownerId, color: terr.getEmpireColor(ownerId), loops, mask, contours,
+        // ARC GALAXY G2-3 (D-GX-15 (a)) — pole wpływu na tej samej siatce (bez nasycenia maski przy 2 × ISO): płaszczyzna
+        // „rozlanego światła” płyty galaktyki czyta z niego rdzeń, krawędź (gradient) i szew sporny. Hash bez zmian.
+        field: Float32Array.from(f),
         maskBounds: { x0: X0, y0: Y0, cell: stepX, nx, ny },
         hash: territoryHash(mask, loops),   // content-hash → sygnatura rebuildu 3D (B6)
       });
