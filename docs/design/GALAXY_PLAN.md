@@ -624,11 +624,11 @@ route around · ⚪ observation, hygiene or coupling · ✅ closed. "Step" = whe
 | **596** | ⚪ | **The observatory range is centred on home whatever colony holds the observatory** — level from `getMaxObservatoryLevel()` (any colony), ring and blip gate centred on home (`FleetManagerOverlay.js:5651-5656, :6321, :6218`). Galaxy twin of Finding 191 | G2 (D-GX-22) |
 | **597** | ✅ | **Dead sky config:** `GAME_CONFIG.BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND: 250` (`GameConfig.js:34-35`) and `THEME.starfield` + 10 per-theme overrides (`ThemeConfig.js:41, :484 … :761`) have zero readers | **NIEBO ✅ (`6ea7cad`)** — retired (signed 2026-10-30): the sky colour stays physical, not themed (keeper `sky_catalog_smoke` T12) |
 | **598** | ✅ | **Stale descriptions of the galaxy:** `GalaxyGenerator.js:3` "~42 układów", `:5` "3-18 LY" vs `SYSTEM_COUNT 72` / 2–22 ly; `GALAXY_SEED_PLAN.md:49-50` "`sys_000…sys_071`" — the ids are `sys_001…sys_071` (home is `sys_home`) | **NIEBO ✅ (`6ea7cad`)** — comments fixed in `GalaxyGenerator.js` and `GALAXY_SEED_PLAN.md` (no behaviour) |
-| **599** | ⚪ | **The maths that the arc rewrites has no swept keeper.** Territory field / loops / contested / merge (`tmp_territory_b3`, gitignored), territory fog (`b4`, gitignored), payload (`b5`), flashes (`b6`), contours (`tmp_territory_contours_smoke`, tracked, not swept), holotable camera (`tmp_holotable_cam_smoke`, not swept), the scan backend (`tmp_obs_stratcom_scan_smoke`, gitignored); `b1` is already stale (asserts save v91). In the sweep only `influence_map_smoke` T8 reads `TerritoryField.js` (radius formula) | G2 (move the logic keepers into `src/testing/smoke/` when the plate payload changes) |
+| **599** | ⚪ | **The maths that the arc rewrites has no swept keeper.** Territory field / loops / contested / merge (`tmp_territory_b3`, gitignored), territory fog (`b4`, gitignored), payload (`b5`), flashes (`b6`), contours (`tmp_territory_contours_smoke`, tracked, not swept), holotable camera (`tmp_holotable_cam_smoke`, not swept), the scan backend (`tmp_obs_stratcom_scan_smoke`, gitignored); `b1` is already stale (asserts save v91). In the sweep only `influence_map_smoke` T8 reads `TerritoryField.js` (radius formula) | G2 — **partly closed in G2-3 (`82f6ece`)**: the field / loops / contested / merge (`b3`), territory fog (`b4`) and 3D payload (`b5`) maths moved into the sweep as parts B3 / B4 / B5 of `galaxy_territory_smoke` (assertions unchanged); flashes (`b6`), contours, the holotable camera and the scan backend stay as they were (Stratcom-only, they die with the tab in G5) |
 
 | **600** | ⚪ | **A galaxy system has ONE owner field and the last writer wins.** `EmpireRegistry.syncToGalaxyData` (on load) clears every `galaxyData.systems[].empireId`, then stamps each empire's colony systems unconditionally in `listAll()` order (`src/systems/EmpireRegistry.js:343-365`, the write at `:362`); `ColonyManager.transferColony` stamps the capturer on the whole system (`:960`) and `captureColonyForPlayer` clears it (`:1009`) even when the previous owner keeps other colonies there. Every reader of the owner axis (`SystemReveal` through `SystemRevealWorld`: the G1 galaxy list and plate names, the sky labels, the Stratcom panel) then asks the intel of the wrong empire. **Measured** on ZF r120: emp_002's capital system Castor (`homeSystemId sys_040`, colony `entity_163`) is stamped `emp_test_enemy`, whose debug colony sits on the moon Castor e-II (`entity_165`) — the galaxy list shows Castor as Rój Testowy at contact and emp_002 (rumor) has no system at all; the G1 contact sheet had to stage its rumor frame. Reachability in normal play (two AI empires in one system; the player capturing a non-capital colony in an AI home system) **NOT measured** | G2 / G3 (the pin and the warp menu read the owner axis); candidates: the system owner = the capital's empire, or colonies per empire in the reveal canon — own decision |
 
-**Next free number: 601** (NIEBO filed no new findings; G1 filed #600).
+**Next free number: 601** (NIEBO filed no new findings; G1 filed #600; G2 filed no new findings — 590 stays 🟠 as signed in D-GX-17 (c), 595 / 596 stay ⚪ because D-GX-22 was implemented as signed (ping from home, planar metric, owner options in §7 O4), 599 is partly closed, 600 is untouched).
 
 ## §4 The cut: NIEBO → G1 → G2 → G3 → G4 → G5
 
@@ -767,6 +767,63 @@ One flag, one gate with a tuning loop; three commits of code if the owner wants 
 | **Contact sheet** | 5 themes × frames: fly-out t = 0 / 0.3 / 0.6 / 1.0 · galaxy with territory A + B + C · a contested seam · pin with actions · hover expansion · rail with N ships · ping · lanes · dive approach with brackets · dive arrival |
 | **STOP** | `kosmos-handover\galaxy-g2\`; PASS → up to three `feat(G2-n)` + `docs(G2)` |
 
+#### G2 — ✅ delivered 2026-11-02 (`f27a8f2` · `a579f06` · `82f6ece`)
+
+Owner's look: PASS, **tuning 1** recorded as staged — `I_GAIN` 4.2 · `PLATE_SAT` 1.7 · `SIZE_GAIN` 6.5 · `PAN_GRAB` 1 ·
+`PRESET_DIST_MUL` 1 · `TERR_SEAM_STYLE` **0**. ⚠ The PASS message carried the placeholder `<X>` for the seam style; the
+staged default 0 (hot white seam, bit-identical to the old shader) was kept — styles 1 / 2 stay available as a live knob.
+Flag `galaxyLook` ON (requires `galaxyView`; OFF = G1 bit for bit; permanent in G5).
+
+- **As planned:** G2-1 — fly-out / fly-in driver, semantic zoom, the dive rule with ⌜⌟ on the target, the gesture state
+  machine (NEW `GalaxyFlightLogic.js`, `GalaxyGestureLogic.js`; camera wheel hook, `GalaxyModeController`). G2-2 — galaxy
+  label sublayer with hover expansion and the click pin ([ Enter ] · [ Send ▼ ] disabled until G3 · [ Scan ] through the
+  existing `ObservatorySystem.startSystemScan` / `cancelSystemScan`; no [ Beacon ] / [ Gate ] — D-GX-17 (c)), density rule,
+  ship rail beside the star (`HudGalaxyRailLayer`), observatory ping from home (`HudGalaxyPingLayer`, NEW
+  `utils/ObservatoryRange.js` — table Lv → ly unchanged, centre = home, planar metric, D-GX-22), MST lanes in the route idiom
+  (`HudGalaxyRouteLayer`), chips [R] [T] [E] in galaxy semantics, [O] hidden (`GalaxyChromeLogic`). G2-3 — the territory on
+  the plate (NEW `GalaxyTerritory` + `GalaxyTerritoryShader` + `GalaxyTerritoryLogic`): A pooled-light plane per owner from the
+  exported field, thin rim from the gradient, hot white contested seam, slow breathing; B curtains extruded from the loops;
+  C ownership halos with hostility as pulse; risers only for owned systems + the selected star (`riserEndpoints`); fog by
+  `resolveTerritoryVisibility`; the plane rebuilds only when the payload signature changes.
+- **Changes found at the look (all inside the flag):** (T2) the second click on a selected star is a camera focus
+  (`focusStar` → `cam.focusOn`, zoom unchanged); a double click, Enter, [ Enter ] and the dive still enter; inside the dive
+  range the second click enters (rule `plateClickAction(…, ctx)`). (T3) plate stars retuned — `I_GAIN` 1.6 → 4.2,
+  `SIZE_GAIN` 4.5 → 6.5, NEW `PLATE_SAT` 1.7 (saturation around the channel mean, the sky untouched): brightest plate star
+  2.60 → 5.2 HDR (7.5 → 9.5 px) against the brightest background star 2.543, i.e. 1.02× → 2.04×; the sky's G 0.18 · K 0.45 ·
+  M 0.60 saturation becomes ×1.7 on the plate. (T4) the pin / expansion carries "planets N · moons N · planetoids N" (a
+  generated + place-known system from `StarSystemManager`, otherwise the scan result by tier: 1 planets, 2 + moons, 3 +
+  planetoids; scan progress takes precedence; fallback `galaxyPin.noBodyData` only when a result has no counts; no source — no
+  line). (T5) NEW ship marker on the plate (`GalaxyShipMarkerLogic`): a parked empty rhombus, an in-transit chevron with ×N
+  for a fleet, the route line to the target. (T6) NEW live knob `TERR_SEAM_STYLE` 0 / 1 / 2 → `seamStyleParams` → uniforms
+  `uSeamWhite` / `uSeamHatch` / `uRimOverlap`: 0 = the hot white seam, 1 = hatching in both owners' colours along the seam
+  without white, 2 = no seam, a soft colour hand-over with the rim ×0.5 where another territory covers the point.
+- **Style 0 is the identity, measured:** the same frame rendered by the old and the new shader on the real GPU (RTX 3070,
+  ANGLE D3D11, WebGL2), 6 variants (top / tilted / zoom × t = 0 / 1.7; 8-bit, half-float and float32 targets) — 0 differing
+  words; controls 0 ≠ 1, 0 ≠ 2. Caveats, not hidden: one GPU (FMA / derivatives may differ elsewhere), a synthetic
+  two-owner payload, "before" = a copy from the git index. Hatching assumes two main owners locally and its period (≈ 4 physical
+  px) depends on the DPR.
+- **Keepers:** NEW `galaxy_flight_smoke` 47 · `galaxy_gesture_smoke` 44 · `galaxy_chrome_smoke` 65 (H5 anti-mirror over 16
+  states executing the real `HudGalaxyLabelLayer`; H9 rail geometry migrated from `stratcom_ship_icon` T1–T7; H10 observatory
+  range migrated from `warp_stratcom` W13) · `galaxy_ship_marker_smoke` 108 · `galaxy_territory_smoke` 63 (parts B3 / B4 / B5
+  are the Finding 599 maths moved into the sweep with unchanged assertions; R0–R7 = field export, plate payload / visibility /
+  signature, contested seam, ownership halos, risers, curtains, rebuild only on a changed signature + log-depth chunks, the
+  seam-style table: an invalid value → 0, style 0 = identical uniforms) · `galaxy_mode_logic_smoke` 73 (G14e / G14f fail
+  with the old gains, 71 / 2). Sweep **363/363 OK, 0 FAIL, 29 advisory** · `check-i18n` pl = en = **3 413** (G1 3 409; the
+  owner's `ce6db73` +1, G2 +3 — §6) · save v101 without migration. No keeper pins a drawing constant (F8).
+- **In game** (ZF r120 = `kosmos_Zjednoczona_Federacja_r120_v101 (3).json`, Amber Noir, window 1584 × 946 for the T5 / T6
+  frames): T5 on a STAGED scene — `orderService.issueWarp(fleet_2, sys_024)` (Thuban → Diphda, 5.536 ly) stopped at ≈ 51.5 %,
+  the ×4 chevron on the route, the parked rhombus beside the selection square; the dashed lane behind Diphda is the player's
+  MST warp-lane Diphda – `sys_051`, not a bug; no separate single-ship chevron was caught (USS Furia was in orbit). T6 on the
+  REAL contested border (player blue vs `emp_001` orange near Diphda / Kapella): pixel difference 0 vs 1 = 194 072 px (max
+  212), 0 vs 2 = 202 401 px (max 234); two frames of the same style differ in 7 369 px (max 13 / 255), seam core (≥ 235) 0 px.
+  Contact sheet `kosmos-handover\galaxy-g2\gate\kontakt_g2_t1.html`; the STOP note `kosmos-handover\galaxy-g2\STOP_T1.md`.
+- **Process note:** the three commits were split WHOLE-FILE by import dependency (shared wiring files — `GameScene`,
+  `ThreeRenderer`, `UIManager` — cannot be split by hunk non-interactively), so `f27a8f2` and `a579f06` are not independently
+  complete behaviourally; HEAD is. `git revert` of the arc must go in reverse order.
+- **Findings:** G2 filed **no new number** (next free stays **601**). Status moves: **599 partly closed** (see §3); **590**
+  stays 🟠 (the dead FMO handlers go in G5); **595 / 596** stay ⚪ (D-GX-22 implemented as signed, owner options §7 O4);
+  **600** untouched — the read-only measurement of its reachability follows as a separate step (§3 row 600).
+
 ### G3 — single-ship warp from the galaxy
 
 | | |
@@ -857,6 +914,7 @@ at runtime (`label_hover_smoke`, `w3_raider_lever_smoke.mjs:212`). Wording below
 | G1 | `leftOutliner.foreignColoniesUnknown` | obce kolonie: ? | foreign colonies: ? | `ownerExists` without `place ∧ contact` (D-GX-11) |
 | G2 | `galaxyPin.enter` | Wejdź | Enter | chip `[ … ]` (chip brackets added by the chip idiom) |
 | G2 | `galaxyPin.send` | Wyślij ▼ | Send ▼ | disabled until G3 |
+| G2 | `galaxyPin.noBodyData` | skan: brak danych o ciałach | scan: no body data | pin line when a scan result carries no body counts (T4) |
 | G3 | `galaxyMenu.warpTo` | Skok do {0} | Warp to {0} | menu entry title; details reuse `fleet.warpHops` · `fleet.warpEta` · `fleet.warpFuelNeed` (neutral "Skoki: {0}" — avoids the PL plural trap of Finding 563) |
 | G4 | `galaxyMenu.fleetWarpTo` | Flota: skok do {0} | Fleet: warp to {0} | fleet entry |
 | G4 | `warpRoute.fleetStarted` | {0}: flota skacze do {1} (skoki: {2}) | {0}: fleet warping to {1} (hops: {2}) | one fleet-level Log line instead of N member lines |
