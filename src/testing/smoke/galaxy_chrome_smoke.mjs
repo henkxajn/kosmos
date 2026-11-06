@@ -2,6 +2,9 @@
 // Protokół lekki F8: keeper wyłącznie dla LOGIKI (model przypięcia, tabela stanów skanu, anty-lustro treści, reguła wskaźnika,
 // gęstość nazw, szyna statków, zasięg i blipy) — bez pinów na stałych rysunku i bez kontroli na poprzednim commicie.
 //   H0  API (`GalaxyChromeLogic`, `ObservatoryRange`, `chipLayersFor`)
+//   H9  uwaga: od poprawek po G3 (F5) szyna domyślnie nie ma nazw — geometria wierszy pinowana przy chipie [O] włączonym
+//   H13 po G3 (F5): tabela widoczności nazw szyny (domyślnie / chip [O] / najechana / zaznaczona / kursor na wierszu / zaznaczony statek / OFF)
+//   H14 po G3 (F4): CTRL+klik wiersza szyny wygrywa z gwiazdą SĄSIADA pod kursorem; zwykły klik — gwiazda (Finding 110); OFF jak przed krokiem
 //   H1  przyciski przypięcia: [ Wejdź ] tylko dla układu do wejścia, [ Wyślij ▼ ] obecny i WYŁĄCZNY do G3, chip skanu;
 //       [ Beacon ] / [ Gate ] pominięte (D-GX-17 (c))
 //   H2  tabela stanów chipu skanu (dom, w toku, zbadany, brak obserwatorium, poza zasięgiem / bramka wyłączona, wynik pełny,
@@ -295,6 +298,7 @@ header('H9  szyna — geometria, strefy, klik');
   // Prawdziwa podwarstwa szyny — strefy i klik.
   const vessels = [1, 2, 3, 4, 5].map((i) => V({ id: `v${i}`, name: `Statek ${i}` }));
   const K = mkWorld({ vessels });
+  K.uiPrefs = { hudLayers: { ships: true } };   // chip [O] włączony — nazwy wszędzie (gęstość domyślna: H13)
   globalThis.window.KOSMOS = K;
   const R = HGR?.HudGalaxyRailLayer ? new HGR.HudGalaxyRailLayer({ ctx: null }) : null;
   const proj = { point: (x, y, z) => (x === 0 && z === 0 ? { x: 400, y: 300 } : { x: 400 + x * 0.1, y: 300 + z * 0.1 }) };
@@ -313,6 +317,87 @@ header('H9  szyna — geometria, strefy, klik');
   K._log.length = 0; K._starUnder = 'sys_x';
   ok(call(() => R.handleClick(z0.x + 2, z0.y + 2, 0, 0)) === false && K._log.length === 0, 'H9h gwiazda pod kursorem wygrywa z wierszem szyny');
   K._starUnder = null;
+}
+
+header('H13 gęstość szyny — tabela widoczności nazw (F5)');
+{
+  const list = [1, 2, 3, 4].map((i) => V({ id: `v${i}`, name: `Statek ${i}` }));
+  const half = GL?.GALAXY_PICK_HALF_PX ?? 11;
+  const proj = { point: (x, y, z) => (x === 0 && z === 0 ? { x: 400, y: 300 } : { x: 400 + x * 0.1, y: 300 + z * 0.1 }) };
+  const f0 = GAME_CONFIG.FEATURES.galaxyWarp;
+  // id wierszy + tekst „+N” przy gwieździe domu; 4 statki, limit wierszy = 3.
+  const state = ({ ships = false, hover = false, selStar = false, selShips = [], flag = true, onRow = false, vessels = list } = {}) => {
+    GAME_CONFIG.FEATURES.galaxyWarp = flag;
+    const K = mkWorld({ vessels, selected: selStar ? 'sys_home' : null });
+    K.uiPrefs = { hudLayers: ships ? { ships: true } : {} };
+    globalThis.window.KOSMOS = K;
+    const hud = { ctx: null, hoverObjectKey: () => (hover ? 'galaxy:sys_home' : null) };
+    const R = new HGR.HudGalaxyRailLayer(hud);
+    if (onRow) R._zones = [{ x: 500, y: 500, w: 50, h: 14, vesselId: 'v1', systemId: 'sys_home' }];
+    const F = F0(K, { sel: { vesselIds: selShips, leadId: selShips[0] ?? null }, pointer: onRow ? { lx: 510, ly: 505, overUI: false } : null });
+    R.prepare(F);
+    const c = R.collect(F, proj);
+    return { rows: (c?.rows ?? []).map((r) => r.vesselId).join(','), plus: (c?.plus ?? []).map((p) => p.text).join(','), zones: R._zones.length,
+      parked: (c?.parked ?? []).map((p) => p.count).join(','), R, K };
+  };
+  const one = list.slice(0, 1), two = list.slice(0, 2);
+  const table = [
+    ['domyślnie — bez nazw, sam „+N”', {}, '', '+4'],
+    ['chip [O] — nazwy; jeden statek ponad limit wierszy — bez „+1”', { ships: true }, 'v1,v2,v3', ''],
+    ['gwiazda najechana', { hover: true }, 'v1,v2,v3', ''],
+    ['gwiazda zaznaczona', { selStar: true }, 'v1,v2,v3', ''],
+    ['kursor na wierszu gwiazdy', { onRow: true }, 'v1,v2,v3', ''],
+    ['zaznaczony statek — tylko jego nazwa', { selShips: ['v3'] }, 'v3', '+3'],
+    ['dwa zaznaczone', { selShips: ['v2', 'v3'] }, 'v2,v3', '+2'],
+    ['flaga OFF — nazwy i „+1” jak w G2', { flag: false }, 'v1,v2,v3', '+1'],
+    ['samotny statek — sam znacznik, bez „+N”', { vessels: one }, '', ''],
+    ['samotny statek zaznaczony — nazwa, bez „+N”', { vessels: one, selShips: ['v1'] }, 'v1', ''],
+    ['dwa statki — „+2”', { vessels: two }, '', '+2'],
+    ['dwa statki, jeden zaznaczony — nazwa, bez „+1”', { vessels: two, selShips: ['v1'] }, 'v1', ''],
+  ];
+  const bad = [];
+  for (const [label, o, rows, plus] of table) {
+    const s = call(() => state(o));
+    if (s?.rows !== rows || s?.plus !== plus) bad.push(`${label}: ${s?.rows}/${s?.plus} (oczek. ${rows}/${plus})`);
+  }
+  ok(bad.length === 0, `H13a SEDNO: ${table.length} stanów (${bad.join(' | ') || 'zgodne'})`);
+  const d = call(() => state({}));
+  ok(d?.zones === 0, 'H13b domyślnie bez stref kliku — gwiazda zachowuje klik, „+N” bez strefy');
+  const lay = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 4, rowH: 14, pickHalf: half, plusW: 20 }));
+  ok(lay?.rows?.length === 0 && lay?.plus?.count === 4 && lay?.plus?.h === 14 && Math.abs(lay.plus.y + 7 - 300) < 1e-9 && lay.plus.x > 400 + half,
+    'H13c „+N” bez wierszy: na miejscu pierwszego wiersza, poza kwadratem wyboru gwiazdy');
+  ok(call(() => CL.railVisibleShips(list, { open: false }))?.length === 0 && call(() => CL.railVisibleShips(null, { open: true }))?.length === 0,
+    'H13d model: bez zaznaczenia — nikt; brak listy — pusto');
+  const lone = call(() => state({ vessels: one }));
+  ok(lone?.parked === '1' && lone?.plus === '' && lone?.zones === 0 && lone?.R?._obstacles?.length === 1,
+    'H13e SEDNO: samotny statek — znacznik zostaje, „+N” nie ma ani paska, ani przeszkody dla nazw płyty');
+  const lay1 = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 1, rowH: 14, pickHalf: half, plusW: 20, plusMin: 2 }));
+  const lay2 = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 2, rowH: 14, pickHalf: half, plusW: 20, plusMin: 2 }));
+  const layG2 = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 1, rowH: 14, pickHalf: half, plusW: 20 }));
+  ok(lay1?.plus === null && lay2?.plus?.count === 2 && layG2?.plus?.count === 1,
+    'H13f próg „+N” w geometrii: N = 1 przy progu 2 — nic, N = 2 — jest; KONTROLA: bez progu „+1” jak w G2');
+  GAME_CONFIG.FEATURES.galaxyWarp = f0;
+
+  header('H14 CTRL+klik wiersza szyny (F4)');
+  GAME_CONFIG.FEATURES.galaxyWarp = true;   // pin ścieżki ON niezależnie od domyślnej flagi (przebieg całości z OFF)
+  const K = mkWorld({ vessels: list, selected: 'sys_home' });
+  K.uiPrefs = {};
+  globalThis.window.KOSMOS = K;
+  const R = new HGR.HudGalaxyRailLayer({ ctx: null, hoverObjectKey: () => null });
+  const F = F0(K, { sel: {} });
+  R.prepare(F); R.collect(F, proj);
+  const z = R._zones[0];
+  K._starUnder = 'sys_x';   // gwiazda SĄSIADA pod wierszem — dawny powód odmowy
+  ok(call(() => R.handleClick(z.x + 2, z.y + 2, 0, 0)) === false && K._log.length === 0, 'H14a KONTROLA (Finding 110): zwykły klik — gwiazda pod kursorem wygrywa');
+  K.rightOutliner._lastMouseMods = { shift: false, ctrl: true };
+  ok(call(() => R.handleClick(z.x + 2, z.y + 2, 0, 0)) === true && K._log.some((e) => e[0] === 'row' && e[1] === z.vesselId),
+    'H14b SEDNO: CTRL+klik — wiersz wygrywa z gwiazdą sąsiada; idzie przez ten sam `_onHit` co wiersz outlinera');
+  K._log.length = 0;
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  ok(call(() => R.handleClick(z.x + 2, z.y + 2, 0, 0)) === false, 'H14c KONTROLA OFF: przy CTRL gwiazda wygrywa jak przed krokiem');
+  GAME_CONFIG.FEATURES.galaxyWarp = f0;
+  K._starUnder = null;
+  ok(z.systemId === 'sys_home', 'H14d strefa niesie układ wiersza (kursor na wierszu trzyma nazwy po zejściu z gwiazdy)');
 }
 
 header('H10 zasięg obserwatorium i blipy');
@@ -338,6 +423,14 @@ header('H11 chipy warstw w trybie galaktyki');
 {
   ok(HC?.chipLayersFor?.(true)?.join(',') === 'radar,routes,labels' && HC?.chipLayersFor?.(false)?.join(',') === 'radar,routes,labels,orbits',
     'H11a tryb galaktyki: [R] ping, [T] szlaki + trasy, [E] nazwy; [O] bez chipu (tryb układu — wszystkie 4)');
+  ok(HC?.chipLayersFor?.(true, true)?.join(',') === 'radar,routes,labels,ships' && HC?.chipLayersFor?.(false, true)?.join(',') === 'radar,routes,labels,orbits',
+    'H11b G3: w trybie galaktyki miejsce [O] mają „Okręty”; tryb układu bez zmian');
+  const row = ['radar', 'routes', 'labels', 'orbits'].map((layer, i) => ({ layer, x: i * 30, y: 0, w: 28, h: 16 }));
+  const gal = HC?.chipsForMode?.(row, true, true) ?? [];
+  ok(gal.map((c) => c.layer).join(',') === 'radar,routes,labels,ships' && gal[3]?.x === row[3].x, 'H11c chip „Okręty” stoi na miejscu [O] (rząd nie skacze)');
+  ok((HC?.chipsForMode?.(row, true, false) ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels'
+    && (HC?.chipsForMode?.(row, false, true) ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels,orbits',
+    'H11d KONTROLA: flaga OFF — miejsce puste jak w G2; tryb układu — orbity');
 }
 
 header('H12 pierścień pingu w kawałkach (koszt rasteryzacji)');

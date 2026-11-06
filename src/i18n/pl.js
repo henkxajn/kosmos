@@ -2560,6 +2560,7 @@ export default {
   'galaxyPin.send': 'Wyślij ▼',
   'galaxyPin.noBodyData': 'skan: brak danych o ciałach',
   'galaxyMenu.warpTo': 'Skok do {0}',
+  'galaxyMenu.fleetWaitsG4': 'flota — G4',
   // ARKUSZ UI U3-2 — prawy outliner (statki): nagłówek, sekcja „W drodze” (D-UI-8, §7.3), kubełki typu (D-UI-6, §7.1)
   'rightOutliner.ships': 'STATKI [{0}]',
   'rightOutliner.inTransit': 'W drodze',
@@ -3759,6 +3760,8 @@ export default {
   'hudChips.nameRoutes': 'Trasy',
   'hudChips.nameLabels': 'Etykiety',
   'hudChips.nameOrbits': 'Orbity',
+  'hudChips.ships':      'O',
+  'hudChips.nameShips':  'Okręty',
   'hudChips.tip':        '{0} — klawisz {1}',
   'hudAlert.contact':    'kontakt',
 

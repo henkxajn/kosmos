@@ -2133,6 +2133,9 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   handleClick(x, y) {
     this._dirty = true;
+    // ARC GALAXY G3-B — klik nad powierzchnią UI (kolumny, pasy) zamyka picker [ Wyślij ▼ ], a sam klik idzie dalej; klik nad mapą
+    // rozstrzyga warstwa HUD (`HudGalaxySendPickerLayer.handleClick`).
+    if (window.KOSMOS?.galaxyMode?.sendPicker && this.isOverUI(x, y)) window.KOSMOS.galaxyMode.closeSendPicker();
     x /= UI_SCALE; y /= UI_SCALE;
 
     // Game Over — klik na przycisk "Nowa Gra"

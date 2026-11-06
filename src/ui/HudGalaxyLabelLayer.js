@@ -17,7 +17,7 @@
 //     kolonie, stan zbadania, skan) — pamięć najechania `makeHoverMemory` (150 ms wejścia, 200 ms wygasania), etykieta
 //     rozwinięta trzyma swojego kandydata (`pinFor` / `updatePins` — pasek rośnie w dół, sąsiedzi ustępują);
 //   • PRZYPIĘCIE gwiazdy zaznaczonej (zaznaczenie = przypięcie, jak w trybie układu) — to samo rozwinięcie + wiersz akcji
-//     (`GalaxyChromeLogic.galaxyPinButtons`: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (wyłączony do G3), [ Skanuj ] /
+//     (`GalaxyChromeLogic.galaxyPinButtons`: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (G3-B: picker, flaga `galaxyWarp`), [ Skanuj ] /
 //     [ Skanuj dokładniej ] / [ Anuluj skan ] — `ObservatorySystem.startSystemScan` / `cancelSystemScan`; chip wyłączony
 //     z powodem w linii pod wierszem akcji przy najechaniu); linia skanu w toku widoczna w rozwinięciu przypiętej gwiazdy
 //     także bez najechania; [ Beacon ] / [ Gate ] pominięte (D-GX-17 (c));
@@ -48,6 +48,7 @@ import {
   runGalaxyPinAction, galaxyLabelEssential, galaxyChromeAlpha, galaxyPointerTarget,
 } from './GalaxyChromeLogic.js';
 import { diveBracketsVisible } from './GalaxyGestureLogic.js';
+import { galaxyWarpOn, warpHoverModel, refusalText } from './GalaxyWarpLogic.js';
 import { observatoryRangeLY, inObservatoryRange } from '../utils/ObservatoryRange.js';
 
 // Rysunek i układ (px logiczne). Strojenie okiem — stałe rysunku bez pinów keepera.
@@ -139,6 +140,18 @@ export class HudGalaxyLabelLayer {
     if (!this._look) return null;
     const z = pinHitAt(this._g2.pinZones, lx, ly);
     return z?.kind === 'btn' ? z.id : null;
+  }
+  /** G3-B — strefa przycisku [ Wyślij ▼ ] przypięcia z ostatniej klatki (kotwica pickera) albo `null`. */
+  sendButtonZone() {
+    return this._look ? (this._g2.pinZones.find((z) => z.kind === 'btn' && z.id === 'send') ?? null) : null;
+  }
+  /** G3-B — gwiazda pod punktem wg reguły kliku (przypięcie > gwiazda > nazwa): cel menu PPM; `null` — pusta płyta. */
+  galaxyStarIdAt(lx, ly, rawX, rawY) {
+    if (!this._look) return null;
+    const pz = pinHitAt(this._g2.pinZones, lx, ly);
+    const nz = pz ? null : resolveLabelClick(this._g2.zones, lx, ly);
+    const starUnder = pz ? null : ((typeof window !== 'undefined' ? window.KOSMOS?.threeRenderer?.galaxyStarAt?.(rawX, rawY) : null) ?? null);
+    return galaxyPointerTarget({ pinZone: pz, nameZone: nz, starUnder }).id;
   }
   /** G2 — gwiazda z rozwinięciem z najechania (`galaxy:<id>`) albo `null`. */
   hoverObjectKey() { return this._look && this._g2.p?.hovId != null ? 'galaxy:' + this._g2.p.hovId : null; }
@@ -319,7 +332,7 @@ export class HudGalaxyLabelLayer {
       inRange: inObservatoryRange(row.sys, home, rangeLY), rangeGate: Number(LIVE_GALAXY.SCAN_RANGE_GATE) !== 0,
     });
     const enterable = K?.galaxyMode?.canEnter?.(id, world) === true;
-    return { id, lines: this._g2Lines(K, row, scans, loc), buttons: galaxyPinButtons({ enterable, scanChip: chip, t }), chip };
+    return { id, lines: this._g2Lines(K, row, scans, loc), buttons: galaxyPinButtons({ enterable, scanChip: chip, sendEnabled: galaxyWarpOn(), t }), chip };
   }
 
   _g2Prepare(F) {
@@ -375,15 +388,19 @@ export class HudGalaxyLabelLayer {
     const hovLines = hovRow ? this._g2Lines(K, hovRow, scans, loc) : null;
     const pz = ptr && !ptr.overUI ? pinHitAt(g.pinZones, ptr.lx, ptr.ly) : null;
     const hoverBtn = pz?.kind === 'btn' ? pz.id : null;
+    // G3-B — powód, dla którego zaznaczony statek nie doskoczy do gwiazdy pod kursorem (ten sam model co podgląd trasy).
+    const warpModel = galaxyWarpOn() && hovId != null ? warpHoverModel(hovId, K) : null;
+    const warpReason = warpModel && !warpModel.available ? refusalText(warpModel.reason) : null;
     const fade = galaxyChromeAlpha({ flightAlpha: tr._galaxyChromeAlpha, now: F.now, fadeT0: tr._galaxyFadeT0, fadeMs: GALAXY_FADE_MS });
     let key = `gal2:1:${sel ?? ''}:${hovId ?? ''}:${Math.round(hov.alpha * 20)}:${diveId ?? ''}:${diveBr ? 1 : 0}:${labelsOn ? 1 : 0}:${loc}`
       + `:${hoverBtn ?? ''}:${Math.round(fade * 40)}`;
     if (pin) key += `|P${pin.lines.join('/')}|${pin.buttons.map((b) => `${b.id}${b.enabled ? 1 : 0}${b.label}`).join(',')}`;
     if (hovLines) key += `|H${hovLines.join('/')}`;
+    if (warpReason) key += `|W${warpReason}`;
     if (scans.size && F.sim != null) key += `|s${Math.round(F.sim / 40)}`;   // oddech nawiasów skanu (zegar symulacji)
     for (const it of items) key += `|${it.id}:${it.role}:${it.text ? 1 : 0}${it.essential ? 'e' : ''}`;
     g.p = { on: true, items, sel, hovId, hovAlpha: hov.alpha, hovAnimating: hov.animating, diveId, diveBr, scans, pin, hovLines, hoverBtn,
-      labelsOn, fade };
+      labelsOn, fade, warpReason };
     this._prep = { on: true, items, sel };
     return key;
   }
@@ -436,9 +453,11 @@ export class HudGalaxyLabelLayer {
         }
         const hb = P.hoverBtn != null ? P.pin.buttons.find((b) => b.id === P.hoverBtn) : null;
         if (hb && hb.enabled !== true && hb.reason) { const ln = this._g2Line(hb.reason, subFont, sub, 0, G.SUB_MAX_PX); ln.kind = 'reason'; lines.push(ln); }
+        if (P.warpReason && p.id === P.hovId) { const ln = this._g2Line(P.warpReason, subFont, sub, 0, G.SUB_MAX_PX); ln.kind = 'reason'; lines.push(ln); }
       } else if (p.hovered && P.hovLines) {
         expFrom = 1; expAlpha = P.hovAlpha;
         for (const s of P.hovLines) lines.push(this._g2Line(s, subFont, sub, 0, G.SUB_MAX_PX));
+        if (P.warpReason) { const ln = this._g2Line(P.warpReason, subFont, sub, 0, G.SUB_MAX_PX); ln.kind = 'reason'; lines.push(ln); }
       }
       let w = 0, h = 2 * R.PAD_Y;
       lines.forEach((ln, i) => { w = Math.max(w, ln.w); h += ln.h + (i > 0 ? R.LINE_GAP : 0); });

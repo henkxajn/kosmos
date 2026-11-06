@@ -8,6 +8,9 @@
 //     obecność (kolonia, placówka, stacja, statek, wojska — reguła D-UI-3 lewego outlinera; zapisy sprzed naprawy 186 mają
 //     układ z kolonią gracza z `explored = false`, Findingi 480 / 489). Własna obecność = gracz tam jest, więc zna nazwę
 //     i miejsce.
+//     ARC GALAXY G3 (flaga `galaxyWarp`, reguła D-UI-3 w trybie galaktyki): układ z samym STATKIEM gracza albo będący celem jego skoku
+//     jest na liście także bez `reveal.name` — jako „???”, przygaszony (statek nie zna nazwy układu; nazwę daje kanon albo obecność
+//     trwała: kolonia, placówka, stacja, wojska). Cel skoku sam nie otwiera wejścia — bramka G1 bez zmian.
 //   • PRZYGASZENIE + ○: miejsce nieznane (`!reveal.place` ∧ brak obecności).
 //   • KOLEJNOŚĆ (D-UI-2 rozszerzone): dom; własne układy z kolonią z POP; z placówką albo stacją; reszta — w grupie wg
 //     odległości od domu, potem nazwy.
@@ -29,6 +32,8 @@ import { systemIdOf } from '../utils/SystemScope.js';
 import { HOME_SYSTEM_ID, isSystemExplored } from '../utils/SystemExploration.js';
 import { systemRevealFromWorld } from '../utils/SystemRevealWorld.js';
 import { isSystemEnterable } from './GalaxyModeLogic.js';
+import { UNNAMED_SYSTEM } from './GalaxyChromeLogic.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 import { isEnemyVessel, isInService } from '../entities/Vessel.js';   // kanony strony i służby statku (W2)
 
 /** Grupy kolejności (mniejsza = wyżej). */
@@ -46,6 +51,26 @@ export function isGalaxyNameKnown(rec, own) {
   return rec?.name === true || own === true;
 }
 
+/**
+ * ARC GALAXY G3 — stan nazwy i miejsca układu, jedno źródło obu outlinerów. `shipFog` (flaga `galaxyWarp`): nazwę daje wyłącznie obecność
+ * trwała (`named`), nie sam statek; wiersz bez nazwy nie zna też miejsca. Bez `shipFog` — każda obecność, jak w G1.
+ */
+function galaxyNameState(rec, pres, isHome, shipFog) {
+  const own = isHome || pres?.own === true;
+  const known = isGalaxyNameKnown(rec, shipFog ? (isHome || pres?.named === true) : own);
+  return { own, known, placeKnown: known && (rec?.place === true || own) };
+}
+
+/** Cele skoku statku w drodze: bieżący przeskok (`mission.toSystemId`) i koniec trasy wieloprzeskokowej. */
+function warpDestinations(v) {
+  const out = new Set();
+  const m = v?.mission;
+  if (m?.type === 'interstellar_jump' && m.phase === 'warp_transit' && m.toSystemId != null) out.add(String(m.toSystemId));
+  const hops = v?.warpRoute?.hops;
+  if (Array.isArray(hops) && hops.length) out.add(String(hops[hops.length - 1]));
+  return out;
+}
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 // ── Obecność gracza w układach (reguła D-UI-3) ───────────────────────────────────────────────────────────────────────
@@ -54,14 +79,15 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
  * Indeks układ → obecność gracza i kolonie (własne i obce) oraz stacje gracza.
  * @param {{ colonies?:Array, stations?:Array, vessels?:Array, groundUnits?:Array, systemOfBody?:Function }} ctx —
  *   `vessels` = statki GRACZA (wołający filtruje wroga); wraki i tranzyt warp (`systemId === null`) nie odsłaniają układu
- * @returns {Map<string, {pop:boolean, outpost:boolean, station:boolean, ship:boolean, troops:boolean, own:boolean,
- *   ownColonies:object[], ownStations:object[], foreignColonies:object[]}>}
+ * @returns {Map<string, {pop:boolean, outpost:boolean, station:boolean, ship:boolean, troops:boolean, own:boolean, named:boolean,
+ *   inbound:number, ownColonies:object[], ownStations:object[], foreignColonies:object[]}>} — `own` = obecność (bramka wejścia G1);
+ *   `named` = obecność trwała (daje nazwę, bez samego statku); `inbound` = statki gracza w drodze do układu (nie liczą się do `own`)
  */
 export function systemPresenceIndex({ colonies = [], stations = [], vessels = [], groundUnits = [], systemOfBody = () => null } = {}) {
   const idx = new Map();
   const get = (sid) => {
     const k = String(sid);
-    if (!idx.has(k)) idx.set(k, { pop: false, outpost: false, station: false, ship: false, troops: false, own: false,
+    if (!idx.has(k)) idx.set(k, { pop: false, outpost: false, station: false, ship: false, troops: false, own: false, named: false, inbound: 0,
       ownColonies: [], ownStations: [], foreignColonies: [] });
     return idx.get(k);
   };
@@ -83,12 +109,16 @@ export function systemPresenceIndex({ colonies = [], stations = [], vessels = []
     if (!v || v.isWreck) continue;
     const s = systemIdOf(v);
     if (s) get(s).ship = true;
+    for (const d of warpDestinations(v)) if (d !== s) get(d).inbound += 1;
   }
   for (const u of groundUnits ?? []) {
     const s = u?.planetId ? sysOf(u.planetId) : null;
     if (s) get(s).troops = true;
   }
-  for (const e of idx.values()) e.own = e.pop || e.outpost || e.station || e.ship || e.troops;
+  for (const e of idx.values()) {
+    e.named = e.pop || e.outpost || e.station || e.troops;
+    e.own = e.named || e.ship;
+  }
   return idx;
 }
 
@@ -110,6 +140,7 @@ export function systemPresenceIndex({ colonies = [], stations = [], vessels = []
  * @param {(colony:object) => number|null} [ctx.population] — populacja kolonii [POP]
  * @param {boolean} [ctx.includeUnknown] — ARC GALAXY G2: także układy bez nazwy (`known: false`) — treść przypięcia
  *   i najechania gwiazdy bez nazwy; lista lewego outlinera NIE używa (domyślnie `false` — wynik G1 bez zmian)
+ * @param {boolean} [ctx.shipFog] — ARC GALAXY G3: sam statek nie daje nazwy; układ ze statkiem i cel skoku na liście jako „???”
  * @returns {{ rows: object[], byId: Map<string, object> }}
  */
 export function buildGalaxySystemList(ctx = {}) {
@@ -129,10 +160,9 @@ export function buildGalaxySystemList(ctx = {}) {
     const isHome = sys.isHome === true || id === HOME_SYSTEM_ID;
     const rec = (typeof ctx.reveal === 'function' ? ctx.reveal(sys) : null) ?? {};
     const pres = presence.get(id) ?? null;
-    const own = isHome || pres?.own === true;
-    const known = isGalaxyNameKnown(rec, own);
-    if (!known && ctx.includeUnknown !== true) continue;   // brak nazwy i brak obecności — układ poza listą (mgła wojny)
-    const placeKnown = rec.place === true || own;
+    const { own, known, placeKnown } = galaxyNameState(rec, pres, isHome, ctx.shipFog === true);
+    const listed = known || (ctx.shipFog === true && (own || (pres?.inbound ?? 0) > 0));   // D-UI-3: statek albo cel jego skoku
+    if (!listed && ctx.includeUnknown !== true) continue;   // brak nazwy i brak obecności — układ poza listą (mgła wojny)
     const group = isHome ? GALAXY_GROUP.HOME
       : pres?.pop ? GALAXY_GROUP.COLONY
       : (pres?.outpost || pres?.station) ? GALAXY_GROUP.OUTPOST
@@ -165,7 +195,7 @@ export function buildGalaxySystemList(ctx = {}) {
       : foreign.kind === 'unknown' ? (ownCount > 0 ? `${ownCount}+?` : '?') : String(ownCount);
     const generated = generatedOf(id) === true;
     const row = {
-      systemId: id, sys, name: sys.name ?? id, isHome, isActive: id === String(active), isSelected: id === sel,
+      systemId: id, sys, name: sys.name ?? id, label: known ? (sys.name ?? id) : UNNAMED_SYSTEM, isHome, isActive: id === String(active), isSelected: id === sel,
       known, placeKnown, dim: !placeKnown, own, group, distanceLY: dist, spectral: sys.spectralType ?? null,
       generated, enterable: isSystemEnterable({ generated, explored: exploredOf(sys) === true || isHome, presence: own }),
       expanded: expandedOf(id) === true,
@@ -201,6 +231,7 @@ export function galaxyWorldContext(K, input = {}) {
     systemOfBody,
   });
   return {
+    shipFog: GAME_CONFIG.FEATURES?.galaxyWarp === true,
     systems: K?.galaxyData?.systems ?? [],
     activeSystemId: K?.activeSystemId ?? ssm?.activeSystemId ?? HOME_SYSTEM_ID,
     selectedId: K?.galaxyMode?.selectedSystemId ?? null,
@@ -248,11 +279,12 @@ export function buildGalaxyShipView({ vessels = [], fleets = [], warpCapable = i
 
 /**
  * Kolejność sekcji prawego outlinera w trybie galaktyki: dom, własne układy (kolonia, placówka, stacja), potem reszta —
- * w grupie wg odległości od domu, potem nazwy.
- * @param {{ systems:Array, presence?:Map, systemName?:Function }} ctx
- * @returns {Array<{systemId:string, name:string}>}
+ * w grupie wg odległości od domu, potem nazwy. ARC GALAXY G3: z `reveal` (flaga `galaxyWarp`) nazwa wg tej samej reguły co wiersz lewego —
+ * układ bez nazwy to „???” z `dim`; `inbound` — statki w drodze do układu (sekcja listowana też bez statku na miejscu).
+ * @param {{ systems:Array, presence?:Map, systemName?:Function, reveal?:Function|null }} ctx
+ * @returns {Array<{systemId:string, name:string, dim?:boolean, inbound?:number}>}
  */
-export function galaxyShipSectionOrder({ systems = [], presence = new Map(), systemName = null } = {}) {
+export function galaxyShipSectionOrder({ systems = [], presence = new Map(), systemName = null, reveal = null } = {}) {
   const out = [];
   for (const sys of systems ?? []) {
     if (!sys || sys.id == null) continue;
@@ -261,8 +293,16 @@ export function galaxyShipSectionOrder({ systems = [], presence = new Map(), sys
     const p = presence.get(id);
     const ownSys = isHome || !!(p?.pop || p?.outpost || p?.station);
     const dist = num(sys.distanceLY) ?? (isHome ? 0 : Infinity);
-    out.push({ systemId: id, name: systemName?.(id) ?? sys.name ?? id, rank: isHome ? 0 : ownSys ? 1 : 2, dist });
+    const entry = { systemId: id, name: systemName?.(id) ?? sys.name ?? id, rank: isHome ? 0 : ownSys ? 1 : 2, dist };
+    if (typeof reveal === 'function') {
+      const st = galaxyNameState(reveal(sys) ?? {}, p, isHome, true);
+      entry.sortName = entry.name;
+      if (!st.known) entry.name = UNNAMED_SYSTEM;
+      entry.dim = !st.placeKnown;
+      entry.inbound = p?.inbound ?? 0;
+    }
+    out.push(entry);
   }
-  out.sort((a, b) => (a.rank - b.rank) || (a.dist - b.dist) || String(a.name).localeCompare(String(b.name)));
-  return out.map(({ systemId, name }) => ({ systemId, name }));
+  out.sort((a, b) => (a.rank - b.rank) || (a.dist - b.dist) || String(a.sortName ?? a.name).localeCompare(String(b.sortName ?? b.name)));
+  return out.map(({ systemId, name, dim, inbound }) => (dim === undefined ? { systemId, name } : { systemId, name, dim, inbound }));
 }

@@ -40,6 +40,7 @@ import { HudGalaxyLabelLayer } from './HudGalaxyLabelLayer.js'; // ARC GALAXY G1
 import { HudGalaxyRouteLayer } from './HudGalaxyRouteLayer.js'; // ARC GALAXY G2-2 — szlaki i trasy płyty (chip [T])
 import { HudGalaxyPingLayer } from './HudGalaxyPingLayer.js';   // ARC GALAXY G2-2 — ping obserwatorium (chip [R])
 import { HudGalaxyRailLayer } from './HudGalaxyRailLayer.js';   // ARC GALAXY G2-2 — szyna statków i blipy skoku warp
+import { HudGalaxySendPickerLayer } from './HudGalaxySendPickerLayer.js';   // ARC GALAXY G3-B — picker [ Wyślij ▼ ]
 import { focusActive, focusVesselIds, tuneHudAttention, resetHudAttention } from './HudAttentionLogic.js';
 import {
   HudAlertStore, alertFoeEndpoint, distanceAU, screenBearingDeg, alertContentText, tuneHudAlert, resetHudAlert,
@@ -134,7 +135,8 @@ export class HudLayer {
    *  szlaki i trasy (pod spodem), ping obserwatorium, szyna statków, nazwy z rozwinięciem i przypięciem (ostatnie — ich
    *  anti-overlap czyta przeszkody zebrane wcześniej w tej klatce: odczyt pingu, wiersze szyny, blipy). */
   _defaultGalaxySublayers() {
-    return [new HudGalaxyRouteLayer(this), new HudGalaxyPingLayer(this), new HudGalaxyRailLayer(this), new HudGalaxyLabelLayer(this)];
+    return [new HudGalaxyRouteLayer(this), new HudGalaxyPingLayer(this), new HudGalaxyRailLayer(this), new HudGalaxyLabelLayer(this),
+      new HudGalaxySendPickerLayer(this)];
   }
 
   /**
@@ -314,6 +316,20 @@ export class HudLayer {
   coversUiPoint(lx, ly) {
     if (!this._gate.shown || !this._shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return false;
     return this._activeSublayers().some((s) => s.coversUiPoint?.(lx, ly) === true);
+  }
+
+  /** ARC GALAXY G3-B — gwiazda płyty pod punktem (reguła kliku warstwy etykiet): cel menu PPM; `null` — pusta płyta / warstwa schowana. */
+  galaxyStarIdAt(lx, ly, rawX, rawY) {
+    if (!this._gate.shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return null;
+    for (const s of this._activeSublayers()) { const id = s.galaxyStarIdAt?.(lx, ly, rawX, rawY); if (id != null) return id; }
+    return null;
+  }
+
+  /** ARC GALAXY G3-B — kółko nad pickerem [ Wyślij ▼ ]: `true` — przewinięte, kamera nie dostaje kroku. */
+  sendPickerWheel(dy) {
+    if (!this._gate.shown) return false;
+    for (const s of this._activeSublayers()) { if (s.wheel?.(dy) === true) { this._wake = true; return true; } }
+    return false;
   }
 
   /** REFORMA ZAKŁADEK T2 — przycisk przypięcia pod punktem (px logiczne; `null` — brak / warstwa schowana): kursor „rączki”. */

@@ -541,7 +541,9 @@ export const GAME_CONFIG = {
     //         `VesselManager.dispatchInterstellar` odmawiają `vessel_in_reserve` (stary Stratcom dziedziczy odmowę świadomie,
     //         D-GX-12); nazwa celu w logach skoku przez kanon mgły (`warpSystemLabel`, „???”); menu PPM etykietuje per język,
     //         toast odmowy skoku niesie powód. Modele menu / podglądu / pickera: `GalaxyWarpLogic` (czyste, rysuje G3-B).
-    //   OFF = stan sprzed kroku co do bitu.
+    //         Po oglądaniu G3: wiersze pickera planują trasę; kolumna „Dokąd” rejestru przez kanon mgły; układ ze statkiem i cel skoku na
+    //         obu listach jako „???”; CTRL+klik wiersza szyny i nagłówek sekcji prawego outlinera przez bramkę G1; szyna bez nazw + chip [O] „Okręty”.
+    //   OFF = stan sprzed kroku co do bitu (poza domyślnym pokrętłem `galaxyTuning.PRESET_DIST_MUL` — kadr, nie zachowanie).
     //   ⚠ Brak klucza = OFF. Czytana przy każdym wywołaniu (przełączalna z konsoli bez F5).
     galaxyWarp:           true,
 

@@ -5,6 +5,10 @@
 //   • TRASY: własny statek w skoku warp — od punktu tranzytu do układu celu skoku (rola `primary`, krycie gasnące ku celowi
 //     — `routeAlpha`); FLOTA (≥ 2 członków na jednym przeskoku) — jedna trasa od układu ODLOTU do celu (T5); statek zaznaczony z trasą wieloprzeskokową — pozostałe przeskoki; obcy w skoku z wywiadem o STATKU
 //     `contact` / `detailed` w zasięgu obserwatorium — linia skoku w roli `foreign` (kanon Stratcomu; `rumor` — bez linii);
+//   • PODGLĄD SKOKU (G3-B, flaga `galaxyWarp`): zaznaczony statek z napędem warp + gwiazda pod kursorem (ta sama, która dostaje
+//     rozwinięcie — `hoverObjectKey`) — linia przez przeskoki i punkty w roli `primary`; odcinek poza zasięgiem baku i kadłub
+//     odrzucony przez bramkę — przygaszony i kropkowany (rola `dim` to akcent × 0,32: na płycie niewidoczna, jak przy granicy radaru
+//     w H1). Bez zaznaczenia nie ma podglądu (`warpHoverModel`). Znika razem z rozwinięciem;
 //   • chip [T] (D-GX-16: „trasy + szlaki”) — wyłączony: nic; krycie całości × rozjaśnienie chromu trybu galaktyki.
 // Flaga `galaxyLook` OFF — podwarstwa milczy (klucz stały, zero elementów).
 // ⚠ Moduł importuje się pod node (atrapa świata w keeperze): bez three i bez DOM.
@@ -18,6 +22,7 @@ import { GALAXY_K, GALAXY_FADE_MS, plateWorldOf } from './GalaxyModeLogic.js';
 import { galaxyShipRail, galaxyEnemyBlips, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
 import { buildFleetIndex, groupTransitByFleet, routeEndpoints } from './GalaxyShipMarkerLogic.js';
 import { observatoryRangeLY } from '../utils/ObservatoryRange.js';
+import { galaxyWarpOn, warpHoverModel } from './GalaxyWarpLogic.js';
 
 // Rysunek (px logiczne). Strojenie okiem — bez pinów keepera.
 export const HUD_GALAXY_ROUTES = Object.freeze({
@@ -25,6 +30,12 @@ export const HUD_GALAXY_ROUTES = Object.freeze({
   LANE_ALPHA: 0.42,
   LANE_WIDTH: 1.2,
   ROUTE_WIDTH: 1,
+  PREVIEW_WIDTH: 2,      // podgląd skoku przy najechaniu (G3-B) — grubszy od nitek etykiet, które biegną obok
+  PREVIEW_ALPHA: 1,
+  PREVIEW_OUT_ALPHA: 0.45,                // odcinek i punkt poza zasięgiem
+  PREVIEW_OUT_DASH: Object.freeze([2, 5]),
+  PREVIEW_HOP_R: 3,      // punkt przeskoku [px]
+  PREVIEW_TARGET_R: 5.5, // pierścień celu [px]
 });
 
 const q = (v) => Math.round(v * 10);
@@ -82,13 +93,18 @@ export class HudGalaxyRouteLayer {
       const rest = wr.hops.slice(Math.max(0, wr.legIndex)).map((id) => byId.get(String(id))).filter(Boolean);
       if (rest.length >= 2) hops = rest;
     }
+    // Podgląd skoku: gwiazda z rozwinięcia (ostatnia klatka warstwy etykiet) + zaznaczony statek.
+    const hoverKey = galaxyWarpOn() ? (this._hud?.hoverObjectKey?.() ?? null) : null;
+    const hoverId = typeof hoverKey === 'string' && hoverKey.startsWith('galaxy:') ? hoverKey.slice(7) : null;
+    const preview = hoverId != null ? warpHoverModel(hoverId, K) : null;
     const anchor = tr.getGalaxyAnchorLy();
     let key = `gr:2:${q(anchor.x)},${q(anchor.y)},${q(anchor.z)}`;
     for (const [a, b] of lanes) key += `|l${a.id}-${b.id}`;
     for (const r of routes) key += `|r${r.id}:${q(r.from.x)},${q(r.from.y)}:${r.to.id}:${r.enemy ? 1 : 0}`;
     if (hops) key += `|h${hops.map((s) => s.id).join(',')}`;
-    if ((lanes.length || routes.length || hops) && F.sim != null) key += `|m${Math.round(F.sim)}`;
-    this._prep = { on: true, lanes, routes, hops, anchor };
+    if (preview) key += `|p${preview.vesselId}>${preview.targetSystemId}:${preview.legs.map((l) => (l.reachable ? 1 : 0)).join('')}`;
+    if ((lanes.length || routes.length || hops || preview) && F.sim != null) key += `|m${Math.round(F.sim)}`;
+    this._prep = { on: true, lanes, routes, hops, anchor, preview };
     return key;
   }
 
@@ -106,7 +122,7 @@ export class HudGalaxyRouteLayer {
 
   collect(F, proj) {
     const P = this._prep;
-    if (!P.on || !proj) { this._last = { lanes: [], routes: [] }; return { count: 0, animating: false, lanes: [], routes: [] }; }
+    if (!P.on || !proj) { this._last = { lanes: [], routes: [], preview: null }; return { count: 0, animating: false, lanes: [], routes: [], preview: null }; }
     const M = HUD_ROUTES.CLIP_PX;
     const view = { x0: -M, y0: -M, x1: F.W + M, y1: F.H + M };
     const lanes = [], routes = [];
@@ -122,10 +138,30 @@ export class HudGalaxyRouteLayer {
       const g = this._pieces(P.hops, P.anchor, proj, view);
       if (g.pieces.length) routes.push({ id: 'hops', enemy: false, hops: true, ...g });
     }
+    const preview = P.preview ? this._collectPreview(P.preview, P.anchor, proj, view) : null;
     const tr = F.K?.threeRenderer;
     const alpha = galaxyChromeAlpha({ flightAlpha: tr?._galaxyChromeAlpha, now: F.now, fadeT0: tr?._galaxyFadeT0, fadeMs: GALAXY_FADE_MS });
-    this._last = { lanes, routes };
-    return { count: lanes.length + routes.length, animating: alpha < 1, lanes, routes, alpha };
+    this._last = { lanes, routes, preview };
+    return { count: lanes.length + routes.length + (preview ? 1 : 0), animating: alpha < 1, lanes, routes, preview, alpha };
+  }
+
+  /** Odcinki podglądu (po jednym na przeskok — każdy z własną rolą) i punkty przeskoków w px logicznych. */
+  _collectPreview(m, anchor, proj, view) {
+    const legs = [];
+    m.legs.forEach((leg, i) => {
+      const a = m.polyline[i], b = m.polyline[i + 1];
+      if (!a || !b) return;
+      const g = this._pieces([a, b], anchor, proj, view);
+      if (g.pieces.length) legs.push({ reachable: leg.reachable, ...g });
+    });
+    const hops = [];
+    m.hopPoints.forEach((h, i) => {
+      const w = plateWorldOf(h, anchor, GALAXY_K);
+      const p = proj.point(w.x, w.y, w.z);
+      // Punkt należy do odcinka, który do niego prowadzi (start — do pierwszego).
+      if (p) hops.push({ x: p.x, y: p.y, role: h.role, reachable: m.legs[Math.max(0, i - 1)]?.reachable === true });
+    });
+    return legs.length || hops.length ? { legs, hops } : null;
   }
 
   draw(ctx, F, c) {
@@ -141,9 +177,33 @@ export class HudGalaxyRouteLayer {
       strokeRoutePieces(ctx, r.pieces, r.total, r.enemy ? roles.foreign : roles.primary, 1, R.WARP_DASH, marchR, G.ROUTE_WIDTH,
         (u) => routeAlpha(u, 1) * a);
     }
+    if (c.preview) {
+      const marchO = marchOffset(F.sim, G.PREVIEW_OUT_DASH[0] + G.PREVIEW_OUT_DASH[1]);
+      for (const l of c.preview.legs) {
+        const al = (l.reachable ? G.PREVIEW_ALPHA : G.PREVIEW_OUT_ALPHA) * a;
+        strokeRoutePieces(ctx, l.pieces, l.total, roles.primary, 1, l.reachable ? R.WARP_DASH : G.PREVIEW_OUT_DASH,
+          l.reachable ? marchR : marchO, G.PREVIEW_WIDTH, () => al);
+      }
+      ctx.setLineDash([]);
+      for (const h of c.preview.hops) {
+        ctx.globalAlpha = (h.reachable ? G.PREVIEW_ALPHA : G.PREVIEW_OUT_ALPHA) * a;
+        ctx.beginPath();
+        if (h.role === 'target') {
+          ctx.strokeStyle = roles.primary; ctx.lineWidth = G.PREVIEW_WIDTH;
+          ctx.arc(h.x, h.y, G.PREVIEW_TARGET_R, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = roles.primary;
+          ctx.arc(h.x, h.y, G.PREVIEW_HOP_R, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
   }
 
   debug() {
-    return { id: 'galaxyRoutes', on: this._prep.on, lanes: this._last.lanes.length, routes: this._last.routes.length };
+    return { id: 'galaxyRoutes', on: this._prep.on, lanes: this._last.lanes.length, routes: this._last.routes.length,
+      preview: this._last.preview ? this._last.preview.legs.map((l) => (l.reachable ? 1 : 0)).join('') : null };
   }
 }

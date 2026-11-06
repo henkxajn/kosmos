@@ -22,6 +22,8 @@
 //     odległości barw (CIEDE2000) w pięciu motywach ekranu tytułowego i w `default`: „w ruchu” = `textPrimary` (jasny),
 //     nie `info` — w motywie Amber Noir `info` to złoto obok pomarańczowego „bez paliwa” (ΔE 12,6 wobec ≥ 21,8).
 //   • ZWIJANIE (D-UI-4, §7.5): układ rozwinięty wg `ctx.expanded` (domyślnie bieżący); „W drodze” — zawsze.
+//   • ARC GALAXY G3 (tryb galaktyki — pola wpisu `ctx.systems`): `inbound` > 0 — układ jest celem skoku i ma sekcję także bez statku na
+//     miejscu; `dim` — miejsce nieznane (widok przygasza nagłówek). Tryb układu tych pól nie podaje.
 //
 // Czysty: bez `window`, EventBusa, UI i i18n — kubełki niosą identyfikator (`group.id`), napisy daje widok.
 // Importy — wyłącznie kanon układu (`SystemScope`).
@@ -175,7 +177,7 @@ export function buildShipTree(ctx = {}) {
     transit = { section: TRANSIT, count: countOf(s.fleets, s.ships), rows: [...s.fleets, ...s.ships] };
   }
 
-  const order = [...known.keys()].filter((id) => sectionOf.has(id));
+  const order = [...known.keys()].filter((id) => sectionOf.has(id) || (known.get(id)?.inbound ?? 0) > 0);
   const extra = [...sectionOf.keys()].filter((id) => id !== TRANSIT && !known.has(id))
     .sort((a, b) => String(nameOf(a)).localeCompare(String(nameOf(b))));
   const systems = [];
@@ -184,13 +186,14 @@ export function buildShipTree(ctx = {}) {
     const groups = [];
     let count = 0;
     for (const g of SHIP_TYPE_GROUPS) {
-      const b = s.groups.get(g.id);
-      if (!b.fleets.length && !b.ships.length) continue;
+      const b = s?.groups.get(g.id);
+      if (!b || (!b.fleets.length && !b.ships.length)) continue;
       b.fleets.sort(byName); b.ships.sort(byRoleThenName);
       count += countOf(b.fleets, b.ships);
       groups.push({ id: g.id, rows: [...b.fleets, ...b.ships] });
     }
-    systems.push({ systemId, name: nameOf(systemId), isActive: systemId === active, expanded: expandedOf(systemId) === true, count, groups });
+    systems.push({ systemId, name: nameOf(systemId), isActive: systemId === active, expanded: expandedOf(systemId) === true, count, groups,
+      dim: known.get(systemId)?.dim === true, inbound: known.get(systemId)?.inbound ?? 0 });
   }
   return { transit, systems, index, fleetIndex, total: alive.length };
 }

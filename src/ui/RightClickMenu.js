@@ -19,6 +19,7 @@ import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatch
 import { outOfCameraFrame, fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal, CAMERA_FRAME_REASON } from '../utils/CameraFrame.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 import { t } from '../i18n/i18n.js';
+import { galaxyStarMenuEntries, runGalaxyWarpOrder } from './GalaxyWarpLogic.js';
 
 // ── Leg D (Finding 255, noga MAPY) — typy rozkazu, których cel POCHODZI Z KLIKANEGO
 //    PUNKTU, czyli z ramki KAMERY. Tylko dla nich wolno pytać „czy statek jest w tej
@@ -49,7 +50,10 @@ export class RightClickMenu {
     const um = window.KOSMOS?.uiManager;
     const selectedVesselId = um?.getSelectedVesselId?.() ?? null;
     const selectedFleetId = um?.getSelectedFleetId?.() ?? null;
-    const options = buildMenuOptions(target, { vesselId: selectedVesselId, fleetId: selectedFleetId });
+    // ARC GALAXY G3-B — gwiazda płyty: jedna pozycja skoku wg zaznaczenia (etykieta i dostępność policzone na żywo).
+    const options = target?.type === 'galaxyStar'
+      ? galaxyStarMenuEntries(target.systemId)
+      : buildMenuOptions(target, { vesselId: selectedVesselId, fleetId: selectedFleetId });
     if (options.length === 0) return;  // brak opcji → nie pokazuj
 
     const menu = document.createElement('div');
@@ -87,6 +91,19 @@ export class RightClickMenu {
       const warningPrefix = opt.warning ? '⚠ ' : '';
       item.textContent = `${warningPrefix}${opt.icon}  ${menuOptionLabel(opt)}`;
       if (opt.disabledReason) item.title = opt.disabledReason;
+      // G3-B — powód wyłączenia widoczny w samej pozycji (czytelny: krycie pozycji zostaje 1).
+      if (!opt.enabled && opt.reasonIsText && opt.disabledReason) {
+        item.style.opacity = '1';
+        item.style.color = THEME.textSecondary;
+        item.style.flexDirection = 'column';
+        item.style.alignItems = 'flex-start';
+        item.style.gap = '2px';
+        const why = document.createElement('div');
+        why.className = 'kosmos-rcm-reason';
+        why.textContent = opt.disabledReason;
+        why.style.color = THEME.textPrimary;
+        item.appendChild(why);
+      }
 
       // M3 P1.5 — universal tooltip dla disabled options. data-tooltip
       // pattern (Filip D6=α) — Tooltip.js global mouseover/mouseout listener
@@ -95,7 +112,9 @@ export class RightClickMenu {
         const reason = opt.disabledReason ?? 'requires_selection';
         // Mapuj kody na klucze tłumaczeń; fallback na surowy reason
         let tipKey;
-        if (reason === 'requires_selection' || /selection|wybierz/i.test(reason)) {
+        if (opt.reasonIsText) {
+          tipKey = null;   // gotowy tekst — `fleet.warpErrNoRoute` zawiera „zasięg” i regex niżej by go podmienił
+        } else if (reason === 'requires_selection' || /selection|wybierz/i.test(reason)) {
           tipKey = 'tooltip.menu.requiresSelection';
         } else if (/range|zasięg/i.test(reason)) {
           tipKey = 'tooltip.menu.outOfRange';
@@ -217,6 +236,12 @@ export class RightClickMenu {
     // behavior (P1.1/P1.2 console.log) bez restartu sesji.
     if (!GAME_CONFIG.FEATURES?.m3OrdersInteractive) {
       console.log('[RightClickMenu] Option (placeholder, FEATURES off):', option.id, 'target:', target);
+      return;
+    }
+
+    // ARC GALAXY G3-B — skok z menu gwiazdy płyty: rozkaz per statek, komunikat kształtu D-E2.
+    if (option.action === 'issueGalaxyWarp') {
+      runGalaxyWarpOrder({ vesselIds: option.vesselIds, targetSystemId: option.targetSystemId });
       return;
     }
 

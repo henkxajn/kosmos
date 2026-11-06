@@ -47,6 +47,7 @@ const perfNow = () => ((typeof performance !== 'undefined' && performance.now) ?
 
 export class GalaxyModeController {
   constructor() {
+    this._sendPicker = null;   // G3-B — picker [ Wyślij ▼ ]: { systemId, scroll } | null
     this._active = false;
     this._snapshot = null;                         // stan sprzed wejścia (kamera systemu) — przywrócenie 1:1
     this._selectedId = null;                       // gwiazda zaznaczona na płycie (sesja)
@@ -108,7 +109,11 @@ export class GalaxyModeController {
     this._snapshot = plan.snapshot;
     const ctx = {
       systems: world.systems, activeId, selectedId: this._selectedId,
-      brightOf: (sys) => world.reveal(sys).place === true || world.presence.get(String(sys.id))?.own === true || sys.isHome === true,
+      // ARC GALAXY G3 — jak wiersz outlinera: sam statek nie rozjaśnia gwiazdy bez nazwy (`shipFog`).
+      brightOf: (sys) => {
+        const p = world.presence.get(String(sys.id));
+        return world.reveal(sys).place === true || (world.shipFog ? p?.named === true : p?.own === true) || sys.isHome === true;
+      },
     };
     if (this.flightOn(tr)) return this._startFlyOut(reason, plan, ctx, cam, tr);
     tr.setGalaxyMode(true, ctx);
@@ -123,6 +128,7 @@ export class GalaxyModeController {
 
   exit(reason = 'key') {
     if (!this._active || this._flight) return false;
+    this.closeSendPicker();
     const K = this._K();
     const tr = K?.threeRenderer, cam = tr?._cameraController;
     if (FLIGHT_EXIT_REASONS.includes(reason) && this._snapshot?.camera && this.flightOn(tr)) {
@@ -145,8 +151,38 @@ export class GalaxyModeController {
     const k = systemId == null ? null : String(systemId);
     if (k === this._selectedId) return false;
     this._selectedId = k;
+    this.closeSendPicker();                 // picker należy do przypięcia gwiazdy
     this._K()?.threeRenderer?.setGalaxySelected?.(k);
     EventBus.emit('galaxy:selectionChanged', { systemId: k });
+    this._dirty();
+    return true;
+  }
+
+  // ARC GALAXY G3-B — picker [ Wyślij ▼ ] przypiętej gwiazdy: `{ systemId, scroll }` albo `null`.
+  get sendPicker() { return this._sendPicker ?? null; }
+
+  toggleSendPicker(systemId) {
+    const k = systemId == null ? null : String(systemId);
+    if (k == null || this._sendPicker?.systemId === k) { this.closeSendPicker(); return false; }
+    this._sendPicker = { systemId: k, scroll: 0 };
+    this._dirty();
+    return true;
+  }
+
+  /** @returns {boolean} czy picker był otwarty (Esc zdejmuje go przed przypięciem). */
+  closeSendPicker() {
+    if (!this._sendPicker) return false;
+    this._sendPicker = null;
+    this._dirty();
+    return true;
+  }
+
+  /** Przewinięcie o `delta` wierszy; dół listy przycina rysujący (zna liczbę wierszy). */
+  scrollSendPicker(delta, maxScroll = Infinity) {
+    if (!this._sendPicker) return false;
+    const next = Math.min(maxScroll, Math.max(0, this._sendPicker.scroll + delta));
+    if (next === this._sendPicker.scroll) return false;
+    this._sendPicker.scroll = next;
     this._dirty();
     return true;
   }
@@ -241,6 +277,7 @@ export class GalaxyModeController {
    */
   onWheel(e, cam) {
     if (this._flight) return true;
+    if (this._sendPicker && this._K()?.hudLayer?.sendPickerWheel?.(e?.deltaY ?? 0) === true) return true;   // G3-B — kółko nad pickerem
     if (!galaxyLookOn() || !cam) return false;
     const K = this._K();
     if (!K?.civMode) return false;

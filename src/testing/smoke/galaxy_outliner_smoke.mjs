@@ -4,8 +4,9 @@
 //   O0  API `GalaxyOutlinerLogic`
 //   O1  SEDNO: lista galaktyki = `reveal.name` kanonu (`SystemRevealWorld`) ∨ własna obecność — na prawdziwej galaktyce
 //       z generatora (72 układy, różne szczeble wywiadu, skany, zbadane)
-//   O2  przygaszenie + ○: miejsce nieznane (`!reveal.place` ∧ brak obecności); obecność w niezbadanym układzie (zapis
-//       sprzed 186, Findingi 480 / 489) — na liście i nieprzygaszona
+//   O2  przygaszenie + ○: miejsce nieznane (`!reveal.place` ∧ brak obecności); obecność TRWAŁA w niezbadanym układzie (zapis
+//       sprzed 186, Findingi 480 / 489) — na liście i nieprzygaszona. ⚠ Połowa „sam statek” O2c ŚWIADOMIE ODWRÓCONA po G3 (decyzja
+//       właściciela, F3): statek nie daje nazwy — wiersz „???”, przygaszony; pinuje ją O11
 //   O3  kolejność D-UI-2 rozszerzona: dom → układy z kolonią z POP → placówka / stacja → reszta wg odległości
 //   O4  linia informacji i właściciel z kanonu: odległość ly · klasa widmowa · liczba kolonii; `fleet.stratcomEmpire*`
 //       (imperium przy `contact`, obce przy `rumor`, nieznany bez wywiadu, Twoje Imperium przy własnej kolonii)
@@ -19,6 +20,8 @@
 //   O9  SEDNO: drzewo trybu układu bez zmian — model z flagą ON = [korzeń] + model z flagą OFF (co do bajtu JSON);
 //       flaga OFF — brak korzenia; wiersze układów w tej samej kolejności
 //   O10 rozwinięcie: domyślnie gwiazda zaznaczona; jawny stan użytkownika tylko tam, gdzie różni się od domyślnego
+//   O11 po G3 (F3, reguła D-UI-3 w trybie galaktyki): układ ze statkiem gracza albo cel jego skoku na liście także bez `reveal.name` —
+//       „???” + przygaszenie; prawdziwa nazwa nigdzie w rysunku; wejście wg bramki G1 (cel skoku jej nie otwiera); KONTROLA: flaga OFF jak w G1
 // Uruchom: node src/testing/smoke/galaxy_outliner_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import EventBus      from '../../core/EventBus.js';
@@ -175,8 +178,8 @@ const L = listNow();
   ok(!ids.includes('sys_unk') && !ids.includes('sys_aiD'), 'O2a układ bez nazwy i bez obecności — poza listą (także imperium bez wywiadu)');
   ok(rowOf(L, 'sys_aiB')?.dim === true && rowOf(L, 'sys_aiC')?.dim === true && rowOf(L, 'sys_scan')?.dim === false && rowOf(L, 'sys_aiA')?.dim === false,
     'O2b przygaszone: nazwa z `rumor` / `contact` bez miejsca; jasne: skan obserwatorium, zbadany');
-  ok(rowOf(L, 'sys_out')?.dim === false && rowOf(L, 'sys_out')?.placeKnown === true && rowOf(L, 'sys_ship')?.dim === false,
-    'O2c własna placówka i własny statek w NIEZBADANYM układzie — na liście, jasne (Findingi 480 / 489)');
+  ok(rowOf(L, 'sys_out')?.dim === false && rowOf(L, 'sys_out')?.placeKnown === true && rowOf(L, 'sys_out')?.label === 'Pollux',
+    'O2c własna placówka w NIEZBADANYM układzie — na liście, jasna, z nazwą (Finding 480; połowa „sam statek” — O11)');
 
   header('O3  kolejność D-UI-2 rozszerzona');
   ok(ids.join(' ') === 'sys_home sys_col sys_out sys_sta sys_scan sys_ship sys_aiA sys_aiB sys_aiC',
@@ -317,6 +320,72 @@ header('O10 rozwinięcie — domyślnie zaznaczona gwiazda');
   ok(lo?._galaxyExpanded?.has?.('sys_col') === false, 'O10c powrót do domyślnego — bez jawnego stanu (D-UI-4)');
   EventBus.emit('galaxy:selectionChanged', { systemId: 'sys_aiA' });
   ok(lo?._revealKey === 'gsys:sys_aiA', 'O10d zaznaczenie gwiazdy na płycie — odsłonięcie wiersza (przewinięcie listy)');
+}
+
+// ═══ O11 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+header('O11 statek i cel skoku listują układ bez nazwy (F3)');
+{
+  const fWarp = GAME_CONFIG.FEATURES.galaxyWarp;
+  GAME_CONFIG.FEATURES.galaxyWarp = true;   // sekcja pinuje ścieżkę ON niezależnie od domyślnej flagi (przebieg całości z OFF)
+  GM.isActive = true; GM.selectedSystemId = null;
+  const r0 = rowOf(listNow(), 'sys_ship');
+  ok(r0?.known === false && r0?.label === '???' && r0?.dim === true && r0?.placeKnown === false && r0?.name === 'Mizar',
+    'O11a SEDNO: sam statek w niezbadanym układzie — wiersz „???”, przygaszony (świadomie odwrócone wobec G1)');
+  ok(r0?.enterable === true && r0?.own === true, 'O11b wejście wg bramki G1: wygenerowany ∧ obecność — można wejść');
+  const lo = newLO();
+  const drawn = drawLO(lo);
+  const mark = drawn.find((c) => c.s === '???');
+  ok(!!mark && mark.fillStyle === THEME.textDim && texts(drawn).includes(GOL?.UNKNOWN_PLACE_GLYPH ?? '○') && !texts(drawn).includes('Mizar'),
+    'O11c rysunek: „???” w `textDim`, znacznik ○, prawdziwej nazwy nie ma');
+  const za = zone(lo, 'gsys', 'sys_ship');
+  ops.length = 0; hit(lo, za);
+  ok(JSON.stringify(ops) === '[["select","sys_ship"]]', 'O11d klik wiersza „???” — zaznaczenie jak każdy wiersz');
+  drawLO(lo); ops.length = 0; hit(lo, zone(lo, 'gsys', 'sys_ship'));
+  ok(JSON.stringify(ops) === '[["enterSystem","sys_ship"]]', 'O11e 2. klik — wejście przez kontroler (bramka G1)');
+  GM.selectedSystemId = null;
+  K.activeSystemId = 'sys_ship';
+  const back = call(() => newLO()._model(K, { colonies: COLONIES, groundUnits: [] }))?.items?.[0];
+  ok(back?.kind === 'galaxyBack' && back?.name === '???', 'O11p wiersz powrotu „← Układ: …” przy aktywnym układzie bez nazwy — „???”');
+  K.activeSystemId = 'sys_home';
+
+  // Cel skoku: układ bez nazwy, bez statku na miejscu.
+  const inTransit = { id: 'v_t', name: 'Skoczek', systemId: null, position: { state: 'orbiting', dockedAt: null },
+    mission: { type: 'interstellar_jump', phase: 'warp_transit', toSystemId: 'sys_unk' } };
+  VESSELS.push(inTransit);
+  const r1 = rowOf(listNow(), 'sys_unk');
+  ok(r1?.label === '???' && r1?.dim === true && r1?.known === false, 'O11f SEDNO: cel skoku bez nazwy — na liście jako „???”, przygaszony');
+  ok(r1?.enterable === false && r1?.own === false, 'O11g cel skoku nie otwiera wejścia: nie ma tam obecności');
+  generated.add('sys_unk');
+  ok(rowOf(listNow(), 'sys_unk')?.enterable === false, 'O11h nawet wygenerowany: bramka G1 pyta o obecność, nie o cel skoku');
+  generated.delete('sys_unk');
+  ok(rowOf(listNow(), 'sys_scan')?.label === 'Altair' && rowOf(listNow(), 'sys_col')?.label === 'Kochab', 'O11i KONTROLA: układy z nazwą — nazwa w etykiecie wiersza');
+  VESSELS.pop();
+  ok(!rowOf(listNow(), 'sys_unk'), 'O11j KONTROLA: statek w tranzycie zniknął — cel znów poza listą (O2a nie jest jałowe)');
+
+  // Koniec trasy wieloprzeskokowej też jest celem.
+  VESSELS.push({ id: 'v_r', name: 'Trasa', systemId: 'sys_col', position: { state: 'orbiting', dockedAt: 'C1' }, mission: null,
+    warpRoute: { hops: ['sys_col', 'sys_scan', 'sys_aiD'], legIndex: 0 } });
+  ok(rowOf(listNow(), 'sys_aiD')?.label === '???', 'O11k koniec trasy wieloprzeskokowej — cel skoku (imperium bez wywiadu: tylko „???”)');
+  VESSELS.pop();
+
+  // Obecność trwała daje nazwę; statek obok niej niczego nie zmienia.
+  const pres = call(() => GOL.systemPresenceIndex({ colonies: [], vessels: [{ id: 'a', systemId: 'x' }, { id: 'b', systemId: null,
+    mission: { type: 'interstellar_jump', phase: 'warp_transit', toSystemId: 'y' } }], groundUnits: [{ planetId: 'g1' }],
+    systemOfBody: () => 'z' }));
+  const ex = pres?.get?.('x'), ey = pres?.get?.('y'), ez = pres?.get?.('z');
+  ok(ex?.ship === true && ex?.own === true && ex?.named === false, 'O11l indeks: statek — obecność, ale nie nazwa');
+  ok(ey?.inbound === 1 && ey?.own === false && ey?.ship === false, 'O11m indeks: cel skoku — licznik w drodze, bez obecności');
+  ok(ez?.troops === true && ez?.named === true && ez?.own === true, 'O11n indeks: wojska — obecność trwała (dają nazwę)');
+
+  // Flaga OFF — stan sprzed kroku.
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  VESSELS.push(inTransit);
+  const off = listNow();
+  ok(rowOf(off, 'sys_ship')?.label === 'Mizar' && rowOf(off, 'sys_ship')?.dim === false && !rowOf(off, 'sys_unk'),
+    'O11o KONTROLA OFF: statek daje nazwę (G1), cel skoku poza listą — przyrząd widzi różnicę');
+  VESSELS.pop();
+  GAME_CONFIG.FEATURES.galaxyWarp = fWarp;
+  GM.isActive = false;
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

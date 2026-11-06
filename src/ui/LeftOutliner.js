@@ -38,7 +38,7 @@ import EntityManager       from '../core/EntityManager.js';
 import { t, getName, getShort, getLocale } from '../i18n/i18n.js';
 import { fmtDec }          from './NumberFormatLogic.js';
 import { buildGalaxySystemList, galaxyWorldContext, UNKNOWN_PLACE_GLYPH } from './GalaxyOutlinerLogic.js';   // ARC GALAXY G1
-import { galaxyOwnerText, galaxyInfoText } from './GalaxyChromeLogic.js';   // ARC GALAXY G2 — anty-lustro (ta sama treść co przypięcie)
+import { galaxyOwnerText, galaxyInfoText, UNNAMED_SYSTEM } from './GalaxyChromeLogic.js';   // ARC GALAXY G2 — anty-lustro (ta sama treść co przypięcie)
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { isPlayerColony }  from '../utils/ColonyOwnership.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';   // ARKUSZ UI U3-0 — statki gracza dla widoczności układów (489)
@@ -208,7 +208,7 @@ export class LeftOutliner extends OutlinerColumn {
     const list = buildGalaxySystemList({ ...world, expanded: (id) => this._galaxyExpandedOf(id, sel) });
     const active = String(world.activeSystemId);
     const activeRow = list.byId.get(active);
-    const activeName = activeRow?.name ?? EntityManager.getStarOfSystem?.(active)?.name ?? active;
+    const activeName = activeRow?.label ?? (world.shipFog ? UNNAMED_SYSTEM : (EntityManager.getStarOfSystem?.(active)?.name ?? active));
     const loc = getLocale();
     const items = [{ kind: 'galaxyBack', key: 'galaxyBack', h: SYS_H, name: activeName }];
     for (const r of list.rows) {
@@ -290,7 +290,7 @@ export class LeftOutliner extends OutlinerColumn {
     }
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = r.dim ? THEME.textDim : r.isActive ? THEME.accent : THEME.textPrimary;
-    ctx.fillText(this._fit(ctx, r.name, g.x + g.w - PAD - tx), tx, iy + 13);
+    ctx.fillText(this._fit(ctx, r.label, g.x + g.w - PAD - tx), tx, iy + 13);
     this._shadow(ctx, false);
     this._clickTargets.push({ type: 'gsys', systemId: r.systemId, enterable: r.enterable, x: g.x, y: iy, w: g.w, h: SYS_H,
       arrowX: g.x + PAD + ARROW_W });

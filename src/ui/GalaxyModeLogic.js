@@ -99,7 +99,7 @@ export function galaxyFitDistLy(systems) {
 export function galaxyCameraConfig(systems, activeId, K = GALAXY_K) {
   const anchor = galaxyAnchorLy(systems, activeId);
   const minDist = GALAXY_CAMERA.FLOOR_LY * K, maxDist = GALAXY_CAMERA.MAX_LY * K;
-  // Mnożnik presetu (pokrętło `PRESET_DIST_MUL`, czytane przy każdym Home) — 1 = podpisany kadr Stratcomu ≈ 57 ly.
+  // Mnożnik presetu (pokrętło `PRESET_DIST_MUL`, czytane przy każdym Home); wartość niedodatnia — 1 = kadr Stratcomu ≈ 57 ly.
   const mul = Number(LIVE_GALAXY.PRESET_DIST_MUL) > 0 ? Number(LIVE_GALAXY.PRESET_DIST_MUL) : 1;
   const presetDist = clamp(galaxyFitDistLy(systems) * K * mul, minDist, maxDist);
   return {
@@ -245,7 +245,7 @@ export const LIVE_GALAXY = {
   HALO_SIZE_MUL: 3.4,    // halo domu / zaznaczonej — rozmiar × rozmiar gwiazdy
   HALO_I: 0.55,          // halo — intensywność
   PAN_GRAB: 1,           // 1 — przeciąganie: zawartość jedzie za kursorem; 0 — odczucie Stratcomu (czyta kontroler kamery)
-  PRESET_DIST_MUL: 1,    // mnożnik dystansu presetu (Home): 1 = fitDist Stratcomu ≈ 57 ly (D-GX-3); < 1 — bliżej (Stratcom ma FOV 50°, gra 55°)
+  PRESET_DIST_MUL: 0.8,  // mnożnik dystansu presetu (Home i wylot): 0,8 — decyzja właściciela po G3 (≈ 46 ly); 1 = fitDist Stratcomu ≈ 57 ly (D-GX-3)
   // ── ARC GALAXY G2 (flaga `galaxyLook`) — każde pole ma czytelnika (V-266) ──
   // G2-1 lot (czyta `GalaxyModeController`): FLIGHT 0 = twarde cięcie G1 (jak przy `prefers-reduced-motion`).
   FLIGHT: 1,             // 1 — wylot / wlot lotem kamery; 0 — twarde cięcie z rozjaśnieniem 0,25 s (G1)

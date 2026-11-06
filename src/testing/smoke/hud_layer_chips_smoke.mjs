@@ -6,6 +6,7 @@
 // Wyłącznie LOGIKA (protokół od H2, HUD_PLAN §4.0) — stan, klawisze, zgodność wstecz, skutki warstw; bez pinów na stałe
 // rysunku. Moduł powstaje w paczce B — import dynamiczny (brak modułu = pin pada, suita się nie przerywa).
 //   C0  API, kolejność warstw i klawiszy
+//   C8  po G3 (F5): w trybie galaktyki miejsce [O] ma chip „Okręty” (`hudLayers.ships`, domyślnie wyłączony), klawisz 9; OFF — miejsce puste jak w G2
 //   C1  stan w `uiPrefs.hudLayers` (brak = wszystkie ON); zgodność wstecz: dawny `hudRadarVisible` czytany jako [R];
 //       zapis [R] — wyłącznie `hudLayers.radar` (dawny klucz usunięty)
 //   C2  klawisze Digit6–9 = kolejność chipów; tylko z fokusem na mapie (tryb cywilizacji, bez overlayu / okna DOM /
@@ -82,6 +83,13 @@ header('C1  stan warstw — `uiPrefs.hudLayers`, zgodność wstecz');
   const r1 = call('toggleHudLayer', q, 'labels'), r2 = call('toggleHudLayer', q, 'labels');
   ok(r1 === false && r2 === true && q.hudLayers?.labels === true, 'C1e: przełączenie [E] — wył. → wł.');
   ok(call('toggleHudLayer', q, 'trade') === null && Object.keys(q.hudLayers).join(',') === 'labels', 'C1f: nieznana warstwa — bez zapisu');
+  // ARC GALAXY G3 (F5): chip „Okręty” — ten sam magazyn, domyślnie WYŁĄCZONY (inaczej niż cztery warstwy mapy układu).
+  ok(call('readHudLayers', {})?.ships === false && call('readHudLayers', null)?.ships === false, 'C1g: `ships` — brak stanu = wyłączone (stary zapis: szyna bez nazw)');
+  const sp = {};
+  const s1 = call('toggleHudLayer', sp, 'ships'), s2 = call('toggleHudLayer', sp, 'ships');
+  ok(s1 === true && s2 === false && sp.hudLayers?.ships === false && Object.keys(sp.hudLayers).join(',') === 'ships', 'C1h: przełączenie „Okrętów” w `uiPrefs.hudLayers`');
+  ok(call('readHudLayers', sp)?.orbits === true && call('readHudLayers', { hudLayers: { orbits: false } })?.ships === false, 'C1i: orbity i okręty niezależne');
+  ok(CL?.HUD_LAYER_KEY_LABEL?.ships === '9', 'C1j: klawisz chipu „Okręty” — 9');
 }
 
 // ═══ C2 ══════════════════════════════════════════════════════════════════════
@@ -371,6 +379,42 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   const tEn = en.c._calls.filter((x) => x.op === 'fillText').map((x) => x.args[0]);
   ok(['S', 'L', 'O'].every((L) => tEn.includes(br(L))) && (tEn.includes(br('R')) || tEn.includes('R')), `C7k: EN — ${['S', 'R', 'L', 'O'].map(br).join(' ')} (D-HUD-13)`);
   setLocale('pl');
+  // ARC GALAXY G3 (F5) — prawdziwy pas w trybie galaktyki: chip „Okręty” na miejscu [O], klik przełącza `hudLayers.ships`, podpowiedź.
+  K.uiPrefs = {};
+  const gmKeep = K.galaxyMode;
+  K.galaxyMode = { isActive: true };
+  const flags0 = { v: GAME_CONFIG.FEATURES.galaxyView, l: GAME_CONFIG.FEATURES.galaxyLook, w: GAME_CONFIG.FEATURES.galaxyWarp };
+  GAME_CONFIG.FEATURES.galaxyView = true; GAME_CONFIG.FEATURES.galaxyLook = true; GAME_CONFIG.FEATURES.galaxyWarp = true;
+  const g = draw({ left: 150 });
+  const gc = g.b.getLayerChips?.() ?? [];
+  const gs = gc[3] ?? { x: -1, y: -1, w: 0, h: 0 };
+  ok(gc.map((c) => c.layer).join(',') === 'radar,routes,labels,ships' && Math.abs(gs.x - chips[3].x) < 1e-9 && gs.w === chips[3].w,
+    'C8a: tryb galaktyki — chip „Okręty” na miejscu [O], ta sama szerokość');
+  const tShip = g.c._calls.filter((x) => x.op === 'fillText').map((x) => x.args[0]);
+  ok(tShip.includes(br('O')), 'C8b: litera „O”');
+  const strikes0 = g.c._calls.filter((x) => x.op === 'stroke').length;
+  ok(g.b.handleClick(gs.x + gs.w / 2, gs.y + gs.h / 2) === true && K.uiPrefs.hudLayers?.ships === true && K.uiPrefs.hudLayers?.orbits === undefined,
+    'C8c SEDNO: klik — `hudLayers.ships` włączone, orbity nietknięte');
+  const g2 = draw({ left: 150 });
+  ok(g2.c._calls.filter((x) => x.op === 'stroke').length === strikes0 - 1, 'C8d: domyślnie przekreślony (wyłączony), po kliku bez kreski');
+  g2.b.handleMouseMove(gs.x + 2, gs.y + 2);
+  const tipS = recCtx(); g2.b.draw(tipS, W, H, TS, { left: 150 });
+  const tipSt = tipS._calls.filter((x) => x.op === 'fillText').map((x) => x.args[0]).find((s) => String(s).includes(t('hudChips.nameShips')));
+  ok(tipSt === t('hudChips.tip', t('hudChips.nameShips'), '9') && String(tipSt).includes('Okręty'), `C8e: podpowiedź PL („${tipSt}”)`);
+  setLocale('en');
+  ok(t('hudChips.nameShips') === 'Ships' && t('hudChips.ships') === 'O', 'C8f: EN „Ships”, litera O');
+  setLocale('pl');
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  const gOff = draw({ left: 150 });
+  ok((gOff.b.getLayerChips?.() ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels', 'C8g KONTROLA OFF: miejsce [O] puste jak w G2');
+  GAME_CONFIG.FEATURES.galaxyView = flags0.v; GAME_CONFIG.FEATURES.galaxyLook = flags0.l; GAME_CONFIG.FEATURES.galaxyWarp = flags0.w;
+  K.galaxyMode = gmKeep;
+  // Klawisz 9 w trybie galaktyki — pin źródłowy (GameScene nie importuje się pod node).
+  const gsSrc = readFileSync(new URL('../../scenes/GameScene.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const i9 = gsSrc.indexOf("case 'Digit6':");
+  const blk9 = i9 < 0 ? '' : gsSrc.slice(i9, gsSrc.indexOf('break;', i9) + 6);
+  ok(/shipsNine = galaxyNine && GAME_CONFIG\.FEATURES\?\.galaxyWarp === true/.test(blk9) && /if \(shipsNine\) toggleHudLayer\(window\.KOSMOS\.uiPrefs, GALAXY_SHIPS_LAYER\)/.test(blk9)
+    && /\(!galaxyNine \|\| shipsNine\)/.test(blk9), 'C8h: klawisz 9 w trybie galaktyki przełącza „Okręty”; bez flagi — bez skutku jak w G2');
   K.uiPrefs = {}; K.combatHud = null; delete K.deepSpaceCombatSystem;
 }
 

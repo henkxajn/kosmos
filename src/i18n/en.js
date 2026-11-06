@@ -2557,6 +2557,7 @@ export default {
   'galaxyPin.send': 'Send ▼',
   'galaxyPin.noBodyData': 'scan: no body data',
   'galaxyMenu.warpTo': 'Warp to {0}',
+  'galaxyMenu.fleetWaitsG4': 'fleet — G4',
   'leftOutliner.keyHint': '“,” left panel · “.” right panel · “B” both',
   // ARKUSZ UI U3-2 — right outliner (ships): header, "In transit" section (D-UI-8, §7.3), type buckets (D-UI-6, §7.1)
   'rightOutliner.ships': 'SHIPS [{0}]',
@@ -3756,6 +3757,8 @@ export default {
   'hudChips.nameRoutes': 'Routes',
   'hudChips.nameLabels': 'Labels',
   'hudChips.nameOrbits': 'Orbits',
+  'hudChips.ships':      'O',
+  'hudChips.nameShips':  'Ships',
   'hudChips.tip':        '{0} — key {1}',
   'hudAlert.contact':    'contact',
 

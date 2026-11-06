@@ -11,6 +11,8 @@
 // T6  słownik odmowy: parzystość z dawną tabelą `_warpErrLabel` (przepisaną tu dosłownie) w obu językach, także gałęzie domyślne
 // T7  toast odmowy niesie powód (Finding 594) — prawdziwe `_handleHit`; KONTROLA: OFF = sam nagłówek / cisza pickera
 // T8  menu PPM per język (Finding 592) — prawdziwe `RightClickMenu.show`; dane pozycji nietknięte; powód wyłączenia przez słownik
+// T9  picker planuje trasę (po G3, F1): wiersz, który odmówiłby przy kliku, jest odmówiony przed klikiem; zgodność z prawdziwym rozkazem; pamięć planu
+// T10 Finding 602 (po G3, F2): kolumna „Dokąd” rejestru K3 przez kanon mgły — `buildShipEntry` i `buildRegistryRows`; KONTROLA: OFF niesie nazwę
 //
 // ⚠ `UIManager` nie importuje się pod node — wpięcie linii Dziennika to pin źródłowy (T3e); logika (`launchTargetLabel`) wykonaniem.
 
@@ -29,8 +31,10 @@ import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { RightClickMenu } from '../../ui/RightClickMenu.js';
 import { buildMenuOptions, menuOptionLabel, MENU_OPTIONS_BY_TARGET } from '../../data/RightClickMenuOptions.js';
 import {
-  warpMenuOption, warpPreview, sendPickerRows, refusalText, warpErrLabel, warpPlanOptions, warpSystemLabel,
+  warpMenuOption, warpPreview, sendPickerRows, sendPickerRowLines, refusalText, warpErrLabel, warpPlanOptions, warpSystemLabel,
 } from '../../ui/GalaxyWarpLogic.js';
+import { buildShipEntry } from '../../ui/FleetPictureLogic.js';
+import { buildRegistryRows } from '../../ui/FleetRegistryLogic.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, label) => { if (cond) { pass++; console.log('  PASS  ' + label); } else { fail++; console.log('  FAIL  ' + label); } };
@@ -410,6 +414,80 @@ header('T8 menu PPM per język');
   ok(reasonNow() === 'Najpierw wybierz statek', 'KONTROLA OFF: literał jak przed krokiem');
   GAME_CONFIG.FEATURES.galaxyWarp = true;
   setLocale(prev);
+}
+
+// ── T9 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+header('T9 picker planuje trasę: odmowa przed klikiem');
+{
+  const fuel = (current) => ({ current, max: 10, consumption: 0.5, fuelType: 'warp_cores' });
+  const fine = mk({ name: 'Fine' });
+  const low = mk({ name: 'Low', warpFuel: fuel(0.2) });
+  const lowStored = mk({ name: 'LowStored', warpFuel: fuel(0.2), serviceState: 'stored' });
+  const rows = sendPickerRows([low, lowStored, fine], 'B', canOrder);
+  const by = Object.fromEntries(rows.map(r => [r.name, r]));
+  ok(by.Fine?.ok === true && by.Fine.reason === null, 'pełny bak: wiersz zdolny');
+  ok(by.Low?.ok === false && by.Low.reason === 'insufficient_warp_fuel' && by.Low.reasonText === refusalText('insufficient_warp_fuel'),
+    'SEDNO: za mało rdzeni: odmówiony z powodem PRZED klikiem');
+  ok(sendPickerRowLines(by.Low).sub === refusalText('insufficient_warp_fuel') && sendPickerRowLines(by.Fine).sub === 'Dom',
+    'druga linia wiersza: powód odmowy; KONTROLA: wiersz zdolny — położenie statku');
+  ok(by.LowStored?.reason === 'vessel_in_reserve', 'priorytet jak w menu: bramka statku > trasa');
+  ok(rows[0].name === 'Fine', 'odmówiony schodzi pod zdolne');
+  const far = sendPickerRows([mk({ name: 'NoRoute' })], 'FAR', canOrder)[0];
+  ok(far?.ok === false && far.reason === 'no_route' && far.reasonText === refusalText('no_route'), 'cel poza zasięgiem każdego skoku: no_route');
+
+  // Zgodność z rozkazem: każdy wiersz mówi to samo, co prawdziwe `beginJourney` temu samemu statkowi.
+  const table = [
+    ['pełny bak', {}, 'B'], ['za mało rdzeni', { warpFuel: fuel(0.2) }, 'B'], ['trasa dwuskokowa', {}, 'D'], ['paliwo na jeden skok z dwóch', { warpFuel: fuel(3) }, 'D'],
+    ['brak trasy', {}, 'FAR'], ['rezerwa', { serviceState: 'stored' }, 'B'], ['ten sam układ', {}, 'sys_home'],
+    ['poza domem', { systemId: 'B', position: { x: 0, y: 0, state: 'orbiting', dockedAt: 'x' } }, 'D'],
+  ];
+  const bad = [];
+  for (const [label, over, target] of table) {
+    const v = mk(over);
+    const row = sendPickerRows([v], target, canOrder)[0];
+    const res = wrs.beginJourney(v.id, target);
+    if (row.ok !== (res.ok === true)) bad.push(`${label}: wiersz ${row.ok}/${row.reason}, rozkaz ${res.ok}/${res.reason}`);
+  }
+  ok(bad.length === 0 && table.some(([, o]) => o.warpFuel), `SEDNO: wiersz ≡ prawdziwy rozkaz w ${table.length} przypadkach (${bad.join(' | ') || 'zgodne'})`);
+
+  // Pamięć planu: picker pyta co klatkę, planer biegnie raz na stan statku; zmiana baku unieważnia.
+  let plans = 0;
+  const spy = (...a) => { plans++; return planWarpRoute(...a); };
+  const memo = mk({ name: 'Memo', warpFuel: fuel(0.2) });
+  const askMemo = () => sendPickerRows([memo], 'B', canOrder, { planWarpRoute: spy })[0];
+  const r1 = askMemo();
+  askMemo(); askMemo();
+  ok(plans === 1 && r1.ok === false, `planer raz na stan statku, nie co klatkę (wywołania: ${plans})`);
+  memo.warpFuel.current = 10;
+  const r2 = askMemo();
+  ok(plans === 2 && r2.ok === true, 'zmiana baku: nowy plan, wiersz odzyskuje zdolność');
+  const otherGalaxy = [...SYS];
+  sendPickerRows([memo], 'B', canOrder, { planWarpRoute: spy, systems: otherGalaxy });
+  ok(plans === 3, 'inna tablica układów: nowy plan');
+}
+
+// ── T10 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+header('T10 Finding 602: kolumna „Dokąd” przez kanon mgły');
+{
+  const C = SYS.find(s => s.id === 'C');
+  C.explored = false;
+  const v = mk({ name: 'Skoczek' });
+  ok(wrs.beginJourney(v.id, 'C').ok === true && v.mission?.type === 'interstellar_jump' && v.mission.targetName === 'Cygni',
+    'KONTROLA fixture: statek w skoku, `mission.targetName` = prawdziwa nazwa');
+  const rowOf = () => buildRegistryRows([v], { systemName: (id) => id }).find(r => r.id === v.id);
+  ok(buildShipEntry(v, {}).toName === '???' && rowOf()?.toName === '???', 'SEDNO: niezbadany cel w trakcie skoku — „???” we wpisie i w wierszu K3');
+  ok(!JSON.stringify(rowOf()).includes('Cygni'), 'wiersz K3 nigdzie nie niesie prawdziwej nazwy');
+  scans.C = { tier: 1 };
+  ok(buildShipEntry(v, {}).toName === 'Cygni', 'po skanie nazwa wraca');
+  delete scans.C;
+  C.explored = true;
+  ok(buildShipEntry(v, {}).toName === 'Cygni' && rowOf()?.toName === 'Cygni', 'układ zbadany: nazwa');
+  C.explored = false;
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  ok(buildShipEntry(v, {}).toName === 'Cygni', 'KONTROLA OFF: `mission.targetName` jak przed krokiem — przyrząd widzi różnicę');
+  GAME_CONFIG.FEATURES.galaxyWarp = true;
+  const other = mk({ name: 'Inna', mission: { type: 'transport', targetId: 'p1', targetName: 'Kolonia X', phase: 'transit' } });
+  ok(buildShipEntry(other, {}).toName === 'Kolonia X', 'misje poza skokiem: nazwa z misji, bez kanonu');
 }
 
 console.log(`\ngalaxy_warp_logic: ${pass} PASS, ${fail} FAIL`);

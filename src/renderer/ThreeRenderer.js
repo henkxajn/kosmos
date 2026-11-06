@@ -1043,6 +1043,19 @@ export class ThreeRenderer {
     return pickGalaxyStar(pts, rawX / s, rawY / s, GALAXY_PICK_HALF_PX);
   }
 
+  /** ARC GALAXY G3-B — punkt okna (px CSS) gwiazdy płyty albo `null` (za kamerą): przyrządy bramki (`KOSMOS.debug.galaxyWarpMenuAt`). */
+  galaxyStarScreen(systemId) {
+    if (!this._galaxyActive || !this._galaxyPlate) return null;
+    const view = this.getHudView();
+    if (!view) return null;
+    const K = window.KOSMOS;
+    const s = K?.uiScale > 0 ? K.uiScale : Math.min(view.cssW / 1280, view.cssH / 720);
+    const proj = makeHudProjector({ ...view, uiScale: s });
+    const st = proj ? this._galaxyPlate.starsWorld().find((q) => String(q.id) === String(systemId)) : null;
+    const p = st ? proj.point(st.x, st.y, st.z) : null;
+    return p ? { x: p.x * s, y: p.y * s } : null;
+  }
+
   // Klik w trybie galaktyki: gwiazda (zaznaczenie / dwuklik = wejście) albo pustka (odznaczenie) — decyduje kontroler.
   _galaxyClick(sx, sy) {
     const id = this.galaxyStarAt(sx, sy);

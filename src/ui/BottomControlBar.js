@@ -33,7 +33,7 @@ import { resolveHudRoles } from './HudPalette.js';
 import { layoutMapModePill, mapModePillAt, mapPillSegmentText, mapPillSegmentWidth } from './GalaxyModeLogic.js';
 import {
   HUD_CHIPS, HUD_LAYER_KEYS, HUD_LAYER_KEY_LABEL, readHudLayers, toggleHudLayer, chipText, chipWidth, layoutLayerChips, chipAt,
-  chipLayersFor,
+  chipsForMode,
 } from './HudLayerChipsLogic.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import EventBus from '../core/EventBus.js';
@@ -142,7 +142,8 @@ export class BottomControlBar {
   // Litery chipów (i18n) i nazwy warstw (podpowiedź).
   _chipLetter(layer) { return t(`hudChips.${layer}`); }
   _chipName(layer) {
-    return t({ radar: 'hudChips.nameRadar', routes: 'hudChips.nameRoutes', labels: 'hudChips.nameLabels', orbits: 'hudChips.nameOrbits' }[layer]);
+    return t({ radar: 'hudChips.nameRadar', routes: 'hudChips.nameRoutes', labels: 'hudChips.nameLabels', orbits: 'hudChips.nameOrbits',
+      ships: 'hudChips.nameShips' }[layer]);
   }
 
   // Paczka B — rząd chipów warstw od lewego końca pasa (`bgLeft`) do klastra po prawej (`limitX`).
@@ -153,11 +154,11 @@ export class BottomControlBar {
     const widths = HUD_LAYER_KEYS.map((L) => chipWidth(this._chipLetter(L), measure));
     this._layerChips = layoutLayerChips({ x0: bgLeft, stripTop, stripH: STRIP_H, widths, limitX });
     // ARC GALAXY G2-2 (D-GX-16) — tryb galaktyki: chip [O] schowany, jego miejsce zostaje puste (pigułka trybu nie skacze).
+    // ARC GALAXY G3 (flaga `galaxyWarp`) — to miejsce zajmuje chip „Okręty” (nazwy szyny statków).
     const lastAll = this._layerChips[this._layerChips.length - 1];
     this._layerSpanEnd = lastAll ? lastAll.x + lastAll.w : null;
     if (GAME_CONFIG.FEATURES?.galaxyView && GAME_CONFIG.FEATURES?.galaxyLook) {
-      const keep = chipLayersFor(window.KOSMOS?.galaxyMode?.isActive === true);
-      this._layerChips = this._layerChips.filter((c) => keep.includes(c.layer));
+      this._layerChips = chipsForMode(this._layerChips, window.KOSMOS?.galaxyMode?.isActive === true, GAME_CONFIG.FEATURES?.galaxyWarp === true);
     }
     const roles = resolveHudRoles(THEME);
     const on = readHudLayers(window.KOSMOS?.uiPrefs);

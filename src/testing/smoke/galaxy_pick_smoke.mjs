@@ -245,9 +245,18 @@ header('P7  scena w trybie galaktyki (GameScene, wykonanie ze źródła)');
   ok(JSON.stringify(calls) === '[[null,false,null,"galaxyStar"]]' && [...sl.seen].every((k) => k === 'planetScene' || k === '_selectFromClickPick'),
     `P7a klik mapy: wyłącznie wynik pickera płyty (statek z pickera układu ignorowany), dotknięte {${[...sl.seen].join(', ')}}`);
   const right = compile(GS, '_handleTacticalRightClick', { window: globalThis.window, document: globalThis.document, GAME_CONFIG });
+  // G3-B podnosi bramkę G1 wyłącznie dla menu skoku z gwiazdy (`_openGalaxyStarMenu`, keeper `galaxy_warp_ui`). Flaga OFF — jak w G1.
+  const warpFlag = GAME_CONFIG.FEATURES.galaxyWarp;
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
   const sr = spyThis({});
   run(right, sr.p, { target: { id: 'planet-canvas' }, clientX: 5, clientY: 5, preventDefault() {} });
-  ok([...sr.seen].every((k) => k === 'planetScene'), `P7b prawy klik: bez menu mapy (G3), dotknięte {${[...sr.seen].join(', ')}}`);
+  ok([...sr.seen].every((k) => k === 'planetScene'), `P7b prawy klik (galaxyWarp OFF): bez menu mapy, dotknięte {${[...sr.seen].join(', ')}}`);
+  GAME_CONFIG.FEATURES.galaxyWarp = true;
+  const menus = [];
+  const srOn = spyThis({ _openGalaxyStarMenu: (...a) => menus.push(a), _resolveClickTarget: () => { menus.push('raycast'); return null; } });
+  run(right, srOn.p, { target: { id: 'planet-canvas' }, clientX: 5, clientY: 5, preventDefault() {} });
+  ok(JSON.stringify(menus) === '[[5,5]]', `P7b2 prawy klik (galaxyWarp ON): tylko menu gwiazdy, bez raycastu układu (${JSON.stringify(menus)})`);
+  GAME_CONFIG.FEATURES.galaxyWarp = warpFlag;
   const tip = compile(GS, '_tooltipHoverFromMain3D', { window: globalThis.window, document: globalThis.document, GAME_CONFIG });
   const tips = [];
   const st = spyThis({ _scheduleEntityTooltip: (...a) => tips.push(a) });

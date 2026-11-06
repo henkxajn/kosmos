@@ -15,10 +15,16 @@
 //   S8  SEDNO: tryb układu bez zmian — drzewo co do bajtu JSON jak bez kontrolera trybu; statek bez napędu jest; brak
 //       `dimReason`
 //   S9  panele statku i floty dokują do wiersza w trybie galaktyki (`shipRowKeys` / `fleetRowKeys` + `resolveRowAnchor`)
+//   S10 po G3 (F3): sekcja układu bez nazwy — „???” + `textDim`; cel skoku ma sekcję bez statku na miejscu („→N”); dopisek i podpowiedź bez
+//       prawdziwej nazwy; KONTROLA: flaga OFF jak w G1
+//   S11 po G3 (F4): CTRL+klik wiersza przełącza statek w zbiorze; klik nagłówka sekcji w trybie galaktyki — gwiazda + rozwinięcie, 2. klik —
+//       wejście przez bramkę G1 (nie przełączenie układu z pominięciem bramki); KONTROLA: tryb układu i flaga OFF jak dotąd
 // Uruchom: node src/testing/smoke/galaxy_ship_tree_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
+import EventBus from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
 import { THEME } from '../../config/ThemeConfig.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { t, setLocale } from '../../i18n/i18n.js';
 
 let GOL = null, OL = null, SPA = null, FPH = null;
@@ -207,6 +213,154 @@ header('S8  tryb układu bez zmian');
   const flat = all.flatMap((r) => (r.kind === 'fleet' ? (r.members ?? []) : [r]));
   ok(a?.index?.has?.('n1') && a?.index?.has?.('n3') && !flat.some((r) => r.dimReason), 'S8b tryb układu: statki bez napędu są, żaden wiersz nie ma `dimReason`');
 }
+
+// ═══ S10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+const fWarp = GAME_CONFIG.FEATURES.galaxyWarp;
+GAME_CONFIG.FEATURES.galaxyWarp = true;   // S10 / S11 pinują ścieżkę ON niezależnie od domyślnej flagi (przebieg całości z OFF)
+header('S10 sekcja układu bez nazwy i cel skoku');
+{
+  const fog = { id: 'sys_fog', name: 'Sekret', x: 4, y: 0, z: 0, distanceLY: 4.0, spectralType: 'M', explored: false };
+  const dst = { id: 'sys_dst', name: 'Tajny Cel', x: 5, y: 0, z: 0, distanceLY: 5.0, spectralType: 'M', explored: false };
+  SYS.push(fog, dst);
+  EntityManager.add({ id: 'star_fog', type: 'star', name: 'Sekret', systemId: 'sys_fog' });
+  EntityManager.add({ id: 'star_dst', type: 'star', name: 'Tajny Cel', systemId: 'sys_dst' });
+  const add = (v) => { VMAP.set(v.id, v); return v; };
+  add(ship('fs', 'Zwiadowca', 'sys_fog', { warpFuel: WARP }));
+  add(ship('tj', 'Skoczek', null, { warpFuel: WARP, position: { state: 'orbiting', dockedAt: null, x: 0, y: 0 },
+    mission: { type: 'interstellar_jump', phase: 'warp_transit', toSystemId: 'sys_dst' } }));
+  // Członek floty w układzie bez nazwy — dopisek.
+  const fl = { id: 'f9', name: 'Mieszana', memberIds: ['w1', 'fm'] };
+  add(ship('fm', 'Daleki', 'sys_fog', { warpFuel: WARP, fleetId: 'f9' }));
+  VMAP.get('w1').fleetId = 'f9';
+  FLEETS.push(fl);
+  GM.isActive = true; GM.selectedSystemId = null;
+  const ro = newRO();
+  call(() => ro.toggleExpanded('sys_fog', 'sys_home'));
+  const calls = drawRO(ro), names = calls.map((c) => c.s);
+  const tree = ro?._layout?.result;
+  const sec = (id) => tree?.systems?.find?.((s) => s.systemId === id);
+  ok(sec('sys_fog')?.name === '???' && sec('sys_fog')?.dim === true && sec('sys_fog')?.count === 1, 'S10a SEDNO: sekcja ze statkiem w układzie bez nazwy — „???”, `dim`');
+  const fogRows = calls.filter((c) => c.s === '???');
+  ok(fogRows.length >= 2 && fogRows.every((c) => c.fillStyle === THEME.textDim), 'S10b nagłówki rysowane `textDim`');
+  ok(!names.some((s) => s.includes('Sekret') || s.includes('Tajny')), 'S10c prawdziwej nazwy nie ma w rysunku — także w dopisku członka floty');
+  ok(sec('sys_dst')?.count === 0 && sec('sys_dst')?.inbound === 1 && sec('sys_dst')?.name === '???' && sec('sys_dst')?.groups?.length === 0,
+    'S10d SEDNO: cel skoku — sekcja bez statku na miejscu, licznik w drodze');
+  ok(names.includes('0 →1'), 'S10e licznik sekcji: „0 →1”');
+  ok(sec('sys_home')?.dim === false && sec('sys_home')?.name === 'Dom' && sec('sys_far')?.name === 'Kochab' && sec('sys_far')?.dim === false,
+    'S10f KONTROLA: układy z nazwą — nazwa, bez przygaszenia');
+  const zf = zone(ro, 'vessel', 'fs');
+  if (zf) call(() => ro.updateHover(zf.x + 60, zf.y + 4, W, H));
+  const tip = (ro?._tip?.lines ?? []).map((l) => l.text).join(' | ');
+  ok(!!zf && tip.includes('???') && !tip.includes('Sekret') && !tip.includes('Ziemia'), `S10g podpowiedź statku: układ „???”, bez nazwy gwiazdy i ciała („${tip}”)`);
+
+  const f0 = GAME_CONFIG.FEATURES.galaxyWarp;
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  const roOff = newRO();
+  call(() => roOff.toggleExpanded('sys_fog', 'sys_home'));
+  const offNames = drawRO(roOff).map((c) => c.s);
+  ok(offNames.includes('Sekret') && !offNames.includes('???') && !roOff?._layout?.result?.systems?.some?.((s) => s.systemId === 'sys_dst'),
+    'S10h KONTROLA OFF: prawdziwa nazwa, cel skoku bez sekcji — przyrząd widzi różnicę');
+  GAME_CONFIG.FEATURES.galaxyWarp = f0;
+
+  // Sprzątanie: reszta keepera liczy statki i floty.
+  for (const id of ['fs', 'tj', 'fm']) VMAP.delete(id);
+  VMAP.get('w1').fleetId = null;
+  FLEETS.pop();
+  SYS.splice(SYS.indexOf(fog), 1); SYS.splice(SYS.indexOf(dst), 1);
+}
+
+// ═══ S11 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+header('S11 CTRL+klik i klik nagłówka sekcji');
+{
+  const log = [];
+  const um = K.uiManager;
+  um.toggleSelection = (id) => { log.push(['toggle', id]); sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]; };
+  K.starSystemManager.switchActiveSystem = (id) => { log.push(['switch', id]); return true; };
+  GM.select = (id) => { log.push(['select', id]); GM.selectedSystemId = id; };
+  GM.enterSystem = (id) => { log.push(['enter', id]); return true; };
+  GM.isActive = true; GM.selectedSystemId = null; sel = []; fleetSel = null;
+  const ro = newRO();
+  drawRO(ro);
+  const click = (z, ctrl = false, dx = 60) => { ro._lastMouseMods = { shift: false, ctrl }; return call(() => ro.hitTest(z.x + dx, z.y + 4, W, H)); };
+  const zw = zone(ro, 'vessel', 'w1'), zr = zone(ro, 'vessel', 'r1');
+  click(zw, true); click(zr, true);
+  ok(!!zw && !!zr && sel.join(',') === 'w1,r1' && log.every((e) => e[0] === 'toggle'), `S11a SEDNO: CTRL+klik dwóch wierszy — oba w zbiorze (${sel.join(',')})`);
+  click(zw, true);
+  ok(sel.join(',') === 'r1', 'S11b CTRL+klik zaznaczonego — wypada ze zbioru');
+  sel = []; log.length = 0;
+  click(zw, false);
+  ok(sel.join(',') === 'w1' && !log.some((e) => e[0] === 'toggle'), 'S11c KONTROLA: zwykły klik — pojedyncze zaznaczenie, bez przełączania zbioru');
+  sel = []; log.length = 0;
+
+  const zs = zone(ro, 'system', 'sys_far');
+  click(zs);
+  ok(JSON.stringify(log) === '[["select","sys_far"]]' && ro.isExpanded('sys_far', 'sys_home') === true,
+    'S11d SEDNO: klik nazwy sekcji w trybie galaktyki — gwiazda + rozwinięcie, bez przełączenia układu (dawniej wyrzucało z trybu)');
+  drawRO(ro); log.length = 0;
+  click(zone(ro, 'system', 'sys_far'));
+  ok(JSON.stringify(log) === '[["enter","sys_far"]]', 'S11e 2. klik — wejście przez kontroler (bramka G1), nie `switchActiveSystem`');
+  log.length = 0; GM.selectedSystemId = null;
+  drawRO(ro);
+  const exp0 = ro.isExpanded('sys_far', 'sys_home');
+  click(zone(ro, 'system', 'sys_far'), false, 4);
+  ok(ro.isExpanded('sys_far', 'sys_home') !== exp0 && log.length === 0, 'S11f strzałka — samo rozwinięcie, bez zaznaczenia i wejścia');
+
+  log.length = 0;
+  const f0 = GAME_CONFIG.FEATURES.galaxyWarp;
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  const roOff = newRO(); drawRO(roOff);
+  roOff._lastMouseMods = { shift: false, ctrl: false };
+  const zo = zone(roOff, 'system', 'sys_far');
+  call(() => roOff.hitTest(zo.x + 60, zo.y + 4, W, H));
+  ok(JSON.stringify(log) === '[["switch","sys_far"]]', 'S11g KONTROLA OFF: klik sekcji przełącza układ jak przed krokiem');
+  GAME_CONFIG.FEATURES.galaxyWarp = f0;
+
+  log.length = 0;
+  GM.isActive = false;
+  const roSys = newRO(); drawRO(roSys);
+  roSys._lastMouseMods = { shift: false, ctrl: false };
+  const zy = zone(roSys, 'system', 'sys_far');
+  call(() => roSys.hitTest(zy.x + 60, zy.y + 4, W, H));
+  ok(JSON.stringify(log) === '[["switch","sys_far"]]', 'S11h KONTROLA: tryb układu — klik sekcji przełącza układ (reguła D-UI-5 bez zmian)');
+  GM.isActive = true;
+
+  // CTRL+klik kolejnego statku w trybie galaktyki nie przewija listy do lidera (następny klik trafiłby w inny wiersz).
+  const roR = newRO();
+  roR._revealKey = null;
+  EventBus.emit('ui:selectionChanged', { vesselId: 'w1', vesselIds: ['w1', 'r1'], prevVesselId: 'w1' });
+  const multiKey = roR._revealKey;
+  EventBus.emit('ui:selectionChanged', { vesselId: 'w1', vesselIds: ['w1'], prevVesselId: null });
+  const singleKey = roR._revealKey;
+  roR._revealKey = null; GM.isActive = false;
+  EventBus.emit('ui:selectionChanged', { vesselId: 'w1', vesselIds: ['w1', 'r1'], prevVesselId: 'w1' });
+  ok(multiKey == null && singleKey === 'vessel:w1' && roR._revealKey === 'vessel:w1',
+    'S11i zbiór ≥ 2 w trybie galaktyki — bez przewijania do lidera; KONTROLA: pojedynczy i tryb układu — jak dotąd (§7.12)');
+  GM.isActive = true;
+
+  // Nagłówek sekcji układu bez wejścia: 2. klik nic nie zrobi, więc podpowiedź mówi dlaczego.
+  const roT = newRO(); drawRO(roT);
+  const zt = zone(roT, 'system', 'sys_far');
+  GM.canEnter = () => false;
+  call(() => roT.updateHover(zt.x + 60, zt.y + 4, W, H));
+  const tipNo = roT._tip?.text;
+  GM.canEnter = () => true;
+  call(() => roT.updateHover(zt.x + 60, zt.y + 4, W, H));
+  const tipYes = roT._tip;
+  ok(tipNo === t('leftOutliner.cannotEnter') && tipYes == null, 'S11j układ bez wejścia — podpowiedź z powodem; KONTROLA: z wejściem — bez niej');
+  GM.canEnter = () => false;
+  const fT = GAME_CONFIG.FEATURES.galaxyWarp;
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  call(() => roT.updateHover(zt.x + 60, zt.y + 4, W, H));
+  const tipOff = roT._tip;
+  GAME_CONFIG.FEATURES.galaxyWarp = fT;
+  GM.isActive = false;
+  call(() => roT.updateHover(zt.x + 60, zt.y + 4, W, H));
+  const tipSys = roT._tip;
+  GM.isActive = true;
+  ok(tipOff == null && tipSys == null, 'S11k KONTROLA: flaga OFF i tryb układu — bez tej podpowiedzi (klik sekcji przełącza tam układ)');
+  delete GM.canEnter;
+}
+GAME_CONFIG.FEATURES.galaxyWarp = fWarp;
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

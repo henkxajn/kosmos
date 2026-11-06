@@ -31,6 +31,7 @@ export const GALAXY_CHROME = Object.freeze({
   MAX_LINES: 4,            // linie rozwinięcia najechania / przypięcia (idiom T1)
   RAIL_GAP_PX: 3,          // odstęp szyny od krawędzi kwadratu wyboru gwiazdy
   RAIL_MAX_ROWS: 3,        // wiersze szyny; dalsze — „+N” (bez strefy kliku)
+  RAIL_PLUS_MIN: 2,        // G3: od tylu statków bez wiersza rysuje się „+N” (samotny statek — sam znacznik)
   RAIL_ROW_GAP: 1,         // odstęp wierszy szyny
   NOT_YET: 'G3',           // powód wyłączonego [ Wyślij ▼ ] (rozkaz warp z płyty — krok G3)
 });
@@ -183,13 +184,13 @@ export function stripLeadSymbol(s) {
 }
 
 /**
- * Przyciski przypięcia: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (wyłączony do G3), chip skanu (`galaxyScanChip`).
+ * Przyciski przypięcia: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (aktywny z flagą `galaxyWarp`), chip skanu (`galaxyScanChip`).
  * @returns {Array<{ id:string, label:string, enabled:boolean, reason:string|null }>} — `reason`: tekst powodu wyłączenia
  */
-export function galaxyPinButtons({ enterable = false, scanChip = null, t } = {}) {
+export function galaxyPinButtons({ enterable = false, scanChip = null, sendEnabled = false, t } = {}) {
   const out = [];
   if (enterable) out.push({ id: 'enter', label: t('galaxyPin.enter'), enabled: true, reason: null });
-  out.push({ id: 'send', label: t('galaxyPin.send'), enabled: false, reason: GALAXY_CHROME.NOT_YET });
+  out.push({ id: 'send', label: t('galaxyPin.send'), enabled: sendEnabled === true, reason: sendEnabled === true ? null : GALAXY_CHROME.NOT_YET });
   if (scanChip) {
     out.push({ id: scanChip.id, label: stripLeadSymbol(t(scanChip.labelKey)), enabled: scanChip.enabled === true,
       reason: scanChip.reasonKey ? t(scanChip.reasonKey) : null });
@@ -200,6 +201,7 @@ export function galaxyPinButtons({ enterable = false, scanChip = null, t } = {})
 /**
  * Wykonanie przycisku przypięcia (keeper pinuje wywołania):
  *   enter      → `K.galaxyMode.enterSystem(id)` (lot, gdy włączony — bramka 186 w kontrolerze);
+ *   send       → `K.galaxyMode.toggleSendPicker(id)` (picker statków, G3-B);
  *   scan / scanMore → `K.observatorySystem.startSystemScan(id)`; odmowa → komunikat jak w Stratcomie (limit / brak
  *                obserwatorium / już skanowany);
  *   scanCancel → `cancelSystemScan(id, 'manual')`;
@@ -216,6 +218,9 @@ export function runGalaxyPinAction(btn, { systemId, K = null, toast = null, t } 
   switch (btn.id) {
     case 'enter':
       return K?.galaxyMode?.enterSystem?.(systemId) ? 'enter' : 'enterRefused';
+    case 'send':
+      K?.galaxyMode?.toggleSendPicker?.(systemId);
+      return 'send';
     case 'scan':
     case 'scanMore': {
       const ok = obs?.startSystemScan?.(systemId) === true;
@@ -278,22 +283,36 @@ export function galaxyShipRail({ vessels = [], systems = [] } = {}) {
 }
 
 /**
+ * ARC GALAXY G3 — gęstość szyny: które statki przy gwieździe mają wiersz z nazwą. Gwiazda otwarta (najechana, zaznaczona, kursor na jej
+ * wierszu, chip [O] „Okręty” włączony) — wszystkie; inaczej wyłącznie statki zaznaczone. Reszta to „+N” przy znaczniku (od `RAIL_PLUS_MIN`).
+ * @param {Array<object>} list — statki przy gwieździe (`galaxyShipRail`)
+ * @param {{ open?:boolean, selIds?:Set<string>|null }} o
+ * @returns {Array<object>} statki z wierszem, w kolejności listy
+ */
+export function railVisibleShips(list, { open = false, selIds = null } = {}) {
+  const all = list ?? [];
+  return open ? [...all] : all.filter((v) => selIds?.has?.(String(v?.id)) === true);
+}
+
+/**
  * Geometria szyny przy gwieździe (px logiczne): wiersze od `x0 = ax + pickHalf + gap` (nigdy na kwadracie wyboru gwiazdy),
  * pierwszy wyśrodkowany w pionie na gwieździe, kolejne w dół, bez nakładania; ponad `maxRows` — „+N” (bez strefy kliku).
+ * `hidden` — statki bez wiersza (gęstość, `railVisibleShips`), wliczone do „+N”; bez wierszy „+N” stoi na miejscu pierwszego
+ * (`rowH` — jego wysokość). `plusMin` — od tylu statków rysuje się „+N”; poniżej — brak (bez paska i bez przeszkody).
  * @param {{ ax:number, ay:number, rows:Array<{w:number, h:number}>, pickHalf?:number, gap?:number, maxRows?:number,
- *   plusW?:number, rowGap?:number }} p
+ *   plusW?:number, rowGap?:number, hidden?:number, rowH?:number, plusMin?:number }} p
  * @returns {{ rows:Array<{x:number, y:number, w:number, h:number, index:number}>, plus:{x:number, y:number, w:number, h:number, count:number}|null }}
  */
 export function railLayout({ ax, ay, rows = [], pickHalf = GALAXY_PICK_HALF_PX, gap = GALAXY_CHROME.RAIL_GAP_PX,
-  maxRows = GALAXY_CHROME.RAIL_MAX_ROWS, plusW = 18, rowGap = GALAXY_CHROME.RAIL_ROW_GAP } = {}) {
+  maxRows = GALAXY_CHROME.RAIL_MAX_ROWS, plusW = 18, rowGap = GALAXY_CHROME.RAIL_ROW_GAP, hidden = 0, rowH = 0, plusMin = 1 } = {}) {
   const x0 = num(ax) + pickHalf + gap;
   const shown = rows.slice(0, Math.max(0, maxRows));
-  const h0 = shown[0]?.h ?? rows[0]?.h ?? 0;
+  const h0 = shown[0]?.h ?? rows[0]?.h ?? rowH;
   let y = num(ay) - h0 / 2;
   const out = [];
   shown.forEach((r, i) => { out.push({ x: x0, y, w: Math.max(0, num(r.w)), h: Math.max(0, num(r.h)), index: i }); y += num(r.h) + rowGap; });
-  const rest = rows.length - shown.length;
-  const plus = rest > 0 ? { x: x0, y, w: plusW, h: h0, count: rest } : null;
+  const rest = rows.length - shown.length + Math.max(0, num(hidden));
+  const plus = rest >= Math.max(1, plusMin) ? { x: x0, y, w: plusW, h: h0, count: rest } : null;
   return { rows: out, plus };
 }
 

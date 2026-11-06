@@ -9,6 +9,8 @@
 //     [T] wyłączone = bez tras; [R] = ten sam przełącznik co ☰ „Radar” (tryb Y nadal wymusza radar);
 //   • klawisze Digit6–Digit9 (kolejność = kolejność chipów; `e.code` — niezależnie od układu klawiatury), wyłącznie z fokusem na
 //     mapie: tryb cywilizacji, bez overlayu, bez okna DOM, bez modyfikatorów (Shift — czysty widok, Ctrl — etykiety CTRL);
+//   • ARC GALAXY G3 (flaga `galaxyWarp`): w trybie galaktyki miejsce [O] i klawisz 9 należą do warstwy `ships` — „Okręty” (EN „Ships”):
+//     nazwy szyny statków wszędzie. Stan w `uiPrefs.hudLayers.ships`, domyślnie WYŁĄCZONY (domyślnie szyna bez nazw); orbity bez zmian;
 //   • chipy w idiomie chipów T5 (tekst „[ R ]”, 16 px — `CHIP_SPACED`, decyzja właściciela 2026-10-28): włączony — rola
 //     `primary`; wyłączony — rola `dim`, przekreślony (`CHIP_OFF_STYLE` 'strike'; wariant „bez nawiasów” — 'bare'); szerokość
 //     chipu ta sama w obu stanach (przełączenie nie przesuwa rzędu).
@@ -16,18 +18,34 @@
 /** Warstwy chipów — kolejność rzędu i klawiszy. */
 export const HUD_LAYER_KEYS = Object.freeze(['radar', 'routes', 'labels', 'orbits']);
 
+/** ARC GALAXY G3 — warstwa chipu [O] w trybie galaktyki: nazwy szyny statków. */
+export const GALAXY_SHIPS_LAYER = 'ships';
+
+const STORED_LAYER_KEYS = Object.freeze([...HUD_LAYER_KEYS, GALAXY_SHIPS_LAYER]);
+
 /** Klawisze (`KeyboardEvent.code`) → warstwa (D-HUD-14). */
 export const HUD_LAYER_CODES = Object.freeze({ Digit6: 'radar', Digit7: 'routes', Digit8: 'labels', Digit9: 'orbits' });
 
 /** Klawisz (cyfra) warstwy — podpowiedź chipu. */
-export const HUD_LAYER_KEY_LABEL = Object.freeze({ radar: '6', routes: '7', labels: '8', orbits: '9' });
+export const HUD_LAYER_KEY_LABEL = Object.freeze({ radar: '6', routes: '7', labels: '8', orbits: '9', [GALAXY_SHIPS_LAYER]: '9' });
 
 /**
  * ARC GALAXY G2-2 (D-GX-16) — warstwy z chipem w danym trybie mapy: tryb galaktyki (flaga `galaxyLook`) — [R] = ping
  * obserwatorium, [T] = szlaki + trasy, [E] = nazwy płyty; [O] (orbity układu) bez chipu i bez klawisza 9. Tryb układu — wszystkie.
+ * ARC GALAXY G3: `shipsChip` (flaga `galaxyWarp`) — w trybie galaktyki miejsce [O] zajmują „Okręty”.
  */
-export function chipLayersFor(galaxyActive) {
-  return galaxyActive ? HUD_LAYER_KEYS.filter((L) => L !== 'orbits') : HUD_LAYER_KEYS.slice();
+export function chipLayersFor(galaxyActive, shipsChip = false) {
+  if (!galaxyActive) return HUD_LAYER_KEYS.slice();
+  const base = HUD_LAYER_KEYS.filter((L) => L !== 'orbits');
+  return shipsChip ? [...base, GALAXY_SHIPS_LAYER] : base;
+}
+
+/** Rząd chipów trybu mapy z rzędu `layoutLayerChips`: miejsce [O] przejmują „Okręty”, chipy spoza trybu odpadają (miejsce zostaje puste). */
+export function chipsForMode(chips, galaxyActive, shipsChip = false) {
+  const keep = chipLayersFor(galaxyActive, shipsChip);
+  return (chips ?? [])
+    .map((c) => (galaxyActive && shipsChip && c.layer === 'orbits' ? { ...c, layer: GALAXY_SHIPS_LAYER } : c))
+    .filter((c) => keep.includes(c.layer));
 }
 
 // Stałe (px logiczne). Strojenie na bramce — z konsoli: `KOSMOS.hudLayer.tune({ CHIP_OFF_STYLE: 'bare' })`.
@@ -48,7 +66,7 @@ const C = HUD_CHIPS;
 
 // ── Stan warstw ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Stan czterech warstw z `uiPrefs` (brak — włączone; radar — także dawny `hudRadarVisible`). */
+/** Stan warstw z `uiPrefs` (brak — włączone; radar — także dawny `hudRadarVisible`; `ships` — brak = WYŁĄCZONE). */
 export function readHudLayers(uiPrefs) {
   const L = uiPrefs?.hudLayers ?? {};
   const radar = typeof L.radar === 'boolean' ? L.radar : uiPrefs?.hudRadarVisible !== false;
@@ -57,12 +75,13 @@ export function readHudLayers(uiPrefs) {
     routes: L.routes !== false,
     labels: L.labels !== false,
     orbits: L.orbits !== false,
+    [GALAXY_SHIPS_LAYER]: L[GALAXY_SHIPS_LAYER] === true,
   };
 }
 
 /** Zapis stanu warstwy (mutuje `uiPrefs`); radar — usuwa dawny klucz (jedno źródło). Zwraca nowy stan wszystkich warstw. */
 export function setHudLayer(uiPrefs, layer, on) {
-  if (!uiPrefs || !HUD_LAYER_KEYS.includes(layer)) return readHudLayers(uiPrefs);
+  if (!uiPrefs || !STORED_LAYER_KEYS.includes(layer)) return readHudLayers(uiPrefs);
   const L = (uiPrefs.hudLayers && typeof uiPrefs.hudLayers === 'object') ? { ...uiPrefs.hudLayers } : {};
   L[layer] = on === true;
   uiPrefs.hudLayers = L;
@@ -72,7 +91,7 @@ export function setHudLayer(uiPrefs, layer, on) {
 
 /** Przełączenie warstwy; zwraca nowy stan warstwy. */
 export function toggleHudLayer(uiPrefs, layer) {
-  if (!HUD_LAYER_KEYS.includes(layer)) return null;
+  if (!STORED_LAYER_KEYS.includes(layer)) return null;
   const now = readHudLayers(uiPrefs)[layer];
   return setHudLayer(uiPrefs, layer, !now)[layer];
 }

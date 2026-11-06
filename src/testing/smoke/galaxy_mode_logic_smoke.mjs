@@ -114,8 +114,8 @@ header('G4  konfiguracja kamery galaktyki');
   ok(near(GL?.galaxyFitDistLy?.([{ x: 21.87, y: 0, z: 0 }]), 57.2994, 1e-3), 'G4b reguła Stratcomu: rozrzut 21,87 ly → 57,30 ly (StratcomGalaxyRenderer)');
   const cfg = GL?.galaxyCameraConfig?.(systems, sysA.id);
   const K = 200;
-  ok(cfg?.minDist === 6 * K && cfg?.maxDist === 120 * K && near(cfg?.presetDist, fit * K, 1e-6),
-    'G4c zakres 6–120 ly · K, preset = fitDist · K');
+  ok(cfg?.minDist === 6 * K && cfg?.maxDist === 120 * K && near(cfg?.presetDist, fit * K * 0.8, 1e-6),
+    'G4c zakres 6–120 ly · K, preset = fitDist · K · 0,8 (decyzja właściciela po G3)');
   ok(near(cfg?.panCenter?.x, -sysA.x * K, 1e-9) && near(cfg?.panCenter?.z, -sysA.y * K, 1e-9) && cfg?.panHalf === 30 * K,
     'G4d pan wokół środka galaktyki (dom w świecie = −P_active · K), ±30 ly · K');
   ok(cfg?.pitch === 0.92 && cfg?.yaw === 0.6 && cfg?.far === 40000, 'G4e skos 0,92 / azymut 0,6 (stały skos stołu holograficznego), far 40 000');
@@ -125,8 +125,8 @@ header('G4  konfiguracja kamery galaktyki');
   if (GL?.LIVE_GALAXY) GL.LIVE_GALAXY.PRESET_DIST_MUL = -3;
   const cBad = GL?.galaxyCameraConfig?.(systems, sysA.id);
   if (GL?.LIVE_GALAXY) GL.LIVE_GALAXY.PRESET_DIST_MUL = mul0;
-  ok(mul0 === 1 && near(c07?.presetDist, fit * K * 0.7, 1e-6) && near(cBad?.presetDist, fit * K, 1e-6),
-    'G4f pokrętło PRESET_DIST_MUL (domyślnie 1 = podpisane 57 ly): 0,7 → preset × 0,7; wartość niedodatnia → 1');
+  ok(mul0 === 0.8 && near(c07?.presetDist, fit * K * 0.7, 1e-6) && near(cBad?.presetDist, fit * K, 1e-6),
+    'G4f pokrętło PRESET_DIST_MUL (domyślnie 0,8; 1 = kadr Stratcomu 57 ly): 0,7 → preset × 0,7; wartość niedodatnia → 1');
 
   header('G5  plany: migawka i przywrócenie 1:1');
   const snap = { theta: 0.31, phi: 1.07, dist: 233.5, target: { x: 4.2, y: 0, z: -7.7 } };
@@ -371,6 +371,39 @@ header('G16 GalaxyModeController na atrapie świata');
   ok(call(() => gm.enterSystem('sys_home')) === true && gm.isActive === false && log.some((e) => e[0] === 'reset') && !log.some((e) => e[0] === 'switch'),
     'G16i aktywny układ — wyjście + domyślny widok układu, bez przebudowy sceny');
   GAME_CONFIG.FEATURES.galaxyView = flag0;
+}
+
+// G4c / G4f — domyślny kadr 0,8 świadomie (decyzja właściciela po G3, F6); dawniej pinowały 1.
+header('G17 jasność gwiazdy na płycie: sam statek jej nie daje (po G3, F3)');
+{
+  const fV = GAME_CONFIG.FEATURES.galaxyView, fW = GAME_CONFIG.FEATURES.galaxyWarp;
+  GAME_CONFIG.FEATURES.galaxyView = true; GAME_CONFIG.FEATURES.galaxyWarp = true;
+  const fogs = systems.filter((s) => !s.isHome && s.explored !== true);
+  const shipSys = fogs[0], colSys = fogs[1], idle = fogs[2];
+  let ctxOn = null;
+  const cam = mkCam({ targetDist: 233.5, R: 3.6, goal: [0, 0, 0] });
+  const K = {
+    civMode: true, galaxyData: { systems }, activeSystemId: 'sys_home',
+    starSystemManager: { activeSystemId: 'sys_home', getSystem: () => ({}) },
+    threeRenderer: { _cameraController: cam, setGalaxyMode: (on, ctx) => { if (on) ctxOn = ctx; }, setGalaxySelected: () => {}, resetToSystemView: () => true },
+    uiManager: { isPickerActive: () => false, _dirty: false, _outlinerState: { groundUnits: [] } },
+    intelSystem: { isAtLeast: () => false }, observatorySystem: null,
+    colonyManager: { getAllColonies: () => [{ planetId: 'cb', isOutpost: false }] },
+    vesselManager: { getAllVessels: () => [{ id: 'v', systemId: shipSys.id, position: { state: 'orbiting' } }] },
+    entityManager: { get: (id) => (id === 'cb' ? { id, systemId: colSys.id } : null) },
+  };
+  globalThis.window.KOSMOS = K;
+  const gm = GC?.GalaxyModeController ? new GC.GalaxyModeController() : null;
+  call(() => gm.enter('test'));
+  const b = (s) => ctxOn?.brightOf?.(s);
+  ok(fogs.length >= 3 && b(shipSys) === false && b(idle) === false, 'G17a SEDNO: sam statek w układzie bez nazwy — gwiazda przygaszona (jak wiersz „???”)');
+  ok(b(colSys) === true && b(systems.find((s) => s.isHome)) === true, 'G17b KONTROLA: kolonia w niezbadanym układzie i dom — jasne');
+  call(() => gm.exit('test'));
+  GAME_CONFIG.FEATURES.galaxyWarp = false;
+  call(() => gm.enter('test'));
+  ok(b(shipSys) === true, 'G17c KONTROLA OFF: statek rozjaśnia jak w G1 — przyrząd widzi różnicę');
+  call(() => gm.exit('test'));
+  GAME_CONFIG.FEATURES.galaxyView = fV; GAME_CONFIG.FEATURES.galaxyWarp = fW;
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

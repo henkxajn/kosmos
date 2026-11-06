@@ -11,7 +11,13 @@
 //   • OBCY w skoku warp w zasięgu obserwatorium od domu (kanon Stratcomu, D-GX-22): wywiad o statku `contact` / `detailed` —
 //     znacznik w roli z relacji (linię skoku rysuje `HudGalaxyRouteLayer`), inaczej duch „?” (bez linii i bez nazwy);
 //   • gwiazda pod kursorem wygrywa z wierszem szyny (strefa HUD — weto `galaxyStarAt`), przeszkody dla nazw płyty
-//     (`labelObstacles`); krycie × rozjaśnienie chromu trybu galaktyki.
+//     (`labelObstacles`); krycie × rozjaśnienie chromu trybu galaktyki;
+//   • ARC GALAXY G3 (flaga `galaxyWarp`) — GĘSTOŚĆ: domyślnie znacznik bez nazw, „+N” od dwóch statków bez wiersza (samotny statek — sam
+//     znacznik, `RAIL_PLUS_MIN`); wiersze z nazwami ma gwiazda najechana
+//     (`hoverObjectKey`), zaznaczona i ta, nad której wierszem stoi kursor (bez tego wiersz znikałby po zejściu kursora z gwiazdy), a także
+//     statek zaznaczony; chip [O] „Okręty” (klawisz 9) włącza nazwy wszędzie (`railVisibleShips`);
+//   • ARC GALAXY G3 — CTRL+klik wiersza przełącza statek w zbiorze zaznaczonych (`Outliner._onHit`) i wygrywa z gwiazdą sąsiada pod
+//     kursorem: przy CTRL zamiarem jest statek.
 // Flaga `galaxyLook` OFF — podwarstwa milczy.
 // ⚠ Moduł importuje się pod node (keeper — atrapa świata): bez three i bez DOM.
 import { GAME_CONFIG } from '../config/GameConfig.js';
@@ -19,7 +25,8 @@ import { THEME } from '../config/ThemeConfig.js';
 import { getLocale } from '../i18n/i18n.js';
 import { HUD_LABELS, pointInRect, resolveLabelClick } from './HudLabelLogic.js';
 import { GALAXY_K, GALAXY_FADE_MS, GALAXY_PICK_HALF_PX, plateWorldOf } from './GalaxyModeLogic.js';
-import { GALAXY_CHROME, galaxyShipRail, galaxyEnemyBlips, railLayout, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
+import { GALAXY_CHROME, galaxyShipRail, galaxyEnemyBlips, railLayout, railVisibleShips, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
+import { readHudLayers } from './HudLayerChipsLogic.js';
 import { observatoryRangeLY } from '../utils/ObservatoryRange.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { areAtWar } from '../utils/WarGate.js';
@@ -34,6 +41,7 @@ import {
 export const HUD_GALAXY_RAIL = Object.freeze({
   ROW_PAD_X: 3,
   GHOST_R: 3.5,        // duch „?” — promień
+  PLUS_ALPHA: 0.8,     // „+N” (G3: główny nośnik liczby statków — rola `primary`; `dim` jest na płycie nieczytelna)
 });
 
 const q = (v) => Math.round(v * 10);
@@ -90,11 +98,20 @@ export class HudGalaxyRailLayer {
     });
     const fleetIdx = buildFleetIndex(K.fleetSystem?.listFleets?.() ?? [], vessels);
     const groups = groupTransitByFleet(rail.transit, (id) => fleetIdx.get(String(id)) ?? null, selIds);
+    // Gęstość (G3): flaga OFF albo chip [O] — nazwy wszędzie; inaczej gwiazda najechana, zaznaczona i ta z wierszem pod kursorem.
+    const openAll = !GAME_CONFIG.FEATURES?.galaxyWarp || readHudLayers(K.uiPrefs).ships === true;
+    const hoverKey = this._hud?.hoverObjectKey?.() ?? null;
+    const ptr = F.pointer;
+    const openStars = new Set();
+    if (typeof hoverKey === 'string' && hoverKey.startsWith('galaxy:')) openStars.add(hoverKey.slice(7));
+    if (gm.selectedSystemId != null) openStars.add(String(gm.selectedSystemId));
+    const rowZone = ptr && !ptr.overUI ? this._zoneAt(ptr.lx, ptr.ly) : null;
+    if (rowZone?.systemId != null) openStars.add(String(rowZone.systemId));
     let key = `gs:2:${q(anchor.x)},${q(anchor.y)},${q(anchor.z)}:${loc}`;
-    for (const [sid, list] of rail.bySystem) key += `|${sid}:${list.map((v) => `${v.id}${selIds.has(String(v.id)) ? '*' : ''}`).join(',')}`;
+    for (const [sid, list] of rail.bySystem) key += `|${sid}${openAll || openStars.has(sid) ? 'o' : ''}:${list.map((v) => `${v.id}${selIds.has(String(v.id)) ? '*' : ''}`).join(',')}`;
     for (const g of groups) key += `|t${g.key}x${g.count}:${q(g.gx)},${q(g.gy)}${g.selected ? '*' : ''}`;
     for (const b of enemies) key += `|e${b.v.id}:${b.mode}:${relationOf(b.v)}:${q(b.gx)},${q(b.gy)}`;
-    this._prep = { on: true, rail, enemies, groups, relationOf, selIds, anchor, loc };
+    this._prep = { on: true, rail, enemies, groups, relationOf, selIds, anchor, loc, openAll, openStars };
     return key;
   }
 
@@ -118,14 +135,16 @@ export class HudGalaxyRailLayer {
       const pspec = shipMarkerSpec({ motion: 'parked', relation: 'own', selected: anySelected(list, P.selIds), cx: p.x, cy: p.y });
       parked.push({ x: p.x, y: p.y, spec: pspec, count: list.length });
       obstacles.push(markerObstacle(pspec.geo.rect));
-      const texts = list.map((v) => String(v.name ?? v.id).toLocaleLowerCase(P.loc));
+      const visible = railVisibleShips(list, { open: P.openAll || P.openStars.has(sid), selIds: P.selIds });
+      const texts = visible.map((v) => String(v.name ?? v.id).toLocaleLowerCase(P.loc));
       const dims = texts.map((s) => ({ w: this._width(font, size, s) + 2 * G.ROW_PAD_X, h: rowH }));
-      const plusText = `+${Math.max(0, list.length - GALAXY_CHROME.RAIL_MAX_ROWS)}`;
-      const lay = railLayout({ ax: p.x, ay: p.y, rows: dims, pickHalf: GALAXY_PICK_HALF_PX, plusW: this._width(font, size, plusText) + 2 * G.ROW_PAD_X });
+      const plusText = `+${Math.max(0, list.length - Math.min(visible.length, GALAXY_CHROME.RAIL_MAX_ROWS))}`;
+      const lay = railLayout({ ax: p.x, ay: p.y, rows: dims, pickHalf: GALAXY_PICK_HALF_PX, plusW: this._width(font, size, plusText) + 2 * G.ROW_PAD_X,
+        hidden: list.length - visible.length, rowH, plusMin: GAME_CONFIG.FEATURES?.galaxyWarp ? GALAXY_CHROME.RAIL_PLUS_MIN : 1 });
       lay.rows.forEach((r) => {
-        const v = list[r.index];
+        const v = visible[r.index];
         rows.push({ ...r, vesselId: v.id, text: texts[r.index], selected: P.selIds.has(String(v.id)), font, size, sx: p.x, sy: p.y });
-        zones.push({ x: r.x, y: r.y, w: r.w, h: r.h, vesselId: v.id });
+        zones.push({ x: r.x, y: r.y, w: r.w, h: r.h, vesselId: v.id, systemId: sid });
         obstacles.push({ x: r.x, y: r.y, w: r.w, h: r.h });
       });
       if (lay.plus) {
@@ -204,8 +223,10 @@ export class HudGalaxyRailLayer {
       ctx.fillStyle = THEME.bgPrimary;
       ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
       ctx.font = pl.font;
-      ctx.fillStyle = roles.dim;
-      ctx.globalAlpha = a;
+      // G3: przy fladze „+N” niesie liczbę statków, więc musi być czytelny; OFF — rola `dim` jak w G2.
+      const plusOn = GAME_CONFIG.FEATURES?.galaxyWarp === true;
+      ctx.fillStyle = plusOn ? roles.primary : roles.dim;
+      ctx.globalAlpha = (plusOn ? G.PLUS_ALPHA : 1) * a;
       ctx.fillText(pl.text, pl.x + G.ROW_PAD_X, pl.y + pl.h - 3);
     }
     // Statki przy gwieździe — pusty romb (SM-1); w tranzycie warp — pusty daszek w kierunku podróży; flota — jeden
@@ -263,13 +284,17 @@ export class HudGalaxyRailLayer {
 
   _zoneAt(x, y) { return resolveLabelClick(this._zones, x, y); }
 
-  /** Klik wiersza szyny / daszka tranzytu = klik wiersza prawego outlinera; gwiazda pod kursorem wygrywa (Finding 110). */
+  /**
+   * Klik wiersza szyny / daszka tranzytu = klik wiersza prawego outlinera (CTRL — przełączenie w zbiorze, `Outliner._onHit`); gwiazda pod
+   * kursorem wygrywa (Finding 110), chyba że przy CTRL (G3): tam zamiarem jest statek, a wiersz leży na kwadracie SĄSIADA, nie swojej gwiazdy.
+   */
   handleClick(x, y, rawX, rawY) {
     const z = this._zoneAt(x, y);
     if (!z) return false;
     const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
-    if (K?.threeRenderer?.galaxyStarAt?.(rawX, rawY) != null) return false;
     const ro = K?.rightOutliner ?? K?.uiManager?._outliner ?? null;
+    const ctrl = GAME_CONFIG.FEATURES?.galaxyWarp === true && ro?._lastMouseMods?.ctrl === true;
+    if (!ctrl && K?.threeRenderer?.galaxyStarAt?.(rawX, rawY) != null) return false;
     if (ro?._onHit) ro._onHit({ type: 'vessel', vesselId: z.vesselId }, x, y, K);
     else K?.uiManager?.setSelectedVesselId?.(z.vesselId);
     return true;

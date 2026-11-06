@@ -164,7 +164,7 @@ import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId, isSystemExplored } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { outlinerKeyAction } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2-4 — klawisze outlinerów (§7.16)
-import { layerForKeyCode, layerKeyAllowed, toggleHudLayer } from '../ui/HudLayerChipsLogic.js';   // paczka B — klawisze 6–9 (D-HUD-14)
+import { layerForKeyCode, layerKeyAllowed, toggleHudLayer, GALAXY_SHIPS_LAYER } from '../ui/HudLayerChipsLogic.js';   // paczka B — klawisze 6–9 (D-HUD-14)
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
@@ -173,6 +173,20 @@ import { printStrikeWaves, printSquadronNeeds, squadronMaxShips } from '../utils
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
 const INTRO_SETTLE_MS = 2500;
+
+// ARC GALAXY G3-B — n-ta najbliższa gwiazda od aktywnego układu (przyrządy bramki; 1 = najbliższa).
+function galaxyNearestStar(K, n) {
+  const systems = K?.galaxyData?.systems ?? [];
+  const act = systems.find((s) => String(s.id) === String(K?.activeSystemId ?? 'sys_home'));
+  const a = act ? galaxyLyToWorld(act) : { x: 0, y: 0, z: 0 };
+  const list = systems.filter((s) => s !== act).map((s) => {
+    const w = galaxyLyToWorld(s);
+    return { id: String(s.id), d: Math.hypot(w.x - a.x, w.y - a.y, w.z - a.z) };
+  }).sort((p, q) => p.d - q.d);
+  const k = Math.min(list.length, Math.max(1, Math.floor(Number(n) || 1)));
+  const pick = list[k - 1];
+  return pick ? { n: k, id: pick.id, distLy: +pick.d.toFixed(2) } : null;
+}
 
 export class GameScene {
   // canvas3D — element #three-canvas
@@ -679,6 +693,28 @@ export class GameScene {
         const out = { ok, id, flight: gm.flightInfo?.() ?? null };
         console.log('[galaxy] flyIn', out);
         return out;
+      },
+      // ARC GALAXY G3-B — przyrządy bramki skoku z galaktyki (tryb galaktyki; zaznacz statek w prawym outlinerze):
+      //   KOSMOS.debug.galaxyWarpMenuAt(1) — menu PPM n-tej najbliższej gwiazdy od aktywnego układu (jak prawy klik na niej);
+      //   KOSMOS.debug.galaxySendPicker(1) — przypnij n-tą najbliższą gwiazdę i otwórz jej [ Wyślij ▼ ].
+      galaxyWarpMenuAt: (n = 1) => {
+        const K = window.KOSMOS, gm = K?.galaxyMode;
+        if (!gm?.isActive) return null;
+        const star = galaxyNearestStar(K, n);
+        const at = star ? K.threeRenderer?.galaxyStarScreen?.(star.id) : null;
+        if (!at) return null;
+        gm.closeSendPicker?.();
+        EventBus.emit('ui:rightClickMenuOpened', { target: { type: 'galaxyStar', systemId: star.id }, screenPoint: at });
+        return { ...star, ...at };
+      },
+      galaxySendPicker: (n = 1) => {
+        const K = window.KOSMOS, gm = K?.galaxyMode;
+        if (!gm?.isActive) return null;
+        const star = galaxyNearestStar(K, n);
+        if (!star) return null;
+        gm.select(star.id);
+        if (gm.sendPicker?.systemId !== star.id) gm.toggleSendPicker(star.id);
+        return { ...star, picker: gm.sendPicker };
       },
       galaxyScanNearest: (n = 1) => {
         const K = window.KOSMOS, gm = K?.galaxyMode, obs = K?.observatorySystem;
@@ -4910,6 +4946,12 @@ export class GameScene {
           um.cancelPickerMode();
           return;
         }
+        // ARC GALAXY G3-B — picker [ Wyślij ▼ ] schodzi pierwszy (przed zaznaczeniem statku i przypięciem gwiazdy).
+        if (window.KOSMOS?.galaxyMode?.closeSendPicker?.()) {
+          e.preventDefault();
+          um?.markDirty?.();
+          return;
+        }
         const rcm = window.KOSMOS?.rightClickMenu;
         if (rcm?.isOpen?.()) {
           e.preventDefault();
@@ -5073,14 +5115,17 @@ export class GameScene {
         case 'Digit8':
         case 'Digit9': {
           const layer = layerForKeyCode(e.code);
-          // ARC GALAXY G2-2 (D-GX-16) — w trybie galaktyki [O] nie ma chipu: klawisz 9 bez skutku.
-          const noChip = layer === 'orbits' && galaxyLookOn() && window.KOSMOS?.galaxyMode?.isActive === true;
-          if (layer && !noChip && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
+          // ARC GALAXY G2-2 (D-GX-16) — w trybie galaktyki orbity układu nie mają chipu; klawisz 9 należy do chipu „Okręty” (G3, flaga
+          // `galaxyWarp` — nazwy szyny statków), bez flagi — bez skutku.
+          const galaxyNine = layer === 'orbits' && galaxyLookOn() && window.KOSMOS?.galaxyMode?.isActive === true;
+          const shipsNine = galaxyNine && GAME_CONFIG.FEATURES?.galaxyWarp === true;
+          if (layer && (!galaxyNine || shipsNine) && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
             modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay, .se-overlay, .at-overlay, .ce-overlay'),
             planetSceneOpen: !!this.planetScene?.isOpen, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey })) {
             e.preventDefault();
             window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
-            toggleHudLayer(window.KOSMOS.uiPrefs, layer);
+            if (shipsNine) toggleHudLayer(window.KOSMOS.uiPrefs, GALAXY_SHIPS_LAYER);
+            else toggleHudLayer(window.KOSMOS.uiPrefs, layer);
             window.KOSMOS.hudLayer?.wake?.();
             this.uiManager?.markDirty?.();
           }
@@ -6339,9 +6384,24 @@ export class GameScene {
     }
   }
 
+  // ARC GALAXY G3-B — menu PPM gwiazdy płyty. Cel wg reguły kliku warstwy HUD (przypięcie > gwiazda > nazwa); pusta płyta i lot — bez menu.
+  _openGalaxyStarMenu(clientX, clientY) {
+    const K = window.KOSMOS, gm = K?.galaxyMode;
+    if (gm?.isFlying) return;
+    gm?.closeSendPicker?.();
+    const local = this.uiManager?.toLocalUI?.(clientX, clientY);
+    const systemId = K?.hudLayer?.galaxyStarIdAt?.(local?.x, local?.y, clientX, clientY)
+      ?? this.threeRenderer?.galaxyStarAt?.(clientX, clientY) ?? null;
+    if (systemId == null) return;
+    EventBus.emit('ui:rightClickMenuOpened', { target: { type: 'galaxyStar', systemId }, screenPoint: { x: clientX, y: clientY } });
+  }
+
   _handleTacticalRightClick(e) {
     if (this.planetScene?.isOpen) return;
-    if (window.KOSMOS?.galaxyMode?.isActive) return;   // ARC GALAXY G1 — menu mapy w trybie galaktyki wraca w G3
+    // ARC GALAXY G3-B — w trybie galaktyki jedyne menu mapy to skok z gwiazdy płyty (`_openGalaxyStarMenu`, po bramkach niżej);
+    // flaga `galaxyWarp` OFF — jak w G1, bez menu.
+    const galaxyActive = window.KOSMOS?.galaxyMode?.isActive === true;
+    if (galaxyActive && !GAME_CONFIG.FEATURES?.galaxyWarp) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
     // P1.3.5 post-fix #1 (D2 reinforcement) — Strategy A pełna:
@@ -6365,6 +6425,7 @@ export class GameScene {
     // nad powierzchnią UI (kolumny, pas dolny z chipami warstw, belki, panele) bez menu mapy. Dawne obejście `CANVAS` było dla
     // overlayu (wtedy `isOverUI` = cały ekran), a ten przypadek wraca wyżej (`isAnyOpen`).
     if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
+    if (galaxyActive) { this._openGalaxyStarMenu(e.clientX, e.clientY); return; }
 
     let target = this._resolveClickTarget(e.clientX, e.clientY);
     if (!target) return;

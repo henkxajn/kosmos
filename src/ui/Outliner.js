@@ -26,6 +26,7 @@
 // Importuje się pod node (keeper `right_outliner_smoke` — prawdziwy `draw` / `hitTest` / `updateHover` na atrapie ctx).
 
 import { THEME }          from '../config/ThemeConfig.js';
+import { GAME_CONFIG }    from '../config/GameConfig.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t }               from '../i18n/i18n.js';
@@ -61,7 +62,12 @@ export class Outliner extends OutlinerColumn {
     // Ustawiane PRZED hitTest.
     this._lastMouseMods = { shift: false, ctrl: false };
     // D-UI-10 (§7.12): zaznaczenie z mapy / Tab / dowolnej powierzchni → rozwinięcie układu wiersza + przewinięcie.
-    EventBus.on('ui:selectionChanged', (p) => { if (p?.vesselId != null) this._reveal(`vessel:${p.vesselId}`); });
+    // ARC GALAXY G3 — tryb galaktyki: CTRL+klik kolejnego statku nie przewija listy do lidera (klik następnego wiersza trafiłby w inny statek).
+    EventBus.on('ui:selectionChanged', (p) => {
+      if (p?.vesselId == null) return;
+      if ((p.vesselIds?.length ?? 1) > 1 && this._K()?.galaxyMode?.isActive === true && GAME_CONFIG.FEATURES?.galaxyWarp) return;
+      this._reveal(`vessel:${p.vesselId}`);
+    });
     EventBus.on('ui:fleetSelectionChanged', (p) => { if (p?.fleetId != null) this._reveal(`fleet:${p.fleetId}`); });
     // ARC GALAXY G1 — przewinięcie listy osobno dla trybu układu i galaktyki.
     this._scrollMemo = { system: 0, galaxy: 0 };
@@ -109,8 +115,9 @@ export class Outliner extends OutlinerColumn {
       dim = view.dim;
       if (!order) {
         const world = galaxyWorldContext(K, { colonies: input.treeColonies ?? input.colonies, groundUnits: input.groundUnits });
+        // ARC GALAXY G3 — ta sama reguła nazwy co wiersz lewego: układ bez nazwy to „???”, cel skoku ma sekcję bez statku na miejscu.
         order = galaxyShipSectionOrder({ systems: world.systems, presence: world.presence,
-          systemName: (id) => EntityManager.getStarOfSystem(id)?.name ?? null });
+          systemName: (id) => EntityManager.getStarOfSystem(id)?.name ?? null, reveal: world.shipFog ? world.reveal : null });
       }
     }
     if (!order) order = this._systemOrder(K, input);
@@ -225,13 +232,14 @@ export class Outliner extends OutlinerColumn {
       ctx.fillRect(g.x, iy, g.w, SYS_H);
     }
     this._shadow(ctx, true);
-    const cw = this._count(ctx, g, iy, s.count, 13);
+    // ARC GALAXY G3 — licznik sekcji z dopiskiem statków w drodze do układu („→1”); nagłówek miejsca nieznanego przygaszony.
+    const cw = this._count(ctx, g, iy, s.inbound > 0 ? `${s.count} →${s.inbound}` : s.count, 13);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
     ctx.fillText(s.expanded ? '▾' : '▸', g.x + PAD, iy + 13);
     const tx = g.x + PAD + ARROW_W - 2;
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = isActive ? THEME.accent : THEME.textPrimary;
+    ctx.fillStyle = s.dim ? THEME.textDim : isActive ? THEME.accent : THEME.textPrimary;
     ctx.fillText(this._fit(ctx, s.name, g.x + g.w - PAD - cw - tx), tx, iy + 13);
     this._shadow(ctx, false);
     this._clickTargets.push({ type: 'system', systemId: s.systemId, x: g.x, y: iy, w: g.w, h: SYS_H, arrowX: g.x + PAD + ARROW_W });
@@ -345,6 +353,15 @@ export class Outliner extends OutlinerColumn {
     }
     if (z.type === 'system') {
       if (x < z.arrowX) { this.toggleExpanded(z.systemId, this._active(K)); this._markDirty(); return; }
+      // ARC GALAXY G3 — tryb galaktyki: reguła wiersza lewego (1. klik — gwiazda na płycie + rozwinięcie sekcji; 2. klik — wejście przez
+      // bramkę G1 `enterSystem`); dawne przełączenie układu z pominięciem bramki wyrzucało z trybu i otwierało układ bez miejsca.
+      const gm = K?.galaxyMode;
+      if (gm?.isActive === true && GAME_CONFIG.FEATURES?.galaxyWarp) {
+        if (String(gm.selectedSystemId ?? '') === String(z.systemId)) gm.enterSystem?.(z.systemId);
+        else { gm.select?.(z.systemId); this._setExpanded(z.systemId, true, this._active(K)); }
+        this._markDirty();
+        return;
+      }
       // D-UI-5: klik w układ = przejście do niego (kadr `frameSystem`); klik w bieżący = domyślny widok (§7.9).
       const ss = K?.starSystemManager;
       if (ss && ss.activeSystemId !== z.systemId) ss.switchActiveSystem(z.systemId);
@@ -359,6 +376,10 @@ export class Outliner extends OutlinerColumn {
   }
 
   _hoverTip(z, x, y, K) {
+    // ARC GALAXY G3 — nagłówek sekcji w trybie galaktyki: układ bez wejścia (2. klik nic nie zrobi) — powód, jak wiersz lewego.
+    if (z.type === 'system' && K?.galaxyMode?.isActive === true && GAME_CONFIG.FEATURES?.galaxyWarp && K.galaxyMode.canEnter?.(z.systemId) === false) {
+      return { text: t('leftOutliner.cannotEnter'), x, y };
+    }
     if (z.type === 'vessel' && z.row) return { lines: this._shipTipLines(z.row, K), x, y };
     if (z.type === 'fleet' && z.row) {
       return { lines: [
@@ -388,9 +409,11 @@ export class Outliner extends OutlinerColumn {
     const where = [];
     if (r.systemId == null) where.push(t('rightOutliner.inTransit'));
     else {
-      if (e.dockedAt) where.push(resolveBodyName(e.dockedAt));
+      // ARC GALAXY G3 — tryb galaktyki: nazwy z sekcji drzewa (reguła mgły); układ bez nazwy nie zdradza ani gwiazdy, ani ciała.
+      const section = K?.galaxyMode?.isActive === true ? this._layout?.result?.systems?.find?.((s) => s.systemId === r.systemId) : null;
+      if (e.dockedAt && section?.dim !== true) where.push(resolveBodyName(e.dockedAt));
       // Układ — gdy inny niż oglądany albo gdy wiersz ma dopisek (członek floty spoza układu prowadzącego, decyzja 6 (a)).
-      if (r.systemId !== this._active(K) || r.note) where.push(EntityManager.getStarOfSystem(r.systemId)?.name ?? r.systemId);
+      if (r.systemId !== this._active(K) || r.note) where.push(section?.name ?? EntityManager.getStarOfSystem(r.systemId)?.name ?? r.systemId);
     }
     if (where.length) lines.push({ text: where.join(' · '), color: THEME.textDim });
     for (const a of alerts) {
