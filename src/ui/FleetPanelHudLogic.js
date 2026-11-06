@@ -32,6 +32,7 @@ import { summarizeFleetGroup, countActionable, combatCheckOf } from './FleetGrou
 import { toggleOpenList, openListFor } from './LabelPinLogic.js';
 import { doctrineNameKey } from '../data/FleetDoctrines.js';
 import { systemIdOf } from '../utils/SystemScope.js';
+import { fleetWarpStatusLine } from './GalaxyWarpLogic.js';
 
 // Stałe (px logiczne) — wartości startowe = panel statku T5 po bramce. Strojenie z konsoli: `KOSMOS.fleetPanelHud.tune({ W: 210 })`.
 export const FLEET_PANEL_HUD_DEFAULTS = Object.freeze({
@@ -241,6 +242,8 @@ export function buildFleetPanelModel(fleet, env = {}) {
   }));
   m.sub = [t('fleet.shipsCount', members.length), lead ? t('fleetPanelHud.leader', low(lead.name ?? lead.id)) : null,
     low(fleetStateText(m.members, fleet, pc))].filter(Boolean).join(' · ');
+  const warpLine = fleetWarpStatusLine(fleet, K);   // G4 — „Skok warp → X · ETA: …”, gdy flota jest w skoku
+  if (warpLine) m.info.push({ text: warpLine });
   m.doctrine = { label: `${low(t('fleetCmd.doctrine'))}: ${low(t(doctrineNameKey(fleet.doctrine)))} ▾`, zone: zone('doctrine') };
   // Rozkazy (lustro F5): warunki aktywności co do znaku jak dawny `FleetCommandPanel.draw`.
   const hasOrder = !!fleet.activeOrder;

@@ -156,12 +156,15 @@ header('T1 menu gwiazdy wg zaznaczenia');
   ok(tips.length === 1 && tips[0] === t('fleet.warpErrNoRoute'), `podpowiedź: powód wprost, bez regexu „zasięgu” (${tips.join()})`);
   farM.close();
 
+  // G4 — przy `fleetWarp` ON wpis floty jest żywy (`galaxy_fleet_warp_ui_smoke` T1); zaślepka G3 żyje przy OFF i tam zostaje pin.
+  GAME_CONFIG.FEATURES.fleetWarp = false;
   select([], 'fleet_1');
   const fleetE = galaxyStarMenuEntries('B')[0];
   ok(fleetE?.enabled === false && fleetE?.disabledReason === t('galaxyMenu.fleetWaitsG4') && fleetE?.vesselIds.length === 0, 'flota: wyłączona z powodem „flota — G4”');
   ok(fleetE?.labelPL === 'Skok do Beta' && fleetE?.labelEN === 'Warp to Beta', 'flota: sam tytuł');
   select([ship], 'fleet_1');
   ok(galaxyStarMenuEntries('B')[0]?.disabledReason === t('galaxyMenu.fleetWaitsG4'), 'mieszane (flota + luźny statek): flota ma pierwszeństwo jak w menu mapy');
+  GAME_CONFIG.FEATURES.fleetWarp = true;
 
   const a = mk(), b = mk(NO_WARP);
   select([a, b]);
@@ -401,9 +404,11 @@ header('T5 bramka mgły na nazwach');
   select([ship]);
   const e = galaxyStarMenuEntries('C')[0];
   ok(e.labelPL.startsWith('Skok do ???') && e.labelEN.startsWith('Warp to ???') && !e.labelPL.includes('Cygni'), 'menu: niezbadany cel = ???');
+  GAME_CONFIG.FEATURES.fleetWarp = false;   // G4 — zaślepka G3 żyje przy OFF; wpis żywy: `galaxy_fleet_warp_ui_smoke` T1
   select([], 'fleet_1');
   const f = galaxyStarMenuEntries('C')[0];
   ok(f.labelPL === 'Skok do ???' && !f.labelEN.includes('Cygni'), 'menu floty: niezbadany cel = ???');
+  GAME_CONFIG.FEATURES.fleetWarp = true;
   select([ship]);
   const m = sendPickerModel({ systemId: 'C', scroll: 0 }, K);
   ok(m.header.endsWith('→ ???') && !m.header.includes('Cygni'), 'nagłówek pickera: ???');

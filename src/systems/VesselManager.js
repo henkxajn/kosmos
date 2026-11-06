@@ -1018,6 +1018,8 @@ export class VesselManager {
     // AI STRIKES BACK S3 (SB54) — kąt punktu przylotu na okręgu obrzeży, WSPÓLNY dla grupy (`OrderService.issueGroupAttack`
     //   losuje go RAZ). Jedzie w misji (zapis — kopia płytka). Brak — losowany przy przylocie, jak dotąd.
     if (Number.isFinite(opts.arrivalAngle)) vessel.mission.arrivalAngle = opts.arrivalAngle;
+    // G4 — znacznik skoku floty (popup przylotu). Osobne pole: `mission.groupId` należy do eskadr AI (SB54).
+    if (speedLock && opts.warpGroupId) vessel.mission.warpGroupId = opts.warpGroupId;
 
     vessel.status = 'on_mission';
     vessel.position.state = 'in_transit';

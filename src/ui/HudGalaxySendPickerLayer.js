@@ -3,6 +3,7 @@
 // spodem powód odmowy albo położenie statku. Klik wiersza = `OrderService.issueWarp` (`runGalaxyWarpOrder`: toast z powodem); sukces
 // zamyka, odmowa zostawia listę. Esc i klik poza zamykają; klik poza nad płytą jest pochłaniany — nie zdejmuje przypięcia.
 // Stan pickera należy do `GalaxyModeController.sendPicker`, wiersze i tekst do `GalaxyWarpLogic` (nazwy przez kanon mgły).
+// G4: nad statkami sekcja floty (wiersz = `OrderService.issueFleetWarp`, ta sama faza 1 co menu); nagłówek sekcji nie jest strefą kliku.
 // Flaga `galaxyWarp` OFF — podwarstwa milczy.
 // ⚠ Moduł importuje się pod node (atrapa świata w keeperze): bez three i bez DOM.
 import { THEME } from '../config/ThemeConfig.js';
@@ -10,7 +11,7 @@ import { themeToken } from './HudPalette.js';
 import { HUD_LABELS, pointInRect } from './HudLabelLogic.js';
 import { galaxyChromeAlpha } from './GalaxyChromeLogic.js';
 import { GALAXY_FADE_MS } from './GalaxyModeLogic.js';
-import { galaxyWarpOn, sendPickerModel, sendPickerBox, sendPickerRowLines, runGalaxyWarpOrder } from './GalaxyWarpLogic.js';
+import { galaxyWarpOn, fleetWarpOn, sendPickerModel, sendPickerBox, sendPickerRowLines, sendRowKey, runGalaxyWarpOrder, runGalaxyFleetWarpOrder } from './GalaxyWarpLogic.js';
 
 // Rysunek (px logiczne). Strojenie okiem — bez pinów keepera.
 export const HUD_GALAXY_SEND_PICKER = Object.freeze({
@@ -21,6 +22,7 @@ export const HUD_GALAXY_SEND_PICKER = Object.freeze({
   THUMB_W: 2,          // pasek przewijania
   THUMB_ALPHA: 0.6,
   REFUSED_ALPHA: 0.55, // nazwa statku odmówionego
+  BAR_ALPHA: 0.97,     // G4: tło kryjące — wyższy picker z sekcją floty częściej otwiera się nad przyciskiem, na opisie przypiętej gwiazdy
 });
 
 export class HudGalaxySendPickerLayer {
@@ -66,9 +68,13 @@ export class HudGalaxySendPickerLayer {
     }
     const model = sendPickerModel(sp, K);
     const ptr = F.pointer;
-    const hoverId = ptr ? (this._rowAt(ptr.lx, ptr.ly)?.vesselId ?? null) : null;
+    const hoverRow = ptr ? this._rowAt(ptr.lx, ptr.ly) : null;
+    const hoverId = hoverRow ? sendRowKey(hoverRow) : null;
     let key = `gsp:1:${sp.systemId}:${model.first}:${model.total}:${hoverId ?? ''}:${model.header}`;
-    for (const r of model.rows) key += `|${r.vesselId}:${r.ok ? 1 : 0}:${r.reason ?? ''}:${r.warpCurrent.toFixed(1)}:${r.whereLabel}`;
+    for (const r of model.rows) {
+      const { main, sub } = sendPickerRowLines(r);
+      key += `|${sendRowKey(r)}:${r.ok ? 1 : 0}:${main}:${sub}`;
+    }
     this._prep = { on: true, model, hoverId };
     return key;
   }
@@ -85,16 +91,21 @@ export class HudGalaxySendPickerLayer {
     const font = `${size}px ${THEME.fontFamily}`, fontB = `bold ${font}`;
     const lineH = size + 3;
     const rowH = 2 * lineH + 2 * G.ROW_PAD_Y;
-    const body = m.empty ? lineH : m.rows.length * rowH;
+    const heightOf = (r) => (r.kind === 'section' ? lineH + 2 * G.ROW_PAD_Y : rowH);
+    const body = m.empty ? lineH : m.rows.reduce((sum, r) => sum + heightOf(r), 0);
     const box = sendPickerBox({ anchor, w: G.WIDTH, h: 2 * R.PAD_Y + lineH + R.LINE_GAP + body, rect: F.mapRect, gap: G.GAP_Y });
     const inner = box.w - 2 * R.PAD_X - (m.maxScroll > 0 ? G.THUMB_W + 2 : 0);
     const bodyY = box.y + R.PAD_Y + lineH + R.LINE_GAP;
-    const rows = m.rows.map((r, i) => {
+    let rowY = bodyY;
+    const rows = m.rows.map((r) => {
       const { main, sub } = sendPickerRowLines(r);
-      return { ...r, x: box.x, y: bodyY + i * rowH, w: box.w, h: rowH,
-        mainText: this._fit(main, font, size, inner), subText: this._fit(sub, font, size, inner) };
+      const h = heightOf(r);
+      const out = { ...r, x: box.x, y: rowY, w: box.w, h, key: sendRowKey(r),
+        mainText: this._fit(main, r.kind === 'section' ? fontB : font, size, inner), subText: this._fit(sub, font, size, inner) };
+      rowY += h;
+      return out;
     });
-    this._last = { box, zones: rows };
+    this._last = { box, zones: rows.filter((r) => r.kind !== 'section') };
     const tr = F.K?.threeRenderer;
     const fade = galaxyChromeAlpha({ flightAlpha: tr?._galaxyChromeAlpha, now: F.now, fadeT0: tr?._galaxyFadeT0, fadeMs: GALAXY_FADE_MS });
     return { count: 1, animating: fade < 1, box, rows, size, font, fontB, lineH, fade,
@@ -110,7 +121,7 @@ export class HudGalaxySendPickerLayer {
     ctx.setLineDash([]);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.globalAlpha = R.BAR_ALPHA_SELECTED * a;
+    ctx.globalAlpha = (fleetWarpOn() ? G.BAR_ALPHA : R.BAR_ALPHA_SELECTED) * a;
     ctx.fillStyle = THEME.bgPrimary;
     ctx.fillRect(box.x, box.y, box.w, box.h);
     const x = box.x + R.PAD_X;
@@ -125,7 +136,15 @@ export class HudGalaxySendPickerLayer {
       ctx.fillText(c.empty, x, c.bodyY + c.size);
     }
     for (const r of c.rows) {
-      if (r.vesselId === c.hoverId) {
+      if (r.kind === 'section') {
+        ctx.font = c.fontB;
+        ctx.globalAlpha = R.SUB_ALPHA * a;
+        ctx.fillStyle = textPrimary;
+        ctx.fillText(r.mainText, x, r.y + G.ROW_PAD_Y + c.size);
+        ctx.font = c.font;
+        continue;
+      }
+      if (r.key === c.hoverId) {
         ctx.globalAlpha = G.HOVER_ALPHA * a;
         ctx.fillStyle = r.ok ? roles.primary : roles.dim;
         ctx.fillRect(r.x, r.y, r.w, r.h);
@@ -160,6 +179,10 @@ export class HudGalaxySendPickerLayer {
     if (!this._inBox(x, y)) { gm.closeSendPicker(); return true; }
     const row = this._rowAt(x, y);
     if (row) {
+      if (row.kind === 'fleet') {
+        if (runGalaxyFleetWarpOrder({ fleetId: row.fleetId, targetSystemId: sp.systemId, K }).ok) gm.closeSendPicker();
+        return true;
+      }
       const res = runGalaxyWarpOrder({ vesselIds: [row.vesselId], targetSystemId: sp.systemId, K });
       if (res.moved > 0) gm.closeSendPicker();
     }
@@ -183,6 +206,6 @@ export class HudGalaxySendPickerLayer {
   debug() {
     const m = this._prep.model;
     return { id: 'galaxySendPicker', on: this._prep.on === true, box: this._last.box, total: m?.total ?? 0, first: m?.first ?? 0,
-      rows: (m?.rows ?? []).map((r) => ({ id: r.vesselId, ok: r.ok, reason: r.reason })) };
+      rows: (m?.rows ?? []).map((r) => ({ id: r.fleetId ?? r.vesselId ?? null, kind: r.kind ?? 'ship', ok: r.ok, reason: r.reason })) };
   }
 }

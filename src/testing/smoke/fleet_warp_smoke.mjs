@@ -18,6 +18,7 @@
 //   T15 rozkaz floty w locie odbija się o bramkę warp i nie rusza rekordu
 //   T16 flaga OFF = stan sprzed kroku: `feature_off`, opcje niewidzialne
 //   T17 trasa podana z góry pasuje do TEGO statku
+//   T18 Stop floty w skoku (decyzja właściciela 2026-11-06): przerwanie na najbliższym przystanku, jeden toast i jedna linia, członkowie wolni
 //
 // Uruchom: node src/testing/smoke/fleet_warp_smoke.mjs
 
@@ -72,7 +73,7 @@ const SYSTEMS = () => [
   { id: 'FAR', name: 'Daleko', x: 100, y: 0, z: 0 },
 ];
 
-let vMgr, mos, fSys, wrs, os, events, logs, tickNo;
+let vMgr, mos, fSys, wrs, os, events, logs, toasts, tickNo;
 
 function wire() {
   mos = new MovementOrderSystem(vMgr); fSys = new FleetSystem(vMgr); wrs = new WarpRouteSystem(vMgr); os = new OrderService();
@@ -80,6 +81,8 @@ function wire() {
   events = [];
   for (const ev of ['fleet:orderIssued', 'fleet:orderCancelled', 'fleet:orderCompleted', 'warpRoute:aborted', 'warpRoute:completed'])
     EventBus.on(ev, (d) => events.push({ ev, ...d }));
+  toasts = [];
+  EventBus.on('ui:toast', (d) => toasts.push(d));
 }
 
 function scene() {
@@ -593,7 +596,7 @@ group('T14 tekst odmowy (D-GX-20)', () => {
     }
   }
   setLocale('en');
-  const keys = { 'warpRoute.fleetStarted': ['{0}: flota skacze do {1} (skoki: {2})', '{0}: fleet warping to {1} (hops: {2})'], 'warpRoute.fleetCompleted': ['{0}: flota dotarła do {1}', '{0}: fleet arrived at {1}'] };
+  const keys = { 'galaxyMenu.fleetWarpTo': ['Flota: skok do {0}', 'Fleet: warp to {0}'], 'warpRoute.fleetStarted': ['{0}: flota skacze do {1} (skoki: {2})', '{0}: fleet warping to {1} (hops: {2})'], 'warpRoute.fleetCompleted': ['{0}: flota dotarła do {1}', '{0}: fleet arrived at {1}'], 'warpRoute.fleetAborted': ['{0}: trasa floty przerwana w {1}', '{0}: fleet route aborted at {1}'] };
   for (const [key, [pl, en]] of Object.entries(keys)) {
     assert(tIn('pl', key, '{0}', '{1}', '{2}') === pl && tIn('en', key, '{0}', '{1}', '{2}') === en, `${key}: brzmienie z §6 w obu językach`);
   }
@@ -641,6 +644,277 @@ group('T16 flaga OFF = stan sprzed kroku', () => {
   } finally {
     FEATURES.fleetWarp = true;
   }
+});
+
+// ── T18 ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Stop = trasa kończy się na najbliższym przystanku. Trasa i rekord żyją do lądowania; jeden toast i jedna linia na flotę, w chwili, gdy ląduje ostatni.
+const fleetEvents = (name) => events.filter((e) => e.ev === name);
+const logsSince = (n) => logs.slice(n).map((l) => l.text);
+const stop = (fid) => fSys.cancelFleetOrder(fid, 'manual');
+const threeShips = () => [ship({ name: 'A', hull: 'fw_slow' }), ship({ name: 'B', hull: 'fw_med' }), ship({ name: 'C', hull: 'fw_fast' })];
+const onHops = (vs, hops) => vs.every((v) => v.warpRoute?.hops?.join() === hops && v.warpRoute?.finalSystemId === hops.split(',').pop());
+
+group('T18a Stop: w chwili kliku trasa kończy się na przystanku, reszta milczy', () => {
+  scene();
+  const vs = threeShips(), [a, b, c] = vs;
+  const fid = makeFleet(a, b, c);
+  assert(issue(fid, 'D')?.ok === true && onHops(vs, 'sys_home,B,C,D') && a.mission?.toSystemId === 'B', 'kontrola: flota leci trasą 3 skoków, pierwszy odcinek do B');
+  tick(5);
+  const etaBefore = GalaxyWarp.fleetWarpStatus?.(fleetOf(fid))?.etaYears;
+  const nLogs = logs.length, nToasts = toasts.length, nEvents = events.length;
+  assert(stop(fid) === true, 'Stop przyjęty');
+  assert(onHops(vs, 'sys_home,B'), 'trasa każdego członka żyje i kończy się na najbliższym przystanku');
+  assert(vs.every((v) => v.mission?.phase === 'warp_transit' && v.mission?.toSystemId === 'B' && v.position.state === 'in_transit' && v.systemId === null), 'bieżący odcinek leci dalej (kontrola)');
+  const ao = fleetOf(fid)?.activeOrder;
+  assert(ao?.type === 'warp' && ao?.stopped === true && ao?.targetSystemId === 'B' && ao?.hops?.join() === 'sys_home,B', 'rekord floty żyje i mówi, gdzie flota stanie');
+  assert(!!ao && logs.length === nLogs && toasts.length === nToasts && events.length === nEvents, 'w chwili kliku: zero linii, toastów i zdarzeń (zero `fleet:orderCancelled`)');
+  // Panel floty mówi prawdę od razu: to jedyna reakcja na klik, zanim flota wyląduje.
+  const st = GalaxyWarp.fleetWarpStatus?.(fleetOf(fid));
+  const left = a.mission.arrivalYear - window.KOSMOS.timeSystem.gameTime;
+  assert(st?.targetSystemId === 'B' && st?.hops?.join() === 'sys_home,B', 'panel: celem jest przystanek');
+  assert(etaBefore > st?.etaYears && Math.abs(st?.etaYears - left) < 1e-9, `panel: ETA tylko bieżącego odcinka (${etaBefore?.toFixed(2)} → ${st?.etaYears?.toFixed(2)})`);
+  assert(GalaxyWarp.fleetWarpStatusLine?.(fleetOf(fid)) === `${t('fleetPicture.activity.warp')} → ${st?.targetName} · ${t('fleet.warpEta', st?.etaYears?.toFixed(1))}`, 'panel: linia z tym samym celem i ETA');
+  // Drugi Stop nic nie zmienia; flota w locie dalej odmawia rozkazów.
+  const before = snapshot();
+  assert(ao?.stopped === true && stop(fid) === false && snapshot() === before && toasts.length === nToasts, 'drugi Stop: no-op');
+  const mv = mos.issueOrder(a.id, { type: 'moveToPoint', targetPoint: { x: 6 * AU, y: 0 } });
+  assert(mv?.ok === false && mv?.reason === 'vessel_in_warp_transit', 'w locie: członek dalej odmawia rozkazu ruchu (kontrola bramki warp)');
+  assert(ao?.stopped === true && issue(fid, 'C')?.reason === 'in_transit' && fleetOf(fid)?.activeOrder === ao, 'w locie: nowy skok odbity, rekord ten sam');
+});
+
+group('T18b Stop: lądowanie na przystanku, jeden toast i jedna linia', () => {
+  scene();
+  const vs = threeShips(), [a, b, c] = vs;
+  const fid = makeFleet(a, b, c);
+  const seen = {};
+  EventBus.on('interstellar:arrived', ({ vessel, systemId }) => { (seen[systemId] ??= {})[vessel.id] = tickNo; });
+  issue(fid, 'D');
+  const nLogs = logs.length, nToasts = toasts.length;
+  stop(fid);
+  let routeAlive = true, recordAlive = true, n = 0;
+  while (a.systemId !== 'B' && n++ < 600) { if (!a.warpRoute) routeAlive = false; if (fleetOf(fid)?.activeOrder?.type !== 'warp') recordAlive = false; tick(); }
+  assert(a.systemId === 'B' && routeAlive, 'trasa żyje aż do lądowania');
+  assert(vs.every((v) => v.warpRoute === null && v.systemId === 'B' && v.position.state === 'orbiting' && v.mission?.phase === 'in_system'), 'trasa zdjęta po lądowaniu; wszyscy na orbicie przystanku');
+  const ticks = Object.values(seen.B ?? {});
+  assert(ticks.length === 3 && new Set(ticks).size === 1, `trzech członków w jednym ticku (${ticks.join()})`);
+  assert(a.systemId === 'B' && samePos(a, b) && samePos(b, c) && Math.abs(Math.hypot(a.position.x, a.position.y) - 30 * AU) < 1e-6, 'lądują w jednym punkcie obrzeży (kąt floty, bez losowania per statek)');
+  assert(recordAlive && fleetOf(fid)?.activeOrder === null, 'rekord floty żyje do lądowania i wtedy znika');
+  assert(JSON.stringify(logsSince(nLogs)) === JSON.stringify([t('warpRoute.fleetAborted', 'Eskadra', 'Beta')]), `Dziennik: dokładnie jedna linia floty (jest: ${JSON.stringify(logsSince(nLogs))})`);
+  const last = logs[logs.length - 1];
+  assert(last?.channel === 'fleet' && last?.severity === 'warn', 'kanał floty, ostrzeżenie');
+  assert(toasts.length - nToasts === 1 && toasts[nToasts]?.text === t('warpRoute.fleetAborted', 'Eskadra', 'Beta'), `dokładnie jeden toast floty (jest: ${toasts.length - nToasts})`);
+  const done = fleetEvents('fleet:orderCompleted');
+  assert(done.length === 1 && done[0].type === 'warp' && done[0].mode === 'aborted', 'jedno `fleet:orderCompleted`, tryb `aborted`');
+  assert(fleetEvents('fleet:orderCancelled').length === 0, 'zero `fleet:orderCancelled` przez cały przebieg');
+  assert(vs.every((v) => v.warpFuel.current === 16), `każdy zapłacił tylko bieżący odcinek: 8 LY × 0,5 (${vs.map((v) => v.warpFuel.current).join()})`);
+  tick(600);
+  assert(vs.every((v) => v.systemId === 'B' && v.position.state === 'orbiting'), 'flota stoi: nie rusza do C');
+  assert(!Object.keys(seen).includes('C') && logsSince(nLogs).length === 1, 'zero przylotów dalej i zero kolejnych linii');
+});
+
+group('T18c Stop: członkowie wolni dla własnych rozkazów', () => {
+  const landed = () => {
+    scene();
+    const vs = threeShips();
+    const fid = makeFleet(...vs);
+    issue(fid, 'D');
+    stop(fid);
+    runUntil(() => fleetOf(fid)?.activeOrder === null, 600);
+    return { fid, vs };
+  };
+  const { fid, vs: [a, b, c] } = landed();
+  assert(a.systemId === 'B' && !fleetOf(fid)?.activeOrder, 'flota stoi na przystanku');
+  const mv = mos.issueOrder(a.id, { type: 'moveToPoint', targetPoint: { x: 6 * AU, y: 0 } });
+  assert(mv?.ok === true && a.movementOrder?.type === 'moveToPoint' && a.position.state === 'in_transit', 'rozkaz ruchu członka przyjęty');
+  const nLogs = logs.length;
+  const own = os.issueWarp(b.id, 'C');
+  assert(own?.ok === true && b.warpRoute?.groupId === undefined && b.mission?.warpSpeed === 6, 'własny skok członka przyjęty, jego własną prędkością (bez blokady floty)');
+  assert(runUntil(() => b.warpRoute === null, 600) && b.systemId === 'C', 'własny skok dolatuje');
+  assert(logCount(t('warpRoute.completed', 'B', 'Cygni')) === 1 && logsSince(nLogs).includes(t('warpRoute.completed', 'B', 'Cygni')), 'po Stopie członek mówi sam za siebie');
+  assert(c.systemId === 'B' && c.position.state === 'orbiting' && !c.movementOrder, 'trzeci stoi nietknięty');
+  // Nowy rozkaz CAŁEJ floty z przystanku: nowa grupa, normalny koniec.
+  const again = landed();
+  const groupBefore = again.vs[0].warpRoute;
+  const res = issue(again.fid, 'D');
+  const ao = fleetOf(again.fid)?.activeOrder;
+  assert(groupBefore === null && res?.ok === true && ao?.stopped !== true && ao?.hops?.join() === 'B,C,D', 'nowy skok floty z przystanku: nowy rekord, bez znacznika Stopu');
+  assert(runUntil(() => fleetOf(again.fid)?.activeOrder === null, 800) && again.vs.every((v) => v.systemId === 'D'), 'flota dolatuje do celu');
+  assert(logCount(t('warpRoute.fleetCompleted', 'Eskadra', 'Delta')) === 1 && logCount(t('warpRoute.fleetAborted', 'Eskadra', 'Beta')) === 1, 'linia przerwania i linia dotarcia — po jednej');
+});
+
+group('T18d Stop na odcinku środkowym i ostatnim', () => {
+  scene();
+  const vs = threeShips();
+  const fid = makeFleet(...vs);
+  issue(fid, 'D');
+  runUntil(() => vs[0].mission?.toSystemId === 'C');
+  const n = logs.length;
+  assert(vs[0].warpRoute?.legIndex === 1 && stop(fid) === true && onHops(vs, 'sys_home,B,C'), 'środkowy odcinek: trasa kończy się na następnym przystanku, nie na poprzednim');
+  runUntil(() => fleetOf(fid)?.activeOrder === null, 600);
+  assert(vs.every((v) => v.systemId === 'C' && v.warpRoute === null), 'flota stoi na C');
+  assert(JSON.stringify(logsSince(n)) === JSON.stringify([t('warpRoute.fleetAborted', 'Eskadra', 'Cygni')]), 'linia przerwania nazywa C');
+  assert(vs.every((v) => v.systemId === 'C' && v.warpFuel.current === 12), `dwa odcinki paliwa: 16 LY × 0,5 (${vs.map((v) => v.warpFuel.current).join()})`);
+  // Ostatni odcinek: przystankiem jest cel. Nic nie ma do przerwania, więc to zwykły przylot.
+  for (const [label, target, prep] of [['trasa 2 skoków', 'C', (a) => runUntil(() => a.mission?.toSystemId === 'C')], ['trasa 1 skoku', 'B', () => {}]]) {
+    scene();
+    const ws = threeShips();
+    const f2 = makeFleet(...ws);
+    issue(f2, target);
+    prep(ws[0]);
+    const ao = fleetOf(f2)?.activeOrder;
+    const route = ws[0].warpRoute?.hops?.join();
+    const nL = logs.length, nT = toasts.length;
+    assert(!!ao && stop(f2) === false && fleetOf(f2)?.activeOrder === ao && ao?.stopped !== true && ws[0].warpRoute?.hops?.join() === route, `${label}: Stop na ostatnim odcinku nic nie zmienia`);
+    runUntil(() => fleetOf(f2)?.activeOrder === null, 600);
+    assert(ws.every((v) => v.systemId === target), `${label}: flota w celu`);
+    assert(JSON.stringify(logsSince(nL)) === JSON.stringify([t('warpRoute.fleetCompleted', 'Eskadra', target === 'C' ? 'Cygni' : 'Beta')]) && toasts.length === nT, `${label}: linia dotarcia, zero przerwania, zero toastu`);
+    assert(fleetEvents('fleet:orderCompleted')[0]?.mode === 'completed', `${label}: tryb \`completed\``);
+  }
+});
+
+group('T18e Stop przeżywa zapis i wczytanie przed lądowaniem', () => {
+  scene();
+  const a = ship({ name: 'A', hull: 'fw_slow' }), b = ship({ name: 'B', hull: 'fw_fast' });
+  const fid = makeFleet(a, b);
+  issue(fid, 'D');
+  tick(5);
+  stop(fid);
+  const saved = JSON.parse(JSON.stringify({ v: vMgr.serialize(), f: fSys.serialize() }));
+  const yearSaved = window.KOSMOS.timeSystem.gameTime;
+  EventBus.clear();
+  logs.length = 0;
+  vMgr = new VesselManager();
+  wire();
+  vMgr.restore(saved.v);
+  fSys.restore(saved.f);
+  window.KOSMOS.timeSystem.gameTime = yearSaved;
+  const a2 = vMgr.getVessel(a.id), b2 = vMgr.getVessel(b.id);
+  const ao = fleetOf(fid)?.activeOrder;
+  assert(onHops([a2, b2], 'sys_home,B') && ao?.stopped === true && ao?.targetSystemId === 'B' && ao?.hops?.join() === 'sys_home,B', 'po wczytaniu: skrócona trasa i rekord Stopu');
+  assert(Number.isFinite(a2.mission?.arrivalAngle) && a2.mission?.arrivalAngle === b2.mission?.arrivalAngle, 'po wczytaniu: kąt lądowania w misji');
+  runUntil(() => fleetOf(fid)?.activeOrder === null, 600);
+  assert(a2.systemId === 'B' && b2.systemId === 'B' && samePos(a2, b2), 'po wczytaniu: lądują razem na przystanku');
+  assert(JSON.stringify(logs.map((l) => l.text)) === JSON.stringify([t('warpRoute.fleetAborted', 'Eskadra', 'Beta')]) && toasts.length === 1, 'po wczytaniu: jedna linia i jeden toast');
+});
+
+group('T18f Stop: członek poza flotą, wrak, własne przerwanie, rozwiązanie floty', () => {
+  // Odszedł PRZED Stopem: Stop go nie dotyczy, leci do celu i mówi sam.
+  scene();
+  const f = ship({ name: 'F' }), g = ship({ name: 'Odszedl' });
+  const fid = makeFleet(f, g);
+  issue(fid, 'D');
+  fSys.removeMember(g.id, 'manual');
+  assert(stop(fid) === true && f.warpRoute?.hops?.join() === 'sys_home,B' && g.warpRoute?.hops?.join() === 'sys_home,B,C,D', 'odszedł przed Stopem: jego trasa nietknięta');
+  runUntil(() => f.warpRoute === null && g.warpRoute === null, 800);
+  assert(f.systemId === 'B' && g.systemId === 'D', 'członek staje, odszedł dolatuje');
+  assert(logCount(t('warpRoute.fleetAborted', 'Eskadra', 'Beta')) === 1 && logCount(t('warpRoute.completed', 'Odszedl', 'Delta')) === 1, 'flota — jedna linia; odszedł — własna');
+  // Odszedł PO Stopie: dostał rozkaz jeszcze jako członek, więc staje, ale mówi sam.
+  scene();
+  const h = ship({ name: 'H' }), i = ship({ name: 'Pozniej' });
+  const fid2 = makeFleet(h, i);
+  issue(fid2, 'D');
+  stop(fid2);
+  fSys.removeMember(i.id, 'manual');
+  assert(fleetOf(fid2)?.activeOrder?.stopped === true, 'rekord żyje po odejściu');
+  runUntil(() => h.warpRoute === null && i.warpRoute === null, 600);
+  assert(h.systemId === 'B' && i.systemId === 'B', 'obaj stają na przystanku');
+  assert(logCount(t('warpRoute.fleetAborted', 'Eskadra', 'Beta')) === 1 && toasts.length === 1 && logCount(t('warpRoute.completed', 'Pozniej', 'Beta')) === 1 && logCount(t('warpRoute.completed', 'H', 'Beta')) === 0, 'flota — jedna linia i toast; odszedł — własna; członek — żadnej');
+  // Wrak w locie po Stopie: reszta ląduje, linia nadal jedna.
+  scene();
+  const j = ship({ name: 'J' }), k = ship({ name: 'Wrak' });
+  const fid3 = makeFleet(j, k);
+  issue(fid3, 'D');
+  stop(fid3);
+  k.isWreck = true; EventBus.emit('vessel:wrecked', { vesselId: k.id });
+  assert(fleetOf(fid3)?.activeOrder?.stopped === true, 'wrak: rekord żyje, dopóki leci drugi');
+  runUntil(() => fleetOf(fid3)?.activeOrder === null, 600);
+  assert(j.systemId === 'B' && logCount(t('warpRoute.fleetAborted', 'Eskadra', 'Beta')) === 1 && toasts.length === 1, 'wrak: ocalały na przystanku, jedna linia i toast');
+  // Nikt nie doleciał: rekord znika bez linii o przystanku.
+  scene();
+  const l = ship({ name: 'L' }), m = ship({ name: 'M' });
+  const fid4 = makeFleet(l, m);
+  issue(fid4, 'D');
+  const stoppedAll = stop(fid4) === true && fleetOf(fid4)?.activeOrder?.stopped === true;   // świadek: bez niego stary Stop zielenił te dwa wiersze
+  for (const v of [l, m]) { v.isWreck = true; EventBus.emit('vessel:wrecked', { vesselId: v.id }); }
+  assert(stoppedAll && (fleetOf(fid4)?.activeOrder ?? null) === null, 'wszyscy wrakami: rekord zdjęty');
+  assert(stoppedAll && logCount(t('warpRoute.fleetAborted', 'Eskadra', 'Beta')) === 0 && toasts.length === 0, 'wszyscy wrakami: bez linii i toastu');
+  // Własne przerwanie członka (nie przez Stop) mówi nadal samo: inaczej statek znikałby z floty bez słowa (K8).
+  scene();
+  const o = ship({ name: 'O' }), p = ship({ name: 'Przerwany' });
+  const fid5 = makeFleet(o, p);
+  issue(fid5, 'D');
+  wrs.abortJourney(p.id, 'superseded');
+  assert(stop(fid5) === true && p.warpRoute === null && logCount(t('warpRoute.aborted', 'Przerwany', 'superseded')) === 1, 'własne przerwanie członka: własna linia (kontrola)');
+  runUntil(() => fleetOf(fid5)?.activeOrder === null, 600);
+  assert(logCount(t('warpRoute.fleetAborted', 'Eskadra', 'Beta')) === 1 && logCount(t('warpRoute.aborted', 'Przerwany', 'superseded')) === 1, 'obok niego jedna linia floty');
+  // Członek na WŁASNEJ trasie (zszedł z trasy floty i skacze sam): Stop floty go nie dotyczy.
+  scene();
+  const u = ship({ name: 'U' }), w = ship({ name: 'Wlasny' });
+  const fid7 = makeFleet(u, w);
+  issue(fid7, 'D');
+  wrs.abortJourney(w.id, 'superseded');
+  runUntil(() => w.systemId === 'B');
+  const ownJump = os.issueWarp(w.id, 'D');   // dwa odcinki: trasa jednoodcinkowa nie ma czego skracać, więc pin byłby jałowy
+  runUntil(() => u.mission?.toSystemId === 'C');
+  const ownBefore = w.warpRoute?.hops?.join();
+  assert(ownJump?.ok === true && ownBefore === 'B,C,D' && w.warpRoute?.legIndex === 0 && w.warpRoute?.groupId === undefined, 'kontrola: członek leci własną trasą dwóch odcinków, bez znacznika floty');
+  assert(stop(fid7) === true && u.warpRoute?.hops?.join() === 'sys_home,B,C' && w.warpRoute?.hops?.join() === ownBefore, 'Stop floty skraca trasę floty, nie jego własną');
+  // Flota rozwiązana między Stopem a lądowaniem: nie ma już kto mówić za flotę, więc każdy mówi sam.
+  scene();
+  const q = ship({ name: 'Q' }), r = ship({ name: 'R' });
+  const fid6 = makeFleet(q, r);
+  issue(fid6, 'D');
+  const stoppedQ = stop(fid6);
+  fSys.disbandFleet(fid6, 'manual');
+  runUntil(() => q.warpRoute === null && r.warpRoute === null, 600);
+  assert(stoppedQ === true && q.systemId === 'B' && r.systemId === 'B', 'rozwiązana: statki stają na przystanku');
+  assert(stoppedQ === true && logCount(t('warpRoute.completed', 'Q', 'Beta')) === 1 && logCount(t('warpRoute.completed', 'R', 'Beta')) === 1 && toasts.length === 0, 'rozwiązana: każdy mówi sam, bez linii floty');
+});
+
+group('T18g Stop: popup przylotu raz na flotę, w obu kolejnościach słuchaczy', () => {
+  const run = (listenerFirst) => {
+    scene();
+    if (listenerFirst) EventBus.clear();
+    let shown = null;
+    const seen = [];
+    EventBus.on('interstellar:arrived', ({ vessel, systemId }) => {
+      const kind = GalaxyWarp.fleetArrivalPopupKind?.(vessel, systemId, shown);
+      if (kind === 'fleet') shown = vessel.mission.warpGroupId;
+      seen.push(`${vessel.name}@${systemId}:${kind}`);
+    });
+    if (listenerFirst) { vMgr = new VesselManager(); wire(); }
+    const vs = threeShips();
+    const fid = makeFleet(...vs);
+    issue(fid, 'D');
+    stop(fid);
+    runUntil(() => fleetOf(fid)?.activeOrder === null, 600);
+    return seen;
+  };
+  for (const [label, seen] of [['słuchacz po WarpRouteSystem', run(false)], ['słuchacz przed WarpRouteSystem', run(true)]]) {
+    assert(seen.length === 3 && seen.every((s) => s.includes('@B:')), `${label}: 3 przyloty, wszystkie na przystanku (${seen.join(' ')})`);
+    assert(seen.filter((s) => s.endsWith(':fleet')).length === 1 && seen.filter((s) => s.endsWith(':none')).length === 2, `${label}: jeden popup floty, reszta cicho`);
+  }
+  // Odcinek pośredni bez Stopu nadal nie daje popupu (kontrola, że to Stop dał przystankowi kąt).
+  scene();
+  const vs = threeShips();
+  const fid = makeFleet(...vs);
+  const kinds = [];
+  EventBus.on('interstellar:arrived', ({ vessel, systemId }) => { if (systemId === 'B') kinds.push(GalaxyWarp.fleetArrivalPopupKind?.(vessel, systemId, null)); });
+  issue(fid, 'D');
+  runUntil(() => kinds.length === 3, 600);
+  assert(kinds.join() === 'none,none,none', 'kontrola: bez Stopu przystanek bez popupu');
+  assert(vs.every((v) => v.mission?.arrivalAngle === undefined), 'kontrola: bez Stopu odcinki pośrednie bez kąta');
+});
+
+group('T18h Stop innego rozkazu floty bez zmian (kontrola)', () => {
+  scene();
+  const a = ship({ name: 'A' }), b = ship({ name: 'B' });
+  const fid = makeFleet(a, b);
+  const mv = fSys.issueFleetOrder(fid, { type: 'moveToPoint', targetPoint: { x: 6 * AU, y: 0 } });
+  assert(mv?.ok === true && !!a.movementOrder && a.position.state === 'in_transit', 'flota leci rozkazem `moveToPoint`');
+  assert(stop(fid) === true && fleetOf(fid)?.activeOrder === null && !a.movementOrder && !b.movementOrder, 'Stop kasuje rekord i rozkazy członków od razu');
+  assert(fleetEvents('fleet:orderCancelled').length === 1 && fleetEvents('fleet:orderCancelled')[0].reason === 'manual', '`fleet:orderCancelled(manual)` jak dotąd');
+  assert(logCount(t('warpRoute.fleetAborted', 'Eskadra', 'Beta')) === 0 && toasts.length === 0, 'bez linii i toastu skoku');
 });
 
 console.log(`\n══════ fleet_warp_smoke: ${pass} PASS / ${fail} FAIL ══════`);

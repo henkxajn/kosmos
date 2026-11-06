@@ -13,6 +13,7 @@ import { DepositSystem } from '../systems/DepositSystem.js';
 import { THEME }     from '../config/ThemeConfig.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { fleetArrivalPopupKind } from './GalaxyWarpLogic.js';
 import {
   formatStatLine,
   formatStatLineWithCursor,
@@ -638,6 +639,8 @@ function _formatTechEffect(eff, isEN) {
 
 // ── Popup: przylot międzygwiezdny ────────────────────────────────────────
 
+let _fleetArrivalShown = null;   // G4 — grupa skoku floty, której popup przylotu już poszedł
+
 function _onInterstellarArrived({ vessel, systemId, star, targetName }) {
   // ⚠ W3-5 (§Findings 32) — BRAMKA WŁASNOŚCI. Ten popup mówi „DOTARŁEŚ do nowego układu"
   // i dokłada darmowy przegląd celu (typ gwiazdy, liczba planet i księżyców, ile w strefie
@@ -650,7 +653,11 @@ function _onInterstellarArrived({ vessel, systemId, star, targetName }) {
   // Widoczność obcych przylotów należy do W3-7 i ma iść przez detekcję (kontakt sensorowy),
   // nigdy przez modal „twojego" przylotu.
   if (!vessel || isEnemyVessel(vessel)) return;
-  const vesselName = vessel?.name ?? t('vessel.unknown');
+  // G4 — skok floty: przystanki bez popupu, finał raz na grupę, z nazwą floty (inaczej N pauzujących popupów na każdy przeskok).
+  const arrivalKind = fleetArrivalPopupKind(vessel, systemId, _fleetArrivalShown);
+  if (arrivalKind === 'none') return;
+  if (arrivalKind === 'fleet') _fleetArrivalShown = vessel.mission.warpGroupId;
+  const vesselName = (arrivalKind === 'fleet' ? window.KOSMOS?.fleetSystem?.getFleet?.(vessel.fleetId)?.name : null) ?? vessel?.name ?? t('vessel.unknown');
   const sysName = targetName ?? systemId;
 
   // Zbierz statystyki nowego układu

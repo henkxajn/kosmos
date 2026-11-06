@@ -341,17 +341,39 @@ export class FleetSystem {
   }
 
   /**
-   * Anuluj aktywny order floty. Wywołuje MOS.cancelOrder per member; clear activeOrder.
+   * Anuluj aktywny order floty. Wywołuje MOS.cancelOrder per member; clear activeOrder. Skok floty: `_stopWarpOrder`.
    */
   cancelFleetOrder(fleetId, reason = 'manual') {
     const fleet = this._fleets.get(fleetId);
     if (!fleet || !fleet.activeOrder) return false;
+    if (fleet.activeOrder.type === 'warp') return this._stopWarpOrder(fleet);
     const mos = window.KOSMOS?.movementOrderSystem;
     for (const [vesselId] of Object.entries(fleet.activeOrder.memberOrderIds ?? {})) {
       mos?.cancelOrder?.(vesselId, reason);
     }
     fleet.activeOrder = null;
     EventBus.emit('fleet:orderCancelled', { fleetId, reason });
+    return true;
+  }
+
+  /**
+   * @private G4 (decyzja właściciela 2026-11-06) — Stop floty w skoku: każdy członek kończy bieżący odcinek i zostaje na najbliższym przystanku.
+   * Rekord i trasy żyją do lądowania, a przerwanie melduje `_settleWarpOrder`: jeden toast i jedna linia za całą flotę, gdy ląduje ostatni członek.
+   * Rekord dostaje skróconą trasę, więc panel floty od razu pokazuje cel i ETA przystanku. Bez `fleet:orderCancelled`: to byłaby druga linia Dziennika.
+   * @returns {boolean} czy Stop coś zmienił. Ostatni odcinek: przystankiem jest cel, więc flota po prostu dolatuje. Drugi Stop: trasa już skrócona.
+   */
+  _stopWarpOrder(fleet) {
+    const ao = fleet.activeOrder;
+    const wrs = window.KOSMOS?.warpRouteSystem;
+    let hops = null;
+    for (const id of fleet.memberIds) {
+      const v = this._vm._vessels?.get?.(id);
+      if (v?.warpRoute?.groupId === ao.groupId && wrs?.stopJourneyAtNextHop?.(id)) hops ??= [...v.warpRoute.hops];
+    }
+    if (!hops) return false;
+    ao.hops = hops;
+    ao.targetSystemId = hops[hops.length - 1];
+    ao.stopped = true;
     return true;
   }
 
@@ -364,7 +386,7 @@ export class FleetSystem {
    *   odmówił `in_transit`.
    * @param {string} fleetId
    * @param {string[]} memberIds
-   * @param {{type:'warp', targetSystemId:string, groupId:string, hops:string[], startedYear:number}} record
+   * @param {{type:'warp', targetSystemId:string, groupId:string, hops:string[], startedYear:number, stopped?:true}} record — `stopped` dopisuje `_stopWarpOrder`
    * @param {(vesselId:string) => {ok:boolean, reason?:string}} dispatch
    * @param {{fleetEta?:number}} [info]
    * @returns {{ok:boolean, accepted:string[], rejected:Array<{vesselId:string, reason:string}>, fleetName?:string}}
@@ -414,7 +436,7 @@ export class FleetSystem {
 
   /**
    * @private G4 — rekord skoku żyje, dopóki leci choć jeden członek grupy. Członek, który zboczył, został przerwany, zginął albo opuścił flotę,
-   * przestaje się liczyć, a reszta leci dalej. Koniec: jedna linia Dziennika, gdy ktokolwiek dotarł; gdy nikt —
+   * przestaje się liczyć, a reszta leci dalej. Koniec: jedna linia Dziennika, gdy ktokolwiek dotarł (po Stopie linia przerwania i toast); gdy nikt —
    * meldowały już przerwania członków.
    * @param {Object} fleet
    * @param {string|null} [endedVesselId] — `warpRoute:completed` leci, zanim trasa zniknie ze statku
@@ -427,8 +449,9 @@ export class FleetSystem {
     fleet.activeOrder = null;
     const arrived = fleet.memberIds.some((id) => !vesselOf(id)?.isWreck && vesselOf(id)?.systemId === ao.targetSystemId);
     const wrs = window.KOSMOS?.warpRouteSystem;
-    if (arrived) wrs?.logFleetCompleted?.(fleet.name, ao.targetSystemId);
-    EventBus.emit('fleet:orderCompleted', { fleetId: fleet.id, type: ao.type, mode: arrived ? 'completed' : 'aborted' });
+    if (arrived && ao.stopped) wrs?.logFleetAborted?.(fleet.name, ao.targetSystemId);
+    else if (arrived) wrs?.logFleetCompleted?.(fleet.name, ao.targetSystemId);
+    EventBus.emit('fleet:orderCompleted', { fleetId: fleet.id, type: ao.type, mode: arrived && !ao.stopped ? 'completed' : 'aborted' });
   }
 
   /**

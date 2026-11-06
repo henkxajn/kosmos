@@ -298,7 +298,8 @@ export function railVisibleShips(list, { open = false, selIds = null } = {}) {
  * Geometria szyny przy gwieździe (px logiczne): wiersze od `x0 = ax + pickHalf + gap` (nigdy na kwadracie wyboru gwiazdy),
  * pierwszy wyśrodkowany w pionie na gwieździe, kolejne w dół, bez nakładania; ponad `maxRows` — „+N” (bez strefy kliku).
  * `hidden` — statki bez wiersza (gęstość, `railVisibleShips`), wliczone do „+N”; bez wierszy „+N” stoi na miejscu pierwszego
- * (`rowH` — jego wysokość). `plusMin` — od tylu statków rysuje się „+N”; poniżej — brak (bez paska i bez przeszkody).
+ * (`rowH` — jego wysokość). `plusMin` — szyna zwinięta (bez wierszy): od tylu statków rysuje się „+N”; poniżej — brak (bez paska i bez przeszkody).
+ * Statki ponad limit wierszy (szyna rozwinięta) — „+reszta” już od jednego, żaden nie znika bez śladu.
  * @param {{ ax:number, ay:number, rows:Array<{w:number, h:number}>, pickHalf?:number, gap?:number, maxRows?:number,
  *   plusW?:number, rowGap?:number, hidden?:number, rowH?:number, plusMin?:number }} p
  * @returns {{ rows:Array<{x:number, y:number, w:number, h:number, index:number}>, plus:{x:number, y:number, w:number, h:number, count:number}|null }}
@@ -311,8 +312,9 @@ export function railLayout({ ax, ay, rows = [], pickHalf = GALAXY_PICK_HALF_PX, 
   let y = num(ay) - h0 / 2;
   const out = [];
   shown.forEach((r, i) => { out.push({ x: x0, y, w: Math.max(0, num(r.w)), h: Math.max(0, num(r.h)), index: i }); y += num(r.h) + rowGap; });
-  const rest = rows.length - shown.length + Math.max(0, num(hidden));
-  const plus = rest >= Math.max(1, plusMin) ? { x: x0, y, w: plusW, h: h0, count: rest } : null;
+  const overflow = rows.length - shown.length;
+  const rest = overflow + Math.max(0, num(hidden));
+  const plus = (overflow >= 1 || rest >= Math.max(1, plusMin)) ? { x: x0, y, w: plusW, h: h0, count: rest } : null;
   return { rows: out, plus };
 }
 

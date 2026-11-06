@@ -198,6 +198,13 @@ export class WarpRouteSystem {
     this._log(t('warpRoute.fleetCompleted', fleetName, this._systemName(targetSystemId)), 'info');
   }
 
+  /** Stop floty: jedna linia i jeden toast za całą flotę, gdy ląduje ostatni członek. Przylot `markSystemExplored`, układ jest już poznany. */
+  logFleetAborted(fleetName, systemId) {
+    const text = t('warpRoute.fleetAborted', fleetName, this._systemName(systemId));
+    this._log(text, 'warn');
+    EventBus.emit('ui:toast', { text, color: '#ffcc44', durationMs: 4000 });
+  }
+
   // Bramka członka: `canOrder` + dwa terminy, których brak zepchnąłby odmowę do fazy 2, po starcie pierwszych członków.
   _groupGateRefusal(v) {
     const gate = this.canOrder(v);
@@ -251,6 +258,7 @@ export class WarpRouteSystem {
     const r = v.warpRoute;
     const legOpts = {};
     if (r?.speedLY > 0) legOpts.speedLY = r.speedLY;
+    if (r?.groupId) legOpts.warpGroupId = r.groupId;
     if (hop === r?.finalSystemId && Number.isFinite(r?.arrivalAngle)) legOpts.arrivalAngle = r.arrivalAngle;
     return Object.keys(legOpts).length > 0
       ? this._vm.dispatchInterstellar(v.id, hop, legOpts)
@@ -326,6 +334,23 @@ export class WarpRouteSystem {
     const v = this._vm?.getVessel?.(vesselId);
     if (!v?.warpRoute) return false;
     this._abort(v, reason);
+    return true;
+  }
+
+  /**
+   * G4 (decyzja właściciela 2026-11-06) — Stop floty w skoku: trasa kończy się na najbliższym przystanku. Statek kończy bieżący odcinek, a gałąź finału
+   * `_onArrived` zdejmuje trasę po lądowaniu, bez linii Dziennika członka. Skrócona lista przystanków jest jedynym źródłem dla panelu floty, trasy na płycie
+   * i zapisu, więc od chwili kliku mówią one prawdę. Kąt floty wchodzi do lecącej misji, bo dotąd niósł go tylko ostatni odcinek: bez tego każdy statek
+   * wylądowałby w innym punkcie obrzeży, a `fleetArrivalPopupKind` nie rozpoznałby końca lotu.
+   * @returns {boolean} czy trasa się skróciła. Ostatni odcinek: przystankiem jest cel, więc nie ma czego przerywać.
+   */
+  stopJourneyAtNextHop(vesselId) {
+    const v = this._vm?.getVessel?.(vesselId);
+    const r = v?.warpRoute;
+    if (!r || r.legIndex >= r.hops.length - 2) return false;
+    r.hops = r.hops.slice(0, r.legIndex + 2);
+    r.finalSystemId = r.hops[r.hops.length - 1];
+    if (Number.isFinite(r.arrivalAngle) && v.mission?.phase === 'warp_transit') v.mission.arrivalAngle = r.arrivalAngle;
     return true;
   }
 

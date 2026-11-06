@@ -1756,6 +1756,7 @@ export default {
   'warpRoute.aborted': '{0}: route aborted ({1})',
   'warpRoute.fleetStarted': '{0}: fleet warping to {1} (hops: {2})',
   'warpRoute.fleetCompleted': '{0}: fleet arrived at {1}',
+  'warpRoute.fleetAborted': '{0}: fleet route aborted at {1}',
 
   // OrderService — unified order layer (composite cross-system transport)
   'order.compositeTargetLost': '{0}: delivery target lost during warp — order cancelled',
@@ -2560,6 +2561,7 @@ export default {
   'galaxyPin.noBodyData': 'scan: no body data',
   'galaxyMenu.warpTo': 'Warp to {0}',
   'galaxyMenu.fleetWaitsG4': 'fleet — G4',
+  'galaxyMenu.fleetWarpTo': 'Fleet: warp to {0}',
   'leftOutliner.keyHint': '“,” left panel · “.” right panel · “B” both',
   // ARKUSZ UI U3-2 — right outliner (ships): header, "In transit" section (D-UI-8, §7.3), type buckets (D-UI-6, §7.1)
   'rightOutliner.ships': 'SHIPS [{0}]',

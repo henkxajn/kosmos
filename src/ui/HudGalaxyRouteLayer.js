@@ -22,7 +22,7 @@ import { GALAXY_K, GALAXY_FADE_MS, plateWorldOf } from './GalaxyModeLogic.js';
 import { galaxyShipRail, galaxyEnemyBlips, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
 import { buildFleetIndex, groupTransitByFleet, routeEndpoints } from './GalaxyShipMarkerLogic.js';
 import { observatoryRangeLY } from '../utils/ObservatoryRange.js';
-import { galaxyWarpOn, warpHoverModel } from './GalaxyWarpLogic.js';
+import { galaxyWarpOn, warpHoverModel, fleetWarpStatus } from './GalaxyWarpLogic.js';
 
 // Rysunek (px logiczne). Strojenie okiem — bez pinów keepera.
 export const HUD_GALAXY_ROUTES = Object.freeze({
@@ -87,7 +87,9 @@ export class HudGalaxyRouteLayer {
     }
     // Statek zaznaczony z trasą wieloprzeskokową — pozostałe przeskoki (od celu bieżącego skoku).
     let hops = null;
-    const lv = lead != null ? K.vesselManager?.getVessel?.(lead) : null;
+    // G4 — zaznaczona flota w skoku: trasa jej członka, czyli wspólne przeskoki rozkazu (`fleet.activeOrder.hops`).
+    const fleetLead = lead == null && sel.fleetId != null ? fleetWarpStatus(K.fleetSystem?.getFleet?.(sel.fleetId), K)?.leadId ?? null : null;
+    const lv = (lead ?? fleetLead) != null ? K.vesselManager?.getVessel?.(lead ?? fleetLead) : null;
     const wr = lv?.warpRoute;
     if (wr && Array.isArray(wr.hops) && Number.isInteger(wr.legIndex)) {
       const rest = wr.hops.slice(Math.max(0, wr.legIndex)).map((id) => byId.get(String(id))).filter(Boolean);

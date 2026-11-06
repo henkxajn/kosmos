@@ -1757,6 +1757,7 @@ export default {
   'warpRoute.aborted': '{0}: trasa przerwana ({1})',
   'warpRoute.fleetStarted': '{0}: flota skacze do {1} (skoki: {2})',
   'warpRoute.fleetCompleted': '{0}: flota dotarła do {1}',
+  'warpRoute.fleetAborted': '{0}: trasa floty przerwana w {1}',
 
   // OrderService — zunifikowana warstwa rozkazów (composite cross-system transport)
   'order.compositeTargetLost': '{0}: cel dostawy zniknął podczas skoku — rozkaz anulowany',
@@ -2563,6 +2564,7 @@ export default {
   'galaxyPin.noBodyData': 'skan: brak danych o ciałach',
   'galaxyMenu.warpTo': 'Skok do {0}',
   'galaxyMenu.fleetWaitsG4': 'flota — G4',
+  'galaxyMenu.fleetWarpTo': 'Flota: skok do {0}',
   // ARKUSZ UI U3-2 — prawy outliner (statki): nagłówek, sekcja „W drodze” (D-UI-8, §7.3), kubełki typu (D-UI-6, §7.1)
   'rightOutliner.ships': 'STATKI [{0}]',
   'rightOutliner.inTransit': 'W drodze',

@@ -19,7 +19,7 @@ import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatch
 import { outOfCameraFrame, fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal, CAMERA_FRAME_REASON } from '../utils/CameraFrame.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 import { t } from '../i18n/i18n.js';
-import { galaxyStarMenuEntries, runGalaxyWarpOrder } from './GalaxyWarpLogic.js';
+import { galaxyStarMenuEntries, runGalaxyWarpOrder, runGalaxyFleetWarpOrder } from './GalaxyWarpLogic.js';
 
 // ── Leg D (Finding 255, noga MAPY) — typy rozkazu, których cel POCHODZI Z KLIKANEGO
 //    PUNKTU, czyli z ramki KAMERY. Tylko dla nich wolno pytać „czy statek jest w tej
@@ -102,6 +102,9 @@ export class RightClickMenu {
         why.className = 'kosmos-rcm-reason';
         why.textContent = opt.disabledReason;
         why.style.color = THEME.textPrimary;
+        // G4 — odmowa floty nazywa członków: tekst się zawija, zamiast rozciągać menu poza ekran.
+        why.style.whiteSpace = 'normal';
+        why.style.maxWidth = '420px';
         item.appendChild(why);
       }
 
@@ -242,6 +245,12 @@ export class RightClickMenu {
     // ARC GALAXY G3-B — skok z menu gwiazdy płyty: rozkaz per statek, komunikat kształtu D-E2.
     if (option.action === 'issueGalaxyWarp') {
       runGalaxyWarpOrder({ vesselIds: option.vesselIds, targetSystemId: option.targetSystemId });
+      return;
+    }
+
+    // G4 — skok floty z menu gwiazdy płyty: jeden rozkaz na flotę.
+    if (option.action === 'issueGalaxyFleetWarp') {
+      runGalaxyFleetWarpOrder({ fleetId: option.fleetId, targetSystemId: option.targetSystemId });
       return;
     }
 

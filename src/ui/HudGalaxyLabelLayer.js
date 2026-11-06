@@ -390,7 +390,7 @@ export class HudGalaxyLabelLayer {
     const hoverBtn = pz?.kind === 'btn' ? pz.id : null;
     // G3-B — powód, dla którego zaznaczony statek nie doskoczy do gwiazdy pod kursorem (ten sam model co podgląd trasy).
     const warpModel = galaxyWarpOn() && hovId != null ? warpHoverModel(hovId, K) : null;
-    const warpReason = warpModel && !warpModel.available ? refusalText(warpModel.reason) : null;
+    const warpReason = warpModel && !warpModel.available ? (warpModel.reasonText ?? refusalText(warpModel.reason)) : null;   // flota: tekst D-GX-20
     const fade = galaxyChromeAlpha({ flightAlpha: tr._galaxyChromeAlpha, now: F.now, fadeT0: tr._galaxyFadeT0, fadeMs: GALAXY_FADE_MS });
     let key = `gal2:1:${sel ?? ''}:${hovId ?? ''}:${Math.round(hov.alpha * 20)}:${diveId ?? ''}:${diveBr ? 1 : 0}:${labelsOn ? 1 : 0}:${loc}`
       + `:${hoverBtn ?? ''}:${Math.round(fade * 40)}`;

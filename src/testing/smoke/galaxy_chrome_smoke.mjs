@@ -343,10 +343,11 @@ header('H13 gęstość szyny — tabela widoczności nazw (F5)');
   const one = list.slice(0, 1), two = list.slice(0, 2);
   const table = [
     ['domyślnie — bez nazw, sam „+N”', {}, '', '+4'],
-    ['chip [O] — nazwy; jeden statek ponad limit wierszy — bez „+1”', { ships: true }, 'v1,v2,v3', ''],
-    ['gwiazda najechana', { hover: true }, 'v1,v2,v3', ''],
-    ['gwiazda zaznaczona', { selStar: true }, 'v1,v2,v3', ''],
-    ['kursor na wierszu gwiazdy', { onRow: true }, 'v1,v2,v3', ''],
+    // ⚠ G4-B — ODWRÓCONE ŚWIADOMIE (decyzja właściciela): szyna rozwinięta pokazuje „+reszta” od jednego statku; dawne oczekiwanie (bez „+1”) chowało czwarty statek.
+    ['chip [O] — nazwy; jeden statek ponad limit wierszy — „+1”', { ships: true }, 'v1,v2,v3', '+1'],
+    ['gwiazda najechana', { hover: true }, 'v1,v2,v3', '+1'],
+    ['gwiazda zaznaczona', { selStar: true }, 'v1,v2,v3', '+1'],
+    ['kursor na wierszu gwiazdy', { onRow: true }, 'v1,v2,v3', '+1'],
     ['zaznaczony statek — tylko jego nazwa', { selShips: ['v3'] }, 'v3', '+3'],
     ['dwa zaznaczone', { selShips: ['v2', 'v3'] }, 'v2,v3', '+2'],
     ['flaga OFF — nazwy i „+1” jak w G2', { flag: false }, 'v1,v2,v3', '+1'],

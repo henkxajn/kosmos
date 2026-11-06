@@ -4495,6 +4495,8 @@ export class FleetManagerOverlay {
   _computeFleetStatus(fleet) {
     const ao = fleet.activeOrder;
     if (!ao) return { label: t('fleet.statusIdle2'), color: THEME.textDim };
+    // G4 — rekord skoku nie śledzi rozkazów członków; bez tej gałęzi flota w skoku czytałaby się jako bezczynna.
+    if (ao.type === 'warp') return { label: `🌀 ${t('fleetPicture.activity.warp')}`, color: THEME.warning };
     const tracked = Object.keys(ao.memberOrderIds ?? {}).length;
     if (tracked === 0) return { label: t('fleet.statusIdle2'), color: THEME.textDim };
     switch (ao.type) {

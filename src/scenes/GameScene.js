@@ -86,6 +86,7 @@ import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
 import { spawnTestEnemy, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyRaider, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
+import { fleetWarpDebugHelpers } from '../debug/FleetWarpDebug.js';
 import { loadCombatSandbox, sandboxInfo, sandboxResetPositions, sandboxSpawnMoreEnemies } from '../scenarios/CombatSandbox.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
@@ -589,6 +590,8 @@ export class GameScene {
     // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
+      // KOSMOS.debug.fleetWarpRig / Plan / Issue / State / Divert / AI — pomocniki bramki skoku floty (bez cudzysłowów; docs/design/GALAXY_G4_GATE_CHECKLIST.md).
+      ...fleetWarpDebugHelpers(),
       // KOSMOS.debug.sunInfo()      — stan warstwy Sun 2.0 dla live gate'u (S1).
       // KOSMOS.debug.sunInfo(0.693) — to samo, ale z ZMIERZONĄ średnią mapy emission
       //   klasy M (K 0.782 · G 0.907 · F 1.012), czyli brzegi wygaszania takie, jakich

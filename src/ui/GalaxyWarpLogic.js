@@ -15,11 +15,12 @@ import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { calcShipStats } from '../data/ShipModulesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
-import { planWarpRoute as realPlanWarpRoute, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
+import { planWarpRoute as realPlanWarpRoute, warpDist3D, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 import { describeFleetOrderRefusal } from '../utils/CameraFrame.js';
 import { warpSystemLabel } from '../utils/SystemRevealWorld.js';
 import { stripLeadSymbol } from './GalaxyChromeLogic.js';
+import { fleetTag } from './GalaxyShipMarkerLogic.js';
 
 export { warpSystemLabel };
 
@@ -29,6 +30,8 @@ const canOrderOf = (K) => (v) => K?.warpRouteSystem?.canOrder?.(v) ?? { ok: fals
 
 /** Flaga kroku (brak klucza = OFF). */
 export const galaxyWarpOn = () => !!GAME_CONFIG.FEATURES?.galaxyWarp;
+/** Flaga skoku floty (G4; brak klucza = OFF). */
+export const fleetWarpOn = () => !!GAME_CONFIG.FEATURES?.fleetWarp;
 
 // ── Słownik odmowy (Finding 594, D-GX-20) ──────────────────────────────────────────────────────────────────────────────────
 // Dawna tabela `FleetManagerOverlay._warpErrLabel` + powód rezerwy (Finding 588, klucz wspólny z MOS). Jeden słownik dla menu, pickera,
@@ -235,6 +238,92 @@ export function sendPickerRows(vessels, targetSystemId, canOrder, { K = windowK(
   return [...rows.filter(r => r.ok), ...rows.filter(r => !r.ok)];
 }
 
+// ── Skok floty: model dla menu, podglądu i pickera (G4, D-GX-19) ───────────────────────────────────────────────────────────
+
+// Plan floty — podgląd i picker pytają co klatkę, a to Dijkstra po galaktyce: wynik trzymany, dopóki nie zmieni się stan któregoś członka.
+const FLEET_PLAN_MEMO_MAX = 64;
+let _fleetPlanMemo = new Map();
+
+function fleetMembers(fleet, K) {
+  return (fleet?.memberIds ?? []).map((id) => K?.vesselManager?.getVessel?.(id)).filter((v) => v && !v.isWreck);
+}
+
+function fleetPlanKey(fleet, targetSystemId, K) {
+  const parts = [fleet?.id, targetSystemId, fleet?.activeOrder?.groupId ?? ''];
+  for (const v of fleetMembers(fleet, K)) {
+    const wf = v.warpFuel ?? {};
+    parts.push(v.id, systemIdOf(v), v.position?.state, v.serviceState, v.unpaidYears, wf.current, wf.max, wf.consumption, v.shipId, v.modules?.length ?? 0);
+  }
+  return parts.join('|');
+}
+
+/** Faza 1 rozkazu floty (`OrderService.previewFleetWarp`) z pamięcią po stanie członków. */
+function fleetPlanOf(fleet, targetSystemId, K) {
+  const key = fleetPlanKey(fleet, targetSystemId, K);
+  if (_fleetPlanMemo.has(key)) return _fleetPlanMemo.get(key);
+  if (_fleetPlanMemo.size > FLEET_PLAN_MEMO_MAX) _fleetPlanMemo = new Map();
+  const plan = K?.orderService?.previewFleetWarp?.(fleet?.id, targetSystemId)
+    ?? { ok: false, reason: 'no_route_system', members: [], rejected: [], accepted: [], bindingMemberId: null };
+  _fleetPlanMemo.set(key, plan);
+  return plan;
+}
+
+/**
+ * Wpis menu i wiersz pickera dla floty i gwiazdy celu: wyłącznie faza 1 rozkazu, więc menu mówi to samo, co zrobi klik.
+ * ETA liczone prędkością najwolniejszego członka; paliwo = potrzeba i bak członka wiążącego, nazwany na końcu etykiety.
+ * @returns {{ fleetId:string, available:boolean, reason:string|null, reasonText:string|null, hops:number|null, etaYears:number|null,
+ *             fuelNeed:number|null, fuelHave:number|null, bindingMemberId:string|null, bindingName:string|null, targetName:string,
+ *             labelPL:string, labelEN:string, plan:Object }}
+ */
+export function fleetWarpMenuOption({ fleetId, targetSystemId, K = windowK() } = {}) {
+  const target = String(targetSystemId);
+  const fleet = K?.fleetSystem?.getFleet?.(fleetId) ?? null;
+  const plan = fleet ? fleetPlanOf(fleet, target, K)
+    : { ok: false, reason: 'fleet_not_found', members: [], rejected: [], accepted: [], bindingMemberId: null };
+  const hasRoute = Array.isArray(plan.hops) && plan.hops.length >= 2;
+  const binding = plan.bindingMemberId != null ? K?.vesselManager?.getVessel?.(plan.bindingMemberId) ?? null : null;
+  const hops = hasRoute ? plan.hops.length - 1 : null;
+  const etaYears = hasRoute ? (plan.etaYears ?? null) : null;
+  const fuelNeed = (hasRoute && binding) ? plan.totalLY * binding.warpFuel.consumption : null;
+  const fuelHave = binding?.warpFuel?.current ?? null;
+  const bindingName = binding?.name ?? null;
+  const targetName = warpSystemLabel(target, K);
+  const label = (lang) => {
+    const title = tIn(lang, 'galaxyMenu.fleetWarpTo', targetName);
+    if (!hasRoute) return title;
+    const parts = [tIn(lang, 'fleet.warpHops', String(hops))];
+    if (etaYears != null) parts.push(tIn(lang, 'fleet.warpEta', etaYears.toFixed(1)));
+    if (fuelNeed != null) parts.push(`${tIn(lang, 'fleet.warpFuelNeed', fuelNeed.toFixed(1), fuelHave.toFixed(1))} (${bindingName})`);
+    return `${title} — ${parts.join(' · ')}`;
+  };
+  const available = plan.ok === true;
+  return {
+    fleetId, available,
+    reason: available ? null : plan.reason,
+    reasonText: available ? null : (describeFleetWarpRefusal(plan)?.text ?? refusalText(plan.reason)),
+    hops, etaYears, fuelNeed, fuelHave, bindingMemberId: plan.bindingMemberId ?? null, bindingName, targetName,
+    labelPL: label('pl'), labelEN: label('en'), plan,
+  };
+}
+
+/** Wiersze sekcji „Floty” pickera: ta sama faza 1 co menu; zdolne pierwsze. Flota bez żywych członków nie ma wiersza. */
+export function sendPickerFleetRows(targetSystemId, K = windowK()) {
+  const rows = [];
+  for (const fleet of K?.fleetSystem?.listFleets?.() ?? []) {
+    const count = fleetMembers(fleet, K).length;
+    if (count === 0) continue;
+    const o = fleetWarpMenuOption({ fleetId: fleet.id, targetSystemId, K });
+    rows.push({
+      kind: 'fleet', fleetId: fleet.id, vesselId: null, name: fleet.name ?? fleet.id, count, ok: o.available, reason: o.reason, reasonText: o.reasonText,
+      hops: o.hops, etaYears: o.etaYears, fuelNeed: o.fuelNeed, fuelHave: o.fuelHave, bindingName: o.bindingName,
+    });
+  }
+  return [...rows.filter(r => r.ok), ...rows.filter(r => !r.ok)];
+}
+
+/** Stały klucz wiersza pickera: flota, statek albo nagłówek sekcji. */
+export const sendRowKey = (row) => row?.fleetId ?? row?.vesselId ?? `section:${row?.text ?? ''}`;
+
 /** Limit wierszy pickera na raz (reszta — kółkiem). */
 export const SEND_PICKER_MAX_ROWS = 6;
 
@@ -251,7 +340,12 @@ export function sendPickerWindow(rows, scroll = 0, maxRows = SEND_PICKER_MAX_ROW
  * @returns {{ systemId:string, header:string, empty:string|null, rows:Array, first:number, maxScroll:number, total:number }}
  */
 export function sendPickerModel(state, K = windowK()) {
-  const rows = sendPickerRows(K?.vesselManager?.getAllVessels?.() ?? [], state.systemId, canOrderOf(K), { K });
+  const ships = sendPickerRows(K?.vesselManager?.getAllVessels?.() ?? [], state.systemId, canOrderOf(K), { K });
+  // G4 — sekcja „Floty” nad statkami. Bez flot lista jak w G3 (bez nagłówków).
+  const fleets = fleetWarpOn() ? sendPickerFleetRows(state.systemId, K) : [];
+  const rows = fleets.length > 0
+    ? [{ kind: 'section', text: t('fleet.fleetsHeader') }, ...fleets, ...(ships.length > 0 ? [{ kind: 'section', text: t('rightOutliner.ships', ships.length) }, ...ships] : [])]
+    : ships;
   const win = sendPickerWindow(rows, state.scroll);
   return { ...win, systemId: state.systemId, header: `${t('fleet.selectShipToSend')} → ${warpSystemLabel(state.systemId, K)}`,
     empty: win.total === 0 ? t('fleet.noWarpShipsAvailable') : null };
@@ -267,6 +361,13 @@ export function sendPickerBox({ anchor, w, h, rect, gap = 3 }) {
 
 /** Dwie linie wiersza: „nazwa · kadłub · paliwo” oraz powód odmowy, a przy statku zdolnym — gdzie stoi. */
 export function sendPickerRowLines(row) {
+  if (row.kind === 'section') return { main: row.text, sub: '' };
+  if (row.kind === 'fleet') {
+    const parts = [t('fleet.warpHops', String(row.hops))];
+    if (row.etaYears != null) parts.push(t('fleet.warpEta', row.etaYears.toFixed(1)));
+    if (row.fuelNeed != null) parts.push(`${t('fleet.warpFuelNeed', row.fuelNeed.toFixed(1), row.fuelHave.toFixed(1))} (${row.bindingName})`);
+    return { main: `${row.name} · ${fleetTag(row.count)}`, sub: row.ok ? parts.join(' · ') : row.reasonText };
+  }
   const fuel = `${t('shipPicker.warp')} ${(row.warpCurrent ?? 0).toFixed(1)}/${(row.warpMax ?? 0).toFixed(1)}`;
   return { main: [row.name, row.hull, fuel].filter(Boolean).join(' · '), sub: row.ok ? row.whereLabel : row.reasonText };
 }
@@ -286,12 +387,25 @@ export function warpSelection(K = windowK()) {
   return { fleetId: um?.getSelectedFleetId?.() ?? null, ships };
 }
 
+/**
+ * Flota zaznaczenia dla skoku (G4): węzeł floty w prawym outlinerze albo członek floty (także kilku członków JEDNEJ floty). Luźny statek obok
+ * członka zostaje przy rozkazach per statek (G3). Pojedynczego członka wysyła osobno wiersz pickera.
+ * @returns {string|null}
+ */
+export function selectedWarpFleetId(K = windowK()) {
+  const { fleetId, ships } = warpSelection(K);
+  if (fleetId != null) return fleetId;
+  const owner = ships[0]?.fleetId ?? null;
+  return owner != null && ships.every((v) => v.fleetId === owner) ? owner : null;
+}
+
 // ── Menu PPM gwiazdy płyty (G3-B, target `galaxyStar`) ─────────────────────────────────────────────────────────────────────
 
 /**
  * Pozycje menu gwiazdy — zawsze co najwyżej JEDNA:
  *   • bez statku i bez floty — nic (menu się nie otwiera);
- *   • flota — wyłączona z powodem (skok floty to G4; luźne statki obok floty nie zmieniają tego, jak w menu mapy);
+ *   • flota (`selectedWarpFleetId`) — wpis skoku floty z fazy 1 rozkazu (`fleetWarpMenuOption`); wyłączony z tekstem D-GX-20 nazywającym członków;
+ *     przy `fleetWarp` OFF — węzeł floty: wyłączony z powodem jak w G3, członek — jak statek;
  *   • jeden statek — etykieta i dostępność z `warpMenuOption`;
  *   • kilka luźnych statków — sam tytuł „Skok do X” (trasa i paliwo są per statek), aktywna, gdy skoczyć może choć jeden;
  *     wyłączona — z powodem lidera.
@@ -307,7 +421,15 @@ export function galaxyStarMenuEntries(targetSystemId, K = windowK()) {
     vesselIds, targetSystemId: target,
   });
   const title = (lang) => tIn(lang, 'galaxyMenu.warpTo', name);
-  if (fleetId != null) return [entry(title('pl'), title('en'), t('galaxyMenu.fleetWaitsG4'), [])];
+  if (fleetWarpOn()) {
+    const warpFleetId = selectedWarpFleetId(K);
+    if (warpFleetId != null) {
+      const o = fleetWarpMenuOption({ fleetId: warpFleetId, targetSystemId: target, K });
+      return [{ ...entry(o.labelPL, o.labelEN, o.available ? null : o.reasonText, []), id: 'galaxy.fleetWarp', action: 'issueGalaxyFleetWarp', fleetId: warpFleetId }];
+    }
+  } else if (fleetId != null) {
+    return [entry(title('pl'), title('en'), t('galaxyMenu.fleetWaitsG4'), [])];
+  }
   if (ships.length === 0) return [];
   const canOrder = canOrderOf(K);
   const systems = K?.galaxyData?.systems ?? [];
@@ -353,17 +475,103 @@ export function runGalaxyWarpOrder({ vesselIds = [], targetSystemId, K = windowK
   return { moved, total, fails, text };
 }
 
+/**
+ * Rozkaz skoku floty (menu gwiazdy, picker): jeden `OrderService.issueFleetWarp`, jeden komunikat. Sukces — `fleet.warpOrderSent`; odmowa i wyścig
+ * fazy 2 — kształt D-E2 ze słownikiem skoku (D-GX-20), też w Dzienniku: toast jest ulotny.
+ * @returns {{ ok:boolean, text:string, res:Object|null }}
+ */
+export function runGalaxyFleetWarpOrder({ fleetId, targetSystemId, K = windowK() } = {}) {
+  const res = K?.orderService?.issueFleetWarp?.(fleetId, targetSystemId) ?? { ok: false, reason: 'no_route_system', accepted: [], rejected: [] };
+  const refusal = describeFleetWarpRefusal(res);
+  const text = refusal?.text ?? t('fleet.warpOrderSent');
+  if (!refusal) {
+    EventBus.emit('ui:toast', { text, color: THEME.accent, durationMs: 2500 });
+  } else {
+    EventBus.emit('ui:toast', { text, color: res.ok ? (THEME.warning ?? '#ffcc44') : (THEME.danger ?? '#ff4466'), durationMs: 3000 });
+    K?.eventLogSystem?.push?.({ text, channel: 'fleet', severity: 'warn' });
+  }
+  return { ok: res.ok === true, text, res };
+}
+
+/**
+ * Stan skoku floty dla panelu i rysowania: cel, pozostały czas całej trasy i członek, którego trasę pokazać. Bieżący odcinek z misji członka,
+ * kolejne — dystans / wspólna prędkość (premia beacona per układ celu, jak w dyspozytorze).
+ * @returns {{ targetSystemId:string, targetName:string, hops:string[], etaYears:number|null, leadId:string|null, flying:number }|null}
+ */
+export function fleetWarpStatus(fleet, K = windowK()) {
+  const ao = fleet?.activeOrder;
+  if (ao?.type !== 'warp') return null;
+  const flying = fleetMembers(fleet, K).filter((v) => v.warpRoute?.groupId === ao.groupId);
+  const lead = flying[0] ?? null;
+  let etaYears = null;
+  if (lead) {
+    const now = K?.timeSystem?.gameTime ?? 0;
+    const r = lead.warpRoute;
+    const byId = new Map((K?.galaxyData?.systems ?? []).map((s) => [s.id, s]));
+    etaYears = Math.max(0, (lead.mission?.arrivalYear ?? now) - now);
+    for (let i = (r.legIndex ?? 0) + 1; i < r.hops.length - 1; i++) {
+      const a = byId.get(r.hops[i]), b = byId.get(r.hops[i + 1]);
+      if (!a || !b) continue;
+      const beacon = K?.starSystemManager?.hasBeacon?.(r.hops[i + 1]) ? 3.0 : 1.0;
+      etaYears += warpDist3D(a, b) / ((r.speedLY > 0 ? r.speedLY : 2.5) * beacon);
+    }
+  }
+  return { targetSystemId: ao.targetSystemId, targetName: warpSystemLabel(ao.targetSystemId, K), hops: [...(ao.hops ?? [])], etaYears, leadId: lead?.id ?? null, flying: flying.length };
+}
+
+/** Linia panelu floty: „Skok warp → X · ETA: …”. @returns {string|null} */
+export function fleetWarpStatusLine(fleet, K = windowK()) {
+  const s = fleetWarpStatus(fleet, K);
+  if (!s) return null;
+  const head = `${t('fleetPicture.activity.warp')} → ${s.targetName}`;
+  return s.etaYears == null ? head : `${head} · ${t('fleet.warpEta', s.etaYears.toFixed(1))}`;
+}
+
+/**
+ * Popup przylotu członka skoku floty: przystanek — cisza; finał — jeden popup na grupę, z nazwą floty; członek z przerwaną trasą melduje się sam.
+ * Znacznik `mission.warpGroupId` przeżywa przylot, a kąt niesie wyłącznie ostatni odcinek (także ten, na którym flotę zatrzymał Stop), więc odpowiedź
+ * nie zależy od kolejności słuchaczy.
+ * @returns {'solo'|'fleet'|'none'}
+ */
+export function fleetArrivalPopupKind(vessel, systemId, shownGroupId = null) {
+  const m = vessel?.mission;
+  const groupId = m?.warpGroupId ?? null;
+  if (!groupId) return 'solo';
+  if (m.phase === 'in_system' && m.toSystemId === systemId && Number.isFinite(m.arrivalAngle)) return shownGroupId === groupId ? 'none' : 'fleet';
+  return vessel.warpRoute ? 'none' : 'solo';
+}
+
+// Podgląd skoku floty: wspólny plan, jedna linia. Odmowa z powodu paliwa pokazuje osiągalne odcinki wg baku wiążącego, inna — żadnego.
+function fleetHoverModel(warpFleetId, target, K) {
+  const fleet = K?.fleetSystem?.getFleet?.(warpFleetId) ?? null;
+  const members = fleetMembers(fleet, K);
+  if (!fleet || members.length === 0 || systemIdOf(members[0]) === target) return null;
+  const o = fleetWarpMenuOption({ fleetId: warpFleetId, targetSystemId: target, K });
+  const systems = K?.galaxyData?.systems ?? [];
+  const pv = warpPreview(o.plan, systems, { currentFuel: o.plan.bindingRangeLY, K });
+  const fuelReason = o.reason === WARP_ROUTE_REASONS.INSUFFICIENT_FUEL;
+  return {
+    fleetId: warpFleetId, vesselId: warpFleetId, targetSystemId: target, available: o.available, reason: o.reason, reasonText: o.reasonText,
+    polyline: pv.polyline, hopPoints: pv.hopPoints,
+    legs: (o.available || fuelReason) ? pv.legs : pv.legs.map((l) => ({ ...l, reachable: false })),
+  };
+}
+
 // ── Podgląd trasy przy najechaniu (G3-B) ───────────────────────────────────────────────────────────────────────────────────
 
 let _hoverMemo = { key: null, systems: null, K: null, model: null };   // dwie podwarstwy pytają o to samo w jednej klatce
 
 /**
- * Model podglądu dla gwiazdy pod kursorem: tylko z zaznaczonym statkiem z napędem warp (lider; flota czeka na G4). Układ lidera —
+ * Model podglądu dla gwiazdy pod kursorem: zaznaczona flota — wspólny plan (G4), inaczej statek z napędem warp (lider). Układ lidera —
  * brak podglądu. Bramka statku (rezerwa, unieruchomienie) gasi całą trasę, a powód idzie do rozwinięcia gwiazdy.
  * @returns {{ vesselId, targetSystemId, available:boolean, reason:string|null, polyline:Array, hopPoints:Array, legs:Array }|null}
  */
 export function warpHoverModel(targetSystemId, K = windowK()) {
   if (targetSystemId == null) return null;
+  if (fleetWarpOn()) {
+    const warpFleetId = selectedWarpFleetId(K);
+    if (warpFleetId != null) return fleetHoverModel(warpFleetId, String(targetSystemId), K);
+  }
   const { fleetId, ships } = warpSelection(K);
   const lead = ships[0] ?? null;
   if (fleetId != null || !(lead?.warpFuel?.max > 0)) return null;

@@ -118,6 +118,7 @@ export const ORDER_ACTIVITY_KEYS = Object.freeze({
   engage:      'fleetPicture.order.engage',
   retreat:     'fleetPicture.order.retreat',
   dock:        'fleetPicture.order.dock',
+  warp:        'fleetPicture.activity.warp',   // G4 — rekord skoku floty (`fleet.activeOrder.type`)
 });
 export const ORDER_ACTIVITY_FALLBACK_KEY = 'fleetPicture.order.generic';
 
