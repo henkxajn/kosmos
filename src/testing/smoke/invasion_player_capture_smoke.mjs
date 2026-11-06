@@ -69,6 +69,9 @@ window.KOSMOS.diplomacySystem = { relations };
 const techMock = { isResearched: () => true };
 const cm = new ColonyManager(techMock);
 window.KOSMOS.colonyManager = cm;
+// Stempel galaxyData.systems[].empireId pisze wyłącznie TerritoryService (Finding 600) — pin A9 potrzebuje go w świecie keepera.
+const { TerritoryService } = await import('../../systems/TerritoryService.js');
+window.KOSMOS.territoryService = new TerritoryService();
 const inv = new InvasionSystem();  // subskrybuje groundUnit:buildingCaptured + skan tickowy
 
 // Kolektory eventów

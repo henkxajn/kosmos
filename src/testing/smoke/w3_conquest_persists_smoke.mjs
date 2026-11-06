@@ -89,7 +89,6 @@ console.log('§1 — zdobycz ŻYJE i zasila imperium (produkcja / badania / logi
 console.log('§2 — `galaxyData` przeżywa ponowne wyprowadzenie (ścieżka wczytania zapisu)');
 {
   const core = boot();
-  const reg = core.empireRegistry;
   const cm = core.colonyManager;
   const empireId = empireOf(core);
   const victim = cm.getPlayerColonies()[0];
@@ -100,16 +99,27 @@ console.log('§2 — `galaxyData` przeżywa ponowne wyprowadzenie (ścieżka wcz
   const gd = window.KOSMOS.galaxyData;
   const stampedNow = gd?.systems?.find(s => s.id === systemId)?.empireId ?? null;
   assert(stampedNow === empireId,
-    `S2: układ ostemplowany natychmiast po podboju (${stampedNow}) — warunek \`&& !gs.empireId\` zdjęty`);
+    `S2: układ ostemplowany natychmiast po podboju (${stampedNow}) — stempel przepisuje kanon ` +
+    'własności (`TerritoryService`) na `colony:captured`, nie sam `transferColony`');
 
-  // ⚠ To jest właściwy test: `syncToGalaxyData` czyści WSZYSTKIE stemple i odtwarza je,
-  //   rozwiązując `colonyId → colony`. Przed W3-1 kolonia nie istniała, więc podbój znikał
-  //   z mapy politycznej po każdym wczytaniu zapisu.
-  reg.syncToGalaxyData?.();
+  // ⚠ To jest właściwy test: po Finding 600 stempel jest LUSTREM kanonu własności, a
+  //   `syncOwnerStamps` przepisuje go z indeksu zbudowanego OD ZERA, rozwiązując
+  //   `getAllColonies() → ownerEmpireId` (dawniej `syncToGalaxyData` czyściło WSZYSTKIE stemple
+  //   i odtwarzało je z `colonyId → colony`). Przed W3-1 kolonia nie istniała, więc podbój
+  //   znikał z mapy politycznej po każdym wczytaniu zapisu.
+  // ⚠ Nie `core.territoryService?.syncOwnerStamps?.(gd)`: wywołanie opcjonalne na nieistniejącej
+  //   metodzie to no-op, więc pin przechodziłby JAŁOWO. Istnienie kanonu jest osobną asercją
+  //   (KONTROLA PINU), a samo wywołanie biegnie tylko przy jej zaliczeniu — pin DEGRADUJE
+  //   (czerwona kontrola), zamiast przerwać cały keeper wyjątkiem.
+  const hasCanon = typeof core.territoryService?.syncOwnerStamps === 'function';
+  assert(hasCanon,
+    'S2 KONTROLA PINU: kanon stempla (`TerritoryService.syncOwnerStamps`) istnieje — bez niego ' +
+    'ponowne wyprowadzenie niczego by nie mierzyło');
+  if (hasCanon) core.territoryService.syncOwnerStamps(gd);
   const stampedAfter = gd?.systems?.find(s => s.id === systemId)?.empireId ?? null;
   assert(stampedAfter === empireId,
-    `S2: …i PRZEŻYWA \`syncToGalaxyData\` (${stampedAfter}) — bo `.trim() +
-    '`getColony(colonyId)` ma teraz co zwrócić');
+    `S2: …i PRZEŻYWA \`syncOwnerStamps\` (${stampedAfter}) — bo ` +
+    '`getAllColonies()` ma teraz co zwrócić');
 }
 
 // ── §3 — ostatnie ciało imperium a wiszące referencje ───────────────────────

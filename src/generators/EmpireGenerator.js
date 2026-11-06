@@ -109,8 +109,8 @@ export class EmpireGenerator {
    * Generuje obce imperia na galaktyce. Slice 3.1a: 2 imperia AI wg
    * AI_ARCHETYPE_SEQUENCE (Industrialist + Expansionist), każde z realną kolonią.
    *
-   * Zapisuje do GameState przez EmpireRegistry. Ustawia galaxyData.systems[i].empireId
-   * dla rendering (GalaxyMap).
+   * Zapisuje do GameState przez EmpireRegistry. Stempel galaxyData.systems[i].empireId
+   * (rendering GalaxyMap) NIE jest tu pisany — przepisuje go TerritoryService (Finding 600).
    *
    * @param {Object} galaxyData — wynik GalaxyGenerator.generate()
    * @param {EmpireRegistry} empireRegistry — instancja do createEmpire/addColony
@@ -249,11 +249,19 @@ export class EmpireGenerator {
         // empireRegistry.destroyEmpire(empireId, 'bootstrap_failed'); — pozostaw, gracz zobaczy issue w gameState
       }
 
-      // Zaznacz home na galaxyData (szybki lookup dla GalaxyMap)
-      homeSys.empireId = empireId;
+      // ⚠ Finding 600: stempla `homeSys.empireId` NIE zapisujemy tutaj. Dawne
+      // `homeSys.empireId = empireId` było czwartą regułą własności (układ stolicy należy do
+      // imperium nawet bez kolonii — także gdy bootstrap się nie powiódł), osobną od kanonu
+      // `TerritoryService` („pierwsza kolonia wygrywa"). Stempel jest jego lustrem.
 
       createdIds.push(empireId);
     }
+
+    // Stempel `galaxyData.systems[].empireId` — przepisany z kanonu (Finding 600). Zdarzenia kolonii
+    // z bootstrapu przepisały już ŻYWE galaxyData; to wywołanie dopisuje także `galaxyData` podane
+    // z zewnątrz (headless / testy) — tym samym indeksem, nie osobną regułą. Bez `territoryService`
+    // (stuby generatora w keeperach) nie dzieje się nic: generator nie ma własnej wiedzy o właścicielu.
+    globalThis.KOSMOS?.territoryService?.syncOwnerStamps?.(galaxyData);
 
     console.log(`[EmpireGenerator] Spawnowano ${createdIds.length} imperium AI (Slice 3.1a):`, createdIds);
     return createdIds;

@@ -627,7 +627,7 @@ export class IntelSystem {
     const galaxy = window.KOSMOS?.galaxyData;
     const gs = galaxy?.systems?.find(s => s.id === systemId);
     if (gs?.empireId) return gs.empireId;
-    // Fallback: przeszukaj empireRegistry (gdyby syncToGalaxyData nie zadziałał)
+    // Fallback: przeszukaj empireRegistry (gdy stempel jest pusty — stempel przepisuje z kanonu własności `TerritoryService.syncOwnerStamps`, Finding 600)
     const reg = window.KOSMOS?.empireRegistry;
     if (!reg) return null;
     for (const emp of reg.listAll()) {

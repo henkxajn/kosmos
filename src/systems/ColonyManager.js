@@ -817,8 +817,9 @@ export class ColonyManager {
   //     • `getColoniesByEmpire` odfiltrowywał pudło (EmpireRegistry.js:51-53) ⇒ produkcja,
   //       badania i logistyka AI NIE WIDZIAŁY zdobyczy NIGDY — ofensywne AI nie czerpało
   //       z wygranej niczego, co jest przesłanką całego W3;
-  //     • `syncToGalaxyData` odtwarza `systemId` przez `getColony(colonyId)`, więc po
-  //       zapisie i wczytaniu podbój znikał też z mapy politycznej;
+  //     • `syncToGalaxyData` (usunięte w Finding 600 — stempel układu pisze dziś wyłącznie
+  //       `TerritoryService.syncOwnerStamps`) odtwarzał `systemId` przez `getColony(colonyId)`,
+  //       więc po zapisie i wczytaniu podbój znikał też z mapy politycznej;
   //     • martwe id zostawało w `empires[].colonies` w KAŻDYM kolejnym zapisie.
   //
   //   Teraz transfer jest ODWRACALNYM PRZERZUTEM WŁASNOŚCI W MIEJSCU — dokładne lustro
@@ -942,23 +943,16 @@ export class ColonyManager {
     }
     colony.buildingSystem?._reapplyAllRates?.();
 
-    // Rozpoznaj systemId planety (via EntityManager)
-    const planetEntity = EntityManager.get(planetId);
-    const systemId = planetEntity?.systemId ?? colony.systemId ?? null;
-
     // Dopisz do imperium — zaznacz w gameState (Slice 1: addColony(empireId, colonyId))
     if (empireReg?.addColony) {
       empireReg.addColony(newOwnerEmpireId, planetId);
     }
-    // Oznacz system na galaxyData (dla rendering GalaxyMap).
-    // ⚠ W3-1: warunek `&& !gs.empireId` USUNIĘTY. Układ zdobyty graczowi ma `empireId = null`
-    //   tylko dopóki nikt go nie odbił — po pierwszej zmianie rąk stary stempel blokował każdą
-    //   następną, więc podbój bywał niewidoczny na mapie politycznej. Zdobywca stempluje zawsze.
-    const gd = window.KOSMOS?.galaxyData;
-    if (gd?.systems && systemId) {
-      const gs = gd.systems.find(s => s.id === systemId);
-      if (gs) gs.empireId = newOwnerEmpireId;
-    }
+    // ⚠ Finding 600: stempla `galaxyData.systems[].empireId` TU NIE ZAPISUJEMY. Dawny zapis
+    //   („zdobywca stempluje CAŁY układ") miał inną regułę własności niż kanon
+    //   `TerritoryService` („pierwsza kolonia wygrywa") — przejęcie jednej z trzech kolonii
+    //   układu oddawało zdobywcy cały układ na płycie galaktyki. Stempel jest pochodnym lustrem
+    //   kanonu: `empire:colonyAdded` (wyżej), `colony:captured` i `colony:listChanged` (niżej)
+    //   unieważniają `TerritoryService`, a ten przepisuje stempel z własnego indeksu.
 
     EventBus.emit('colony:captured', {
       planetId,
@@ -997,17 +991,17 @@ export class ColonyManager {
     const previousOwner = colony.ownerEmpireId;
     const isOutpost = colony.isOutpost ?? false;
 
-    // Wypnij ciało z metadanych imperium AI + galaxyData
+    // Wypnij ciało z metadanych imperium AI.
+    // ⚠ Finding 600: stempla `galaxyData.systems[].empireId` TU NIE ZAPISUJEMY. Dawne „wyczyść,
+    //   gdy równy poprzedniemu właścicielowi" było INNĄ regułą niż kanon `TerritoryService`
+    //   („pierwsza kolonia wygrywa"): zależało od poprzedniego stempla, nie od tego, kto trzyma
+    //   pierwszą kolonię układu — a przy dwóch pozostałych koloniach tego imperium kolejny
+    //   `syncToGalaxyData` („ostatni wygrywa") oddawał stempel AI z powrotem. Stempel jest
+    //   pochodnym lustrem kanonu — `empire:colonyRemoved` (niżej), `colony:capturedByPlayer`
+    //   i `colony:listChanged` (po zdjęciu `ownerEmpireId`) unieważniają `TerritoryService`,
+    //   który go przepisuje.
     const empireReg = window.KOSMOS?.empireRegistry;
     empireReg?.removeColony?.(previousOwner, planetId);
-
-    const planetEntity = EntityManager.get(planetId);
-    const systemId = planetEntity?.systemId ?? colony.systemId ?? null;
-    const gd = window.KOSMOS?.galaxyData;
-    if (gd?.systems && systemId) {
-      const gs = gd.systems.find(s => s.id === systemId);
-      if (gs && gs.empireId === previousOwner) gs.empireId = null;
-    }
 
     // Zdejmij oznaczenia wroga → getPlayerColonies() zacznie widzieć ciało
     colony.ownerEmpireId = null;

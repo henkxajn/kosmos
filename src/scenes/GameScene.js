@@ -1395,6 +1395,18 @@ export class GameScene {
         console.log(`[setIntel] ${empireId}: ${before} → ${after}`);
         return after;
       },
+      // KOSMOS.debug.systemOwnerMismatches() — Finding 600: układy, w których stempel właściciela na
+      // `galaxyData.systems[].empireId` rozjeżdża się z kanonem (`TerritoryService.getSystemOwner`).
+      // Zwraca [{ systemId, stamp, expected }]; PUSTA tablica = lustro zgodne z kanonem.
+      // ⚠ Odczyt NIE leczy: migawka stempli jest zdejmowana PRZED pytaniem kanonu (patrz
+      //   `TerritoryService.ownerStampMismatches`), więc wynik mówi o stanie, który widzą czytelnicy stempla.
+      systemOwnerMismatches: () => {
+        const ts = window.KOSMOS?.territoryService;
+        if (!ts?.ownerStampMismatches) { console.warn('[systemOwnerMismatches] brak window.KOSMOS.territoryService'); return null; }
+        const list = ts.ownerStampMismatches(window.KOSMOS?.galaxyData);
+        console.log(`[systemOwnerMismatches] ${list.length} rozjazdów`, list);
+        return list;
+      },
       // KOSMOS.debug.dumpIntel() — wypisz intel quality dla każdego enemy
       // vessela i imperium. Sprawdza czy IntelSystem (M4 P2) dziala.
       dumpIntel: () => {
@@ -2285,7 +2297,8 @@ export class GameScene {
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,
-    // a syncToGalaxyData() odtworzy empireId na galaxyData.systems.
+    // a stempel empireId na galaxyData.systems odtworzy TerritoryService.syncOwnerStamps()
+    // po restore kolonii (Finding 600 — to jedyny pisarz stempla).
     if (isNewGame) {
       // B2: barwa imperium wybrana na starcie (FactionSelectScene) → gameState PRZED
       // EmpireGenerator (wykluczenie koloru gracza z puli AI). Fallback: '#33ccff'
@@ -2332,9 +2345,9 @@ export class GameScene {
       // AI STRIKES BACK (SB16) — tabela strojenia z zapisu: nieznany klucz albo wartość spoza typu/zakresu jest pomijana
       //   (wpis `sbTuning:storedValueIgnored` w DebugLog). Brak klucza w zapisie (np. fixture GATE-S4) = wartości domyślne.
       sanitizeTuningAfterRestore();
-      // Faza 1: po restore — odśwież empireId na galaxyData (na wypadek save
-      // sprzed Fazy 1 lub gdyby galaxyData była starsza od gameState.empires)
-      this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);
+      // Faza 1 / Finding 600: stempel empireId na galaxyData NIE jest tu odtwarzany — to lustro
+      // TerritoryService (kanon „czyj to układ"), a w tym punkcie nie ma jeszcze kolonii. Jedyne
+      // przepisanie stempli po wczytaniu stoi niżej, PO restore kolonii i relinku kolonii AI.
       // Faza 2: zapewnij rekord intel dla każdego imperium (save sprzed Fazy 2)
       this.intelSystem.initForAllEmpires();
       // M2b Commit 2: zapewnij intel.vessels (fallback dla save sprzed migracji v66→v67
@@ -2379,11 +2392,12 @@ export class GameScene {
       //   I gameState.restore (emp.colonies istnieją). Synchroniczne — przed setTimeout swapem.
       EmpireColonyBootstrap.relinkColoniesAfterRestore(c4x.empireTech);
       if (c4x.empireStrategy) window.KOSMOS.empireStrategySystem?.restore(c4x.empireStrategy);
-      // Slice 1: drugi sync — po restore kolonii. EmpireRegistry.syncToGalaxyData
-      // czyta colony.systemId z ColonyManager (nowa struktura: emp.colonies = [colonyId, ...]).
-      // Pierwsze wywołanie (linia 1015, przed restore) działa tylko dla home systemu
-      // emp.homeSystemId — nowy sync dopisuje pozostałe kolonie.
-      this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);
+      // Finding 600: jedyne przepisanie stempla empireId na galaxyData po wczytaniu. Stempel jest
+      // lustrem TerritoryService (kanon „czyj to układ"), więc odtwarza go ten sam indeks — PO restore
+      // kolonii i PO relinku AI wyżej (relink ustawia ownerEmpireId bez zdarzenia, dlatego
+      // syncOwnerStamps wymusza przebudowę zamiast ufać fladze). Zapis z zatrutym stemplem (dawne
+      // pisarze: „ostatni wygrywa", „zdobywca bierze cały układ") leczy się tu sam — bez migracji.
+      this.territoryService?.syncOwnerStamps(window.KOSMOS.galaxyData);
       this.territoryService?.reindex();   // strefy wpływów — przebuduj indeks własności po restore
       this.influenceMap?.refresh();       // mapa wpływów czyta ten indeks — musi pójść za nim
       // Ustaw homePlanet i aktywne systemy

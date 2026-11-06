@@ -248,7 +248,7 @@ console.log('\nT7 — wpięcie: GameScene i DebugLog');
   const orderOk = (s) => {
     const iRestore = s.indexOf('gameState.restore(c4x.gameState);');
     const iSan = s.indexOf('sanitizeTuningAfterRestore();');
-    const iSync = s.indexOf('this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);', iRestore);
+    const iSync = s.indexOf('this.territoryService?.syncOwnerStamps(window.KOSMOS.galaxyData);', iRestore);
     return iRestore > 0 && iSan > iRestore && iSync > iSan;
   };
   assert(orderOk(gsSrc), 'T7c: sprzątanie biegnie PO `gameState.restore(c4x.gameState)` w bloku wczytania');

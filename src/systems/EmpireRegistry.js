@@ -334,33 +334,7 @@ export class EmpireRegistry {
     return true;
   }
 
-  /**
-   * Po restore (gameState załadowany z save) — zsynchronizuj empireId na galaxyData.
-   * Wywoływane z GameScene po GalaxyGenerator.generate / po gameState.restore.
-   *
-   * Slice 1: colonies to string array, więc systemId odczytujemy z ColonyManager.
-   */
-  syncToGalaxyData(galaxyData) {
-    if (!galaxyData?.systems) return;
-    // Wyczyść stare empireId
-    for (const sys of galaxyData.systems) {
-      if (sys.empireId) sys.empireId = null;
-    }
-    const colMgr = window.KOSMOS?.colonyManager;
-    for (const emp of this.listAll()) {
-      // Home system zaznaczamy na wszelki wypadek
-      if (emp.homeSystemId) {
-        const gs = galaxyData.systems.find(s => s.id === emp.homeSystemId);
-        if (gs && !gs.empireId) gs.empireId = emp.id;
-      }
-      // Każda kolonia (po colonyId → systemId)
-      for (const colonyId of emp.colonies ?? []) {
-        const colony = colMgr?.getColony(colonyId);
-        const sysId  = colony?.systemId ?? null;
-        if (!sysId) continue;
-        const gs = galaxyData.systems.find(s => s.id === sysId);
-        if (gs) gs.empireId = emp.id;
-      }
-    }
-  }
+  // ⚠ Finding 600: dawne `syncToGalaxyData(galaxyData)` USUNIĘTE. Stempel właściciela układu
+  // (`galaxyData.systems[].empireId`) pisze wyłącznie `TerritoryService.syncOwnerStamps` — jedna
+  // reguła („pierwsza kolonia wygrywa", kanon `getSystemOwner`) zamiast „ostatni wygrywa" stąd.
 }
