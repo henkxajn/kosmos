@@ -2559,6 +2559,7 @@ export default {
   'galaxyPin.enter': 'Wejdź',
   'galaxyPin.send': 'Wyślij ▼',
   'galaxyPin.noBodyData': 'skan: brak danych o ciałach',
+  'galaxyMenu.warpTo': 'Skok do {0}',
   // ARKUSZ UI U3-2 — prawy outliner (statki): nagłówek, sekcja „W drodze” (D-UI-8, §7.3), kubełki typu (D-UI-6, §7.1)
   'rightOutliner.ships': 'STATKI [{0}]',
   'rightOutliner.inTransit': 'W drodze',

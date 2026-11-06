@@ -37,7 +37,20 @@ export function getLocale() {
  * @returns {string}
  */
 export function t(key, ...params) {
-  let str = _dictionaries[_locale]?.[key]
+  return tIn(_locale, key, ...params);
+}
+
+/**
+ * Tłumaczenie we WSKAZANYM języku, bez zmiany aktywnego — dla modeli niosących etykietę w obu językach naraz
+ * (`labelPL` / `labelEN` menu PPM; ARC GALAXY G3). Fallback i interpolacja jak `t`.
+ *
+ * @param {'pl'|'en'} lang
+ * @param {string} key
+ * @param {...*} params
+ * @returns {string}
+ */
+export function tIn(lang, key, ...params) {
+  let str = _dictionaries[lang]?.[key]
          ?? _dictionaries['pl']?.[key]
          ?? key;
 

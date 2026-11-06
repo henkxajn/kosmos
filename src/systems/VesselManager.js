@@ -40,6 +40,7 @@ import {
   unloadColonists, unloadGroundUnit,   // 582 / 107 — istniejące ścieżki wyładunku (Q4, naprawa sierot)
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
+import { warpSystemLabel } from '../utils/SystemRevealWorld.js';
 import {
   serializeNameCounters, restoreNameCounters,
 } from '../data/VesselNames.js';
@@ -935,6 +936,9 @@ export class VesselManager {
     const state = vessel.position?.state;
     if (state === 'in_transit') return false;
     if (state !== 'docked' && state !== 'orbiting') return false;
+    // Finding 588 (D-GX-12): rezerwa nie skacze — bliźniak `WarpRouteSystem.canOrder` dla wejść omijających planer (`FleetActions`,
+    //   fallbacki FMO). Tylko gałąź gracza: ścieżka AI nietknięta. `opts.force` omija paliwo, nie załogę.
+    if (GAME_CONFIG.FEATURES?.galaxyWarp && !isEnemyVessel(vessel) && !isInService(vessel)) return false;
 
     const shipDef = _getHullDef(vessel.shipId);
     if (!shipDef) return false;
@@ -1016,8 +1020,11 @@ export class VesselManager {
     // systemId = null podczas tranzytu międzygwiezdnego (statek "między" układami)
     vessel.systemId = null;
 
+    // Finding 589 (D-GX-18): dziennik misji gracza nie zdradza nazwy układu sprzed przylotu; `mission.targetName` zostaje prawdziwy.
+    const launchName = (GAME_CONFIG.FEATURES?.galaxyWarp && !isEnemyVessel(vessel))
+      ? warpSystemLabel(targetSystemId) : targetStar.name;
     addMissionLog(vessel, gameYear,
-      t('vessel.interstellarLaunch', targetStar.name, distLY.toFixed(1)),
+      t('vessel.interstellarLaunch', launchName, distLY.toFixed(1)),
       'info');
 
     EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });

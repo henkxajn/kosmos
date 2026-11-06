@@ -536,6 +536,15 @@ export const GAME_CONFIG = {
     //   ⚠ Brak klucza = OFF; wymaga `galaxyView`. Czytana przy każdym przejściu i co klatkę warstwy HUD / płyty.
     galaxyLook:           true,
 
+    // ── ARC GALAXY / G3 — SKOK Z GALAKTYKI (GALAXY_PLAN.md §4 G3; D-GX-12, 18, 20; Findingi 588, 589, 592–594) ──────────────────
+    //   ON  = kadłub poza służbą (W2: `stored` / `mobilizing`) nie skacze — `WarpRouteSystem.canOrder` i gałąź GRACZA
+    //         `VesselManager.dispatchInterstellar` odmawiają `vessel_in_reserve` (stary Stratcom dziedziczy odmowę świadomie,
+    //         D-GX-12); nazwa celu w logach skoku przez kanon mgły (`warpSystemLabel`, „???”); menu PPM etykietuje per język,
+    //         toast odmowy skoku niesie powód. Modele menu / podglądu / pickera: `GalaxyWarpLogic` (czyste, rysuje G3-B).
+    //   OFF = stan sprzed kroku co do bitu.
+    //   ⚠ Brak klucza = OFF. Czytana przy każdym wywołaniu (przełączalna z konsoli bez F5).
+    galaxyWarp:           true,
+
     // ── ZNACZNIK STATKU — flaga na stałe ON od SM-Z (2026-10-29; HUD_PLAN.md §„Znacznik statku”) ──
     // `hudShipMarker` (znacznik statku w warstwie HUD 2D — daszek w kierunku ruchu, romb bez ruchu, role motywu; D-SM-1…6):
     //   klucz usunięty, kod czyta ścieżkę ON bez rozgałęzień. Usunięta ścieżka OFF — insygnia frakcji 3D (`_syncInsignia`,

@@ -13,7 +13,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { THEME } from '../config/ThemeConfig.js';
-import { buildMenuOptions } from '../data/RightClickMenuOptions.js';
+import { buildMenuOptions, menuOptionLabel } from '../data/RightClickMenuOptions.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatcher.js';
 import { outOfCameraFrame, fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal, CAMERA_FRAME_REASON } from '../utils/CameraFrame.js';
@@ -85,7 +85,7 @@ export class RightClickMenu {
       `;
       // M4 P1.5 — warning suffix (np. ⚠) dla enabled options z warning code.
       const warningPrefix = opt.warning ? '⚠ ' : '';
-      item.textContent = `${warningPrefix}${opt.icon}  ${opt.labelPL}`;
+      item.textContent = `${warningPrefix}${opt.icon}  ${menuOptionLabel(opt)}`;
       if (opt.disabledReason) item.title = opt.disabledReason;
 
       // M3 P1.5 — universal tooltip dla disabled options. data-tooltip

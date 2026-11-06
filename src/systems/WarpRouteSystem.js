@@ -21,11 +21,12 @@
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { t } from '../i18n/i18n.js';
-import { canJump, isEnemyVessel } from '../entities/Vessel.js';
+import { canJump, isEnemyVessel, isInService } from '../entities/Vessel.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { calcShipStats } from '../data/ShipModulesData.js';
 import { planWarpRoute, warpDist3D, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
+import { warpSystemLabel } from '../utils/SystemRevealWorld.js';
 
 export class WarpRouteSystem {
   /**
@@ -47,6 +48,9 @@ export class WarpRouteSystem {
   canOrder(v) {
     if (!v || v.isWreck || isEnemyVessel(v)) return { ok: false, reason: 'not_player' };
     if (!(v.warpFuel?.max > 0))               return { ok: false, reason: 'not_warp_capable' };
+    // Finding 588 (D-GX-12): kadłub bez załogi nie skacze — bliźniak bramki MOS `vessel_in_reserve` (W3-4 / D6). Powód tego samego
+    //   brzmienia co w MOS, żeby odmowa czytała ten sam klucz i18n. Przed `immobilized`: „obsadź załogą” jest tu krokiem do zrobienia.
+    if (GAME_CONFIG.FEATURES?.galaxyWarp && !isInService(v)) return { ok: false, reason: 'vessel_in_reserve' };
     if (this._vm?.isImmobilized?.(v))         return { ok: false, reason: 'immobilized' };
     const st = v.position?.state;
     if (st === 'in_transit')                  return { ok: false, reason: 'in_transit' };
@@ -102,7 +106,9 @@ export class WarpRouteSystem {
     }
 
     EventBus.emit('warpRoute:started', { vesselId, route: plan, finalSystemId: targetSystemId });
-    const finalName = this._systemName(targetSystemId);
+    // Finding 589 (D-GX-18): start skoku pisze do Dziennika PRZED przylotem, więc nazwa celu idzie przez kanon mgły.
+    //   `warpRoute.legDone` / `completed` zostają przy `_systemName` — lecą po `markSystemExplored`, układ jest już poznany.
+    const finalName = GAME_CONFIG.FEATURES?.galaxyWarp ? warpSystemLabel(targetSystemId) : this._systemName(targetSystemId);
     this._log(t('warpRoute.started', v.name, finalName, String(plan.hops.length - 1)), 'info');
     return { ok: true, route: plan };
   }

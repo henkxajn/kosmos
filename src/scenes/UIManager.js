@@ -7,6 +7,7 @@
 
 import EventBus    from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { launchTargetLabel } from '../utils/SystemRevealWorld.js';
 import {
   createPickerState as _createPickerState,
   startPicker as _startPicker,
@@ -1170,8 +1171,10 @@ export class UIManager {
       const icon = sd?.icon ?? '🚀';
       const mIcon = mission?.type === 'colony' ? '🚢'
         : mission?.type === 'transport' ? '📦' : mission?.type === 'recon' ? '🔭' : '⛏';
+      // Finding 589 (D-GX-18) — trzecia linia startu skoku w Dzienniku: nazwa układu sprzed przylotu przez kanon mgły.
+      const launchTarget = GAME_CONFIG.FEATURES?.galaxyWarp ? launchTargetLabel(mission) : (mission?.targetName ?? '?');
       this._addNotification(
-        t('log.el.vesselLaunched', icon, vessel.name, mission?.targetName ?? '?', mIcon, _missionLabel(mission?.type)),
+        t('log.el.vesselLaunched', icon, vessel.name, launchTarget, mIcon, _missionLabel(mission?.type)),
         'fleet', 'info');
     });
     EventBus.on('vessel:docked', ({ vessel }) => {

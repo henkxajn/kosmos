@@ -67,6 +67,7 @@ import {
 import { buildTimelineRows, toneColor } from './FleetPictureLogic.js';
 import { systemDisplayName } from './MapLabelLogic.js';
 import { planWarpRoute, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
+import { refusalText, warpErrLabel } from './GalaxyWarpLogic.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showDropTroopsModal } from '../ui/DropTroopsModal.js';
 import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
@@ -2352,7 +2353,10 @@ export class FleetManagerOverlay {
         const vMgr2b = window.KOSMOS?.vesselManager;
         if (vMgr2b && zone.data.vesselId && zone.data.systemId) {
           const os = window.KOSMOS?.orderService;
-          if (os) os.issueWarp(zone.data.vesselId, zone.data.systemId);
+          if (os) {
+            const res = os.issueWarp(zone.data.vesselId, zone.data.systemId);
+            if (!res?.ok) this._toastWarpRefused(res, true);
+          }
           else if (window.KOSMOS?.warpRouteSystem) window.KOSMOS.warpRouteSystem.beginJourney(zone.data.vesselId, zone.data.systemId);
           else vMgr2b.dispatchInterstellar(zone.data.vesselId, zone.data.systemId);
           this._pendingSendSystemId = null;
@@ -2377,7 +2381,7 @@ export class FleetManagerOverlay {
             this._selectedClusterSystem = null;  // wyczyść uzbrojony cel; statek zostaje wybrany (marker)
             EventBus.emit('ui:toast', { text: t('fleet.warpOrderSent'), color: THEME.accent, durationMs: 2500 });
           } else {
-            EventBus.emit('ui:toast', { text: t('fleet.warpOrderFailed'), color: THEME.danger ?? '#ff4466', durationMs: 3000 });
+            this._toastWarpRefused(res);
           }
         }
         break;
@@ -6881,22 +6885,17 @@ export class FleetManagerOverlay {
 
   // Etykieta błędu w panelu rozkazu (priorytet: bramka statku > powód trasy).
   _warpErrLabel(plan, gate) {
-    if (!gate.ok) {
-      switch (gate.reason) {
-        case 'in_transit':       return t('fleet.warpErrInTransit');
-        case 'immobilized':      return t('fleet.warpErrImmobilized');
-        case 'not_warp_capable': return t('fleet.warpErrConfig');
-        default:                 return t('fleet.warpErrState');
-      }
-    }
-    switch (plan.reason) {
-      case WARP_ROUTE_REASONS.SAME_SYSTEM:       return t('fleet.warpErrSame');
-      case WARP_ROUTE_REASONS.NO_ROUTE:          return t('fleet.warpErrNoRoute');
-      case WARP_ROUTE_REASONS.INSUFFICIENT_FUEL: return t('fleet.warpErrFuel');
-      case WARP_ROUTE_REASONS.BAD_CONFIG:
-      case WARP_ROUTE_REASONS.UNKNOWN_SYSTEM:    return t('fleet.warpErrConfig');
-      default:                                   return t('fleet.warpErrNoRoute');
-    }
+    return warpErrLabel(plan, gate);   // jeden słownik odmowy skoku — `GalaxyWarpLogic` (D-GX-20)
+  }
+
+  // Finding 594 — toast odmowy rozkazu skoku niesie powód. Przy OFF stan sprzed kroku: `warp_order_send` — sam nagłówek,
+  // `cluster_send_pick` — cisza. Przy ON picker Stratcom dziedziczy odmowę rezerwy (D-GX-12), więc nie może milczeć.
+  _toastWarpRefused(res, silentWhenOff = false) {
+    const on = GAME_CONFIG.FEATURES?.galaxyWarp;
+    if (!on && silentWhenOff) return;
+    const detail = (on && res?.reason) ? refusalText(res.reason) : null;
+    const text = detail ? `${t('fleet.warpOrderFailed')} — ${detail}` : t('fleet.warpOrderFailed');
+    EventBus.emit('ui:toast', { text, color: THEME.danger ?? '#ff4466', durationMs: 3000 });
   }
 
   // Finding 125 (dogrywka po live-gate) — JEDNO wejście skoku „powrót do bazy" dla trzech
