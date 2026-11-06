@@ -2,6 +2,13 @@
 
 Napisana PRZED bramką. Każde polecenie uruchomione na żywym silniku (Chrome, GPU, okno 1600×1041, kopia zapisu ZF120) 2026-11-06; liczby niżej to odczyty z tego przebiegu. Wszystkie polecenia bez cudzysłowów.
 
+**Wynik bramki:** właściciel 2026-11-06, **K0–K11 PASS**.
+- **Klient EN:** bramka szła w kliencie angielskim, a teksty oczekiwane niżej są po polsku, bo w tym kliencie sprawdzał je walidator. W EN te same komunikaty czyta się po angielsku (`Rozkaz skoku wydany` = `Warp order issued`).
+- **K7:** zapis na odcinku 1/3, nie 2/3. Zapis i wczytanie w trakcie trasy nadal dowiedzione.
+- **K10:** tekst odmowy przy fladze OFF brzmi `No route in range`, nie mówi o wyłączonej funkcji (⚪, ginie z flagą w G5). `reason: feature_off` i `unchanged: true` jak niżej.
+- **Z bramki:** Finding 605 ⚪ (flota stojąca przy gwieździe bez oznaczenia floty na płycie; → G5).
+- **Poza meldunkiem z bramki:** lista „Do obejrzenia poza K0–K11” na końcu.
+
 **Zapis:** ZF120 = `Downloads/kosmos_Zjednoczona_Federacja_r120_v101 (3).json`. Gramy na kopii: rig dodaje statki, a autozapis wnosi je do slotu.
 
 **Pomocniki (`KOSMOS.debug`):**

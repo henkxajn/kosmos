@@ -1,0 +1,17 @@
+# STEP G4 — state after the owner's gate (anchor `15b6fc7`, status: committed — `8745fb4` G4-A · `f337fe3` G4-B, docs in the `docs(G4)` commit; next 603, then G5)
+
+**Status:** gate PASS K0–K11 (owner, 2026-11-06, EN client; K7 saved on leg 1/3). Gate: `docs/design/GALAXY_G4_GATE_CHECKLIST.md`. Frames: `kosmos-handover/galaxy-g4/gate/kontakt_g4.html`. Stop note: `kosmos-handover/galaxy-g4/STOP_G4.md`.
+
+**Mechanic (G4-A):** `OrderService.previewFleetWarp` / `issueFleetWarp`, `WarpRouteSystem.planGroupJourney` + `beginJourney(id, target, {hops, groupId, speedLY, arrivalAngle})`, `dispatchInterstellar(id, sys, {speedLY, arrivalAngle, warpGroupId})` (player only), `FleetSystem.issueWarpOrder` + `_settleWarpOrder`. Record: `fleet.activeOrder = { type:'warp', targetSystemId, groupId, hops, startedYear, stopped? }`. Save v101, no migration.
+
+**Stop on a fleet in warp (owner's decision 2026-11-06):** `FleetSystem.cancelFleetOrder` → `_stopWarpOrder` → `WarpRouteSystem.stopJourneyAtNextHop` per group member. The route is cut to the next hop and the fleet's angle goes into the flying mission, so members land together; the route and the record live until landing. `_settleWarpOrder` then emits one toast and one Log line (`logFleetAborted`, key `warpRoute.fleetAborted`) and `fleet:orderCompleted { mode: 'aborted' }`; no `fleet:orderCancelled`. A Stop on the last leg changes nothing (the next hop is the target). A member's own abort (`_abort`) still speaks for itself.
+
+**UI (G4-B), all pure in `ui/GalaxyWarpLogic.js`:** `selectedWarpFleetId`, `fleetWarpMenuOption`, `runGalaxyFleetWarpOrder`, `sendPickerFleetRows`, `sendRowKey`, `fleetWarpStatus`, `fleetWarpStatusLine`, `fleetArrivalPopupKind`, `describeFleetWarpRefusal`. Layers: `RightClickMenu`, `HudGalaxySendPickerLayer`, `HudGalaxyRouteLayer`, `HudGalaxyLabelLayer`, `MissionEventModal`, `FleetPanelHudLogic`, `FleetManagerOverlay`. Rail rule: `railLayout` in `GalaxyChromeLogic`. Debug: `src/debug/FleetWarpDebug.js` via `GameScene` (`fleetWarpStop`, `fleetWarpOwnOrder` for K11).
+
+**Keepers:** `fleet_warp_smoke` 274, `galaxy_fleet_warp_ui_smoke` 99 (recorded before the commit split: G4-B fail-first on the G4-A state 20 / 75, mutants 33/33; Stop rows T18 fail-first on the tree before the fix 209 / 63, mutants 26/26; fresh clones at commit time: final mechanic keeper on `15b6fc7` 37 PASS / 221 FAIL, UI keeper on the rebuilt G4-A tree 20 PASS / 77 FAIL). Flipped on purpose: `galaxy_chrome` H13a, `galaxy_warp_ui` placeholder pins now run at flag OFF.
+
+**Commit split:** by hunk. The `8745fb4` tree is the mechanic with no UI, no Stop and no arrival marker: `fleet_warp_smoke` T1–T17 196 rows, sweep 368/368, `check-i18n` 3419. `f337fe3` adds the rest: sweep 369/369, `check-i18n` 3421. `GALAXY_PLAN.md` §4 G4 — delivered has the deviations.
+
+**Next:** the own step for Finding 603 (not started), then G5 (cleanup by the T4 method, plus 604 and 605). First free **606**.
+
+**Open:** 🔴 603 (single ship with an active `engage` sent on warp never arrives; probe `src/testing/headless/probe-603-engage-warp.mjs`, not tried in the real game; owner's decision: own step before G5) · ⚪ 604 (solo multi-hop route pauses with a popup at every hop, measured in the real game; → G5) · ⚪ 605 (a parked fleet has no fleet indication on the plate; → G5) · ⚪ no number: at flag OFF the refusal text reads "No route in range", dies with the flag in G5. None fixed in G4. Real data has one warp speed (18 LY/yr), so the speed lock is only visible through the rig's session override.

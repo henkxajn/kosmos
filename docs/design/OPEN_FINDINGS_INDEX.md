@@ -1051,6 +1051,16 @@
 > • Sweep **367/367**, `check-i18n` pl = en = **3417**; save v101 bez migracji.
 > • Następny: **G4** (warp floty, pełna bramka) — nierozpoczęty.
 > • **Pierwszy wolny numer: 603.**
+>
+> **Aktualizacja 2026-11-06 (ARC GALAXY — G4 ✅, `8745fb4` · `f337fe3`)** — skok floty z mapy galaktyki za flagą `fleetWarp`: jeden plan, odmowa niczego nie rusza, blokada
+> prędkości najwolniejszego, jeden popup przylotu na flotę; Stop floty w skoku przerywa na najbliższym przystanku (decyzja właściciela). Bramka właściciela K0–K11 PASS,
+> klient EN (`GALAXY_PLAN.md` §4 G4 — delivered, odstępstwa 1–4).
+> • **NOWE: #603** 🔴 (wiersz w A12) — pojedynczy statek z aktywnym `engage` wysłany skokiem nie dolatuje; własny krok po G4, przed G5 (decyzja właściciela); sonda
+> `src/testing/headless/probe-603-engage-warp.mjs`, w prawdziwej grze niepróbowane. **#604** ⚪ (wiersz w A12) — statek solo na trasie wieloprzeskokowej pauzuje grę popupem
+> na każdym przystanku; → G5. **#605** ⚪ (wiersz w A12) — flota stojąca przy gwieździe bez oznaczenia floty na płycie; → G5.
+> • Sweep **369/369**, `check-i18n` pl = en = **3421**; save v101 bez migracji.
+> • Następny: **krok 603**, potem **G5**.
+> • **Pierwszy wolny numer: 606.**
 
 
 ---
@@ -1135,7 +1145,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **504-577** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–29; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z, 574-577 ze znacznika statku — dodatek po zamknięciu, §9) |
 | **578-582** | `VESSEL_ORDERS_PLAN.md` §Findingi 578–582 — akcje obce po skoku warp (2026-10-29–30; 578-580 z audytu fazy A i z fazy B, 581 z decyzji właściciela po bramce, 582 z bramki (a7); audyt `docs/audit/POST_WARP_FOREIGN_ACTIONS_AUDIT.md`) |
 | **583-587** | `VESSEL_ORDERS_PLAN.md` §Findingi 583–587 — szew zużycia statku poza walką (2026-10-30; 583-585 z audytu fazy A, 586 z rezerwy Q3 i z bramki, 587 z bramki; audyt `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`) |
-| **588-602** | `GALAXY_PLAN.md` §3 Findings register — arc GALAXY (mapa galaktyki jako tryb głównego widoku 3D; 2026-10-30–11-06; 588-599 z audytu fazy A, 600 z kroku G1, 601 z kroku 600, 602 z kroku G3) |
+| **588-605** | `GALAXY_PLAN.md` §3 Findings register — arc GALAXY (mapa galaktyki jako tryb głównego widoku 3D; 2026-10-30–11-06; 588-599 z audytu fazy A, 600 z kroku G1, 601 z kroku 600, 602 z kroku G3, 603-604 sprzed bramki G4, 605 z bramki G4) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1465,6 +1475,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **600** | ✅ | **ZAMKNIĘTY 2026-11-06** (`0800372`, krok 600) — układ galaktyki ma JEDNO pole właściciela, wygrywa ostatni zapis (`EmpireRegistry.syncToGalaxyData:362` przy wczytaniu, `ColonyManager.transferColony:960`, `captureColonyForPlayer:1009`) — oś właściciela kanonu mgły pyta o wywiad niewłaściwego imperium; zmierzone na ZF r120 (stolica emp_002 w Castor ostemplowana emp_test_enemy — kolonia debugowa na księżycu Castor e-II; emp_002 bez układu na liście galaktyki); osiągalność w normalnej grze niezmierzona | jeden pisarz, `TerritoryService`: stempel jest lustrem kanonu, dawni pisarze usunięci; keeper `system_owner_stamp_smoke` 45/45 (fail-first na `f1a8dfd` 17/28); w grze na ZF r120 0 rozjazdów, Castor = emp_002. `GALAXY_PLAN.md` §3 |
 | **601** | ⚪ | Zdobycie pierwszej kolonii układu w kolejności `getAllColonies()` (np. stolicy) oddaje zdobywcy cały układ w kanonie `TerritoryService`, a z nim stempel i płytę galaktyki, nawet gdy dotychczasowy właściciel trzyma tam nadal pozostałe kolonie (reguła „pierwsza kolonia wygrywa”, świadomie bez zmian w Step 600). | bez kroku; reguła kanonu zostaje (decyzja właściciela 2026-11-06). `GALAXY_PLAN.md` §3 |
 | **602** | ✅ | **ZAMKNIĘTY 2026-11-06** (`d95368d`, G3, F2) — kolumna „Dokąd” Rejestru K3 drukuje prawdziwą nazwę niezbadanego celu w trakcie skoku (`FleetPictureLogic.js:317` czyta `mission.targetName`; zmierzone `toName = Cygni`) — klasa 589 poza listą D-GX-18 | `toName` skoku przez `warpSystemLabel`: „???”, po odsłonięciu nazwa; keeper `galaxy_warp_logic` T10. `GALAXY_PLAN.md` §3 |
+| **603** | 🔴 | pojedynczy statek z aktywnym `engage` wysłany skokiem (`issueWarp` zwraca `ok: true`, rdzenie schodzą) nie dolatuje: `VesselManager._updatePositions` wychodzi przy `isOrderControlled` (`:2567-2574`) przed gałęzią tranzytu warp (`:2699`). Anulowanie rozkazu go nie budzi (`orbiting`, `systemId null`), rozkaz ruchu odbija się `vessel_in_warp_transit`; wyciąga go tylko nowy skok, płatny drugi raz. Zmierzone headless (sonda `src/testing/headless/probe-603-engage-warp.mjs`), w prawdziwej grze niepróbowane; flota odporna (`fleet_warp_smoke` T12) | **własny krok po G4, przed G5** (decyzja właściciela 2026-11-06: statek unieruchomiony na stałe, klasa 125); krok zaczyna się od odtworzenia w prawdziwej grze; nienaprawiane w G4. `GALAXY_PLAN.md` §3 |
+| **604** | ⚪ | statek solo na trasie wieloprzeskokowej pauzuje grę popupem na każdym przystanku (`fleetArrivalPopupKind` = `solo`); zmierzone w prawdziwej grze: trzy popupy na trasie 3 skoków. Stan z G3 | **→ G5** (decyzja właściciela 2026-11-06); nienaprawiane w G4. `GALAXY_PLAN.md` §3 |
+| **605** | ⚪ | flota stojąca przy gwieździe nie ma na płycie żadnego oznaczenia floty: sam romb (`HudGalaxyRailLayer.js:134-136`), „×N” tylko w tranzycie (`:169`); flotę widać wyłącznie w prawym outlinerze. Obserwacja właściciela z bramki G4 | **→ G5**, polerka. `GALAXY_PLAN.md` §3 |
 
 ---
 

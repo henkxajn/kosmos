@@ -3,15 +3,15 @@
 > **Status: Phase A — read-only audit + plan, SIGNED by the owner 2026-10-30 (§0.2, §5 column "Signed"); NIEBO ✅ DONE
 > 2026-10-30 (`6ea7cad`, §4 NIEBO — delivered); G1 ✅ DONE 2026-10-31 (`ccdd26e`, §4 G1 — delivered); G2 ✅ DONE 2026-11-02
 > (`f27a8f2` · `a579f06` · `82f6ece`, §4 G2 — delivered); Step 600 ✅ DONE 2026-11-06 (`0800372`, §3); G3 ✅ DONE 2026-11-06
-> (`9fe3f81` · `d95368d`, §4 G3 — delivered); next G4 (fleet warp, full gate — not started).**
+> (`9fe3f81` · `d95368d`, §4 G3 — delivered); G4 ✅ DONE 2026-11-06 (`8745fb4` · `f337fe3`, §4 G4 — delivered); next the own step for Finding 603, then G5.**
 > Anchor HEAD `e2f7943` (= origin/main).
 > Phase A implemented nothing. The only repo file written by that phase is this plan; the handover folder is
 > `C:\Users\Komputer\kosmos-handover\galaxy-phase-a\` (`STOP_A.md`, probes, results). Measurements ran in a scratch clone
 > (`E:\kosmos-work\galaxy-phase-a\tree`, `git clone --shared`, read-only against the owner's objects) — the owner's tree
 > was not touched (no `src/` edits, no keepers, no commits). Committed with the owner's signatures in
 > `docs(GALAXY A): phase A plan + owner signatures` — the anchor of NIEBO.
-> **Next free finding number: 603** (this plan files **#588–#602** — 588–599 from phase A, 600 from G1, 601 from Step 600, 602 from G3; 578–587 are taken
-> in `VESSEL_ORDERS_PLAN.md`; NIEBO filed none).
+> **Next free finding number: 606** (this plan files **#588–#605** — 588–599 from phase A, 600 from G1, 601 from Step 600, 602 from G3, 603 and 604 from the G4
+> pre-gate fix, 605 from the G4 gate; 578–587 are taken in `VESSEL_ORDERS_PLAN.md`; NIEBO filed none).
 
 ## §0 Owner's frame (signed 2026-10-30 — verbatim; not relitigated, the plan is built around it)
 
@@ -630,10 +630,13 @@ route around · ⚪ observation, hygiene or coupling · ✅ closed. "Step" = whe
 | **600** | ✅ | **A galaxy system has ONE owner field and the last writer wins.** `EmpireRegistry.syncToGalaxyData` (on load) clears every `galaxyData.systems[].empireId`, then stamps each empire's colony systems unconditionally in `listAll()` order (`src/systems/EmpireRegistry.js:343-365`, the write at `:362`); `ColonyManager.transferColony` stamps the capturer on the whole system (`:960`) and `captureColonyForPlayer` clears it (`:1009`) even when the previous owner keeps other colonies there. Every reader of the owner axis (`SystemReveal` through `SystemRevealWorld`: the G1 galaxy list and plate names, the sky labels, the Stratcom panel) then asks the intel of the wrong empire. **Measured** on ZF r120: emp_002's capital system Castor (`homeSystemId sys_040`, colony `entity_163`) is stamped `emp_test_enemy`, whose debug colony sits on the moon Castor e-II (`entity_165`) — the galaxy list shows Castor as Rój Testowy at contact and emp_002 (rumor) has no system at all; the G1 contact sheet had to stage its rumor frame. Reachability in normal play (two AI empires in one system; the player capturing a non-capital colony in an AI home system) **NOT measured** | **Step 600 ✅ (`0800372`, 2026-11-06)** — one writer, `TerritoryService`: the stamp is now a derived mirror of the canon (`getSystemOwner`, "first colony wins"), written only by `TerritoryService._writeOwnerStamps` (from `_rebuild` / `syncOwnerStamps`), and `_invalidate` rebuilds eagerly. Writers removed: `EmpireRegistry.syncToGalaxyData`, `transferColony`, `captureColonyForPlayer`, `EmpireGenerator`. On load one `syncOwnerStamps` after the AI relink heals a poisoned stamp (save v101, no migration). Read-only probe `KOSMOS.debug.systemOwnerMismatches()`. Keeper `system_owner_stamp_smoke` 45/45 (fail-first on `f1a8dfd` 17/28). In the game on ZF r120: Castor `emp_test_enemy` in the file → `emp_002` after load, 0 mismatches. The consequence of the kept rule → #601 |
 | **601** | ⚪ | Zdobycie pierwszej kolonii układu w kolejności `getAllColonies()` (np. stolicy) oddaje zdobywcy cały układ w kanonie `TerritoryService`, a z nim stempel i płytę galaktyki, nawet gdy dotychczasowy właściciel trzyma tam nadal pozostałe kolonie (reguła „pierwsza kolonia wygrywa”, świadomie bez zmian w Step 600). | No step — the rule stays (owner's decision 2026-11-06); keeper `system_owner_stamp_smoke` pins "stamp == canon" for the first colony |
 | **602** | ✅ | **The Registry "To" column prints the real name of an unrevealed jump target** (Finding 589 class, outside the D-GX-18 list). `FleetPictureLogic.buildShipEntry` set `toName` from `mission.targetName` (`:317`), which carries the real name from launch; **measured** `toName = Cygni` for an unexplored target during the jump. The ship panel does not print it (measured) | **G3-B ✅ (`d95368d`, F2)** — a jump's `toName` through `warpSystemLabel`: `???` until revealed, the name once known; other missions as before; flag OFF as before. Keeper `galaxy_warp_logic` T10; checked on the drawn registry (`gate\fixes\f2_registry.png`) |
+| **603** | 🔴 | **A single ship with an active `engage` order sent on warp never arrives.** `_issueEngage` leaves the ship `orbiting` (`MovementOrderSystem.js:1282`) and `WarpRouteSystem.canOrder` (`:48`) has no movement-order term, so `OrderService.issueWarp` returns `ok: true` and the warp cores are paid; `VesselManager._updatePositions` then leaves the loop at `isOrderControlled` (`:2567-2574`) before the warp-transit branch (`:2699`), so `_tickInterstellar` never runs. **Measured headless, not tried in the real game** (probe `src/testing/headless/probe-603-engage-warp.mjs`: real `OrderService` → `WarpRouteSystem` → `VesselManager` + `time:tick`; a 67-tick flight read after 335 ticks): `systemId null`, `in_transit`, `warp_transit`, cores 20 → 16, not arrived; the control without the order arrives. Cancelling the order does not wake it: the state drops to `orbiting`, the warp branch needs `in_transit`, and 134 more ticks change nothing; a move order is refused `vessel_in_warp_transit`; only a NEW warp order gets it out, paid again. `pursue`, `intercept`, `patrol` and `escort` are `in_transit` when issued, so `canOrder` refuses them (measured); `pursue` in its hold state is not measured. The fleet path is immune: `FleetSystem.issueWarpOrder` cancels members' orders first (`fleet_warp_smoke` T12) | **Own step after G4, before G5** (owner's decision 2026-11-06: a bricked ship, Finding 125 class). That step reproduces it in the real game first. Not fixed in G4 |
+| **604** | ⚪ | **A solo multi-hop route pauses the game with a popup at every hop.** `fleetArrivalPopupKind` (`GalaxyWarpLogic.js:536`) answers `solo` for a route without `warpGroupId`, so `MissionEventModal._onInterstellarArrived` (`:644`) queues a pausing popup on every `interstellar:arrived`. **Measured in the real game** (ZF120, 1600×1041; `G4-szybki` alone, `Kepler-4799 > Wezen > Tau Ceti > Arktur`): three popups, the game paused at each, the route still alive on the first two. The same headless (probe `src/testing/headless/probe-603-engage-warp.mjs`: `B:solo C:solo D:solo`; the control, a fleet on the same route, gets one, at the target). G3 behaviour, untouched in G4 | **G5** (owner's decision 2026-11-06). Not fixed in G4 |
+| **605** | ⚪ | **A fleet parked at a star has no fleet indication on the plate.** A star with own ships draws one diamond (`HudGalaxyRailLayer.js:134-136`), the same for loose ships and for a fleet; the fleet grouping and the `×N` tag exist only in transit (`groupTransitByFleet` `:100`, tag `:169`), so a parked fleet is visible only in the right outliner. The owner's observation at the G4 gate (2026-11-06) | **G5**, polish |
 
-**Next free number: 603** (NIEBO filed no new findings; G1 filed #600; G2 filed no new findings — 590 stays 🟠 as signed in D-GX-17 (c), 595 / 596 stay ⚪ because D-GX-22 was implemented as signed (ping from home, planar metric, owner options in §7 O4), 599 is partly closed; Step 600 closed #600 and filed #601; G3 closed #588, #589, #592, #593, #594 and filed + closed #602).
+**Next free number: 606** (NIEBO filed no new findings; G1 filed #600; G2 filed no new findings — 590 stays 🟠 as signed in D-GX-17 (c), 595 / 596 stay ⚪ because D-GX-22 was implemented as signed (ping from home, planar metric, owner options in §7 O4), 599 is partly closed; Step 600 closed #600 and filed #601; G3 closed #588, #589, #592, #593, #594 and filed + closed #602; the G4 pre-gate fix filed #603 and #604; the G4 gate filed #605).
 
-## §4 The cut: NIEBO → G1 → G2 → G3 → G4 → G5
+## §4 The cut: NIEBO → G1 → G2 → G3 → G4 → 603 → G5
 
 Process for every step except G4 (F8, HUD_PLAN §4.0 annex): one flag (idiom `!!FEATURES.x` — a missing key = OFF),
 code prepared in a clone outside the repo, keepers ONLY for logic (no pins on drawing constants, no drawing mutations,
@@ -916,6 +919,63 @@ then PASS with one change (a lone ship shows the marker alone). Flag `galaxyWarp
 | **Gate** | written checklist BEFORE the gate (`docs/design/GALAXY_G4_GATE_CHECKLIST.md`), one-liners validated on the live engine, live gate in the owner's window |
 | **STOP** | `kosmos-handover\galaxy-g4\`; PASS → `feat(G4)` + `docs(G4)` |
 
+#### G4 — ✅ delivered 2026-11-06 (`8745fb4` · `f337fe3`)
+
+Owner's gate: **PASS K0–K11** (2026-11-06, EN client, `GALAXY_G4_GATE_CHECKLIST.md`). K7 saved on leg 1/3 instead of 2/3; the round trip is still proven. Flag
+`fleetWarp` ON (OFF = before the step; permanent in G5).
+
+- **As planned (D-GX-19, D-GX-20):** `OrderService.previewFleetWarp` / `issueFleetWarp`. Phase 1 (`WarpRouteSystem.planGroupJourney`) has no side effects: one plan
+  for all members; a refusal leaves members and `fleet.activeOrder` bit for bit (Finding 275 rule) and names who and why in the D-E2 shape
+  (`describeFleetWarpRefusal`, one reason dictionary, no new reason keys). Phase 2: `beginJourney(id, target, { hops, groupId, speedLY, arrivalAngle })` per member and
+  `dispatchInterstellar(…, { speedLY })`, so members land in the same tick at every hop with no rendezvous state; one arrival angle on the final hop; record
+  `fleet.activeOrder = { type: 'warp', targetSystemId, groupId, hops, startedYear }` (`FleetSystem.issueWarpOrder`, closed by `_settleWarpOrder`: a member diverted,
+  aborted, wrecked or gone from the fleet stops counting, the rest fly on); one Log line at the start and one at the end (`warpRoute.fleetStarted` / `fleetCompleted`),
+  zero member lines. AI path `issueGroupAttack` byte-identical (source hash pinned, `fleet_warp_smoke` T11). Save v101 without migration: `warpRoute` carries `groupId` /
+  `speedLY` / `arrivalAngle` only when they exist (`warpRouteGroupFields`). UI: star menu entry "Fleet: warp to X — Hops · ETA · Cores (binding member)", disabled with
+  the refusal text; hover preview = the shared plan, one line; a `FLEETS` section above `SHIPS [N]` in the [ Send ▼ ] picker, from the same phase 1; fleet panel line
+  "Warp jump → X · ETA"; the selected fleet's route on the plate.
+- **Deviations from the plan:**
+  (1) **speed lock inert until mixed drives exist** — every `engine_warp` in the game data has 18 LY/yr, so no save holds mixed speeds and the lock runs at 18 today.
+  It works (keeper hulls at 3 / 6 / 9 LY/yr, `fleet_warp_smoke` T3, T5); the gate's rig overrides `_baseWarpSpeed` for the session (6 / 12 / 18), which the game code does
+  not know and the save does not carry. After a load the route carries its locked speed.
+  (2) **K8 helper path** — a member's own warp order in flight is refused (`in_transit`), so "a member leaves the route" exists only through the helper: `fleetWarpDivert`
+  takes it off the route (it finishes the current leg), then issues its own order at the stop. No UI for a mid-flight divert today.
+  (3) **one arrival popup per fleet** — not in the plan. Without it every member opened a pausing popup at every hop. `MissionEventModal` asks `fleetArrivalPopupKind`: a
+  stop = silence, the end = one popup per group with the fleet's name, a member with a broken route reports alone. Marker `mission.warpGroupId`, separate from the AI
+  squadrons' `mission.groupId`.
+  (4) **rail expanded rule** — ships over the row limit give `+rest` from 1 (`railLayout`), so a star with 4 ships while open shows 3 names + `+1`; the collapsed state
+  keeps G3's `+N` from 2. Outside the flag (a G3 fix). ⚠ Reversed on purpose: `galaxy_chrome` H13a.
+  Also recorded: the menu entry also answers a selected member or several members of one fleet (`selectedWarpFleetId`); one member goes alone through its picker row ·
+  the G3 placeholder pins of `galaxy_warp_ui` now run at flag OFF (`galaxyMenu.fleetWaitsG4` lives on the OFF path until G5) · `FleetManagerOverlay._computeFleetStatus`:
+  a fleet in warp read as idle, now "Warp jump" · `RightClickMenu`: a long refusal wraps instead of stretching the menu · picker background opaque (0.97) under the flag:
+  the taller picker opens over the pinned star's text more often.
+- **Stop on a fleet in warp** (owner's decision 2026-11-06, not in the plan): `FleetSystem.cancelFleetOrder` → `_stopWarpOrder` → `WarpRouteSystem.stopJourneyAtNextHop` per
+  member. The route is cut to the next hop, so the fleet panel, the plate route, the outliners and the save read the short route with no branch of their own; the fleet's
+  angle goes into the flying mission so members land at one point. When the last member lands: record gone, one toast and one Log line `warpRoute.fleetAborted` (warn), zero
+  member lines, `fleet:orderCompleted { mode: 'aborted' }`, no `fleet:orderCancelled`. Readings confirmed by the owner the same day: toast and line at landing, not at the
+  click; line suppression for Stop only (a member's own abort keeps its line, K8); Stop on the last leg changes nothing; one pausing fleet popup and one landing point at the
+  stop hop; a member who left before Stop flies on, one who leaves after it stops at the hop and reports alone.
+- **Flag OFF text:** ⚪ `KOSMOS.debug.fleetWarpIssue` at flag OFF refuses `feature_off` as signed (K10), but the text reads "⚠ Fleet order rejected: No route in range":
+  `refusalText` has no `feature_off` key and falls to the route default. Seen at the gate; only the console helper reaches it, because menu and picker are gated by
+  `fleetWarpOn()`. Not fixed, it dies with the flag in G5.
+- **Keepers:** NEW `fleet_warp_smoke` 274 (mechanic T1–T17 + T18 Stop) · NEW `galaxy_fleet_warp_ui_smoke` 99. Fail-first in a fresh clone on the parent `15b6fc7`,
+  final keeper: 37 PASS / 221 FAIL. On the rebuilt G4-A tree: UI keeper 20 PASS / 77 FAIL, final mechanic keeper 208 PASS / 66 FAIL (red: the T18 rows and the two G4-B key rows; recorded before the commit split: UI 20 / 75,
+  T18 209 / 63). Mutants: UI 33/33, Stop 26/26. Sweep **369/369 OK, 0 FAIL** on the working tree and a clean LF checkout; flag OFF: 367/369, red only the pin "flag in code: ON" in `fleet_warp_smoke` and four T1 rows of `galaxy_fleet_warp_ui_smoke` that read the shipped flag ·
+  `check-i18n` pl = en = **3 421** (G3: 3 417; G4 +4 — §6) · save v101 without migration.
+- **In game:** the owner's gate above. Before it every checklist command ran on the live engine in a validator (Chrome, ZF120, 1600 × 1041, UI scale 1.25, PL client): 51
+  commands in order K0–K11, 37/37 checks in two runs in a row, console clean, real mouse clicks on `[ Rozkazy ▼ ]` → `[ Stop ]` and, before the Stop fix, on the menu entry
+  and the picker row. Frames: `kosmos-handover/galaxy-g4/gate/kontakt_g4.html`. **Not in the owner's reported result:** the checklist's extra look items (picker, rail with
+  4 ships, Command status); keeper `galaxy_fleet_warp_ui` T5–T7. **Not tried in the real game:** Finding 603.
+- **Process note:** `feat(G4-A)` and `feat(G4-B)` are split by hunk, not whole-file: the `8745fb4` tree is the mechanic with no UI, no Stop and no arrival marker (`fleet_warp_smoke`
+  T1–T17, 196 rows; the menu still shows the G3 placeholder), rebuilt from the final files and swept on its own (368/368, `check-i18n` 3 419); `f337fe3` adds the rest. Both
+  commits are independently green; `git revert` in reverse order.
+- **Findings:** filed **603** 🔴 (own step, next), **604** ⚪ and **605** ⚪ (→ G5). **590 / 595 / 596 / 599 / 601** unchanged. Next free **606**. Next step **603**, then **G5**.
+
+### 603 — a single ship with `engage` sent on warp (own step, owner's decision 2026-11-06)
+
+Not started. It sits between G4 and G5 because a bricked ship (Finding 125 class) should not wait for the cleanup. The step first reproduces it in the real game: so far it is
+measured headless only (`src/testing/headless/probe-603-engage-warp.mjs`). The measured path, and what does not get the ship out, are in §3 #603.
+
 ### G5 — cleanup (T4 method)
 
 | | |
@@ -925,6 +985,7 @@ then PASS with one change (a lone ship shows the marker alone). Flag `galaxyWarp
 | **Kept** | `cluster_switch` handler (producers `_drawRight` `:7723`, `ShipPanelHudLogic.js:208`); `_dispatchReturnJump` / `_toastReturnFailed`; `_warpErrLabel` moved to a pure module; `StratcomHitLogic`; `HolotableCamera`; `TerritoryRenderLogic`; `TerritoryField`; `TerritoryService`; `SystemReveal`; `SystemExploration` |
 | **Keepers** | D-GX-21 list (re-aims with stated reasons); `log_depth_chunks_smoke` T6 lists edited; a cleanliness pin (`galaxy_g5_clean_smoke`, wzór `tabs_t4_clean_smoke` / `hud_bz_clean_smoke`) |
 | **Proof** | T4 method: deterministic traces of surviving surfaces before / after (Command tabs, ship panel, foreign panel `cluster_switch`), contact sheet pairs 0 px on the surviving surfaces |
+| **Polish** | Findings 604 and 605 (owner's decision 2026-11-06), kept apart from the T4 proof above |
 | **Docs** | `MANUAL.md:856`, `fleet.colonizeCrossSystemHint` wording, comments naming G/M → Stratcom (A9) |
 | **STOP** | `kosmos-handover\galaxy-g5\`; PASS → `chore(G5)` + `docs(G5)`; arc closed |
 
@@ -987,12 +1048,13 @@ at runtime (`label_hover_smoke`, `w3_raider_lever_smoke.mjs:212`). Wording below
 | G2 | `galaxyPin.send` | Wyślij ▼ | Send ▼ | disabled until G3 |
 | G2 | `galaxyPin.noBodyData` | skan: brak danych o ciałach | scan: no body data | pin line when a scan result carries no body counts (T4) |
 | G3 | `galaxyMenu.warpTo` | Skok do {0} | Warp to {0} | menu entry title; details reuse `fleet.warpHops` · `fleet.warpEta` · `fleet.warpFuelNeed` (neutral "Skoki: {0}" — avoids the PL plural trap of Finding 563) |
-| G3 | `galaxyMenu.fleetWaitsG4` | flota — G4 | fleet — G4 | disabled entry for a selected fleet; dev wording, G4 replaces it |
+| G3 | `galaxyMenu.fleetWaitsG4` | flota — G4 | fleet — G4 | disabled entry for a selected fleet; dev wording: G4 replaced it at flag ON, the OFF path keeps it until G5 |
 | G3 | `hudChips.ships` | O | O | chip letter of "Ships" in galaxy mode (letter O in both: the EN letter S is taken by Sensors) |
 | G3 | `hudChips.nameShips` | Okręty | Ships | chip tip, `hudChips.tip` |
 | G4 | `galaxyMenu.fleetWarpTo` | Flota: skok do {0} | Fleet: warp to {0} | fleet entry |
 | G4 | `warpRoute.fleetStarted` | {0}: flota skacze do {1} (skoki: {2}) | {0}: fleet warping to {1} (hops: {2}) | one fleet-level Log line instead of N member lines |
 | G4 | `warpRoute.fleetCompleted` | {0}: flota dotarła do {1} | {0}: fleet arrived at {1} | |
+| G4 | `warpRoute.fleetAborted` | {0}: trasa floty przerwana w {1} | {0}: fleet route aborted at {1} | Stop on a fleet in warp: one Log line and one toast when the last member lands (owner's decision 2026-11-06) |
 
 Reused without change (no new key): `vessel.reasonVesselInReserve` ("Kadłub w rezerwie — najpierw obsadź go załogą (Rozmieść)" /
 "Hull in reserve — crew it first (Deploy)") for Finding 588's refusal; `tooltip.menu.requiresSelection` for the Polish literal in
