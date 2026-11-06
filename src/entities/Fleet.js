@@ -91,6 +91,7 @@ function _cloneActiveOrder(ao) {
   if (ao.targetPoint)    clone.targetPoint    = { ...ao.targetPoint };
   if (ao.memberOrderIds) clone.memberOrderIds = { ...ao.memberOrderIds };
   if (ao.memberTargets)  clone.memberTargets  = { ...ao.memberTargets };   // Finding 272 (opcjonalne)
+  if (ao.hops)           clone.hops           = [...ao.hops];              // G4 — trasa skoku floty
   return clone;
 }
 

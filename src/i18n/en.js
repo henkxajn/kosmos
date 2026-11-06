@@ -1754,6 +1754,8 @@ export default {
   'warpRoute.legDone': '{0}: jumped to {1}',
   'warpRoute.completed': '{0}: arrived at {1}',
   'warpRoute.aborted': '{0}: route aborted ({1})',
+  'warpRoute.fleetStarted': '{0}: fleet warping to {1} (hops: {2})',
+  'warpRoute.fleetCompleted': '{0}: fleet arrived at {1}',
 
   // OrderService — unified order layer (composite cross-system transport)
   'order.compositeTargetLost': '{0}: delivery target lost during warp — order cancelled',

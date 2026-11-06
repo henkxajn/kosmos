@@ -1755,6 +1755,8 @@ export default {
   'warpRoute.legDone': '{0}: przeskok do {1}',
   'warpRoute.completed': '{0}: dotarł do {1}',
   'warpRoute.aborted': '{0}: trasa przerwana ({1})',
+  'warpRoute.fleetStarted': '{0}: flota skacze do {1} (skoki: {2})',
+  'warpRoute.fleetCompleted': '{0}: flota dotarła do {1}',
 
   // OrderService — zunifikowana warstwa rozkazów (composite cross-system transport)
   'order.compositeTargetLost': '{0}: cel dostawy zniknął podczas skoku — rozkaz anulowany',

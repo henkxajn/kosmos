@@ -89,6 +89,10 @@ export class FleetSystem {
       this._onMemberOrderEnded(vesselId, orderId, 'blocked');
     });
 
+    // G4 (D-GX-19) — skok floty: koniec trasy członka (przylot albo przerwanie) może domknąć rekord floty. Bez rekordu typu `warp` — no-op.
+    EventBus.on('warpRoute:completed', ({ vesselId }) => this._onWarpMemberEnded(vesselId));
+    EventBus.on('warpRoute:aborted',   ({ vesselId }) => this._onWarpMemberEnded(vesselId));
+
     // P3 — retreat_at_50 tick (0.5 civYear accumulator).
     EventBus.on('time:tick', ({ civDeltaYears }) => this._tickCivYears(civDeltaYears));
   }
@@ -352,6 +356,82 @@ export class FleetSystem {
   }
 
   /**
+   * G4 (D-GX-19) — rekord skoku floty, dwufazowo jak `issueFleetOrder` (Finding 275). Plan przeszedł już fazę 1 (`OrderService.previewFleetWarp`).
+   * Stary rekord chowamy na czas startu: rozkazy ruchu członków kasujemy tu, a bez tego `_onMemberOrderEnded` ogłosiłby fałszywe „zakończone”.
+   * ⚠ Kasowanie jest konieczne, nie ostrożnościowe: statek z aktywnym rozkazem, który przeszedł bramkę stanu (zmierzone: `engage`, stan `orbiting`),
+   *   wypada z `_updatePositions` przed gałęzią tranzytu warp, więc nigdy by nie doleciał (pojedynczy statek ma ten defekt do dziś: Finding 603).
+   *   Migawkę misji usuwamy PRZED kasowaniem (kontrakt z `_preemptCommit`): inaczej `_resumeMissionAfterOrder` wskrzesiłby misję i `canOrder`
+   *   odmówił `in_transit`.
+   * @param {string} fleetId
+   * @param {string[]} memberIds
+   * @param {{type:'warp', targetSystemId:string, groupId:string, hops:string[], startedYear:number}} record
+   * @param {(vesselId:string) => {ok:boolean, reason?:string}} dispatch
+   * @param {{fleetEta?:number}} [info]
+   * @returns {{ok:boolean, accepted:string[], rejected:Array<{vesselId:string, reason:string}>, fleetName?:string}}
+   */
+  issueWarpOrder(fleetId, memberIds, record, dispatch, { fleetEta = null } = {}) {
+    const fleet = this._fleets.get(fleetId);
+    if (!fleet) return { ok: false, accepted: [], rejected: [] };
+    const mos = window.KOSMOS?.movementOrderSystem;
+    const prevOrder = fleet.activeOrder;
+    fleet.activeOrder = null;
+    let released = false;
+    for (const vid of memberIds) {
+      const v = this._vm._vessels?.get?.(vid);
+      if (v?.movementOrder?.status !== 'active') continue;
+      delete v._suspendedMission;
+      mos?.cancelOrder?.(vid, 'replaced');
+      released = true;
+    }
+    const accepted = [];
+    const rejected = [];
+    for (const vid of memberIds) {
+      const res = dispatch(vid);
+      if (res?.ok) accepted.push(vid);
+      else rejected.push({ vesselId: vid, reason: res?.reason ?? 'dispatch_failed' });
+    }
+    // Nikt nie wystartował (wyścig: faza 1 przewiduje każdą odmowę dyspozytora). Stary rekord wraca, chyba że jego rozkazy już zdjęliśmy:
+    //   wtedy nie miałby go kto domknąć.
+    if (accepted.length === 0) {
+      fleet.activeOrder = released ? null : prevOrder;
+      if (released && prevOrder) EventBus.emit('fleet:orderCancelled', { fleetId, reason: 'replaced' });
+      return { ok: false, accepted, rejected };
+    }
+    if (prevOrder) EventBus.emit('fleet:orderCancelled', { fleetId, reason: 'replaced' });
+    fleet.activeOrder = record;
+    EventBus.emit('fleet:orderIssued', {
+      fleetId, type: record.type, accepted: [...accepted], rejected: [...rejected], fleetEta, speedCap: null,
+    });
+    return { ok: true, accepted, rejected, fleetName: fleet.name };
+  }
+
+  /** @private Trasa członka dobiegła końca — czy to ostatni z grupy? */
+  _onWarpMemberEnded(vesselId) {
+    const fleetId = this._vm._vessels?.get?.(vesselId)?.fleetId;
+    const fleet = fleetId ? this._fleets.get(fleetId) : null;
+    if (fleet) this._settleWarpOrder(fleet, vesselId);
+  }
+
+  /**
+   * @private G4 — rekord skoku żyje, dopóki leci choć jeden członek grupy. Członek, który zboczył, został przerwany, zginął albo opuścił flotę,
+   * przestaje się liczyć, a reszta leci dalej. Koniec: jedna linia Dziennika, gdy ktokolwiek dotarł; gdy nikt —
+   * meldowały już przerwania członków.
+   * @param {Object} fleet
+   * @param {string|null} [endedVesselId] — `warpRoute:completed` leci, zanim trasa zniknie ze statku
+   */
+  _settleWarpOrder(fleet, endedVesselId = null) {
+    const ao = fleet.activeOrder;
+    if (ao?.type !== 'warp') return;
+    const vesselOf = (id) => this._vm._vessels?.get?.(id);
+    if (fleet.memberIds.some((id) => id !== endedVesselId && vesselOf(id)?.warpRoute?.groupId === ao.groupId)) return;
+    fleet.activeOrder = null;
+    const arrived = fleet.memberIds.some((id) => !vesselOf(id)?.isWreck && vesselOf(id)?.systemId === ao.targetSystemId);
+    const wrs = window.KOSMOS?.warpRouteSystem;
+    if (arrived) wrs?.logFleetCompleted?.(fleet.name, ao.targetSystemId);
+    EventBus.emit('fleet:orderCompleted', { fleetId: fleet.id, type: ao.type, mode: arrived ? 'completed' : 'aborted' });
+  }
+
+  /**
    * Doktryna — modyfikuje fleet order spec wg fleet.doctrine.
    *  - engage_in_range: pass-through (default)
    *  - kite: dla 'engage' set preferMaxRange=true (MOS _tickEngageOrder
@@ -536,6 +616,7 @@ export class FleetSystem {
     fleet.memberIds.splice(idx, 1);
     if (vessel) vessel.fleetId = null;
     EventBus.emit('fleet:memberRemoved', { fleetId, vesselId, reason });
+    this._settleWarpOrder(fleet);   // G4 — wrak albo odejście mogło zostawić rekord skoku bez lecących
     // Auto-disband empty fleet (jeśli flaga ustawiona; default true)
     if (fleet.memberIds.length === 0 && fleet.autoDisbandWhenEmpty) {
       this.disbandFleet(fleetId, 'empty');
@@ -611,6 +692,11 @@ export class FleetSystem {
         if (Object.keys(f.activeOrder.memberOrderIds).length === 0) {
           f.activeOrder = null;
         }
+      }
+      // G4 — rekord skoku bez lecącego członka nie miałby kto domknąć. Trasa i rekord jadą w formacie v101 (bez migracji).
+      if (f.activeOrder?.type === 'warp'
+          && !f.memberIds.some((vid) => this._vm._vessels?.get?.(vid)?.warpRoute?.groupId === f.activeOrder.groupId)) {
+        f.activeOrder = null;
       }
       // Auto-disband empty restored fleet (np. wszyscy członkowie zniknęli między save'ami)
       if (f.memberIds.length === 0 && f.autoDisbandWhenEmpty) {

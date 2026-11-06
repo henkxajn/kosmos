@@ -547,6 +547,15 @@ export const GAME_CONFIG = {
     //   ⚠ Brak klucza = OFF. Czytana przy każdym wywołaniu (przełączalna z konsoli bez F5).
     galaxyWarp:           true,
 
+    // ── ARC GALAXY / G4 — skok FLOTY (GALAXY_PLAN.md §4 G4, D-GX-19, D-GX-20) ──
+    // `fleetWarp`:
+    //   ON  = `OrderService.issueFleetWarp` / `previewFleetWarp`: jeden plan dla całej floty, faza 1 bez skutków ubocznych (odmowa zostawia członków
+    //         i `fleet.activeOrder` co do bitu — reguła Findingu 275), blokada prędkości najwolniejszego członka (`dispatchInterstellar(…, { speedLY })`),
+    //         jeden kąt przylotu na finale, rekord `fleet.activeOrder = { type: 'warp', … }`, jedna linia Dziennika na start i jedna na koniec.
+    //   OFF = stan sprzed kroku co do bitu: `issueFleetWarp` odmawia `feature_off`, opcje `beginJourney` i `speedLY` są niewidzialne.
+    //   ⚠ Brak klucza = OFF. Czytana przy każdym wywołaniu (przełączalna z konsoli bez F5).
+    fleetWarp:            true,
+
     // ── ZNACZNIK STATKU — flaga na stałe ON od SM-Z (2026-10-29; HUD_PLAN.md §„Znacznik statku”) ──
     // `hudShipMarker` (znacznik statku w warstwie HUD 2D — daszek w kierunku ruchu, romb bez ruchu, role motywu; D-SM-1…6):
     //   klucz usunięty, kod czyta ścieżkę ON bez rozgałęzień. Usunięta ścieżka OFF — insygnia frakcji 3D (`_syncInsignia`,

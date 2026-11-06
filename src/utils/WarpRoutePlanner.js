@@ -37,6 +37,20 @@ export function warpDist3D(a, b) {
 }
 
 /**
+ * G4 (D-GX-19) — pola skoku floty w `vessel.warpRoute` (`groupId`, `speedLY`, `arrivalAngle`). Tylko te, które są: trasa pojedynczego statku
+ * ma kształt jak dotąd, co do klucza. Jedno źródło dla startu trasy i obu stron zapisu (v101 bez migracji).
+ * @param {{groupId?:string, speedLY?:number, arrivalAngle?:number}|null} src
+ * @returns {{groupId?:string, speedLY?:number, arrivalAngle?:number}}
+ */
+export function warpRouteGroupFields(src) {
+  const out = {};
+  if (src?.groupId) out.groupId = src.groupId;
+  if (src?.speedLY > 0) out.speedLY = src.speedLY;                               // LY/rok
+  if (Number.isFinite(src?.arrivalAngle)) out.arrivalAngle = src.arrivalAngle;   // rad
+  return out;
+}
+
+/**
  * Zaplanuj trasę warp z fromId do toId (najkrótszy dystans, model jedno-bakowy).
  *
  * @param {Array<{id:string,x?:number,y?:number,z?:number}>} systems — galaxyData.systems (extra pola ignorowane)

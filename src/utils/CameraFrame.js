@@ -88,9 +88,11 @@ export function fleetOffendersOutOfFrame(fleetId) {
  * Nazwa statku + przetłumaczony powód. Jedno źródło formatowania dla WSZYSTKICH ścieżek
  * (per-statek, flotowa PPM, oba pickery flotowe) — inaczej ten sam powód czytałby się
  * inaczej zależnie od tego, którym przyciskiem gracz go wywołał.
+ * `reasonText` (G4, D-GX-20) — słownik powodów innej rodziny odmów (skok floty); test typu, bo wołający robią `.map(describeOrderFail)`
+ * i drugim argumentem bywa indeks tablicy.
  */
-export function describeOrderFail(f) {
-  const reason = _reasonText(f?.reason);
+export function describeOrderFail(f, reasonText) {
+  const reason = (typeof reasonText === 'function' ? reasonText : _reasonText)(f?.reason);
   const nm     = window.KOSMOS?.vesselManager?.getVessel?.(f?.vesselId)?.name ?? f?.vesselId;
   return `${nm} (${reason})`;
 }
@@ -110,12 +112,12 @@ export function describeOrderFail(f) {
  * @param {{ok?:boolean, reason?:string, accepted?:string[], rejected?:{vesselId:string, reason:string}[]}|null} res
  * @returns {{ text: string, entityRef: string|null } | null}
  */
-export function describeFleetOrderRefusal(res) {
+export function describeFleetOrderRefusal(res, reasonText = _reasonText) {
   if (!res) return null;
   const rejected  = Array.isArray(res.rejected) ? res.rejected : [];
   const acceptedN = res.accepted?.length ?? 0;
   if (rejected.length > 0) {
-    const skipped = rejected.map(describeOrderFail).join(', ');
+    const skipped = rejected.map((f) => describeOrderFail(f, reasonText)).join(', ');
     const totalN  = acceptedN + rejected.length;
     return {
       text: acceptedN > 0
@@ -125,7 +127,7 @@ export function describeFleetOrderRefusal(res) {
     };
   }
   if (res.ok === false && res.reason) {
-    return { text: t('log.el.orderRejected', _reasonText(res.reason)), entityRef: null };
+    return { text: t('log.el.orderRejected', reasonText(res.reason)), entityRef: null };
   }
   return null;
 }

@@ -23,6 +23,7 @@
 import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { t }         from '../i18n/i18n.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
@@ -161,6 +162,69 @@ export class OrderService {
       ? this._vm?.dispatchInterstellar?.(vesselId, targetSystemId, { arrivalAngle: opts.arrivalAngle })
       : this._vm?.dispatchInterstellar?.(vesselId, targetSystemId);
     return { ok: !!ok, reason: ok ? undefined : 'dispatch_failed' };
+  }
+
+  /**
+   * G4 (D-GX-19) — podgląd skoku floty, BEZ skutków ubocznych: faza 1 `issueFleetWarp` i ten sam wynik dla menu PPM.
+   * Odmowa ma kształt D-E2 (`rejected`, `accepted`), więc czyta ją `describeFleetWarpRefusal` (D-GX-20).
+   * @returns {{ok:true, hops:string[], legs:Array, totalLY:number, etaYears:number, groupSpeedLY:number, bindingMemberId:string,
+   *            fuelByMember:Object<string,number>, memberIds:string[]}
+   *         | {ok:false, reason:string, members:Array<{id:string, name:string, reason:string}>,
+   *            rejected:Array<{vesselId:string, reason:string}>, accepted:string[], bindingMemberId:string|null}}
+   */
+  previewFleetWarp(fleetId, targetSystemId) {
+    const refusal = (reason, refused = [], extra = {}) => ({
+      ...extra,
+      ok: false, reason,
+      members:  refused.map(({ vessel, reason: r }) => ({ id: vessel.id, name: vessel.name, reason: r })),
+      rejected: refused.map(({ vessel, reason: r }) => ({ vesselId: vessel.id, reason: r })),
+      accepted: [],
+      bindingMemberId: extra.bindingMemberId ?? null,
+    });
+    if (!GAME_CONFIG.FEATURES?.fleetWarp) return refusal('feature_off');
+    if (!targetSystemId) return refusal('no_target');
+    const fleet = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId);
+    if (!fleet) return refusal('fleet_not_found');
+    if (!this._vm || !this._wrs) return refusal('no_route_system');
+    const vessels = fleet.memberIds.map((id) => this._vm.getVessel?.(id)).filter((v) => v && !v.isWreck);
+    if (vessels.length === 0) return refusal('fleet_empty');
+    const { refused, ...plan } = this._wrs.planGroupJourney(vessels, targetSystemId);
+    if (!plan.ok) return refusal(plan.reason, refused, plan);
+    return { ...plan, memberIds: vessels.map((v) => v.id) };
+  }
+
+  /**
+   * G4 (D-GX-19) — SKOK FLOTY: walidacja wszystkich → start wszystkich. Faza 1 (`previewFleetWarp`) niczego nie rusza: odmowa zostawia członków
+   * i `fleet.activeOrder` co do bitu (reguła Findingu 275). Faza 2: jedna trasa, prędkość najwolniejszego członka (członkowie lądują w tym samym
+   * ticku na każdym przystanku, bez stanu zbiórki), jeden kąt przylotu na finale, rekord u właściciela (`FleetSystem.issueWarpOrder`).
+   * ⚠ `issueGroupAttack` (AI) tu nie pasuje: odmawia kadłubom gracza, a jej start nie jest transakcyjny.
+   * @returns {{ok:true, hops:string[], etaYears:number, bindingMemberId:string, groupId:string, accepted:string[], rejected:Array}
+   *         | ReturnType<OrderService['previewFleetWarp']>}
+   */
+  issueFleetWarp(fleetId, targetSystemId) {
+    const plan = this.previewFleetWarp(fleetId, targetSystemId);
+    if (!plan.ok) return plan;
+
+    const startedYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const groupId = `fw_${fleetId}_${startedYear}`;
+    const arrivalAngle = Math.random() * Math.PI * 2;   // JEDEN kąt na flotę (rad)
+    const journey = { hops: plan.hops, groupId, speedLY: plan.groupSpeedLY, arrivalAngle };
+    const res = window.KOSMOS.fleetSystem.issueWarpOrder(
+      fleetId, plan.memberIds,
+      { type: 'warp', targetSystemId, groupId, hops: [...plan.hops], startedYear },
+      (vesselId) => this._wrs.beginJourney(vesselId, targetSystemId, journey),
+      { fleetEta: plan.etaYears },
+    );
+    if (!res.ok) {
+      const names = (id) => this._vm.getVessel?.(id)?.name ?? id;
+      return {
+        ok: false, reason: res.rejected[0]?.reason ?? 'dispatch_failed',
+        members: res.rejected.map(({ vesselId, reason }) => ({ id: vesselId, name: names(vesselId), reason })),
+        rejected: res.rejected, accepted: [], bindingMemberId: plan.bindingMemberId,
+      };
+    }
+    this._wrs.logFleetStarted(res.fleetName, targetSystemId, plan.hops.length - 1);
+    return { ...plan, ok: true, groupId, accepted: res.accepted, rejected: res.rejected };
   }
 
   /**

@@ -17,6 +17,7 @@ import { calcShipStats } from '../data/ShipModulesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { planWarpRoute as realPlanWarpRoute, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { systemIdOf } from '../utils/SystemScope.js';
+import { describeFleetOrderRefusal } from '../utils/CameraFrame.js';
 import { warpSystemLabel } from '../utils/SystemRevealWorld.js';
 import { stripLeadSymbol } from './GalaxyChromeLogic.js';
 
@@ -46,6 +47,10 @@ const REFUSAL_KEYS = Object.freeze({
   [WARP_ROUTE_REASONS.INSUFFICIENT_FUEL]: 'fleet.warpErrFuel',
   [WARP_ROUTE_REASONS.BAD_CONFIG]:        'fleet.warpErrConfig',
   [WARP_ROUTE_REASONS.UNKNOWN_SYSTEM]:    'fleet.warpErrConfig',
+  // skok floty (G4, D-GX-20) — bez nowych kluczy: członek poza układem reszty floty; flota, której nie ma kto poprowadzić
+  group_split:       'fleet.otherSystem',
+  fleet_empty:       'fleet.warpErrState',
+  fleet_not_found:   'fleet.warpErrState',
 });
 const ROUTE_DEFAULT_KEY = 'fleet.warpErrNoRoute';   // dawny `default` gałęzi trasy (np. `dispatch_failed`)
 const GATE_DEFAULT_KEY  = 'fleet.warpErrState';     // dawny `default` gałęzi bramki
@@ -59,6 +64,16 @@ export function refusalText(reason) {
 export function warpErrLabel(plan, gate) {
   if (!gate.ok) return t(REFUSAL_KEYS[gate.reason] ?? GATE_DEFAULT_KEY);
   return refusalText(plan.reason);
+}
+
+/**
+ * G4 (D-GX-20) — tekst odmowy skoku FLOTY: kształt D-E2 („No vessel moved · Nazwa (powód)”), powody ze słownika skoku.
+ * Znacznik „✗” należy do samodzielnej etykiety panelu; w nawiasie po nazwie statku byłby szumem.
+ * @param {{ok?:boolean, reason?:string, accepted?:string[], rejected?:{vesselId:string, reason:string}[]}|null} res — wynik `issueFleetWarp` / `previewFleetWarp`
+ * @returns {{text:string, entityRef:string|null}|null}
+ */
+export function describeFleetWarpRefusal(res) {
+  return describeFleetOrderRefusal(res, (reason) => stripLeadSymbol(refusalText(reason)));
 }
 
 // ── Opcje planera dla statku ───────────────────────────────────────────────────────────────────────────────────────────────

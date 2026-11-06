@@ -31,6 +31,7 @@ import { HULLS }      from '../data/HullsData.js';
 
 // Helper: pobierz definicję kadłuba (legacy SHIPS lub nowe HULLS)
 function _getHullDef(id) { return SHIPS[id] ?? HULLS[id]; }
+import { warpRouteGroupFields } from '../utils/WarpRoutePlanner.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
@@ -983,7 +984,11 @@ export class VesselManager {
     if (!opts.force && !isEnemyVessel(vessel) && !canJump(vessel, distLY)) return false;
 
     // Prędkość warp (z bonusem beacon) — z modułów jeśli dostępne
-    const baseSpeed = stats?.warpSpeedLY || shipDef.warpSpeedLY || 2.5; // LY/rok
+    // G4 (D-GX-19) — blokada prędkości floty: `opts.speedLY` (najwolniejszy członek, LY/rok) zastępuje własną prędkość statku, więc członkowie
+    //   wysłani w tym samym ticku lądują w tym samym ticku. Tylko gałąź GRACZA i za flagą; ścieżka AI nietknięta. Premia beacona zostaje:
+    //   zależy od układu celu, więc dla grupy jest wspólna.
+    const speedLock = (GAME_CONFIG.FEATURES?.fleetWarp && !isEnemyVessel(vessel) && opts.speedLY > 0) ? opts.speedLY : null;
+    const baseSpeed = speedLock ?? (stats?.warpSpeedLY || shipDef.warpSpeedLY || 2.5); // LY/rok
     const ssMgr = window.KOSMOS?.starSystemManager;
     const beaconBonus = ssMgr?.hasBeacon(targetSystemId) ? 3.0 : 1.0;
     const warpSpeed = baseSpeed * beaconBonus;
@@ -1748,6 +1753,7 @@ export class VesselManager {
           finalSystemId:    v.warpRoute.finalSystemId ?? null,
           totalFuelPlanned: v.warpRoute.totalFuelPlanned ?? 0,
           startedYear:      v.warpRoute.startedYear ?? 0,
+          ...warpRouteGroupFields(v.warpRoute),   // G4 — tylko trasa floty; pojedynczy statek ma kształt jak dotąd
         } : null,
         // Slice C — pendingOrder: druga noga rozkazu composite (dostawa po warp).
         //   OrderService._maybeDeliver odczytuje to po warpRoute:completed/interstellar:arrived.
@@ -1887,6 +1893,7 @@ export class VesselManager {
           finalSystemId:    vd.warpRoute.finalSystemId ?? (vd.warpRoute.hops[vd.warpRoute.hops.length - 1] ?? null),
           totalFuelPlanned: vd.warpRoute.totalFuelPlanned ?? 0,
           startedYear:      vd.warpRoute.startedYear ?? 0,
+          ...warpRouteGroupFields(vd.warpRoute),   // G4 — bez migracji (v101): brak pól = trasa pojedynczego statku
         } : null,
         // Slice C — pendingOrder (druga noga composite); null gdy brak/stary save.
         pendingOrder:   vd.pendingOrder ? { ...vd.pendingOrder } : null,

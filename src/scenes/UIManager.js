@@ -1117,6 +1117,7 @@ export class UIManager {
       }
     });
     EventBus.on('fleet:orderIssued', ({ fleetId, type, accepted, rejected, fleetEta, speedCap }) => {
+      if (type === 'warp') return;   // G4 — skok floty ma własną, jedną linię Dziennika (`warpRoute.fleetStarted`)
       const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
       const aN = accepted?.length ?? 0;
       const rN = rejected?.length ?? 0;
@@ -1140,6 +1141,7 @@ export class UIManager {
       }
     });
     EventBus.on('fleet:orderCompleted', ({ fleetId, type }) => {
+      if (type === 'warp') return;   // G4 — jedna linia `warpRoute.fleetCompleted`
       const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
       this._addNotification(t('log.el.fleetOrderDone', fname, _orderLabel(type)), 'fleet', 'info');
     });
@@ -1167,6 +1169,7 @@ export class UIManager {
     // w Dzienniku gracza jak jego własne statki.
     EventBus.on('vessel:launched', ({ vessel, mission }) => {
       if (isEnemyVessel(vessel)) return;
+      if (vessel.warpRoute?.groupId) return;   // G4 — członek skoku floty: jedna linia na flotę zamiast N linii na każdy skok
       const sd = SHIPS[vessel.shipId];
       const icon = sd?.icon ?? '🚀';
       const mIcon = mission?.type === 'colony' ? '🚢'
