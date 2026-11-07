@@ -677,6 +677,7 @@ export default {
   'vessel.reasonNoShelterInSystem': 'No shelter in this system — no body lies outside the engagement radius',
   'vessel.reasonNoFriendlyPlanet': 'No friendly planet in range',
   'vessel.reasonNotInCombat': 'Vessel is not in combat',
+  'vessel.reasonInCombat': 'Vessel is in combat',
   // Group-order aggregate feedback (some vessels skipped)
   'vessel.orderPartial': 'Order: {0}/{1} moved · skipped: {2}',
   'vessel.orderNoneMoved': 'No vessel moved · {0}',

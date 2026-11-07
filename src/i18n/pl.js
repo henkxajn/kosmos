@@ -677,6 +677,7 @@ export default {
   'vessel.reasonNoShelterInSystem': 'Brak schronienia w tym układzie — żadne ciało nie leży poza promieniem starcia',
   'vessel.reasonNoFriendlyPlanet': 'Brak własnej planety w zasięgu',
   'vessel.reasonNotInCombat': 'Statek nie bierze udziału w bitwie',
+  'vessel.reasonInCombat': 'Statek bierze udział w bitwie',
   // Zbiorczy feedback rozkazu grupowego (część statków pominięta)
   'vessel.orderPartial': 'Rozkaz: ruszyło {0}/{1} · pominięto: {2}',
   'vessel.orderNoneMoved': 'Żaden statek nie ruszył · {0}',

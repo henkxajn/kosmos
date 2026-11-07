@@ -55,6 +55,7 @@ import { warGateRefusal, cargoUnloadRefusal } from '../utils/WarGate.js';   // D
 import { resolveTemplate } from '../utils/ShipTemplateResolver.js';   // AI STRIKES BACK S1 (SB22) — kadłub puli AI
 import { orbitClockSec } from '../utils/SimClock.js';                  // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';   // Finding 603
+import { combatCheckOf } from '../ui/FleetGroupPanelLogic.js';                  // Finding 607 — predykat „Odwrotu” grupy (Finding 562)
 import { describeOrderFail } from '../utils/CameraFrame.js';           // Finding 579 (D-4) — „<statek> (<powód>)” jak inne odmowy
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
@@ -941,6 +942,9 @@ export class VesselManager {
     // Finding 588 (D-GX-12): rezerwa nie skacze — bliźniak `WarpRouteSystem.canOrder` dla wejść omijających planer (`FleetActions`,
     //   fallbacki FMO). Tylko gałąź gracza: ścieżka AI nietknięta. `opts.force` omija paliwo, nie załogę.
     if (GAME_CONFIG.FEATURES?.galaxyWarp && !isEnemyVessel(vessel) && !isInService(vessel)) return false;
+    // Finding 607: statek w starciu nie skacze — bliźniak `WarpRouteSystem.canOrder` dla wejść omijających planer, jak rezerwa wyżej. Tylko gałąź
+    //   gracza: ścieżka AI nietknięta. `opts.force` omija paliwo, nie walkę.
+    if (!isEnemyVessel(vessel) && combatCheckOf(window.KOSMOS)?.(vesselId)) return false;
 
     const shipDef = _getHullDef(vessel.shipId);
     if (!shipDef) return false;

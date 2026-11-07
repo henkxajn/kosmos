@@ -27,6 +27,7 @@ import { HULLS } from '../data/HullsData.js';
 import { calcShipStats } from '../data/ShipModulesData.js';
 import { planWarpRoute, warpDist3D, warpRouteGroupFields, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { warpSystemLabel } from '../utils/SystemRevealWorld.js';
+import { combatCheckOf } from '../ui/FleetGroupPanelLogic.js';   // Finding 607 — predykat „Odwrotu” grupy (Finding 562)
 
 export class WarpRouteSystem {
   /**
@@ -52,6 +53,10 @@ export class WarpRouteSystem {
     //   brzmienia co w MOS, żeby odmowa czytała ten sam klucz i18n. Przed `immobilized`: „obsadź załogą” jest tu krokiem do zrobienia.
     if (GAME_CONFIG.FEATURES?.galaxyWarp && !isInService(v)) return { ok: false, reason: 'vessel_in_reserve' };
     if (this._vm?.isImmobilized?.(v))         return { ok: false, reason: 'immobilized' };
+    // Finding 607: statek w aktywnym starciu nie skacze. Rozkaz był przyjmowany i płatny, a statek zostawał w walce. Ten sam predykat co „Odwrót”
+    //   grupy i bramka MOS `not_in_combat` (Finding 562). Przed stanem: statek w odwrocie jest `in_transit`, a powodem ma być walka. Za `immobilized`:
+    //   to zostaje po walce.
+    if (combatCheckOf(window.KOSMOS)?.(v.id)) return { ok: false, reason: 'in_combat' };
     const st = v.position?.state;
     if (st === 'in_transit')                  return { ok: false, reason: 'in_transit' };
     if (st !== 'docked' && st !== 'orbiting') return { ok: false, reason: 'bad_state' };

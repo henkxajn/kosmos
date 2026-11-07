@@ -42,6 +42,7 @@ const REFUSAL_KEYS = Object.freeze({
   immobilized:       'fleet.warpErrImmobilized',
   not_warp_capable:  'fleet.warpErrConfig',
   vessel_in_reserve: 'vessel.reasonVesselInReserve',
+  in_combat:         'vessel.reasonInCombat',
   bad_state:         'fleet.warpErrState',
   not_player:        'fleet.warpErrState',
   // powody trasy (`planWarpRoute`)

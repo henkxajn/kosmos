@@ -3,6 +3,7 @@
 //   fleetWarpRig(kind)      — flota „G4”: 3 fregaty przy domu. 1 = wszyscy zdolni; 2 = trzeci bez napędu warp (K5); 3 = trzeci w rezerwie (K6)
 //   fleetWarpPlan(n)        — faza 1 do najbliższego układu o trasie n skoków: etykieta wpisu menu, ETA, wiążący, odmowa
 //   fleetWarpIssue(n)       — ten sam rozkaz co klik wpisu menu; `unchanged` = członkowie i rekord co do bitu przy odmowie
+//   fleetWarpBattle(i)      — członek i (od 0) w starciu: odsunięty od reszty, zbrojny rajder obok, gra na pauzie (bramka 607)
 //   fleetWarpState()        — odczyt: członkowie (układ, stan, przeskoki), rekord, przyloty per układ (ten sam tick), linie Dziennika
 //   fleetWarpDivert(i)      — i-ty członek (od 1) zjeżdża z trasy i leci własnym skokiem gdzie indziej
 //   fleetWarpStop()         — Stop floty: ta sama metoda co chip „Stop” panelu floty i „Anuluj rozkaz” w Dowództwie
@@ -14,7 +15,8 @@
 //   probe603Rig()           — zaznacza okręt solo ze skokiem w układzie z wrogiem, kamera na jego układzie
 //   probe603Engage() / probe603Patrol() / probe603Cores(x) — rozkaz na zaznaczonym statku; rdzenie = x
 //   probe603Warp(n)         — ten sam rozkaz co klik wpisu menu, do najbliższego układu o trasie n skoków
-//   probe603Enemy()         — rajder 5 AU od statku, gra na pauzie · probe603Battle() — zbrojny rajder obok statku + engage + start starcia, gra na pauzie
+//   probe603Enemy()         — rajder 5 AU od statku, gra na pauzie · probe603Battle(weak) — zbrojny rajder obok statku + engage + start (weak = 1: rajder na 1 HP, statek wygrywa)
+//                             · starcia, gra na pauzie
 //   probe603AI()            — para AI rusza na dom gracza; kolejne wywołania: odczyt · probe603Rail() — liczba statków przy gwiazdach szyny
 // ⚠ Dane gry dają dziś JEDNĄ prędkość skoku (każdy `engine_warp`: 18 LY/rok), więc blokady prędkości nie da się zobaczyć bez nadpisania. Rig
 //   nadpisuje `WarpRouteSystem._baseWarpSpeed` na czas sesji (6 / 12 / 18 LY/rok) — kod gry tego nie zna. Po wczytaniu trasa niesie swoją zablokowaną
@@ -184,6 +186,21 @@ export function fleetWarpDebugHelpers() {
       };
     },
 
+    /** Bramka 607: członek `i` floty w starciu, gra na pauzie. Odsunięty od reszty: skład starcia zbiera statki w promieniu, a odmowa ma nazwać tylko jego. */
+    fleetWarpBattle(i = 0) {
+      const k = K(), vm = k.vesselManager, fleet = currentFleet(), v = vm?.getVessel?.(fleet?.memberIds?.[i]);
+      if (!v) return { ok: false, reason: 'no_member', index: i };
+      k.timeSystem?.pause?.();
+      if (v.position?.state === 'docked') vm.undockToOrbit?.(v.id);
+      Object.assign(v.position, { x: v.position.x + 5 * GAME_CONFIG.AU_TO_PX, state: 'orbiting', dockedAt: null });
+      const e = raiderNear(v, 0.1);
+      if (!e) return { ok: false, reason: 'no_raider' };
+      EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: e.id, distanceAU: 0.1, sameFaction: false });
+      const enc = k.deepSpaceCombatSystem?._findActiveEncounterContaining?.(v.id) ?? null;
+      return { ok: !!enc, reason: enc ? null : 'no_encounter', member: v.name, enemy: e.name, armed: hasWeapons(e), encounter: enc?.id ?? null,
+        inEncounter: membersOf(fleet).filter((m) => enc?.vesselStates?.has(m.id)).map((m) => m.name) };
+    },
+
     fleetWarpState() {
       installRecorder();
       const k = K(), fleet = currentFleet(), members = membersOf(fleet);
@@ -340,7 +357,7 @@ export function fleetWarpDebugHelpers() {
 
     /** Ten sam rozkaz co klik wpisu menu gwiazdy, do najbliższego układu o trasie n skoków. `unchanged` — statek co do bitu przy odmowie. */
     probe603Warp(n = 1) {
-      const k = K(), v = selectedShip();
+      const k = K(), v = selectedShip() ?? k.vesselManager?.getVessel?.(probe603Last);   // Esc zdejmuje zaznaczenie, a bramka prowadzi dalej ten sam statek
       if (!v) return { ok: false, reason: 'no_selection' };
       const t = targetForShip(v, n);
       if (!t) return { ok: false, reason: 'no_target_with_hops', hops: n };
@@ -355,13 +372,14 @@ export function fleetWarpDebugHelpers() {
       return e ? { ok: true, enemy: e.name, armed: hasWeapons(e), enemyAU: round(auBetween(v, e), 2) } : { ok: false, reason: v ? 'no_raider' : 'no_selection' };
     },
 
-    /** Zbrojny rajder 0,1 AU od statku, rozkaz `engage` i start starcia, gra na pauzie: skok można wydać W TRAKCIE walki. */
-    probe603Battle() {
+    /** Zbrojny rajder 0,1 AU od statku, rozkaz `engage` i start starcia, gra na pauzie: skok można wydać W TRAKCIE walki. `weak`: rajder na 1 HP, statek wygrywa (bramka 607, K1). */
+    probe603Battle(weak = 0) {
       const k = K(), v = selectedShip();
       if (!v) return { ok: false, reason: 'no_selection' };
       k.timeSystem?.pause?.();
       const e = raiderNear(v, 0.1);
       if (!e) return { ok: false, reason: 'no_raider' };
+      if (weak) e.combatDamage = { hpMissing: 1e9, shieldMissing: 1e9 };
       const o = k.movementOrderSystem.issueOrder(v.id, { type: 'engage', targetEntityId: e.id });
       EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: e.id, distanceAU: 0.1, sameFaction: false });
       return { ok: o?.ok === true, reason: o?.reason ?? null, enemy: e.name, armed: hasWeapons(e), encounter: k.deepSpaceCombatSystem?._findActiveEncounterContaining?.(v.id)?.id ?? null };
@@ -404,12 +422,13 @@ const aiEmpire = () => (K().empireRegistry?.listAll?.() ?? []).find((e) => K().d
 const shipBits = (v) => JSON.stringify([v.position, v.status, v.systemId, v.mission, v.movementOrder, v.warpFuel, v.warpRoute ?? null]);
 const nearestEnemy = (v) => ships().filter((e) => isEnemyVessel(e) && !e.isWreck && e.systemId === v.systemId).sort((a, b) => auBetween(v, a) - auBetween(v, b))[0] ?? null;
 
-/** Rajder AI w układzie statku, `au` od niego. Istniejąca furtka debugowa, ta sama co `fleetWarpAI`. */
+/** Rajder AI w układzie statku, `au` od niego. Istniejąca furtka debugowa, ta sama co `fleetWarpAI`. Rodzi się w najbliższym układzie i zostaje przestawiony: furtka odmawia układu domowego (Finding 277), a flota z `fleetWarpRig` stoi przy domu. */
 function raiderNear(v, au) {
   const empire = aiEmpire();
   if (!empire) return null;
-  const r = spawnEnemyRaider({ empireId: empire.id, systemId: v.systemId, autoOrder: false }), e = K().vesselManager.getVessel(r?.vesselId);
+  const r = spawnEnemyRaider({ empireId: empire.id, autoOrder: false }), e = K().vesselManager.getVessel(r?.vesselId);
   if (!e) return null;
+  e.systemId = v.systemId;
   Object.assign(e.position, { x: v.position.x + au * GAME_CONFIG.AU_TO_PX, y: v.position.y, state: 'orbiting', dockedAt: null });
   return e;
 }
