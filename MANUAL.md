@@ -853,11 +853,12 @@ zbiorcze masz w panelu grupy / dowodzenia flotą. Pas zwijasz strzałką **▾**
 
 ## Strefy wpływów (mapa galaktyczna)
 
-Na mapie galaktycznej (**Dowództwo → STRATCOM**, klawisze `G`/`M`) każde imperium — Twoje i obce —
-pokazane jest jako **strefa wpływów**: posiadane układy emitują pole, którego pola bliskich kolonii
-zlewają się w organiczny kształt z subtelnym **tintem** w barwie imperium i **przerywaną izolinią** na
-granicy. Dwa odległe skupiska = dwa „bąble" w tej samej barwie; gdy skolonizujesz układ pomiędzy, bąble
-**zrastają się na oczach** (krótki rozbłysk granicy).
+Mapa galaktyczna to tryb głównego widoku 3D: wchodzisz klawiszem `G` albo `M`, pigułką **[ UKŁAD ] [ GALAKTYKA ]**
+na pasie dolnym albo wierszem **GALAKTYKA** na górze lewego outlinera; wracasz tym samym klawiszem, `Esc` albo
+wierszem **„← Układ"**. Na płycie galaktyki każde imperium — Twoje i obce — pokazane jest jako **strefa wpływów**:
+posiadane układy emitują pole, którego pola bliskich kolonii zlewają się w organiczny kształt — **rozlane światło**
+w barwie imperium z cienką krawędzią i **kurtyną** wzdłuż granicy. Dwa odległe skupiska = dwa „bąble" w tej samej
+barwie; gdy skolonizujesz układ pomiędzy, bąble **zrastają się**.
 
 - **Barwa = tożsamość.** Kolor mówi KTO (stały kolor imperium). Barwę swojego imperium wybierasz na
   ekranie startowym (paleta 8 kolorów, domyślnie cyjan). Obce imperia mają własne, rozróżnialne kolory.
@@ -865,10 +866,9 @@ granicy. Dwa odległe skupiska = dwa „bąble" w tej samej barwie; gdy skoloniz
 - **Rozmiar pola = rozwój.** Im więcej populacji i budynków w układzie, tym większe pole wpływu.
 - **Mgła wojny.** Twoje terytorium widzisz zawsze. Obce: od kontaktu (`intel ≥ contact`) w pełnym
   kolorze; przy plotce (`rumor`) tylko szary zarys bez wypełnienia; nieznane — nic.
-- **Romb właściciela** przy gwieździe oznacza układ pod kontrolą (Twój zawsze; obcy przy kontakcie).
-- **Granica sporna** (pola dwóch imperiów stykają się) jest jaśniejsza / podwójna — zapowiedź napięcia
+- **Aureola właściciela** wokół gwiazdy oznacza układ pod kontrolą (Twój zawsze; obcy przy kontakcie).
+- **Granica sporna** (pola dwóch imperiów stykają się) świeci jasnym szwem — zapowiedź napięcia
   granicznego.
-- Panel układu pokazuje wiersz **„Terytorium: <imperium>"**; legenda radaru — próbki strefy, granicy
-  i rombu.
+- Rozwinięcie gwiazdy (najechanie albo klik) podaje właściciela układu.
 
-Warstwa jest zawsze włączona (bez przełącznika). Działa w widoku 2D (mały podgląd) i 3D (duży panel).
+Warstwa jest zawsze włączona (bez przełącznika).
