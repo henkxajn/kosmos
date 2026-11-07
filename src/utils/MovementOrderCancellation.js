@@ -21,10 +21,11 @@ import { ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY } from '../ui/FleetPic
  * @param {object} deps.eventLogSystem   — EventLogSystem instance (lub null)
  * @param {function} deps.t              — i18n translator (key, ...args) → string
  * @param {string} vesselId
+ * @param {string} [cancelReason] — powód w rekordzie rozkazu (`blockReason`); domyślnie decyzja gracza
  * @returns {{ok: boolean, reason?: string}}
  *   reason ∈ 'no_mos' | 'no_vessel' | 'no_order' | 'mos_rejected'
  */
-export function tryCancelVesselOrder(deps, vesselId) {
+export function tryCancelVesselOrder(deps, vesselId, cancelReason = 'player') {
   const { mos, vesselManager, eventLogSystem, t } = deps ?? {};
   if (!mos?.cancelOrder) return { ok: false, reason: 'no_mos' };
 
@@ -40,7 +41,7 @@ export function tryCancelVesselOrder(deps, vesselId) {
   const orderLabel = t
     ? t(ORDER_ACTIVITY_KEYS[orderType] ?? ORDER_ACTIVITY_FALLBACK_KEY)
     : orderType;
-  const cancelled = mos.cancelOrder(vesselId, 'player');
+  const cancelled = mos.cancelOrder(vesselId, cancelReason);
   if (!cancelled) return { ok: false, reason: 'mos_rejected' };
 
   // EventLog wpis — channel='fleet' (V5: 'orders' nie istnieje w CHANNELS).

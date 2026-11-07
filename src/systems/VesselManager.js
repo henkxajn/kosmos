@@ -54,6 +54,7 @@ import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / 
 import { warGateRefusal, cargoUnloadRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny (away team); D13a — ładownia (107)
 import { resolveTemplate } from '../utils/ShipTemplateResolver.js';   // AI STRIKES BACK S1 (SB22) — kadłub puli AI
 import { orbitClockSec } from '../utils/SimClock.js';                  // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
+import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';   // Finding 603
 import { describeOrderFail } from '../utils/CameraFrame.js';           // Finding 579 (D-4) — „<statek> (<powód>)” jak inne odmowy
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
@@ -995,6 +996,15 @@ export class VesselManager {
     const travelYears = distLY / warpSpeed;
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+
+    // Finding 603 — SKOK ZASTĘPUJE ROZKAZ RUCHU (gałąź gracza; ta sama reguła co skok floty, `FleetSystem.issueWarpOrder`). Żywy rozkaz zostawiał
+    //   statek w tranzycie na zawsze: `_updatePositions` wychodzi przy `isOrderControlled` przed gałęzią warp, a po anulowaniu `orbiting` nie wraca
+    //   do gałęzi, która wymaga `in_transit`. Stoi TU, za wszystkimi odmowami: odrzucony skok nie ma prawa zabić rozkazu (reguła Findingu 275).
+    //   Migawka znika pierwsza, inaczej `_resumeMissionAfterOrder` na `vessel:orderCancelled` wystartowałby starą misję (`vessel:launched`).
+    if (!isEnemyVessel(vessel) && vessel.movementOrder?.status === 'active') {
+      delete vessel._suspendedMission;
+      tryCancelVesselOrder({ mos: window.KOSMOS?.movementOrderSystem, vesselManager: this, eventLogSystem: window.KOSMOS?.eventLogSystem, t }, vesselId, 'warp_departed');
+    }
 
     // S3.0b S1: Zużyj paliwo warp (clamp do 0 — AI/force mogą skoczyć na oparach).
     consumeWarpFuel(vessel, distLY);
