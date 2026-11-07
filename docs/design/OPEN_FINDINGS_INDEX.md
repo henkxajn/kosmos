@@ -1070,6 +1070,14 @@
 > • Sweep **370/370**, `check-i18n` pl = en = **3421**; save v101 bez migracji.
 > • Następny: **krok 607**, potem **G5**.
 > • **Pierwszy wolny numer: 609.**
+>
+> **Aktualizacja 2026-11-07 (ARC GALAXY — krok 607 ✅, `585249c`)** — statek gracza w aktywnym starciu nie skacze: `WarpRouteSystem.canOrder` odmawia `in_combat` predykatem „Odwrotu” grupy (`combatCheckOf`, #562),
+> `dispatchInterstellar`, gałąź gracza, ma tego samego strażnika; menu, picker, podgląd i faza 1 floty czytają bramkę bez drugiej gałęzi; ścieżka AI bez zmian (ślad nagrany na `eca9a3b`), bez flagi. Bramka właściciela K0–K3 PASS, klient EN
+> (`GALAXY_PLAN.md` §4 607 — delivered).
+> • **ZAMKNIĘTY: #607** (wiersz w A12). **NOWE: #609** ⚪ (wiersz w A12) — wrak statku AI z lotu warp ma stempel `sys_home` zamiast układu wylotu; uśpiony, bez kroku.
+> • Sweep **371/371**, `check-i18n` pl = en = **3422**; save v101 bez migracji.
+> • Następny: **G5** (sprzątanie, zamknięcie arca) — nierozpoczęty.
+> • **Pierwszy wolny numer: 610.**
 
 
 ---
@@ -1154,7 +1162,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **504-577** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD i REFORMY ZAKŁADEK (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; zakładki — etykiety, przypięcia, panele przy outlinerze; 2026-10-21–29; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0, 522-527 z sesji i bramki H1, 528-530 z sesji paczki A, 531-567 z reformy zakładek — `TABS_REFORM_PLAN.md`, 568-572 z paczki B, 573 z B-Z, 574-577 ze znacznika statku — dodatek po zamknięciu, §9) |
 | **578-582** | `VESSEL_ORDERS_PLAN.md` §Findingi 578–582 — akcje obce po skoku warp (2026-10-29–30; 578-580 z audytu fazy A i z fazy B, 581 z decyzji właściciela po bramce, 582 z bramki (a7); audyt `docs/audit/POST_WARP_FOREIGN_ACTIONS_AUDIT.md`) |
 | **583-587** | `VESSEL_ORDERS_PLAN.md` §Findingi 583–587 — szew zużycia statku poza walką (2026-10-30; 583-585 z audytu fazy A, 586 z rezerwy Q3 i z bramki, 587 z bramki; audyt `docs/audit/VESSEL_CONSUMPTION_SEAM_AUDIT.md`) |
-| **588-608** | `GALAXY_PLAN.md` §3 Findings register — arc GALAXY (mapa galaktyki jako tryb głównego widoku 3D; 2026-10-30–11-07; 588-599 z audytu fazy A, 600 z kroku G1, 601 z kroku 600, 602 z kroku G3, 603-604 sprzed bramki G4, 605 z bramki G4, 606 z kroku 603, 607-608 z bramki 603) |
+| **588-609** | `GALAXY_PLAN.md` §3 Findings register — arc GALAXY (mapa galaktyki jako tryb głównego widoku 3D; 2026-10-30–11-07; 588-599 z audytu fazy A, 600 z kroku G1, 601 z kroku 600, 602 z kroku G3, 603-604 sprzed bramki G4, 605 z bramki G4, 606 z kroku 603, 607-608 z bramki 603, 609 z kroku 607) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1488,8 +1496,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **604** | ⚪ | statek solo na trasie wieloprzeskokowej pauzuje grę popupem na każdym przystanku (`fleetArrivalPopupKind` = `solo`); zmierzone w prawdziwej grze: trzy popupy na trasie 3 skoków. Stan z G3 | **→ G5** (decyzja właściciela 2026-11-06); nienaprawiane w G4. `GALAXY_PLAN.md` §3 |
 | **605** | ⚪ | flota stojąca przy gwieździe nie ma na płycie żadnego oznaczenia floty: sam romb (`HudGalaxyRailLayer.js:134-136`), „×N” tylko w tranzycie (`:169`); flotę widać wyłącznie w prawym outlinerze. Obserwacja właściciela z bramki G4 | **→ G5**, polerka. `GALAXY_PLAN.md` §3 |
 | **606** | ⚪ | powrót do bazy w locie warp daje darmowy lot i chimerę doku: `OrderService.issueReturn` czyta `isForeign` jako fałsz przy `systemId null` (`OrderService.js:398`), statek bierze lokalny `startReturn` i dokuje w domu ze `systemId` celu skoku i starą `warpRoute`, rdzeni nie płaci. Zmierzone headless i w prawdziwej grze; **bez ścieżki UI** (`return_home` poza listą akcji, `FleetActions.js:683`) | uśpiony, bez kroku; nienaprawiane w kroku 603. `GALAXY_PLAN.md` §3 |
-| **607** | 🟠 | skok w trakcie starcia jest przyjęty i zapłacony, a statek zostaje w walce: `WarpRouteSystem.canOrder` (`:48`) nie ma terminu walki. Zmierzone w prawdziwej grze (jedno przegrane starcie, `probe603Battle()`), powtórzone przez właściciela na bramce 603 (K3): wrak ze skokiem i bez, z rozkazem i bez; po skoku wrak ma stempel `sys_home` zamiast układu walki i zachowuje `warpRoute`. Nie jest skutkiem naprawy 603. Walka wygrana niezmierzona | **własny krok, następny, przed G5** (decyzja właściciela 2026-11-07); nierozpoczęty. `GALAXY_PLAN.md` §3 |
+| **607** | ✅ | **ZAMKNIĘTY 2026-11-07** (`585249c`, krok 607, bez flagi) — skok w trakcie starcia był przyjęty i zapłacony, a statek zostawał w walce: `WarpRouteSystem.canOrder` nie miał terminu walki. Zmierzone w prawdziwej grze (jedno przegrane starcie), powtórzone przez właściciela na bramce 603 (K3): wrak ze skokiem i bez, z rozkazem i bez; po skoku wrak miał stempel `sys_home` zamiast układu walki i zachowywał `warpRoute`. Nie był skutkiem naprawy 603 | `canOrder` odmawia `in_combat` predykatem „Odwrotu” grupy (`combatCheckOf`, #562), `dispatchInterstellar`, gałąź gracza, ma tego samego strażnika; ścieżka AI bez zmian. Keeper `warp_combat_607_smoke`; bramka K0–K3 PASS 2026-11-07. `GALAXY_PLAN.md` §3 |
 | **608** | ⚪ | po najechaniu na gwiazdę rozwinięte nazwy statków szyny przykrywa rozwinięcie informacji o gwieździe (ten sam obszar kotwicy). Obserwacja właściciela z bramki 603, niezmierzona | **→ G5**, polerka, razem z 604 i 605. `GALAXY_PLAN.md` §3 |
+| **609** | ⚪ | wrak statku AI z lotu warp ma stempel `sys_home` zamiast układu wylotu: `EnemyAttackHandler._turnIntoWreck` (`:326`) zeruje misję i zostawia `systemId null`, a `_resolveSystemId` (`VesselManager.js:333`) daje `null ?? 'sys_home'`, bez terminu właściciela. Z czytania kodu, potwierdzone śladem (`warp_combat_607_smoke` T0 `ai_wrecked_mid_flight`). **Bez znanej ścieżki:** pule AI wysyłające skokiem pomijają statki w starciu, a system walki odmawia statkowi w skoku | uśpiony, bez kroku; nienaprawiane w kroku 607. `GALAXY_PLAN.md` §3 |
 
 ---
 

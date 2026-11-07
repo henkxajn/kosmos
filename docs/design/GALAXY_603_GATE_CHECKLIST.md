@@ -57,6 +57,7 @@ Napisana PRZED bramką. Każde polecenie uruchomione na żywym silniku (Chrome b
 **Wynik:** `order: engage/active`, `system: sys_020`, `cores: 0.1`. Po `KOSMOS.timeSystem.setMultiplier(2)` · `KOSMOS.timeSystem.play()` · chwili · `KOSMOS.timeSystem.pause()` dalej `engage/active`, a `xy` inne: pościg trwa.
 
 ## K3 — patrol odmawia; skok w trakcie starcia
+⚠ **Od Findingu 607 (`585249c`) skok w trakcie starcia jest odmawiany `in_combat`.** Część tego kroku od `probe603Battle()` opisuje stan z bramki 603 i już się tak nie odtworzy; aktualny przebieg: `docs/design/GALAXY_607_GATE_CHECKLIST.md`. Odmowa patrolu bez zmian.
 **Ustaw:** `KOSMOS.debug.probe603Patrol()` · `KOSMOS.debug.probe603Cores(5)`
 **Polecenie:** `KOSMOS.debug.probe603Warp(1)`
 **Wynik:** `ok: false`, `reason: in_transit`, `text: Nie można wydać rozkazu — ✗ Statek w tranzycie`, `unchanged: true`. `probe603()`: `order: patrol/active`.
