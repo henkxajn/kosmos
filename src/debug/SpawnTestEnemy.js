@@ -723,10 +723,10 @@ export function spawnEnemyRaider(opts = {}) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // spawnEnemyWarpGhost — wrogi statek w TRANZYCIE WARP (międzygwiezdnym), do testu
-// fog-of-war na radarze/galaktyce Stratcom. Tworzy PEŁNĄ instancję Vessel (createVessel)
+// fog-of-war na płycie galaktyki (tryb G / M). Tworzy PEŁNĄ instancję Vessel (createVessel)
 // — w przeciwieństwie do ręcznego `_vessels.set('ghost_test', {...})`, który był surowym
 // obiektem bez `position`/`status` i wywracał pętle draw/tick (brak v.position.dockedAt itd.).
-// Przy Lv≥4 obserwatorium pojawi się na Stratcom jako ghost „?" (rumor) — bez tożsamości
+// Przy Lv≥4 obserwatorium pojawi się na płycie galaktyki jako ghost „?" (rumor) — bez tożsamości
 // do bliskiego spotkania. opts: { offsetLY=3, name }.
 // ─────────────────────────────────────────────────────────────────────────────
 export function spawnEnemyWarpGhost(opts = {}) {
@@ -788,6 +788,6 @@ export function spawnEnemyWarpGhost(opts = {}) {
   EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
 
   console.log(`[spawnEnemyWarpGhost] 👻 Wrogi warp ${offsetLY} ly od domu (id=${vessel.id}). ` +
-              `Otwórz Stratcom (Lv≥4) → ghost „?". Usuń: KOSMOS.vesselManager._vessels.delete('${vessel.id}')`);
+              `Otwórz mapę galaktyki (G, obserwatorium Lv≥4) → ghost „?". Usuń: KOSMOS.vesselManager._vessels.delete('${vessel.id}')`);
   return { success: true, vesselId: vessel.id, offsetLY };
 }

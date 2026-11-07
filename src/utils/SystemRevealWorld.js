@@ -1,8 +1,9 @@
 // SystemRevealWorld — JEDYNY punkt składania kanałów kanonu mgły wojny układu (GALAXY_PLAN.md A14: „one pure assembler
 // (moved out of FMO)” — wyciągnięty w NIEBO, bo etykiety nieba to pierwsza nowa powierzchnia z nazwami układów):
-// oś MIEJSCA (`isSystemExplored` + ukończony skan STRATCOM obserwatorium) i oś WŁAŚCICIELA (`intelSystem.isAtLeast`) →
-// `resolveSystemReveal` (Finding 188). Konsumenci: mapa galaktyki (`FleetManagerOverlay._systemReveal`), etykiety mapy
-// układu (`HudLabelLayer._t1NameVisible`), etykiety nieba (`HudSkyLabelLayer`) i przyrządy bramki nieba (`ThreeRenderer`).
+// oś MIEJSCA (`isSystemExplored` + ukończony skan układu obserwatorium) i oś WŁAŚCICIELA (`intelSystem.isAtLeast`) →
+// `resolveSystemReveal` (Finding 188). Konsumenci: płyta i outlinery trybu galaktyki (`GalaxyOutlinerLogic`; do G5 także
+// zakładka Stratcom `FleetManagerOverlay._systemReveal`), etykiety mapy układu (`HudLabelLayer._t1NameVisible`), etykiety nieba
+// (`HudSkyLabelLayer`) i przyrządy bramki nieba (`ThreeRenderer`).
 // ⚠ Nowa powierzchnia z nazwą układu składa kanały TUTAJ — druga kopia trzech kanałów to bliźniak, który się rozjedzie.
 // Czysty względem świata: `K` (= `window.KOSMOS`) podaje wołający — bez `window` (atrapa w keeperze). Fail-closed: brak
 // rekordu ⇒ nic (`resolveSystemReveal(null)`).

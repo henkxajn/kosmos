@@ -5,23 +5,30 @@
 //     bez napędu / brak trasy / brak bramki), priorytet bramka > trasa; zgodność z `beginJourney` co do planu (także prędkość)
 // T2  etykieta PL + EN niezależnie od aktywnego języka, „Skoki: N” bez polskiej liczby mnogiej; aktywny język nietknięty
 // T3  bramka mgły: `warpSystemLabel`, menu, podgląd, picker i TRZY linie startu skoku (`warpRoute.started`,
-//     `vessel.interstellarLaunch`, linia `vessel:launched` w Dzienniku); KONTROLA: przy OFF ta sama linia niesie nazwę; AI nietknięte
+//     `vessel.interstellarLaunch`, linia `vessel:launched` w Dzienniku); KONTROLA: po zbadaniu te same linie niosą nazwę; AI nietknięte
 // T4  podgląd trasy: linia, punkty z rolami, odcinki z zasięgiem, pola częściowe przy `insufficient_warp_fuel`, fail-closed bez paliwa
 // T5  picker wg `canOrder` (Finding 593): orbita przy innym ciele jest na liście, rezerwa przyciemniona z powodem, AI / wrak / bez napędu poza
 // T6  słownik odmowy: parzystość z dawną tabelą `_warpErrLabel` (przepisaną tu dosłownie) w obu językach, także gałęzie domyślne
-// T7  toast odmowy niesie powód (Finding 594) — prawdziwe `_handleHit`; KONTROLA: OFF = sam nagłówek / cisza pickera
+// T7  (wycofany w G5-B — przyciski skoku zakładki Stratcom usunięte; toast odmowy z powodem: `galaxy_warp_ui_smoke` T2 / T4)
 // T8  menu PPM per język (Finding 592) — prawdziwe `RightClickMenu.show`; dane pozycji nietknięte; powód wyłączenia przez słownik
 // T9  picker planuje trasę (po G3, F1): wiersz, który odmówiłby przy kliku, jest odmówiony przed klikiem; zgodność z prawdziwym rozkazem; pamięć planu
-// T10 Finding 602 (po G3, F2): kolumna „Dokąd” rejestru K3 przez kanon mgły — `buildShipEntry` i `buildRegistryRows`; KONTROLA: OFF niesie nazwę
+// T10 Finding 602 (po G3, F2): kolumna „Dokąd” rejestru K3 przez kanon mgły — `buildShipEntry` i `buildRegistryRows`; KONTROLA: po skanie /
+//     po zbadaniu nazwa wraca
 //
 // ⚠ `UIManager` nie importuje się pod node — wpięcie linii Dziennika to pin źródłowy (T3e); logika (`launchTargetLabel`) wykonaniem.
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flagi `galaxyWarp` / `fleetWarp` na stałe ON, ścieżki OFF i zakładka Stratcom usunięte):
+//   T3 — kontrola OFF (stare linie startu z prawdziwą nazwą) wycofana; to, że przyrząd widzi nazwę, pinuje dalej wiersz „po zbadaniu
+//   trzy linie niosą nazwę”; T3e — pin źródłowy `UIManager` na BEZWARUNKOWE `launchTargetLabel(mission)`, bez odczytu flagi (dawniej:
+//   wywołanie za `galaxyWarp ?`); T7 — wycofany w całości: `warp_order_send` / `cluster_send_pick` i `_pendingSendSystemId` zniknęły
+//   z zakładką Stratcom (toast odmowy z powodem pinują `galaxy_warp_ui_smoke` T2 — rozkaz z menu gwiazdy — i T4 — klik odmówionego
+//   wiersza pickera); T8 — kontrole OFF (klient EN dostaje `labelPL`, polski literał powodu) wycofane, wiersze PL / EN zostają;
+//   T10 — kontrola OFF (`mission.targetName`) wycofana, nazwę po skanie i po zbadaniu widzą wiersze obok. Ustawianie flagi w setupie
+//   usunięte (klucza nie ma, nikt go nie czyta).
 
 import '../headless/env.js';           // MUSI być pierwszy (localStorage dla i18n, atrapa DOM menu)
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import EventBus from '../../core/EventBus.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { t, tIn, setLocale, getLocale } from '../../i18n/i18n.js';
 import { WarpRouteSystem } from '../../systems/WarpRouteSystem.js';
 import { VesselManager } from '../../systems/VesselManager.js';
@@ -62,7 +69,6 @@ window.KOSMOS = {
   intelSystem: { isAtLeast: (emp, lvl) => (RANK[intel[emp]] ?? 0) >= (RANK[lvl] ?? 99) },
 };
 const K = window.KOSMOS;
-GAME_CONFIG.FEATURES.galaxyWarp = true;
 
 const vm = Object.create(VesselManager.prototype);
 vm._vessels = new Map();
@@ -208,13 +214,6 @@ header('T3 bramka mgły na nazwach');
   ok(logs.some(x => x.includes('Cygni')) && launchLine(v2).includes('Cygni') && launchTargetLabel(v2.mission) === 'Cygni', 'po zbadaniu trzy linie niosą nazwę');
   SYS.find(s => s.id === 'C').explored = false;
 
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  logs.length = 0;
-  const v3 = mk();
-  wrs.beginJourney(v3.id, 'C');
-  ok(logs.some(x => x.includes('Cygni')) && launchLine(v3).includes('Cygni'), 'KONTROLA OFF: stare linie niosą prawdziwą nazwę — przyrząd ją widzi');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
-
   const ai = mk({ ownerEmpireId: 'emp_001' });
   vm.dispatchInterstellar(ai.id, 'C');
   ok(launchLine(ai).includes('Cygni'), 'KONTROLA AI: dziennik misji imperium nietknięty');
@@ -226,7 +225,9 @@ header('T3 bramka mgły na nazwach');
   const at = src.indexOf("EventBus.on('vessel:launched'");
   const body = at >= 0 ? src.slice(at, src.indexOf('EventBus.on(', at + 10)) : '';
   const code = body.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
-  ok(body.length > 0 && /galaxyWarp\s*\?\s*launchTargetLabel\(mission\)/.test(code), 'UIManager: linia startu idzie przez launchTargetLabel za flagą');
+  // G5-B: wywołanie bezwarunkowe — żadnego odczytu flagi i żadnej gałęzi z `mission.targetName` obok.
+  ok(body.length > 0 && /const\s+launchTarget\s*=\s*launchTargetLabel\(mission\)\s*;/.test(code) && !/FEATURES|galaxyWarp/.test(code),
+    'UIManager: linia startu idzie przez launchTargetLabel bezwarunkowo (bez odczytu flagi)');
   ok(/t\('log\.el\.vesselLaunched',[^)]*launchTarget\b/.test(code), 'UIManager: wynik trafia do linii Dziennika');
 }
 
@@ -328,49 +329,7 @@ header('T6 słownik odmowy — parzystość z dawną tabelą');
   ok(tIn('en', 'vessel.reasonVesselInReserve') !== tIn('pl', 'vessel.reasonVesselInReserve'), 'KONTROLA: klucz ma dwie wersje językowe (parzystość nie jest jałowa)');
 }
 
-// ── T7 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-header('T7 toast odmowy niesie powód');
-{
-  const toasts = [];
-  const onToast = (e) => toasts.push(e.text);
-  EventBus.on('ui:toast', onToast);
-  const fmo = Object.create(FleetManagerOverlay.prototype);
-  let answer = { ok: false, reason: 'vessel_in_reserve' };
-  K.orderService = { issueWarp: () => answer };
-  const send = { type: 'warp_order_send', data: { vesselId: 'v', systemId: 'B' } };
-  const pick = { type: 'cluster_send_pick', data: { vesselId: 'v', systemId: 'B' } };
-  const header594 = t('fleet.warpOrderFailed');
-  const detail = refusalText('vessel_in_reserve');
-
-  fmo._handleHit(send);
-  ok(toasts.at(-1) === `${header594} — ${detail}`, 'warp_order_send: nagłówek + powód');
-  toasts.length = 0;
-  fmo._handleHit(pick);
-  ok(toasts.length === 1 && toasts[0] === `${header594} — ${detail}`, 'cluster_send_pick: odmowa nie jest cicha (Stratcom dziedziczy rezerwę)');
-  ok(fmo._pendingSendSystemId === null, 'picker Stratcom domknięty jak dotąd');
-
-  answer = { ok: false, reason: 'insufficient_warp_fuel' };
-  toasts.length = 0;
-  fmo._handleHit(send);
-  ok(toasts.at(-1) === `${header594} — ${t('fleet.warpErrFuel')}`, 'powód trasy też trafia do toastu');
-
-  answer = { ok: true };
-  toasts.length = 0;
-  fmo._handleHit(pick);
-  ok(toasts.length === 0, 'KONTROLA: sukces pickera bez toastu');
-
-  answer = { ok: false, reason: 'vessel_in_reserve' };
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  toasts.length = 0;
-  fmo._handleHit(send);
-  ok(toasts.length === 1 && toasts[0] === header594, 'KONTROLA OFF: sam nagłówek jak przed krokiem');
-  toasts.length = 0;
-  fmo._handleHit(pick);
-  ok(toasts.length === 0, 'KONTROLA OFF: cisza pickera jak przed krokiem');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
-  EventBus.off('ui:toast', onToast);
-  delete K.orderService;
-}
+// ── T7 — wycofany w G5-B (przyciski skoku zakładki Stratcom usunięte; zob. nagłówek) ─────────────────────────────────────────
 
 // ── T8 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 header('T8 menu PPM per język');
@@ -392,11 +351,6 @@ header('T8 menu PPM per język');
   setLocale('pl');
   const pl = shown();
   ok(pl.includes('Lecisz tutaj') && !pl.includes('Move here'), 'klient PL: menu po polsku');
-  setLocale('en');
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  const offEn = shown();
-  ok(offEn.includes('Lecisz tutaj') && !offEn.includes('Move here'), 'KONTROLA OFF: klient EN dostaje labelPL jak przed krokiem');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
 
   ok(menuOptionLabel({ labelPL: 'a' }) === 'a', 'pozycja bez labelEN: fallback na labelPL');
   const all = Object.values(MENU_OPTIONS_BY_TARGET).flat();
@@ -409,10 +363,6 @@ header('T8 menu PPM per język');
   ok(reasonNow() === 'Select a vessel first', 'powód wyłączenia po angielsku przez tooltip.menu.requiresSelection');
   setLocale('pl');
   ok(reasonNow() === 'Najpierw wybierz statek', 'powód wyłączenia po polsku');
-  setLocale('en');
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  ok(reasonNow() === 'Najpierw wybierz statek', 'KONTROLA OFF: literał jak przed krokiem');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
   setLocale(prev);
 }
 
@@ -483,9 +433,6 @@ header('T10 Finding 602: kolumna „Dokąd” przez kanon mgły');
   C.explored = true;
   ok(buildShipEntry(v, {}).toName === 'Cygni' && rowOf()?.toName === 'Cygni', 'układ zbadany: nazwa');
   C.explored = false;
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  ok(buildShipEntry(v, {}).toName === 'Cygni', 'KONTROLA OFF: `mission.targetName` jak przed krokiem — przyrząd widzi różnicę');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
   const other = mk({ name: 'Inna', mission: { type: 'transport', targetId: 'p1', targetName: 'Kolonia X', phase: 'transit' } });
   ok(buildShipEntry(other, {}).toName === 'Kolonia X', 'misje poza skokiem: nazwa z misji, bez kanonu');
 }

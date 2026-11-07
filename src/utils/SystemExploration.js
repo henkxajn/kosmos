@@ -22,7 +22,7 @@
 //   konsumentem, więc import w drugą stronę byłby cyklem.
 //
 // ⚠ „ZBADANY" ≠ „WIDOCZNY". Ten kanon odpowiada wyłącznie na pytanie o WŁASNĄ eksplorację.
-//   Wiedza z wywiadu (`IntelSystem.isAtLeast(empireId, 'rumor')`) i skan STRATCOM
+//   Wiedza z wywiadu (`IntelSystem.isAtLeast(empireId, 'rumor')`) i skan układu obserwatorium
 //   (`ObservatorySystem.getSystemScanResult`) to OSOBNE kanały. Wciągnięcie ich tutaj skleiłoby
 //   trzy różne pytania w jedno i odtworzyło defekt, który ten plik zamyka.
 // ⚠ AKTUALIZACJA (Finding 188): składanie tych kanałów PRZESTAŁO być prywatną sprawą konsumenta.

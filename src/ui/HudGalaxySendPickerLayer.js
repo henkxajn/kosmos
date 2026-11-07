@@ -4,14 +4,13 @@
 // zamyka, odmowa zostawia listę. Esc i klik poza zamykają; klik poza nad płytą jest pochłaniany — nie zdejmuje przypięcia.
 // Stan pickera należy do `GalaxyModeController.sendPicker`, wiersze i tekst do `GalaxyWarpLogic` (nazwy przez kanon mgły).
 // G4: nad statkami sekcja floty (wiersz = `OrderService.issueFleetWarp`, ta sama faza 1 co menu); nagłówek sekcji nie jest strefą kliku.
-// Flaga `galaxyWarp` OFF — podwarstwa milczy.
 // ⚠ Moduł importuje się pod node (atrapa świata w keeperze): bez three i bez DOM.
 import { THEME } from '../config/ThemeConfig.js';
 import { themeToken } from './HudPalette.js';
 import { HUD_LABELS, pointInRect } from './HudLabelLogic.js';
 import { galaxyChromeAlpha } from './GalaxyChromeLogic.js';
 import { GALAXY_FADE_MS } from './GalaxyModeLogic.js';
-import { galaxyWarpOn, fleetWarpOn, sendPickerModel, sendPickerBox, sendPickerRowLines, sendRowKey, runGalaxyWarpOrder, runGalaxyFleetWarpOrder } from './GalaxyWarpLogic.js';
+import { sendPickerModel, sendPickerBox, sendPickerRowLines, sendRowKey, runGalaxyWarpOrder, runGalaxyFleetWarpOrder } from './GalaxyWarpLogic.js';
 
 // Rysunek (px logiczne). Strojenie okiem — bez pinów keepera.
 export const HUD_GALAXY_SEND_PICKER = Object.freeze({
@@ -62,7 +61,7 @@ export class HudGalaxySendPickerLayer {
   prepare(F) {
     const K = F.K, gm = K?.galaxyMode;
     const sp = gm?.sendPicker ?? null;
-    if (!galaxyWarpOn() || gm?.isActive !== true || gm.isFlying || !sp) {
+    if (gm?.isActive !== true || gm.isFlying || !sp) {
       this._prep = { on: false };
       return 'gsp:0';
     }
@@ -121,7 +120,7 @@ export class HudGalaxySendPickerLayer {
     ctx.setLineDash([]);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.globalAlpha = (fleetWarpOn() ? G.BAR_ALPHA : R.BAR_ALPHA_SELECTED) * a;
+    ctx.globalAlpha = G.BAR_ALPHA * a;
     ctx.fillStyle = THEME.bgPrimary;
     ctx.fillRect(box.x, box.y, box.w, box.h);
     const x = box.x + R.PAD_X;
@@ -175,7 +174,7 @@ export class HudGalaxySendPickerLayer {
     const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
     const gm = K?.galaxyMode;
     const sp = gm?.sendPicker ?? null;
-    if (!sp || !galaxyWarpOn()) return false;
+    if (!sp) return false;
     if (!this._inBox(x, y)) { gm.closeSendPicker(); return true; }
     const row = this._rowAt(x, y);
     if (row) {

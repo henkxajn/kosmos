@@ -17,18 +17,24 @@
 // ⚠ DLACZEGO TO PRZEŻYŁO TAK DŁUGO: nazwa układu ma TRZECI predykat (`_systemDisplayName:6355`,
 //   samo `sys.explored`) i zostaje „???". Panel WYGLĄDA na zamglony, oddając spis i wejście.
 //
-//   T1  186 SEDNO — panel detalu na układzie AI: brak `cluster_switch`, status „Niezbadany",
-//       zero wierszy spisu. Mierzone PRZEBIEGIEM PRAWDZIWEJ FUNKCJI RYSUJĄCEJ, nie źródłowo.
+//   T1  186 SEDNO — przypięcie gwiazdy układu AI (tryb galaktyki): brak [ Wejdź ], status „Niezbadany",
+//       brak linii ciał. Mierzone PRZEBIEGIEM PRAWDZIWEJ podwarstwy nazw płyty (`_g2Pin`), nie źródłowo.
 //   T2  KONTROLA PINU — układ ZBADANY przez gracza dalej daje wszystkie trzy. Bramkujemy
-//       stan wiedzy, nie funkcję panelu.
-//   T3  186 drugi site — `_drawWarpOrderPanel` (`:6784`). Bramka była tam ŚWIADOMIE SKOPIOWANA
-//       (Finding 108/Z4, komentarz w źródle), więc kanon musi ruszyć OBA site'y albo żaden.
+//       stan wiedzy, nie funkcję przypięcia.
+//   T3  186 — JEDNA bramka wejścia (`GalaxyModeController.canEnter`, D-GX-13): układ AI zamknięty, zbadany
+//       otwarty; przypięcie, lewy i prawy outliner pytają tę samą funkcję (pin źródłowy).
 //   T4  187 SEDNO — przylot WROGA nie zapala `explored`; kontrola: przylot GRACZA zapala.
 //   T5  `StarSystemManager.restore` fail-CLOSED (było `?? true`); kontrola: sys_home i jawne
 //       `explored:true` dalej zbadane.
 //   T6  kanon sam w sobie: fail-closed na śmieciach i ŚLEPY na lustro `sysData.explored`.
-//   T7  pin źródłowy z kontrolą pinu: w `FleetManagerOverlay` nie ma już odczytu `.explored`
-//       z rekordu `StarSystemManager`, a kanon jest zaimportowany.
+//   T7  pin źródłowy z kontrolą pinu: ani `FleetManagerOverlay`, ani moduły trybu galaktyki nie czytają
+//       `.explored` z rekordu `StarSystemManager`, a kanon jest zaimportowany przez bramkę wejścia.
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — zakładka Stratcom usunięta, D-GX-21): T1/T2 czytały panel detalu Stratcomu
+//   (`_drawStratcomDetail`), T3 — panel rozkazu warp (`_drawWarpOrderPanel`); oba zniknęły z zakładką. Następcą jest przypięcie
+//   gwiazdy w trybie galaktyki (G2): [ Wejdź ] z bramki `canEnter` (wygenerowany ∧ zbadany kanonem ∨ własna obecność), linia
+//   stanu zbadania i linia ciał (`galaxyBodiesLine` — liczby z `StarSystemManager` WYŁĄCZNIE przy znanym miejscu). Zamiar bez
+//   zmian: lustro `sysData.explored` nie otwiera ani wejścia, ani spisu ciał. T7: kontrola „kanon zaimportowany” przeniesiona
+//   z FMO (który po usunięciu zakładki nie czyta już stanu zbadania wcale) na `GalaxyModeController` i podwarstwę nazw płyty.
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'fs';
@@ -42,7 +48,9 @@ const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const { StarSystemManager }   = await import('../../systems/StarSystemManager.js');
-const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
+const { HudGalaxyLabelLayer }  = await import('../../ui/HudGalaxyLabelLayer.js');
+const { GalaxyModeController } = await import('../../ui/GalaxyModeController.js');
+const { galaxyWorldContext, buildGalaxySystemList } = await import('../../ui/GalaxyOutlinerLogic.js');
 const { createVessel }        = await import('../../entities/Vessel.js');
 const VesselManagerMod        = await import('../../systems/VesselManager.js');
 const VesselManager           = VesselManagerMod.VesselManager ?? VesselManagerMod.default;
@@ -77,12 +85,16 @@ const mkStar = (id, extra = {}) => ({
   spectralType: 'G', luminosity: 1.0, explored: false, ...extra,
 });
 
-function drawDetail(star, ssMgr) {
-  const host = Object.create(FleetManagerOverlay.prototype);
-  host._hitZones = [];
-  const ctx = mkCtx();
-  host._drawStratcomDetail(ctx, 0, 0, 900, 600, star, ssMgr, null, null);
-  return { zones: host._hitZones, texts: ctx.texts };
+// Przypięcie gwiazdy (tryb galaktyki): prawdziwa podwarstwa nazw płyty, wiersz z prawdziwego `buildGalaxySystemList`, bramka
+// wejścia — prawdziwa metoda kontrolera (`canEnter`) na świecie z `galaxyWorldContext`.
+const canEnter = (id, world) => GalaxyModeController.prototype.canEnter.call({}, id, world);
+function pinOf(star) {
+  const K = window.KOSMOS;
+  K.galaxyMode = { canEnter };
+  const world = galaxyWorldContext(K);
+  const row = buildGalaxySystemList({ ...world, includeUnknown: true }).byId.get(String(star.id));
+  const pin = row ? new HudGalaxyLabelLayer({ ctx: null })._g2Pin(K, row, new Map(), world, 'pl') : null;
+  return { pin, row, world, lines: pin?.lines ?? [], buttons: (pin?.buttons ?? []).map((b) => b.id) };
 }
 
 const ss = new StarSystemManager();
@@ -121,55 +133,48 @@ const LBL_EXPLORED   = t('fleet.clusterExplored');
 const LBL_UNEXPLORED = t('fleet.clusterUnexplored');
 const LBL_TOTAL      = t('fleet.scanTotal');
 
-// ── T1 / T2 ──────────────────────────────────────────────────────────────────
-console.log('T1/T2 — panel detalu STRATCOM: układ AI vs układ zbadany przez gracza');
+// ── T1 / T2 ────────────────────────────────────────────────────────────────
+console.log('T1/T2 — przypięcie gwiazdy (tryb galaktyki): układ AI vs układ zbadany przez gracza');
+const LBL_BODIES = String(t('fleet.scanPlanets')).toLowerCase();
 {
-  const ai = drawDetail(aiStar, ss);
-  assert(!ai.zones.some(z => z.type === 'cluster_switch'),
-    'T1 SEDNO: układ AI NIE wystawia przycisku „Przełącz widok" (cluster_switch) — lustro ' +
-    '`sysData.explored` zostaje true po resecie bootstrapu i w OR-ze :6249 wygrywało, dając ' +
-    'graczowi wejście do widoku 3D cudzego układu');
-  assert(ai.texts.includes(LBL_UNEXPLORED) && !ai.texts.includes(LBL_EXPLORED),
+  const ai = pinOf(aiStar);
+  assert(!!ai.pin, 'KONTROLA PINU: przypięcie układu AI powstało (wiersz w liście galaktyki, includeUnknown)');
+  assert(!ai.buttons.includes('enter'),
+    'T1 SEDNO: układ AI NIE wystawia [ Wejdź ] — lustro `sysData.explored` zostaje true po resecie bootstrapu, a wejście ' +
+    'do widoku 3D cudzego układu było dokładnie skutkiem Findingu 186');
+  assert(ai.lines.includes(LBL_UNEXPLORED) && !ai.lines.includes(LBL_EXPLORED),
     `T1 SEDNO: status układu AI = „${LBL_UNEXPLORED}", nie „${LBL_EXPLORED}"`);
-  assert(!ai.texts.includes(LBL_TOTAL),
-    `T1 SEDNO: brak wiersza spisu („${LBL_TOTAL}") — bez obserwatorium (maxTier=0) poprawną ` +
-    'odpowiedzią jest kontrolka „locked", a nie darmowy spis ciał w tierze 3');
+  assert(!ai.lines.some((l) => String(l).includes(LBL_BODIES)),
+    `T1 SEDNO: brak linii ciał („${LBL_BODIES} …") — bez obserwatorium (maxTier=0) i bez znanego miejsca liczby ciał ` +
+    'z `StarSystemManager` byłyby darmowym spisem');
 
-  const own = drawDetail(ownStar, ss);
-  assert(own.zones.some(z => z.type === 'cluster_switch'),
-    'T2 KONTROLA PINU: układ zbadany przez gracza DALEJ ma „Przełącz widok" — bramkujemy stan ' +
-    'wiedzy, nie funkcję panelu');
-  assert(own.texts.includes(LBL_EXPLORED),
-    `T2 KONTROLA PINU: status układu zbadanego = „${LBL_EXPLORED}"`);
-  assert(own.texts.includes(LBL_TOTAL),
-    'T2 KONTROLA PINU: spis ciał dla układu ODWIEDZONEGO zostaje (wiedza kupiona przylotem)');
+  const own = pinOf(ownStar);
+  assert(own.buttons.includes('enter'),
+    'T2 KONTROLA PINU: układ zbadany przez gracza DALEJ ma [ Wejdź ] — bramkujemy stan wiedzy, nie funkcję przypięcia');
+  assert(own.lines.includes(LBL_EXPLORED), `T2 KONTROLA PINU: status układu zbadanego = „${LBL_EXPLORED}"`);
+  assert(own.lines.some((l) => String(l).includes(LBL_BODIES)),
+    'T2 KONTROLA PINU: linia ciał dla układu ODWIEDZONEGO zostaje (wiedza kupiona przylotem)');
 }
 
-// ── T3 — drugi site tej samej bramki ─────────────────────────────────────────
-console.log('T3 — panel rozkazu warp (:6784) rusza razem z panelem detalu');
+// ── T3 — jedna bramka wejścia ────────────────────────────────────────────────
+console.log('T3 — jedna bramka wejścia (`canEnter`) dla przypięcia i outlinerów');
 {
-  const v = createVessel('hull_frigate', 'entity_3', {
-    name: 'Zwiadowca', modules: ['engine_warp', 'warp_tank'], x: 0, y: 0, systemId: 'sys_home',
-  });
-  v.warpFuel = { current: 10, max: 10, consumption: 1 };
-  const vMgr = { getVessel: (id) => (id === v.id ? v : null) };
-
-  const draw = (star) => {
-    const host = Object.create(FleetManagerOverlay.prototype);
-    host._hitZones = [];
-    host._selectedWarpShipId = v.id;
-    const ctx = mkCtx();
-    host._drawWarpOrderPanel(ctx, 0, 0, 900, 600, star, vMgr);
-    return host._hitZones;
-  };
-
-  assert(!draw(aiStar).some(z => z.type === 'cluster_switch'),
-    'T3 SEDNO: panel rozkazu warp na układzie AI też NIE wystawia „Przełącz widok". Bramka ' +
-    'jest tam ŚWIADOMIE SKOPIOWANA z panelu detalu (Finding 108/Z4, komentarz w źródle) — ' +
-    'jedno źródło prawdy musi ruszyć OBA site\'y, inaczej zostaje nieutwardzony bliźniak');
-  assert(draw(ownStar).some(z => z.type === 'cluster_switch'),
-    'T3 KONTROLA PINU: na układzie zbadanym wejście do widoku zostaje — Finding 108 wymaga, ' +
-    'żeby tryb rozkazu NIE odcinał jedynej drogi do układu');
+  const world = galaxyWorldContext(window.KOSMOS);
+  assert(canEnter('sys_ai', world) === false,
+    'T3 SEDNO: `canEnter` zamyka układ AI (wygenerowany, lustro zapalone, gwiazda niezbadana)');
+  assert(canEnter('sys_seen', world) === true,
+    'T3 KONTROLA PINU: układ zbadany przylotem gracza jest otwarty — Finding 108 wymaga, żeby wejście do układu zostało');
+  const rows = buildGalaxySystemList({ ...world, includeUnknown: true }).byId;
+  assert(rows.get('sys_ai')?.enterable === false && rows.get('sys_seen')?.enterable === true,
+    'T3: wiersz lewego outlinera ma tę samą odpowiedź co `canEnter` (AI zamknięty, zbadany otwarty)');
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const src = (f) => strip(readFileSync(join(SRC, 'ui', f), 'utf8'));
+  const viaPure = ['GalaxyModeController.js', 'GalaxyOutlinerLogic.js'].filter((f) => /isSystemEnterable\(/.test(src(f)));
+  const viaGate = ['HudGalaxyLabelLayer.js', 'Outliner.js'].filter((f) => /canEnter\?\.\(|canEnter\(/.test(src(f)));
+  assert(viaPure.length === 2 && viaGate.length === 2,
+    `T3: jedna reguła wejścia — isSystemEnterable w kontrolerze (canEnter) i w liście lewego outlinera (${JSON.stringify(viaPure)}), ` +
+    `przypięcie i prawy outliner pytają canEnter (${JSON.stringify(viaGate)}) — bez nieutwardzonego bliźniaka (dawniej bramka panelu ` +
+    'rozkazu była SKOPIOWANA z panelu detalu, Finding 108/Z4)');
 }
 
 // ── T4 — 187: przylot obcego nie zapala eksploracji ──────────────────────────
@@ -245,17 +250,19 @@ console.log('T6 — kanon SystemExploration: fail-closed i ślepy na lustro');
 }
 
 // ── T7 — pin źródłowy z kontrolą pinu ────────────────────────────────────────
-console.log('T7 — pin źródłowy: FMO nie czyta już lustra');
+console.log('T7 — pin źródłowy: ani FMO, ani tryb galaktyki nie czytają lustra');
 {
   const stripComments = (src) => src
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-  const fmo = stripComments(readFileSync(join(SRC, 'ui', 'FleetManagerOverlay.js'), 'utf8'));
-  assert(!/sysReg\w*\s*\??\.explored/.test(fmo),
-    'T7 SEDNO: żaden odczyt `sysReg….explored` w FleetManagerOverlay — lustro nie ma prawa ' +
-    'wrócić jako źródło prawdy (kod czytany BEZ komentarzy, żeby opis nie zaliczał pinu)');
-  assert(/SystemExploration\.js/.test(fmo),
-    'T7 KONTROLA PINU: kanon JEST zaimportowany — inaczej pin wyżej przechodziłby także wtedy, ' +
+  const read = (rel) => stripComments(readFileSync(join(SRC, ...rel.split('/')), 'utf8'));
+  const files = ['ui/FleetManagerOverlay.js', 'ui/GalaxyModeController.js', 'ui/HudGalaxyLabelLayer.js', 'ui/GalaxyOutlinerLogic.js', 'ui/GalaxyChromeLogic.js'];
+  const mirror = files.filter((f) => /sysReg\w*\s*\??\.explored|getSystem\??\.?\([^)]*\)\s*\??\.explored/.test(read(f)));
+  assert(mirror.length === 0,
+    `T7 SEDNO: żaden odczyt lustra (\`sysReg….explored\` / \`getSystem(…).explored\`) w FMO i modułach trybu galaktyki (czytają: ${JSON.stringify(mirror)}) — ` +
+    'lustro nie ma prawa wrócić jako źródło prawdy (kod czytany BEZ komentarzy, żeby opis nie zaliczał pinu)');
+  assert(/SystemExploration\.js/.test(read('ui/GalaxyModeController.js')) && /SystemExploration\.js/.test(read('ui/HudGalaxyLabelLayer.js')),
+    'T7 KONTROLA PINU: kanon JEST zaimportowany przez bramkę wejścia i przypięcie — inaczej pin wyżej przechodziłby także wtedy, ' +
     'gdyby ktoś po prostu usunął bramkę razem z funkcją');
 }
 

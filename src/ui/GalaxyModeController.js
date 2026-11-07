@@ -9,9 +9,8 @@
 //     `galaxy:selectionChanged`. 1. klik = zaznaczenie, 2. klik w zaznaczoną = fokus kamery (z bliska — wejście); dwuklik albo [Enter] = wejście, gdy układ da się otworzyć (D-GX-13, bramka 186).
 //   • Wejście w układ (G1, bez lotu): wyjście z trybu + przełączenie układu — kamera ląduje w kadrze układu (`frameSystem`);
 //     wejście w AKTYWNY układ — wyjście + domyślny widok układu (`resetToSystemView`, bez przebudowy sceny).
-// Flaga `FEATURES.galaxyView` (idiom „brak klucza = OFF”): OFF → `enter` nic nie robi (tryb nieosiągalny — HEAD bit w bit).
 //
-// ARC GALAXY, krok G2-1 (flaga `FEATURES.galaxyLook`; D-GX-7, D-GX-13, D-GX-14; rama F2, F3 (d)):
+// ARC GALAXY, krok G2-1 (D-GX-7, D-GX-13, D-GX-14; rama F2, F3 (d)):
 //   • LOT zamiast twardego cięcia — G, pigułka, wiersz korzenia lewego outlinera, Esc, [Enter], dwuklik, gest kółka
 //     i [ Wejdź ] przypięcia: WYLOT do galaktyki (~1,4 s) i WLOT (~1,2 s; powrót = migawka 1:1, wejście = kadr układu, inny
 //     układ — przesunięcie początku świata + `switchSystem` w chwili, gdy płyta i prawdziwe gwiazdy nieba są na zerze).
@@ -22,10 +21,9 @@
 //   • GEST semantyczny (D-GX-7): `onWheel` (hak kontrolera kamery PRZED krokiem zoomu — gałąź `wheelZoom` układu bez zmian)
 //     — 3 ząbki (300 px znormalizowanych; strojenie 1 — było 2) w 600 ms za sufitem układu → wylot; lustrzanie przy podłodze
 //     galaktyki → nurkowanie w cel (`diveTargetId`, D-GX-13); lot w toku połyka kółko.
-// Flaga `galaxyLook` OFF → wszystkie ścieżki G1 co do bitu (twarde cięcie, brak gestu).
+// Flagi kroków G1 (`galaxyView`) i G2 (`galaxyLook`) na stałe ON od G5 — ścieżki OFF usunięte.
 
 import EventBus from '../core/EventBus.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { buildGalaxyEnterPlan, buildGalaxyExitPlan, galaxyCameraConfig, galaxyPresetView, plateClickAction, systemById,
   isSystemEnterable, LIVE_GALAXY, GALAXY_K } from './GalaxyModeLogic.js';
 import { galaxyWorldContext } from './GalaxyOutlinerLogic.js';
@@ -34,11 +32,6 @@ import { systemIdOf } from '../utils/SystemScope.js';
 import { CLICK_INTENT, applyClickIntent, bodyTarget } from './ClickIntentLogic.js';
 import { buildFlyOutPlan, buildFlyInPlan, sampleFlight, flightEndState, flightEnabled, applyFlightPose } from './GalaxyFlightLogic.js';
 import { makeSemanticZoom, diveTarget, diveBracketsVisible } from './GalaxyGestureLogic.js';
-
-/** Flaga kroku G1 (czytana przy każdym wywołaniu). */
-export const galaxyViewOn = () => !!GAME_CONFIG.FEATURES?.galaxyView;
-/** Flaga kroku G2 (czytana przy każdym wywołaniu; wymaga G1). */
-export const galaxyLookOn = () => galaxyViewOn() && !!GAME_CONFIG.FEATURES?.galaxyLook;
 
 /** Powody wyjścia lotem (wejścia gracza); reszta (`focus`, `watch`, `switch`, `enter`) — twarde wyjście G1. */
 export const FLIGHT_EXIT_REASONS = Object.freeze(['key', 'esc', 'pill', 'outliner', 'debug']);
@@ -90,14 +83,14 @@ export class GalaxyModeController {
     catch { return false; }
   }
 
-  /** Lot zamiast twardego cięcia: flaga `galaxyLook`, pokrętło `FLIGHT` > 0, bez `prefers-reduced-motion`, wolny slot sterownika. */
+  /** Lot zamiast twardego cięcia: pokrętło `FLIGHT` > 0, bez `prefers-reduced-motion`, wolny slot sterownika. */
   flightOn(tr = this._K()?.threeRenderer) {
-    return galaxyLookOn() && flightEnabled({ knob: LIVE_GALAXY.FLIGHT, reducedMotion: this._reducedMotion() })
+    return flightEnabled({ knob: LIVE_GALAXY.FLIGHT, reducedMotion: this._reducedMotion() })
       && typeof tr?.beginGalaxyFlight === 'function' && typeof tr?.setCinematicDriver === 'function' && !tr._cinematicDriver;
   }
 
   enter(reason = 'key') {
-    if (this._active || this._flight || !galaxyViewOn()) return false;
+    if (this._active || this._flight) return false;
     const K = this._K();
     const tr = K?.threeRenderer, cam = tr?._cameraController;
     if (!K?.civMode || !tr?.setGalaxyMode || !cam?.snapshotView || !cam?.setMode || !cam?.applyView) return false;
@@ -109,10 +102,10 @@ export class GalaxyModeController {
     this._snapshot = plan.snapshot;
     const ctx = {
       systems: world.systems, activeId, selectedId: this._selectedId,
-      // ARC GALAXY G3 — jak wiersz outlinera: sam statek nie rozjaśnia gwiazdy bez nazwy (`shipFog`).
+      // ARC GALAXY G3 — jak wiersz outlinera: sam statek nie rozjaśnia gwiazdy bez nazwy (mgła statków).
       brightOf: (sys) => {
         const p = world.presence.get(String(sys.id));
-        return world.reveal(sys).place === true || (world.shipFog ? p?.named === true : p?.own === true) || sys.isHome === true;
+        return world.reveal(sys).place === true || p?.named === true || sys.isHome === true;
       },
     };
     if (this.flightOn(tr)) return this._startFlyOut(reason, plan, ctx, cam, tr);
@@ -278,7 +271,7 @@ export class GalaxyModeController {
   onWheel(e, cam) {
     if (this._flight) return true;
     if (this._sendPicker && this._K()?.hudLayer?.sendPickerWheel?.(e?.deltaY ?? 0) === true) return true;   // G3-B — kółko nad pickerem
-    if (!galaxyLookOn() || !cam) return false;
+    if (!cam) return false;
     const K = this._K();
     if (!K?.civMode) return false;
     const state = { mode: cam.mode, targetDist: cam._targetDist, dist: cam._dist, minDist: cam.minDist, maxDist: cam.maxDist };

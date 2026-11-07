@@ -28,11 +28,6 @@ const FUEL_EPS = 1e-6;   // ten sam margines co bramka paliwa planera
 const windowK = () => (typeof window !== 'undefined' ? window.KOSMOS : null);
 const canOrderOf = (K) => (v) => K?.warpRouteSystem?.canOrder?.(v) ?? { ok: false, reason: 'not_player' };   // fail-closed
 
-/** Flaga kroku (brak klucza = OFF). */
-export const galaxyWarpOn = () => !!GAME_CONFIG.FEATURES?.galaxyWarp;
-/** Flaga skoku floty (G4; brak klucza = OFF). */
-export const fleetWarpOn = () => !!GAME_CONFIG.FEATURES?.fleetWarp;
-
 // ── Słownik odmowy (Finding 594, D-GX-20) ──────────────────────────────────────────────────────────────────────────────────
 // Dawna tabela `FleetManagerOverlay._warpErrLabel` + powód rezerwy (Finding 588, klucz wspólny z MOS). Jeden słownik dla menu, pickera,
 // toastów i starego panelu rozkazu.
@@ -82,7 +77,7 @@ export function describeFleetWarpRefusal(res) {
 
 // ── Opcje planera dla statku ───────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Opcje `planWarpRoute` dla statku — ta sama postać co `WarpRouteSystem.beginJourney` i panel rozkazu Stratcom. */
+/** Opcje `planWarpRoute` dla statku — ta sama postać co `WarpRouteSystem.beginJourney`. */
 export function warpPlanOptions(vessel) {
   const wf = vessel?.warpFuel;
   const tankRange = (wf?.max > 0 && wf?.consumption > 0) ? wf.max / wf.consumption : 0;   // LY
@@ -343,7 +338,7 @@ export function sendPickerWindow(rows, scroll = 0, maxRows = SEND_PICKER_MAX_ROW
 export function sendPickerModel(state, K = windowK()) {
   const ships = sendPickerRows(K?.vesselManager?.getAllVessels?.() ?? [], state.systemId, canOrderOf(K), { K });
   // G4 — sekcja „Floty” nad statkami. Bez flot lista jak w G3 (bez nagłówków).
-  const fleets = fleetWarpOn() ? sendPickerFleetRows(state.systemId, K) : [];
+  const fleets = sendPickerFleetRows(state.systemId, K);
   const rows = fleets.length > 0
     ? [{ kind: 'section', text: t('fleet.fleetsHeader') }, ...fleets, ...(ships.length > 0 ? [{ kind: 'section', text: t('rightOutliner.ships', ships.length) }, ...ships] : [])]
     : ships;
@@ -406,14 +401,13 @@ export function selectedWarpFleetId(K = windowK()) {
  * Pozycje menu gwiazdy — zawsze co najwyżej JEDNA:
  *   • bez statku i bez floty — nic (menu się nie otwiera);
  *   • flota (`selectedWarpFleetId`) — wpis skoku floty z fazy 1 rozkazu (`fleetWarpMenuOption`); wyłączony z tekstem D-GX-20 nazywającym członków;
- *     przy `fleetWarp` OFF — węzeł floty: wyłączony z powodem jak w G3, członek — jak statek;
  *   • jeden statek — etykieta i dostępność z `warpMenuOption`;
  *   • kilka luźnych statków — sam tytuł „Skok do X” (trasa i paliwo są per statek), aktywna, gdy skoczyć może choć jeden;
  *     wyłączona — z powodem lidera.
  * Kształt jak `buildMenuOptions`; `reasonIsText` — `disabledReason` to gotowy tekst, nie kod do mapowania.
  */
 export function galaxyStarMenuEntries(targetSystemId, K = windowK()) {
-  const { fleetId, ships } = warpSelection(K);
+  const { ships } = warpSelection(K);
   const target = String(targetSystemId);
   const name = warpSystemLabel(target, K);
   const entry = (labelPL, labelEN, reasonText, vesselIds) => ({
@@ -422,14 +416,10 @@ export function galaxyStarMenuEntries(targetSystemId, K = windowK()) {
     vesselIds, targetSystemId: target,
   });
   const title = (lang) => tIn(lang, 'galaxyMenu.warpTo', name);
-  if (fleetWarpOn()) {
-    const warpFleetId = selectedWarpFleetId(K);
-    if (warpFleetId != null) {
-      const o = fleetWarpMenuOption({ fleetId: warpFleetId, targetSystemId: target, K });
-      return [{ ...entry(o.labelPL, o.labelEN, o.available ? null : o.reasonText, []), id: 'galaxy.fleetWarp', action: 'issueGalaxyFleetWarp', fleetId: warpFleetId }];
-    }
-  } else if (fleetId != null) {
-    return [entry(title('pl'), title('en'), t('galaxyMenu.fleetWaitsG4'), [])];
+  const warpFleetId = selectedWarpFleetId(K);
+  if (warpFleetId != null) {
+    const o = fleetWarpMenuOption({ fleetId: warpFleetId, targetSystemId: target, K });
+    return [{ ...entry(o.labelPL, o.labelEN, o.available ? null : o.reasonText, []), id: 'galaxy.fleetWarp', action: 'issueGalaxyFleetWarp', fleetId: warpFleetId }];
   }
   if (ships.length === 0) return [];
   const canOrder = canOrderOf(K);
@@ -569,10 +559,8 @@ let _hoverMemo = { key: null, systems: null, K: null, model: null };   // dwie p
  */
 export function warpHoverModel(targetSystemId, K = windowK()) {
   if (targetSystemId == null) return null;
-  if (fleetWarpOn()) {
-    const warpFleetId = selectedWarpFleetId(K);
-    if (warpFleetId != null) return fleetHoverModel(warpFleetId, String(targetSystemId), K);
-  }
+  const warpFleetId = selectedWarpFleetId(K);
+  if (warpFleetId != null) return fleetHoverModel(warpFleetId, String(targetSystemId), K);
   const { fleetId, ships } = warpSelection(K);
   const lead = ships[0] ?? null;
   if (fleetId != null || !(lead?.warpFuel?.max > 0)) return null;

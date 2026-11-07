@@ -37,7 +37,7 @@
 //       WSZYSTKICH trzech modulach sceny ukladu. Powod zapisany, bo pin, ktory znika
 //       bez sladu, wyglada potem jak zgubiony (wzor A0->A1 w keeperze atmosfery).
 //       Niezmienne zostaja blizniaki BEZ log-depth (PlanetGlobeRenderer /
-//       StratcomGalaxyRenderer / GlbSnapshotRenderer): ODWROCENIE reguly „utwardz
+//       GlbSnapshotRenderer): ODWROCENIE reguly „utwardz
 //       blizniaka" — tam chunki dalyby gl_FragDepth = 0 dla KAZDEGO fragmentu.
 //   T7  WPIECIE (D2): flaga czytana FUNKCJA, obie sciezki KAZDEJ fabryki, derywacje
 //       liczone RAZ na starcie modulu, mglawica przez depthTest zamiast chunkow,
@@ -46,6 +46,10 @@
 //       znaku do StarPointShader.js; dawna powloka (flaga skyCatalog OFF) dalej naklada chunki przez flage —
 //       ten pin zostaje, czyta stale STAR_VERT / STAR_FRAG. Kopula nieba (ON) jest BEZ chunkow i bez testu
 //       glebi — precedens mglawicy D-D3 (rysowana pierwsza, na liscie nieprzezroczystej, nigdy nie pisze glebi).
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flaga `skyCatalog` na stałe ON, dawna powłoka usunięta; zakładka Stratcom
+//   i `StratcomGalaxyRenderer.js` usunięte): T6 — `StratcomGalaxyRenderer.js` zdjęty z listy konsumentów i z listy bliźniaków
+//   BEZ log-depth (plik nie istnieje; zostają PlanetGlobeRenderer i GlbSnapshotRenderer); T7 — pin kopuły nieba bez opisu
+//   „skyCatalog ON”. WYCOFANE: T7 „starfield (dawna powłoka, skyCatalog OFF): obie ścieżki przez flagę” (kod usunięty).
 
 import fs from 'fs';
 import {
@@ -225,16 +229,17 @@ ok('KONTROLA: poprawne źródło NIE rzuca', !throws(() => withLogDepthVertex(SY
 console.log('\nT6 — wpięcie OBECNE (⚠ odwrócone wobec D0) + bliźniaki BEZ log-depth');
 const consumers = [];
 for (const f of ['ThreeRenderer.js', 'SunShader.js', 'AtmosphereShader.js', 'GasGiantShader.js',
-                 'PlanetGlobeRenderer.js', 'StratcomGalaxyRenderer.js', 'GlbSnapshotRenderer.js', 'PlanetShader.js']) {
+                 'PlanetGlobeRenderer.js', 'GlbSnapshotRenderer.js', 'PlanetShader.js']) {
   if (read('../../renderer/' + f).includes('LogDepthChunks')) consumers.push(f);
 }
 ok('konsumenci to DOKŁADNIE trzy moduły sceny układu: ' + consumers.join(', '),
    consumers.length === 3 && consumers.includes('ThreeRenderer.js') &&
    consumers.includes('SunShader.js') && consumers.includes('AtmosphereShader.js'));
-// ⚠ ODWRÓCONA reguła bliźniaka: te trzy renderery NIE MAJĄ logarithmicDepthBuffer, więc
+// ⚠ ODWRÓCONA reguła bliźniaka: te renderery NIE MAJĄ logarithmicDepthBuffer, więc
 //   logDepthBufFC nigdy nie zostanie tam wgrany (zostanie 0) ⇒ gl_FragDepth = 0 dla
-//   KAŻDEGO fragmentu. Ten pin ma przeżyć każdy następny slice.
-for (const f of ['PlanetGlobeRenderer.js', 'StratcomGalaxyRenderer.js', 'GlbSnapshotRenderer.js']) {
+//   KAŻDEGO fragmentu. Ten pin ma przeżyć każdy następny slice. (G5-B: trzeci bliźniak,
+//   `StratcomGalaxyRenderer.js`, usunięty razem z zakładką Stratcom.)
+for (const f of ['PlanetGlobeRenderer.js', 'GlbSnapshotRenderer.js']) {
   const s = read('../../renderer/' + f);
   ok('BLIŹNIAK ' + f + ': bez logarithmicDepthBuffer', !s.includes('logarithmicDepthBuffer'));
   ok('BLIŹNIAK ' + f + ': NIE importuje LogDepthChunks', !s.includes('LogDepthChunks'));
@@ -252,12 +257,9 @@ ok('flaga czytana FUNKCJĄ, nie stałą modułową (inaczej konsola nie złapie 
 ok('idiom „brak klucza = OFF" (!! zamiast !== false)',
    /logDepthOn = \(\) => !!GAME_CONFIG/.test(rendCode) && !/sceneDepthUnification !== false/.test(rendCode));
 ok('flaga istnieje w GameConfig i jest domyślnie ON', /sceneDepthUnification:\s*true/.test(strip(cfgSrc)));
-// ⚠ NIEBO: literał starfielda w StarPointShader.js; dawna powłoka (skyCatalog OFF) — chunki przez flagę jak w D2.
-ok('starfield (dawna powłoka, skyCatalog OFF): obie ścieżki przez flagę, literały ze StarPointShader.js',
-   rendCode.includes('logDepthOn() ? withLogDepthVertex(starVert)') && rendCode.includes('logDepthOn() ? withLogDepthFragment(starFrag)')
-   && rendCode.includes('const starVert = STAR_VERT;') && rendCode.includes('const starFrag = STAR_FRAG;'));
+// ⚠ NIEBO: literał starfielda w StarPointShader.js; dawna powłoka (skyCatalog OFF, chunki przez flagę) usunięta w G5-B.
 const spsCode = strip(read('../../renderer/StarPointShader.js'));
-ok('kopuła nieba (skyCatalog ON): BEZ chunków, bez testu i zapisu głębi — precedens mgławicy D-D3',
+ok('kopuła nieba: BEZ chunków, bez testu i zapisu głębi — precedens mgławicy D-D3',
    spsCode.includes('vertexShader:   STAR_VERT_SKY') && spsCode.includes('depthTest:    false') && spsCode.includes('depthWrite:   false')
    && !spsCode.includes('withLogDepth') && !/^import /m.test(spsCode));
 ok('chmury: obie ścieżki przez flagę',

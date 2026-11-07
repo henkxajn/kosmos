@@ -22,13 +22,12 @@
 // dawnego rzędu doku): [R] [T] [E] [O] (EN [S] [R] [L] [O]) w idiomie chipów T5 — włączony w roli `primary`, wyłączony w roli
 // `dim` (przekreślony albo bez nawiasów — `HUD_CHIPS.CHIP_OFF_STYLE`); klik przełącza warstwę (`uiPrefs.hudLayers`), podpowiedź
 // z klawiszem (6–9); pod overlayem — brak (jak suwak). Zegar, suwak, 🔔, ☰ i czip ⚔ — w tych samych px co bez chipów.
-// PIGUŁKA TRYBU MAPY (ARC GALAXY G1, D-GX-9; flaga `galaxyView`): [ UKŁAD ] [ GALAKTYKA ] (EN [ SYSTEM ] [ GALAXY ]) na środku
+// PIGUŁKA TRYBU MAPY (ARC GALAXY G1, D-GX-9): [ UKŁAD ] [ GALAKTYKA ] (EN [ SYSTEM ] [ GALAXY ]) na środku
 // wolnego odcinka pasa — między ostatnim chipem warstw a klastrem po prawej (czip ⚔ albo suwak zoomu); idiom chipów (segment
 // aktywny — rola `primary`, nieaktywny — `dim`), podpowiedź `bottomBar.mapModeHint` (klawisz G — ten sam przełącznik); pod
 // overlayem — brak (jak suwak). Pozostałe elementy pasa w tych samych px co bez pigułki.
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';   // ARC GALAXY G1 — flaga pigułki trybu mapy
 import { resolveHudRoles } from './HudPalette.js';
 import { layoutMapModePill, mapModePillAt, mapPillSegmentText, mapPillSegmentWidth } from './GalaxyModeLogic.js';
 import {
@@ -84,7 +83,7 @@ export class BottomControlBar {
     this._zoomDragMoved = false;
     this._hover     = null;   // 'bell'|'menu'|'play'|`speed${i}`|`chip:${warstwa}`|null
     this._layerChips = [];    // paczka B — chipy warstw z ostatniej klatki: [{ layer, x, y, w, h }] (puste pod overlayem / przy OFF)
-    this._mapPill = [];       // ARC GALAXY G1 — segmenty pigułki trybu mapy: [{ mode, x, y, w, h }] (puste pod overlayem / przy OFF)
+    this._mapPill = [];       // ARC GALAXY G1 — segmenty pigułki trybu mapy: [{ mode, x, y, w, h }] (puste pod overlayem)
   }
 
   /** ARC GALAXY G1 — segmenty pigułki trybu mapy z ostatniej klatki (bramka, keeper). */
@@ -154,12 +153,10 @@ export class BottomControlBar {
     const widths = HUD_LAYER_KEYS.map((L) => chipWidth(this._chipLetter(L), measure));
     this._layerChips = layoutLayerChips({ x0: bgLeft, stripTop, stripH: STRIP_H, widths, limitX });
     // ARC GALAXY G2-2 (D-GX-16) — tryb galaktyki: chip [O] schowany, jego miejsce zostaje puste (pigułka trybu nie skacze).
-    // ARC GALAXY G3 (flaga `galaxyWarp`) — to miejsce zajmuje chip „Okręty” (nazwy szyny statków).
+    // ARC GALAXY G3 — to miejsce zajmuje chip „Okręty” (nazwy szyny statków).
     const lastAll = this._layerChips[this._layerChips.length - 1];
     this._layerSpanEnd = lastAll ? lastAll.x + lastAll.w : null;
-    if (GAME_CONFIG.FEATURES?.galaxyView && GAME_CONFIG.FEATURES?.galaxyLook) {
-      this._layerChips = chipsForMode(this._layerChips, window.KOSMOS?.galaxyMode?.isActive === true, GAME_CONFIG.FEATURES?.galaxyWarp === true);
-    }
+    this._layerChips = chipsForMode(this._layerChips, window.KOSMOS?.galaxyMode?.isActive === true);
     const roles = resolveHudRoles(THEME);
     const on = readHudLayers(window.KOSMOS?.uiPrefs);
     const C = HUD_CHIPS;
@@ -337,7 +334,7 @@ export class BottomControlBar {
     }
     // ARC GALAXY G1 (D-GX-9) — pigułka trybu mapy w wolnym odcinku między chipami warstw a klastrem po prawej; tylko nad mapą.
     this._mapPill = [];
-    if (mapMode && GAME_CONFIG.FEATURES?.galaxyView) {
+    if (mapMode) {
       const spanLeft = this._layerSpanEnd != null ? this._layerSpanEnd + HUD_CHIPS.CHIP_GAP : bgLeft + HUD_CHIPS.CHIP_GAP;
       const spanRight = (this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x) - HUD_CHIPS.CHIP_GAP;
       this._drawMapModePill(ctx, spanLeft, stripTop, spanRight);

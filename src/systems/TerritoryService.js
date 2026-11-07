@@ -1,6 +1,6 @@
 // TerritoryService — indeks własności układów gwiezdnych (single source of truth)
 //
-// Zastępuje liczenie „czyj to układ" per klatka w widokach mapy (Stratcom).
+// Zastępuje liczenie „czyj to układ" per klatka w widokach mapy (płyta galaktyki, outlinery).
 // Buduje Map<systemId, { owner, kind, devScore, colonyIds }> z ColonyManager
 // (kolonie/outposty) + StationSystem (stacje gracza jako „posterunki" w układach
 // BEZ kolonii). Invalidacja eventami (zero liczenia w pętli renderu). Dostarcza

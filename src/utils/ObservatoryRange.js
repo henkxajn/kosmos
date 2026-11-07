@@ -1,5 +1,5 @@
 // ObservatoryRange — ARC GALAXY, krok G2 (docs/design/GALAXY_PLAN.md §4 G2-2; D-GX-22): zasięg obserwatorium na mapie
-// galaktyki w latach świetlnych — JEDNO źródło dla zakładki Stratcom (`FleetManagerOverlay._getStratcomRangeLY`, do G5),
+// galaktyki w latach świetlnych — JEDNO źródło (do G5 także dla zakładki Stratcom — `FleetManagerOverlay._getStratcomRangeLY`),
 // pingu obserwatorium na płycie (`HudGalaxyPingLayer`), bramki obcych blipów skoku warp i bramki [ Skanuj ] przypięcia.
 //   • tabela poziom → ly przeniesiona z `FleetManagerOverlay` BEZ ZMIAN (Lv0–3 = 0 ly, Lv4 = 5, Lv5 = 10, Lv6+ = 15);
 //   • środek = DOM, metryka PŁASKA (x, y galaktyki — płyta to dysk; status quo soczewki H5 i `inSensor` — D-GX-22);

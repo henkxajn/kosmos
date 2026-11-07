@@ -20,7 +20,7 @@ export function resolveTerritoryVisibility(ownerIds, { isPlayer, intelLevelOf, i
   return out;
 }
 
-// Buduje payload dla StratcomGalaxyRenderer.setTerritory (B5, render 3D):
+// Buduje payload terytorium 3D (B5; dziś czyta go płyta galaktyki — `GalaxyTerritoryLogic`, dawniej StratcomGalaxyRenderer):
 //   full  → mask (tint) + loops; outline → loops-only (szary); skip → pominięte.
 // sig = version + stan fog (owner:mode) → rebuild 3D tylko przy realnej zmianie.
 // territories: [{ ownerId, color, mask, maskBounds, loops }]; visList: resolveTerritoryVisibility.
@@ -87,7 +87,7 @@ export function mergeFlashFactor(now, startTs, durationMs) {
   return (t < 0 || t > 1) ? 0 : 1 - t;
 }
 
-// Lazy-start rozbłysku: zrost zwykle następuje przy ZAMKNIĘTYM Stratcomie, więc zegar
+// Lazy-start rozbłysku (dawny Stratcom; od G5 bez konsumenta): zrost zwykle następował przy ZAMKNIĘTEJ mapie, więc zegar
 // FLASH_MS startujemy dopiero przy PIERWSZYM narysowaniu warstwy po evencie. 'start' gdy
 // event świeży (< maxAgeMs), 'discard' gdy zbyt stary (zrost dawno temu — gracz go pominął).
 export function classifyPendingFlash(evtMs, nowMs, maxAgeMs) {

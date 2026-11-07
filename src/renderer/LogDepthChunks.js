@@ -40,7 +40,7 @@
 //   z three.module.js" ma zostać prawdziwy przez cały arc.
 //
 // ── Granica: ten moduł obsługuje TYLKO renderer mapy układu ─────────────────────
-// ⚠⚠ NIE STOSOWAĆ w PlanetGlobeRenderer / StratcomGalaxyRenderer / GlbSnapshotRenderer.
+// ⚠⚠ NIE STOSOWAĆ w PlanetGlobeRenderer / GlbSnapshotRenderer (dawniej także StratcomGalaxyRenderer, usunięty w G5).
 //   Żaden z nich nie ustawia `logarithmicDepthBuffer`, więc `logDepthBufFC` NIGDY nie
 //   zostanie tam wgrany i uniform zostanie na 0 ⇒ `gl_FragDepth = log2(vFragDepth) * 0
 //   * 0.5 = 0` dla KAŻDEGO fragmentu, czyli wszystko na najbliższej możliwej głębi.

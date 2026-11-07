@@ -9,7 +9,6 @@
 
 import { SHIP_MODULES } from './ShipModulesData.js';
 import { isPlayerColonyId } from '../utils/ColonyOwnership.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { t, getLocale } from '../i18n/i18n.js';
 //
 // Target shape (dostarczany przez P1.2 raycaster — RaycasterHelper.resolveTargetFromHits):
@@ -170,9 +169,9 @@ function _vesselHasNoWeapons(vesselId) {
 }
 
 // Finding 592 — etykieta pozycji w języku klienta. Pozycje niosą oba języki jako dane, a renderer pisał zawsze `labelPL`,
-// więc klient EN dostawał polskie menu (OFF: `labelPL` jak przed krokiem).
+// więc klient EN dostawał polskie menu.
 export function menuOptionLabel(opt) {
-  if (GAME_CONFIG.FEATURES?.galaxyWarp && getLocale() === 'en') return opt.labelEN ?? opt.labelPL;
+  if (getLocale() === 'en') return opt.labelEN ?? opt.labelPL;
   return opt.labelPL;
 }
 
@@ -221,9 +220,9 @@ export function buildMenuOptions(target, selection) {
         // forFleet zawsze enabled gdy zaakceptowany przez filter (fleetActive=true).
         enabled: opt.forFleet ? true
           : (!opt.requiresSelection || selectedVesselId !== null),
-        // Finding 592 — powód przez słownik, nie polski literał (OFF: literał sprzed kroku).
+        // Finding 592 — powód przez słownik, nie polski literał.
         disabledReason: (!opt.forFleet && opt.requiresSelection && !selectedVesselId)
-          ? (GAME_CONFIG.FEATURES?.galaxyWarp ? t('tooltip.menu.requiresSelection') : 'Najpierw wybierz statek') : null,
+          ? t('tooltip.menu.requiresSelection') : null,
         warning: null,
       };
       // M4 P1.5 — warning gdy pursue/intercept na enemy a selected vessel bez broni.

@@ -1,6 +1,6 @@
-// HolotableCamera — czysta matematyka kamery „stołu holograficznego" Stratcomu.
+// HolotableCamera — czysta matematyka kamery „stołu holograficznego” (dawniej Stratcomu; dziś preset kamery, pan i słupki trybu galaktyki).
 //
-// Wydzielone ze StratcomGalaxyRenderer, by dało się testować headless: ZERO importu
+// Wydzielone z dawnego StratcomGalaxyRenderer (usunięty w ARC GALAXY G5), by dało się testować headless: ZERO importu
 // (bez three, bez DOM). Renderer deleguje tu liczenie pozycji kamery; overlay liczy
 // tu pan (przesuwanie widoku po dysku) oraz końce słupków (risers).
 //

@@ -20,8 +20,8 @@
 //   na PRZENIESIENIU pola DOM tam, gdzie ono nie nalezy; gdy zakladka sie nie zmienia, nic sie nie
 //   przenosi. Kto to "naprawi", zmieni zachowanie wyszukiwarki. Pin stoi, zeby tego nie zrobic.
 //
-//   T1  wyszukiwarka Rejestru + wejscie na Stratcom ⇒ input USUNIETY z DOM   (fail-first)
-//   T2  pole ilosci + drop-downy Logistyki + wejscie na Stratcom ⇒ posprzatane (fail-first)
+//   T1  wyszukiwarka Rejestru + wejscie na inna zakladke ⇒ input USUNIETY z DOM   (fail-first)
+//   T2  pole ilosci + drop-downy Logistyki + wejscie na inna zakladke ⇒ posprzatane (fail-first)
 //   T3  KONTROLA PINU: `_switchTab` i `close()` nadal sprzataja (straznik regresji, zielony od zawsze)
 //   T4  PIN DECYZJI: wejscie na TE SAMA zakladke NIE resetuje stanu (early-return zostaje)
 //   T5  intencja wejscia przezywa `_switchTab` (klawisz K: focusSection/tacticalView/showWrecks)
@@ -32,11 +32,17 @@
 //   re-show zostaje zamkniety w jednym overlayu — przy fladze ON to dokladnie m/k; przy OFF dawne g/m/k (stan sprzed kroku).
 //   Oba stany sprawdzane — flaga przestawiana przed konstrukcja keymapy (czytana w konstruktorze).
 //   T7  `open({})` (sciezka Outlinera) NIE zmienia zakladki i NIE wola `_switchTab`
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — zakladka Stratcom usunieta, D-GX-21): T1-T3 i T5 wchodza na zakladke 'atlas'
+//   (dawny cel 'stratcom' nie istnieje; `_switchTab` nie waliduje id, wiec stary literal przechodzilby dalej, ale bez sensu);
+//   T4 — decyzja planu (early-return na tej samej zakladce) zostaje, kontrola przeniesiona z rodziny pol 108 (usunietych razem
+//   z zakladka) na `_atlasScrollY` (zerowany przy wejsciu na atlas z innej zakladki); T6 — w keymapie zostaje JEDEN wpis
+//   {id, opts}: 'k'; G i M nie sa w keymapie (przelaczaja tryb galaktyki w `GameScene` przez `isGalaxyToggleKey` — M od G5),
+//   flaga `galaxyView` usunieta, wiec stanu OFF nie ma. Fixture `mkOverlay` bez pol Stratcomu.
 
 import '../headless/env.js';           // MUSI byc pierwszy
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { OverlayManager } from '../../ui/OverlayManager.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
+import { isGalaxyToggleKey } from '../../ui/GalaxyModeLogic.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -59,28 +65,15 @@ function mkOverlay(tab = 'tactical') {
   o._logiColDropdown = null;
   o._logiGoodDropdownOpen = false;
   o._mapHoverBody = null;
-  o._clusterHoverSystem = null;
   o._hoverVesselId = null;
   o._rightScrollY = 0;
   o._atlasScrollY = 0;
   o._missionConfig = null;
   o._targetScrollOffset = 0;
   o._cachedTargets = null;
-  o._selectedClusterSystem = null;
-  o._pendingSendSystemId = null;
-  o._selectedWarpShipId = null;
-  o._warpShipScrollY = 0;
   // `_close()` dotyka tych pol — musza istniec, zeby sciezka Esc nie rzucila
-  o._galaxy3D = null;
   o._mapDragging = false;
   o._mapDragWasDrag = false;
-  o._clusterZoom = 1;
-  o._clusterPanX = 0;
-  o._clusterPanY = 0;
-  o._galaxyDist = null;
-  o._galaxyDrag = false;
-  o._galaxyPanelRect = null;
-  o._holotablePanTarget = { x: 0, z: 0 };
   return o;
 }
 
@@ -88,7 +81,7 @@ const inDom = (el) => !!el && document.body.children.includes(el);
 const SEARCH_ZONE = { x: 100, y: 50, w: 120, h: 16 };
 
 // ── T1 — rdzen: osiagalna sciezka defektu (wyszukiwarka Rejestru bez `blur`) ──
-console.log('\nT1 — wyszukiwarka Rejestru + wejscie klawiszem na Stratcom');
+console.log('\nT1 — wyszukiwarka Rejestru + wejscie na zakladke atlas przez open({tab})');
 {
   const o = mkOverlay('tactical');
   o._registryFilter.search = 'zmija';
@@ -98,15 +91,15 @@ console.log('\nT1 — wyszukiwarka Rejestru + wejscie klawiszem na Stratcom');
   assert(typeof el.onblur !== 'function',
     'kontrola pinu: wyszukiwarka NIE ma handlera blur (celowo) — dlatego ta sciezka jest osiagalna');
 
-  o.open({ tab: 'stratcom' });   // dokladnie to, co robi OverlayManager.handleKey('m') przy active==='fleet'
+  o.open({ tab: 'atlas' });   // `openPanel('fleet', { tab })` na zywym overlayu (do G5 — takze klawisz M → 'stratcom')
 
-  assert(o._activeTab === 'stratcom', 'zakladka przelaczona na stratcom');
-  assert(!inDom(el), 'input wyszukiwarki USUNIETY z DOM (nie wisi nad mapa galaktyki)');
+  assert(o._activeTab === 'atlas', 'zakladka przelaczona na atlas');
+  assert(!inDom(el), 'input wyszukiwarki USUNIETY z DOM (nie wisi nad inna zakladka)');
   assert(o._registrySearchEl === null, '_registrySearchEl wyzerowane');
 }
 
 // ── T2 — druga polowa szwu: Logistyka (pole ilosci + drop-downy) ──
-console.log('\nT2 — pole ilosci i drop-downy Logistyki + wejscie klawiszem na Stratcom');
+console.log('\nT2 — pole ilosci i drop-downy Logistyki + wejscie na zakladke atlas przez open({tab})');
 {
   const o = mkOverlay('logistics');
   o._openLogiQtyInput('food', 100, 100);
@@ -115,7 +108,7 @@ console.log('\nT2 — pole ilosci i drop-downy Logistyki + wejscie klawiszem na 
   const el = o._logiQtyInput;
   assert(inDom(el), 'kontrola pinu: input ilosci jest w DOM przed wejsciem');
 
-  o.open({ tab: 'stratcom' });
+  o.open({ tab: 'atlas' });
 
   assert(!inDom(el), 'input ilosci USUNIETY z DOM');
   assert(o._logiQtyInput === null, '_logiQtyInput wyzerowane');
@@ -129,9 +122,9 @@ console.log('\nT3 — kontrola pinu: _switchTab i close() nadal sprzataja (straz
   const a = mkOverlay('logistics');
   a._openLogiQtyInput('food', 100, 100);
   const ea = a._logiQtyInput;
-  a._switchTab('stratcom');
+  a._switchTab('atlas');
   assert(!inDom(ea), '_switchTab: input usuniety');
-  assert(a._activeTab === 'stratcom', '_switchTab: zakladka zmieniona');
+  assert(a._activeTab === 'atlas', '_switchTab: zakladka zmieniona');
 
   const b = mkOverlay('tactical');
   b._openRegistrySearch(SEARCH_ZONE);
@@ -144,27 +137,23 @@ console.log('\nT3 — kontrola pinu: _switchTab i close() nadal sprzataja (straz
 // ── T4 — PIN DECYZJI (plan T4=W1): wejscie na TE SAMA zakladke nic nie resetuje ──
 console.log('\nT4 — PIN DECYZJI: early-return `_switchTab` zostaje (to nie jest dziura)');
 {
-  const o = mkOverlay('stratcom');
-  o._selectedWarpShipId = 'v_49';
-  o._selectedClusterSystem = 'sys_024';
-  o.open({ tab: 'stratcom' });
-  assert(o._selectedWarpShipId === 'v_49',
-    'ta sama zakladka ⇒ zaznaczony statek warp NIE jest resetowany (swiadome, decyzja T4)');
-  assert(o._selectedClusterSystem === 'sys_024', 'ta sama zakladka ⇒ wybrany uklad zachowany');
+  const o = mkOverlay('atlas');
+  o._atlasScrollY = 240;
+  o.open({ tab: 'atlas' });
+  assert(o._atlasScrollY === 240,
+    'ta sama zakladka ⇒ przewiniecie katalogu NIE jest resetowane (swiadome, decyzja T4)');
 
-  // kontrola pinu: wejscie z INNEJ zakladki resetuje rodzine 108
+  // kontrola pinu: wejscie z INNEJ zakladki resetuje stan zakladki docelowej
   const p = mkOverlay('logistics');
-  p._selectedWarpShipId = 'v_49';
-  p._selectedClusterSystem = 'sys_024';
-  p.open({ tab: 'stratcom' });
-  assert(p._selectedWarpShipId === null && p._selectedClusterSystem === null,
-    'kontrola pinu: wejscie z INNEJ zakladki resetuje rodzine 108');
+  p._atlasScrollY = 240;
+  p.open({ tab: 'atlas' });
+  assert(p._atlasScrollY === 0, 'kontrola pinu: wejscie z INNEJ zakladki resetuje przewiniecie atlasu');
 }
 
 // ── T5 — intencja wejscia przezywa `_switchTab` (klawisz K) ──
 console.log('\nT5 — klawisz K: intencja wejscia nie zostaje zjedzona przez `_switchTab`');
 {
-  const o = mkOverlay('stratcom');
+  const o = mkOverlay('atlas');
   o._openRegistrySearch(SEARCH_ZONE);
   const el = o._registrySearchEl;
   o.open({ focusSection: 'wreck' });
@@ -175,29 +164,20 @@ console.log('\nT5 — klawisz K: intencja wejscia nie zostaje zjedzona przez `_s
   assert(o._tacticalView === 'registry', 'K: widok REJESTR (galaz 3g przy mapie 2D OFF)');
   assert(o._registryFilter.showWrecks === true, 'K: filtr wrakow wlaczony — intencja wejscia zachowana');
   assert(o._pendingFocusSection === null, 'K: _pendingFocusSection skonsumowane przez galaz 3g');
-  assert(!inDom(el), 'K: input wyszukiwarki posprzatany przy zmianie zakladki stratcom → tactical');
+  assert(!inDom(el), 'K: input wyszukiwarki posprzatany przy zmianie zakladki atlas → tactical');
 }
 
 // ── T6 — PIN ZRODLOWY (wykonaniowy): zbior producentow re-show jest zamkniety ──
-console.log('\nT6 — PIN ZRODLOWY: wpisy keymapy w formie {id, opts} to dokladnie g/m/k (galaxyView OFF) albo m/k (ON) → fleet');
+console.log('\nT6 — PIN ZRODLOWY: jedyny wpis keymapy w formie {id, opts} to k → fleet; G i M poza keymapa');
 {
-  const flag0 = GAME_CONFIG.FEATURES.galaxyView;
-  const objKeysOf = (on) => {
-    GAME_CONFIG.FEATURES.galaxyView = on;
-    const om = new OverlayManager();
-    GAME_CONFIG.FEATURES.galaxyView = flag0;
-    return { om, keys: Object.keys(om._keyMap).filter(k => typeof om._keyMap[k] !== 'string').sort() };
-  };
-  const on = objKeysOf(true), off = objKeysOf(false);
-  assert(JSON.stringify(on.keys) === JSON.stringify(['k', 'm']) && !('g' in on.om._keyMap),
-    `galaxyView ON: wpisy {id,opts} = ${JSON.stringify(on.keys)} (oczekiwane k/m), \`g\` poza keymapa (przelacznik trybu galaktyki)`);
-  assert(JSON.stringify(off.keys) === JSON.stringify(['g', 'k', 'm']),
-    `galaxyView OFF: wpisy {id,opts} = ${JSON.stringify(off.keys)} (oczekiwane g/k/m — stan sprzed kroku)`);
-  assert(on.keys.every(k => on.om._keyMap[k].id === 'fleet') && off.keys.every(k => off.om._keyMap[k].id === 'fleet'),
-    'wszystkie celuja w overlay `fleet` — klasa zamknieta w jednym overlayu (oba stany flagi)');
-  assert(typeof on.om._keyMap['f'] === 'string' && typeof off.om._keyMap['f'] === 'string',
-    'kontrola pinu: wpis `f` jest stringiem ⇒ idzie galezia toggle (_hideOverlay), nie re-show');
-  assert(GAME_CONFIG.FEATURES.galaxyView === flag0, 'kontrola: flaga przywrocona po tescie');
+  const om = new OverlayManager();
+  const keys = Object.keys(om._keyMap).filter(k => typeof om._keyMap[k] !== 'string').sort();
+  assert(JSON.stringify(keys) === JSON.stringify(['k']), `wpisy {id,opts} = ${JSON.stringify(keys)} (oczekiwane tylko k)`);
+  assert(keys.every(k => om._keyMap[k].id === 'fleet'), 'wpis k celuje w overlay `fleet` — klasa zamknieta w jednym overlayu');
+  assert(!('g' in om._keyMap) && !('m' in om._keyMap), '`g` i `m` poza keymapa (przelacznik trybu galaktyki w GameScene)');
+  assert(isGalaxyToggleKey({ key: 'g' }) === true && isGalaxyToggleKey({ key: 'm' }) === true,
+    'kontrola pinu: G i M obsluguje `isGalaxyToggleKey` — keymapa nie jest ich odbiorca');
+  assert(typeof om._keyMap['f'] === 'string', 'kontrola pinu: wpis `f` jest stringiem ⇒ idzie galezia toggle (_hideOverlay), nie re-show');
 }
 
 // ── T7 — sciezka Outlinera: brak `opts.tab` ⇒ zakladka nietknieta, `_switchTab` niewolane ──

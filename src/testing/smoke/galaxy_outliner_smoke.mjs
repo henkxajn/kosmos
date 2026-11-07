@@ -17,17 +17,21 @@
 //       `leftOutliner.cannotEnter`; 2. klik nie wchodzi przez kontroler
 //   O8  klik: korzeń „GALAKTYKA” (tryb układu) → wejście; „← Układ: <aktywny>” → wyjście; wiersz — 1. klik zaznaczenie,
 //       2. klik wejście, strzałka — rozwinięcie bez zaznaczenia; własna kolonia / stacja → wejście z fokusem
-//   O9  SEDNO: drzewo trybu układu bez zmian — model z flagą ON = [korzeń] + model z flagą OFF (co do bajtu JSON);
-//       flaga OFF — brak korzenia; wiersze układów w tej samej kolejności
+//   O9  SEDNO: drzewo trybu układu bez zmian — model = [korzeń] + drzewo `result` (`buildSystemTree`) co do klucza wiersza;
+//       rysunek: „GALAKTYKA” pierwsza, wiersze układów w kolejności drzewa
 //   O10 rozwinięcie: domyślnie gwiazda zaznaczona; jawny stan użytkownika tylko tam, gdzie różni się od domyślnego
 //   O11 po G3 (F3, reguła D-UI-3 w trybie galaktyki): układ ze statkiem gracza albo cel jego skoku na liście także bez `reveal.name` —
-//       „???” + przygaszenie; prawdziwa nazwa nigdzie w rysunku; wejście wg bramki G1 (cel skoku jej nie otwiera); KONTROLA: flaga OFF jak w G1
+//       „???” + przygaszenie; prawdziwa nazwa nigdzie w rysunku; wejście wg bramki G1 (cel skoku jej nie otwiera)
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B): flagi `galaxyView` / `galaxyWarp` na stałe ON, ścieżki OFF usunięte — O9a i O9c
+//   bez połówek OFF (korzeń zawsze pierwszy i jeden; rysunek: „GALAKTYKA” przed drzewem, układy w kolejności drzewa `result`);
+//   wycofane O9b (reszta modelu co do bajtu JSON jak przy fladze OFF) — w jego miejsce O9d: reszta modelu = drzewo `result`
+//   co do klucza wiersza; wycofane O11o (KONTROLA OFF: statek daje nazwę, cel skoku poza listą — świadkami ON zostają O11a
+//   z prawdziwą nazwą w rekordzie, O11i i O11j); linie ustawiające i przywracające flagi usunięte (O9, O11).
 // Uruchom: node src/testing/smoke/galaxy_outliner_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import EventBus      from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
 import { THEME } from '../../config/ThemeConfig.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { t, setLocale } from '../../i18n/i18n.js';
 import { fmtDec } from '../../ui/NumberFormatLogic.js';
 import { systemRevealFromWorld } from '../../utils/SystemRevealWorld.js';
@@ -291,22 +295,24 @@ header('O7  bramka wejścia (186) na wierszu');
 }
 
 // ═══ O9 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
-header('O9  drzewo trybu układu bez zmian (flaga ON = korzeń + OFF)');
+header('O9  drzewo trybu układu bez zmian (korzeń + drzewo `result`)');
 {
   GM.isActive = false;
-  const flag0 = GAME_CONFIG.FEATURES.galaxyView;
   const lo = newLO();
-  const modelAt = (on) => { GAME_CONFIG.FEATURES.galaxyView = on; const m = call(() => lo._model(K, { colonies: COLONIES, groundUnits: [] })); GAME_CONFIG.FEATURES.galaxyView = flag0; return m; };
-  const mOn = modelAt(true), mOff = modelAt(false);
-  const strip = (m) => JSON.stringify({ title: m?.title, keyHint: m?.keyHint, items: m?.items, result: m?.result, active: m?.active });
-  ok(mOn?.items?.[0]?.kind === 'galaxyRoot' && !mOff?.items?.some?.((i) => i.kind === 'galaxyRoot'), 'O9a flaga ON — pierwszy wiersz korzenia; OFF — brak');
-  ok(strip(mOff) === strip({ ...mOn, items: mOn?.items?.slice?.(1) }) && (mOff?.items?.length ?? 0) > 3,
-    `O9b SEDNO: reszta modelu co do bajtu JSON jak przy OFF (${mOff?.items?.length ?? 0} wierszy drzewa)`);
-  const drawAt = (on) => { GAME_CONFIG.FEATURES.galaxyView = on; const tx = drawLO(lo); GAME_CONFIG.FEATURES.galaxyView = flag0; return tx; };
-  const tOn = drawAt(true), tOff = drawAt(false);
-  const sysOrder = (calls) => calls.map((c) => c.s).filter((s) => ['Dom', 'Kochab', 'Pollux', 'Vega', 'Mizar', 'Thuban'].includes(s));
-  ok(JSON.stringify(sysOrder(tOn)) === JSON.stringify(sysOrder(tOff)) && texts(tOn).includes('GALAKTYKA') && !texts(tOff).includes('GALAKTYKA'),
-    'O9c rysunek: te same wiersze drzewa w tej samej kolejności; „GALAKTYKA” tylko przy ON');
+  const m = call(() => lo._model(K, { colonies: COLONIES, groundUnits: [] }));
+  ok(m?.items?.[0]?.kind === 'galaxyRoot' && m.items.filter((i) => i.kind === 'galaxyRoot').length === 1,
+    'O9a pierwszy wiersz — korzeń „GALAKTYKA” (dokładnie jeden; od G5-B zawsze)');
+  // G5-B — w miejsce wycofanego O9b (porównanie z modelem przy fladze OFF): wyrocznią jest drzewo, które model sam niesie.
+  const treeKeys = (m?.result?.systems ?? []).flatMap((s) => [`system:${s.systemId}`,
+    ...(s.bodies ?? []).map((r) => `${r.kind === 'station' ? 'station' : 'body'}:${r.id}`)]);
+  const restKeys = (m?.items ?? []).slice(1).map((i) => i.key);
+  ok(restKeys.length > 3 && JSON.stringify(restKeys) === JSON.stringify(treeKeys),
+    `O9d SEDNO: reszta modelu = drzewo \`result\` co do klucza wiersza (${restKeys.length} wierszy drzewa)`);
+  const tx = texts(drawLO(lo));
+  const names = (m?.result?.systems ?? []).map((s) => s.name);
+  const iRoot = tx.indexOf('GALAKTYKA');
+  ok(names.length > 3 && iRoot >= 0 && iRoot < tx.indexOf(names[0]) && JSON.stringify(tx.filter((s) => names.includes(s))) === JSON.stringify(names),
+    `O9c rysunek: „GALAKTYKA” przed drzewem; wiersze układów w kolejności drzewa (${names.join(' ')})`);
 }
 
 // ═══ O10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -325,8 +331,6 @@ header('O10 rozwinięcie — domyślnie zaznaczona gwiazda');
 // ═══ O11 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
 header('O11 statek i cel skoku listują układ bez nazwy (F3)');
 {
-  const fWarp = GAME_CONFIG.FEATURES.galaxyWarp;
-  GAME_CONFIG.FEATURES.galaxyWarp = true;   // sekcja pinuje ścieżkę ON niezależnie od domyślnej flagi (przebieg całości z OFF)
   GM.isActive = true; GM.selectedSystemId = null;
   const r0 = rowOf(listNow(), 'sys_ship');
   ok(r0?.known === false && r0?.label === '???' && r0?.dim === true && r0?.placeKnown === false && r0?.name === 'Mizar',
@@ -376,15 +380,6 @@ header('O11 statek i cel skoku listują układ bez nazwy (F3)');
   ok(ex?.ship === true && ex?.own === true && ex?.named === false, 'O11l indeks: statek — obecność, ale nie nazwa');
   ok(ey?.inbound === 1 && ey?.own === false && ey?.ship === false, 'O11m indeks: cel skoku — licznik w drodze, bez obecności');
   ok(ez?.troops === true && ez?.named === true && ez?.own === true, 'O11n indeks: wojska — obecność trwała (dają nazwę)');
-
-  // Flaga OFF — stan sprzed kroku.
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  VESSELS.push(inTransit);
-  const off = listNow();
-  ok(rowOf(off, 'sys_ship')?.label === 'Mizar' && rowOf(off, 'sys_ship')?.dim === false && !rowOf(off, 'sys_unk'),
-    'O11o KONTROLA OFF: statek daje nazwę (G1), cel skoku poza listą — przyrząd widzi różnicę');
-  VESSELS.pop();
-  GAME_CONFIG.FEATURES.galaxyWarp = fWarp;
   GM.isActive = false;
 }
 

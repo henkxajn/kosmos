@@ -10,14 +10,13 @@
 //     i dom kładzione najpierw (priorytet);
 //   • nawiasy ⌜⌟ wokół gwiazdy zaznaczonej (rola `primary`); klik w nazwę = klik w gwiazdę (strefa HUD przed wyborem płyty);
 //   • twarde cięcie: cała podwarstwa rozjaśnia się w `GALAXY_FADE_MS` od wejścia w tryb (ten sam zegar co płyta).
-// Bez rozwinięcia najechania i bez przypięcia (G2).
-// ARC GALAXY, krok G2-2 (flaga `galaxyLook`; D-GX-13, D-GX-16, D-GX-17 (c); rama F5 — idiom etykiet mapy układu: najechanie
-// rozwija, klik przypina z akcjami): przy fladze ON warstwa dokłada —
+// ARC GALAXY, krok G2-2 (D-GX-13, D-GX-16, D-GX-17 (c); rama F5 — idiom etykiet mapy układu: najechanie
+// rozwija, klik przypina z akcjami): warstwa dokłada —
 //   • ROZWINIĘCIE najechania (≤ 4 linie pod nazwą WERSALIKAMI: właściciel wg `SystemRevealWorld`, odległość ly · klasa ·
 //     kolonie, stan zbadania, skan) — pamięć najechania `makeHoverMemory` (150 ms wejścia, 200 ms wygasania), etykieta
 //     rozwinięta trzyma swojego kandydata (`pinFor` / `updatePins` — pasek rośnie w dół, sąsiedzi ustępują);
 //   • PRZYPIĘCIE gwiazdy zaznaczonej (zaznaczenie = przypięcie, jak w trybie układu) — to samo rozwinięcie + wiersz akcji
-//     (`GalaxyChromeLogic.galaxyPinButtons`: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (G3-B: picker, flaga `galaxyWarp`), [ Skanuj ] /
+//     (`GalaxyChromeLogic.galaxyPinButtons`: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (G3-B: picker), [ Skanuj ] /
 //     [ Skanuj dokładniej ] / [ Anuluj skan ] — `ObservatorySystem.startSystemScan` / `cancelSystemScan`; chip wyłączony
 //     z powodem w linii pod wierszem akcji przy najechaniu); linia skanu w toku widoczna w rozwinięciu przypiętej gwiazdy
 //     także bez najechania; [ Beacon ] / [ Gate ] pominięte (D-GX-17 (c));
@@ -27,14 +26,13 @@
 //     skanowana — z oddechem krycia na zegarze symulacji (`breathAlpha`, B-1);
 //   • KLIK: przycisk przypięcia > linia nazwy przypiętej > reszta przypiętej (pochłonięty) > nazwa — z wetem gwiazdy pod
 //     kursorem (gwiazda innej nazwy wygrywa — nazwa nie kradnie kliku sąsiada, Finding 110); krycie × chrom lotu.
-// Flaga OFF — ścieżka G1 co do bitu (metody `_g1*`).
+// Flagi `galaxyLook` / `galaxyWarp` na stałe ON od G5 — dawna ścieżka G1 bez rozwinięcia i przypięcia (`_g1*`) usunięta.
 // ⚠ Moduł importuje się pod node (keeper `galaxy_pick_smoke` — atrapa świata): bez three i bez DOM.
 import EventBus from '../core/EventBus.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { t, getLocale } from '../i18n/i18n.js';
 import { themeToken } from './HudPalette.js';
-import { HUD_LABELS, placeLabels, threadGeometry, updateBorn, fadeAlpha, pointInRect, resolveLabelClick } from './HudLabelLogic.js';
+import { HUD_LABELS, threadGeometry, updateBorn, fadeAlpha, pointInRect, resolveLabelClick } from './HudLabelLogic.js';
 import { HUD_ATTENTION, bracketCorners, breathAlpha } from './HudAttentionLogic.js';
 import { skyLabelRelation, skyLabelRole, skyLabelColor } from './HudSkyLabelLogic.js';
 import { galaxyLabelCandidates, galaxyLabelPrio, galaxyLabelText, GALAXY_FADE_MS, LIVE_GALAXY } from './GalaxyModeLogic.js';
@@ -48,7 +46,7 @@ import {
   runGalaxyPinAction, galaxyLabelEssential, galaxyChromeAlpha, galaxyPointerTarget,
 } from './GalaxyChromeLogic.js';
 import { diveBracketsVisible } from './GalaxyGestureLogic.js';
-import { galaxyWarpOn, warpHoverModel, refusalText } from './GalaxyWarpLogic.js';
+import { warpHoverModel, refusalText } from './GalaxyWarpLogic.js';
 import { observatoryRangeLY, inObservatoryRange } from '../utils/ObservatoryRange.js';
 
 // Rysunek i układ (px logiczne). Strojenie okiem — stałe rysunku bez pinów keepera.
@@ -64,8 +62,6 @@ export const HUD_GALAXY_LABELS = Object.freeze({
   NON_ESSENTIAL_PRIO: 5000, // priorytet rozkładu nazw chowanych przy nakładaniu (po nigdy nie chowanych)
 });
 
-/** Flaga kroku G2 (czytana co klatkę). */
-const galaxyLookOn = () => !!GAME_CONFIG.FEATURES?.galaxyView && !!GAME_CONFIG.FEATURES?.galaxyLook;
 const nowMs = () => ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
 
 const MEASURE_CACHE_MAX = 600;
@@ -76,14 +72,11 @@ export class HudGalaxyLabelLayer {
     this.mode = 'galaxy';                 // `HudLayer`: lista podwarstw trybu galaktyki
     this._prep = { on: false, items: [], sel: null };
     this._last = { labels: [], bracket: null };
-    this._candPrev = new Map();
-    this._born = new Map();
     this._measure = new Map();
     this._sysRef = null;
     this._byId = new Map();
     this._world = null;
     this._worldT = -Infinity;
-    this._look = false;               // G2 — gałąź klatki (ustala `prepare`; `collect` / `draw` / klik idą tą samą)
     this._g2 = { p: null, pins: new Map(), born: new Map(), candPrev: new Map(), hover: makeHoverMemory(), zones: [],
       pinZones: [], rows: null, rowsT: -Infinity, rowsK: null, last: { labels: [], brackets: [] } };
   }
@@ -125,172 +118,31 @@ export class HudGalaxyLabelLayer {
     return this._world;
   }
 
-  // ── Dyspozytor G1 / G2 (flaga `galaxyLook`) ──────────────────────────────────────────────────────────────────────
-  prepare(F) {
-    this._look = galaxyLookOn();
-    return this._look ? this._g2Prepare(F) : this._g1Prepare(F);
-  }
-  collect(F, proj) { return this._look ? this._g2Collect(F, proj) : this._g1Collect(F, proj); }
-  draw(ctx, F, c) { return this._look ? this._g2Draw(ctx, F, c) : this._g1Draw(ctx, F, c); }
-  handleClick(x, y, rawX, rawY) { return this._look ? this._g2HandleClick(x, y, rawX, rawY) : this._g1HandleClick(x, y); }
-  coversPoint(lx, ly) { return this._look ? this._g2Covers(lx, ly) : !!this._zoneAt(lx, ly); }
-  coversUiPoint(lx, ly) { return this._look ? this._g2Covers(lx, ly) : !!this._zoneAt(lx, ly); }
-  /** G2 — przycisk przypięcia pod punktem (kursor „rączki”); G1 — brak. */
+  // ── Klatka (ścieżka G2; dawny dyspozytor G1 / G2 usunięty w G5) ─────────────────────────────────────────────────
+  prepare(F) { return this._g2Prepare(F); }
+  collect(F, proj) { return this._g2Collect(F, proj); }
+  draw(ctx, F, c) { return this._g2Draw(ctx, F, c); }
+  handleClick(x, y, rawX, rawY) { return this._g2HandleClick(x, y, rawX, rawY); }
+  coversPoint(lx, ly) { return this._g2Covers(lx, ly); }
+  coversUiPoint(lx, ly) { return this._g2Covers(lx, ly); }
+  /** Przycisk przypięcia pod punktem (kursor „rączki”). */
   pinButtonAt(lx, ly) {
-    if (!this._look) return null;
     const z = pinHitAt(this._g2.pinZones, lx, ly);
     return z?.kind === 'btn' ? z.id : null;
   }
   /** G3-B — strefa przycisku [ Wyślij ▼ ] przypięcia z ostatniej klatki (kotwica pickera) albo `null`. */
   sendButtonZone() {
-    return this._look ? (this._g2.pinZones.find((z) => z.kind === 'btn' && z.id === 'send') ?? null) : null;
+    return this._g2.pinZones.find((z) => z.kind === 'btn' && z.id === 'send') ?? null;
   }
   /** G3-B — gwiazda pod punktem wg reguły kliku (przypięcie > gwiazda > nazwa): cel menu PPM; `null` — pusta płyta. */
   galaxyStarIdAt(lx, ly, rawX, rawY) {
-    if (!this._look) return null;
     const pz = pinHitAt(this._g2.pinZones, lx, ly);
     const nz = pz ? null : resolveLabelClick(this._g2.zones, lx, ly);
     const starUnder = pz ? null : ((typeof window !== 'undefined' ? window.KOSMOS?.threeRenderer?.galaxyStarAt?.(rawX, rawY) : null) ?? null);
     return galaxyPointerTarget({ pinZone: pz, nameZone: nz, starUnder }).id;
   }
-  /** G2 — gwiazda z rozwinięciem z najechania (`galaxy:<id>`) albo `null`. */
-  hoverObjectKey() { return this._look && this._g2.p?.hovId != null ? 'galaxy:' + this._g2.p.hovId : null; }
-
-  /** Tryb galaktyki aktywny i gwiazdy płyty z treścią etykiet — część klucza klatki. */
-  _g1Prepare(F) {
-    const K = F.K, gm = K?.galaxyMode, tr = K?.threeRenderer;
-    if (gm?.isActive !== true || typeof tr?.getGalaxyStarsWorld !== 'function') {
-      this._prep = { on: false, items: [], sel: null };
-      return 'gal:0';
-    }
-    const stars = tr.getGalaxyStarsWorld();
-    const byId = this._systems(K);
-    const world = this._worldCtx(K, F.now);
-    const sel = gm.selectedSystemId ?? null;
-    const loc = getLocale();
-    const items = [];
-    for (const st of stars) {
-      const id = String(st.id);
-      const sys = byId.get(id) ?? null;
-      const home = id === HOME_SYSTEM_ID || sys?.isHome === true;
-      const own = home || world.presence.get(id)?.own === true;
-      let named = own;
-      if (!named) { try { named = world.reveal(sys).name === true; } catch { named = false; } }
-      const relation = skyLabelRelation({ own, explored: isSystemExplored(sys) });
-      items.push({ id, w: st, sys, home, selected: id === sel, relation, role: skyLabelRole(relation),
-        text: named ? galaxyLabelText(sys?.name ?? id, loc) : null, distLy: Number(sys?.distanceLY) || 0 });
-    }
-    let key = `gal:1:${sel ?? ''}:${loc}:${Math.round(F.now - (tr._galaxyFadeT0 ?? 0)) < GALAXY_FADE_MS ? 'f' : 's'}`;
-    for (const it of items) key += `|${it.id}:${it.role}:${it.text ? 1 : 0}`;
-    this._prep = { on: true, items, sel };
-    return key;
-  }
-
-  /** Geometria (px logiczne): rzut gwiazd, rozkład nazw, nawiasy zaznaczonej. */
-  _g1Collect(F, proj) {
-    const P = this._prep;
-    if (!P.on || !proj) {
-      this._born.clear();
-      this._last = { labels: [], bracket: null };
-      return { count: 0, animating: false, labels: [], bracket: null };
-    }
-    const K = F.K, tr = K?.threeRenderer, map = F.mapRect, G = HUD_GALAXY_LABELS, R = HUD_LABELS;
-    const pts = [];
-    for (const it of P.items) {
-      const p = proj.point(it.w.x, it.w.y, it.w.z);
-      if (p) pts.push({ ...it, x: p.x, y: p.y });
-    }
-    const obstacles = pts.map((p) => ({ cx: p.x, cy: p.y, r: G.STAR_OBSTACLE_PX, id: p.id }));
-    const size = (THEME.fontSizeNormal ?? 11) + R.MAIN_SIZE_DELTA;
-    const font = `${size}px ${THEME.fontFamily}`;
-    const items = [];
-    for (const p of pts) {
-      if (!p.text || !pointInRect(p.x, p.y, map)) continue;
-      const w = this._width(font, size, p.text, G.LETTER_SPACING) + 2 * R.PAD_X;
-      const h = size + 3 + 2 * R.PAD_Y;
-      items.push({ key: 'g:' + p.id, id: p.id, ax: p.x, ay: p.y, clear: G.STAR_CLEAR_PX, gapBelow: G.GAP_BELOW_PX, w, h,
-        prio: galaxyLabelPrio({ selected: p.selected, home: p.home, relation: p.relation, distLy: p.distLy }),
-        ownObstacle: obstacles.find((o) => o.id === p.id) ?? null, text: p.text, role: p.role, size, font });
-    }
-    const { placed } = placeLabels(items, { rect: map, obstacles, prev: this._candPrev, candidatesOf: galaxyLabelCandidates });
-    this._candPrev = new Map(placed.map((p) => [p.key, p.cand]));
-    const fading = updateBorn(this._born, placed.map((p) => p.key), F.now);
-    const modeK = Math.min(1, Math.max(0, (F.now - (tr?._galaxyFadeT0 ?? -Infinity)) / GALAXY_FADE_MS));
-    const labels = placed.map((p) => ({ ...p, fade: fadeAlpha(F.now, this._born.get(p.key)) * modeK }));
-    let bracket = null;
-    const selP = P.sel != null ? pts.find((p) => p.id === String(P.sel)) : null;
-    if (selP && pointInRect(selP.x, selP.y, map)) {
-      const half = G.BRACKET_HALF;
-      bracket = { id: selP.id, cx: selP.x, cy: selP.y, half,
-        arm: Math.max(1, Math.min(HUD_ATTENTION.BRACKET_ARM_PX, 2 * half * HUD_ATTENTION.BRACKET_ARM_FRAC)), fade: modeK };
-    }
-    this._last = { labels, bracket };
-    return { count: labels.length + (bracket ? 1 : 0), animating: fading || modeK < 1, labels, bracket };
-  }
-
-  _g1Draw(ctx, F, c) {
-    const R = HUD_LABELS, G = HUD_GALAXY_LABELS;
-    const roles = F.roles;
-    const textPrimary = themeToken(THEME, 'textPrimary');
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-    ctx.setLineDash([]);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    if (c.bracket) {
-      const b = c.bracket;
-      ctx.strokeStyle = roles.primary;
-      ctx.lineWidth = HUD_ATTENTION.BRACKET_WIDTH;
-      ctx.globalAlpha = b.fade ?? 1;
-      ctx.beginPath();
-      for (const cr of bracketCorners({ cx: b.cx, cy: b.cy, half: b.half, arm: b.arm })) {
-        const q = cr.pts;
-        ctx.moveTo(q[0], q[1]); ctx.lineTo(q[2], q[3]); ctx.lineTo(q[4], q[5]);
-      }
-      ctx.stroke();
-    }
-    for (const m of c.labels ?? []) {
-      const fade = m.fade ?? 1;
-      if (!(fade > 0)) continue;
-      const color = skyLabelColor(m.role, roles, textPrimary);
-      if (m.side !== 'C') {
-        // Kandydat zastępczy (nazwa nie zmieściła się pod gwiazdą) — nitka od gwiazdy, jak etykiety warstwy.
-        const th = threadGeometry(m);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = R.THREAD_WIDTH;
-        ctx.globalAlpha = R.THREAD_ALPHA * fade;
-        ctx.beginPath();
-        ctx.moveTo(th.x0, th.y0);
-        ctx.lineTo(th.x1, th.y1);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = R.BAR_ALPHA * fade;
-      ctx.fillStyle = THEME.bgPrimary;
-      ctx.fillRect(m.x, m.y, m.w, m.h);
-      ctx.font = m.font;
-      ctx.fillStyle = color;
-      ctx.globalAlpha = fade;
-      if ('letterSpacing' in ctx) ctx.letterSpacing = `${G.LETTER_SPACING}px`;
-      ctx.fillText(m.text, m.x + R.PAD_X, m.y + R.PAD_Y + m.size);
-      if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  _zoneAt(x, y) {
-    const zones = (this._last.labels ?? []).map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, id: l.id }));
-    return resolveLabelClick(zones, x, y);
-  }
-
-  /** Klik w nazwę = klik w jej gwiazdę (zaznaczenie; dwuklik — wejście) — strefa HUD przed wyborem płyty. */
-  _g1HandleClick(x, y) {
-    const z = this._zoneAt(x, y);
-    if (!z) return false;
-    const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
-    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    K?.galaxyMode?.onPlateClick?.(z.id, now);
-    return true;
-  }
+  /** Gwiazda z rozwinięciem z najechania (`galaxy:<id>`) albo `null`. */
+  hoverObjectKey() { return this._g2.p?.hovId != null ? 'galaxy:' + this._g2.p.hovId : null; }
 
   // ══ G2-2 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -332,7 +184,7 @@ export class HudGalaxyLabelLayer {
       inRange: inObservatoryRange(row.sys, home, rangeLY), rangeGate: Number(LIVE_GALAXY.SCAN_RANGE_GATE) !== 0,
     });
     const enterable = K?.galaxyMode?.canEnter?.(id, world) === true;
-    return { id, lines: this._g2Lines(K, row, scans, loc), buttons: galaxyPinButtons({ enterable, scanChip: chip, sendEnabled: galaxyWarpOn(), t }), chip };
+    return { id, lines: this._g2Lines(K, row, scans, loc), buttons: galaxyPinButtons({ enterable, scanChip: chip, t }), chip };
   }
 
   _g2Prepare(F) {
@@ -389,7 +241,7 @@ export class HudGalaxyLabelLayer {
     const pz = ptr && !ptr.overUI ? pinHitAt(g.pinZones, ptr.lx, ptr.ly) : null;
     const hoverBtn = pz?.kind === 'btn' ? pz.id : null;
     // G3-B — powód, dla którego zaznaczony statek nie doskoczy do gwiazdy pod kursorem (ten sam model co podgląd trasy).
-    const warpModel = galaxyWarpOn() && hovId != null ? warpHoverModel(hovId, K) : null;
+    const warpModel = hovId != null ? warpHoverModel(hovId, K) : null;
     const warpReason = warpModel && !warpModel.available ? (warpModel.reasonText ?? refusalText(warpModel.reason)) : null;   // flota: tekst D-GX-20
     const fade = galaxyChromeAlpha({ flightAlpha: tr._galaxyChromeAlpha, now: F.now, fadeT0: tr._galaxyFadeT0, fadeMs: GALAXY_FADE_MS });
     let key = `gal2:1:${sel ?? ''}:${hovId ?? ''}:${Math.round(hov.alpha * 20)}:${diveId ?? ''}:${diveBr ? 1 : 0}:${labelsOn ? 1 : 0}:${loc}`
@@ -617,24 +469,16 @@ export class HudGalaxyLabelLayer {
   /** Odczyt bramki: etykiety i nawiasy ostatniej klatki (px logiczne). */
   debug() {
     const r1 = (v) => (Number.isFinite(v) ? +v.toFixed(1) : v);
-    if (this._look) {
-      const L = this._g2.last, P = this._g2.p;
-      return {
-        id: 'galaxyLabels', look: true, on: this._prep.on, items: this._prep.items.length,
-        named: this._prep.items.filter((i) => i.text).length,
-        labels: L.labels.map((l) => ({ id: l.id, text: l.lines?.[0]?.text, role: l.role, side: l.side, essential: l.essential,
-          lines: l.lines?.length ?? 1, pin: !!l.pinLabel, x: r1(l.x), y: r1(l.y), w: r1(l.w), h: r1(l.h) })),
-        brackets: L.brackets.map((b) => ({ id: b.id, kind: b.kind, cx: r1(b.cx), cy: r1(b.cy) })),
-        hover: P?.hovId ?? null, dive: P?.diveId ?? null, diveBrackets: P?.diveBr ?? false,
-        pin: P?.pin ? { id: P.pin.id, lines: P.pin.lines, buttons: P.pin.buttons.map((b) => ({ id: b.id, label: b.label, enabled: b.enabled, reason: b.reason })) } : null,
-        pinZones: this._g2.pinZones.length,
-      };
-    }
+    const L = this._g2.last, P = this._g2.p;
     return {
       id: 'galaxyLabels', on: this._prep.on, items: this._prep.items.length,
       named: this._prep.items.filter((i) => i.text).length,
-      labels: this._last.labels.map((l) => ({ id: l.id, text: l.text, role: l.role, side: l.side, x: r1(l.x), y: r1(l.y), w: r1(l.w), h: r1(l.h) })),
-      bracket: this._last.bracket ? { id: this._last.bracket.id, cx: r1(this._last.bracket.cx), cy: r1(this._last.bracket.cy) } : null,
+      labels: L.labels.map((l) => ({ id: l.id, text: l.lines?.[0]?.text, role: l.role, side: l.side, essential: l.essential,
+        lines: l.lines?.length ?? 1, pin: !!l.pinLabel, x: r1(l.x), y: r1(l.y), w: r1(l.w), h: r1(l.h) })),
+      brackets: L.brackets.map((b) => ({ id: b.id, kind: b.kind, cx: r1(b.cx), cy: r1(b.cy) })),
+      hover: P?.hovId ?? null, dive: P?.diveId ?? null, diveBrackets: P?.diveBr ?? false,
+      pin: P?.pin ? { id: P.pin.id, lines: P.pin.lines, buttons: P.pin.buttons.map((b) => ({ id: b.id, label: b.label, enabled: b.enabled, reason: b.reason })) } : null,
+      pinZones: this._g2.pinZones.length,
     };
   }
 }

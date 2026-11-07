@@ -1,7 +1,7 @@
 // fleet_warp_smoke — G4 (GALAXY_PLAN.md §4 G4, D-GX-19, D-GX-20): SKOK FLOTY.
 //
 // Pinuje mechanikę na prawdziwym łańcuchu `OrderService` → `FleetSystem` → `WarpRouteSystem` → `VesselManager` + `time:tick`:
-//   T1  beginJourney bez opts — bez zmian co do bajtu (kształt trasy, dwa argumenty dyspozytora, linie solo) + kontrola: dyspozytor bez blokady
+//   T1  beginJourney bez opts — kształt trasy bez nowych kluczy, dwa argumenty dyspozytora, linia solo
 //   T2  odmowa całej floty zostawia członków i rekord co do bitu (zapis przed == zapis po, zero zdarzeń), powód i nazwa każdego winnego
 //   T3  jeden plan dla wszystkich, wspólny limit skoku (najmniejszy bak); podgląd bez skutków ubocznych
 //   T4  członek wiążący nazwany w odmowie i w wyniku; każdy członek płaci własne zużycie
@@ -11,14 +11,22 @@
 //   T8  wrak w trasie; wrak ostatniego lecącego przy zerze przylotów; członek, który opuścił flotę, mówi znów sam za siebie
 //   T9  zapis / wczytanie w połowie trasy (v101 bez migracji): grupa leci dalej, kąt i prędkość przeżywają, stara trasa bez nowych kluczy
 //   T10 Dziennik: jedna linia na start i koniec, zero linii członków; piny `UIManager` (nie importuje się pod node)
-//   T11 ścieżka AI: `issueGroupAttack` co do bajtu (suma źródła z 15b6fc7), przy ON i OFF ten sam wynik; `speedLY` nie działa na AI
+//   T11 ścieżka AI: `issueGroupAttack` co do bajtu (suma źródła z 15b6fc7); `speedLY` nie działa na AI
 //   T12 poprzedni rozkaz floty: przyjęcie kasuje rozkazy członków (bez fałszywego „zakończone”), odmowa — nie; migawka misji nie wskrzesza
 //   T13 faza 2 przy wyścigu: nikt nie wystartował = rekord wraca; część wystartowała = reszta leci
 //   T14 D-GX-20: tekst odmowy PL / EN bez sluga i bez nowych kluczy poza §6; `.map(describeOrderFail)` z indeksem nadal działa
 //   T15 rozkaz floty w locie odbija się o bramkę warp i nie rusza rekordu
-//   T16 flaga OFF = stan sprzed kroku: `feature_off`, opcje niewidzialne
+//   T16 flaga `fleetWarp` zdjęta (G5-B): brak klucza w `FEATURES` i predykatu `fleetWarpOn` — ścieżki OFF nie ma
 //   T17 trasa podana z góry pasuje do TEGO statku
 //   T18 Stop floty w skoku (decyzja właściciela 2026-11-06): przerwanie na najbliższym przystanku, jeden toast i jedna linia, członkowie wolni
+//
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flagi `galaxyWarp` / `fleetWarp` na stałe ON, ścieżki OFF usunięte): T1 — porównania
+//   ON == OFF (trasa, misja, linie Dziennika) wycofane, zostają piny kształtu trasy, dwóch argumentów dyspozytora i linii solo przy ON;
+//   T2 — przypadek „rezerwa przy `galaxyWarp` OFF” wycofany (wiersz rezerwy z `_groupGateRefusal` usunięty, rezerwę odmawia `canOrder`,
+//   co pinuje przypadek „rezerwa” wyżej); T11 — porównanie `issueGroupAttack` ON == OFF wycofane (ścieżkę AI pinuje dalej suma źródła
+//   i wiersze `speedLY`); T16 — „flaga w kodzie: ON” przecelowane na pin odwrotny (klucz i predykat usunięte), pięć kontroli OFF
+//   (`feature_off`, `hops` niewidzialne, trasa bez pól floty, własna prędkość, dyspozytor ignoruje `speedLY`) wycofane. Alias `FEATURES`
+//   i migawka `SHIPPED_FLAG` usunięte (służyły przestawianiu flagi).
 //
 // Uruchom: node src/testing/smoke/fleet_warp_smoke.mjs
 
@@ -55,8 +63,6 @@ const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\
 
 const AU = GAME_CONFIG.AU_TO_PX;
 const DT = 0.02, CIV = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
-const FEATURES = GAME_CONFIG.FEATURES;
-const SHIPPED_FLAG = FEATURES.fleetWarp;   // zanim grupy zaczną ją przestawiać
 
 // Kadłuby testowe: prędkość bazowa z danych kadłuba (bez modułów), żeby trzy prędkości były prawdziwym wejściem `_baseWarpSpeed`.
 const warpHull = (id, warpSpeedLY) => { SHIPS[id] = { ...HULLS.hull_frigate, id, warpCapable: true, warpSpeedLY }; };
@@ -133,8 +139,8 @@ const samePos = (a, b) => a.position.x === b.position.x && a.position.y === b.po
 
 // ── T1 ──────────────────────────────────────────────────────────────────────────────────────────────────
 group('T1 beginJourney bez opts — bez zmian', () => {
-  const run = (flag) => {
-    FEATURES.fleetWarp = flag;
+  // G5-B: ścieżki OFF nie ma, więc porównania ON == OFF wycofane; zostaje to, co bez opts widać przy ON.
+  const run = () => {
     scene();
     const v = ship({ name: 'Solo' });
     const args = [];
@@ -142,18 +148,13 @@ group('T1 beginJourney bez opts — bez zmian', () => {
     vMgr.dispatchInterstellar = (...a) => { args.push(a.length); return orig(...a); };
     const r = wrs.beginJourney(v.id, 'D');
     const route = { ...v.warpRoute };
-    const mission = JSON.stringify({ ...v.mission });
     runUntil(() => v.warpRoute === null);
-    return { r, route, mission, args, logs: logs.map((l) => l.text), keys: Object.keys(route), final: v.systemId };
+    return { r, args, logs: logs.map((l) => l.text), keys: Object.keys(route), final: v.systemId };
   };
-  const on = run(true), off = run(false);
-  FEATURES.fleetWarp = true;
-  assert(on.r.ok === true && on.final === 'D', 'trasa solo dolatuje przy fleetWarp ON');
+  const on = run();
+  assert(on.r.ok === true && on.final === 'D', 'trasa solo dolatuje');
   assert(on.keys.join() === 'hops,legIndex,finalSystemId,totalFuelPlanned,startedYear', 'kształt `warpRoute` bez nowych kluczy');
   assert(on.args.every((n) => n === 2) && on.args.length === 3, 'dyspozytor wołany dwoma argumentami na każdym z 3 odcinków');
-  assert(JSON.stringify(on.route) === JSON.stringify(off.route), 'trasa ON == OFF');
-  assert(on.mission === off.mission, 'misja ON == OFF');
-  assert(JSON.stringify(on.logs) === JSON.stringify(off.logs), 'linie Dziennika ON == OFF');
   assert(on.logs.some((l) => l === t('warpRoute.completed', 'Solo', 'Delta')), 'solo mówi sam za siebie (`warpRoute.completed`)');
 });
 
@@ -182,13 +183,6 @@ group('T2 odmowa całej floty zostawia wszystko co do bitu', () => {
   refuseCase('brak trasy', () => ({ fid: makeFleet(ship({ name: 'A' })) }), 'FAR', 'no_route');
   refuseCase('nieznany układ', () => ({ fid: makeFleet(ship({ name: 'A' })) }), 'NIE_MA', 'unknown_system');
   refuseCase('pusta flota', () => ({ fid: fSys.createFleet('Pusta').id }), 'B', 'fleet_empty');
-  // Finding 588 — rezerwa nie skacze z flotą także przy `galaxyWarp` OFF: `canOrder` bramkuje ten termin tamtą flagą.
-  FEATURES.galaxyWarp = false;
-  try {
-    refuseCase('rezerwa przy galaxyWarp OFF', () => { const a = ship({ name: 'A' }), b = ship({ name: 'Rezerwa' }); b.serviceState = 'stored'; return { fid: makeFleet(a, b), culprit: b }; }, 'B', 'vessel_in_reserve', 'Rezerwa');
-  } finally {
-    FEATURES.galaxyWarp = true;
-  }
   scene();
   assert(issue('fleet_nie_ma', 'B')?.reason === 'fleet_not_found', 'nieznana flota: `fleet_not_found`');
   // Poprzedni rozkaz żywy (Finding 275): flota w locie dostaje odmowę i leci dalej tym samym rozkazem.
@@ -451,8 +445,7 @@ group('T11 ścieżka AI co do bajtu', () => {
   const hash = createHash('sha256').update(src.slice(start, end)).digest('hex').slice(0, 16);
   assert(hash === 'bd65648740670528', `suma źródła \`issueGroupAttack\` jak na 15b6fc7 (jest: ${hash})`);
   const realRandom = Math.random;
-  const runAI = (flag) => {
-    FEATURES.fleetWarp = flag;
+  const runAI = () => {
     scene();
     EntityManager.add({ id: 'cel', type: 'planet', name: 'Cel', x: AU, y: 0, systemId: 'B', physics: { x: AU, y: 0 } });
     const e1 = ship({ name: 'R1', hull: 'fw_slow' }), e2 = ship({ name: 'R2', hull: 'fw_fast' });
@@ -462,10 +455,8 @@ group('T11 ścieżka AI co do bajtu', () => {
     Math.random = realRandom;
     return { r, m: [e1, e2].map((e) => JSON.stringify(e.mission)), routes: [e1.warpRoute, e2.warpRoute], logs: logs.length };
   };
-  const on = runAI(true), off = runAI(false);
-  FEATURES.fleetWarp = true;
+  const on = runAI();   // G5-B: porównanie z OFF wycofane — ścieżkę AI pinuje suma źródła wyżej
   assert(on.r?.ok === true && on.r?.composite === true, 'AI: grupa wystartowała skokiem');
-  assert(JSON.stringify(on) === JSON.stringify(off), 'AI: `issueGroupAttack` przy ON == OFF (misje, trasy, Dziennik)');
   assert(on.routes.every((r) => r === null || r === undefined), 'AI: bez trasy planera');
   // `speedLY` nie działa na AI; kąt działa jak dotąd.
   scene();
@@ -624,26 +615,10 @@ group('T15 rozkaz floty w locie', () => {
 });
 
 // ── T16 ─────────────────────────────────────────────────────────────────────────────────────────────────
-group('T16 flaga OFF = stan sprzed kroku', () => {
-  assert(SHIPPED_FLAG === true, 'flaga w kodzie: ON');
-  FEATURES.fleetWarp = false;
-  try {
-    scene();
-    const a = ship({ name: 'A' });
-    const fid = makeFleet(a);
-    const before = snapshot();
-    const res = issue(fid, 'B');
-    assert(res?.ok === false && res?.reason === 'feature_off' && snapshot() === before, 'OFF: `issueFleetWarp` odmawia i niczego nie rusza');
-    const r = wrs.beginJourney(a.id, 'B', { hops: ['sys_home', 'C', 'B'], groupId: 'g', speedLY: 1, arrivalAngle: 1 });
-    assert(r.ok === true && a.warpRoute?.hops?.join() === 'sys_home,B', 'OFF: `hops` niewidzialne (planer)');
-    assert(Object.keys(a.warpRoute).join() === 'hops,legIndex,finalSystemId,totalFuelPlanned,startedYear', 'OFF: trasa bez pól floty');
-    assert(a.mission?.warpSpeed === 6 && a.mission?.arrivalAngle === undefined, 'OFF: własna prędkość, bez kąta');
-    scene();
-    const b = ship({ name: 'B' });
-    assert(vMgr.dispatchInterstellar(b.id, 'B', { speedLY: 1 }) === true && b.mission?.warpSpeed === 6, 'OFF: dyspozytor ignoruje `speedLY`');
-  } finally {
-    FEATURES.fleetWarp = true;
-  }
+// PRZECELOWANE (G5-B): dawne „flaga w kodzie: ON” → pin odwrotny (klucza i predykatu nie ma); kontrole OFF wycofane — ścieżki OFF nie ma.
+group('T16 flaga `fleetWarp` zdjęta (G5-B)', () => {
+  assert(GAME_CONFIG.FEATURES.fleetWarp === undefined && !/\bfleetWarp\s*:/.test(stripComments(readSrc('config/GameConfig.js')))
+    && GalaxyWarp.fleetWarpOn === undefined, 'klucz `FEATURES.fleetWarp` usunięty z GameConfig, predykat `fleetWarpOn` usunięty');
 });
 
 // ── T18 ─────────────────────────────────────────────────────────────────────────────────────────────────

@@ -9,11 +9,11 @@
 //     tu wołający przez `logDepth` (renderer — `sceneDepthUnification`).
 //   • Pokrętła wyglądu — `GalaxyModeLogic.LIVE_GALAXY` (renderer wystawia je jako `galaxyTuning`); zmiana pokrętła
 //     przelicza atrybuty w następnym `tick()`.
-//   • ARC GALAXY G2-3 (flaga `galaxyLook`, rama F5 C): AUREOLE WŁASNOŚCI — większy PSF w barwie imperium wokół gwiazd układów
+//   • ARC GALAXY G2-3 (rama F5 C): AUREOLE WŁASNOŚCI — większy PSF w barwie imperium wokół gwiazd układów
 //     z właścicielem (`setOwnerHalos`; gracz zawsze, AI od wywiadu `contact` — reguła `GalaxyTerritoryLogic.plateOwnerHalos`);
 //     SŁUPKI gwiazda → płaszczyzna dysku z kropką u podstawy wyłącznie dla układów gracza i gwiazdy zaznaczonej
 //     (`setRisers`, `HolotableCamera.riserEndpoints`, barwa z roli HUD); terytorium (`GalaxyTerritory`) dokłada wołający jako
-//     dziecko `group`. Przy fladze OFF nic z tego nie powstaje (listy puste — płyta G1 co do bitu).
+//     dziecko `group`. Puste listy = brak aureoli i słupków (dawna ścieżka OFF flagi `galaxyLook` usunięta w G5).
 // ⚠ THREE wstrzykiwany (wzór `StarPointShader`) — moduł nie importuje three, więc ładuje się pod node.
 
 import { createPlateStarMaterial, STAR_VERT_PLATE, STAR_FRAG_PLATE } from './StarPointShader.js';

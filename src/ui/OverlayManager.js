@@ -14,7 +14,8 @@ export class OverlayManager {
     //   C·civilization  E·economy  H·colony  P·population  D·diplomacy  F·fleet  T·tech
     //   (P·population degated w C7 — dodawany warunkowo niżej gdy FEATURES.populationOverlay=ON)
     //   (S·shipyard dodane w C8 — Stocznia zajęła slot po Populacji)
-    // Skróty wtórne I/W/G/U/O zostają jako bezpośrednie (dostępne też przez subnav).
+    // Skróty wtórne I/W/U/O zostają jako bezpośrednie (dostępne też przez subnav).
+    // G i M nie są w tej mapie: przełączają tryb galaktyki głównego widoku (`GameScene`, przed tą keymapą — ARC GALAXY).
     // dyson/trade — BEZ skrótu (klawisze 'd'/'h' przejęte przez primary); tylko subnav.
     this._keyMap = {
       // primary (6 stałych + 's':'shipyard' C8; 'p':'population' warunkowo — niżej gdy FEATURES.populationOverlay)
@@ -28,24 +29,17 @@ export class OverlayManager {
       // wtórne overlaye — bezpośrednie skróty
       'i': 'intel',           // Faza 2 — Wywiad (obce imperia)
       'w': 'war',             // Faza 4 — Panel wojny
-      // Stratcom zastąpił mapę galaktyki (G) i mini-mapę (M) — oba otwierają
-      // Dowództwo Taktyczne na zakładce Stratcom (radar strategiczny).
-      'g': { id: 'fleet', opts: { tab: 'stratcom' } },
       'u': 'unit_design',
       'o': 'observatory',
       // systemowe (poza grupami nav)
       'l': 'eventLog',        // Opcja B/3 — Dziennik zdarzeń
       'n': 'poi',             // M3 P2.1 — POI Panel (sidebar list)
-      'm': { id: 'fleet', opts: { tab: 'stratcom' } }, // Stratcom zastąpił mini-mapę
       'k': { id: 'fleet', opts: { focusSection: 'wreck' } }, // M4 P2 — Fleet → sekcja Wraki
     };
     // C7 — hotkey P bramkowany kill-switchem PopulationOverlay (default OFF). OFF = P
     // całkowicie nieaktywne (handleKey → entry undefined → return false, bez console.log).
     // ON = przywraca 'p' → 'population'. Zob. GameConfig.FEATURES.populationOverlay.
     if (GAME_CONFIG.FEATURES.populationOverlay) this._keyMap['p'] = 'population';
-    // ARC GALAXY G1 (D-GX-8) — G przełącza tryb galaktyki głównego widoku (`GameScene`, PRZED tą keymapą); M dalej otwiera
-    // zakładkę Stratcom (do G5). Flaga OFF — G otwiera Stratcom jak przed krokiem.
-    if (GAME_CONFIG.FEATURES?.galaxyView) delete this._keyMap['g'];
   }
 
   register(id, overlay) {

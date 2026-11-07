@@ -1,4 +1,4 @@
-// KANON „CO GRACZ WIDZI O UKŁADZIE" — jedno źródło prawdy dla mgły wojny w STRATCOM.
+// KANON „CO GRACZ WIDZI O UKŁADZIE" — jedno źródło prawdy dla mgły wojny mapy galaktyki (do G5 — STRATCOM).
 //
 // Powstało przy zamykaniu Findingu 188 (`docs/design/STRATCOM_REVEAL_PLAN.md`, decyzje
 // D-188-1..8 w wariancie W1).
@@ -7,7 +7,7 @@
 //   liczył jedną flagę `known = isHome || explored || isAtLeast(empireId, 'rumor')` i wydawał
 //   pod nią SZEŚĆ różnych faktów. Gra ma jednak dwie NIEZALEŻNE osie wiedzy:
 //
-//     oś MIEJSCA      — `isSystemExplored` / skan STRATCOM — „byłem tam albo to zmierzyłem":
+//     oś MIEJSCA      — `isSystemExplored` / skan układu — „byłem tam albo to zmierzyłem":
 //                       nazwa układu, liczby ciał, życie na planetach, infrastruktura.
 //     oś WŁAŚCICIELA  — `intel.<empireId>`: rumor → contact → detailed — „co wiem o TYM,
 //                       KTO tam mieszka": tożsamość, archetyp, wrogość, liczby o imperium.
@@ -44,7 +44,7 @@ const NOTHING = Object.freeze({
  * @param {Object} sys — gwiazda z `galaxyData.systems` (BIERZE OBIEKT, nie identyfikator).
  * @param {Object} deps
  * @param {boolean}  deps.explored     — `isSystemExplored(sys)` (oś MIEJSCA).
- * @param {boolean}  deps.scanned      — ukończony skan STRATCOM (oś MIEJSCA).
+ * @param {boolean}  deps.scanned      — ukończony skan układu obserwatorium (oś MIEJSCA).
  * @param {Function} deps.intelAtLeast — `(level) => bool` dla WŁAŚCICIELA tego układu (oś WŁAŚCICIELA).
  * @returns {{place:boolean, name:boolean, ownerExists:boolean, ownerIdentity:boolean,
  *            hostility:boolean, population:boolean, life:boolean}}
@@ -92,7 +92,7 @@ export function resolveSystemReveal(sys, deps = {}) {
     population: hasOwner ? atLeast('detailed') : explored,
 
     // D-188-6: życie to fakt o PLANETACH, nie o imperium — oś właściciela wypada całkowicie.
-    //   Skan STRATCOM świadomie NIE liczy się: jego ładunek to liczby ciał, nie biosfera
+    //   Skan układu świadomie NIE liczy się: jego ładunek to liczby ciał, nie biosfera
     //   (rozszerzenie skanu o życie = zmiana treści, poza zakresem tego slice'u).
     life: explored,
   };

@@ -16,14 +16,17 @@
 //   L12 `applyFlightPose` neutralizuje lerpy kontrolera (prawdziwy prototyp `ThreeCameraController`); `frameSystem` przykryty
 //   L13 orkiestracja `GalaxyModeController` na atrapie świata: wylot (przejście logiczne po 0,2 s), Esc w trakcie, wlot powrotny
 //       = migawka 1:1, wlot w INNY układ (kadr nowego układu z `switchSystem` przykryty pozą lotu, koniec = kadr), FLIGHT = 0
-//       i flaga OFF — twarde cięcie G1, przytrzymanie lotu (arkusz kontaktowy)
+//       i `prefers-reduced-motion` — twarde cięcie G1, przytrzymanie lotu (arkusz kontaktowy)
 //   L14 piny źródłowe wpięcia: hak kółka PRZED krokiem zoomu (po bramkach overlayu i UI); klawisze w locie bezczynne, Esc →
 //       `finishFlight` (wzór lotu intro)
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B): flagi `galaxyView` / `galaxyLook` na stałe ON, ścieżki OFF usunięte (`flightOn`
+//   nie czyta flagi) — wycofane L13m (flaga galaxyLook OFF — twarde cięcie G1); w jego miejsce L13n: drugi żywy wyzwalacz
+//   twardego cięcia na poziomie kontrolera — `prefers-reduced-motion` przy pokrętle FLIGHT = 1 i wolnym slocie sterownika;
+//   linie ustawiające i przywracające flagi usunięte (L13).
 // Uruchom: node src/testing/smoke/galaxy_flight_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import fs from 'node:fs';
 import * as T3 from '../../lib/three.core.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++; console.log('  ✗ FAIL:', m); } };
@@ -197,7 +200,6 @@ function mkCam({ targetDist = 233.5, goal = [4.2, 0, -7.7] } = {}) {
 
 header('L13 orkiestracja GalaxyModeController');
 {
-  const flagV = GAME_CONFIG.FEATURES.galaxyView, flagL = GAME_CONFIG.FEATURES.galaxyLook;
   const knob0 = GL?.LIVE_GALAXY?.FLIGHT;
   const galaxy = GG?.GalaxyGenerator?.generate?.(424242) ?? { systems: [] };
   const systems = galaxy.systems;
@@ -231,7 +233,6 @@ header('L13 orkiestracja GalaxyModeController');
     hudLayer: { setFlightAlpha: (a) => log.push(['hudAlpha', a]), wake: () => {} },
   };
   globalThis.window.KOSMOS = K;
-  GAME_CONFIG.FEATURES.galaxyView = true; GAME_CONFIG.FEATURES.galaxyLook = true;
   if (GL?.LIVE_GALAXY) GL.LIVE_GALAXY.FLIGHT = 1;
   const gm = GC?.GalaxyModeController ? new GC.GalaxyModeController() : null;
   const drive = (t) => call(() => tr._cinematicDriver?.(t));
@@ -281,18 +282,23 @@ header('L13 orkiestracja GalaxyModeController');
   const fi = call(() => gm.flightInfo());
   ok(held?.u === 0.6 && gm?.isFlying === true && near(fi?.t, 0.6 * 1400, 30), 'L13k `flightSeek(0.6, true)` — lot stoi w ułamku 0,6 (klatki arkusza)');
   call(() => gm.finishFlight()); call(() => gm.exit('debug')); call(() => gm.finishFlight());
-  // FLIGHT = 0 i flaga OFF — twarde cięcie G1
+  // FLIGHT = 0 i prefers-reduced-motion — twarde cięcie G1
   if (GL?.LIVE_GALAXY) GL.LIVE_GALAXY.FLIGHT = 0;
   log.length = 0;
   ok(call(() => gm.enter('key')) === true && gm?.isFlying === false && gm?.isActive === true && !log.some((e) => e[0] === 'begin'),
     'L13l pokrętło FLIGHT = 0 — twarde cięcie (bez lotu)');
   call(() => gm.exit('key'));
   if (GL?.LIVE_GALAXY) GL.LIVE_GALAXY.FLIGHT = 1;
-  GAME_CONFIG.FEATURES.galaxyLook = false;
+  // G5-B — w miejsce wycofanego L13m (flaga galaxyLook OFF): `prefers-reduced-motion` czytane przez kontroler (`_reducedMotion`).
+  // Slot sterownika wolny i pokrętło 1 — jedynym powodem twardego cięcia zostaje zapytanie o media.
+  const mm0 = globalThis.matchMedia;
+  globalThis.matchMedia = (q) => ({ matches: /prefers-reduced-motion:\s*reduce/.test(String(q)), addEventListener: () => {}, removeEventListener: () => {} });
+  const freeSlot = tr._cinematicDriver == null;
   log.length = 0;
-  ok(call(() => gm.enter('key')) === true && gm?.isFlying === false && !log.some((e) => e[0] === 'begin'), 'L13m flaga galaxyLook OFF — twarde cięcie G1');
+  ok(freeSlot && call(() => gm.enter('key')) === true && gm?.isFlying === false && gm?.isActive === true && !log.some((e) => e[0] === 'begin'),
+    'L13n prefers-reduced-motion (pokrętło FLIGHT = 1, slot sterownika wolny) — twarde cięcie (bez lotu)');
   call(() => gm.exit('key'));
-  GAME_CONFIG.FEATURES.galaxyView = flagV; GAME_CONFIG.FEATURES.galaxyLook = flagL;
+  globalThis.matchMedia = mm0;
   if (GL?.LIVE_GALAXY) GL.LIVE_GALAXY.FLIGHT = knob0;
 }
 

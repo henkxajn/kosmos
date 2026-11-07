@@ -3,7 +3,8 @@
 // przy przytrzymanym CTRL (ta sama flaga „pokaż wszystkie etykiety” co etykiety CTRL mapy układu —
 // `ThreeRenderer._showAllLabels`, przełączana w `GameScene` na Control). Rysunek — `HudSkyLabelLayer` (podwarstwa warstwy HUD).
 // Czysty: bez three, bez DOM, bez `window`; kolory podaje wołający (role motywu).
-//   • widoczność — JEDNA reguła (kolejność = kolejność sprawdzania): flaga `skyCatalog` (i istniejąca kopuła) · czysty widok
+//   • widoczność — JEDNA reguła (kolejność = kolejność sprawdzania): istniejąca kopuła nieba (flaga `skyCatalog` na stałe ON od
+//     ARC GALAXY G5 — powód „dome”, dawniej „flag”) · czysty widok
 //     SHIFT · overlay · tryb Y (taktyczny) · CTRL albo wymuszenie przyrządem bramki (`KOSMOS.debug.skyMarks(1)`) — przyrząd
 //     zastępuje WYŁĄCZNIE CTRL, pozostałe powody chowają dalej;
 //   • mgła wojny (D-GX-18): nazwa tylko przy `reveal.name` (kanon `SystemReveal`, składany w `SystemRevealWorld`) — inaczej
@@ -25,15 +26,15 @@ export const HUD_SKY_LABELS = Object.freeze({
 });
 
 /** Powody ukrycia — kolejność sprawdzania (keeper: tabela CTRL × SHIFT × overlay × Y). */
-export const SKY_LABEL_HIDE_REASONS = Object.freeze(['flag', 'cleanView', 'overlay', 'yMode', 'ctrl']);
+export const SKY_LABEL_HIDE_REASONS = Object.freeze(['dome', 'cleanView', 'overlay', 'yMode', 'ctrl']);
 
 /**
  * Czy rysować etykiety nieba.
- * @param {{flag?:boolean, cleanView?:boolean, overlay?:boolean, yMode?:boolean, ctrl?:boolean, forced?:boolean}} s
+ * @param {{dome?:boolean, cleanView?:boolean, overlay?:boolean, yMode?:boolean, ctrl?:boolean, forced?:boolean}} s
  * @returns {{ shown: boolean, reason: string|null }}
  */
-export function skyLabelGate({ flag = false, cleanView = false, overlay = false, yMode = false, ctrl = false, forced = false } = {}) {
-  if (flag !== true) return { shown: false, reason: 'flag' };
+export function skyLabelGate({ dome = false, cleanView = false, overlay = false, yMode = false, ctrl = false, forced = false } = {}) {
+  if (dome !== true) return { shown: false, reason: 'dome' };
   if (cleanView === true) return { shown: false, reason: 'cleanView' };
   if (overlay === true) return { shown: false, reason: 'overlay' };
   if (yMode === true) return { shown: false, reason: 'yMode' };

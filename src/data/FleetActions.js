@@ -221,7 +221,7 @@ const ACTIONS = {
 
   // ── Załadunek kolonistów bez startu (pre-load pod kolonizację cross-system) ──
   // Ładuje POPy na kolonizator i TRZYMA je (load-and-hold), bez wyboru celu i bez startu.
-  // Warp colony ship: załaduj tu → skok STRATCOM → „Kolonizuj obcy" (czyta vessel.colonists).
+  // Warp colony ship: załaduj tu → skok z mapy galaktyki → „Kolonizuj obcy" (czyta vessel.colonists).
   // Rozładunek: istniejący przycisk „Wyładuj kolonistów".
   load_colonists: {
     id: 'load_colonists',
@@ -681,7 +681,7 @@ export function getAvailableActions(vessel, state) {
       }
     }
     // (a') Finding 145 — `return_home` USUNIĘTE z listy akcji. Droga do domu = wysyłka z mapy
-    // galaktyki (Stratcom → statek → gwiazda domowa → „Wyślij"). Definicja ACTIONS.return_home
+    // galaktyki (tryb G / M: zaznaczony statek → PPM na gwieździe domowej). Definicja ACTIONS.return_home
     // zostaje jako martwy kod do sweepu 127.
     result.push(_check(ACTIONS.redirect, vessel, state));
     result.push(_check(ACTIONS.transport, vessel, state));

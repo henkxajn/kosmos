@@ -131,7 +131,7 @@ export class HudLayer {
     return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudLabelLayer(this), new HudFocusLayer(this), new HudSkyLabelLayer(this)];
   }
 
-  /** ARC GALAXY G1 — podwarstwy trybu galaktyki: nazwy płyty. G2-2 (flaga `galaxyLook`; przy OFF nowe podwarstwy milczą):
+  /** ARC GALAXY G1 — podwarstwy trybu galaktyki: nazwy płyty. G2-2:
    *  szlaki i trasy (pod spodem), ping obserwatorium, szyna statków, nazwy z rozwinięciem i przypięciem (ostatnie — ich
    *  anti-overlap czyta przeszkody zebrane wcześniej w tej klatce: odczyt pingu, wiersze szyny, blipy). */
   _defaultGalaxySublayers() {

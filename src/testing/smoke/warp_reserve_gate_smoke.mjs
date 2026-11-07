@@ -8,15 +8,19 @@
 // T2  beginJourney — odmowa nic nie rusza (paliwo, stan, misja, trasa, układ); kontrola: kadłub w służbie startuje
 // T3  dispatchInterstellar (gałąź gracza) — ten sam termin dla wejść omijających planer; `force` omija paliwo, nie załogę
 // T4  KONTROLA: gałąź AI nietknięta — kadłub imperium `stored` / `active` skacze jak dotąd; canOrder dalej `not_player`
-// T5  KONTROLA: flaga OFF = stan sprzed kroku — rezerwa skacze (dowód, że termin stoi za flagą i że fixture skoku jest żywy)
+// T5  (wycofany w G5-B — flaga `galaxyWarp` zdjęta, termin rezerwy bezwarunkowy)
 // T6  powód dociera przez fasadę: `OrderService.issueWarp` → `vessel_in_reserve`
+//
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flaga `galaxyWarp` na stałe ON, ścieżka OFF usunięta): T5 wycofany w całości (rezerwa
+//   skacze przy OFF, dyspozytor przyjmuje `mobilizing` przy OFF, brak klucza = OFF) — terminu za flagą już nie ma. Żywość fixture'u
+//   skoku pinują dalej kontrole T2 („active startuje”) i T3 („active → dyspozytor przyjmuje”). Ustawianie flagi w setupie i import
+//   `GAME_CONFIG` (służył tylko jej przestawianiu) usunięte.
 
 globalThis.localStorage = { _s: {}, getItem(k) { return this._s[k] ?? null; }, setItem(k, v) { this._s[k] = String(v); }, removeItem(k) { delete this._s[k]; } };
 globalThis.window = globalThis.window ?? globalThis;
 globalThis.window.KOSMOS = {};
 globalThis.document = globalThis.document ?? { createElement: () => ({ style: {}, appendChild() {}, addEventListener() {} }) };
 
-const { GAME_CONFIG } = await import('../../config/GameConfig.js');
 const { WarpRouteSystem } = await import('../../systems/WarpRouteSystem.js');
 const { VesselManager } = await import('../../systems/VesselManager.js');
 const { OrderService } = await import('../../systems/OrderService.js');
@@ -57,8 +61,6 @@ function mk(over = {}) {
   return v;
 }
 const snap = (v) => JSON.stringify({ f: v.warpFuel.current, st: v.position.state, d: v.position.dockedAt, m: v.mission, r: v.warpRoute, s: v.systemId, status: v.status });
-
-GAME_CONFIG.FEATURES.galaxyWarp = true;
 
 header('T1 canOrder — termin służby');
 {
@@ -114,19 +116,7 @@ header('T4 KONTROLA — gałąź AI nietknięta');
   ok(wrs.canOrder(ai('stored')).reason === 'not_player', 'canOrder dla statku AI dalej not_player');
 }
 
-header('T5 KONTROLA — flaga OFF = stan sprzed kroku');
-{
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  const a = mk({ serviceState: 'stored' });
-  ok(wrs.canOrder(a).ok === true, 'OFF: canOrder przepuszcza stored');
-  ok(wrs.beginJourney(a.id, 'B').ok === true && a.position.state === 'in_transit', 'OFF: rezerwa skacze jak przed krokiem');
-  const b = mk({ serviceState: 'mobilizing' });
-  ok(vm.dispatchInterstellar(b.id, 'B') === true, 'OFF: dyspozytor przyjmuje mobilizing');
-  delete GAME_CONFIG.FEATURES.galaxyWarp;
-  const c = mk({ serviceState: 'stored' });
-  ok(wrs.canOrder(c).ok === true, 'brak klucza = OFF');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
-}
+// T5 — wycofany w G5-B (flaga `galaxyWarp` zdjęta; zob. nagłówek).
 
 header('T6 powód przez fasadę OrderService');
 {

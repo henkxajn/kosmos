@@ -1,6 +1,6 @@
 // OrderService — zunifikowana fasada wydawania rozkazów flocie.
 //
-// Cel: JEDEN punkt wejścia, który WSZYSTKIE UI (rejestr floty, mapa Stratcom G,
+// Cel: JEDEN punkt wejścia, który WSZYSTKIE UI (rejestr floty, mapa galaktyki G / M,
 // menu PPM mapy) wołają zamiast trzech rozbieżnych ścieżek. Fasada jest CIENKIM
 // routerem — nie reimplementuje logiki (paliwo, dystans, Kepler, pętle zostają
 // w MissionSystem / VesselManager / WarpRouteSystem). Kolaboratorzy rozwiązywani
@@ -23,7 +23,6 @@
 import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { t }         from '../i18n/i18n.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
@@ -181,7 +180,6 @@ export class OrderService {
       accepted: [],
       bindingMemberId: extra.bindingMemberId ?? null,
     });
-    if (!GAME_CONFIG.FEATURES?.fleetWarp) return refusal('feature_off');
     if (!targetSystemId) return refusal('no_target');
     const fleet = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId);
     if (!fleet) return refusal('fleet_not_found');

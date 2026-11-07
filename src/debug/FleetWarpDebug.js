@@ -8,7 +8,6 @@
 //   fleetWarpDivert(i)      — i-ty członek (od 1) zjeżdża z trasy i leci własnym skokiem gdzie indziej
 //   fleetWarpStop()         — Stop floty: ta sama metoda co chip „Stop” panelu floty i „Anuluj rozkaz” w Dowództwie
 //   fleetWarpOwnOrder(i)    — i-ty członek (od 1) dostaje własny skok do najbliższego układu: czy po Stopie jest wolny
-//   fleetWarpAI()           — para okrętów AI: `issueGroupAttack` przy fleetWarp ON i OFF, odczyt SB54
 //   fleetWarpSave()         — zapis do slotu (ta sama ścieżka co menu); po nim F5 i „Kontynuuj”
 // Finding 603 (docs/design/GALAXY_603_GATE_CHECKLIST.md), domyślnie zaznaczony statek:
 //   probe603(id)            — odczyt: stan, układ, misja, rozkaz żywy i ostatni, trasa, rdzenie, Rejestr, płyta, starcie; `patients` = statki w stanie z 603
@@ -277,32 +276,6 @@ export function fleetWarpDebugHelpers() {
       return { ok: true, year: round(K().timeSystem?.gameTime, 4) };
     },
 
-    fleetWarpAI() {
-      const k = K(), vm = k.vesselManager, cfg = GAME_CONFIG.FEATURES;
-      const empire = (k.empireRegistry?.listAll?.() ?? []).find((e) => k.directorProduction?.capitalOf?.(e.id));
-      if (!empire) return { ok: false, reason: 'no_ai_empire' };
-      const systemId = systemIdOf(EntityManager.get(k.directorProduction.capitalOf(empire.id)?.planetId));
-      // Istniejąca furtka debugowa: `createAIVessel` należy wyłącznie do puli floty (AI STRIKES BACK, keeper `sb1_fleet_pool` T10e).
-      const spawn = () => {
-        const r = spawnEnemyRaider({ empireId: empire.id, systemId, autoOrder: false });
-        return vm.getVessel(r?.vesselId) ?? null;
-      };
-      const body = k.homePlanet;
-      const run = (flag) => {
-        const was = cfg.fleetWarp;
-        cfg.fleetWarp = flag;
-        const a = spawn(), b = spawn();
-        const r = k.orderService.issueGroupAttack([a?.id, b?.id], { targetBodyId: body.id, targetSystemId: systemIdOf(body), groupId: 'g4_k9' });
-        const shape = (v) => ({ type: v.mission?.type ?? null, to: v.mission?.toSystemId ?? null, warpSpeed: v.mission?.warpSpeed ?? null, pending: v.pendingOrder?.kind ?? null, group: v.pendingOrder?.groupId ?? null, route: v.warpRoute ?? null, warpGroupId: v.mission?.warpGroupId ?? null });
-        const out = { ok: r?.ok === true, composite: r?.composite ?? null, sameAngle: Number.isFinite(a?.mission?.arrivalAngle) && a.mission.arrivalAngle === b?.mission?.arrivalAngle, a: shape(a), b: shape(b) };
-        for (const v of [a, b]) if (v) vm.destroyVessel(v.id, { reason: 'dismantled' });
-        cfg.fleetWarp = was;
-        return out;
-      };
-      const on = run(true), off = run(false);
-      return { empire: empire.id, on, sameAsOff: JSON.stringify(on) === JSON.stringify(off) };
-    },
-
     // ── Finding 603 (docs/design/GALAXY_603_GATE_CHECKLIST.md) ──
     probe603(vesselId = K().uiManager?.getSelectedVesselId?.() ?? probe603Last) {
       const k = K(), v = k.vesselManager?.getVessel?.(vesselId), patients = warpPatients();
@@ -422,7 +395,7 @@ const aiEmpire = () => (K().empireRegistry?.listAll?.() ?? []).find((e) => K().d
 const shipBits = (v) => JSON.stringify([v.position, v.status, v.systemId, v.mission, v.movementOrder, v.warpFuel, v.warpRoute ?? null]);
 const nearestEnemy = (v) => ships().filter((e) => isEnemyVessel(e) && !e.isWreck && e.systemId === v.systemId).sort((a, b) => auBetween(v, a) - auBetween(v, b))[0] ?? null;
 
-/** Rajder AI w układzie statku, `au` od niego. Istniejąca furtka debugowa, ta sama co `fleetWarpAI`. Rodzi się w najbliższym układzie i zostaje przestawiony: furtka odmawia układu domowego (Finding 277), a flota z `fleetWarpRig` stoi przy domu. */
+/** Rajder AI w układzie statku, `au` od niego. Istniejąca furtka debugowa (`spawnEnemyRaider`). Rodzi się w najbliższym układzie i zostaje przestawiony: furtka odmawia układu domowego (Finding 277), a flota z `fleetWarpRig` stoi przy domu. */
 function raiderNear(v, au) {
   const empire = aiEmpire();
   if (!empire) return null;

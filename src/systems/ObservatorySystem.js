@@ -27,7 +27,7 @@ import { SystemGenerator } from '../generators/SystemGenerator.js';
 // Zasięg detekcji wrogich statków per poziom obserwatorium (AU).
 // Index 0 = brak obserwatorium — każda kolonia dostaje 1 AU pasywnego wzroku
 // (planeta widzi własną orbitę). Lv4+ = ∞ (cały układ); Lv5/Lv6 dokładają radar LY
-// galaktyczny (Stratcom, patrz STRATCOM_LY_BY_LEVEL w FleetManagerOverlay).
+// galaktyczny (mapa galaktyki — pierścień zasięgu i bramka skanu; tabela STRATCOM_LY_BY_LEVEL w `utils/ObservatoryRange.js`).
 const VESSEL_DETECTION_RANGE = [1, 3, 6, 15, Infinity, Infinity, Infinity];
 
 // Co ile civYears odświeżać pozycję ghost-sightingu już-wykrytych statków (throttle — ogranicza
@@ -44,7 +44,7 @@ const SCAN_DURATION_YEARS = 3.0;
 // Po ukończeniu ciało → explored (zgrubny poziom: kolonizacja + obecność surowców, bez ilości).
 const BODY_SCAN_DURATION_YEARS = 0.25;
 
-// Czasowy skan obcego układu z STRATCOM. Czas liczony w latach GRY (deltaYears z time:tick,
+// Czasowy skan obcego układu ([ Skanuj ] przypięcia gwiazdy w trybie galaktyki). Czas liczony w latach GRY (deltaYears z time:tick,
 // NIE civYears) — stały 1 rok gry, niezależnie od poziomu obserwatorium (decyzja gracza).
 const SYSTEM_SCAN_DURATION_YEARS = 1.0;
 
@@ -74,11 +74,11 @@ export class ObservatorySystem {
     // BODY_SCAN_DURATION/level → body.explored=true (zgrubny). Persystuje w save.
     this._bodyScans = new Map();
 
-    // Skan STRATCOM — aktywne czasowe skany obcych układów:
+    // Skan układu — aktywne czasowe skany obcych układów:
     // Map<systemId, {progress, startedYear, targetTier}>. Persystuje w save.
     this._systemScans = new Map();
 
-    // Skan STRATCOM — ukończone wyniki: Map<systemId, {tier, counts}>.
+    // Skan układu — ukończone wyniki: Map<systemId, {tier, counts}>.
     // tier: 1=liczba planet, 2=+księżyce, 3=wszystkie ciała (rozbicie). Persystuje w save.
     this._systemScanResults = new Map();
 
@@ -86,7 +86,7 @@ export class ObservatorySystem {
     this._gameYear = 0;
 
     // Nasłuch czasu — civDeltaYears (mechaniki 4X biegną szybciej) + deltaYears (lata gry:
-    // skan STRATCOM liczy się w czasie GRY, nie civ, by trwał dokładnie 1 rok gry).
+    // skan układu liczy się w czasie GRY, nie civ, by trwał dokładnie 1 rok gry).
     EventBus.on('time:tick', ({ civDeltaYears, deltaYears }) => {
       if (!window.KOSMOS?.civMode) return;
       this._tickScan(civDeltaYears, deltaYears);
@@ -397,7 +397,7 @@ export class ObservatorySystem {
     return window.KOSMOS?.homePlanet?.name ?? t('observatory.title');
   }
 
-  // ── Czasowy skan obcego układu (STRATCOM) ──────────────────────────────
+  // ── Czasowy skan obcego układu ─────────────────────────────────────────
   // Zdalny skan gwiazdy ujawnia liczbę ciał układu, BEZ jego eksploracji/kolonizacji.
   // Tier wg poziomu obserwatorium: Lv2→planety, Lv3-4→+księżyce, Lv5+→wszystkie ciała.
 
@@ -560,7 +560,7 @@ export class ObservatorySystem {
     // Ręczne skany ciał niebieskich (reforma obserwatorium — zastąpił pasywny auto-skan).
     this._tickBodyScans(civDeltaYears);
 
-    // Czasowe skany obcych układów (STRATCOM) — w czasie GRY (deltaYears), nie civ.
+    // Czasowe skany obcych układów — w czasie GRY (deltaYears), nie civ.
     this._tickSystemScans(gameDeltaYears);
   }
 
@@ -709,7 +709,7 @@ export class ObservatorySystem {
     const bodyScans = {};
     this._bodyScans.forEach((val, key) => { bodyScans[key] = val; });
 
-    // Skan STRATCOM — aktywne skany układów + ukończone wyniki (Map→obj).
+    // Skan układu — aktywne skany układów + ukończone wyniki (Map→obj).
     const systemScans = {};
     this._systemScans.forEach((val, key) => { systemScans[key] = val; });
     const systemScanResults = {};
@@ -758,7 +758,7 @@ export class ObservatorySystem {
       this._bodyScans.set(key, val);
     }
 
-    // Skan STRATCOM — aktywne skany + wyniki (defensywny default = brak; bez migracji save v89).
+    // Skan układu — aktywne skany + wyniki (defensywny default = brak; bez migracji save v89).
     for (const [key, val] of Object.entries(data.systemScans ?? {})) {
       this._systemScans.set(key, val);
     }

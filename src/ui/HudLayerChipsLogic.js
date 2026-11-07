@@ -9,7 +9,7 @@
 //     [T] wyłączone = bez tras; [R] = ten sam przełącznik co ☰ „Radar” (tryb Y nadal wymusza radar);
 //   • klawisze Digit6–Digit9 (kolejność = kolejność chipów; `e.code` — niezależnie od układu klawiatury), wyłącznie z fokusem na
 //     mapie: tryb cywilizacji, bez overlayu, bez okna DOM, bez modyfikatorów (Shift — czysty widok, Ctrl — etykiety CTRL);
-//   • ARC GALAXY G3 (flaga `galaxyWarp`): w trybie galaktyki miejsce [O] i klawisz 9 należą do warstwy `ships` — „Okręty” (EN „Ships”):
+//   • ARC GALAXY G3: w trybie galaktyki miejsce [O] i klawisz 9 należą do warstwy `ships` — „Okręty” (EN „Ships”):
 //     nazwy szyny statków wszędzie. Stan w `uiPrefs.hudLayers.ships`, domyślnie WYŁĄCZONY (domyślnie szyna bez nazw); orbity bez zmian;
 //   • chipy w idiomie chipów T5 (tekst „[ R ]”, 16 px — `CHIP_SPACED`, decyzja właściciela 2026-10-28): włączony — rola
 //     `primary`; wyłączony — rola `dim`, przekreślony (`CHIP_OFF_STYLE` 'strike'; wariant „bez nawiasów” — 'bare'); szerokość
@@ -30,21 +30,19 @@ export const HUD_LAYER_CODES = Object.freeze({ Digit6: 'radar', Digit7: 'routes'
 export const HUD_LAYER_KEY_LABEL = Object.freeze({ radar: '6', routes: '7', labels: '8', orbits: '9', [GALAXY_SHIPS_LAYER]: '9' });
 
 /**
- * ARC GALAXY G2-2 (D-GX-16) — warstwy z chipem w danym trybie mapy: tryb galaktyki (flaga `galaxyLook`) — [R] = ping
- * obserwatorium, [T] = szlaki + trasy, [E] = nazwy płyty; [O] (orbity układu) bez chipu i bez klawisza 9. Tryb układu — wszystkie.
- * ARC GALAXY G3: `shipsChip` (flaga `galaxyWarp`) — w trybie galaktyki miejsce [O] zajmują „Okręty”.
+ * ARC GALAXY G2-2 (D-GX-16) — warstwy z chipem w danym trybie mapy: tryb galaktyki — [R] = ping obserwatorium, [T] = szlaki +
+ * trasy, [E] = nazwy płyty, a miejsce [O] (orbity układu — bez chipu i bez klawisza 9) zajmują „Okręty” (G3). Tryb układu — wszystkie.
  */
-export function chipLayersFor(galaxyActive, shipsChip = false) {
+export function chipLayersFor(galaxyActive) {
   if (!galaxyActive) return HUD_LAYER_KEYS.slice();
-  const base = HUD_LAYER_KEYS.filter((L) => L !== 'orbits');
-  return shipsChip ? [...base, GALAXY_SHIPS_LAYER] : base;
+  return [...HUD_LAYER_KEYS.filter((L) => L !== 'orbits'), GALAXY_SHIPS_LAYER];
 }
 
 /** Rząd chipów trybu mapy z rzędu `layoutLayerChips`: miejsce [O] przejmują „Okręty”, chipy spoza trybu odpadają (miejsce zostaje puste). */
-export function chipsForMode(chips, galaxyActive, shipsChip = false) {
-  const keep = chipLayersFor(galaxyActive, shipsChip);
+export function chipsForMode(chips, galaxyActive) {
+  const keep = chipLayersFor(galaxyActive);
   return (chips ?? [])
-    .map((c) => (galaxyActive && shipsChip && c.layer === 'orbits' ? { ...c, layer: GALAXY_SHIPS_LAYER } : c))
+    .map((c) => (galaxyActive && c.layer === 'orbits' ? { ...c, layer: GALAXY_SHIPS_LAYER } : c))
     .filter((c) => keep.includes(c.layer));
 }
 

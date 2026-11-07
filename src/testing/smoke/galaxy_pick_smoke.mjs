@@ -15,7 +15,14 @@
 //       galaktyki — wyłącznie podwarstwy galaktyki (klatka, klik, najechanie, pokrycie), w trybie układu — wyłącznie układu
 //       (prawdziwy `HudLayer`, podwarstwy-sondy); (c) nazwa płyty = strefa HUD: klik w nią wybiera jej gwiazdę
 //   P7  scena w trybie galaktyki (WYKONANIE metod `GameScene` ze źródła na atrapie `this`): klik mapy — tylko wynik pickera
-//       płyty (bez pickera celu i raycastu układu); prawy klik — bez menu mapy (G3); najechanie — bez współrzędnych układu
+//       płyty (bez pickera celu i raycastu układu); prawy klik — tylko menu skoku z gwiazdy (G3-B), bez raycastu układu;
+//       najechanie — bez współrzędnych układu
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B): flaga `galaxyWarp` na stałe ON, ścieżka OFF usunięta (w `_handleTacticalRightClick`
+//   nie ma już bramki flagi przed menu gwiazdy) — wycofane P7b (prawy klik przy fladze OFF: bez menu mapy, jak w G1); P7b2
+//   bez zmian poza etykietą bez nazwy flagi (świadek dwustronny: menu gwiazdy wołane, raycast układu nie); linie ustawiające
+//   i przywracające flagę usunięte (P7). `GAME_CONFIG` zostaje w zakresie kompilacji — metody sceny czytają inne flagi
+//   (`fcMultiSelect`, `fcConsole`, `fcCommandFromMap`). P6f — napis etykiety z kształtu ścieżki G2 (`lines[0].text`; pole
+//   `text` miała tylko usunięta ścieżka G1) + świadek niepustego napisu (połówka „nigdy ???” nie przechodzi już na pustych).
 // Uruchom: node src/testing/smoke/galaxy_pick_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
@@ -226,8 +233,11 @@ header('P6  strefy HUD pierwsze');
   const out = run(() => L.collect(F, proj)) ?? {};
   const labs = L?._last?.labels ?? [];
   const lb = labs.find((l) => l.id === 'sys_b');
-  ok(labs.length === 2 && !labs.some((l) => l.id === 'sys_q') && !labs.some((l) => /\?\?\?/.test(l.text ?? '')),
-    `P6f nazwy: gwiazdy z ujawnioną nazwą (dom, Bellatrix); bez nazwy — goła, nigdy „???” (${labs.map((l) => l.text).join(', ')})`);
+  // G5-B — ścieżka G1 usunięta: etykieta ścieżki G2 niesie napis w `lines[0].text` (pole `text` miała tylko G1). Świadek
+  // niepustego napisu — bez niego połówka „nigdy ???” przechodziłaby na pustych napisach.
+  const labText = (l) => l?.lines?.[0]?.text ?? '';
+  ok(labs.length === 2 && !labs.some((l) => l.id === 'sys_q') && labs.every((l) => labText(l).length > 0) && !labs.some((l) => /\?\?\?/.test(labText(l))),
+    `P6f nazwy: gwiazdy z ujawnioną nazwą (dom, Bellatrix); bez nazwy — goła, nigdy „???” (${labs.map(labText).join(', ')})`);
   K.galaxyMode = KW.galaxyMode;   // klik podwarstwy woła kontroler z `window.KOSMOS` (świat gry)
   ok(!!lb && run(() => L.handleClick(lb.x + 3, lb.y + 3)) === true && plateClicks[0] === 'sys_b' && run(() => L.handleClick(1, 1)) === false,
     'P6g klik w nazwę = klik w JEJ gwiazdę (strefa HUD przed wyborem płyty); poza nazwą — nie pochłania');
@@ -245,18 +255,12 @@ header('P7  scena w trybie galaktyki (GameScene, wykonanie ze źródła)');
   ok(JSON.stringify(calls) === '[[null,false,null,"galaxyStar"]]' && [...sl.seen].every((k) => k === 'planetScene' || k === '_selectFromClickPick'),
     `P7a klik mapy: wyłącznie wynik pickera płyty (statek z pickera układu ignorowany), dotknięte {${[...sl.seen].join(', ')}}`);
   const right = compile(GS, '_handleTacticalRightClick', { window: globalThis.window, document: globalThis.document, GAME_CONFIG });
-  // G3-B podnosi bramkę G1 wyłącznie dla menu skoku z gwiazdy (`_openGalaxyStarMenu`, keeper `galaxy_warp_ui`). Flaga OFF — jak w G1.
-  const warpFlag = GAME_CONFIG.FEATURES.galaxyWarp;
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  const sr = spyThis({});
-  run(right, sr.p, { target: { id: 'planet-canvas' }, clientX: 5, clientY: 5, preventDefault() {} });
-  ok([...sr.seen].every((k) => k === 'planetScene'), `P7b prawy klik (galaxyWarp OFF): bez menu mapy, dotknięte {${[...sr.seen].join(', ')}}`);
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
+  // G3-B — w trybie galaktyki jedynym menu mapy jest skok z gwiazdy płyty (`_openGalaxyStarMenu`, keeper `galaxy_warp_ui`);
+  // od G5-B bez bramki flagi (dawne P7b — flaga OFF, bez menu — wycofane).
   const menus = [];
   const srOn = spyThis({ _openGalaxyStarMenu: (...a) => menus.push(a), _resolveClickTarget: () => { menus.push('raycast'); return null; } });
   run(right, srOn.p, { target: { id: 'planet-canvas' }, clientX: 5, clientY: 5, preventDefault() {} });
-  ok(JSON.stringify(menus) === '[[5,5]]', `P7b2 prawy klik (galaxyWarp ON): tylko menu gwiazdy, bez raycastu układu (${JSON.stringify(menus)})`);
-  GAME_CONFIG.FEATURES.galaxyWarp = warpFlag;
+  ok(JSON.stringify(menus) === '[[5,5]]', `P7b2 prawy klik w trybie galaktyki: tylko menu gwiazdy, bez raycastu układu (${JSON.stringify(menus)})`);
   const tip = compile(GS, '_tooltipHoverFromMain3D', { window: globalThis.window, document: globalThis.document, GAME_CONFIG });
   const tips = [];
   const st = spyThis({ _scheduleEntityTooltip: (...a) => tips.push(a) });

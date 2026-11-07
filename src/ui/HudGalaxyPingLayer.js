@@ -9,10 +9,8 @@
 //     skanu układu (`observatory:systemScanStarted`) — czas realny; kolejne co 6 s zegara symulacji; ping stoi, gdy pierścień
 //     większy niż kadr (`pingStopReason`);
 //   • chip [R] (D-GX-16: ping obserwatorium) — wyłączony: nic; krycie × rozjaśnienie chromu.
-// Flaga `galaxyLook` OFF — podwarstwa milczy.
 // ⚠ Moduł importuje się pod node: bez three i bez DOM.
 import EventBus from '../core/EventBus.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { t, getLocale } from '../i18n/i18n.js';
 import { fmtDec } from './NumberFormatLogic.js';
@@ -68,12 +66,10 @@ export class HudGalaxyPingLayer {
 
   destroy() { EventBus.off('observatory:systemScanStarted', this._onScan); }
 
-  _on() { return !!GAME_CONFIG.FEATURES?.galaxyView && !!GAME_CONFIG.FEATURES?.galaxyLook; }
-
   prepare(F) {
     const K = F.K, gm = K?.galaxyMode, tr = K?.threeRenderer;
     this._simNow = F.sim;
-    if (!this._on() || gm?.isActive !== true || !F.att?.layers?.radar || typeof tr?.getGalaxyStarsWorld !== 'function') {
+    if (gm?.isActive !== true || !F.att?.layers?.radar || typeof tr?.getGalaxyStarsWorld !== 'function') {
       this._prep = { on: false };
       return 'gp:0';
     }

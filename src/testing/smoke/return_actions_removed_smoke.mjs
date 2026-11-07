@@ -5,17 +5,19 @@
 // na odmowie) USUWA cztery producenty przycisku: akcję `return_home` z listy akcji rejestru oraz
 // trzy strefy panelu (`interstellar_return`, `foreign_return`, `foreign_return_from_recon`).
 //
-// ⚠ USUWAMY PRZYCISKI, NIE ZDOLNOŚĆ. Drogą do domu zostaje wysyłka z mapy galaktyki:
-//   `_drawWarpShipList` (BEZ filtra stanu — listuje każdy statek gracza z bakiem warp)
-//   → `warp_ship_select` → klik gwiazdy domowej → `_drawWarpOrderPanel` → `warp_order_send`
-//   → `OrderService.issueWarp`. `WarpRouteSystem.canOrder` blokuje WYŁĄCZNIE `in_transit`.
-// ⚠ To jest JEDYNA droga z mapy — druga (`cluster_send` w panelu detalu) jest schowana dla domu
-//   (`FMO:6367  if (!sys.isHome)`). Dlatego A3 jest pinem pojedynczego punktu awarii i musi być
-//   zielony PO OBU stronach: gdyby padł, usunęlibyśmy zdolność, a nie przycisk.
+// ⚠ USUWAMY PRZYCISKI, NIE ZDOLNOŚĆ. Drogą do domu zostaje skok z mapy galaktyki (tryb G / M):
+//   zaznaczony statek → PPM na gwieździe domowej → pozycja menu `galaxyStarMenuEntries` → `runGalaxyWarpOrder`
+//   → `OrderService.issueWarp` (także [ Wyślij ▼ ] przypięcia gwiazdy). Bramka: `WarpRouteSystem.canOrder`.
+// ⚠ A3 jest pinem pojedynczego punktu awarii i musi być zielony PO OBU stronach: gdyby padł, usunęlibyśmy zdolność,
+//   a nie przycisk.
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — zakładka Stratcom usunięta, D-GX-21): A3 pinował dawną drogę z mapy Stratcomu
+//   (`_drawWarpShipList` → `warp_order_send` z `_drawWarpOrderPanel`). Panel rozkazu zniknął z zakładką, więc A3 czyta jej
+//   następcę z G3: menu gwiazdy domu w trybie galaktyki (`galaxyStarMenuEntries`) i rozkaz `runGalaxyWarpOrder` — ten sam
+//   statek na obcej orbicie, ten sam cel. Zamiar bez zmian (zdolność powrotu z mapy zostaje); wzór — `galaxy_warp_ui` T6.
 //
 // A1  PIN   — `return_home` nie wychodzi z `_getAvailableActions` w ŻADNYM stanie
 // A2  PIN   — trzy strefy powrotu nie są renderowane przez żaden panel
-// A3  KONTROLA — mapa galaktyki DALEJ wystawia `warp_order_send` dla statku na obcej orbicie
+// A3  KONTROLA — mapa galaktyki DALEJ wysyła statek z obcej orbity do domu (menu gwiazdy domu, G3)
 // A4  KONTROLA — `canOrder`: obca orbita OK, `in_transit` odmowa (bramka nietknięta)
 // A5  KONTROLA — silnikowa ścieżka powrotu (handler `foreign_return`) DALEJ dyspozycjonuje skok
 // A6  PIN ŹRÓDŁOWY — komentarze w `issueOrder` nie powołują się już na przycisk powrotu
@@ -137,18 +139,20 @@ ok(arrival.zones.includes('cluster_switch'),
   'brak stref powrotu nie bierze się z braku rysowania');
 
 // ── A3 — KONTROLA: mapa galaktyki dalej wysyła do domu (POJEDYNCZY PUNKT AWARII) ──────────────
-header('A3 KONTROLA — `_drawWarpOrderPanel` dalej wystawia warp_order_send dla statku na obcej orbicie');
+header('A3 KONTROLA — menu gwiazdy domu w trybie galaktyki wysyła statek z obcej orbity do domu');
 vessels.clear(); vessels.set('v_1', makeVessel());
 globalThis.KOSMOS.warpRouteSystem = new WarpRouteSystem(vesselManager);
-const o3 = Object.create(FleetManagerOverlay.prototype);
-o3._selectedWarpShipId = 'v_1'; o3._hitZones = [];
-const drawn3 = [];
-o3._drawWarpOrderPanel(makeCtx(drawn3), 0, 0, 900, 700, GALAXY.systems[0], vesselManager);
-const z3 = o3._hitZones.map(z => z.type);
-ok(drawn3.length > 0, 'KONTROLA PINU: panel rozkazu warp faktycznie się narysował');
-ok(z3.includes('warp_order_send'),
-  `statek na obcej orbicie MOŻE zostać wysłany do domu z mapy (strefy: ${JSON.stringify(z3)}) — ` +
-  'to JEDYNA droga z mapy, bo cluster_send jest schowany dla domu (FMO:6367)');
+globalThis.KOSMOS.uiManager = { getSelectedVesselId: () => 'v_1', getSelectedVesselIds: () => ['v_1'], getSelectedFleetId: () => null };
+const { galaxyStarMenuEntries, runGalaxyWarpOrder } = await import('../../ui/GalaxyWarpLogic.js');
+const e3 = galaxyStarMenuEntries('sys_home', globalThis.KOSMOS)[0] ?? null;
+ok(!!e3, 'KONTROLA PINU: menu gwiazdy domu ma pozycję dla zaznaczonego statku');
+ok(e3?.enabled === true && e3.action === 'issueGalaxyWarp' && (e3.vesselIds ?? []).includes('v_1'),
+  `statek na obcej orbicie MOŻE zostać wysłany do domu z mapy galaktyki (pozycja: ${JSON.stringify({ enabled: e3?.enabled, action: e3?.action, reason: e3?.disabledReason })})`);
+warpCalls = [];
+const r3 = runGalaxyWarpOrder({ vesselIds: e3?.vesselIds ?? [], targetSystemId: 'sys_home', K: globalThis.KOSMOS });
+ok(r3?.moved === 1 && warpCalls.some((c) => c.id === 'v_1' && c.sys === 'sys_home'),
+  `rozkaz z menu idzie przez OrderService.issueWarp do domu (wywołania: ${JSON.stringify(warpCalls)})`);
+delete globalThis.KOSMOS.uiManager;
 
 // ── A4 — KONTROLA: bramka canOrder nietknięta ─────────────────────────────────────────────────
 header('A4 KONTROLA — canOrder: obca orbita OK, in_transit odmowa');

@@ -16,15 +16,18 @@
 //       `dimReason`
 //   S9  panele statku i floty dokują do wiersza w trybie galaktyki (`shipRowKeys` / `fleetRowKeys` + `resolveRowAnchor`)
 //   S10 po G3 (F3): sekcja układu bez nazwy — „???” + `textDim`; cel skoku ma sekcję bez statku na miejscu („→N”); dopisek i podpowiedź bez
-//       prawdziwej nazwy; KONTROLA: flaga OFF jak w G1
+//       prawdziwej nazwy
 //   S11 po G3 (F4): CTRL+klik wiersza przełącza statek w zbiorze; klik nagłówka sekcji w trybie galaktyki — gwiazda + rozwinięcie, 2. klik —
-//       wejście przez bramkę G1 (nie przełączenie układu z pominięciem bramki); KONTROLA: tryb układu i flaga OFF jak dotąd
+//       wejście przez bramkę G1 (nie przełączenie układu z pominięciem bramki); KONTROLA: tryb układu jak dotąd
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B): flaga `galaxyWarp` na stałe ON, ścieżki OFF usunięte — wycofane S10h (KONTROLA
+//   OFF: prawdziwa nazwa, cel skoku bez sekcji) i S11g (KONTROLA OFF: klik sekcji przełącza układ jak przed krokiem); S11k bez
+//   połówki OFF (zostaje tryb układu — bez podpowiedzi `cannotEnter`); świadkami ON zostają S10f (układy z nazwą — nazwa)
+//   i S11h (tryb układu — klik sekcji przełącza układ); linie ustawiające i przywracające flagę usunięte (S10, S11).
 // Uruchom: node src/testing/smoke/galaxy_ship_tree_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import EventBus from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
 import { THEME } from '../../config/ThemeConfig.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { t, setLocale } from '../../i18n/i18n.js';
 
 let GOL = null, OL = null, SPA = null, FPH = null;
@@ -215,8 +218,6 @@ header('S8  tryb układu bez zmian');
 }
 
 // ═══ S10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
-const fWarp = GAME_CONFIG.FEATURES.galaxyWarp;
-GAME_CONFIG.FEATURES.galaxyWarp = true;   // S10 / S11 pinują ścieżkę ON niezależnie od domyślnej flagi (przebieg całości z OFF)
 header('S10 sekcja układu bez nazwy i cel skoku');
 {
   const fog = { id: 'sys_fog', name: 'Sekret', x: 4, y: 0, z: 0, distanceLY: 4.0, spectralType: 'M', explored: false };
@@ -252,15 +253,6 @@ header('S10 sekcja układu bez nazwy i cel skoku');
   if (zf) call(() => ro.updateHover(zf.x + 60, zf.y + 4, W, H));
   const tip = (ro?._tip?.lines ?? []).map((l) => l.text).join(' | ');
   ok(!!zf && tip.includes('???') && !tip.includes('Sekret') && !tip.includes('Ziemia'), `S10g podpowiedź statku: układ „???”, bez nazwy gwiazdy i ciała („${tip}”)`);
-
-  const f0 = GAME_CONFIG.FEATURES.galaxyWarp;
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  const roOff = newRO();
-  call(() => roOff.toggleExpanded('sys_fog', 'sys_home'));
-  const offNames = drawRO(roOff).map((c) => c.s);
-  ok(offNames.includes('Sekret') && !offNames.includes('???') && !roOff?._layout?.result?.systems?.some?.((s) => s.systemId === 'sys_dst'),
-    'S10h KONTROLA OFF: prawdziwa nazwa, cel skoku bez sekcji — przyrząd widzi różnicę');
-  GAME_CONFIG.FEATURES.galaxyWarp = f0;
 
   // Sprzątanie: reszta keepera liczy statki i floty.
   for (const id of ['fs', 'tj', 'fm']) VMAP.delete(id);
@@ -306,16 +298,6 @@ header('S11 CTRL+klik i klik nagłówka sekcji');
   ok(ro.isExpanded('sys_far', 'sys_home') !== exp0 && log.length === 0, 'S11f strzałka — samo rozwinięcie, bez zaznaczenia i wejścia');
 
   log.length = 0;
-  const f0 = GAME_CONFIG.FEATURES.galaxyWarp;
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  const roOff = newRO(); drawRO(roOff);
-  roOff._lastMouseMods = { shift: false, ctrl: false };
-  const zo = zone(roOff, 'system', 'sys_far');
-  call(() => roOff.hitTest(zo.x + 60, zo.y + 4, W, H));
-  ok(JSON.stringify(log) === '[["switch","sys_far"]]', 'S11g KONTROLA OFF: klik sekcji przełącza układ jak przed krokiem');
-  GAME_CONFIG.FEATURES.galaxyWarp = f0;
-
-  log.length = 0;
   GM.isActive = false;
   const roSys = newRO(); drawRO(roSys);
   roSys._lastMouseMods = { shift: false, ctrl: false };
@@ -348,19 +330,13 @@ header('S11 CTRL+klik i klik nagłówka sekcji');
   const tipYes = roT._tip;
   ok(tipNo === t('leftOutliner.cannotEnter') && tipYes == null, 'S11j układ bez wejścia — podpowiedź z powodem; KONTROLA: z wejściem — bez niej');
   GM.canEnter = () => false;
-  const fT = GAME_CONFIG.FEATURES.galaxyWarp;
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  call(() => roT.updateHover(zt.x + 60, zt.y + 4, W, H));
-  const tipOff = roT._tip;
-  GAME_CONFIG.FEATURES.galaxyWarp = fT;
   GM.isActive = false;
   call(() => roT.updateHover(zt.x + 60, zt.y + 4, W, H));
   const tipSys = roT._tip;
   GM.isActive = true;
-  ok(tipOff == null && tipSys == null, 'S11k KONTROLA: flaga OFF i tryb układu — bez tej podpowiedzi (klik sekcji przełącza tam układ)');
+  ok(tipSys == null, 'S11k KONTROLA: tryb układu — bez tej podpowiedzi (klik sekcji przełącza tam układ)');
   delete GM.canEnter;
 }
-GAME_CONFIG.FEATURES.galaxyWarp = fWarp;
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

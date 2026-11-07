@@ -5,14 +5,12 @@
 //   • TRASY: własny statek w skoku warp — od punktu tranzytu do układu celu skoku (rola `primary`, krycie gasnące ku celowi
 //     — `routeAlpha`); FLOTA (≥ 2 członków na jednym przeskoku) — jedna trasa od układu ODLOTU do celu (T5); statek zaznaczony z trasą wieloprzeskokową — pozostałe przeskoki; obcy w skoku z wywiadem o STATKU
 //     `contact` / `detailed` w zasięgu obserwatorium — linia skoku w roli `foreign` (kanon Stratcomu; `rumor` — bez linii);
-//   • PODGLĄD SKOKU (G3-B, flaga `galaxyWarp`): zaznaczony statek z napędem warp + gwiazda pod kursorem (ta sama, która dostaje
+//   • PODGLĄD SKOKU (G3-B): zaznaczony statek z napędem warp + gwiazda pod kursorem (ta sama, która dostaje
 //     rozwinięcie — `hoverObjectKey`) — linia przez przeskoki i punkty w roli `primary`; odcinek poza zasięgiem baku i kadłub
 //     odrzucony przez bramkę — przygaszony i kropkowany (rola `dim` to akcent × 0,32: na płycie niewidoczna, jak przy granicy radaru
 //     w H1). Bez zaznaczenia nie ma podglądu (`warpHoverModel`). Znika razem z rozwinięciem;
 //   • chip [T] (D-GX-16: „trasy + szlaki”) — wyłączony: nic; krycie całości × rozjaśnienie chromu trybu galaktyki.
-// Flaga `galaxyLook` OFF — podwarstwa milczy (klucz stały, zero elementów).
 // ⚠ Moduł importuje się pod node (atrapa świata w keeperze): bez three i bez DOM.
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { HUD_NEAR_CLIP } from './HudProjection.js';
 import { clipRunsToRect } from './HudRadarLogic.js';
 import { HUD_ROUTES, marchOffset, routeAlpha, projectPolyline } from './HudRouteLogic.js';
@@ -22,7 +20,7 @@ import { GALAXY_K, GALAXY_FADE_MS, plateWorldOf } from './GalaxyModeLogic.js';
 import { galaxyShipRail, galaxyEnemyBlips, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
 import { buildFleetIndex, groupTransitByFleet, routeEndpoints } from './GalaxyShipMarkerLogic.js';
 import { observatoryRangeLY } from '../utils/ObservatoryRange.js';
-import { galaxyWarpOn, warpHoverModel, fleetWarpStatus } from './GalaxyWarpLogic.js';
+import { warpHoverModel, fleetWarpStatus } from './GalaxyWarpLogic.js';
 
 // Rysunek (px logiczne). Strojenie okiem — bez pinów keepera.
 export const HUD_GALAXY_ROUTES = Object.freeze({
@@ -48,11 +46,9 @@ export class HudGalaxyRouteLayer {
     this._last = { lanes: [], routes: [] };
   }
 
-  _on() { return !!GAME_CONFIG.FEATURES?.galaxyView && !!GAME_CONFIG.FEATURES?.galaxyLook; }
-
   prepare(F) {
     const K = F.K, gm = K?.galaxyMode, tr = K?.threeRenderer;
-    if (!this._on() || gm?.isActive !== true || !F.att?.layers?.routes || typeof tr?.getGalaxyAnchorLy !== 'function') {
+    if (gm?.isActive !== true || !F.att?.layers?.routes || typeof tr?.getGalaxyAnchorLy !== 'function') {
       this._prep = { on: false };
       return 'gr:0';
     }
@@ -96,7 +92,7 @@ export class HudGalaxyRouteLayer {
       if (rest.length >= 2) hops = rest;
     }
     // Podgląd skoku: gwiazda z rozwinięcia (ostatnia klatka warstwy etykiet) + zaznaczony statek.
-    const hoverKey = galaxyWarpOn() ? (this._hud?.hoverObjectKey?.() ?? null) : null;
+    const hoverKey = this._hud?.hoverObjectKey?.() ?? null;
     const hoverId = typeof hoverKey === 'string' && hoverKey.startsWith('galaxy:') ? hoverKey.slice(7) : null;
     const preview = hoverId != null ? warpHoverModel(hoverId, K) : null;
     const anchor = tr.getGalaxyAnchorLy();

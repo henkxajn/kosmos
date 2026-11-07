@@ -55,7 +55,7 @@ export class TerritoryField {
     this._lastComputeYear = window.KOSMOS?.timeSystem?.gameTime ?? this._lastComputeYear;
     this._territories.clear();
 
-    // Kill-switch: OFF = zero kosztu (Stratcom bez warstwy politycznej)
+    // Kill-switch: OFF = zero kosztu (płyta galaktyki bez warstwy politycznej)
     if (!GAME_CONFIG.FEATURES?.territoryOverlay) { EventBus.emit('territory:changed', {}); return; }
 
     const terr = window.KOSMOS?.territoryService;

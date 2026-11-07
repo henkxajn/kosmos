@@ -36,8 +36,8 @@ export function resolveMaxAnisotropy(renderer) {
 
 /**
  * Rejestruje anizotropię dla tekstur ładowanych przez ten moduł.
- * ⚠ Cache jest WSPÓŁDZIELONY przez ThreeRenderer, PlanetGlobeRenderer i
- *   StratcomGalaxyRenderer, a każdy ma własny WebGLRenderer i konstruuje się
+ * ⚠ Cache jest WSPÓŁDZIELONY przez ThreeRenderer i PlanetGlobeRenderer (do G5 także
+ *   StratcomGalaxyRenderer), a każdy ma własny WebGLRenderer i konstruuje się
  *   w innym momencie. Dlatego setter RETRO-APLIKUJE wartość na tekstury już
  *   wczytane — inaczej to, czy tekstura dostanie anizotropię, zależałoby od
  *   kolejności konstruowania rendererów (cicha pułapka kolejnościowa).
@@ -136,9 +136,9 @@ export function loadPlanetTextures(texType, variant) {
  *
  * ⚠ V-265 — ładujemy WYŁĄCZNIE `emission`. Mapy `diffuse` i `normal` były wczytywane
  *   od zawsze i NIE MAJĄ konsumenta nigdzie w src/: obaj wołający czytają tylko
- *   `.emission` (ThreeRenderer — tarcza gwiazdy; StratcomGalaxyRenderer — gwiazdy mapy
- *   galaktyki). Cena tej bezczynności: 24 pliki ≈ 23,6 MiB na dysku, do 24 żądań HTTP
- *   i ~64 MiB VRAM po rozpakowaniu (1024×512 RGBA + mipy), gdy Stratcom rozgrzeje
+ *   `.emission` (ThreeRenderer — tarcza gwiazdy; do G5 także StratcomGalaxyRenderer — gwiazdy
+ *   dawnej mapy galaktyki). Cena tej bezczynności: 24 pliki ≈ 23,6 MiB na dysku, do 24 żądań HTTP
+ *   i ~64 MiB VRAM po rozpakowaniu (1024×512 RGBA + mipy), gdy dawny Stratcom rozgrzał
  *   wszystkie 12 wariantów.
  * ⚠ Pliki PNG ZOSTAJĄ w assets/, a generator nie przestaje ich robić — kasowanie
  *   assetów to osobna decyzja, nie skutek uboczny tej.

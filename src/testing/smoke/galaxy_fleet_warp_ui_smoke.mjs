@@ -1,5 +1,5 @@
 // galaxy_fleet_warp_ui_smoke — G4-B (GALAXY_PLAN.md §4 G4, D-GX-19, D-GX-20): UI skoku floty, logika na prawdziwym łańcuchu rozkazu.
-//   T1  wpis menu gwiazdy per rodzaj zaznaczenia (węzeł floty, członek, członkowie jednej floty, mieszane, luźny, nic; flaga OFF = G3)
+//   T1  wpis menu gwiazdy per rodzaj zaznaczenia (węzeł floty, członek, członkowie jednej floty, mieszane, luźny, nic)
 //   T2  wpis wyłączony: tekst D-GX-20 nazywa członków, ten sam co odmowa rozkazu; PL i EN, bez sluga
 //   T3  klik: rozkaz floty, toast; odmowa niczego nie rusza i zostaje w Dzienniku
 //   T4  podgląd przy najechaniu = wspólny plan (jedna linia), osiągalność wg baku wiążącego, pamięć po stanie członków
@@ -9,6 +9,10 @@
 //   T8  trasa zaznaczonej floty = wspólne przeskoki rekordu (prawdziwa warstwa tras)
 //   T9  popup przylotu: jeden na grupę, przy obu kolejnościach słuchaczy; członek z przerwaną trasą melduje się sam
 //   T10 pomocniki bramki (`KOSMOS.debug.fleetWarp*`): te same odpowiedzi co rozkaz, wpięte w `GameScene`
+//
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flaga `fleetWarp` na stałe ON, ścieżka OFF usunięta): wycofane kontrole OFF = G3 —
+//   T1 (węzeł floty = zaślepka G3 z kluczem `galaxyMenu.fleetWaitsG4`, usuwanym; członek = statek), T4 (flota bez podglądu), T5 (picker
+//   bez sekcji floty). Wiersze przy ON bez zmian; alias `FEATURES` (służył tylko przestawianiu flagi) usunięty.
 //
 // Uruchom: node src/testing/smoke/galaxy_fleet_warp_ui_smoke.mjs
 
@@ -45,7 +49,6 @@ const readSrc = (rel) => readFileSync(join(__dir, '..', '..', rel), 'utf8').repl
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\r\n]*/g, '');
 
 const AU = GAME_CONFIG.AU_TO_PX, DT = 0.02, CIV = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
-const FEATURES = GAME_CONFIG.FEATURES;
 const warpHull = (id, warpSpeedLY) => { SHIPS[id] = { ...HULLS.hull_frigate, id, warpCapable: true, warpSpeedLY }; };
 warpHull('fu_slow', 3); warpHull('fu_med', 6); warpHull('fu_fast', 9);
 
@@ -110,15 +113,6 @@ group('T1 wpis menu per rodzaj zaznaczenia', () => {
   assert(menu('D')?.action === 'issueGalaxyWarp' && menu('D')?.vesselIds?.[0] === loose.id, 'luźny statek: wpis statku (G3)');
   select([]);
   assert((GW.galaxyStarMenuEntries('D') ?? []).length === 0, 'bez zaznaczenia: brak menu');
-  // Flaga OFF — stan G3.
-  FEATURES.fleetWarp = false;
-  try {
-    select([], fid);
-    const off = menu('D');
-    assert(off?.enabled === false && off?.disabledReason === t('galaxyMenu.fleetWaitsG4') && off?.action === 'issueGalaxyWarp', 'OFF: węzeł floty = zaślepka G3');
-    select([b]);
-    assert(menu('D')?.action === 'issueGalaxyWarp' && menu('D')?.vesselIds?.[0] === b.id, 'OFF: członek = statek (G3)');
-  } finally { FEATURES.fleetWarp = true; }
 });
 
 group('T2 wpis wyłączony nazywa członków (D-GX-20)', () => {
@@ -186,11 +180,6 @@ group('T4 podgląd = wspólny plan', () => {
   a.serviceState = 'stored'; b.warpFuel.current = 20;
   const gate = GW.warpHoverModel('D');
   assert(gate?.available === false && gate?.legs?.every((l) => !l.reachable) && gate?.reasonText?.includes('A'), 'rezerwa: trasa zgaszona, powód z nazwą');
-  FEATURES.fleetWarp = false;
-  try {
-    select([], fid);
-    assert(GW.warpHoverModel('D') === null, 'OFF: flota bez podglądu (G3)');
-  } finally { FEATURES.fleetWarp = true; }
   const label = stripComments(readSrc('ui/HudGalaxyLabelLayer.js'));
   assert(/warpModel\.reasonText \?\? refusalText\(warpModel\.reason\)/.test(label), 'rozwinięcie gwiazdy: tekst floty przed powodem statku');
 });
@@ -212,18 +201,11 @@ group('T5 picker: sekcja „Floty”', () => {
   const lines = GW.sendPickerRowLines(m.rows[1] ?? {});
   assert(lines.main === 'Eskadra · ×2', `wiersz floty: nazwa i liczba (${lines.main})`);
   assert(lines.sub === `${t('fleet.warpHops', '3')} · ${t('fleet.warpEta', '4.0')} · ${t('fleet.warpFuelNeed', '12.0', '13.0')} (B)`, `wiersz floty: skoki, ETA, paliwo wiążącego (${lines.sub})`);
-  // Bez flot i przy OFF — lista jak w G3.
+  // Bez flot — lista jak w G3.
   scene();
   ship({ name: 'Sam' });
   const none = GW.sendPickerModel({ systemId: 'D', scroll: 0 });
   assert(none.rows.length === 1 && none.rows[0].kind === undefined && none.rows[0].name === 'Sam', 'bez flot: bez nagłówków');
-  scene();
-  makeFleet(ship({ name: 'X' }));
-  FEATURES.fleetWarp = false;
-  try {
-    const off = GW.sendPickerModel({ systemId: 'D', scroll: 0 });
-    assert(off.rows.every((r) => r.kind === undefined) && off.rows.length === 1, 'OFF: bez sekcji floty');
-  } finally { FEATURES.fleetWarp = true; }
 
   // Prawdziwa warstwa: nagłówek bez strefy, klik wiersza floty wydaje rozkaz i zamyka picker.
   scene();

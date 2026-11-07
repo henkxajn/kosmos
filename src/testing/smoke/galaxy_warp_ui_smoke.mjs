@@ -1,18 +1,26 @@
 // Keeper: ARC GALAXY G3-B — skok z galaktyki w UI (logika, bez pinów na stałych rysunku; protokół lekki F8).
 // Uruchom: node src/testing/smoke/galaxy_warp_ui_smoke.mjs
 //
-// T1  menu gwiazdy wg zaznaczenia: brak / statek / flota / mieszane — prawdziwe `RightClickMenu.show` na atrapie DOM
+// T1  menu gwiazdy wg zaznaczenia: brak / statek / mieszane — prawdziwe `RightClickMenu.show` na atrapie DOM (wpis floty:
+//     `galaxy_fleet_warp_ui_smoke` T1)
 // T2  rozkaz: `issueWarp` per statek, komunikat kształtu D-E2, odmowa też w Dzienniku; klik pozycji menu
 // T3  podgląd trasy tylko z zaznaczeniem: model, prawdziwa podwarstwa tras, powód w rozwinięciu prawdziwej podwarstwy etykiet
 // T4  picker [ Wyślij ▼ ]: wiersze, okno ≤ 6 + kółko, Esc / klik poza zamyka, klik wiersza = rozkaz; prawdziwa podwarstwa
 // T5  bramka mgły na nazwach: menu, nagłówek pickera, wiersz pickera
-// T6  droga do domu z obcej orbity przez menu gwiazdy (następca `return_actions_removed` A3, gdy Stratcom zniknie w G5)
+// T6  droga do domu z obcej orbity przez menu gwiazdy (następca `return_actions_removed` A3 — Stratcom zniknął w G5-B)
 // T7  wpięcie PPM (`_handleTacticalRightClick` skompilowane ze źródła) i Esc (kolejność w źródle): GameScene nie importuje się pod node
-// T8  KONTROLA: flaga OFF — menu galaktyki, podgląd, picker i przycisk jak przed krokiem
+// T8  (wycofany w G5-B — flaga `galaxyWarp` zdjęta, ścieżki OFF nie ma)
 // T9  po G3 (F4): Esc zdejmuje zbiór przed wyjściem z trybu; pozycja menu kilku statków i rozkaz z odmową nazwaną. Pin zachowania, które
 //     już działało (zmierzone przed zmianą) — na kodzie sprzed poprawek też zielony
 //
 // Świat: prawdziwe `VesselManager.dispatchInterstellar`, `WarpRouteSystem`, `OrderService`, `GalaxyModeController`.
+//
+// ⚠ PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flagi `galaxyWarp` / `fleetWarp` na stałe ON, ścieżki OFF usunięte): T1 — trzy wiersze
+//   zaślepki floty G3 przy `fleetWarp` OFF (flota sama i flota + luźny statek; klucz `galaxyMenu.fleetWaitsG4` usuwany) wycofane, wpis
+//   floty przy ON pinuje `galaxy_fleet_warp_ui_smoke` T1; T3 — wiersz „przycisk bez flagi = powód G3” wycofany, [ Wyślij ▼ ] aktywny
+//   zawsze; T4 — `galaxyPinButtons` bez parametru `sendEnabled` (usunięty z sygnatury); T5 — menu floty przy OFF wycofane; T8 — wycofany
+//   w całości (przycisk, podgląd, picker, pin źródłowy powrotu PPM za flagą w `GameScene` i parzystość PL / EN klucza zaślepki).
+//   Ustawianie `galaxyWarp` w setupie usunięte (klucza nie ma, nikt go nie czyta). T6 bez zmian — zielony następca wiersza Stratcom.
 
 import '../headless/env.js';           // MUSI być pierwszy (localStorage dla i18n, atrapa DOM menu)
 import { readFileSync } from 'node:fs';
@@ -20,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import EventBus from '../../core/EventBus.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
-import { t, tIn, setLocale, getLocale } from '../../i18n/i18n.js';
+import { t, tIn } from '../../i18n/i18n.js';
 import { WarpRouteSystem } from '../../systems/WarpRouteSystem.js';
 import { VesselManager } from '../../systems/VesselManager.js';
 import { OrderService } from '../../systems/OrderService.js';
@@ -70,7 +78,6 @@ const K = {
 window.KOSMOS = K;
 K.warpRouteSystem = new WarpRouteSystem(vm);
 K.orderService = new OrderService();
-GAME_CONFIG.FEATURES.galaxyWarp = true;
 GAME_CONFIG.FEATURES.m3OrdersInteractive = true;
 
 let seq = 0;
@@ -156,16 +163,7 @@ header('T1 menu gwiazdy wg zaznaczenia');
   ok(tips.length === 1 && tips[0] === t('fleet.warpErrNoRoute'), `podpowiedź: powód wprost, bez regexu „zasięgu” (${tips.join()})`);
   farM.close();
 
-  // G4 — przy `fleetWarp` ON wpis floty jest żywy (`galaxy_fleet_warp_ui_smoke` T1); zaślepka G3 żyje przy OFF i tam zostaje pin.
-  GAME_CONFIG.FEATURES.fleetWarp = false;
-  select([], 'fleet_1');
-  const fleetE = galaxyStarMenuEntries('B')[0];
-  ok(fleetE?.enabled === false && fleetE?.disabledReason === t('galaxyMenu.fleetWaitsG4') && fleetE?.vesselIds.length === 0, 'flota: wyłączona z powodem „flota — G4”');
-  ok(fleetE?.labelPL === 'Skok do Beta' && fleetE?.labelEN === 'Warp to Beta', 'flota: sam tytuł');
-  select([ship], 'fleet_1');
-  ok(galaxyStarMenuEntries('B')[0]?.disabledReason === t('galaxyMenu.fleetWaitsG4'), 'mieszane (flota + luźny statek): flota ma pierwszeństwo jak w menu mapy');
-  GAME_CONFIG.FEATURES.fleetWarp = true;
-
+  // G4 — wpis floty jest żywy (`galaxy_fleet_warp_ui_smoke` T1); zaślepka G3 przy `fleetWarp` OFF wycofana w G5-B razem z flagą.
   const a = mk(), b = mk(NO_WARP);
   select([a, b]);
   const mixE = galaxyStarMenuEntries('B');
@@ -290,13 +288,10 @@ header('T3 podgląd tylko z zaznaczeniem');
   select([]);
   call(() => L.prepare({ ...FL, now: 2000 }));
   ok(L._g2.p?.warpReason == null, 'etykiety: bez zaznaczenia bez powodu');
-  // Przycisk [ Wyślij ▼ ] w przypięciu — prawdziwa ścieżka przypięcia, aktywny wyłącznie z flagą.
+  // Przycisk [ Wyślij ▼ ] w przypięciu — prawdziwa ścieżka przypięcia, aktywny zawsze (G5-B: flaga zdjęta).
   K2.galaxyMode.selectedSystemId = 'B';
   const sendBtn = () => { call(() => L.prepare({ ...FL, now: 3000 })); return L._g2.p?.pin?.buttons?.find((b) => b.id === 'send') ?? null; };
-  ok(sendBtn()?.enabled === true && sendBtn()?.reason === null, 'przypięcie: [ Wyślij ▼ ] aktywny z flagą');
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  ok(sendBtn()?.enabled === false && sendBtn()?.reason === 'G3', 'przypięcie: bez flagi jak przed krokiem');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
+  ok(sendBtn()?.enabled === true && sendBtn()?.reason === null, 'przypięcie: [ Wyślij ▼ ] aktywny');
 }
 
 // ── T4 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -331,8 +326,8 @@ header('T4 picker [ Wyślij ▼ ]');
   K.galaxyMode = gm;
   K.threeRenderer = { setGalaxySelected() {}, _cameraController: null };
   gm.select('B');
-  const btn = galaxyPinButtons({ sendEnabled: true, t }).find((b) => b.id === 'send');
-  ok(btn.enabled === true && btn.reason === null, 'przycisk aktywny z flagą kroku');
+  const btn = galaxyPinButtons({ t }).find((b) => b.id === 'send');
+  ok(btn.enabled === true && btn.reason === null, 'przycisk aktywny (G5-B: bez parametru `sendEnabled`)');
   ok(runGalaxyPinAction(btn, { systemId: 'B', K, t }) === 'send' && gm.sendPicker?.systemId === 'B', 'klik przycisku otwiera picker');
   runGalaxyPinAction(btn, { systemId: 'B', K, t });
   ok(gm.sendPicker === null, 'drugi klik zamyka');
@@ -404,11 +399,6 @@ header('T5 bramka mgły na nazwach');
   select([ship]);
   const e = galaxyStarMenuEntries('C')[0];
   ok(e.labelPL.startsWith('Skok do ???') && e.labelEN.startsWith('Warp to ???') && !e.labelPL.includes('Cygni'), 'menu: niezbadany cel = ???');
-  GAME_CONFIG.FEATURES.fleetWarp = false;   // G4 — zaślepka G3 żyje przy OFF; wpis żywy: `galaxy_fleet_warp_ui_smoke` T1
-  select([], 'fleet_1');
-  const f = galaxyStarMenuEntries('C')[0];
-  ok(f.labelPL === 'Skok do ???' && !f.labelEN.includes('Cygni'), 'menu floty: niezbadany cel = ???');
-  GAME_CONFIG.FEATURES.fleetWarp = true;
   select([ship]);
   const m = sendPickerModel({ systemId: 'C', scroll: 0 }, K);
   ok(m.header.endsWith('→ ???') && !m.header.includes('Cygni'), 'nagłówek pickera: ???');
@@ -507,37 +497,7 @@ header('T7 wpięcie w GameScene');
   ok(/sendPicker && this\.isOverUI\(x, y\)\) window\.KOSMOS\.galaxyMode\.closeSendPicker\(\)/.test(uiRaw), 'klik nad UI zamyka picker (UIManager — pin źródłowy)');
 }
 
-// ── T8 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-header('T8 KONTROLA: flaga OFF');
-{
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  const off = galaxyPinButtons({ sendEnabled: false, t }).find((b) => b.id === 'send');
-  ok(off.enabled === false && off.reason === 'G3', 'przycisk jak przed krokiem');
-
-  const ship = mk();
-  select([ship]);
-  const hud = { hoverObjectKey: () => 'galaxy:B' };
-  K.galaxyMode = { isActive: true };
-  K.threeRenderer = { getGalaxyAnchorLy: () => ({ x: 0, y: 0, z: 0 }) };
-  const layer = new HudGalaxyRouteLayer(hud);
-  const F = { K, att: { layers: { routes: true } }, sel: {}, sim: 0, now: 0, W: 1000, H: 1000 };
-  layer.prepare(F);
-  ok(layer.collect(F, { depth: () => 1, point: (x, y) => ({ x, y }) }).preview === null, 'podgląd nie powstaje');
-
-  const gm = new GalaxyModeController();
-  gm._active = true;
-  K.galaxyMode = gm;
-  gm.toggleSendPicker('B');
-  const P = new HudGalaxySendPickerLayer({ ctx: null, _galaxySublayers: [] });
-  ok(P.prepare({ K, now: 0 }) === 'gsp:0' && P.handleClick(1, 1) === false, 'podwarstwa pickera milczy');
-  gm.closeSendPicker();
-
-  const raw = readFileSync(join(HERE, '../../scenes/GameScene.js'), 'utf8').replace(/\r\n/g, '\n');
-  ok(/if \(galaxyActive && !GAME_CONFIG\.FEATURES\?\.galaxyWarp\) return;/.test(raw), 'PPM w trybie galaktyki: powrót jak w G1 (pin źródłowy; wykonanie — `galaxy_pick` P7b)');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;
-  ok(getLocale() != null && tIn('en', 'galaxyMenu.fleetWaitsG4') !== tIn('pl', 'galaxyMenu.fleetWaitsG4'), 'powód floty w obu językach');
-  setLocale(getLocale());
-}
+// ── T8 — wycofany w G5-B (flaga `galaxyWarp` zdjęta, ścieżki OFF nie ma; zob. nagłówek) ──────────────────────────────────────
 
 // ── T9 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 header('T9 po G3 (F4): Esc zdejmuje zbiór przed wyjściem z trybu; menu kilku statków z F1');

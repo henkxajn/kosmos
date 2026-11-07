@@ -868,7 +868,7 @@ export class SystemGenerator {
     }
   }
 
-  // ── Zdalny „peek" liczby ciał obcego układu (skan STRATCOM) ───────────────
+  // ── Zdalny „peek" liczby ciał obcego układu (skan układu obserwatorium) ──────
   // Zwraca DETERMINISTYCZNĄ liczbę ciał układu BEZ rejestracji encji w EntityManager.
   // Reużywa ten sam seed (galaxyStar.id) i DOKŁADNIE tę samą sekwencję generatorów
   // co generateForStar — dzięki temu skan z odległości pokazuje liczby SPÓJNE z tym,

@@ -9,20 +9,28 @@
 //
 // Pokrycie:
 //   S1  reguła widoczności — tabela CTRL × SHIFT × overlay × tryb Y (16 stanów); przyrząd bramki zastępuje WYŁĄCZNIE CTRL;
-//       flaga OFF chowa zawsze; kolejność powodów; otwiera tylko `=== true`.
+//       brak kopuły chowa zawsze; kolejność powodów; otwiera tylko `=== true`.
 //   S2  podwarstwa czyta te pola świata — CTRL `_showAllLabels`, przyrząd `_skyLabelsForced`, SHIFT `_cleanView`
-//       (interfejs albo renderer), overlay `isAnyOpen()`, tryb Y `F.tactical`, flaga `FEATURES.skyCatalog` + kopuła.
+//       (interfejs albo renderer), overlay `isAnyOpen()`, tryb Y `F.tactical`, kopuła `_sky` (bez flagi).
 //   S3  mgła wojny (D-GX-18) — nazwa wyłącznie przy `reveal.name`, inaczej „???”; macierz eksploracja × skan × wywiad;
-//       jeden punkt składania (A14): mapa galaktyki, etykiety mapy układu i etykiety nieba — ta sama odpowiedź.
+//       jeden punkt składania (A14): etykiety mapy układu i etykiety nieba — ta sama odpowiedź; płyta galaktyki
+//       (`GalaxyOutlinerLogic`) składa w tym samym module.
 //   S4  role wg relacji — własny (dom, kolonia gracza) `primary`, zbadany `textPrimary`, niezbadany `dim`.
 //   S5  jedna etykieta na skupisko — wygrywa najbliższy (remis — mniejszy id), histereza między klatkami.
 //   S6  zasłonięcie — gwiazda w tarczy ciała (słońce, planeta) nie dostaje znacznika; tarcza poniżej progu nie zasłania.
 //   S7  rzut kierunku W NIESKOŃCZONOŚCI = rzut gwiazdy kopuły (kamera + kierunek × R) dla każdego R; za kamerą — brak.
 //   S8  od końca do końca — prawdziwa galaktyka, katalog i niebo z domu: CTRL → znaczniki, bez CTRL / tryb Y / overlay /
 //       SHIFT → nic; przyrząd bez CTRL → te same znaczniki; żadnej prawdziwej nazwy nieujawnionego układu; jeden na skupisko.
-//   S9  warstwa HUD — podwarstwa nieba ostatnia na liście gry, `drawFirst` rysowana przed resztą; F niesie tryb Y i flagi.
+//   S9  warstwa HUD — podwarstwa nieba ostatnia na liście gry, `drawFirst` rysowana przed resztą; F niesie tryb Y i flagi
+//       (bez klucza `skyCatalog`).
 //   S10 odległość — `fleet.clusterDistance` („{0} LY”) z separatorem języka (bez nowego klucza); klucz klatki zależy od
 //       języka.
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flaga `skyCatalog` na stałe ON, zakładka Stratcom FMO usunięta): S1 / S2 —
+//   parametr bramki `flag` → `dome` (powód „dome”, lista powodów od „dome”); S2 — brak kopuły ⇒ „dome”, podwarstwa nie czyta
+//   flag `F.features`; atrapa klatki bez `features.skyCatalog` (bez czytelnika); S3 — bez nogi mapy Stratcom (`fmo._systemReveal`
+//   usunięte); lista powierzchni jednego punktu składania: płyta galaktyki (`GalaxyOutlinerLogic`) zamiast FMO; S9 — klatka
+//   warstwy niesie FEATURES bez klucza `skyCatalog` (odwrócone). WYCOFANE: S2 `features: { skyCatalog: false }` i `features: {}`
+//   (OFF przez flagę ⇒ „flag”).
 
 import '../headless/env.js';           // MUSI być pierwszy
 import fs from 'node:fs';
@@ -41,7 +49,6 @@ const HLL  = await import('../../ui/HudLabelLayer.js');
 const SRW  = await import('../../utils/SystemRevealWorld.js');
 const SC   = await import('../../utils/SkyCatalog.js');
 const I18N = await import('../../i18n/i18n.js');
-const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
 const { GalaxyGenerator } = await import('../../generators/GalaxyGenerator.js');
 const { THEME } = await import('../../config/ThemeConfig.js');
 const { resolveHudRoles, themeToken } = await import('../../ui/HudPalette.js');
@@ -98,7 +105,7 @@ function mkWorld({ synth, systems, intel = {}, scanned = new Set(), colonies = [
     entityManager: { get: (id) => entities.get(id) ?? null, getByType: (t) => (t === 'star' && starId ? [{ id: starId }] : []) },
   };
 }
-const mkF = (K, o = {}) => ({ K, features: { skyCatalog: true }, tactical: false, now: 1000, uiScale: UI,
+const mkF = (K, o = {}) => ({ K, tactical: false, now: 1000, uiScale: UI,
   mapRect: { x: 0, y: 0, w: W, h: H }, roles: resolveHudRoles(THEME), ...o });
 const itemOf = (layer, id) => layer._prep.items.find((it) => it.id === id) ?? null;
 const markerIds = (c) => (c.markers ?? []).map((m) => m.id).sort();
@@ -108,7 +115,7 @@ console.log('\nS1 — reguła widoczności: CTRL × SHIFT × overlay × tryb Y')
 { const B = [false, true]; let rows = 0, shownRows = 0; const bad = [];
   for (const ctrl of B) for (const cleanView of B) for (const overlay of B) for (const yMode of B) {
     rows++;
-    const g = L.skyLabelGate({ flag: true, ctrl, cleanView, overlay, yMode });
+    const g = L.skyLabelGate({ dome: true, ctrl, cleanView, overlay, yMode });
     const want = ctrl && !cleanView && !overlay && !yMode;
     const reason = want ? null : cleanView ? 'cleanView' : overlay ? 'overlay' : yMode ? 'yMode' : 'ctrl';
     if (g.shown) shownRows++;
@@ -118,20 +125,20 @@ console.log('\nS1 — reguła widoczności: CTRL × SHIFT × overlay × tryb Y')
      rows === 16 && shownRows === 1 && bad.length === 0);
   const badF = [];
   for (const cleanView of B) for (const overlay of B) for (const yMode of B) {
-    const g = L.skyLabelGate({ flag: true, ctrl: false, forced: true, cleanView, overlay, yMode });
+    const g = L.skyLabelGate({ dome: true, ctrl: false, forced: true, cleanView, overlay, yMode });
     if (g.shown !== (!cleanView && !overlay && !yMode)) badF.push(`${cleanView}/${overlay}/${yMode}`);
   }
   ok(`przyrząd bramki (skyMarks(1)) zastępuje WYŁĄCZNIE CTRL — SHIFT, overlay i tryb Y chowają dalej (złych: ${badF.join('; ') || 'brak'})`, badF.length === 0);
-  ok('flaga OFF chowa zawsze — także przy CTRL i przyrządzie (powód „flag”)',
-     [L.skyLabelGate({ ctrl: true, forced: true }), L.skyLabelGate({ flag: false, ctrl: true })].every((g) => !g.shown && g.reason === 'flag'));
-  ok('kolejność powodów = kolejność sprawdzania: flag · cleanView · overlay · yMode · ctrl',
-     JSON.stringify(L.SKY_LABEL_HIDE_REASONS) === JSON.stringify(['flag', 'cleanView', 'overlay', 'yMode', 'ctrl'])
-     && L.skyLabelGate({ flag: true, cleanView: true, overlay: true, yMode: true }).reason === 'cleanView'
-     && L.skyLabelGate({ flag: true, overlay: true, yMode: true }).reason === 'overlay'
-     && L.skyLabelGate({ flag: true, yMode: true }).reason === 'yMode');
-  ok('otwiera wyłącznie `=== true` (1 / „yes” nie są CTRL ani flagą)',
-     !L.skyLabelGate({ flag: true, ctrl: 1 }).shown && !L.skyLabelGate({ flag: true, ctrl: 'yes' }).shown
-     && !L.skyLabelGate({ flag: 1, ctrl: true }).shown && !L.skyLabelGate({ flag: true, forced: 1 }).shown);
+  ok('brak kopuły chowa zawsze — także przy CTRL i przyrządzie (powód „dome”)',
+     [L.skyLabelGate({ ctrl: true, forced: true }), L.skyLabelGate({ dome: false, ctrl: true })].every((g) => !g.shown && g.reason === 'dome'));
+  ok('kolejność powodów = kolejność sprawdzania: dome · cleanView · overlay · yMode · ctrl',
+     JSON.stringify(L.SKY_LABEL_HIDE_REASONS) === JSON.stringify(['dome', 'cleanView', 'overlay', 'yMode', 'ctrl'])
+     && L.skyLabelGate({ dome: true, cleanView: true, overlay: true, yMode: true }).reason === 'cleanView'
+     && L.skyLabelGate({ dome: true, overlay: true, yMode: true }).reason === 'overlay'
+     && L.skyLabelGate({ dome: true, yMode: true }).reason === 'yMode');
+  ok('otwiera wyłącznie `=== true` (1 / „yes” nie są CTRL ani kopułą)',
+     !L.skyLabelGate({ dome: true, ctrl: 1 }).shown && !L.skyLabelGate({ dome: true, ctrl: 'yes' }).shown
+     && !L.skyLabelGate({ dome: 1, ctrl: true }).shown && !L.skyLabelGate({ dome: true, forced: 1 }).shown);
 }
 
 // Wspólne syntetyczne niebo S2–S6: obserwator w początku, A na wprost kamery, B w prawo, C w lewo-w górę, D za kamerą.
@@ -153,7 +160,7 @@ const CAM0 = mkCamera();
 const PROJ0 = projOf(CAM0);
 
 // ═══ S2 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
-console.log('\nS2 — podwarstwa czyta pola świata (CTRL, przyrząd, SHIFT, overlay, tryb Y, flaga + kopuła)');
+console.log('\nS2 — podwarstwa czyta pola świata (CTRL, przyrząd, SHIFT, overlay, tryb Y, kopuła)');
 { const K = mkWorld({ synth: SYN, systems: SYS_BASE() });
   const layer = new SLM.HudSkyLabelLayer(null);
   const B = [false, true]; const bad = []; let n = 0;
@@ -164,23 +171,23 @@ console.log('\nS2 — podwarstwa czyta pola świata (CTRL, przyrząd, SHIFT, ove
     K.uiManager.overlayManager.open = overlay;
     const F = mkF(K, { tactical: y });
     const key = layer.prepare(F);
-    const exp = L.skyLabelGate({ flag: true, ctrl, forced, cleanView: shift != null, overlay, yMode: y });
+    const exp = L.skyLabelGate({ dome: true, ctrl, forced, cleanView: shift != null, overlay, yMode: y });
     const d = layer.debug();
     if (d.shown !== exp.shown || d.reason !== exp.reason || key.startsWith('sky:1:') !== exp.shown
         || (exp.shown ? layer._prep.items.length !== 4 : layer._prep.items.length !== 0)) bad.push(`ctrl=${ctrl} forced=${forced} shift=${shift} overlay=${overlay} y=${y}`);
   }
   ok(`${n} stanów świata (CTRL × przyrząd × SHIFT brak / interfejs / renderer × overlay × tryb Y): bramka podwarstwy = reguła S1 na polach świata, klucz klatki „sky:1” tylko przy pokazaniu (złych: ${bad.join('; ') || 'brak'})`, n === 48 && bad.length === 0);
   K.threeRenderer._showAllLabels = true; K.threeRenderer._skyLabelsForced = false; K.uiManager._cleanView = false; K.threeRenderer._cleanView = false; K.uiManager.overlayManager.open = false;
-  const flagCases = [
-    ['FEATURES.skyCatalog = false', () => mkF(K, { features: { skyCatalog: false } })],
-    ['brak klucza FEATURES.skyCatalog', () => mkF(K, { features: {} })],
-    ['kopuła nie istnieje (`_sky` = null)', () => { K.threeRenderer._sky = null; return mkF(K); }],
-  ];
-  const badFlag = [];
-  for (const [label, mk] of flagCases) { layer.prepare(mk()); if (layer.debug().reason !== 'flag') badFlag.push(label); K.threeRenderer._sky = {}; }
-  ok(`flaga: wyłączona, brak klucza albo brak kopuły ⇒ powód „flag” (złych: ${badFlag.join('; ') || 'brak'})`, badFlag.length === 0);
+  // G5-B: flaga `skyCatalog` na stałe ON — jedyną bramką „czy niebo istnieje” jest kopuła; podwarstwa nie czyta `F.features`.
+  K.threeRenderer._sky = null;
   layer.prepare(mkF(K));
-  ok('KONTROLA: w stanie bazowym (CTRL, flaga, kopuła) podwarstwa pokazuje 4 prawdziwe układy nieba', layer.debug().shown === true && layer._prep.items.length === 4);
+  const noDome = layer.debug();
+  K.threeRenderer._sky = {};
+  ok(`brak kopuły (\`_sky\` = null) ⇒ powód „dome”, nic (${noDome.reason}); podwarstwa nie czyta flag \`F.features\``,
+     noDome.shown === false && noDome.reason === 'dome' && layer._prep.items.length === 0
+     && !/\bfeatures\b/.test(strip(read('../../ui/HudSkyLabelLayer.js'))));
+  layer.prepare(mkF(K));
+  ok('KONTROLA: w stanie bazowym (CTRL, kopuła) podwarstwa pokazuje 4 prawdziwe układy nieba', layer.debug().shown === true && layer._prep.items.length === 4);
   const empty = new SLM.HudSkyLabelLayer(null);
   const Kn = mkWorld({ synth: SYN, systems: SYS_BASE() }); Kn.threeRenderer._skyBuf = null;
   ok('brak bufora nieba ⇒ nic (klucz „sky:0”, zero pozycji)', empty.prepare(mkF(Kn)).startsWith('sky:0:') && empty._prep.items.length === 0);
@@ -188,8 +195,7 @@ console.log('\nS2 — podwarstwa czyta pola świata (CTRL, przyrząd, SHIFT, ove
 
 // ═══ S3 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
 console.log('\nS3 — mgła wojny: nazwa tylko przy reveal.name, „???” inaczej; jeden punkt składania (A14)');
-{ const fmo = Object.create(FleetManagerOverlay.prototype);
-  const t1 = HLL.HudLabelLayer.prototype._t1NameVisible;
+{ const t1 = HLL.HudLabelLayer.prototype._t1NameVisible;
   let states = 0, named = 0, hidden = 0; const bad = [];
   for (const explored of [false, true]) for (const scan of [false, true]) for (const lvl of ['unknown', 'rumor', 'contact', 'detailed']) {
     states++;
@@ -201,14 +207,13 @@ console.log('\nS3 — mgła wojny: nazwa tylko przy reveal.name, „???” inacz
     const sys = systems[1];
     const canon = SRW.systemRevealFromWorld(K, sys).name === true;
     const it = itemOf(layer, 'sys_a');
-    const viaMap = !!fmo._systemReveal(sys)?.name;
     const viaT1 = t1.call({}, { K, activeSystemId: 'sys_a' }) === true;
     if (canon) named++; else hidden++;
-    if (!it || it.name !== (canon ? 'Alfa' : '???') || viaMap !== canon || viaT1 !== canon) {
-      bad.push(`explored=${explored} scan=${scan} intel=${lvl} → canon=${canon} item=${it?.name} mapa=${viaMap} t1=${viaT1}`);
+    if (!it || it.name !== (canon ? 'Alfa' : '???') || viaT1 !== canon) {
+      bad.push(`explored=${explored} scan=${scan} intel=${lvl} → canon=${canon} item=${it?.name} t1=${viaT1}`);
     }
   }
-  ok(`macierz ${states} stanów (eksploracja × skan × wywiad): etykieta nieba = kanon; mapa galaktyki i etykiety mapy układu — ta sama odpowiedź (złych: ${bad.join('; ') || 'brak'})`,
+  ok(`macierz ${states} stanów (eksploracja × skan × wywiad): etykieta nieba = kanon; etykiety mapy układu — ta sama odpowiedź (złych: ${bad.join('; ') || 'brak'})`,
      states === 16 && bad.length === 0);
   ok(`KONTROLA nie-jałowości: kanon ujawnia w ${named} stanach i ukrywa w ${hidden}`, named > 0 && hidden > 0);
   { const systems = SYS_BASE();
@@ -224,7 +229,8 @@ console.log('\nS3 — mgła wojny: nazwa tylko przy reveal.name, „???” inacz
      L.skyLabelName({ name: 'Kochab', revealed: true }) === 'Kochab' && L.skyLabelName({ name: 'Kochab', revealed: false }) === '???'
      && L.skyLabelName({ name: 'Kochab', revealed: 1 }) === '???' && L.skyLabelName({ name: '  ', revealed: true }) === '???'
      && L.skyLabelName({ revealed: true }) === '???' && L.skyLabelName() === '???');
-  const files = ['../../ui/FleetManagerOverlay.js', '../../ui/HudLabelLayer.js', '../../ui/HudSkyLabelLayer.js', '../../renderer/ThreeRenderer.js'];
+  // G5-B: mapa Stratcom (FMO) usunięta — mapą galaktyki jest płyta, której nazwy składa `GalaxyOutlinerLogic`.
+  const files = ['../../ui/GalaxyOutlinerLogic.js', '../../ui/HudLabelLayer.js', '../../ui/HudSkyLabelLayer.js', '../../renderer/ThreeRenderer.js'];
   const badSrc = files.filter((f) => { const c = strip(read(f)); return /resolveSystemReveal\s*\(/.test(c) || !c.includes('systemRevealFromWorld('); });
   ok(`powierzchnie z nazwą układu składają kanały w JEDNYM module (\`SystemRevealWorld\`) — bez drugiej kopii trzech kanałów (złe: ${badSrc.join(', ') || 'brak'})`, badSrc.length === 0);
 }
@@ -403,8 +409,10 @@ console.log('\nS9 — warstwa HUD: podwarstwa nieba ostatnia na liście gry, rys
   ok(`\`drawFirst\` rysowana przed resztą mimo miejsca na końcu listy (${a.log}); bez flagi — kolejność listy (${b.log})`, a.log === 'niebo,reszta' && b.log === 'reszta,niebo');
   KH.tacticalMode.isActive = true;
   const c = order(true);
-  ok('klatka warstwy niesie tryb Y (`F.tactical` z `tacticalMode.isActive`) i flagi `FEATURES` (bramka podwarstwy nieba)',
-     a.F?.tactical === false && c.F?.tactical === true && typeof c.F?.features === 'object' && 'skyCatalog' in (c.F?.features ?? {}));
+  // G5-B — ODWRÓCONE: flaga `skyCatalog` na stałe ON, klucza w FEATURES brak (bramką nieba jest kopuła — S2).
+  ok('klatka warstwy niesie tryb Y (`F.tactical` z `tacticalMode.isActive`) i flagi `FEATURES` (innych podwarstw) — bez klucza `skyCatalog`',
+     a.F?.tactical === false && c.F?.tactical === true && typeof c.F?.features === 'object' && 'fcBrackets' in (c.F?.features ?? {})
+     && !('skyCatalog' in (c.F?.features ?? {})));
 }
 
 // ═══ S10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════

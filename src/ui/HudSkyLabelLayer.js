@@ -83,11 +83,11 @@ export class HudSkyLabelLayer {
     return this._byId;
   }
 
-  /** Bramka (CTRL / przyrząd, SHIFT, overlay, tryb Y, flaga) i prawdziwe układy nieba z treścią — część klucza klatki. */
+  /** Bramka (kopuła, CTRL / przyrząd, SHIFT, overlay, tryb Y) i prawdziwe układy nieba z treścią — część klucza klatki. */
   prepare(F) {
     const K = F.K, tr = K?.threeRenderer, um = K?.uiManager;
     const gate = skyLabelGate({
-      flag: F.features?.skyCatalog === true && !!tr?._sky,
+      dome: !!tr?._sky,
       cleanView: um?._cleanView === true || tr?._cleanView === true,
       overlay: um?.overlayManager?.isAnyOpen?.() === true,
       yMode: F.tactical === true,

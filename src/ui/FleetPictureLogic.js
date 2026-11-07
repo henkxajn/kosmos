@@ -21,7 +21,6 @@
 
 import { getPrimaryRole, isEnemyVessel } from '../entities/Vessel.js';
 import { resolveVesselStatus } from '../utils/VesselStatus.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { warpSystemLabel } from '../utils/SystemRevealWorld.js';
 
 // ── Słownik: rola → glif ─────────────────────────────────────────────────────
@@ -320,7 +319,7 @@ export function buildShipEntry(vessel, ctx = {}) {
     // Finding 602 (D-GX-18) — skok międzygwiezdny przez kanon mgły: `mission.targetName` niesie prawdziwą nazwę od startu, a kolumna
     // „Dokąd” drukowałaby niezbadany cel w trakcie skoku; po przylocie układ jest zbadany, więc wraca nazwa.
     toName = returning ? null
-      : (mission.type === 'interstellar_jump' && GAME_CONFIG.FEATURES?.galaxyWarp) ? warpSystemLabel(mission.toSystemId ?? null)
+      : mission.type === 'interstellar_jump' ? warpSystemLabel(mission.toSystemId ?? null)
       : (mission.targetName ?? null);
   } else if (orderActive && order.type === 'moveToPoint') {
     toId = order.targetBodyId ?? null;                 // ruch do ciała (punkt → null)

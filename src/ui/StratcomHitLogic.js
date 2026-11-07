@@ -3,7 +3,7 @@
 //
 // PO CO TO ISTNIEJE: `FleetManagerOverlay` nosil DWIE PRZECIWNE reguly rozstrzygania tego samego
 // trafienia. Klik iterowal strefy od konca (wygrywa OSTATNIA pushowana), hover od poczatku
-// (wygrywa PIERWSZA). Poniewaz `_stratcomVisibleSystems` sortuje rosnaco po odleglosci, a strefy
+// (wygrywa PIERWSZA). Poniewaz dawne `_stratcomVisibleSystems` (zakladka Stratcom, usunieta w G5) sortowalo rosnaco po odleglosci, a strefy
 // gwiazd maja 22x22 px przy promieniu glifu <= 7, dawalo to deterministyczny rozjazd:
 // HOVER PODSWIETLAL BLIZSZY UKLAD, A KLIK WYBIERAL DALSZY (zmierzone w grze 15/15).
 //
@@ -66,7 +66,7 @@ export function pickStarZone(zones, mx, my) {
 }
 
 /**
- * Pelne rozstrzygniecie trafienia dla mapy STRATCOM — jedno zrodlo dla klika i hovera.
+ * Pelne rozstrzygniecie trafienia stref overlaya Dowodztwa (do G5 — mapy STRATCOM) — jedno zrodlo dla klika i hovera.
  * Zwraca strefe, ktora ma dostac zdarzenie (albo `null`, gdy pod kursorem nic nie ma).
  */
 export function resolveStratcomZone(zones, mx, my) {

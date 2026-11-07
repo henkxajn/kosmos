@@ -2,11 +2,11 @@
 //
 // ARC GALAXY, krok NIEBO (docs/design/GALAXY_PLAN.md §4, D-GX-4): literały STAR_VERT / STAR_FRAG przeniesione
 // z ThreeRenderer._buildBackground CO DO ZNAKU (z końcami linii i wcięciami — keeper `sky_catalog_smoke` trzyma ich
-// sumy SHA-256 z kotwicy e4e5717). Ścieżka OFF (flaga skyCatalog = false) buduje z nich ten sam materiał co przed
-// krokiem — three kluczuje cache programów po TREŚCI ŹRÓDŁA, więc identyczny string = identyczny program.
+// sumy SHA-256 z kotwicy e4e5717). Pochodne kopuły nieba (`STAR_VERT_SKY`) i płyty galaktyki (`STAR_VERT_PLATE`)
+// są z nich liczone przez kotwice; dawna ścieżka OFF flagi `skyCatalog` (powłoka z Math.random) usunięta w ARC GALAXY G5.
 //
 // ⚠ Moduł BEZ IMPORTÓW (wzór modułu chunków głębi V4): wykonywalny pod node; THREE wstrzykuje wołający.
-// ⚠ Chunki głębi logarytmicznej (V4) nakłada WOŁAJĄCY wyłącznie na ścieżce OFF. Kopuła nieba ich nie ma i mieć nie
+// ⚠ Chunki głębi logarytmicznej (V4): kopuła nieba ich nie ma i mieć nie
 //   może z tego samego powodu co mgławica (D-D3): rysuje się na liście nieprzezroczystej PRZED resztą sceny, bez
 //   testu i zapisu głębi — planety zawsze ją zasłaniają.
 // ⚠ Backticka nie wolno wstawić do literału GLSL — node --check przechodzi, a plik jest zepsuty.
@@ -118,7 +118,7 @@ export function createPlateStarMaterial(THREE, { pixelRatio = 1, fade = 0, verte
 }
 
 /**
- * Materiał gwiazd KOPUŁY nieba (flaga skyCatalog): lista nieprzezroczysta, bez testu i zapisu głębi, addytywnie
+ * Materiał gwiazd KOPUŁY nieba: lista nieprzezroczysta, bez testu i zapisu głębi, addytywnie
  * (D-D3 — jak mgławica), atrybuty jak dawne niebo + `aReal`.
  * @param <class 'object'> THREE — moduł three (wstrzykiwany)
  * @param {Object} [opts] — pixelRatio (device px na px CSS), realFade (0…1; 1 = prawdziwe układy w pełni)

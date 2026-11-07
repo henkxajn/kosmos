@@ -16,7 +16,7 @@
 // domyślną. Defensywne odczyty fasady idą przez getOrNull().
 //
 // ⚠ ODCZYT NIGDY NIE TWORZY REKORDU. getTension jest wołany per gwiazda per klatka
-// (FleetManagerOverlay, mapa Stratcom) — wywoływanie tam ensure() zasypałoby
+// (FleetManagerOverlay, mapa galaktyki) — wywoływanie tam ensure() zasypałoby
 // EventBus zdarzeniami gameState:changed. Rekordy powstają wyłącznie przy MUTACJI
 // oraz w miejscach, które robiły to dotąd (empire:created, intel:contactEstablished,
 // initForAllEmpires).

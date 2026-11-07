@@ -35,7 +35,6 @@ export const CIV_TABS = [
   { id: 'observatory',   icon: '🔭', labelKey: 'civPanel.observatory',  key: 'O' },
   { id: 'unit_design',   icon: '🔧', labelKey: 'civPanel.unitDesign',   key: 'U' },
   { id: 'dyson',         icon: '⭐', labelKey: 'civPanel.dyson',        key: 'D' },
-  { id: 'galaxy',        icon: '🌌', labelKey: 'civPanel.galaxy',       key: 'G' },
   { id: 'intel',         icon: '👁', labelKey: 'civPanel.intel',        key: 'I' },
   { id: 'diplomacy',     icon: '🤝', labelKey: 'civPanel.diplomacy',    key: 'Y' },
   { id: 'war',           icon: '⚔', labelKey: 'civPanel.war',          key: 'W' },
@@ -170,7 +169,7 @@ export function buildNavGroups(_features) {
     { primary: 'economy',      members: ['budget', 'economy', 'trade', 'flows'] },
     { primary: 'colony',       members: ['colony'] },
     { primary: 'shipyard',     members: ['shipyard'] },   // C8 — zajął slot zwolniony po Populacji (C7)
-    { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war'] },  // 'galaxy' usunięte — Stratcom (klawisz G/M) zastąpił mapę galaktyki
+    { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war'] },  // 'galaxy' usunięte — mapa galaktyki to tryb głównego widoku (klawisz G / M, ARC GALAXY)
     { primary: 'fleet',        members: ['fleet'] },
     { primary: 'tech',         members: ['tech', 'observatory'] },
   ];

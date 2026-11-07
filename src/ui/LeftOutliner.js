@@ -24,7 +24,7 @@
 //     Outlinerze); kolonia AI — bez (mgła wojny).
 //
 //   • ARC GALAXY G1 (GALAXY_PLAN.md §4 G1; D-GX-9, D-GX-10, D-GX-11): w trybie układu — pierwszy wiersz „GALAKTYKA”
-//     (korzeń drzewa; klik = tryb galaktyki; flaga `galaxyView`); w trybie galaktyki — lista układów galaktyki
+//     (korzeń drzewa; klik = tryb galaktyki); w trybie galaktyki — lista układów galaktyki
 //     (`GalaxyOutlinerLogic.buildGalaxySystemList`): pierwszy wiersz „← Układ: <aktywny>” (wyjście), wiersz układu — 1. klik
 //     zaznaczenie gwiazdy na płycie, 2. klik albo [Enter] — wejście (gdy da się otworzyć; inaczej podpowiedź), strzałka —
 //     rozwinięcie (domyślnie rozwinięta gwiazda zaznaczona): linia informacji, właściciel, własne kolonie i stacje (klik =
@@ -32,7 +32,6 @@
 // Importuje się pod node (keeper `left_outliner_smoke` — prawdziwy `draw` + `hitTest` na atrapie ctx).
 
 import { THEME }           from '../config/ThemeConfig.js';
-import { GAME_CONFIG }     from '../config/GameConfig.js';   // ARC GALAXY G1 — flaga `galaxyView` (wiersz korzenia)
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t, getName, getShort, getLocale } from '../i18n/i18n.js';
@@ -173,7 +172,7 @@ export class LeftOutliner extends OutlinerColumn {
     const tree = buildSystemTree(this.treeContext(K, input, active));
     const items = [];
     // ARC GALAXY G1 (D-GX-9) — korzeń drzewa: pierwszy wiersz „GALAKTYKA” (klik = tryb galaktyki); nagłówek bez zmian.
-    if (GAME_CONFIG.FEATURES?.galaxyView) items.push({ kind: 'galaxyRoot', key: 'galaxyRoot', h: SYS_H });
+    items.push({ kind: 'galaxyRoot', key: 'galaxyRoot', h: SYS_H });
     for (const s of tree.systems) {
       items.push({ kind: 'system', key: `system:${s.systemId}`, node: s, h: SYS_H });
       for (const r of (s.bodies ?? [])) {
@@ -208,7 +207,7 @@ export class LeftOutliner extends OutlinerColumn {
     const list = buildGalaxySystemList({ ...world, expanded: (id) => this._galaxyExpandedOf(id, sel) });
     const active = String(world.activeSystemId);
     const activeRow = list.byId.get(active);
-    const activeName = activeRow?.label ?? (world.shipFog ? UNNAMED_SYSTEM : (EntityManager.getStarOfSystem?.(active)?.name ?? active));
+    const activeName = activeRow?.label ?? UNNAMED_SYSTEM;
     const loc = getLocale();
     const items = [{ kind: 'galaxyBack', key: 'galaxyBack', h: SYS_H, name: activeName }];
     for (const r of list.rows) {
@@ -238,7 +237,7 @@ export class LeftOutliner extends OutlinerColumn {
     };
   }
 
-  // Właściciel układu — klucze panelu Stratcom (`fleet.stratcomEmpire*`): imperium wg osi właściciela, gracz, obcy, nieznany.
+  // Właściciel układu — klucze dawnego panelu Stratcom (`fleet.stratcomEmpire*`, nazwy zostają): imperium wg osi właściciela, gracz, obcy, nieznany.
   // ARC GALAXY G2 — ta sama funkcja co linia przypięcia gwiazdy (`GalaxyChromeLogic.galaxyOwnerText`, anty-lustro).
   _ownerText(K, owner) {
     return galaxyOwnerText(owner, { t, empireName: (id) => K?.empireRegistry?.get?.(id)?.name ?? null });

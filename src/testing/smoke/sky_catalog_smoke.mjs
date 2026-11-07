@@ -4,7 +4,13 @@
 // Keeper LOGIKI (protokół F8 / HUD_PLAN §4.0 aneks): bez pinów na stałych rysunku (kalibracja jasności to pokrętła
 // strojone okiem na bramce), bez mutacji rysunku, bez kontroli na poprzednim commicie. `SkyCatalog.js` i
 // `StarPointShader.js` nie mają importów three / DOM, więc część wykonaniowa biegnie pod node wprost; renderer
-// (`ThreeRenderer` nie importuje się pod node) — piny źródłowe na wpięciu i złota suma ścieżki OFF.
+// (`ThreeRenderer` nie importuje się pod node) — piny źródłowe na wpięciu.
+//
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flaga `skyCatalog` na stałe ON, dawna powłoka 7 000 punktów z Math.random
+//   usunięta): T8 — `_buildBackground` = sama kopuła (cała treść `this._buildSkyDome();`); import renderera = sama fabryka
+//   kopuły (literały STAR_VERT / STAR_FRAG zostają w module shadera jako baza derywacji — ich złote sumy zostają);
+//   T9 — zamiast idiomu flagi: klucza `skyCatalog` w FEATURES brak, `skyCatalogOn` w rendererze brak; bramki `this._sky`
+//   (setSkyGalaxy, pętla) bez opisu „OFF”. WYCOFANE: T8 złota suma ścieżki OFF (GOLD_OFF) i jej KONTROLA (7 000 → 7 001).
 //
 // Pokrycie:
 //   T1  determinizm — to samo ziarno ⇒ te same bajty katalogu i nieba; inne ziarno ⇒ inne niebo; `skySeedOf`.
@@ -16,9 +22,9 @@
 //   T5  paralaksa między dwoma układami — dokładny kąt dla prawdziwej gwiazdy, mały dla tła (odniesienie: 0,43°).
 //   T6  prawo magnitudo — skończone, w [I_MIN, CAP], monotoniczne; miękki sufit nigdy nie przekracza CAP.
 //   T7  brak galaktyki ⇒ niebo puste (nie losowe): katalog `null`, zero punktów, kopuła bez Math.random.
-//   T8  flaga OFF ⇒ `_buildBackground` = kod kotwicy e4e5717 (złota suma po normalizacji) + literały PSF co do znaku.
-//   T9  wpięcie — idiom flagi, wywołanie w GameScene po zmintowaniu / wczytaniu, przeliczenie w switchSystem po
-//       initSystem, kopuła za kamerą po update kontrolera i przed composerem.
+//   T8  `_buildBackground` = sama kopuła; literały PSF co do znaku (baza derywacji kopuły nieba i płyty galaktyki).
+//   T9  wpięcie — bez flagi (klucza brak), wywołanie w GameScene po zmintowaniu / wczytaniu, przeliczenie w switchSystem
+//       po initSystem, kopuła za kamerą po update kontrolera i przed composerem.
 //   T10 pokrętła — alias `skyTuning`, każde pole ma czytelnika, zmiana pokrętła zmienia niebo, FILLER_COUNT = ogon.
 //   T11 StarPointShader — derywacja `uRealFade` (wstawki, reszta co do znaku), fabryka kopuły (lista nieprzezroczysta,
 //       bez testu i zapisu głębi, addytywnie, bez chunków V4).
@@ -36,8 +42,7 @@ let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };
 const read = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
-const norm = (s) => strip(s).replace(/\s+/g, ' ').trim();
-const sha = (t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex').slice(0, 16);
+const sha =(t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex').slice(0, 16);
 const BT = String.fromCharCode(96);
 /** Ciało metody klasy (wcięcie 2) — od `{` do linii `  }`. */
 const methodBody = (src, sig) => {
@@ -221,40 +226,38 @@ const rec = methodBody(trSrc, "_recomputeSky(reason = 'recompute')") ?? '';
 ok('_recomputeSky bez katalogu ⇒ punkty niewidoczne (niebo puste, nie stare)', /if \(!cat\) \{\s*points\.visible = false;/.test(strip(rec)));
 
 // ── T8 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-console.log('\nT8 — flaga OFF ⇒ `_buildBackground` = kod kotwicy e4e5717 co do znaku (po normalizacji)');
-const GOLD_OFF = '934bbfdeba070e93';            // _buildBackground kotwicy, literały → STAR_VERT / STAR_FRAG, bez komentarzy
-const GOLD_VERT = '1786d5e76b1eca0a', GOLD_FRAG = '9c36b1b87fe10f68';   // treść literałów PSF w kotwicy (LF)
+console.log('\nT8 — `_buildBackground` = sama kopuła (ścieżka OFF usunięta w G5-B); literały PSF co do znaku');
+const GOLD_VERT = '1786d5e76b1eca0a', GOLD_FRAG = '9c36b1b87fe10f68';   // treść literałów PSF w kotwicy (LF) — baza derywacji
 ok(`STAR_VERT co do znaku jak w kotwicy (sha ${sha(SPS.STAR_VERT)})`, sha(SPS.STAR_VERT) === GOLD_VERT);
 ok(`STAR_FRAG co do znaku jak w kotwicy (sha ${sha(SPS.STAR_FRAG)})`, sha(SPS.STAR_FRAG) === GOLD_FRAG);
 ok('KONTROLA: zmiana jednego znaku literału zmienia sumę', sha(SPS.STAR_VERT.replace('38.0', '39.0')) !== GOLD_VERT || sha(SPS.STAR_FRAG.replace('38.0', '39.0')) !== GOLD_FRAG);
-const bg = methodBody(trSrc, '_buildBackground()'), neb = methodBody(trSrc, '_buildNebula()');
-ok('pierwsza instrukcja _buildBackground = gałąź ON (`if (skyCatalogOn()) { this._buildSkyDome(); return; }`)',
-   !!bg && strip(bg).trim().startsWith('if (skyCatalogOn()) { this._buildSkyDome(); return; }'));
-const offEquiv = bg && neb ? bg.replace('if (skyCatalogOn()) { this._buildSkyDome(); return; }', '')
-  .replace('this.scene.add(this._buildNebula());', neb.replace('return nebula;', 'this.scene.add(nebula);')) : '';
-ok(`ścieżka OFF (bez gałęzi ON, mgławica z powrotem w miejscu wywołania) = kotwica (sha ${sha(norm(offEquiv))})`, sha(norm(offEquiv)) === GOLD_OFF);
-ok('KONTROLA: inna liczba gwiazd w ścieżce OFF zmienia sumę', sha(norm(offEquiv.replace('const N   = 7000;', 'const N   = 7001;'))) !== GOLD_OFF);
-ok('ścieżka OFF używa literałów ze StarPointShader.js (import), nie własnej kopii',
-   /import \{ STAR_VERT, STAR_FRAG, createSkyStarMaterial \} from '\.\/StarPointShader\.js';/.test(trSrc) && !trCode.includes('const starVert = ' + BT));
+const bg = methodBody(trSrc, '_buildBackground()');
+ok('_buildBackground = sama kopuła: cała treść `this._buildSkyDome();` (bez gałęzi flagi i bez powłoki z Math.random)',
+   !!bg && strip(bg).trim() === 'this._buildSkyDome();');
+ok('renderer importuje ze StarPointShader.js wyłącznie fabrykę kopuły — bez literałów PSF i bez własnej kopii',
+   /import \{ createSkyStarMaterial \} from '\.\/StarPointShader\.js';/.test(trSrc) && !/\bSTAR_(VERT|FRAG)\b/.test(trCode) && !trCode.includes('const starVert = ' + BT));
 
 // ── T9 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-console.log('\nT9 — wpięcie: flaga, GameScene, switchSystem, kopuła za kamerą');
-ok('flaga czytana FUNKCJĄ, idiom „brak klucza = OFF"', trCode.includes('const skyCatalogOn = () => !!GAME_CONFIG.FEATURES?.skyCatalog;'));
+console.log('\nT9 — wpięcie: bez flagi, GameScene, switchSystem, kopuła za kamerą');
+// G5-B: flaga na stałe ON — klucza w FEATURES brak (żywy obiekt), renderer bez czytnika flagi.
+const { GAME_CONFIG } = await import('../../config/GameConfig.js');
+ok('flagi brak: klucza `skyCatalog` w FEATURES brak, `skyCatalogOn` w rendererze brak',
+   !!GAME_CONFIG?.FEATURES && Object.keys(GAME_CONFIG.FEATURES).length > 10 && !('skyCatalog' in GAME_CONFIG.FEATURES)
+   && !/\bskyCatalogOn\b|FEATURES\??\.skyCatalog\b/.test(trCode));
 const cfgSrc = read('../../config/GameConfig.js');
-ok('flaga istnieje w GameConfig i jest ON (krok do obejrzenia)', /skyCatalog:\s*true,/.test(strip(cfgSrc)));
 const gsCode = strip(read('../../scenes/GameScene.js'));
 const call = 'this.threeRenderer?.setSkyGalaxy?.(window.KOSMOS.galaxyData);';
 const iCall = gsCode.indexOf(call), iMint = gsCode.indexOf('window.KOSMOS.galaxyData = GalaxyGenerator.generate('),
       iLoad = gsCode.indexOf('window.KOSMOS.galaxyData = savedData.civ4x.galaxyData;'), iEmp = gsCode.indexOf('EmpireGenerator.generate(window.KOSMOS.galaxyData');
 ok('GameScene: setSkyGalaxy dokładnie RAZ, po obu gałęziach (mint i wczytanie), przed imperiami',
    gsCode.split(call).length === 2 && iMint > 0 && iLoad > iMint && iCall > iLoad && iEmp > iCall);
-ok('setSkyGalaxy: przy fladze OFF (brak kopuły) no-op', /setSkyGalaxy\(galaxyData\) \{\s*if \(!this\._sky\) return null;/.test(trCode));
+ok('setSkyGalaxy: bez kopuły (`_sky` = null) — no-op', /setSkyGalaxy\(galaxyData\) \{\s*if \(!this\._sky\) return null;/.test(trCode));
 const sw = strip(methodBody(trSrc, 'switchSystem(star, planets, planetesimals, moons = [])') ?? '');
 ok('switchSystem: przeliczenie nieba PO initSystem (nowy układ = nowe niebo)', sw.indexOf('this.initSystem(') >= 0 && sw.indexOf("this._recomputeSky('switchSystem')") > sw.indexOf('this.initSystem('));
 ok('switchSystem: układ obserwatora z gwiazdy nowego układu (`star.systemId`)', sw.includes('this._skySystemId = star?.systemId'));
 const loop = strip(methodBody(trSrc, '_startLoop()') ?? '');
 const iUpd = loop.indexOf('this._cameraController.update()'), iSky = loop.indexOf('this._sky.group.position.copy(this.camera.position)'), iComp = loop.indexOf('this._composer.render()');
-ok('pętla: kopuła za kamerą PO update kontrolera, PRZED composerem; bramka `this._sky` (OFF — brak)',
+ok('pętla: kopuła za kamerą PO update kontrolera, PRZED composerem; bramka `this._sky` (bez kopuły — nic)',
    iUpd > 0 && iSky > iUpd && iComp > iSky && loop.includes('if (this._sky) { this._sky.group.position.copy(this.camera.position); this._tickSky(); }'));
 
 // ── T10 ───────────────────────────────────────────────────────────────────────────────────────────────────────────

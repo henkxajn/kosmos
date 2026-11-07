@@ -16,11 +16,13 @@
 //   W9  cel nurkowania: zaznaczona (gdy da się wejść; inaczej brak), inaczej najbliższa celowi kamery w 3 ly, do której da
 //       się wejść; poza promieniem — brak (kółko staje na podłodze)
 //   W10 nawiasy celu od dwóch ostatnich ząbków nad podłogą
-//   W11 hak kółka `GalaxyModeController.onWheel`: flaga `galaxyLook` OFF — zawsze `false` (gałąź `wheelZoom` jak w G1);
-//       lot w toku połyka kółko; gest u sufitu układu wchodzi w tryb galaktyki; nurkowanie bez celu — `false`
+//   W11 hak kółka `GalaxyModeController.onWheel`: gest u sufitu układu wchodzi w tryb galaktyki; lot w toku połyka kółko;
+//       nurkowanie bez celu — `false`
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B): flagi `galaxyView` / `galaxyLook` na stałe ON, ścieżki OFF usunięte (`onWheel`
+//   nie czyta flagi) — wycofane W11a (flaga galaxyLook OFF — hak zawsze `false`, brak gestu jak w G1); W11b–W11e bez zmian;
+//   linie ustawiające i przywracające flagi usunięte (W11).
 // Uruchom: node src/testing/smoke/galaxy_gesture_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
-import { GAME_CONFIG } from '../../config/GameConfig.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++; console.log('  ✗ FAIL:', m); } };
@@ -197,7 +199,6 @@ header('W10 nawiasy celu');
 
 header('W11 hak kółka GalaxyModeController.onWheel');
 {
-  const flagV = GAME_CONFIG.FEATURES.galaxyView, flagL = GAME_CONFIG.FEATURES.galaxyLook;
   const log = [];
   const K = { civMode: true };
   globalThis.window.KOSMOS = K;
@@ -206,13 +207,6 @@ header('W11 hak kółka GalaxyModeController.onWheel');
   // Atrapa kontrolera kamery — hak czyta pola `_targetDist` / `_dist` i gettery `minDist` / `maxDist`.
   const asCam = (c) => ({ mode: c.mode, _targetDist: c.targetDist, _dist: c.dist, minDist: c.minDist, maxDist: c.maxDist });
   const camSys = asCam(SYS());
-  GAME_CONFIG.FEATURES.galaxyView = true; GAME_CONFIG.FEATURES.galaxyLook = false;
-  const off1 = call(() => gm.onWheel(notch(100), camSys));
-  const off2 = call(() => gm.onWheel(notch(100), camSys));
-  const off3 = call(() => gm.onWheel(notch(100), camSys));
-  ok(off1 === false && off2 === false && off3 === false && log.length === 0,
-    'W11a flaga galaxyLook OFF — hak zawsze false, brak gestu (G1 co do bitu), także po trzech ząbkach');
-  GAME_CONFIG.FEATURES.galaxyLook = true;
   const a = call(() => gm.onWheel(notch(100), camSys));
   const b = call(() => gm.onWheel(notch(100), camSys));
   const c = call(() => gm.onWheel(notch(100), camSys));
@@ -231,7 +225,6 @@ header('W11 hak kółka GalaxyModeController.onWheel');
   const dive = call(() => gm.onWheel(notch(-100), asCam(GAL())));
   ok(d1 === false && d2 === false && dive === true && log.some((e) => e[0] === 'dive' && e[1] === 'sys_tgt'),
     'W11e nurkowanie z celem — dopiero trzeci ząbek wchodzi w układ celu');
-  GAME_CONFIG.FEATURES.galaxyView = flagV; GAME_CONFIG.FEATURES.galaxyLook = flagL;
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

@@ -17,8 +17,7 @@ import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   /
 import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
 import { coordTooltipBlocked } from '../ui/ShipPanelHudLogic.js';   // REFORMA ZAKŁADEK T5 — 530: dymek współrzędnych nie nad UI
 import { escapeClosesFleetPanel } from '../ui/FleetPanelHudLogic.js';   // REFORMA ZAKŁADEK T6 — Esc zamyka panel floty
-import { isGalaxyToggleKey, galaxyLyToWorld, LIVE_GALAXY } from '../ui/GalaxyModeLogic.js';   // ARC GALAXY G1 — klawisz G, przyrządy bramki
-import { galaxyLookOn } from '../ui/GalaxyModeController.js';                              // ARC GALAXY G2 — flaga wyglądu
+import { isGalaxyToggleKey, galaxyLyToWorld, LIVE_GALAXY } from '../ui/GalaxyModeLogic.js';   // ARC GALAXY G1 — klawisze G / M, przyrządy bramki
 import { galaxyScanChip, runGalaxyPinAction } from '../ui/GalaxyChromeLogic.js';           // ARC GALAXY G2-2 — przyrząd skanu
 import { observatoryRangeLY, inObservatoryRange, planarDistanceLY } from '../utils/ObservatoryRange.js';   // G2 — D-GX-22
 import { resolveHomeColony } from '../utils/TransferStore.js';
@@ -310,7 +309,7 @@ export class GameScene {
     this.vesselManager   = new VesselManager();
     // Warp multi-hop — egzekutor sekwencji skoków (subskrybuje interstellar:arrived).
     this.warpRouteSystem = new WarpRouteSystem(this.vesselManager);
-    // Zunifikowana fasada rozkazów (rejestr/Stratcom/PPM) + auto-chain cross-system transport.
+    // Zunifikowana fasada rozkazów (rejestr/mapa galaktyki/PPM) + auto-chain cross-system transport.
     this.orderService    = new OrderService();
     // MVP Zlecenia Transportowe — ręczny transport przez „pulę logistyczną" (przez OrderService).
     this.transportOrderSystem = new TransportOrderSystem();
@@ -987,7 +986,7 @@ export class GameScene {
       //   ile układów każde imperium ROŚCI, ilu dotyka STREFĄ GRANICZNĄ (powłoka
       //   TERRITORY.BORDER_LY na zewnątrz roszczenia) i jaki to procent galaktyki.
       //   Z argumentem wypisuje też listy identyfikatorów tego właściciela.
-      //   ⚠ To DANE dla reguł, nie warstwa rysunku — Stratcom pokazuje samo roszczenie.
+      //   ⚠ To DANE dla reguł, nie warstwa rysunku — płyta galaktyki pokazuje samo roszczenie.
       //   Pokrycie zmierzone przy 5 LY: 17,7% (src/testing/headless/probe-border-zone-coverage.mjs).
       influenceMap: (ownerId = null) => {
         const im = window.KOSMOS?.influenceMap;
@@ -1395,7 +1394,7 @@ export class GameScene {
       //   Równoważne wejście: `spawnEnemyAttack({ warpCapable: true })`.
       spawnEnemyRaider,
       // KOSMOS.debug.spawnEnemyWarpGhost({ offsetLY?, name? }) — wrogi statek w tranzycie
-      // warp (pełna instancja Vessel) do testu ghost „?" na radarze/galaktyce Stratcom.
+      // warp (pełna instancja Vessel) do testu ghost „?" na płycie galaktyki.
       // Zastępuje kruchy ręczny `_vessels.set('ghost_test', {...})` (surowy obiekt → crashe).
       spawnEnemyWarpGhost,
       // KOSMOS.debug.setIntel(empireId, level) — USTAW poziom wywiadu o imperium.
@@ -4986,7 +4985,7 @@ export class GameScene {
             && !um?._bottomBar?.menuOpen && !document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) {
           e.preventDefault();
           // ARC GALAXY G2-2 (idiom przypięcia, D-TR-5) — przypięta (zaznaczona) gwiazda schodzi PIERWSZA; kolejny Esc — powrót.
-          if (galaxyLookOn() && window.KOSMOS.galaxyMode.selectedSystemId != null) window.KOSMOS.galaxyMode.select(null);
+          if (window.KOSMOS.galaxyMode.selectedSystemId != null) window.KOSMOS.galaxyMode.select(null);
           else window.KOSMOS.galaxyMode.exit('esc');
           um?.markDirty?.();
           return;
@@ -5056,9 +5055,9 @@ export class GameScene {
         }
       }
 
-      // ARC GALAXY G1 (D-GX-8) — G (także Shift+G) przełącza tryb galaktyki głównego widoku, PRZED keymapą overlayów (wpis `g`
-      // zdjęty z `OverlayManager._keyMap` przy fladze); z otwartym overlayem — overlay się zamyka i tryb galaktyki wchodzi.
-      if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.galaxyView && isGalaxyToggleKey(e)) {
+      // ARC GALAXY G1 (D-GX-8) — G (także Shift+G) przełącza tryb galaktyki głównego widoku, PRZED keymapą overlayów; od G5
+      // także M (dawny skrót Stratcomu). Z otwartym overlayem — overlay się zamyka i tryb galaktyki wchodzi.
+      if (window.KOSMOS?.civMode && isGalaxyToggleKey(e)) {
         e.preventDefault();
         const om = this.uiManager.overlayManager;
         const gm = window.KOSMOS.galaxyMode;
@@ -5118,11 +5117,10 @@ export class GameScene {
         case 'Digit8':
         case 'Digit9': {
           const layer = layerForKeyCode(e.code);
-          // ARC GALAXY G2-2 (D-GX-16) — w trybie galaktyki orbity układu nie mają chipu; klawisz 9 należy do chipu „Okręty” (G3, flaga
-          // `galaxyWarp` — nazwy szyny statków), bez flagi — bez skutku.
-          const galaxyNine = layer === 'orbits' && galaxyLookOn() && window.KOSMOS?.galaxyMode?.isActive === true;
-          const shipsNine = galaxyNine && GAME_CONFIG.FEATURES?.galaxyWarp === true;
-          if (layer && (!galaxyNine || shipsNine) && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
+          // ARC GALAXY G2-2 (D-GX-16) — w trybie galaktyki orbity układu nie mają chipu; klawisz 9 należy do chipu „Okręty”
+          // (G3 — nazwy szyny statków).
+          const shipsNine = layer === 'orbits' && window.KOSMOS?.galaxyMode?.isActive === true;
+          if (layer && layerKeyAllowed({ civMode: !!window.KOSMOS?.civMode, overlayOpen: this.uiManager?.overlayManager?.isAnyOpen?.() === true,
             modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay, .se-overlay, .at-overlay, .ce-overlay'),
             planetSceneOpen: !!this.planetScene?.isOpen, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey })) {
             e.preventDefault();
@@ -6401,10 +6399,8 @@ export class GameScene {
 
   _handleTacticalRightClick(e) {
     if (this.planetScene?.isOpen) return;
-    // ARC GALAXY G3-B — w trybie galaktyki jedyne menu mapy to skok z gwiazdy płyty (`_openGalaxyStarMenu`, po bramkach niżej);
-    // flaga `galaxyWarp` OFF — jak w G1, bez menu.
+    // ARC GALAXY G3-B — w trybie galaktyki jedyne menu mapy to skok z gwiazdy płyty (`_openGalaxyStarMenu`, po bramkach niżej).
     const galaxyActive = window.KOSMOS?.galaxyMode?.isActive === true;
-    if (galaxyActive && !GAME_CONFIG.FEATURES?.galaxyWarp) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
     // P1.3.5 post-fix #1 (D2 reinforcement) — Strategy A pełna:

@@ -12,15 +12,13 @@
 //     znacznik w roli z relacji (linię skoku rysuje `HudGalaxyRouteLayer`), inaczej duch „?” (bez linii i bez nazwy);
 //   • gwiazda pod kursorem wygrywa z wierszem szyny (strefa HUD — weto `galaxyStarAt`), przeszkody dla nazw płyty
 //     (`labelObstacles`); krycie × rozjaśnienie chromu trybu galaktyki;
-//   • ARC GALAXY G3 (flaga `galaxyWarp`) — GĘSTOŚĆ: domyślnie znacznik bez nazw, „+N” od dwóch statków bez wiersza (samotny statek — sam
+//   • ARC GALAXY G3 — GĘSTOŚĆ: domyślnie znacznik bez nazw, „+N” od dwóch statków bez wiersza (samotny statek — sam
 //     znacznik, `RAIL_PLUS_MIN`); wiersze z nazwami ma gwiazda najechana
 //     (`hoverObjectKey`), zaznaczona i ta, nad której wierszem stoi kursor (bez tego wiersz znikałby po zejściu kursora z gwiazdy), a także
 //     statek zaznaczony; chip [O] „Okręty” (klawisz 9) włącza nazwy wszędzie (`railVisibleShips`);
 //   • ARC GALAXY G3 — CTRL+klik wiersza przełącza statek w zbiorze zaznaczonych (`Outliner._onHit`) i wygrywa z gwiazdą sąsiada pod
 //     kursorem: przy CTRL zamiarem jest statek.
-// Flaga `galaxyLook` OFF — podwarstwa milczy.
 // ⚠ Moduł importuje się pod node (keeper — atrapa świata): bez three i bez DOM.
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { getLocale } from '../i18n/i18n.js';
 import { HUD_LABELS, pointInRect, resolveLabelClick } from './HudLabelLogic.js';
@@ -57,8 +55,6 @@ export class HudGalaxyRailLayer {
     this._measure = new Map();
   }
 
-  _on() { return !!GAME_CONFIG.FEATURES?.galaxyView && !!GAME_CONFIG.FEATURES?.galaxyLook; }
-
   _width(font, size, s) {
     const k = font + '|' + s;
     const hit = this._measure.get(k);
@@ -74,7 +70,7 @@ export class HudGalaxyRailLayer {
 
   prepare(F) {
     const K = F.K, gm = K?.galaxyMode, tr = K?.threeRenderer;
-    if (!this._on() || gm?.isActive !== true || typeof tr?.getGalaxyStarsWorld !== 'function' || typeof tr?.getGalaxyAnchorLy !== 'function') {
+    if (gm?.isActive !== true || typeof tr?.getGalaxyStarsWorld !== 'function' || typeof tr?.getGalaxyAnchorLy !== 'function') {
       this._prep = { on: false };
       return 'gs:0';
     }
@@ -98,8 +94,8 @@ export class HudGalaxyRailLayer {
     });
     const fleetIdx = buildFleetIndex(K.fleetSystem?.listFleets?.() ?? [], vessels);
     const groups = groupTransitByFleet(rail.transit, (id) => fleetIdx.get(String(id)) ?? null, selIds);
-    // Gęstość (G3): flaga OFF albo chip [O] — nazwy wszędzie; inaczej gwiazda najechana, zaznaczona i ta z wierszem pod kursorem.
-    const openAll = !GAME_CONFIG.FEATURES?.galaxyWarp || readHudLayers(K.uiPrefs).ships === true;
+    // Gęstość (G3): chip [O] — nazwy wszędzie; inaczej gwiazda najechana, zaznaczona i ta z wierszem pod kursorem.
+    const openAll = readHudLayers(K.uiPrefs).ships === true;
     const hoverKey = this._hud?.hoverObjectKey?.() ?? null;
     const ptr = F.pointer;
     const openStars = new Set();
@@ -140,7 +136,7 @@ export class HudGalaxyRailLayer {
       const dims = texts.map((s) => ({ w: this._width(font, size, s) + 2 * G.ROW_PAD_X, h: rowH }));
       const plusText = `+${Math.max(0, list.length - Math.min(visible.length, GALAXY_CHROME.RAIL_MAX_ROWS))}`;
       const lay = railLayout({ ax: p.x, ay: p.y, rows: dims, pickHalf: GALAXY_PICK_HALF_PX, plusW: this._width(font, size, plusText) + 2 * G.ROW_PAD_X,
-        hidden: list.length - visible.length, rowH, plusMin: GAME_CONFIG.FEATURES?.galaxyWarp ? GALAXY_CHROME.RAIL_PLUS_MIN : 1 });
+        hidden: list.length - visible.length, rowH, plusMin: GALAXY_CHROME.RAIL_PLUS_MIN });
       lay.rows.forEach((r) => {
         const v = visible[r.index];
         rows.push({ ...r, vesselId: v.id, text: texts[r.index], selected: P.selIds.has(String(v.id)), font, size, sx: p.x, sy: p.y });
@@ -223,10 +219,9 @@ export class HudGalaxyRailLayer {
       ctx.fillStyle = THEME.bgPrimary;
       ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
       ctx.font = pl.font;
-      // G3: przy fladze „+N” niesie liczbę statków, więc musi być czytelny; OFF — rola `dim` jak w G2.
-      const plusOn = GAME_CONFIG.FEATURES?.galaxyWarp === true;
-      ctx.fillStyle = plusOn ? roles.primary : roles.dim;
-      ctx.globalAlpha = (plusOn ? G.PLUS_ALPHA : 1) * a;
+      // G3: „+N” niesie liczbę statków, więc musi być czytelny.
+      ctx.fillStyle = roles.primary;
+      ctx.globalAlpha = G.PLUS_ALPHA * a;
       ctx.fillText(pl.text, pl.x + G.ROW_PAD_X, pl.y + pl.h - 3);
     }
     // Statki przy gwieździe — pusty romb (SM-1); w tranzycie warp — pusty daszek w kierunku podróży; flota — jeden
@@ -293,7 +288,7 @@ export class HudGalaxyRailLayer {
     if (!z) return false;
     const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
     const ro = K?.rightOutliner ?? K?.uiManager?._outliner ?? null;
-    const ctrl = GAME_CONFIG.FEATURES?.galaxyWarp === true && ro?._lastMouseMods?.ctrl === true;
+    const ctrl = ro?._lastMouseMods?.ctrl === true;
     if (!ctrl && K?.threeRenderer?.galaxyStarAt?.(rawX, rawY) != null) return false;
     if (ro?._onHit) ro._onHit({ type: 'vessel', vesselId: z.vesselId }, x, y, K);
     else K?.uiManager?.setSelectedVesselId?.(z.vesselId);

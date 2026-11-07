@@ -51,7 +51,7 @@ export class WarpRouteSystem {
     if (!(v.warpFuel?.max > 0))               return { ok: false, reason: 'not_warp_capable' };
     // Finding 588 (D-GX-12): kadłub bez załogi nie skacze — bliźniak bramki MOS `vessel_in_reserve` (W3-4 / D6). Powód tego samego
     //   brzmienia co w MOS, żeby odmowa czytała ten sam klucz i18n. Przed `immobilized`: „obsadź załogą” jest tu krokiem do zrobienia.
-    if (GAME_CONFIG.FEATURES?.galaxyWarp && !isInService(v)) return { ok: false, reason: 'vessel_in_reserve' };
+    if (!isInService(v))                      return { ok: false, reason: 'vessel_in_reserve' };
     if (this._vm?.isImmobilized?.(v))         return { ok: false, reason: 'immobilized' };
     // Finding 607: statek w aktywnym starciu nie skacze. Rozkaz był przyjmowany i płatny, a statek zostawał w walce. Ten sam predykat co „Odwrót”
     //   grupy i bramka MOS `not_in_combat` (Finding 562). Przed stanem: statek w odwrocie jest `in_transit`, a powodem ma być walka. Za `immobilized`:
@@ -69,8 +69,8 @@ export class WarpRouteSystem {
    * Rozpocznij podróż warp do układu docelowego (single- lub multi-hop).
    * @param {string} vesselId
    * @param {string} targetSystemId
-   * @param {{hops?:string[], groupId?:string, speedLY?:number, arrivalAngle?:number}} [opts] — G4 (D-GX-19), skok floty; przy `fleetWarp` OFF
-   *   niewidzialne. `hops`: gotowa trasa, bez planera (bramka statku i jego bak sprawdzane dalej); `speedLY`: LY/rok na KAŻDYM odcinku;
+   * @param {{hops?:string[], groupId?:string, speedLY?:number, arrivalAngle?:number}} [opts] — G4 (D-GX-19), skok floty.
+   *   `hops`: gotowa trasa, bez planera (bramka statku i jego bak sprawdzane dalej); `speedLY`: LY/rok na KAŻDYM odcinku;
    *   `arrivalAngle`: rad, tylko na ostatnim odcinku; `groupId`: linia Dziennika należy do floty. Bez opts — jak przed G4 co do bajtu.
    * @returns {{ok:boolean, reason?:string, route?:Object}}
    */
@@ -89,7 +89,7 @@ export class WarpRouteSystem {
     // limitu → planner łańcuchuje multi-hop przez układy pośrednie.
     const tankRange = (wf?.max > 0 && wf?.consumption > 0) ? wf.max / wf.consumption : 0;
     const maxHopLY = Math.min(GAME_CONFIG.WARP_MAX_JUMP_LY ?? 10, tankRange);
-    const group = GAME_CONFIG.FEATURES?.fleetWarp ? (opts ?? {}) : {};
+    const group = opts ?? {};
     const plan = Array.isArray(group.hops) ? this._givenRoute(v, systems, targetSystemId, group) : planWarpRoute(systems, v.systemId ?? 'sys_home', targetSystemId, {
       maxHopLY,
       currentFuel: wf?.current ?? 0,
@@ -118,7 +118,7 @@ export class WarpRouteSystem {
     EventBus.emit('warpRoute:started', { vesselId, route: plan, finalSystemId: targetSystemId });
     // Finding 589 (D-GX-18): start skoku pisze do Dziennika PRZED przylotem, więc nazwa celu idzie przez kanon mgły.
     //   `warpRoute.legDone` / `completed` zostają przy `_systemName` — lecą po `markSystemExplored`, układ jest już poznany.
-    const finalName = GAME_CONFIG.FEATURES?.galaxyWarp ? warpSystemLabel(targetSystemId) : this._systemName(targetSystemId);
+    const finalName = warpSystemLabel(targetSystemId);
     if (!group.groupId) this._log(t('warpRoute.started', v.name, finalName, String(plan.hops.length - 1)), 'info');
     return { ok: true, route: plan };
   }
@@ -210,12 +210,11 @@ export class WarpRouteSystem {
     EventBus.emit('ui:toast', { text, color: '#ffcc44', durationMs: 4000 });
   }
 
-  // Bramka członka: `canOrder` + dwa terminy, których brak zepchnąłby odmowę do fazy 2, po starcie pierwszych członków.
+  // Bramka członka: `canOrder` (w nim rezerwa — Finding 588) + termin napędu, którego brak zepchnąłby odmowę do fazy 2,
+  // po starcie pierwszych członków.
   _groupGateRefusal(v) {
     const gate = this.canOrder(v);
     if (!gate.ok) return gate.reason;
-    // Finding 588 — rezerwa odmawia także przy `galaxyWarp` OFF; `canOrder` bramkuje ten termin tamtą flagą.
-    if (!isInService(v)) return 'vessel_in_reserve';
     // `dispatchInterstellar` wymaga NAPĘDU, `canOrder` pyta tylko o bak (kadłub z Komorą Warp bez `engine_warp`).
     const def = SHIPS[v.shipId] ?? HULLS[v.shipId] ?? null;
     const stats = (def && Array.isArray(v.modules) && v.modules.length > 0) ? calcShipStats(def, v.modules) : null;

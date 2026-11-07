@@ -7,7 +7,7 @@
 //     outlinera wynika z JEDNEJ reguły (`GalaxyOutlinerLogic.isGalaxyNameKnown` — `reveal.name` ∨ własna obecność);
 //     właściciel i linia informacji — z tych samych funkcji co wiersz outlinera (`galaxyOwnerText`, `galaxyInfoText`).
 //     Przypięcie / najechanie gwiazdy bez nazwy pokazuje „???” (nazwa na płycie — nic, wiersz — brak).
-//   • PRZYPIĘCIE (D-GX-17 (c)): [ Wejdź ] (tylko gdy da się wejść — bramka G1), [ Wyślij ▼ ] (obecny, wyłączony do G3),
+//   • PRZYPIĘCIE (D-GX-17 (c)): [ Wejdź ] (tylko gdy da się wejść — bramka G1), [ Wyślij ▼ ] (zawsze aktywny od G5 — dawna blokada do G3 usunięta),
 //     [ Skanuj ] / [ Skanuj dokładniej ] / [ Anuluj skan ] — skan ma tu JEDYNY przyszły dom (wymóg właściciela 2026-10-31):
 //     `ObservatorySystem.startSystemScan` / `cancelSystemScan`, ta sama bramka obserwatorium (tier ≥ 1) i zasięg
 //     (`STRATCOM_LY_BY_LEVEL` przez `ObservatoryRange` — D-GX-22, pokrętło `SCAN_RANGE_GATE`), te same komunikaty; chip
@@ -18,7 +18,7 @@
 //   • SZYNA statków: wiersze OBOK gwiazdy (na prawo), nigdy na kwadracie wyboru gwiazdy (±`GALAXY_PICK_HALF_PX`) —
 //     niezmiennik Findingu 110 (ikona nie kradnie kliku gwiazdy) przeniesiony z wachlarza Stratcomu; wiersze kafelkują
 //     (bez nakładania), ponad `RAIL_MAX_ROWS` — „+N” bez strefy kliku; gwiazda poza kadrem — bez wierszy i bez stref.
-//   • BLIP obcego skoku warp (dzisiejszy kanon Stratcomu, `_stratcomWarpBlipMode`): w zasięgu obserwatorium od domu (płasko),
+//   • BLIP obcego skoku warp (dawny kanon Stratcomu, `_stratcomWarpBlipMode` — usunięty w G5): w zasięgu obserwatorium od domu (płasko),
 //     wywiad o STATKU `contact` / `detailed` → pełny blip + linia trasy, inaczej duch „?” (bez trasy); własne — zawsze.
 // Czysty: bez `window`, bez three, bez DOM; `t`, formatery i kanały świata podaje wołający.
 import { GALAXY_PICK_HALF_PX } from './GalaxyModeLogic.js';
@@ -33,7 +33,6 @@ export const GALAXY_CHROME = Object.freeze({
   RAIL_MAX_ROWS: 3,        // wiersze szyny; dalsze — „+N” (bez strefy kliku)
   RAIL_PLUS_MIN: 2,        // G3: od tylu statków bez wiersza rysuje się „+N” (samotny statek — sam znacznik)
   RAIL_ROW_GAP: 1,         // odstęp wierszy szyny
-  NOT_YET: 'G3',           // powód wyłączonego [ Wyślij ▼ ] (rozkaz warp z płyty — krok G3)
 });
 
 /** Przypięcie / najechanie gwiazdy bez nazwy — nagłówek (nazwa na płycie i wiersz outlinera — brak). */
@@ -45,7 +44,7 @@ const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 // ── Treść (wspólna z lewym outlinerem — anty-lustro) ─────────────────────────────────────────────────────────────────
 
 /**
- * Właściciel układu — klucze panelu Stratcom (`fleet.stratcomEmpire*`): imperium wg osi właściciela, gracz, obcy, nieznany.
+ * Właściciel układu — klucze dawnego panelu Stratcom (`fleet.stratcomEmpire*`, nazwy zostają): imperium wg osi właściciela, gracz, obcy, nieznany.
  * Ta sama funkcja zasila wiersz rozwinięcia lewego outlinera i linię przypięcia.
  * @param {{kind:'player'|'identity'|'foreign'|'unknown', empireId?:string|null}} owner — z `buildGalaxySystemList`
  * @param {{ t:Function, empireName?:(id:string)=>string|null }} o
@@ -184,13 +183,13 @@ export function stripLeadSymbol(s) {
 }
 
 /**
- * Przyciski przypięcia: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (aktywny z flagą `galaxyWarp`), chip skanu (`galaxyScanChip`).
+ * Przyciski przypięcia: [ Wejdź ] (gdy da się wejść), [ Wyślij ▼ ] (picker skoku — G3), chip skanu (`galaxyScanChip`).
  * @returns {Array<{ id:string, label:string, enabled:boolean, reason:string|null }>} — `reason`: tekst powodu wyłączenia
  */
-export function galaxyPinButtons({ enterable = false, scanChip = null, sendEnabled = false, t } = {}) {
+export function galaxyPinButtons({ enterable = false, scanChip = null, t } = {}) {
   const out = [];
   if (enterable) out.push({ id: 'enter', label: t('galaxyPin.enter'), enabled: true, reason: null });
-  out.push({ id: 'send', label: t('galaxyPin.send'), enabled: sendEnabled === true, reason: sendEnabled === true ? null : GALAXY_CHROME.NOT_YET });
+  out.push({ id: 'send', label: t('galaxyPin.send'), enabled: true, reason: null });
   if (scanChip) {
     out.push({ id: scanChip.id, label: stripLeadSymbol(t(scanChip.labelKey)), enabled: scanChip.enabled === true,
       reason: scanChip.reasonKey ? t(scanChip.reasonKey) : null });
@@ -250,7 +249,7 @@ export function galaxyLabelEssential({ home = false, own = false, selected = fal
 // ── Szyna statków ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Model szyny (lustro `_stratcomOwnShipBlips` Stratcomu — ten sam zbiór): własne statki z bakiem warp albo w trakcie skoku;
+ * Model szyny (dawny zbiór `_stratcomOwnShipBlips` Stratcomu, usuniętego w G5): własne statki z bakiem warp albo w trakcie skoku;
  * w tranzycie warp — punkt na linii skoku (galaktyka x, y z misji; z — interpolacja między układami wg `galProgress`);
  * pozostałe — wiersze przy gwieździe swojego układu (kolejność: nazwa, potem id — stała między klatkami).
  * @param {{ vessels:Array, systems:Array }} p

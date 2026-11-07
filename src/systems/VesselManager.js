@@ -941,7 +941,7 @@ export class VesselManager {
     if (state !== 'docked' && state !== 'orbiting') return false;
     // Finding 588 (D-GX-12): rezerwa nie skacze — bliźniak `WarpRouteSystem.canOrder` dla wejść omijających planer (`FleetActions`,
     //   fallbacki FMO). Tylko gałąź gracza: ścieżka AI nietknięta. `opts.force` omija paliwo, nie załogę.
-    if (GAME_CONFIG.FEATURES?.galaxyWarp && !isEnemyVessel(vessel) && !isInService(vessel)) return false;
+    if (!isEnemyVessel(vessel) && !isInService(vessel)) return false;
     // Finding 607: statek w starciu nie skacze — bliźniak `WarpRouteSystem.canOrder` dla wejść omijających planer, jak rezerwa wyżej. Tylko gałąź
     //   gracza: ścieżka AI nietknięta. `opts.force` omija paliwo, nie walkę.
     if (!isEnemyVessel(vessel) && combatCheckOf(window.KOSMOS)?.(vesselId)) return false;
@@ -990,9 +990,9 @@ export class VesselManager {
 
     // Prędkość warp (z bonusem beacon) — z modułów jeśli dostępne
     // G4 (D-GX-19) — blokada prędkości floty: `opts.speedLY` (najwolniejszy członek, LY/rok) zastępuje własną prędkość statku, więc członkowie
-    //   wysłani w tym samym ticku lądują w tym samym ticku. Tylko gałąź GRACZA i za flagą; ścieżka AI nietknięta. Premia beacona zostaje:
+    //   wysłani w tym samym ticku lądują w tym samym ticku. Tylko gałąź GRACZA; ścieżka AI nietknięta. Premia beacona zostaje:
     //   zależy od układu celu, więc dla grupy jest wspólna.
-    const speedLock = (GAME_CONFIG.FEATURES?.fleetWarp && !isEnemyVessel(vessel) && opts.speedLY > 0) ? opts.speedLY : null;
+    const speedLock = (!isEnemyVessel(vessel) && opts.speedLY > 0) ? opts.speedLY : null;
     const baseSpeed = speedLock ?? (stats?.warpSpeedLY || shipDef.warpSpeedLY || 2.5); // LY/rok
     const ssMgr = window.KOSMOS?.starSystemManager;
     const beaconBonus = ssMgr?.hasBeacon(targetSystemId) ? 3.0 : 1.0;
@@ -1042,8 +1042,7 @@ export class VesselManager {
     vessel.systemId = null;
 
     // Finding 589 (D-GX-18): dziennik misji gracza nie zdradza nazwy układu sprzed przylotu; `mission.targetName` zostaje prawdziwy.
-    const launchName = (GAME_CONFIG.FEATURES?.galaxyWarp && !isEnemyVessel(vessel))
-      ? warpSystemLabel(targetSystemId) : targetStar.name;
+    const launchName = !isEnemyVessel(vessel) ? warpSystemLabel(targetSystemId) : targetStar.name;
     addMissionLog(vessel, gameYear,
       t('vessel.interstellarLaunch', launchName, distLY.toFixed(1)),
       'info');

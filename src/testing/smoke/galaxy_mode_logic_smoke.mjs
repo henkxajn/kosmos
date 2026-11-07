@@ -17,12 +17,18 @@
 //   G10 klik płyty: zaznaczenie, dwuklik (≤ 400 ms, ta sama gwiazda) = wejście, pustka = odznaczenie
 //   G11 bramka wejścia (186): wygenerowany ∧ (zbadany ∨ własna obecność)
 //   G12 pigułka trybu mapy: wyśrodkowana w wolnym odcinku, za wąski odcinek — brak
-//   G13 klawisz G: g / Shift+G tak; z Ctrl / Alt / Meta — nie
+//   G13 klawisze G i M: g / Shift+G i m / Shift+M tak; z Ctrl / Alt / Meta — nie; inna litera — nie
 //   G14 wygląd punktów płyty: rozmiar rośnie z jasnością, niezbadane × UNEXPLORED_MUL, halo dom + zaznaczona (bez duplikatu)
 //   G15 kandydaci etykiet płyty: najpierw „pod gwiazdą, wyśrodkowana” (strona 'C'), potem kandydaci warstwy;
 //       `placeLabels` bez `candidatesOf` — wynik jak dotąd (domyślny generator)
 //   G16 `GalaxyModeController` na atrapie świata: wejście (migawka, renderer, tryb kamery, preset, koniec trybu Y, zdjęty
-//       picker), wyjście 1:1, flaga OFF = nic, wejście w aktywny / inny / niedostępny układ
+//       picker), wyjście 1:1, wejście w aktywny / inny / niedostępny układ
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B): flagi `galaxyView` / `galaxyLook` / `galaxyWarp` na stałe ON, ścieżki OFF usunięte — G0b
+//   zamiast eksportu `galaxyViewOn` pinuje BRAK predykatów flag (`galaxyViewOn`, `galaxyLookOn`) i kluczy w `FEATURES`;
+//   G13a — klawisz M przełącza mapę jak G (`isGalaxyToggleKey`), kontrolą „inna litera” jest N; wycofane G16a (flaga OFF —
+//   wejście nic nie robi) i G17c (KONTROLA OFF: sam statek rozjaśnia gwiazdę jak w G1); w miejsce G17c świadek ON G17d (świat
+//   widzi statek — `ship`, `own` — bez `named`, więc przygaszenie G17a nie wynika ze ślepoty przyrządu); linie ustawiające
+//   i przywracające flagi usunięte (G16, G17); G4b — tylko etykieta (`StratcomGalaxyRenderer` usunięty).
 // Uruchom: node src/testing/smoke/galaxy_mode_logic_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import * as T3 from '../../lib/three.core.js';
@@ -58,7 +64,10 @@ header('G0  API');
     'haloIds', 'galaxyLabelCandidates', 'layoutMapModePill', 'mapModePillAt', 'isGalaxyToggleKey'];
   const missing = need.filter((k) => !(GL && k in GL));
   ok(missing.length === 0, `G0a GalaxyModeLogic — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
-  ok(typeof GC?.GalaxyModeController === 'function' && typeof GC?.galaxyViewOn === 'function', 'G0b GalaxyModeController + galaxyViewOn');
+  // G5-B — flagi G1 / G2 na stałe ON: predykaty flag usunięte z modułu, klucze usunięte z `FEATURES` (bez czytelnika).
+  const flagKeysGone = ['galaxyView', 'galaxyLook'].every((k) => !(k in (GAME_CONFIG.FEATURES ?? {})));
+  ok(typeof GC?.GalaxyModeController === 'function' && !('galaxyViewOn' in GC) && !('galaxyLookOn' in GC) && flagKeysGone,
+    'G0b GalaxyModeController; predykaty flag `galaxyViewOn` / `galaxyLookOn` usunięte, klucze `FEATURES.galaxyView` / `galaxyLook` — brak');
   ok(typeof GP?.GalaxyPlate === 'function', 'G0c GalaxyPlate (THREE wstrzykiwany — ładuje się pod node)');
   ok(typeof SPS?.createPlateStarMaterial === 'function' && typeof SPS?.STAR_VERT_PLATE === 'string'
     && SPS.STAR_VERT_PLATE.replace(SPS.PLATE_FADE_DECL_UNIFORM, '').replace(SPS.PLATE_FADE_APPLY, '') === SPS.STAR_VERT,
@@ -111,7 +120,7 @@ header('G4  konfiguracja kamery galaktyki');
 {
   const fit = GL?.galaxyFitDistLy?.(systems);
   ok(Number.isFinite(fit) && fit > 50 && fit < 65, `G4a fitDist Stratcomu ≈ 57 ly (zmierzone: ${fit?.toFixed?.(2)} ly)`);
-  ok(near(GL?.galaxyFitDistLy?.([{ x: 21.87, y: 0, z: 0 }]), 57.2994, 1e-3), 'G4b reguła Stratcomu: rozrzut 21,87 ly → 57,30 ly (StratcomGalaxyRenderer)');
+  ok(near(GL?.galaxyFitDistLy?.([{ x: 21.87, y: 0, z: 0 }]), 57.2994, 1e-3), 'G4b reguła Stratcomu: rozrzut 21,87 ly → 57,30 ly (reguła dawnego StratcomGalaxyRenderer)');
   const cfg = GL?.galaxyCameraConfig?.(systems, sysA.id);
   const K = 200;
   ok(cfg?.minDist === 6 * K && cfg?.maxDist === 120 * K && near(cfg?.presetDist, fit * K * 0.8, 1e-6),
@@ -271,11 +280,12 @@ header('G12 pigułka trybu mapy');
   ok(GL?.layoutMapModePill?.({ spanLeft: 300, spanRight: 400, stripTop: 700, stripH: 20, widths: [60, 90] })?.length === 0, 'G12b odcinek za wąski — brak pigułki');
   ok(GL?.mapModePillAt?.(pill, pill[1].x + 5, pill[1].y + 5)?.mode === 'galaxy' && GL?.mapModePillAt?.(pill, 10, 10) === null, 'G12c trafienie segmentu');
 
-  header('G13 klawisz G');
+  header('G13 klawisze G i M');
   const k = GL?.isGalaxyToggleKey;
-  ok(k?.({ key: 'g' }) === true && k?.({ key: 'G', shiftKey: true }) === true && k?.({ key: 'g', ctrlKey: true }) === false
-    && k?.({ key: 'g', altKey: true }) === false && k?.({ key: 'g', metaKey: true }) === false && k?.({ key: 'm' }) === false,
-    'G13a g / Shift+G — tak; Ctrl / Alt / Meta — nie; inna litera — nie');
+  // G5-B — M przełącza mapę jak G (wpis 'm' zniknął z keymapy `OverlayManager`); kontrolą „inna litera” jest N.
+  ok(k?.({ key: 'g' }) === true && k?.({ key: 'G', shiftKey: true }) === true && k?.({ key: 'm' }) === true && k?.({ key: 'M', shiftKey: true }) === true
+    && ['g', 'm'].every((key) => k?.({ key, ctrlKey: true }) === false && k?.({ key, altKey: true }) === false && k?.({ key, metaKey: true }) === false)
+    && k?.({ key: 'n' }) === false, 'G13a g / Shift+G i m / Shift+M — tak; Ctrl / Alt / Meta — nie; inna litera (n) — nie');
 }
 
 // ═══ G14 / G15 ════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -324,7 +334,6 @@ header('G14 wygląd punktów płyty');
 // ═══ G16 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
 header('G16 GalaxyModeController na atrapie świata');
 {
-  const flag0 = GAME_CONFIG.FEATURES.galaxyView;
   const log = [];
   const cam = mkCam({ targetDist: 233.5, R: 3.6, goal: [4.2, 0, -7.7] });
   if (cam) { cam._theta = 0.31; cam._phi = 1.07; }
@@ -344,10 +353,6 @@ header('G16 GalaxyModeController na atrapie świata');
   };
   globalThis.window.KOSMOS = K;
   const gm = GC?.GalaxyModeController ? new GC.GalaxyModeController() : null;
-  GAME_CONFIG.FEATURES.galaxyView = false;
-  const off = call(() => gm.enter('test'));
-  ok(off === false && log.length === 0 && gm?.isActive === false, 'G16a flaga OFF — wejście nic nie robi (tryb nieosiągalny)');
-  GAME_CONFIG.FEATURES.galaxyView = true;
   const on = call(() => gm.enter('test'));
   ok(on === true && gm?.isActive === true && cam?.mode === 'galaxy' && cam?._theta === 0.6 && cam?._phi === 0.92,
     'G16b wejście: tryb kamery galaktyki, preset (skos / azymut)');
@@ -370,14 +375,11 @@ header('G16 GalaxyModeController na atrapie świata');
   call(() => gm.enter('test')); log.length = 0;
   ok(call(() => gm.enterSystem('sys_home')) === true && gm.isActive === false && log.some((e) => e[0] === 'reset') && !log.some((e) => e[0] === 'switch'),
     'G16i aktywny układ — wyjście + domyślny widok układu, bez przebudowy sceny');
-  GAME_CONFIG.FEATURES.galaxyView = flag0;
 }
 
 // G4c / G4f — domyślny kadr 0,8 świadomie (decyzja właściciela po G3, F6); dawniej pinowały 1.
 header('G17 jasność gwiazdy na płycie: sam statek jej nie daje (po G3, F3)');
 {
-  const fV = GAME_CONFIG.FEATURES.galaxyView, fW = GAME_CONFIG.FEATURES.galaxyWarp;
-  GAME_CONFIG.FEATURES.galaxyView = true; GAME_CONFIG.FEATURES.galaxyWarp = true;
   const fogs = systems.filter((s) => !s.isHome && s.explored !== true);
   const shipSys = fogs[0], colSys = fogs[1], idle = fogs[2];
   let ctxOn = null;
@@ -398,12 +400,12 @@ header('G17 jasność gwiazdy na płycie: sam statek jej nie daje (po G3, F3)');
   const b = (s) => ctxOn?.brightOf?.(s);
   ok(fogs.length >= 3 && b(shipSys) === false && b(idle) === false, 'G17a SEDNO: sam statek w układzie bez nazwy — gwiazda przygaszona (jak wiersz „???”)');
   ok(b(colSys) === true && b(systems.find((s) => s.isHome)) === true, 'G17b KONTROLA: kolonia w niezbadanym układzie i dom — jasne');
+  // G5-B — świadek ON w miejsce wycofanej kontroli OFF G17c: świat WIDZI statek w jego układzie (obecność `own`), tylko bez
+  // obecności trwałej (`named`) — bez tego G17a przechodziłby także wtedy, gdy atrapa statku w ogóle nie trafia do świata.
+  const pShip = call(() => gm._world().presence.get(String(shipSys.id)));
+  ok(pShip?.ship === true && pShip?.own === true && pShip?.named === false,
+    'G17d KONTROLA (świadek): świat widzi statek w układzie G17a (`ship`, `own`), bez `named` — przygaszenie nie jest ślepotą przyrządu');
   call(() => gm.exit('test'));
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  call(() => gm.enter('test'));
-  ok(b(shipSys) === true, 'G17c KONTROLA OFF: statek rozjaśnia jak w G1 — przyrząd widzi różnicę');
-  call(() => gm.exit('test'));
-  GAME_CONFIG.FEATURES.galaxyView = fV; GAME_CONFIG.FEATURES.galaxyWarp = fW;
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

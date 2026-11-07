@@ -1,5 +1,10 @@
-// tmp_holotable_cam_smoke.mjs — smoke H0: czysta matematyka HolotableCamera
-//   node tmp_holotable_cam_smoke.mjs
+// holotable_camera_smoke.mjs — keeper: czysta matematyka HolotableCamera (dawny smoke H0 Stratcomu)
+//   node src/testing/smoke/holotable_camera_smoke.mjs
+//
+// ⚠ PRZENIESIONE 2026-11-07 (ARC GALAXY G5-B, Finding 599): z `tmp_holotable_cam_smoke.mjs` (katalog główny, poza sweepem). Moduł przeżył zakładkę Stratcom: płyta galaktyki czyta `riserEndpoints` (słupki `GalaxyPlate`),
+//   tryb galaktyki — `DEFAULT_OBLIQUE_PITCH` i `panScreenToWorld` (`GalaxyModeLogic`).
+//   Asercje bez zmian; zmienione wyłącznie ścieżki importu (`../../` zamiast `./src/`) i linia podsumowania
+//   (format sweepu `=== WYNIK: N PASS / M FAIL ===`).
 //
 // Zero three / zero DOM — moduł ma być headless-clean. Testuje: orbitPosition
 // (regresja vs stara formuła setCameraOrbit), clampPitch, panScreenToWorld (skala
@@ -9,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import {
   PITCH_MIN, PITCH_MAX, DEFAULT_OBLIQUE_PITCH,
   clampPitch, orbitPosition, panScreenToWorld, riserEndpoints,
-} from './src/renderer/HolotableCamera.js';
+} from '../../renderer/HolotableCamera.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; } else { fail++; console.log('  FAIL:', m); } };
@@ -91,10 +96,10 @@ ok(DEFAULT_OBLIQUE_PITCH > PITCH_MIN && DEFAULT_OBLIQUE_PITCH < PITCH_MAX, 'T1 D
 
 // ── T8: headless-clean — moduł NIE importuje three ani DOM ──
 {
-  const src = readFileSync(new URL('./src/renderer/HolotableCamera.js', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../../renderer/HolotableCamera.js', import.meta.url), 'utf8');
   ok(!/from ['"]three/.test(src) && !/import\s+\*\s+as\s+THREE/.test(src), 'T8 brak importu three');
   ok(!/document|window/.test(src.replace(/\/\/.*$/gm, '')), 'T8 brak odwołań do DOM (poza komentarzami)');
 }
 
-console.log(`\ntmp_holotable_cam_smoke: ${pass}/${pass + fail} PASS` + (fail ? ` (${fail} FAIL)` : ''));
+console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

@@ -10,7 +10,7 @@
 //   • KOTWICA (D-GX-2 (b)): w początku świata stoi AKTYWNY układ — `group.position = −P_active · K`; dla domu to dokładnie
 //     „dom w początku” z ramy F1. Względne położenia gwiazd nie zależą od kotwicy (niezmiennik przesunięcia — keeper).
 //   • OSIE: galaktyka (x, y w płaszczyźnie, z = grubość dysku) → świat Three: X = gx, Y = gz (wysokość), Z = gy — to samo
-//     odwzorowanie co niebo (`SkyCatalog`), `StratcomGalaxyRenderer` i `HolotableCamera`.
+//     odwzorowanie co niebo (`SkyCatalog`) i `HolotableCamera` (dawniej także `StratcomGalaxyRenderer`).
 //   • KAMERA (D-GX-3): preset skos 0,92 / azymut 0,6 / dystans = `fitDist` mapy Stratcom × K (≈ 57 ly · K); zakres
 //     6 ly · K … 120 ly · K; zoom MNOŻNIKOWY ×1,12 / ×0,89 na znormalizowane 100 px kółka; przeciąganie = PAN po stałym
 //     skosie (`HolotableCamera.panScreenToWorld`), cel w ±30 ly · K wokół środka galaktyki (domu); far 40 000 (system 5 000).
@@ -79,7 +79,7 @@ export function plateWorldOf(sys, anchorLy, K = GALAXY_K) {
 
 // ── Kamera (D-GX-3) ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Dystans kadru całej galaktyki [ly] — reguła `StratcomGalaxyRenderer.fitDist` (rozrzut od domu). */
+/** Dystans kadru całej galaktyki [ly] — dawna reguła `StratcomGalaxyRenderer.fitDist` (rozrzut od domu). */
 export function galaxyFitDistLy(systems) {
   let maxR = 0;
   for (const s of (Array.isArray(systems) ? systems : [])) {
@@ -246,7 +246,7 @@ export const LIVE_GALAXY = {
   HALO_I: 0.55,          // halo — intensywność
   PAN_GRAB: 1,           // 1 — przeciąganie: zawartość jedzie za kursorem; 0 — odczucie Stratcomu (czyta kontroler kamery)
   PRESET_DIST_MUL: 0.8,  // mnożnik dystansu presetu (Home i wylot): 0,8 — decyzja właściciela po G3 (≈ 46 ly); 1 = fitDist Stratcomu ≈ 57 ly (D-GX-3)
-  // ── ARC GALAXY G2 (flaga `galaxyLook`) — każde pole ma czytelnika (V-266) ──
+  // ── ARC GALAXY G2 — każde pole ma czytelnika (V-266) ──
   // G2-1 lot (czyta `GalaxyModeController`): FLIGHT 0 = twarde cięcie G1 (jak przy `prefers-reduced-motion`).
   FLIGHT: 1,             // 1 — wylot / wlot lotem kamery; 0 — twarde cięcie z rozjaśnieniem 0,25 s (G1)
   FLIGHT_OUT_MS: 1400,   // [ms czasu realnego] wylot do galaktyki (D-GX-14 ~1,4 s)
@@ -382,10 +382,11 @@ export function mapPillSegmentWidth(label, measure) {
   return Math.ceil(measure?.(s) ?? s.length * 6) + 2 * MAP_PILL.PAD_X;
 }
 
-// ── Klawisz G (D-GX-8) ───────────────────────────────────────────────────────────────────────────────────────────────
+// ── Klawisze G i M (D-GX-8; M od G5 — dawny skrót mini-mapy / Stratcomu jest aliasem mapy galaktyki) ─────────────────
 
-/** Czy zdarzenie klawisza to przełącznik mapy: G (także Shift+G), bez Ctrl / Alt / Meta. */
+/** Czy zdarzenie klawisza to przełącznik mapy: G albo M (także z Shift), bez Ctrl / Alt / Meta. */
 export function isGalaxyToggleKey(e) {
   if (!e || e.ctrlKey || e.altKey || e.metaKey) return false;
-  return String(e.key ?? '').toLowerCase() === 'g';
+  const k = String(e.key ?? '').toLowerCase();
+  return k === 'g' || k === 'm';
 }

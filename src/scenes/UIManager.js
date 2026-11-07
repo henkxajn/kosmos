@@ -1175,7 +1175,7 @@ export class UIManager {
       const mIcon = mission?.type === 'colony' ? '🚢'
         : mission?.type === 'transport' ? '📦' : mission?.type === 'recon' ? '🔭' : '⛏';
       // Finding 589 (D-GX-18) — trzecia linia startu skoku w Dzienniku: nazwa układu sprzed przylotu przez kanon mgły.
-      const launchTarget = GAME_CONFIG.FEATURES?.galaxyWarp ? launchTargetLabel(mission) : (mission?.targetName ?? '?');
+      const launchTarget = launchTargetLabel(mission);
       this._addNotification(
         t('log.el.vesselLaunched', icon, vessel.name, launchTarget, mIcon, _missionLabel(mission?.type)),
         'fleet', 'info');
@@ -2449,7 +2449,7 @@ export class UIManager {
     //   `#ui-canvas`); tu zostają etykiety CTRL.
     // ⚠ `const tr` — czytane jeszcze niżej przez `_drawSelectionBrackets`.
     // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
-    // Tylko gdy widoczna jest mapa 3D układu — pod otwartym overlayem (Stratcom,
+    // Tylko gdy widoczna jest mapa 3D układu — pod otwartym overlayem (Dowództwo,
     // kolonia itd.) labele nie mają sensu i przebijały przez panel.
     const tr = window.KOSMOS?.threeRenderer;
     // ARC GALAXY G1 — etykiety CTRL obiektów UKŁADU nie nad płytą galaktyki (obiekty układu ukryte w trybie galaktyki).

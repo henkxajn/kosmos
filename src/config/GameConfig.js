@@ -224,10 +224,10 @@ export const GAME_CONFIG = {
     //   (zgrubny: obecność+jakość surowców, kolonizacja). Dokładne ilości dopiero po statku
     //   naukowym (analyzed). Zastąpił pasywny auto-skan. Bramkuje: startBodyScan, przycisk, FX 3D.
     observatoryBodyScan:  true,
-    // observatorySystemScan: czasowy skan obcego układu z STRATCOM (obserwatorium Lv2+).
+    // observatorySystemScan: czasowy skan obcego układu — [ Skanuj ] przypięcia gwiazdy w trybie galaktyki (obserwatorium Lv2+).
     //   Tiery wg poziomu: Lv2→liczba planet, Lv3-4→+księżyce, Lv5+→wszystkie ciała (rozbicie).
     //   Nie eksploruje układu (bez podglądu/kolonizacji) — ujawnia tylko liczby ciał zdalnie.
-    //   Bramkuje: startSystemScan, przycisk STRATCOM. Bez migracji save (pola z ?? {}).
+    //   Bramkuje: startSystemScan, przycisk przypięcia gwiazdy. Bez migracji save (pola z ?? {}).
     observatorySystemScan: true,
     // Obraz Operacyjny Faza 2 — tryb taktyczny (klawisz Y): preset kamery top-down,
     //   glify-billboardy, wymuszone warstwy, duchy ETA. Render/UI-only, bez migracji
@@ -259,7 +259,7 @@ export const GAME_CONFIG = {
     energyBrownoutGate:   true,
     // ── Strefy wpływów (warstwa polityczna mapy galaktycznej, B3-B6) ──────
     //   Kill-switch WEWNĘTRZNY (nie user-toggle — warstwa zawsze widoczna dla
-    //   gracza). OFF = TerritoryField nie liczy pola, Stratcom bez tintu/izolinii.
+    //   gracza). OFF = TerritoryField nie liczy pola, płyta galaktyki bez terytorium.
     territoryOverlay:     true,
     // ── Rozmiar map heksowych kolonii — cap największych map ────────────────
     //   OFF (default) → PlanetMapGenerator.generate() capuje massScale na 1.15:
@@ -499,62 +499,14 @@ export const GAME_CONFIG = {
     //     przywracać regresji, której ta flaga miała uniknąć (precedens V-260/D-V2z).
     sceneDepthUnification: true,
 
-    // ── ARC GALAXY / NIEBO — NIEBO Z KATALOGU GALAKTYKI (GALAXY_PLAN.md §4; D-GX-4/5/6, F7) ──────────────
-    //   ON  = niebo tła to TA SAMA galaktyka co mapa: 71 prawdziwych układów widzianych z aktywnego układu
-    //         + FILLER_COUNT gwiazd tła (domyślnie 14 000 — wybór właściciela; powłoka 30–3 000 ly, rozkład objętościowy) z ziarna galaktyki
-    //         (`src/utils/SkyCatalog.js`), prawo magnitudo z miękkim sufitem HDR; gwiazdy i mgławica jako KOPUŁA
-    //         za kamerą (D-D3 — lista nieprzezroczysta, bez testu głębi: planety zawsze zasłaniają niebo, 591);
-    //         przeliczenie przy switchSystem i przy podłączeniu galaktyki (także wczytanie). Zanim galaktyka
-    //         istnieje, niebo jest PUSTE (nigdy pole z Math.random). Pokrętła: KOSMOS.threeRenderer.skyTuning.
-    //   OFF = niebo sprzed kroku CO DO ZNAKU (7 000 punktów z Math.random w powłoce wokół początku świata).
-    //   ⚠ Czytana przy budowie nieba w konstruktorze renderera — przestawienie łapie się po przeładowaniu.
-    //   ⚠ Brak klucza = OFF (idiom liveGasShaders / liveSunShader).
-    skyCatalog:           true,
-
-    // ── ARC GALAXY / G1 — MAPA GALAKTYKI JAKO TRYB GŁÓWNEGO WIDOKU 3D (GALAXY_PLAN.md §4 G1; D-GX-1/2/3/8–12) ──────────
-    //   ON  = klawisz G (także Shift+G), pigułka [ UKŁAD ] [ GALAKTYKA ] na pasie dolnym i wiersz „GALAKTYKA” lewego outlinera
-    //         przełączają widok 3D na płytę galaktyki w TEJ SAMEJ scenie (`renderer/GalaxyPlate.js`, K = 200 j./ly, aktywny układ
-    //         w początku świata); twarde cięcie z rozjaśnieniem 0,25 s; kamera galaktyki (skos 0,92 / azymut 0,6, zoom
-    //         mnożnikowy, przeciąganie = pan); nazwy płyty w warstwie HUD; oba outlinery w trybie galaktyki; Esc / G / „← Układ”
-    //         — powrót (kamera systemu 1:1); dwuklik gwiazdy / [Enter] / 2. klik wiersza — wejście w układ (bramka 186).
-    //         M dalej otwiera zakładkę Stratcom (do G5).
-    //   OFF = jak przed krokiem (G otwiera Stratcom, brak pigułki i wiersza korzenia; tryb nieosiągalny).
-    //   ⚠ Brak klucza = OFF (idiom `!!FEATURES.x`). Klawisz G czyta flagę przy każdym naciśnięciu; keymapa overlayów
-    //     (wpis `g`) — przy starcie gry (F5 po przestawieniu w konsoli).
-    galaxyView:           true,
-
-    // ── ARC GALAXY / G2 — LOT, GEST, NURKOWANIE, CHROM I TERYTORIUM PŁYTY (GALAXY_PLAN.md §4 G2; D-GX-7, 13–17 (c), 22) ──────
-    //   ON  = wylot / wlot lotem kamery zamiast twardego cięcia (~1,4 s / ~1,2 s; G, pigułka, wiersz korzenia, Esc, [Enter],
-    //         dwuklik, [ Wejdź ]; Esc w trakcie lotu = stan końcowy; pokrętło `galaxyTuning.FLIGHT = 0` albo
-    //         `prefers-reduced-motion` — twarde cięcie G1); gest kółka: 2 ząbki za sufitem układu → wylot, za podłogą galaktyki →
-    //         nurkowanie w cel z nawiasami ⌜⌟; chrom płyty w idiomie etykiet (rozwinięcie najechania, przypięcie z akcjami
-    //         [ Wejdź ] [ Wyślij ▼ ] (G3) [ Skanuj ] — jedyny przyszły dom skanu układu), reguła gęstości nazw, szyna statków przy
-    //         gwieździe, ping obserwatorium z domu, szlaki i trasy, blipy obcych skoków; chipy [R] [T] [E] w znaczeniu płyty, [O]
-    //         ukryty; terytorium na płycie (rozlane światło z pola, krawędź z gradientu, szew sporny, zasłony), aureole
-    //         własności, słupki tylko dla układów gracza i gwiazdy zaznaczonej.
-    //   OFF = G1 co do bitu (twarde cięcie, same nazwy płyty, bez terytorium).
-    //   ⚠ Brak klucza = OFF; wymaga `galaxyView`. Czytana przy każdym przejściu i co klatkę warstwy HUD / płyty.
-    galaxyLook:           true,
-
-    // ── ARC GALAXY / G3 — SKOK Z GALAKTYKI (GALAXY_PLAN.md §4 G3; D-GX-12, 18, 20; Findingi 588, 589, 592–594) ──────────────────
-    //   ON  = kadłub poza służbą (W2: `stored` / `mobilizing`) nie skacze — `WarpRouteSystem.canOrder` i gałąź GRACZA
-    //         `VesselManager.dispatchInterstellar` odmawiają `vessel_in_reserve` (stary Stratcom dziedziczy odmowę świadomie,
-    //         D-GX-12); nazwa celu w logach skoku przez kanon mgły (`warpSystemLabel`, „???”); menu PPM etykietuje per język,
-    //         toast odmowy skoku niesie powód. Modele menu / podglądu / pickera: `GalaxyWarpLogic` (czyste, rysuje G3-B).
-    //         Po oglądaniu G3: wiersze pickera planują trasę; kolumna „Dokąd” rejestru przez kanon mgły; układ ze statkiem i cel skoku na
-    //         obu listach jako „???”; CTRL+klik wiersza szyny i nagłówek sekcji prawego outlinera przez bramkę G1; szyna bez nazw + chip [O] „Okręty”.
-    //   OFF = stan sprzed kroku co do bitu (poza domyślnym pokrętłem `galaxyTuning.PRESET_DIST_MUL` — kadr, nie zachowanie).
-    //   ⚠ Brak klucza = OFF. Czytana przy każdym wywołaniu (przełączalna z konsoli bez F5).
-    galaxyWarp:           true,
-
-    // ── ARC GALAXY / G4 — skok FLOTY (GALAXY_PLAN.md §4 G4, D-GX-19, D-GX-20) ──
-    // `fleetWarp`:
-    //   ON  = `OrderService.issueFleetWarp` / `previewFleetWarp`: jeden plan dla całej floty, faza 1 bez skutków ubocznych (odmowa zostawia członków
-    //         i `fleet.activeOrder` co do bitu — reguła Findingu 275), blokada prędkości najwolniejszego członka (`dispatchInterstellar(…, { speedLY })`),
-    //         jeden kąt przylotu na finale, rekord `fleet.activeOrder = { type: 'warp', … }`, jedna linia Dziennika na start i jedna na koniec.
-    //   OFF = stan sprzed kroku co do bitu: `issueFleetWarp` odmawia `feature_off`, opcje `beginJourney` i `speedLY` są niewidzialne.
-    //   ⚠ Brak klucza = OFF. Czytana przy każdym wywołaniu (przełączalna z konsoli bez F5).
-    fleetWarp:            true,
+    // ── ARC GALAXY — flagi NIEBO / G1–G4 na stałe ON od G5 (2026-11-07; GALAXY_PLAN.md §4 G5) ──
+    // `skyCatalog` (NIEBO — niebo z katalogu galaktyki, kopuła za kamerą), `galaxyView` (G1 — mapa galaktyki jako tryb głównego
+    //   widoku 3D: klawisze G i M, pigułka [ UKŁAD ] [ GALAKTYKA ], wiersz „GALAKTYKA” lewego outlinera), `galaxyLook` (G2 — lot, gest,
+    //   nurkowanie, chrom płyty, terytorium), `galaxyWarp` (G3 — skok z galaktyki, rezerwa nie skacze, nazwy przez kanon mgły),
+    //   `fleetWarp` (G4 — skok floty): klucze usunięte, kod czyta ścieżkę ON bez rozgałęzień. Usunięte ścieżki OFF — dawne niebo
+    //   (7 000 punktów z Math.random), mapa galaktyki w zakładce Stratcom (Dowództwo; razem z rendererem `StratcomGalaxyRenderer`),
+    //   twarde cięcie i nazwy płyty bez rozwinięcia (G1), wpis „flota — G4” i odmowa `feature_off`; przestawienie dawnych kluczy
+    //   w konsoli nie ma skutku.
 
     // ── ZNACZNIK STATKU — flaga na stałe ON od SM-Z (2026-10-29; HUD_PLAN.md §„Znacznik statku”) ──
     // `hudShipMarker` (znacznik statku w warstwie HUD 2D — daszek w kierunku ruchu, romb bez ruchu, role motywu; D-SM-1…6):

@@ -15,7 +15,7 @@
 //   zostawia pierwsze gwiazdy na miejscu — rośnie albo maleje tylko ogon katalogu.
 // ⚠ OSIE: katalog trzyma pozycje w osiach GALAKTYKI (x, y w płaszczyźnie, z = grubość dysku). Kierunki dla sceny 3D
 //   wychodzą w osiach ŚWIATA Three.js: X = gx, Y = gz (wysokość), Z = gy — to samo odwzorowanie co
-//   StratcomGalaxyRenderer i HolotableCamera, żeby płyta galaktyki (G1) i niebo zgadzały się co do kierunku (F2).
+//   HolotableCamera (dawniej także StratcomGalaxyRenderer), żeby płyta galaktyki (G1) i niebo zgadzały się co do kierunku (F2).
 // ⚠ JASNOŚĆ — prawo magnitudo, nie surowe L/d² (D-GX-5 (ii)): strumień L/d² tła ma rozpiętość > 4 rzędów, a najbliższy
 //   prawdziwy układ jest ~3 000× jaśniejszy od najjaśniejszej gwiazdy tła (faza A) — liniowo albo wszystko zgaśnie,
 //   albo wszystko się przepali. Intensywność jest liniowa w magnitudo (logarytm strumienia), z podłogą (MAG_LIMIT,

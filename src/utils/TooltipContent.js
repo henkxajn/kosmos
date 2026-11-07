@@ -159,7 +159,7 @@ function _planetContent(planet, t, deps) {
   } else if (colony) {
     // Finding 531 — kolonia OBCA. Dawniej każda kolonia z `getColony` (kolonie AI też tam są) dostawała
     //   „Właściciel: Imperium gracza” i realną populację przy DOWOLNYM wywiadzie. Teraz oba fakty wg osi WŁAŚCICIELA
-    //   z kanonu mgły wojny (`SystemReveal`, ta sama reguła co panel STRATCOM): nazwa imperium od `contact`, sam fakt
+    //   z kanonu mgły wojny (`SystemReveal`, ta sama reguła co przypięcie gwiazdy w trybie galaktyki): nazwa imperium od `contact`, sam fakt
     //   „obce” od `rumor`, populacja dopiero od `detailed` (D-188-5). Brak wywiadu w `deps` ⇒ fail-closed:
     //   „nieznany”, bez liczby.
     const empId = colony.ownerEmpireId;

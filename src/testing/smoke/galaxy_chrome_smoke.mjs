@@ -3,14 +3,14 @@
 // gęstość nazw, szyna statków, zasięg i blipy) — bez pinów na stałych rysunku i bez kontroli na poprzednim commicie.
 //   H0  API (`GalaxyChromeLogic`, `ObservatoryRange`, `chipLayersFor`)
 //   H9  uwaga: od poprawek po G3 (F5) szyna domyślnie nie ma nazw — geometria wierszy pinowana przy chipie [O] włączonym
-//   H13 po G3 (F5): tabela widoczności nazw szyny (domyślnie / chip [O] / najechana / zaznaczona / kursor na wierszu / zaznaczony statek / OFF)
-//   H14 po G3 (F4): CTRL+klik wiersza szyny wygrywa z gwiazdą SĄSIADA pod kursorem; zwykły klik — gwiazda (Finding 110); OFF jak przed krokiem
-//   H1  przyciski przypięcia: [ Wejdź ] tylko dla układu do wejścia, [ Wyślij ▼ ] obecny i WYŁĄCZNY do G3, chip skanu;
+//   H13 po G3 (F5): tabela widoczności nazw szyny (domyślnie / chip [O] / najechana / zaznaczona / kursor na wierszu / zaznaczony statek)
+//   H14 po G3 (F4): CTRL+klik wiersza szyny wygrywa z gwiazdą SĄSIADA pod kursorem; zwykły klik — gwiazda (Finding 110)
+//   H1  przyciski przypięcia: [ Wejdź ] tylko dla układu do wejścia, [ Wyślij ▼ ] zawsze obecny i włączony, chip skanu;
 //       [ Beacon ] / [ Gate ] pominięte (D-GX-17 (c))
 //   H2  tabela stanów chipu skanu (dom, w toku, zbadany, brak obserwatorium, poza zasięgiem / bramka wyłączona, wynik pełny,
 //       wynik niższy, limit, zwykły)
 //   H3  akcje przypięcia: wyłączony przycisk mówi powód (bez wywołań), [ Wejdź ] → wlot, [ Skanuj ] → ten sam backend
-//       i te same trzy komunikaty odmowy co Stratcom, [ Anuluj skan ] → anulowanie ręczne
+//       i trzy komunikaty odmowy (jeden dom skanu w kodzie), [ Anuluj skan ] → anulowanie ręczne
 //   H4  linia skanu w rozwinięciu („Skanowanie… 42% · 1,3 lat”), wyniki wg tieru; rozwinięcie ≤ 4 linie
 //   H5  ANTY-LUSTRO (16 stanów: zbadany × skan × wywiad unknown / rumor / contact / detailed): nazwa na płycie ≡ wiersz
 //       lewego outlinera ≡ nagłówek przypięcia; linia właściciela przypięcia ≡ ta sama funkcja co wiersz outlinera —
@@ -25,13 +25,21 @@
 //       nakładania, „+N” bez strefy, gwiazda poza kadrem — bez stref (cull), klik wiersza → wiersz prawego outlinera, gwiazda
 //       pod kursorem wygrywa (WYKONANIE `HudGalaxyRailLayer`)
 //   H10 zasięg obserwatorium (z `warp_stratcom` W13): tabela Lv → ly bez zmian, środek = dom, metryka płaska; jedno źródło
-//       ze Stratcomem; blipy obcych: kontakt pełny / plotka duch / poza zasięgiem — nic
-//   H11 chipy warstw w trybie galaktyki: [R] [T] [E], [O] bez chipu
+//       tabeli (`ObservatoryRange`); blipy obcych: kontakt pełny / plotka duch / poza zasięgiem — nic
+//   H11 chipy warstw w trybie galaktyki: [R] [T] [E] i „Okręty” na miejscu [O]
 //   H12 pierścień pingu w kawałkach z ciągłą fazą kropek (koszt rasteryzacji ścieżki o obwiedni całego ekranu)
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flagi `galaxyView` / `galaxyLook` / `galaxyWarp` na stałe ON, ścieżki OFF i zakładka
+//   Stratcom usunięte): ustawianie flag w setupie (plik, H13, H14) zdjęte — bez czytelnika. H1b — [ Wyślij ▼ ] zawsze włączony
+//   (powód null; dawny parametr `sendEnabled` bez czytelnika, stała `GALAXY_CHROME.NOT_YET` usunięta); H3a — wyłączony przycisk
+//   z prawdziwego producenta (chip skanu bez obserwatorium) zamiast dawnego „Wyślij — G3”; H3e — trzy komunikaty skanu mają
+//   jeden dom (`GalaxyChromeLogic`; żyły też w usuniętym `case 'stratcom_scan'` FMO); H6 — bez obejścia `L._look` (ścieżka G1
+//   usunięta); H10e — FMO bez `_getStratcomRangeLY` i bez własnej tabeli, tabela wyłącznie w `utils/ObservatoryRange.js`;
+//   H11a–H11d — sygnatury `chipLayersFor(galaxyActive)` / `chipsForMode(chips, galaxyActive)`: w trybie galaktyki „Okręty”
+//   zawsze (H11b / H11d — dawny parametr chipu bez czytelnika); H13f — sama funkcja czysta (próg domyślny 1).
+//   WYCOFANE: H13a wiersz „flaga OFF — nazwy i „+1” jak w G2”, H14c (OFF: przy CTRL gwiazda wygrywa).
 // Uruchom: node src/testing/smoke/galaxy_chrome_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import fs from 'node:fs';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 
 let pass = 0, fail = 0;
@@ -39,6 +47,17 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
 const header = (s) => console.log(`\n── ${s}`);
 const call = (fn, ...a) => { try { return fn ? fn(...a) : undefined; } catch (e) { return `WYJĄTEK: ${e.message}`; } };
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
+// Pliki produkcyjne `src/` (bez keeperów i bibliotek) — piny „jeden dom” (H3e, H10e); komentarze zdejmowane tylko z trafień.
+const SRC_URL = new URL('../../', import.meta.url);
+const walkJs = (u) => fs.readdirSync(u, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? walkJs(new URL(`${e.name}/`, u)) : e.name.endsWith('.js') ? [new URL(e.name, u)] : []);
+const PROD = walkJs(SRC_URL).map((u) => ({ rel: u.href.slice(SRC_URL.href.length), u }))
+  .filter((f) => !f.rel.startsWith('testing/') && !f.rel.startsWith('lib/'));
+/** Pliki produkcyjne (ścieżka względem `src/`), których KOD pasuje do `re` (bez flagi `g`); `skip` — pominięte prefiksy. */
+const prodFilesMatching = (needle, re, skip = []) => PROD
+  .filter((f) => !skip.some((p) => f.rel.startsWith(p)))
+  .filter((f) => { const s = fs.readFileSync(f.u, 'utf8'); return s.includes(needle) && re.test(stripComments(s.replace(/\r\n/g, '\n'))); })
+  .map((f) => f.rel);
 
 let CL = null, OR = null, HC = null, GOL = null, HGL = null, HGR = null, HLL = null, GL = null;
 try { CL = await import('../../ui/GalaxyChromeLogic.js'); } catch (e) { console.log('  (GalaxyChromeLogic:', e.message + ')'); }
@@ -54,8 +73,6 @@ try { HGP = await import('../../ui/HudGalaxyPingLayer.js'); } catch (e) { consol
 
 const loc0 = getLocale();
 setLocale?.('pl');
-const flagV = GAME_CONFIG.FEATURES.galaxyView, flagL = GAME_CONFIG.FEATURES.galaxyLook;
-GAME_CONFIG.FEATURES.galaxyView = true; GAME_CONFIG.FEATURES.galaxyLook = true;
 
 header('H0  API');
 {
@@ -74,7 +91,11 @@ header('H1  przyciski przypięcia');
   const b1 = call(() => CL.galaxyPinButtons({ enterable: true, scanChip: chip, t }));
   ok(Array.isArray(b1) && b1.map((b) => b.id).join(',') === 'enter,send,scan', `H1a układ do wejścia: [ Wejdź ] [ Wyślij ▼ ] [ Skanuj ] (${b1?.map?.((b) => b.id)})`);
   const send = b1?.find?.((b) => b.id === 'send');
-  ok(send?.enabled === false && send?.reason === 'G3' && send?.label === t('galaxyPin.send'), 'H1b [ Wyślij ▼ ] obecny, wyłączony do G3 (podpowiedź „G3”)');
+  // G5-B: dawny parametr `sendEnabled` (ścieżka OFF — „G3”) bez czytelnika: także `false` niczego nie wyłącza.
+  const sendOld = call(() => CL.galaxyPinButtons({ enterable: true, scanChip: chip, sendEnabled: false, t }))?.find?.((b) => b.id === 'send');
+  ok(send?.enabled === true && send?.reason === null && send?.label === t('galaxyPin.send')
+    && sendOld?.enabled === true && sendOld?.reason === null && !!CL?.GALAXY_CHROME && !('NOT_YET' in CL.GALAXY_CHROME),
+    'H1b [ Wyślij ▼ ] obecny i zawsze włączony (powód null); `sendEnabled` bez czytelnika, stałej `GALAXY_CHROME.NOT_YET` brak');
   ok(b1?.[0]?.label === 'Wejdź' && b1?.[2]?.label === 'Skanuj układ', 'H1c napisy z i18n (bez wiodącego symbolu)');
   const b2 = call(() => CL.galaxyPinButtons({ enterable: false, scanChip: null, t }));
   ok(b2?.map?.((b) => b.id).join(',') === 'send', 'H1d układ bez wejścia, dom bez chipu skanu — tylko [ Wyślij ▼ ]');
@@ -111,8 +132,12 @@ header('H3  akcje przypięcia');
   const K = { observatorySystem: obs, galaxyMode: { enterSystem: (id) => { log.push(['enter', id]); return true; } } };
   const toasts = [];
   const run = (btn) => call(() => CL.runGalaxyPinAction(btn, { systemId: 'sys_x', K, t, toast: (s) => toasts.push(s) }));
-  const r0 = run({ id: 'send', enabled: false, reason: 'G3' });
-  ok(r0 === 'disabled' && toasts[0] === 'G3' && log.length === 0, 'H3a wyłączony przycisk — sam powód, bez wywołań');
+  // Wyłączony przycisk z prawdziwego producenta: chip skanu bez obserwatorium (G5-B — [ Wyślij ▼ ] nie bywa już wyłączony).
+  const off = call(() => CL.galaxyPinButtons({ enterable: false, scanChip: CL.galaxyScanChip({ maxTier: 0, inRange: true }), t }))
+    ?.find?.((b) => b.id === 'scan');
+  const r0 = run(off);
+  ok(off?.enabled === false && r0 === 'disabled' && toasts[0] === t('fleet.scanLocked') && log.length === 0,
+    'H3a wyłączony przycisk (chip skanu bez obserwatorium) — sam powód, bez wywołań');
   ok(run({ id: 'enter', enabled: true }) === 'enter' && log.some((e) => e[0] === 'enter' && e[1] === 'sys_x'), 'H3b [ Wejdź ] → `galaxyMode.enterSystem` (wlot)');
   log.length = 0; toasts.length = 0;
   ok(run({ id: 'scan', enabled: true }) === 'scan' && log[0]?.[0] === 'start', 'H3c [ Skanuj ] → `ObservatorySystem.startSystemScan` (ten sam backend)');
@@ -120,9 +145,12 @@ header('H3  akcje przypięcia');
   obs._tier = 2; obs._active = [{}]; run({ id: 'scanMore', enabled: true });
   obs._active = []; run({ id: 'scan', enabled: true });
   ok(toasts.join('|') === [t('fleet.scanLockedToast'), t('fleet.scanLimitToast'), t('fleet.scanBusyToast')].join('|'),
-    'H3d odmowa backendu — te same trzy komunikaty co Stratcom (blokada / limit / zajęty)');
-  const fmo = stripComments(fs.readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
-  ok(['fleet.scanLockedToast', 'fleet.scanLimitToast', 'fleet.scanBusyToast'].every((k) => fmo.includes(`'${k}'`)), 'H3e KONTROLA: Stratcom używa tych samych trzech kluczy');
+    'H3d odmowa backendu — trzy komunikaty (blokada / limit / zajęty)');
+  // G5-B: zakładka Stratcom usunięta (z nią `case 'stratcom_scan'` FMO) — skan ma w kodzie JEDEN dom: przypięcie płyty.
+  const homes = ['fleet.scanLockedToast', 'fleet.scanLimitToast', 'fleet.scanBusyToast']
+    .map((k) => prodFilesMatching(k, new RegExp(`'${k.replace(/\./g, '\\.')}'`), ['i18n/']));
+  ok(homes.every((h) => h.join(',') === 'ui/GalaxyChromeLogic.js'),
+    `H3e trzy komunikaty skanu — jeden dom: GalaxyChromeLogic, FMO bez nich (${homes.map((h) => h.join('+') || '—').join(' | ')})`);
   log.length = 0;
   ok(run({ id: 'scanCancel', enabled: true }) === 'scanCancel' && log[0]?.[0] === 'cancel' && log[0]?.[2] === 'manual', 'H3f [ Anuluj skan ] → anulowanie ręczne');
 }
@@ -225,7 +253,6 @@ header('H6  reguła wskaźnika (klik ≡ najechanie)');
   const L = HGL?.HudGalaxyLabelLayer ? new HGL.HudGalaxyLabelLayer({ ctx: null }) : null;
   call(() => L.prepare(F0(K)));
   if (L) {
-    L._look = true;
     L._g2.pinZones = [{ kind: 'btn', id: 'send', starId: 'sys_x', x: 100, y: 100, w: 40, h: 12 },
       { kind: 'name', starId: 'sys_x', x: 90, y: 80, w: 120, h: 14 }, { kind: 'body', starId: 'sys_x', x: 90, y: 80, w: 120, h: 60 }];
     L._g2.zones = [{ x: 400, y: 400, w: 60, h: 14, id: 'sys_home' }];
@@ -324,10 +351,8 @@ header('H13 gęstość szyny — tabela widoczności nazw (F5)');
   const list = [1, 2, 3, 4].map((i) => V({ id: `v${i}`, name: `Statek ${i}` }));
   const half = GL?.GALAXY_PICK_HALF_PX ?? 11;
   const proj = { point: (x, y, z) => (x === 0 && z === 0 ? { x: 400, y: 300 } : { x: 400 + x * 0.1, y: 300 + z * 0.1 }) };
-  const f0 = GAME_CONFIG.FEATURES.galaxyWarp;
   // id wierszy + tekst „+N” przy gwieździe domu; 4 statki, limit wierszy = 3.
-  const state = ({ ships = false, hover = false, selStar = false, selShips = [], flag = true, onRow = false, vessels = list } = {}) => {
-    GAME_CONFIG.FEATURES.galaxyWarp = flag;
+  const state = ({ ships = false, hover = false, selStar = false, selShips = [], onRow = false, vessels = list } = {}) => {
     const K = mkWorld({ vessels, selected: selStar ? 'sys_home' : null });
     K.uiPrefs = { hudLayers: ships ? { ships: true } : {} };
     globalThis.window.KOSMOS = K;
@@ -350,7 +375,6 @@ header('H13 gęstość szyny — tabela widoczności nazw (F5)');
     ['kursor na wierszu gwiazdy', { onRow: true }, 'v1,v2,v3', '+1'],
     ['zaznaczony statek — tylko jego nazwa', { selShips: ['v3'] }, 'v3', '+3'],
     ['dwa zaznaczone', { selShips: ['v2', 'v3'] }, 'v2,v3', '+2'],
-    ['flaga OFF — nazwy i „+1” jak w G2', { flag: false }, 'v1,v2,v3', '+1'],
     ['samotny statek — sam znacznik, bez „+N”', { vessels: one }, '', ''],
     ['samotny statek zaznaczony — nazwa, bez „+N”', { vessels: one, selShips: ['v1'] }, 'v1', ''],
     ['dwa statki — „+2”', { vessels: two }, '', '+2'],
@@ -374,13 +398,11 @@ header('H13 gęstość szyny — tabela widoczności nazw (F5)');
     'H13e SEDNO: samotny statek — znacznik zostaje, „+N” nie ma ani paska, ani przeszkody dla nazw płyty');
   const lay1 = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 1, rowH: 14, pickHalf: half, plusW: 20, plusMin: 2 }));
   const lay2 = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 2, rowH: 14, pickHalf: half, plusW: 20, plusMin: 2 }));
-  const layG2 = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 1, rowH: 14, pickHalf: half, plusW: 20 }));
-  ok(lay1?.plus === null && lay2?.plus?.count === 2 && layG2?.plus?.count === 1,
-    'H13f próg „+N” w geometrii: N = 1 przy progu 2 — nic, N = 2 — jest; KONTROLA: bez progu „+1” jak w G2');
-  GAME_CONFIG.FEATURES.galaxyWarp = f0;
+  const layDef = call(() => CL.railLayout({ ax: 400, ay: 300, rows: [], hidden: 1, rowH: 14, pickHalf: half, plusW: 20 }));
+  ok(lay1?.plus === null && lay2?.plus?.count === 2 && layDef?.plus?.count === 1,
+    'H13f próg „+N” w geometrii: N = 1 przy progu 2 — nic, N = 2 — jest; KONTROLA: bez parametru progu (domyślnie 1) — „+1”');
 
   header('H14 CTRL+klik wiersza szyny (F4)');
-  GAME_CONFIG.FEATURES.galaxyWarp = true;   // pin ścieżki ON niezależnie od domyślnej flagi (przebieg całości z OFF)
   const K = mkWorld({ vessels: list, selected: 'sys_home' });
   K.uiPrefs = {};
   globalThis.window.KOSMOS = K;
@@ -393,10 +415,6 @@ header('H13 gęstość szyny — tabela widoczności nazw (F5)');
   K.rightOutliner._lastMouseMods = { shift: false, ctrl: true };
   ok(call(() => R.handleClick(z.x + 2, z.y + 2, 0, 0)) === true && K._log.some((e) => e[0] === 'row' && e[1] === z.vesselId),
     'H14b SEDNO: CTRL+klik — wiersz wygrywa z gwiazdą sąsiada; idzie przez ten sam `_onHit` co wiersz outlinera');
-  K._log.length = 0;
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  ok(call(() => R.handleClick(z.x + 2, z.y + 2, 0, 0)) === false, 'H14c KONTROLA OFF: przy CTRL gwiazda wygrywa jak przed krokiem');
-  GAME_CONFIG.FEATURES.galaxyWarp = f0;
   K._starUnder = null;
   ok(z.systemId === 'sys_home', 'H14d strefa niesie układ wiersza (kursor na wierszu trzyma nazwy po zejściu z gwiazdy)');
 }
@@ -410,8 +428,13 @@ header('H10 zasięg obserwatorium i blipy');
   ok(OR?.inObservatoryRange?.({ x: 3, y: 4, z: 99 }, { x: 0, y: 0 }, 5) === true && OR?.inObservatoryRange?.({ x: 3, y: 4.1 }, { x: 0, y: 0 }, 5) === false,
     'H10c środek = dom, metryka PŁASKA (oś z pominięta — D-GX-22)');
   ok(OR?.inObservatoryRange?.({ x: 0, y: 0 }, { x: 0, y: 0 }, 0) === false, 'H10d zasięg 0 — nic (także sam dom)');
-  const fmo = stripComments(fs.readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
-  ok(/_getStratcomRangeLY\(\)\s*\{[^}]*observatoryRangeLY\(/.test(fmo) && !/STRATCOM_LY_BY_LEVEL\s*=/.test(fmo), 'H10e Stratcom czyta zasięg z jednego źródła (bez własnej tabeli)');
+  // G5-B: zakładka Stratcom usunięta — FMO nie liczy już zasięgu; tabela ma jeden dom, płyta czyta ją przez `observatoryRangeLY`.
+  const src = (p) => stripComments(fs.readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
+  const fmo = src('../../ui/FleetManagerOverlay.js'), ping = src('../../ui/HudGalaxyPingLayer.js');
+  const tableHomes = prodFilesMatching('STRATCOM_LY_BY_LEVEL', /\bSTRATCOM_LY_BY_LEVEL\s*=(?!=)/);
+  ok(!/_getStratcomRangeLY|STRATCOM_LY_BY_LEVEL/.test(fmo) && tableHomes.join(',') === 'utils/ObservatoryRange.js'
+    && /import\s*\{[^}]*\bobservatoryRangeLY\b[^}]*\}\s*from\s*'\.\.\/utils\/ObservatoryRange\.js'/.test(ping) && /\bobservatoryRangeLY\(/.test(ping),
+    `H10e FMO bez _getStratcomRangeLY i bez własnej tabeli; tabela wyłącznie w ObservatoryRange (${tableHomes.join(', ') || '—'}), ping czyta observatoryRangeLY`);
   const enemy = (id, gx, gy) => ({ id, ownerEmpireId: 'emp_1', mission: { phase: 'warp_transit', currentGalX: gx, currentGalY: gy, fromSystemId: 'a', toSystemId: 'b', galProgress: 0.5 } });
   const vs = [enemy('c1', 1, 1), enemy('r1', 2, 1), enemy('far', 9, 9)];
   const q = { c1: 'contact', r1: 'rumor' };
@@ -422,16 +445,17 @@ header('H10 zasięg obserwatorium i blipy');
 
 header('H11 chipy warstw w trybie galaktyki');
 {
-  ok(HC?.chipLayersFor?.(true)?.join(',') === 'radar,routes,labels' && HC?.chipLayersFor?.(false)?.join(',') === 'radar,routes,labels,orbits',
-    'H11a tryb galaktyki: [R] ping, [T] szlaki + trasy, [E] nazwy; [O] bez chipu (tryb układu — wszystkie 4)');
-  ok(HC?.chipLayersFor?.(true, true)?.join(',') === 'radar,routes,labels,ships' && HC?.chipLayersFor?.(false, true)?.join(',') === 'radar,routes,labels,orbits',
-    'H11b G3: w trybie galaktyki miejsce [O] mają „Okręty”; tryb układu bez zmian');
+  ok(HC?.chipLayersFor?.(true)?.join(',') === 'radar,routes,labels,ships' && HC?.chipLayersFor?.(false)?.join(',') === 'radar,routes,labels,orbits',
+    'H11a tryb galaktyki: [R] ping, [T] szlaki + trasy, [E] nazwy, miejsce [O] — „Okręty” (zawsze); tryb układu — wszystkie 4');
+  // G5-B: dawny drugi parametr (chip „Okrętów”; `false` — ścieżka OFF) bez czytelnika.
+  ok(HC?.chipLayersFor?.(true, false)?.join(',') === 'radar,routes,labels,ships' && HC?.chipLayersFor?.(false, false)?.join(',') === 'radar,routes,labels,orbits',
+    'H11b dawny parametr chipu „Okrętów” bez czytelnika — `false` niczego nie zabiera; tryb układu bez zmian');
   const row = ['radar', 'routes', 'labels', 'orbits'].map((layer, i) => ({ layer, x: i * 30, y: 0, w: 28, h: 16 }));
-  const gal = HC?.chipsForMode?.(row, true, true) ?? [];
+  const gal = HC?.chipsForMode?.(row, true) ?? [];
   ok(gal.map((c) => c.layer).join(',') === 'radar,routes,labels,ships' && gal[3]?.x === row[3].x, 'H11c chip „Okręty” stoi na miejscu [O] (rząd nie skacze)');
-  ok((HC?.chipsForMode?.(row, true, false) ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels'
-    && (HC?.chipsForMode?.(row, false, true) ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels,orbits',
-    'H11d KONTROLA: flaga OFF — miejsce puste jak w G2; tryb układu — orbity');
+  ok((HC?.chipsForMode?.(row, false) ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels,orbits'
+    && (HC?.chipsForMode?.(row, true, false) ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels,ships',
+    'H11d KONTROLA: tryb układu — orbity; dawny trzeci parametr bez czytelnika — w trybie galaktyki „Okręty” zostają');
 }
 
 header('H12 pierścień pingu w kawałkach (koszt rasteryzacji)');
@@ -460,7 +484,6 @@ header('H12 pierścień pingu w kawałkach (koszt rasteryzacji)');
   ok(B({ placeKnown: false, sysData: { planetIds: [1] } }) === null && B({}) === null, 'T4f brak źródła / miejsce nieznane → null (bez zmyślania)');
 }
 
-GAME_CONFIG.FEATURES.galaxyView = flagV; GAME_CONFIG.FEATURES.galaxyLook = flagL;
 setLocale?.(loc0);
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

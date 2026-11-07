@@ -6,7 +6,7 @@
 // Wyłącznie LOGIKA (protokół od H2, HUD_PLAN §4.0) — stan, klawisze, zgodność wstecz, skutki warstw; bez pinów na stałe
 // rysunku. Moduł powstaje w paczce B — import dynamiczny (brak modułu = pin pada, suita się nie przerywa).
 //   C0  API, kolejność warstw i klawiszy
-//   C8  po G3 (F5): w trybie galaktyki miejsce [O] ma chip „Okręty” (`hudLayers.ships`, domyślnie wyłączony), klawisz 9; OFF — miejsce puste jak w G2
+//   C8  po G3 (F5): w trybie galaktyki miejsce [O] ma chip „Okręty” (`hudLayers.ships`, domyślnie wyłączony), klawisz 9
 //   C1  stan w `uiPrefs.hudLayers` (brak = wszystkie ON); zgodność wstecz: dawny `hudRadarVisible` czytany jako [R];
 //       zapis [R] — wyłącznie `hudLayers.radar` (dawny klucz usunięty)
 //   C2  klawisze Digit6–9 = kolejność chipów; tylko z fokusem na mapie (tryb cywilizacji, bez overlayu / okna DOM /
@@ -25,6 +25,10 @@
 //   gałęzi flagi; C3d — ☰ „Radar” nie dotyka dawnego przełącznika pierścieni 3D (`sensorOverlayVisible`,
 //   `ui:sensorOverlayToggle`); C4e — [O] z powrotem włączony, metody bez gałęzi flagi; C7d / C7e — wariant porównawczy
 //   „bez chipów” = pas z wyciętym rysunkiem chipów (dawniej: flaga OFF). Przełączniki flag w keeperze usunięte.
+// PRZECELOWANE 2026-11-07 (ARC GALAXY G5-B — flagi `galaxyView` / `galaxyLook` / `galaxyWarp` na stałe ON, ścieżki OFF usunięte):
+//   setup C8 bez przełączania flag (bez czytelnika); C8h — klawisz 9 w trybie galaktyki pinowany na dzisiejszym kodzie `GameScene`
+//   (`shipsNine` z samego trybu galaktyki, przez tę samą bramkę `layerKeyAllowed`, bez czytania flagi).
+//   WYCOFANE: C8g (OFF — miejsce [O] puste jak w G2).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -383,8 +387,6 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   K.uiPrefs = {};
   const gmKeep = K.galaxyMode;
   K.galaxyMode = { isActive: true };
-  const flags0 = { v: GAME_CONFIG.FEATURES.galaxyView, l: GAME_CONFIG.FEATURES.galaxyLook, w: GAME_CONFIG.FEATURES.galaxyWarp };
-  GAME_CONFIG.FEATURES.galaxyView = true; GAME_CONFIG.FEATURES.galaxyLook = true; GAME_CONFIG.FEATURES.galaxyWarp = true;
   const g = draw({ left: 150 });
   const gc = g.b.getLayerChips?.() ?? [];
   const gs = gc[3] ?? { x: -1, y: -1, w: 0, h: 0 };
@@ -404,17 +406,17 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   setLocale('en');
   ok(t('hudChips.nameShips') === 'Ships' && t('hudChips.ships') === 'O', 'C8f: EN „Ships”, litera O');
   setLocale('pl');
-  GAME_CONFIG.FEATURES.galaxyWarp = false;
-  const gOff = draw({ left: 150 });
-  ok((gOff.b.getLayerChips?.() ?? []).map((c) => c.layer).join(',') === 'radar,routes,labels', 'C8g KONTROLA OFF: miejsce [O] puste jak w G2');
-  GAME_CONFIG.FEATURES.galaxyView = flags0.v; GAME_CONFIG.FEATURES.galaxyLook = flags0.l; GAME_CONFIG.FEATURES.galaxyWarp = flags0.w;
   K.galaxyMode = gmKeep;
-  // Klawisz 9 w trybie galaktyki — pin źródłowy (GameScene nie importuje się pod node).
-  const gsSrc = readFileSync(new URL('../../scenes/GameScene.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  // Klawisz 9 w trybie galaktyki — pin źródłowy (GameScene nie importuje się pod node; komentarze zdjęte).
+  const gsSrc = strip(src('../../scenes/GameScene.js'));
   const i9 = gsSrc.indexOf("case 'Digit6':");
   const blk9 = i9 < 0 ? '' : gsSrc.slice(i9, gsSrc.indexOf('break;', i9) + 6);
-  ok(/shipsNine = galaxyNine && GAME_CONFIG\.FEATURES\?\.galaxyWarp === true/.test(blk9) && /if \(shipsNine\) toggleHudLayer\(window\.KOSMOS\.uiPrefs, GALAXY_SHIPS_LAYER\)/.test(blk9)
-    && /\(!galaxyNine \|\| shipsNine\)/.test(blk9), 'C8h: klawisz 9 w trybie galaktyki przełącza „Okręty”; bez flagi — bez skutku jak w G2');
+  const iAllow = blk9.indexOf('layerKeyAllowed('), iShips = blk9.indexOf('if (shipsNine) toggleHudLayer(');
+  ok(/const shipsNine = layer === 'orbits' && window\.KOSMOS\?\.galaxyMode\?\.isActive === true;/.test(blk9)
+    && /if \(shipsNine\) toggleHudLayer\(window\.KOSMOS\.uiPrefs, GALAXY_SHIPS_LAYER\);/.test(blk9)
+    && /else toggleHudLayer\(window\.KOSMOS\.uiPrefs, layer\);/.test(blk9)
+    && iAllow > 0 && iShips > iAllow && !/galaxyWarp|galaxyNine|FEATURES/.test(blk9),
+    'C8h: klawisz 9 w trybie galaktyki przełącza „Okręty” (przez tę samą bramkę `layerKeyAllowed`, bez czytania flagi); w trybie układu — warstwa klawisza');
   K.uiPrefs = {}; K.combatHud = null; delete K.deepSpaceCombatSystem;
 }
 

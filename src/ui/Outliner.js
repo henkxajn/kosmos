@@ -26,7 +26,6 @@
 // Importuje się pod node (keeper `right_outliner_smoke` — prawdziwy `draw` / `hitTest` / `updateHover` na atrapie ctx).
 
 import { THEME }          from '../config/ThemeConfig.js';
-import { GAME_CONFIG }    from '../config/GameConfig.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t }               from '../i18n/i18n.js';
@@ -65,7 +64,7 @@ export class Outliner extends OutlinerColumn {
     // ARC GALAXY G3 — tryb galaktyki: CTRL+klik kolejnego statku nie przewija listy do lidera (klik następnego wiersza trafiłby w inny statek).
     EventBus.on('ui:selectionChanged', (p) => {
       if (p?.vesselId == null) return;
-      if ((p.vesselIds?.length ?? 1) > 1 && this._K()?.galaxyMode?.isActive === true && GAME_CONFIG.FEATURES?.galaxyWarp) return;
+      if ((p.vesselIds?.length ?? 1) > 1 && this._K()?.galaxyMode?.isActive === true) return;
       this._reveal(`vessel:${p.vesselId}`);
     });
     EventBus.on('ui:fleetSelectionChanged', (p) => { if (p?.fleetId != null) this._reveal(`fleet:${p.fleetId}`); });
@@ -117,7 +116,7 @@ export class Outliner extends OutlinerColumn {
         const world = galaxyWorldContext(K, { colonies: input.treeColonies ?? input.colonies, groundUnits: input.groundUnits });
         // ARC GALAXY G3 — ta sama reguła nazwy co wiersz lewego: układ bez nazwy to „???”, cel skoku ma sekcję bez statku na miejscu.
         order = galaxyShipSectionOrder({ systems: world.systems, presence: world.presence,
-          systemName: (id) => EntityManager.getStarOfSystem(id)?.name ?? null, reveal: world.shipFog ? world.reveal : null });
+          systemName: (id) => EntityManager.getStarOfSystem(id)?.name ?? null, reveal: world.reveal });
       }
     }
     if (!order) order = this._systemOrder(K, input);
@@ -356,7 +355,7 @@ export class Outliner extends OutlinerColumn {
       // ARC GALAXY G3 — tryb galaktyki: reguła wiersza lewego (1. klik — gwiazda na płycie + rozwinięcie sekcji; 2. klik — wejście przez
       // bramkę G1 `enterSystem`); dawne przełączenie układu z pominięciem bramki wyrzucało z trybu i otwierało układ bez miejsca.
       const gm = K?.galaxyMode;
-      if (gm?.isActive === true && GAME_CONFIG.FEATURES?.galaxyWarp) {
+      if (gm?.isActive === true) {
         if (String(gm.selectedSystemId ?? '') === String(z.systemId)) gm.enterSystem?.(z.systemId);
         else { gm.select?.(z.systemId); this._setExpanded(z.systemId, true, this._active(K)); }
         this._markDirty();
@@ -377,7 +376,7 @@ export class Outliner extends OutlinerColumn {
 
   _hoverTip(z, x, y, K) {
     // ARC GALAXY G3 — nagłówek sekcji w trybie galaktyki: układ bez wejścia (2. klik nic nie zrobi) — powód, jak wiersz lewego.
-    if (z.type === 'system' && K?.galaxyMode?.isActive === true && GAME_CONFIG.FEATURES?.galaxyWarp && K.galaxyMode.canEnter?.(z.systemId) === false) {
+    if (z.type === 'system' && K?.galaxyMode?.isActive === true && K.galaxyMode.canEnter?.(z.systemId) === false) {
       return { text: t('leftOutliner.cannotEnter'), x, y };
     }
     if (z.type === 'vessel' && z.row) return { lines: this._shipTipLines(z.row, K), x, y };
