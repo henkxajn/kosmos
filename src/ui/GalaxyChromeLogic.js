@@ -317,6 +317,43 @@ export function railLayout({ ax, ay, rows = [], pickHalf = GALAXY_PICK_HALF_PX, 
   return { rows: out, plus };
 }
 
+const boxesOverlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/**
+ * G5-C (Finding 608) — szyna ustępuje rozwinięciu gwiazdy (najechanie albo przypięcie; `blockers` — wszystkie rozwinięcia w kadrze):
+ * wiersze i „+N” stoją po prawej stronie kwadratu wyboru (jak dotąd, `railLayout`); gdy ich pas nachodzi na rozwinięcie — po lewej
+ * (dosunięte do kwadratu wyboru); gdy obie strony są zajęte — pod rozwinięciem, od jego lewej krawędzi. Nigdy pod nim.
+ * `hide` — szyna SĄSIEDNIEJ gwiazdy (decyzja właściciela po bramce G5-C, 2026-11-07): rozwinięcie innej gwiazdy wygrywa — przykryta szyna
+ * (nazwy i „+N”) chowa się, zamiast ustępować; nieprzykryta stoi po prawej, jak dotąd.
+ * @param {object} p  pola `railLayout` + `blockers: Array<{x,y,w,h}>` + `hide:boolean`
+ * @returns {{ side:'right'|'left'|'below'|'hidden', rows:Array<{x,y,w,h,index}>, plus:object|null }}
+ */
+export function railPlacement({ blockers = [], hide = false, ...p } = {}) {
+  const right = railLayout(p);
+  const parts = (lay) => [...lay.rows, ...(lay.plus ? [lay.plus] : [])];
+  const blocking = (lay) => (blockers ?? []).filter((b) => b && parts(lay).some((r) => boxesOverlap(r, b)));
+  const onRight = blocking(right);
+  if (onRight.length === 0) return { side: 'right', ...right };
+  if (hide) return { side: 'hidden', rows: [], plus: null };
+  const xr = num(p.ax) - (p.pickHalf ?? GALAXY_PICK_HALF_PX) - (p.gap ?? GALAXY_CHROME.RAIL_GAP_PX);
+  const left = { rows: right.rows.map((r) => ({ ...r, x: xr - r.w })), plus: right.plus ? { ...right.plus, x: xr - right.plus.w } : null };
+  const onLeft = blocking(left);
+  if (onLeft.length === 0) return { side: 'left', ...left };
+  const both = [...onRight, ...onLeft];
+  const x0 = Math.min(...both.map((b) => b.x));
+  const gapY = p.rowGap ?? GALAXY_CHROME.RAIL_ROW_GAP;
+  const top = (right.rows[0] ?? right.plus).y;
+  const at = (dy) => ({ rows: right.rows.map((r) => ({ ...r, x: x0, y: r.y + dy })), plus: right.plus ? { ...right.plus, x: x0, y: right.plus.y + dy } : null });
+  let dy = Math.max(...both.map((b) => b.y + b.h)) + gapY - top;
+  // Pod rozwinięciem może już stać inna szyna (przeszkody — także jej wiersze): schodzimy pod każdą przeszkodę na drodze.
+  for (let i = 0; i < 8; i++) {
+    const hit = blocking(at(dy));
+    if (hit.length === 0) break;
+    dy = Math.max(...hit.map((b) => b.y + b.h)) + gapY - top;
+  }
+  return { side: 'below', ...at(dy) };
+}
+
 /** Tryb blipu statku na płycie (kanon Stratcomu): własny — `self`; obcy z wywiadem `contact` / `detailed` — `contact`, inaczej `rumor`. */
 export function galaxyBlipMode(v, quality = 'unknown') {
   if (!isEnemyVessel(v)) return 'self';

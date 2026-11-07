@@ -318,6 +318,15 @@ export class HudLayer {
     return this._activeSublayers().some((s) => s.coversUiPoint?.(lx, ly) === true);
   }
 
+  /**
+   * G5-C (obserwacja z bramki 607) — prostokąty HUD (px logiczne), które mają leżeć NAD panelami `#ui-canvas`: dziś otwarty picker
+   * skoku z przypięcia gwiazdy. Panel (karta walki) wycina je ze swojego rysunku i przepuszcza w nich kliki. Warstwa schowana — `[]`.
+   */
+  uiPassThroughRects() {
+    if (!this._gate.shown || !this._shown) return [];
+    return this._activeSublayers().map((s) => s.openBox?.() ?? null).filter(Boolean);
+  }
+
   /** ARC GALAXY G3-B — gwiazda płyty pod punktem (reguła kliku warstwy etykiet): cel menu PPM; `null` — pusta płyta / warstwa schowana. */
   galaxyStarIdAt(lx, ly, rawX, rawY) {
     if (!this._gate.shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return null;

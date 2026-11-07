@@ -522,14 +522,22 @@ export function fleetWarpStatusLine(fleet, K = windowK()) {
  * Popup przylotu członka skoku floty: przystanek — cisza; finał — jeden popup na grupę, z nazwą floty; członek z przerwaną trasą melduje się sam.
  * Znacznik `mission.warpGroupId` przeżywa przylot, a kąt niesie wyłącznie ostatni odcinek (także ten, na którym flotę zatrzymał Stop), więc odpowiedź
  * nie zależy od kolejności słuchaczy.
+ * Statek solo (Finding 604) — ta sama reguła: przystanek na żywej trasie — cisza (linię Dziennika `warpRoute.legDone` pisze `WarpRouteSystem`), popup
+ * tylko w celu. Celem jest `warpRoute.finalSystemId` (Stop go skraca); po finale trasy już nie ma — też popup, więc i tu kolejność słuchaczy jest obojętna.
  * @returns {'solo'|'fleet'|'none'}
  */
 export function fleetArrivalPopupKind(vessel, systemId, shownGroupId = null) {
   const m = vessel?.mission;
   const groupId = m?.warpGroupId ?? null;
-  if (!groupId) return 'solo';
+  if (!groupId) return isMidRouteStop(vessel, systemId) ? 'none' : 'solo';
   if (m.phase === 'in_system' && m.toSystemId === systemId && Number.isFinite(m.arrivalAngle)) return shownGroupId === groupId ? 'none' : 'fleet';
   return vessel.warpRoute ? 'none' : 'solo';
+}
+
+// Przystanek na żywej trasie, który nie jest jej końcem (Finding 604).
+function isMidRouteStop(vessel, systemId) {
+  const r = vessel?.warpRoute;
+  return !!r && systemId !== r.finalSystemId;
 }
 
 // Podgląd skoku floty: wspólny plan, jedna linia. Odmowa z powodu paliwa pokazuje osiągalne odcinki wg baku wiążącego, inna — żadnego.

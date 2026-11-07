@@ -267,11 +267,17 @@ export class HudGalaxyLabelLayer {
     return { text: s, font, size, spacing, w: this._width(font, size, s, spacing), h: size + 3 };
   }
 
+  _g2YieldRail(expanded) {
+    const rects = expanded.map((q) => ({ x: q.x, y: q.y, w: q.w, h: q.h, id: q.id }));
+    for (const s of this._hud?._galaxySublayers ?? []) if (s && s !== this) s.yieldToExpansions?.(rects);
+  }
+
   _g2Collect(F, proj) {
     const g = this._g2, P = g.p;
     if (!P?.on || !proj) {
       g.born.clear(); g.zones = []; g.pinZones = []; g.last = { labels: [], brackets: [] };
       this._last = { labels: [], bracket: null };
+      this._g2YieldRail([]);
       return { count: 0, animating: false, labels: [], brackets: [] };
     }
     const K = F.K, map = F.mapRect, G = HUD_GALAXY_LABELS, R = HUD_LABELS;
@@ -326,6 +332,8 @@ export class HudGalaxyLabelLayer {
       hideOnOverlap: (it) => it.essential !== true });
     g.candPrev = new Map(placed.map((q) => [q.key, q.cand]));
     updatePins(g.pins, placed, expanded);
+    // Finding 608: szyna statków ustępuje rozwinięciom (najechanie, przypięcie) — zgłoszenie po ułożeniu, przed rysunkiem.
+    this._g2YieldRail(placed.filter((q) => q.expFrom !== Infinity));
     const fading = updateBorn(g.born, placed.map((q) => q.key), F.now);
     const modeK = P.fade;
     const labels = placed.map((q) => ({ ...q, fade: fadeAlpha(F.now, g.born.get(q.key)) * modeK }));

@@ -151,6 +151,34 @@ export function groupTransitByFleet(entries, fleetOf, selIds = new Set()) {
 /** Tekst znacznika floty — językowo neutralny (jak „+N” szyny), więc bez klucza i18n. */
 export function fleetTag(count) { return `×${count}`; }
 
+/**
+ * Finding 605 (G5-C) — statki przy gwieździe: członkowie jednej floty (≥ `FLEET_MIN` przy tej gwieździe) idą do napisu floty przy rombie
+ * (podwarstwa szyny składa „⛬ ×N” z glifem węzła floty prawego outlinera); reszta to statki luźne, przy których zostaje reguła „+N” szyny.
+ * @param {Array<object>} list  statki przy gwieździe (`galaxyShipRail().bySystem`)
+ * @param {(vesselId)=>any} fleetOf  vesselId → fleetId | null
+ * @param {any} selectedFleetId  flota zaznaczona (`sel.fleetId`) — jej napis się wyróżnia
+ * @returns {{ fleets: Array<{ fleetId, count:number, ids:Array, selected:boolean }>, loose: Array<object> }}
+ */
+export function groupParkedByFleet(list, fleetOf, selectedFleetId = null) {
+  const all = (list ?? []).filter(Boolean);
+  const byFleet = new Map();
+  for (const v of all) {
+    const fid = fleetOf ? (fleetOf(v.id) ?? null) : null;
+    if (fid == null) continue;
+    if (!byFleet.has(fid)) byFleet.set(fid, []);
+    byFleet.get(fid).push(v);
+  }
+  const fleets = [], inFleet = new Set();
+  for (const [fid, members] of byFleet) {
+    if (members.length < GALAXY_SHIP_MARKER.FLEET_MIN) continue;
+    for (const v of members) inFleet.add(v);
+    fleets.push({ fleetId: fid, count: members.length, ids: members.map((v) => v.id),
+      selected: selectedFleetId != null && String(selectedFleetId) === String(fid) });
+  }
+  fleets.sort((a, b) => String(a.fleetId).localeCompare(String(b.fleetId)));
+  return { fleets, loose: all.filter((v) => !inFleet.has(v)) };
+}
+
 /** Kotwica napisu „×N”: przy prawej krawędzi znacznika, na jego wysokości (baseline środkowy). */
 export function tagAnchor(rect) {
   return { x: rect.x + rect.w + GALAXY_SHIP_MARKER.TAG_GAP_PX, y: rect.y + rect.h / 2 };

@@ -7,7 +7,8 @@
 //   • ZNACZNIKI STATKÓW (G2 / T5, idiom SM-1 mapy układu — `GalaxyShipMarkerLogic` + `HudShipMarkerLogic`): pusty romb przy
 //     gwieździe z własnymi statkami (bez strefy kliku — gwiazda zachowuje klik), pusty daszek 1 px w kierunku podróży dla
 //     statku w skoku warp (punkt tranzytu, z — interpolacja między układami), klik daszka = jak wiersz; FLOTA (≥ 2 członków
-//     na jednym przeskoku) = jeden znacznik + „×N”; rola z relacji (własny / obcy / wróg);
+//     na jednym przeskoku) = jeden znacznik + „×N”; rola z relacji (własny / obcy / wróg); G5-C (Finding 605) — flota ZAPARKOWANA
+//     przy gwieździe: romb + „⛬ ×N” (glif węzła floty prawego outlinera, zaznaczona flota pogrubiona), luźne statki — „+N” jak dotąd;
 //   • OBCY w skoku warp w zasięgu obserwatorium od domu (kanon Stratcomu, D-GX-22): wywiad o statku `contact` / `detailed` —
 //     znacznik w roli z relacji (linię skoku rysuje `HudGalaxyRouteLayer`), inaczej duch „?” (bez linii i bez nazwy);
 //   • gwiazda pod kursorem wygrywa z wierszem szyny (strefa HUD — weto `galaxyStarAt`), przeszkody dla nazw płyty
@@ -17,20 +18,24 @@
 //     (`hoverObjectKey`), zaznaczona i ta, nad której wierszem stoi kursor (bez tego wiersz znikałby po zejściu kursora z gwiazdy), a także
 //     statek zaznaczony; chip [O] „Okręty” (klawisz 9) włącza nazwy wszędzie (`railVisibleShips`);
 //   • ARC GALAXY G3 — CTRL+klik wiersza przełącza statek w zbiorze zaznaczonych (`Outliner._onHit`) i wygrywa z gwiazdą sąsiada pod
-//     kursorem: przy CTRL zamiarem jest statek.
+//     kursorem: przy CTRL zamiarem jest statek;
+//   • G5-C (Finding 608) — szyna USTĘPUJE rozwinięciu gwiazdy (najechanie, przypięcie; zgłasza je warstwa nazw — `yieldToExpansions`):
+//     wiersze po lewej stronie, a gdy obie strony są zajęte — pod rozwinięciem (`railPlacement`); nigdy pod nim. Szyna SĄSIEDNIEJ gwiazdy,
+//     którą cudze rozwinięcie przykrywa, chowa się (rozwinięcie wygrywa — decyzja właściciela po bramce G5-C).
 // ⚠ Moduł importuje się pod node (keeper — atrapa świata): bez three i bez DOM.
 import { THEME } from '../config/ThemeConfig.js';
 import { getLocale } from '../i18n/i18n.js';
 import { HUD_LABELS, pointInRect, resolveLabelClick } from './HudLabelLogic.js';
 import { GALAXY_K, GALAXY_FADE_MS, GALAXY_PICK_HALF_PX, plateWorldOf } from './GalaxyModeLogic.js';
-import { GALAXY_CHROME, galaxyShipRail, galaxyEnemyBlips, railLayout, railVisibleShips, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
+import { GALAXY_CHROME, galaxyShipRail, galaxyEnemyBlips, railPlacement, railVisibleShips, galaxyChromeAlpha } from './GalaxyChromeLogic.js';
 import { readHudLayers } from './HudLayerChipsLogic.js';
+import { FLEET_NODE_GLYPH } from './ShipTreeLogic.js';
 import { observatoryRangeLY } from '../utils/ObservatoryRange.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { areAtWar } from '../utils/WarGate.js';
 import {
   shipMarkerSpec, makeRelationResolver, buildFleetIndex, groupTransitByFleet, fleetTag, tagAnchor,
-  markerHitRect, markerObstacle, foreignDrawKind, anySelected, unitDir,
+  markerHitRect, markerObstacle, foreignDrawKind, anySelected, unitDir, groupParkedByFleet,
 } from './GalaxyShipMarkerLogic.js';
 
 // Rysunek (px logiczne). Strojenie okiem — bez pinów keepera.
@@ -68,6 +73,21 @@ export class HudGalaxyRailLayer {
     return w;
   }
 
+  // Finding 605: napisy flot zaparkowanych przy rombie — od kotwicy „×N” (`tagAnchor`) w prawo, jeden za drugim (font jak „×N” tranzytu).
+  _parkedTags(fleets, rect) {
+    const size = THEME.fontSizeTiny ?? 8;
+    const out = [];
+    let { x, y } = tagAnchor(rect);
+    for (const f of fleets) {
+      const font = `${f.selected ? 'bold ' : ''}${size}px ${THEME.fontFamily}`;
+      const text = `${FLEET_NODE_GLYPH} ${fleetTag(f.count)}`;
+      const w = this._width(font, size, text);
+      out.push({ text, fleetId: f.fleetId, selected: f.selected, font, x, y, w, h: size + 2 });
+      x += w + 4;
+    }
+    return out;
+  }
+
   prepare(F) {
     const K = F.K, gm = K?.galaxyMode, tr = K?.threeRenderer;
     if (gm?.isActive !== true || typeof tr?.getGalaxyStarsWorld !== 'function' || typeof tr?.getGalaxyAnchorLy !== 'function') {
@@ -103,11 +123,15 @@ export class HudGalaxyRailLayer {
     if (gm.selectedSystemId != null) openStars.add(String(gm.selectedSystemId));
     const rowZone = ptr && !ptr.overUI ? this._zoneAt(ptr.lx, ptr.ly) : null;
     if (rowZone?.systemId != null) openStars.add(String(rowZone.systemId));
-    let key = `gs:2:${q(anchor.x)},${q(anchor.y)},${q(anchor.z)}:${loc}`;
-    for (const [sid, list] of rail.bySystem) key += `|${sid}${openAll || openStars.has(sid) ? 'o' : ''}:${list.map((v) => `${v.id}${selIds.has(String(v.id)) ? '*' : ''}`).join(',')}`;
+    // Finding 605: flota zaparkowana przy gwieździe — członkostwo i zaznaczona flota wchodzą do klucza (napis „⛬ ×N” przy rombie).
+    const fleetOf = (id) => fleetIdx.get(String(id)) ?? null;
+    const selFleetId = sel.fleetId ?? null;
+    let key = `gs:2:${q(anchor.x)},${q(anchor.y)},${q(anchor.z)}:${loc}:F${selFleetId ?? ''}`;
+    for (const [sid, list] of rail.bySystem) key += `|${sid}${openAll || openStars.has(sid) ? 'o' : ''}:${list.map((v) => `${v.id}${selIds.has(String(v.id)) ? '*' : ''}@${fleetOf(v.id) ?? ''}`).join(',')}`;
     for (const g of groups) key += `|t${g.key}x${g.count}:${q(g.gx)},${q(g.gy)}${g.selected ? '*' : ''}`;
     for (const b of enemies) key += `|e${b.v.id}:${b.mode}:${relationOf(b.v)}:${q(b.gx)},${q(b.gy)}`;
-    this._prep = { on: true, rail, enemies, groups, relationOf, selIds, anchor, loc, openAll, openStars };
+    this._prep = { on: true, rail, enemies, groups, relationOf, selIds, anchor, loc, openAll, openStars, fleetOf, selFleetId,
+      rowSid: rowZone?.systemId != null ? String(rowZone.systemId) : null };
     return key;
   }
 
@@ -115,6 +139,7 @@ export class HudGalaxyRailLayer {
     const P = this._prep;
     if (!P.on || !proj) {
       this._zones = []; this._obstacles = []; this._last = { rows: [], plus: [], transit: [], enemies: [], parked: [] };
+      this._part = null; this._rails = []; this._expansions = []; this._expSig = '';
       return { count: 0, animating: false };
     }
     const K = F.K, tr = K.threeRenderer, map = F.mapRect, R = HUD_LABELS, G = HUD_GALAXY_RAIL;
@@ -122,32 +147,32 @@ export class HudGalaxyRailLayer {
     const size = THEME.fontSizeSmall ?? 9;
     const font = `${size}px ${THEME.fontFamily}`;
     const rowH = size + 3 + 2;
-    const rows = [], plus = [], transit = [], enemies = [], parked = [], zones = [], obstacles = [];
+    const rows = [], plus = [], transit = [], enemies = [], parked = [], zones = [], obstacles = [], rails = [];
     for (const [sid, list] of P.rail.bySystem) {
       const st = stars.get(sid);
       const p = st ? proj.point(st.x, st.y, st.z) : null;
       if (!p || !pointInRect(p.x, p.y, map)) continue;   // gwiazda poza kadrem — bez wierszy i bez stref (cull)
       // Statki przy gwieździe (T5): jeden pusty romb nad kwadratem wyboru gwiazdy; bez strefy kliku — gwiazda zachowuje klik.
-      const pspec = shipMarkerSpec({ motion: 'parked', relation: 'own', selected: anySelected(list, P.selIds), cx: p.x, cy: p.y });
-      parked.push({ x: p.x, y: p.y, spec: pspec, count: list.length });
+      // Finding 605: członkowie floty — napis „⛬ ×N” przy rombie (zaznaczona flota pogrubia romb i swój napis); luźne — „+N” jak dotąd.
+      const pf = groupParkedByFleet(list, P.fleetOf, P.selFleetId);
+      const pSel = anySelected(list, P.selIds) || pf.fleets.some((f) => f.selected);
+      const pspec = shipMarkerSpec({ motion: 'parked', relation: 'own', selected: pSel, cx: p.x, cy: p.y });
+      const tags = this._parkedTags(pf.fleets, pspec.geo.rect);
+      parked.push({ x: p.x, y: p.y, spec: pspec, count: list.length, tags, selected: pSel });
       obstacles.push(markerObstacle(pspec.geo.rect));
+      for (const tg of tags) obstacles.push({ x: tg.x, y: tg.y - tg.h / 2, w: tg.w, h: tg.h });
       const visible = railVisibleShips(list, { open: P.openAll || P.openStars.has(sid), selIds: P.selIds });
       const texts = visible.map((v) => String(v.name ?? v.id).toLocaleLowerCase(P.loc));
       const dims = texts.map((s) => ({ w: this._width(font, size, s) + 2 * G.ROW_PAD_X, h: rowH }));
-      const plusText = `+${Math.max(0, list.length - Math.min(visible.length, GALAXY_CHROME.RAIL_MAX_ROWS))}`;
-      const lay = railLayout({ ax: p.x, ay: p.y, rows: dims, pickHalf: GALAXY_PICK_HALF_PX, plusW: this._width(font, size, plusText) + 2 * G.ROW_PAD_X,
-        hidden: list.length - visible.length, rowH, plusMin: GALAXY_CHROME.RAIL_PLUS_MIN });
-      lay.rows.forEach((r) => {
-        const v = visible[r.index];
-        rows.push({ ...r, vesselId: v.id, text: texts[r.index], selected: P.selIds.has(String(v.id)), font, size, sx: p.x, sy: p.y });
-        zones.push({ x: r.x, y: r.y, w: r.w, h: r.h, vesselId: v.id, systemId: sid });
-        obstacles.push({ x: r.x, y: r.y, w: r.w, h: r.h });
-      });
-      if (lay.plus) {
-        plus.push({ ...lay.plus, text: plusText, font, size });   // „+N” — bez strefy kliku
-        obstacles.push({ x: lay.plus.x, y: lay.plus.y, w: lay.plus.w, h: lay.plus.h });
-      }
+      const hiddenLoose = pf.loose.filter((v) => !visible.includes(v)).length;
+      const plusText = `+${hiddenLoose + Math.max(0, visible.length - GALAXY_CHROME.RAIL_MAX_ROWS)}`;
+      rails.push({ sid, ax: p.x, ay: p.y, dims, visible, texts, font, size, rowH, plusText, hiddenLoose,
+        plusW: this._width(font, size, plusText) + 2 * G.ROW_PAD_X });
     }
+    // Wiersze i „+N” (Finding 608): ustępują rozwinięciom gwiazd z ostatniego zgłoszenia warstwy nazw (`yieldToExpansions`).
+    this._rails = rails;
+    const railOut = this._layRails(P.rowSid);
+    rows.push(...railOut.rows); plus.push(...railOut.plus); zones.push(...railOut.zones);
     const worldOf = (gx, gy, gz) => plateWorldOf({ x: gx, y: gy, z: gz }, P.anchor, GALAXY_K);
     // Kierunek podróży = ekranowy wektor ku układowi celu skoku (brak układu → w prawo, jak dotąd).
     const dirToStar = (p, toId) => {
@@ -183,12 +208,71 @@ export class HudGalaxyRailLayer {
         obstacles.push({ cx: p.x, cy: p.y, r: G.GHOST_R + 1 });
       }
     }
+    this._fixedZones = zones.slice(railOut.zones.length);
+    this._fixedObstacles = obstacles;
     this._zones = zones;
-    this._obstacles = obstacles;
+    this._obstacles = [...obstacles, ...railOut.obstacles];
     const alpha = galaxyChromeAlpha({ flightAlpha: tr?._galaxyChromeAlpha, now: F.now, fadeT0: tr?._galaxyFadeT0, fadeMs: GALAXY_FADE_MS });
     this._last = { rows, plus, transit, enemies, parked };
-    return { count: rows.length + plus.length + transit.length + enemies.length + parked.length, animating: alpha < 1,
+    this._part = { count: rows.length + plus.length + transit.length + enemies.length + parked.length, animating: alpha < 1,
       rows, plus, transit, enemies, parked, alpha };
+    return this._part;
+  }
+
+  // Finding 608: wiersze i „+N” każdej gwiazdy wg `railPlacement`. Gwiazda, nad której wierszem stoi kursor, trzyma przeszkody z poprzedniego
+  // ułożenia — wiersz nie ucieka spod kursora, gdy rozwinięcie gaśnie po zejściu z gwiazdy.
+  _layRails(rowSid) {
+    const rows = [], plus = [], zones = [], obstacles = [], used = new Map();
+    // Najpierw gwiazdy z własnym rozwinięciem (ich wiersze stają tuż pod nim); wiersze zepchnięte pod rozwinięcie są przeszkodą dla kolejnych.
+    const own = new Set((this._expansions ?? []).map((e) => e.id).filter((id) => id != null).map(String));
+    const order = [...(this._rails ?? [])].sort((a, b) => (own.has(b.sid) ? 1 : 0) - (own.has(a.sid) ? 1 : 0));
+    const below = [];
+    for (const st of order) {
+      const blockers = (rowSid === st.sid && this._used?.has(st.sid)) ? this._used.get(st.sid) : [...(this._expansions ?? []), ...below];
+      used.set(st.sid, blockers);
+      // Szyna gwiazdy bez własnego rozwinięcia, przykryta cudzym rozwinięciem (albo wierszami zepchniętymi pod nie), chowa się — rozwinięcie wygrywa.
+      const lay = railPlacement({ ax: st.ax, ay: st.ay, rows: st.dims, pickHalf: GALAXY_PICK_HALF_PX, plusW: st.plusW,
+        hidden: st.hiddenLoose, rowH: st.rowH, plusMin: GALAXY_CHROME.RAIL_PLUS_MIN, blockers,
+        hide: !blockers.some((b) => b?.id != null && String(b.id) === st.sid) });   // własne rozwinięcie wśród przeszkód (także trzymanych pod kursorem)
+      if (lay.side === 'below') below.push(...lay.rows, ...(lay.plus ? [lay.plus] : []));
+      lay.rows.forEach((r) => {
+        const v = st.visible[r.index];
+        rows.push({ ...r, side: lay.side, vesselId: v.id, text: st.texts[r.index], selected: this._prep.selIds?.has(String(v.id)) === true,
+          font: st.font, size: st.size, sx: st.ax, sy: st.ay });
+        zones.push({ x: r.x, y: r.y, w: r.w, h: r.h, vesselId: v.id, systemId: st.sid });
+        obstacles.push({ x: r.x, y: r.y, w: r.w, h: r.h });
+      });
+      if (lay.plus) {
+        plus.push({ ...lay.plus, side: lay.side, text: st.plusText, font: st.font, size: st.size });   // „+N” — bez strefy kliku
+        obstacles.push({ x: lay.plus.x, y: lay.plus.y, w: lay.plus.w, h: lay.plus.h });
+      }
+    }
+    this._used = used;
+    return { rows, plus, zones, obstacles };
+  }
+
+  /**
+   * Finding 608 — warstwa nazw zgłasza rozwinięcia gwiazd z TEJ klatki (po swoim ułożeniu): szyna układa się na nowo przed rysunkiem,
+   * a przy zmianie budzi następną klatkę, żeby nazwy płyty ominęły już przesunięte wiersze.
+   * @param {Array<{x,y,w,h}>} rects
+   * @returns {boolean} czy ułożenie się zmieniło
+   */
+  yieldToExpansions(rects) {
+    const list = (rects ?? []).filter(Boolean).map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h, id: r.id ?? null }));
+    const sig = list.map((r) => `${r.id ?? ''}:${q(r.x)},${q(r.y)},${q(r.w)},${q(r.h)}`).join('|');
+    if (sig === this._expSig) return false;
+    this._expSig = sig;
+    this._expansions = list;
+    if (!this._part || !this._prep.on) return false;
+    const before = this._part.rows.map((r) => `${q(r.x)},${q(r.y)}`).join('|') + '#' + this._part.plus.map((r) => `${q(r.x)},${q(r.y)}`).join('|');
+    const out = this._layRails(this._prep.rowSid);
+    this._part.rows = out.rows; this._part.plus = out.plus;
+    this._last.rows = out.rows; this._last.plus = out.plus;
+    this._zones = [...out.zones, ...(this._fixedZones ?? [])];
+    this._obstacles = [...(this._fixedObstacles ?? []), ...out.obstacles];
+    const after = out.rows.map((r) => `${q(r.x)},${q(r.y)}`).join('|') + '#' + out.plus.map((r) => `${q(r.x)},${q(r.y)}`).join('|');
+    if (after !== before) this._hud?.wake?.();
+    return after !== before;
   }
 
   draw(ctx, F, c) {
@@ -203,11 +287,13 @@ export class HudGalaxyRailLayer {
       ctx.globalAlpha = (r.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA) * a;
       ctx.fillStyle = THEME.bgPrimary;
       ctx.fillRect(r.x, r.y, r.w, r.h);
-      if (r.index === 0) {
+      // Kreska od kwadratu wyboru do pierwszego wiersza — po stronie szyny; pod rozwinięciem bez kreski (Finding 608).
+      if (r.index === 0 && r.side !== 'below') {
+        const left = r.side === 'left';
         ctx.strokeStyle = roles.primary;
         ctx.globalAlpha = R.THREAD_ALPHA * a;
         ctx.lineWidth = R.THREAD_WIDTH;
-        ctx.beginPath(); ctx.moveTo(r.sx + GALAXY_PICK_HALF_PX * 0.55, r.sy); ctx.lineTo(r.x, r.sy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(r.sx + (left ? -1 : 1) * GALAXY_PICK_HALF_PX * 0.55, r.sy); ctx.lineTo(left ? r.x + r.w : r.x, r.sy); ctx.stroke();
       }
       ctx.font = r.selected ? `bold ${r.font}` : r.font;
       ctx.fillStyle = roles.primary;
@@ -226,7 +312,18 @@ export class HudGalaxyRailLayer {
     }
     // Statki przy gwieździe — pusty romb (SM-1); w tranzycie warp — pusty daszek w kierunku podróży; flota — jeden
     // znacznik + „×N” (zaznaczony członek pogrubia cały znacznik).
-    for (const p of c.parked ?? []) this._strokeMarker(ctx, p.spec, roles, a);
+    for (const p of c.parked ?? []) {
+      this._strokeMarker(ctx, p.spec, roles, a);
+      // Finding 605: flota zaparkowana — „⛬ ×N”; zaznaczona flota — napis pogrubiony i pełny.
+      for (const tg of p.tags ?? []) {
+        ctx.font = tg.font;
+        ctx.fillStyle = roles[p.spec.role];
+        ctx.globalAlpha = tg.selected ? a : Math.min(1, p.spec.alpha * a + 0.15);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(tg.text, tg.x, tg.y);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      }
+    }
     for (const t of c.transit ?? []) {
       this._strokeMarker(ctx, t.spec, roles, a);
       if (t.tag) {
@@ -302,9 +399,11 @@ export class HudGalaxyRailLayer {
     const r1 = (v) => (Number.isFinite(v) ? +v.toFixed(1) : v);
     const L = this._last;
     return { id: 'galaxyRail', on: this._prep.on,
-      rows: L.rows.map((r) => ({ vesselId: r.vesselId, text: r.text, x: r1(r.x), y: r1(r.y), w: r1(r.w), h: r1(r.h), sx: r1(r.sx), sy: r1(r.sy) })),
+      rows: L.rows.map((r) => ({ vesselId: r.vesselId, text: r.text, x: r1(r.x), y: r1(r.y), w: r1(r.w), h: r1(r.h), sx: r1(r.sx), sy: r1(r.sy), side: r.side })),
       plus: L.plus.map((p) => ({ text: p.text, x: r1(p.x), y: r1(p.y) })), transit: L.transit.length,
-      markers: [...(L.parked ?? []).map((p) => ({ kind: p.spec.kind, role: p.spec.role, n: p.count })),
+      markers: [...(L.parked ?? []).map((p) => ({ kind: p.spec.kind, role: p.spec.role, n: p.count,
+        tag: (p.tags ?? []).map((tg) => tg.text).join(' ') || null, sel: p.selected === true,
+        tagSel: (p.tags ?? []).filter((tg) => tg.selected).map((tg) => tg.text) })),
         ...L.transit.map((t) => ({ kind: t.spec.kind, role: t.spec.role, n: t.count, tag: t.tag?.text ?? null, sel: t.selected }))],
       enemies: L.enemies.map((e) => e.mode), zones: this._zones.length };
   }

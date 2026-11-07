@@ -33,6 +33,9 @@ import { systemIdOf } from '../utils/SystemScope.js';
 /** Klucz sekcji „W drodze” (statki i floty w tranzycie warp). */
 export const TRANSIT = 'transit';
 
+/** Glif węzła floty (decyzja 6 (a)) — jedno źródło dla wiersza prawego outlinera i znacznika floty na płycie galaktyki (Finding 605). */
+export const FLEET_NODE_GLYPH = '⛬';
+
 /** Kubełki typów w układzie (D-UI-6, §7.1) — kolejność kubełków i ról w kubełku. */
 export const SHIP_TYPE_GROUPS = Object.freeze([
   Object.freeze({ id: 'war',     roles: Object.freeze(['warship', 'assault', 'transport']) }),

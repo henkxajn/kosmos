@@ -485,5 +485,199 @@ header('H12 pierścień pingu w kawałkach (koszt rasteryzacji)');
 }
 
 setLocale?.(loc0);
+header('H15 flota zaparkowana przy gwieździe — „⛬ ×N” przy rombie (Finding 605, G5-C)');
+{
+  let STL = null;
+  try { STL = await import('../../ui/ShipTreeLogic.js'); } catch (e) { console.log('  (ShipTreeLogic:', e.message + ')'); }
+  const proj = { point: (x, y, z) => (x === 0 && z === 0 ? { x: 400, y: 300 } : { x: 400 + x * 0.1, y: 300 + z * 0.1 }) };
+  const ships = (ids) => ids.map((id) => V({ id, name: `Statek ${id}` }));
+  // Gwiazda domu, gęstość domyślna (bez nazw), bez zaznaczonych statków — liczy się wyłącznie romb, jego napis i „+N”.
+  const state = ({ ids, fleets = [], selFleet = null, open = false }) => {
+    const K = mkWorld({ vessels: ships(ids) });
+    K.uiPrefs = { hudLayers: open ? { ships: true } : {} };
+    K.fleetSystem = { listFleets: () => fleets };
+    globalThis.window.KOSMOS = K;
+    const R = new HGR.HudGalaxyRailLayer({ ctx: null, hoverObjectKey: () => null });
+    const F = F0(K, { sel: selFleet != null ? { fleetId: selFleet } : {} });
+    const key = call(() => R.prepare(F));
+    const c = call(() => R.collect(F, proj));
+    const d = call(() => R.debug()) ?? { markers: [], plus: [], rows: [] };
+    const texts = [];
+    const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'fillText' ? (s) => texts.push(String(s)) : () => {})), set: (t, k, v) => { t[k] = v; return true; } });
+    const roles = new Proxy({}, { get: () => '#ffffff' });
+    call(() => R.draw(ctx, { ...F, roles }, c));
+    return { m: d.markers[0] ?? {}, plus: d.plus.map((p) => p.text), rows: d.rows.length, key, texts, R };
+  };
+  const g = STL?.FLEET_NODE_GLYPH ?? '⛬';
+  const f1 = { id: 'f1', memberIds: ['v1', 'v2', 'v3'] }, f2 = { id: 'f2', memberIds: ['v4', 'v5'] };
+  const table = [
+    ['sama flota (3)', { ids: ['v1', 'v2', 'v3'], fleets: [f1] }, `${g} ×3`, ''],
+    ['statki luźne (3) — reguła „+N” bez zmian', { ids: ['v1', 'v2', 'v3'] }, null, '+3'],
+    ['flota (3) + luźne (2)', { ids: ['v1', 'v2', 'v3', 'v7', 'v8'], fleets: [f1] }, `${g} ×3`, '+2'],
+    ['flota (3) + luźny (1) — „+N” od dwóch, jak dotąd', { ids: ['v1', 'v2', 'v3', 'v7'], fleets: [f1] }, `${g} ×3`, ''],
+    ['jeden członek floty przy gwieździe — statek luźny', { ids: ['v1', 'v7'], fleets: [f1] }, null, '+2'],
+    ['dwie floty', { ids: ['v1', 'v2', 'v3', 'v4', 'v5'], fleets: [f1, f2] }, `${g} ×3 ${g} ×2`, ''],
+  ];
+  for (const [label, o, tag, plus] of table) {
+    const s = state(o);
+    ok((s.m.tag ?? null) === tag && s.plus.join() === plus && s.m.n === o.ids.length,
+      `H15a ${label}: napis ${JSON.stringify(s.m.tag ?? null)}, „+N” ${JSON.stringify(s.plus.join())}, romb liczy ${s.m.n}`);
+  }
+  const fleetOnly = state({ ids: ['v1', 'v2', 'v3'], fleets: [f1] });
+  ok(fleetOnly.texts.includes(`${g} ×3`), `H15b napis floty naprawdę się rysuje (fillText: ${JSON.stringify(fleetOnly.texts)})`);
+  const tg = fleetOnly.R?._last?.parked?.[0]?.tags?.[0];
+  ok(!!tg && (fleetOnly.R?._obstacles ?? []).some((r) => r.x === tg.x && r.w === tg.w), 'H15c napis floty jest przeszkodą dla nazw płyty');
+  const selA = state({ ids: ['v1', 'v2', 'v3', 'v4', 'v5'], fleets: [f1, f2], selFleet: 'f2' });
+  const selN = state({ ids: ['v1', 'v2', 'v3', 'v4', 'v5'], fleets: [f1, f2] });
+  ok(selA.m.sel === true && JSON.stringify(selA.m.tagSel) === JSON.stringify([`${g} ×2`]) && selN.m.sel === false && (selN.m.tagSel ?? []).length === 0,
+    `H15d zaznaczona flota wyróżnia romb i WYŁĄCZNIE swój napis (${JSON.stringify(selA.m.tagSel)}; bez zaznaczenia ${JSON.stringify(selN.m.tagSel)})`);
+  ok(typeof selA.key === 'string' && selA.key !== selN.key, 'H15e zaznaczenie floty zmienia klucz podwarstwy (bez tego napis nie przerysowałby się)');
+  const moved = state({ ids: ['v1', 'v2', 'v3'], fleets: [{ id: 'f1', memberIds: ['v1', 'v2'] }] });
+  ok(moved.key !== fleetOnly.key, 'H15f zmiana składu floty zmienia klucz podwarstwy');
+  const open = state({ ids: ['v1', 'v2', 'v3', 'v7'], fleets: [f1], open: true });
+  ok(open.rows === 3 && open.plus.join() === '+1' && open.m.tag === `${g} ×3`,
+    `H15g chip [O]: wiersze z nazwami jak dotąd (limit 3 + „+1”), napis floty zostaje (${open.rows}, ${open.plus.join()}, ${open.m.tag})`);
+  const outl = stripComments(fs.readFileSync(new URL('../../ui/Outliner.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
+  ok(STL?.FLEET_NODE_GLYPH === '⛬' && /fillText\(FLEET_NODE_GLYPH/.test(outl) && !/fillText\('⛬'/.test(outl),
+    'H15h jedno źródło glifu: prawy outliner i płyta czytają `FLEET_NODE_GLYPH`');
+}
+
+header('H16 szyna ustępuje rozwinięciu gwiazdy (Finding 608, G5-C)');
+{
+  const half = GL?.GALAXY_PICK_HALF_PX ?? 11;
+  const over = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const partsOf = (lay) => [...(lay?.rows ?? []), ...(lay?.plus ? [lay.plus] : [])];
+  const pick = { x: 400 - half, y: 300 - half, w: 2 * half, h: 2 * half };
+  const base = { ax: 400, ay: 300, pickHalf: half, maxRows: 3, rowH: 14, plusW: 20, plusMin: 2 };
+  const three = [60, 50, 70].map((w) => ({ w, h: 14 }));
+  // Tabela ułożenia: [opis, pola, oczekiwana strona].
+  const table = [
+    ['bez rozwinięcia — po prawej, jak dotąd', { rows: three, blockers: [] }, 'right'],
+    ['rozwinięcie po prawej stronie gwiazdy — po lewej', { rows: three, blockers: [{ x: 420, y: 290, w: 120, h: 60 }] }, 'left'],
+    ['rozwinięcie wyśrodkowane pod gwiazdą (obie strony) — pod nim', { rows: three, blockers: [{ x: 330, y: 305, w: 140, h: 50 }] }, 'below'],
+    ['rozwinięcie nad gwiazdą — po prawej, bez zmian', { rows: three, blockers: [{ x: 340, y: 220, w: 140, h: 60 }] }, 'right'],
+    ['rozwinięcie po lewej — po prawej, bez zmian', { rows: three, blockers: [{ x: 260, y: 290, w: 120, h: 60 }] }, 'right'],
+    ['przypięcie (wyższe, z wierszem akcji) po prawej — po lewej', { rows: three, blockers: [{ x: 418, y: 286, w: 200, h: 110 }] }, 'left'],
+    ['sam „+N” (zwinięta) pod rozwinięciem po prawej — po lewej', { rows: [], hidden: 3, blockers: [{ x: 415, y: 292, w: 100, h: 40 }] }, 'left'],
+    ['sąsiad przykryty cudzym rozwinięciem — schowany (rozwinięcie wygrywa)', { rows: three, hide: true, blockers: [{ x: 420, y: 290, w: 120, h: 60 }] }, 'hidden'],
+    ['sąsiad poza cudzym rozwinięciem — po prawej, jak dotąd', { rows: three, hide: true, blockers: [{ x: 340, y: 220, w: 140, h: 60 }] }, 'right'],
+  ];
+  const plain = call(() => CL.railLayout({ ...base, rows: three }));
+  for (const [label, o, side] of table) {
+    const lay = call(() => CL.railPlacement?.({ ...base, ...o }));
+    const parts = partsOf(lay);
+    ok(lay?.side === side && (side === 'hidden' ? parts.length === 0 : parts.length > 0) && !parts.some((r) => o.blockers.some((b) => over(r, b))) && !parts.some((r) => over(r, pick)),
+      `H16a ${label}: strona ${lay?.side}, żaden wiersz pod rozwinięciem ani na kwadracie wyboru (Finding 110)`);
+  }
+  const same = call(() => CL.railPlacement?.({ ...base, rows: three, blockers: [] }));
+  ok(JSON.stringify(same?.rows) === JSON.stringify(plain?.rows) && JSON.stringify(same?.plus) === JSON.stringify(plain?.plus),
+    'H16b bez rozwinięcia ułożenie co do bajtu jak `railLayout`');
+  const below = call(() => CL.railPlacement?.({ ...base, rows: three, blockers: [{ x: 330, y: 305, w: 140, h: 50 }] }));
+  ok(below?.rows?.[0]?.x === 330 && below.rows[0].y >= 355 && below.rows.every((r, i, a) => i === 0 || r.y > a[i - 1].y),
+    'H16c pod rozwinięciem: od jego lewej krawędzi, w dół, kolejność wierszy zachowana');
+  // Rozwinięcie gwiazdy przypiętej przykrywa „+N” gwiazdy SĄSIEDNIEJ (decyzja właściciela po bramce G5-C, 2026-11-07): rozwinięcie wygrywa —
+  // szyna gwiazdy rozwinięcia ustępuje (tu: pod nie), szyna sąsiada chowa się razem ze strefami. Sąsiad poza rozwinięciem — po prawej, jak dotąd.
+  {
+    const E = { x: 595, y: 411, w: 200, h: 86, id: 'sys_k' };
+    const st = (sid, ax, ay, n, hidden) => ({ sid, ax, ay, dims: Array.from({ length: n }, () => ({ w: 60, h: 14 })), visible: Array.from({ length: n }, (_, i) => ({ id: `${sid}_${i}` })),
+      texts: Array.from({ length: n }, (_, i) => `s${i}`), font: '9px x', size: 9, rowH: 14, plusText: `+${hidden}`, hiddenLoose: hidden, plusW: 20 });
+    const R = new HGR.HudGalaxyRailLayer({ ctx: null });
+    R._prep = { on: true, selIds: new Set(), rowSid: null };
+    const lay = (rails) => { R._rails = rails; R._expansions = [E]; const raw = call(() => R._layRails(null));
+      return raw && typeof raw === 'object' ? raw : { rows: [], plus: [], zones: [] }; };   // `call` oddaje napis przy wyjątku — wiersz ma zgasnąć, nie przerwać przebieg
+    const out = lay([st('sys_home', 640, 416, 0, 4), st('sys_k', 695, 402, 2, 0)]);
+    ok(out.rows.length === 2 && out.rows.every((r) => r.side === 'below' && !over(r, E)) && out.plus.length === 0
+      && out.zones.length === 2 && out.zones.every((z) => z.systemId === 'sys_k'),
+      `H16n SEDNO: rozwinięcie wygrywa — wiersze jego gwiazdy pod nim, „+N” sąsiada schowany razem ze strefą (${out.rows.map((r) => r.side).join(',')} · +N ${out.plus.length})`);
+    const far = lay([st('sys_far', 300, 200, 0, 4), st('sys_k', 695, 402, 2, 0)]);
+    ok(far.plus.length === 1 && far.plus[0].side === 'right' && far.plus[0].x > 300,
+      `H16o sąsiad poza rozwinięciem: „+N” po prawej stronie swojej gwiazdy, jak dotąd (${far.plus[0]?.side})`);
+  }
+
+  // Prawdziwa para podwarstw: szyna + nazwy płyty. Najpierw dwie klatki bez uwagi (nazwa stoi wyśrodkowana pod gwiazdą, szyna zwinięta),
+  // potem najechanie albo zaznaczenie: rozwinięcie rośnie w miejscu (trzyma kandydata), a szyna otwiera wiersze. Sprawdzane w KAŻDEJ klatce.
+  const pair = ({ pin = false } = {}) => {
+    const K = mkWorld({ vessels: [1, 2, 3].map((i) => V({ id: `v${i}`, name: `Statek ${i}` })) });
+    K.uiPrefs = { hudLayers: {} };
+    globalThis.window.KOSMOS = K;
+    let wakes = 0;
+    const hud = { ctx: null, _galaxySublayers: [], hoverObjectKey: () => L.hoverObjectKey?.() ?? null, wake: () => { wakes++; } };
+    const R = new HGR.HudGalaxyRailLayer(hud), L = new HGL.HudGalaxyLabelLayer(hud);
+    hud._galaxySublayers.push(R, L);
+    const proj = { point: (x, y, z) => (x === 0 && z === 0 ? { x: 400, y: 300 } : { x: 400 + x * 0.1, y: 300 + z * 0.1 }) };
+    const F = F0(K, { sel: {}, pointer: null });
+    const overlaps = [], wk = [];
+    let exp = null;
+    for (let i = 0; i < 6; i++) {
+      const on = i >= 2;
+      K._starUnder = on && !pin ? 'sys_home' : null;
+      K.galaxyMode.selectedSystemId = on && pin ? 'sys_home' : null;
+      F.pointer = on && !pin ? { lx: 400, ly: 300, rawX: 400, rawY: 300, overUI: false } : null;
+      F.now = 1000 + i * 400;
+      const w0 = wakes;
+      call(() => R.prepare(F)); call(() => L.prepare(F)); call(() => R.collect(F, proj)); call(() => L.collect(F, proj));
+      wk.push(wakes - w0);
+      exp = (L._g2?.last?.labels ?? []).find((l) => l.id === 'sys_home' && l.expFrom !== Infinity) ?? null;
+      if (exp && (R._last?.rows ?? []).length > 0) overlaps.push((R._last.rows).some((r) => over(r, exp)));
+    }
+    return { K, R, F, exp, rows: R._last?.rows ?? [], overlaps, wk };
+  };
+  for (const [label, o] of [['najechanie', {}], ['przypięcie (gwiazda zaznaczona)', { pin: true }]]) {
+    const s = pair(o);
+    ok(!!s.exp && s.rows.length === 3 && s.overlaps.length >= 3, `H16d ${label}: KONTROLA — rozwinięcie jest, wiersze szyny otwarte w ${s.overlaps.length} klatkach`);
+    ok(s.overlaps.length >= 3 && s.overlaps.every((x) => !x) && s.rows.every((r) => r.side === 'below'),
+      `H16e ${label}: SEDNO — w żadnej klatce wiersz nie leży pod rozwinięciem; rozwinięcie wyśrodkowane — wiersze pod nim (${s.rows[0]?.side}, ${JSON.stringify(s.overlaps)})`);
+    ok(s.wk.slice(-2).every((w) => w === 0), `H16f ${label}: potem spoczynek — bez budzenia klatek (${s.wk.join(',')})`);
+  }
+  // Kursor na wierszu: rozwinięcie gaśnie (zejście z gwiazdy), a wiersz nie ucieka spod kursora. KONTROLA: kursor obok — szyna wraca na prawo.
+  {
+    const s = pair({});
+    const r0 = s.rows[0];
+    const onRow = { lx: r0.x + 2, ly: r0.y + 2, rawX: r0.x + 2, rawY: r0.y + 2, overUI: false };
+    call(() => s.R.prepare({ ...s.F, pointer: onRow }));
+    call(() => s.R.yieldToExpansions?.([]));
+    const n0 = s.R._last?.rows?.[0];
+    ok(r0?.side === 'below' && !!n0 && n0.x === r0.x && n0.y === r0.y, `H16g kursor na wierszu: rozwinięcie zgasło, wiersz stoi (${r0?.side} ${r0?.x},${r0?.y} → ${n0?.x},${n0?.y})`);
+    const s2 = pair({});
+    call(() => s2.R.prepare({ ...s2.F, pointer: null }));
+    call(() => s2.R.yieldToExpansions?.([]));
+    const back = s2.R._last?.rows?.[0];
+    ok(!!back && back.x > 400 + half, `H16g′ KONTROLA: kursor poza wierszem — szyna stoi po prawej stronie gwiazdy (x ${back?.x})`);
+  }
+
+  // Otwarty picker skoku leży nad kartą walki (obserwacja z bramki 607): karta wycina go z rysunku i przepuszcza w nim kliki.
+  let SP = null, HL = null, CH = null;
+  try { SP = await import('../../ui/HudGalaxySendPickerLayer.js'); } catch (e) { console.log('  (picker:', e.message + ')'); }
+  try { HL = await import('../../ui/HudLayer.js'); } catch (e) { console.log('  (HudLayer:', e.message + ')'); }
+  try { CH = await import('../../ui/CombatHUD.js'); } catch (e) { console.log('  (CombatHUD:', e.message + ')'); }
+  const box = { x: 500, y: 600, w: 220, h: 120 };
+  const picker = SP?.HudGalaxySendPickerLayer ? new SP.HudGalaxySendPickerLayer({ ctx: null }) : null;
+  if (picker) picker._last = { box: { ...box }, zones: [] };
+  globalThis.window.KOSMOS = { galaxyMode: { isActive: true, isFlying: false, sendPicker: { systemId: 'sys_x' } } };
+  const openA = call(() => picker?.openBox?.());
+  globalThis.window.KOSMOS.galaxyMode.sendPicker = null;
+  const openB = call(() => picker?.openBox?.());
+  ok(JSON.stringify(openA) === JSON.stringify(box) && openB === null, 'H16h picker zgłasza swój prostokąt tylko otwarty');
+  globalThis.window.KOSMOS.galaxyMode.sendPicker = { systemId: 'sys_x' };
+  const rects = call(() => HL?.HudLayer?.prototype?.uiPassThroughRects?.call({ _gate: { shown: true }, _shown: true, _activeSublayers: () => [picker, { openBox: () => null }] }));
+  ok(JSON.stringify(rects) === JSON.stringify([box]), 'H16i HudLayer: prostokąty nad panelami UI = otwarty picker');
+  const hudC = CH?.CombatHUD ? new CH.CombatHUD() : null;
+  const log = [];
+  const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => { log.push([k, ...a]); }), set: (t, k, v) => { t[k] = v; return true; } });
+  globalThis.window.KOSMOS.hudLayer = { uiPassThroughRects: () => [box] };
+  if (hudC) hudC._drawPanel = () => log.push(['panel']);
+  call(() => hudC.draw(ctx, 1280, 800));
+  const clipped = log.some((e) => e[0] === 'clip' && e[1] === 'evenodd') && log.some((e) => e[0] === 'rect' && e[1] === box.x && e[2] === box.y);
+  ok(clipped && log.some((e) => e[0] === 'panel'), 'H16j karta walki rysuje się z wyciętym prostokątem pickera');
+  ok(call(() => hudC._underHud?.(box.x + 10, box.y + 10)) === true && call(() => hudC._underHud?.(10, 10)) === false, 'H16k punkt w pickerze — karta go przepuszcza, poza nim — nie');
+  const ch = stripComments(fs.readFileSync(new URL('../../ui/CombatHUD.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
+  const body = (name) => ch.slice(ch.indexOf(`\n  ${name}(`), ch.indexOf(`\n  ${name}(`) + 400);
+  ok(/_underHud\(mx, my\)/.test(body('handleClick')) && /_underHud\(mx, my\)/.test(body('handleMouseMove')), 'H16l klik i najechanie karty walki pytają o picker');
+  log.length = 0;
+  globalThis.window.KOSMOS.hudLayer = { uiPassThroughRects: () => [] };
+  call(() => hudC.draw(ctx, 1280, 800));
+  ok(!log.some((e) => e[0] === 'clip' || e[0] === 'save'), 'H16m KONTROLA: picker zamknięty — karta rysuje się bez wycinania');
+}
+
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail ? 1 : 0);

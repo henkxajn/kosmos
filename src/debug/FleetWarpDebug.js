@@ -14,6 +14,7 @@
 //   probe603Rig()           — zaznacza okręt solo ze skokiem w układzie z wrogiem, kamera na jego układzie
 //   probe603Engage() / probe603Patrol() / probe603Cores(x) — rozkaz na zaznaczonym statku; rdzenie = x
 //   probe603Warp(n)         — ten sam rozkaz co klik wpisu menu, do najbliższego układu o trasie n skoków
+//   galaxySoloRoute(n)      — G5-C (604): statek solo (zaznaczony albo pierwszy wolny) na trasie n skoków, bak pełny
 //   probe603Enemy()         — rajder 5 AU od statku, gra na pauzie · probe603Battle(weak) — zbrojny rajder obok statku + engage + start (weak = 1: rajder na 1 HP, statek wygrywa)
 //                             · starcia, gra na pauzie
 //   probe603AI()            — para AI rusza na dom gracza; kolejne wywołania: odczyt · probe603Rail() — liczba statków przy gwiazdach szyny
@@ -336,6 +337,23 @@ export function fleetWarpDebugHelpers() {
       if (!t) return { ok: false, reason: 'no_target_with_hops', hops: n };
       const before = shipBits(v), res = runGalaxyWarpOrder({ vesselIds: [v.id], targetSystemId: t.id, K: k });
       return { ok: res.fails.length === 0, reason: res.fails[0]?.reason ?? null, text: res.text, target: `${systemName(t.id)} [${t.id}]`, etaYears: round(t.etaYears), unchanged: shipBits(v) === before };
+    },
+
+    /**
+     * G5-C (Finding 604): statek solo na trasie n skoków — zaznaczony albo pierwszy wolny własny okręt z napędem warp spoza floty; bak dolany
+     * do pełna, ten sam rozkaz co klik wpisu menu gwiazdy. Po wznowieniu czasu: linie Dziennika na przystankach, jeden popup w celu.
+     */
+    galaxySoloRoute(n = 3) {
+      const k = K();
+      const v = selectedShip() ?? ships().find((s) => !isEnemyVessel(s) && !s.isWreck && !s.fleetId && isInService(s) && (s.warpFuel?.max ?? 0) > 0
+        && !s.warpRoute && s.mission?.type !== 'interstellar_jump') ?? null;
+      if (!v) return { ok: false, reason: 'no_ship' };
+      v.warpFuel.current = v.warpFuel.max;
+      const t = targetForShip(v, n);
+      if (!t) return { ok: false, reason: 'no_target_with_hops', hops: n, ship: v.name };
+      const res = runGalaxyWarpOrder({ vesselIds: [v.id], targetSystemId: t.id, K: k });
+      return { ok: res.fails.length === 0, reason: res.fails[0]?.reason ?? null, ship: v.name, target: `${systemName(t.id)} [${t.id}]`,
+        hops: v.warpRoute?.hops?.length ? v.warpRoute.hops.length - 1 : null, etaYears: round(t.etaYears) };
     },
 
     /** Rajder 5 AU od zaznaczonego statku, bez rozkazu i bez starcia, gra na pauzie (bezczynnego rajdera AI odwołuje `DirectorRecall` przy pierwszym ticku). */

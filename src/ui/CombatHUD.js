@@ -91,7 +91,25 @@ export class CombatHUD extends BaseOverlay {
     return !!(dscs?.listActive?.()?.length);
   }
 
+  // G5-C (obserwacja z bramki 607): prostokąty HUD leżące nad kartą walki — otwarty picker skoku z przypięcia gwiazdy.
+  _hudHoles() { return window.KOSMOS?.hudLayer?.uiPassThroughRects?.() ?? []; }
+
+  _underHud(x, y) { return this._hudHoles().some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h); }
+
+  /** Karta walki z wyciętymi prostokątami HUD (`#hud-canvas` leży pod `#ui-canvas`, więc otwarty picker widać przez wycięcie). */
   draw(ctx, W, H) {
+    const holes = this._hudHoles();
+    if (holes.length === 0) { this._drawPanel(ctx, W, H); return; }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    for (const r of holes) ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip('evenodd');
+    this._drawPanel(ctx, W, H);
+    ctx.restore();
+  }
+
+  _drawPanel(ctx, W, H) {
     const dscs = window.KOSMOS?.deepSpaceCombatSystem;
     if (!dscs?.listActive) return;
     const encounters = dscs.listActive();
@@ -537,7 +555,7 @@ export class CombatHUD extends BaseOverlay {
   handleMouseMove(mx, my) {
     const prev = this._hover;
     this._mouse = { x: mx, y: my };
-    const z = this._minimized ? null
+    const z = (this._minimized || this._underHud(mx, my)) ? null
       : this._hoverZones.find((h) => mx >= h.x && mx <= h.x + h.w && my >= h.y && my <= h.y + h.h);
     this._hover = z ? z.full : null;
     return this._hover !== prev;
@@ -549,6 +567,7 @@ export class CombatHUD extends BaseOverlay {
    */
   handleClick(mx, my) {
     if (this._minimized) return false;
+    if (this._underHud(mx, my)) return false;   // G5-C — klik w otwarty picker nad kartą idzie do pickera
     // „Obserwuj bitwę" — close-up kamery na bitwę TEGO wiersza (POLISH P2b, CP22).
     for (const w of this._watchBtns) {
       if (mx >= w.x && mx <= w.x + w.w && my >= w.y && my <= w.y + w.h) {

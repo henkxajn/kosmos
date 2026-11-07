@@ -199,6 +199,12 @@ export class HudGalaxySendPickerLayer {
 
   coversPoint(lx, ly) { return this._inBox(lx, ly); }
   coversUiPoint(lx, ly) { return this._inBox(lx, ly); }
+
+  /** G5-C (obserwacja z bramki 607): prostokąt otwartego pickera — panele `#ui-canvas` (karta walki) go przepuszczają; zamknięty — `null`. */
+  openBox() {
+    const gm = globalThis.window?.KOSMOS?.galaxyMode;
+    return gm?.isActive === true && !gm.isFlying && gm.sendPicker && this._last.box ? { ...this._last.box } : null;
+  }
   /** Kursor „rączki” nad wierszem statku zdolnego do skoku. */
   pinButtonAt(lx, ly) { return this._rowAt(lx, ly)?.ok ? 'sendRow' : null; }
 

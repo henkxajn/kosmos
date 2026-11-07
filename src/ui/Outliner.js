@@ -33,7 +33,7 @@ import { resolveBodyName } from '../utils/BodyName.js';
 import { resolveVesselStatus } from '../utils/VesselStatus.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';
 import { buildShipEntry }  from './FleetPictureLogic.js';
-import { buildShipTree, MARKER_TONES, TRANSIT } from './ShipTreeLogic.js';
+import { buildShipTree, MARKER_TONES, TRANSIT, FLEET_NODE_GLYPH } from './ShipTreeLogic.js';
 import { buildSystemTree } from './SystemTreeLogic.js';
 import { buildGalaxyShipView, galaxyShipSectionOrder, galaxyWorldContext } from './GalaxyOutlinerLogic.js';   // ARC GALAXY G1
 import { CLICK_INTENT, clickObject, vesselTarget, fleetTarget, readClickSelection } from './ClickIntentLogic.js';   // ARKUSZ UI U1-3 / U3-2 (D-UI-5)
@@ -286,8 +286,8 @@ export class Outliner extends OutlinerColumn {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
     ctx.fillStyle = this._markerColor(f.marker);
-    ctx.fillText('⛬', tx, iy + 12);
-    tx += ctx.measureText('⛬').width + 3;
+    ctx.fillText(FLEET_NODE_GLYPH, tx, iy + 12);
+    tx += ctx.measureText(FLEET_NODE_GLYPH).width + 3;
     ctx.fillStyle = isSel || this._hoverKey === key ? THEME.textPrimary : THEME.textSecondary;
     ctx.fillText(this._fit(ctx, f.name, g.x + g.w - PAD - cw - tx), tx, iy + 12);
     this._shadow(ctx, false);
@@ -382,7 +382,7 @@ export class Outliner extends OutlinerColumn {
     if (z.type === 'vessel' && z.row) return { lines: this._shipTipLines(z.row, K), x, y };
     if (z.type === 'fleet' && z.row) {
       return { lines: [
-        { text: `⛬ ${z.row.name}`, header: true },
+        { text: `${FLEET_NODE_GLYPH} ${z.row.name}`, header: true },
         { text: t('fleet.shipsCount', z.row.count), color: THEME.textSecondary },
       ], x, y };
     }

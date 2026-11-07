@@ -335,6 +335,44 @@ group('T9 popup przylotu: jeden na grupę', () => {
   assert(/if \(arrivalKind === 'none'\) return;/.test(modal) && /fleetArrivalPopupKind\(vessel, systemId, _fleetArrivalShown\)/.test(modal), 'MissionEventModal: bramka popupu wpięta (pin źródłowy — DOM)');
 });
 
+// Finding 604 (G5-C): statek solo na trasie wieloprzeskokowej — przystanki bez popupu (tylko linia Dziennika), popup raz, w celu.
+// W tej samej scenie leci flota na tę samą trasę: jej odpowiedź ma zostać jak w T9 (jeden popup na grupę).
+group('T9b popup przylotu statku solo na trasie (Finding 604)', () => {
+  const run = (listenerFirst) => {
+    scene();
+    if (listenerFirst) EventBus.clear();
+    let shown = null;
+    const seen = [], logs = [];
+    EventBus.on('interstellar:arrived', ({ vessel, systemId }) => {
+      const kind = GW.fleetArrivalPopupKind?.(vessel, systemId, shown);
+      if (kind === 'fleet') shown = vessel.mission.warpGroupId;
+      seen.push(`${vessel.name}@${systemId}:${kind}`);
+    });
+    if (listenerFirst) {
+      vMgr = new VesselManager(); mos = new MovementOrderSystem(vMgr); fSys = new FleetSystem(vMgr); wrs = new WarpRouteSystem(vMgr); os = new OrderService();
+      Object.assign(window.KOSMOS, { vesselManager: vMgr, movementOrderSystem: mos, fleetSystem: fSys, warpRouteSystem: wrs, orderService: os });
+    }
+    window.KOSMOS.eventLogSystem = { push: (e) => logs.push(e.text) };
+    const solo = ship({ name: 'Solo' }), f1 = ship({ name: 'F1' }), f2 = ship({ name: 'F2' });
+    const fid = makeFleet(f1, f2);
+    const started = wrs.beginJourney(solo.id, 'D');
+    os.issueFleetWarp?.(fid, 'D');
+    runUntil(() => !solo.warpRoute && fSys.getFleet(fid)?.activeOrder === null);
+    return { seen, logs, started, solo };
+  };
+  for (const [label, listenerFirst] of [['słuchacz po WarpRouteSystem (dziś)', false], ['słuchacz przed WarpRouteSystem', true]]) {
+    const { seen, logs, started, solo } = run(listenerFirst);
+    const soloSeen = seen.filter((s) => s.startsWith('Solo@')).map((s) => s.slice(5));
+    // KONTROLA: trasa solo naprawdę ma trzy odcinki i dolatuje do celu — inaczej „brak popupów na przystankach” byłby ciszą.
+    assert(started?.ok === true && started.route?.hops?.join() === 'sys_home,B,C,D' && solo.systemId === 'D', `${label}: KONTROLA — solo leci trzema odcinkami i dolatuje (${started?.route?.hops?.join()})`);
+    assert(soloSeen.join() === 'B:none,C:none,D:solo', `${label}: solo — przystanki cicho, popup raz, w celu (${soloSeen.join()})`);
+    assert(logs.filter((x) => x.includes('Solo')).length >= 3, `${label}: solo — linie Dziennika na przystankach i w celu zostają (${logs.filter((x) => x.includes('Solo')).length})`);
+    const fleetSeen = seen.filter((s) => !s.startsWith('Solo@'));
+    assert(fleetSeen.length === 6 && fleetSeen.filter((s) => s.endsWith(':fleet')).length === 1 && fleetSeen.find((s) => s.endsWith(':fleet'))?.includes('@D')
+      && fleetSeen.filter((s) => s.endsWith(':none')).length === 5, `${label}: KONTROLA — flota bez zmian: jeden popup na grupę, w celu (${fleetSeen.join()})`);
+  }
+});
+
 group('T10 pomocniki bramki', () => {
   scene();
   const K = window.KOSMOS, d = FWD.fleetWarpDebugHelpers?.();
