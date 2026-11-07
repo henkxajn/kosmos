@@ -5506,7 +5506,7 @@ export class GameScene {
   // ── M3 P1.3 — Picker mode HUD banner ─────────────────────────────
   // DOM div w document.body (poza game-container; index.html nie ma HUD layer'a).
   // EventBus.on('ui:pickerModeStarted/WaypointAdded/Ended') — pokaż/aktualizuj/ukryj.
-  // Cursor crosshair przez document.body.style.cursor — restore na end.
+  // Kursor celownika: klasa `cursor-target` na body (reguła w index.html) — zdejmowana na end.
   _createPickerHUD() {
     if (this._pickerBanner) return;  // idempotent
     const banner = document.createElement('div');
@@ -5541,7 +5541,7 @@ export class GameScene {
         return;  // unknown mode — don't show banner
       }
       banner.style.display = 'block';
-      document.body.style.cursor = 'crosshair';
+      document.body.classList.add('cursor-target');
     });
     // Finding 269 (A-MIN): trzy literały banera szły POZA t() — gracz EN dostawał polską instrukcję
     // (klasa 113; `check-i18n` nie widział sinku `textContent`). Kompozycja bez zmian kształtu:
@@ -5561,7 +5561,7 @@ export class GameScene {
     });
     EventBus.on('ui:pickerModeEnded', () => {
       banner.style.display = 'none';
-      document.body.style.cursor = '';
+      document.body.classList.remove('cursor-target');
     });
   }
 
