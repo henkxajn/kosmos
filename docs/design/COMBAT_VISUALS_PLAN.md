@@ -3,7 +3,8 @@
 > **Status: Phase A (CV-0) — read-only audit + plan, SIGNED by the owner 2026-11-08 (§3 column "Signed"; conditions in
 > §3.1; the cut reordered for an early visual payoff, §4). Phase A commits: `c855298 docs(CV A)` (plan) and
 > `c0700de docs(CV sign)` (signatures). CV-0b ✅ DONE 2026-11-08 (`aeff511`, owner's check PASS, §4 CV-0b — delivered).
-> Next: CV-2a.**
+> CV-2a ✅ DONE 2026-11-08 (`230fd3c`, owner's check PASS, `cvFxEngine` default ON with the owner's tuning; §4 CV-2a — delivered).
+> Next: CV-3a.**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -13,7 +14,7 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 400).
-> **Next free finding number: 637** (this plan files **#612–#636**).
+> **Next free finding number: 638** (this plan files **#612–#637**; #637 from CV-2a).
 
 ---
 
@@ -953,6 +954,88 @@ migration fit this session.
 | **Keepers (logic)** | (d) presentation clock frozen while paused, no catch-up after resume; (f) zero geometry / material constructions after warm-up during 100 synthetic salvos (real three under node, prototype counters) and caps never exceeded; (a) headless 10v10 (combat_pace pattern): signature + per-round trace identical with the flag ON / OFF, plus a control — a fake subscriber drawing `Math.random` DOES shift `OrbitalSpaceSystem` slots (proves the instrument) |
 | **Owner looks at** | a 10v10 from `cvBattle`: HDR beams / tracers on today's timing; pause freezes every effect; fps from `fxStats` ≈ 60 on High |
 
+#### CV-2a — ✅ delivered 2026-11-08 (`230fd3c`; owner's check PASS; `cvFxEngine` default ON)
+
+**What changed.**
+- NEW `src/renderer/combat/PresentationClock.js` (pure, zero imports): real frame dt while the game runs, step 0 in pause
+  (the real-time stamp keeps moving, so the first step after resume is ONE frame — no catch-up), step capped at 100 ms
+  (background tab, suspended loop, `_renderingEnabled` off — the repo's `ANIM_DT_MAX_S` / `COMBAT_GLIDE.DT_MAX_MS`
+  convention), a backward clock re-anchors, `anchor(simClockMs)` as the phase reference only (D-CV-10).
+- NEW `src/renderer/combat/FxShaders.js`: two programs. STREAK — camera-facing ribbon between two points; half-width in
+  WU with a screen-space floor `uMinPx` (CSS px, through `uPxToWorld = 2·tan(fov/2)/H`); HDR core above the bloom
+  threshold 1.0; `uStyle` 0 = beam (even), 1 = tracer (bright head at the target, fading tail). SPARK — billboard (impact
+  flash, shield ring, hit glow on the model), flash and ring grown ×1 → ×3 like today, size from the target model with a
+  per-kind floor / cap in screen px (the cap takes the role of the Watch `watchFxScale`, CP14), pulled toward the camera by
+  half its size so the model never hides the core. Log-depth chunks via `LogDepthChunks` (V-267); every per-effect value is
+  an instance attribute or a uniform — beams and tracers share one program text.
+- NEW `src/renderer/combat/FxEngine.js` (THREE injected — the node keepers build it on real r171): three instanced pools
+  built once (beam 1024 · tracer 1024 · spark 8192), swap-remove so the active instances are contiguous, upload range
+  [0, n), per-frame follow of the DRAWN vessel positions (today's `_followTracerEnds` / `_followFxTarget` semantics), the
+  effect's age computed in the shader from the presentation clock; overflow policy — the oldest effect ends early, a new
+  shot ALWAYS gets a slot (`steals`, zero at the worst load). Live knobs `LIVE_CV_FX`, aliased as
+  `KOSMOS.threeRenderer.cvTuning` (beam / tracer width and core gain, min screen width, flash / ring / glow size and px
+  floor / cap), rewritten to the uniforms every frame — no pins on their values. Defaults after the owner's tuning on the
+  check: `TRACER_CORE` 4 (was 2.6), `MIN_PX` 3 (was 2).
+- `ThreeRenderer`: `_onCombatRoundFx` → `_cvFxRoundFx` under `FEATURES.cvFxEngine` (read at call time) with today's
+  `combatFxPace`, today's stagger `(i % 8) · staggerMs` and today's fog gate `_combatEndpointWorld`; misses as today (dim
+  streak, no flash). `_tickCvFx` in the render loop after the legacy drain — flag OFF and nothing in flight ⇒ immediate
+  return. Engine root hidden in galaxy mode. `cvFxStats(frames)` sampler: frame interval (what the player sees, incl.
+  rasterisation), JS loop time, `renderer.info` calls / triangles summed over every composer pass (`autoReset` off only
+  while sampling), pool peaks. Wreck explosions still use today's `_spawnExplosion` under the flag (CV-5).
+- NEW `src/debug/CvBattleStager.js` (Finding 634): `KOSMOS.debug.cvBattle({ nA, nB, hulls, weapons, kind, seed })` — pure
+  layout `cvBattleLayout` (two lines of 5 per side, front 0.06 AU from the centre, everyone inside the 0.225 AU team-up
+  radius ⇒ the whole 10v10 enters one encounter at once), mixed hulls (frigate / destroyer / cruiser as battleship) and
+  mixed weapons, the viewed system, a clear spot ≥ 1 AU from any other vessel and ≥ 0.5 AU from bodies
+  (`cvBattleCenter`), pause, `vessel:combatRangeEnter` for the centre pair before the first tick, fixed
+  `seedBase = cvSeedBase(seed)`, engage orders, names `CV-A01…` / `CV-B01…`, runtime marker `_cvBattle`, sprites restored
+  at once (no position update arrives in pause), autosave interval 0 in memory only (F5 restores the menu value), warning
+  "nie zapisuj gry po teście". A re-run after the battle removes the previous test ships (silent `dismantled`); during the
+  battle — `battle_in_progress`. `kind: 'orbital'` → `not_yet` (CV-8a). `cvFx(1 | 0)` toggles the flag; `fxStats()`
+  measures 300 frames.
+- `GameConfig.FEATURES.cvFxEngine: true` — default ON by the owner's decision after the check (OFF path kept bit for bit
+  until CV-Z; console: `KOSMOS.debug.cvFx(0)`). `cv_renderer_rng_smoke` now sets the flag OFF inside its scripted battle —
+  it pins TODAY's FX path; the engine path's neutrality is pinned by `cv_fx_results_smoke`.
+
+**Keepers.** NEW `cv_fx_engine_smoke` **38 / 0** — (d) clock frozen through a 30 s pause, one-frame step after resume,
+a 60 s gap capped; engine uniforms / active counts / attributes unchanged through the pause, the last effect retiring at
+exactly its presentation lifetime (KONTROLA: the same engine fed the absolute clock loses everything in the pause —
+#616); (f) zero constructions (Object3D / Material / BufferGeometry / Texture id counters) and zero typed arrays after
+warm-up through 100 worst-round salvos (KONTROLA: deliberate constructions counted exactly); the worst 10v10 round (20
+ships × 5 utility slots = 100 shots, all hit and shield-blocked) at R 50 / 110 / 400 / 1000 — zero steals, every shot
+drawn (peak sparks 4 068 / 8 192 at R 50, the upper bound); overflow keeps the four newest shots; log-depth chunks,
+shared program text, knobs through uniforms; follow; zero `Math.random`, no `new` in the hot path (KONTROLA on a mutated
+copy); flag OFF ⇒ `_tickCvFx` touches nothing and `_onCombatRoundFx` takes today's path, flag ON ⇒ `_cvFxRoundFx` with
+today's pace; OFF-path fingerprint (SHA-256 of today's FX method bodies) == `0eabc4f`. Fail-first on a detached `0eabc4f`
+worktree **2 / 13** — the two greens are the guards (the OFF route, the OFF fingerprint). NEW `cv_fx_results_smoke`
+**28 / 0** — the stager on the headless world (S1–S6) and (a): flag ON (real renderer methods extracted from the source +
+the real engine on r171) == OFF (today's path) == no renderer on the signature `[[20,164,128,"B",null,7,3]]`, the
+per-round trace of all 20 rounds (events, hp / shield of every ship, logical positions), the game draw sequence and the
+orbit slots of four ships arriving mid-battle; KONTROLA: a listener drawing `Math.random` shifts the slots (66 ≠ 12
+draws); the real `DirectorRecall.strandedWarshipsAwayFromHome` skips the staged AI ships (witness: with the encounter
+predicate off it lists all 10). Fail-first **0 / 28** — measured after adding witnesses to four pins that first passed
+vacuously on an empty battle. `log_depth_chunks_smoke` — one pin RE-AIMED: it counted `logDepth: logDepthOn(),` in the
+whole renderer and expected 2, and the FX engine is a legitimate third consumer; it now reads the arguments of the two
+star factory calls it protects (control: the corona call without `logDepth` is caught) — 144 / 0.
+`cv_renderer_rng_smoke` 62 / 0 unchanged. Sweep **374 / 374 OK, 0 FAIL** (28 advisory, pre-existing) · `check-i18n` PASS ·
+no new i18n keys (console instruments only) · save v101 untouched.
+
+**Measured in the real game** (isolated headless Chrome, GATE-S4 fixture, window 1600×900, pixel ratio 1.5):
+- SwiftShader: the three programs compile and link; KONTROLA — the beam program with the log-depth prerequisite removed
+  does NOT link (the S4 defect class is visible to the probe); `cvBattle()` 20 / 20 in one encounter, engage 10 / 10,
+  sprites 20 / 20; pause — uniforms and active counts identical over 1.5 s; no exceptions or shader errors (only the known
+  building-icon 404s, O16).
+- RTX 3070 (ANGLE D3D11, Watch framing): idle 16.7 / 16.8 ms p50 / p95, 60 fps, 138 calls, 105 k triangles; 10v10 with the
+  flag ON 16.7 / 16.8 ms, 59.6 fps, JS loop 1.4 / 2.1 ms, 149 calls (max 151), 255 k triangles; engine peaks beam 5 ·
+  tracer 28 · spark 47, zero steals; the paused frames 1.5 s apart show every beam, tracer, ring and flash in the same
+  place. Seed 1 in the fixture: 20 rounds, losses 7 / 3 — the same as the headless keeper (169 vs 164 shots: the save's
+  own techs).
+
+**Owner's check — PASS 2026-11-08** (steps 1–9 OK, four battles watched on the RTX 3070): flag ON, `cvBattle()` 10v10,
+zoom in / out, pause freezes every effect, `fxStats()`, the same seed with the flag OFF, reload without saving; tuning on
+the check `TRACER_CORE = 4`, `MIN_PX = 3`. Decisions: `cvFxEngine` default ON with that tuning as defaults; commit
+`feat(CV-2a)` + `docs(CV-2a)`. The owner's observations from the check are diagnosed read-only in §4 CV-2a — findings
+from the check (#638 onward).
+
 ### CV-2b — presets, light pool, cue bus, audio attach (flag `cvPresets`)
 
 | | |
@@ -1052,9 +1135,9 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **613** | 🟠 | **The AudioSystem is deaf in the game scene.** Constructor subscriptions wiped by `EventBus.clear()` at game start; instance reused without re-attach; ☰ music / SFX toggles emit into nothing. Static trace — live check `KOSMOS.eventBus.listeners.get('music:toggle')?.length` | `main.js:37`; `AudioSystem.js:58-100`; `GameScene.js:197, :284`; `BottomBar.js:321, :326`; contrast `DebugLog.js:206-213` | CV-2b (cue listener); toggles = D-CV-19 (b) follow-up |
 | **614** | 🟠 | **HP drops before the hit is drawn.** Damage applied in the round, `roundFx` emitted after; 3D bars and the card read `vesselStates` every frame ⇒ bars and log move 150–430 ms before the flash at R = 400 | `DSCS:681-715, :721-740`; `ThreeRenderer.js:6752-6789` → `VesselFxLogic.js:151-167`; `CombatHUD.js:443-461, :509-540` | CV-4 |
 | **615** | 🟠 | **Kills are invisible until the battle ends.** Wrecks only in `_finalizeBattle`; a dead ship keeps its live sprite and an empty bar; every casualty and every surviving loser explodes in one frame (mechanics untouched; Finding 460 family) | `DSCS:1097-1114, :1447`; `ThreeRenderer.js:1341-1348` | CV-4 / CV-5 (presentation) |
-| **616** | ⚪ | **Combat FX animate through pause** (absolute `performance.now`) and expire unseen while the main loop is suspended | `ThreeRenderer.js:4115-4117, :4194, :6393, :6412` | CV-2a |
-| **617** | ⚪ | **FX cap shared and lossy**: 120 slots shared with pulses / pings; drop-oldest discards delayed effects not yet visible; ~30 hits fill it (4 meshes per hit) | `CombatFxConfig.js:26`; `ThreeRenderer.js:6385-6387, :7175, :7305` | CV-2a |
-| **618** | ⚪ | **Only the fireball blooms**; the explosion ring (0.77 × 0.8) and the wreck glow (0.49) stay under threshold 1.0 although their comments say otherwise; tracers 0.27–0.61; ship emissive ≤ 0.78 linear | `ThreeRenderer.js:416, :6518, :1385-1386`; CDN UnrealBloomPass high-pass | CV-2a / CV-4 / CV-5 |
+| **616** | ✅ | **Combat FX animate through pause** (absolute `performance.now`) and expire unseen while the main loop is suspended | `ThreeRenderer.js:4115-4117, :4194, :6393, :6412` | **CV-2a ✅** — presentation clock under `cvFxEngine` (default ON since the owner's check; `cv_fx_engine_smoke` T1–T2, live pause check); the OFF path keeps the old clock until CV-Z |
+| **617** | ✅ | **FX cap shared and lossy**: 120 slots shared with pulses / pings; drop-oldest discards delayed effects not yet visible; ~30 hits fill it (4 meshes per hit) | `CombatFxConfig.js:26`; `ThreeRenderer.js:6385-6387, :7175, :7305` | **CV-2a ✅** — combat shots use the engine's own pools (beam 1024 · tracer 1024 · spark 8192; `cvFxEngine` default ON), a new shot always gets a slot (`cv_fx_engine_smoke` T4–T5); the shared 120-slot cap stays for non-combat FX and on the OFF path until CV-Z |
+| **618** | ⚪ | **Only the fireball blooms**; the explosion ring (0.77 × 0.8) and the wreck glow (0.49) stay under threshold 1.0 although their comments say otherwise; tracers 0.27–0.61; ship emissive ≤ 0.78 linear | `ThreeRenderer.js:416, :6518, :1385-1386`; CDN UnrealBloomPass high-pass | CV-2a — under `cvFxEngine` beam / tracer / flash cores are HDR above the threshold (seen glowing on the RTX 3070); explosion ring and wreck glow → CV-5 |
 | **619** | ⚪ | **Floors fix effect sizes**: explosion `Math.max(0.2, …)` ⇒ fireball 5 L, ring 25 L; exhaust floors ⇒ every plume 0.03 × 0.024 WU (1.9 L); the flicker scales plume thickness, not length | `ThreeRenderer.js:6498, :4716-4717, :4740, :6478-6492` | CV-1a (exhaust) / CV-5 (explosion) |
 | **620** | 🟠 | **Enemy tint and wreck glow are invisible on 24 of 27 models** — `emissiveColor` multiplies an emissive map that is black on all six warships (max 12–29/255); a wreck rebuilt after load / system switch gets `0x110000` | `three.module.js:348`; `ThreeRenderer.js:4782, :4791, :1387-1388`; §1 Q6 Table B | CV-1a / CV-5 |
 | **621** | 🟠 | **`nonwarp_large_science` flies stern-first**: 26/27 models have the bow at local −X, this one +X; the README says +X (wrong); the heading comment says +X (wrong); the exhaust code is right | silhouettes in the audit scratchpad; `README_modele_statkow.md:14-15`; `ThreeRenderer.js:4706-4707, :4715, :4759-4760` | CV-1a (hardpoints frame + README) |
@@ -1070,9 +1153,10 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **631** | ⚪ | **Doctrine barely exists in deep-space mechanics**: DSCS never reads it; kite only moves the MOS band; hold_position does not hold; retreat_at_50 is checked once per 0.5 civ-years (≈ 14 % of maximal battles). Outside CV (F1) — a mechanics question for the owner | `DSCS:553-584`; `MovementOrderSystem.js:1385, :1391-1392`; `FleetSystem.js:478-486, :751` | candidate future MECHANICS arc — owner decides later (§3.1-7); CV-3b posture only |
 | **632** | ⚪ | **EAH ordering and scope**: emits before applying wrecks; wrecks a retreating side anyway; `_wreckPlayerVesselsInSystem` uses `systemId ?? 'sys_home'` ⇒ a ship in warp transit is wrecked by a lost home battle it never defended (Finding 151 class); the no-war skirmish is tagged `source: 'dscs'` | `EnemyAttackHandler.js:228-301, :406`; `WarSystem.js:815`; `GameScene.js:2763` | mechanics outside CV; CV-8a relies on the emit order |
 | **633** | ⚪ | **Possible fog leak**: the rumor-ghost override applies only to `in_transit`; orbiting enemies get their live position written back at physics cadence | `ThreeRenderer.js:5601-5603, :7682-7683` (static, not run) | CV-6a (fog audit) |
-| **634** | ⚪ | **No reproducible battle stager**: Combat Sandbox is not deterministic (global `Math.random` system generation); no helper places N ships of a loadout at a point; `DirectorRecall` recalls idle debug raiders on the first tick; `teleportVessel` never sets `systemId` | `CombatSandbox.js:145`; `SystemGenerator.js:689-690`; `DirectorRecall.js:96-121`; `GameScene.js:852-866` | CV-2a (`cvBattle`) |
+| **634** | ✅ | **No reproducible battle stager**: Combat Sandbox is not deterministic (global `Math.random` system generation); no helper places N ships of a loadout at a point; `DirectorRecall` recalls idle debug raiders on the first tick; `teleportVessel` never sets `systemId` | `CombatSandbox.js:145`; `SystemGenerator.js:689-690`; `DirectorRecall.js:96-121`; `GameScene.js:852-866` | **CV-2a ✅** — `KOSMOS.debug.cvBattle` (`src/debug/CvBattleStager.js`): viewed system, clear spot, pause, encounter before the first tick, fixed `seedBase`, engage orders; same seed = same battle (`cv_fx_results_smoke` S1–S6) |
 | **635** | ⚪ | **Possible double resolution of one raid** — DSCS on approach and EAH on arrival (DSCS does not exclude ships orbiting a planet) | `DSCS:202-254`; `EnemyAttackHandler.js:41-71` (inference, not run) | CV-8a probe |
-| **636** | ⚪ | **Hygiene bundle**: dead `_resolveFxEndpoint`; `entry._orbiting` written never read and `_calcVisualOrbit*` uncalled; FX kind `trail` without producer; hit-glow disposal frees the shared Sprite geometry (re-upload churn); BattleView3D's unused EventBus import and its own weapon-colour copy; `resolveBattle`'s `Date.now()` seed fallback; `round.year` mixes display and civ years; the CLAUDE.md M2a note lists `resolveDeepSpaceBattle` under `KOSMOS.debug` | `ThreeRenderer.js:6359-6372, :5282, :5329, :6447, :6408`; `BattleView3D.js:19, :30-37`; `BattleSystem.js:108`; `DSCS:617` | CV-2a (glow disposal) / CV-Z |
+| **636** | ⚪ | **Hygiene bundle**: dead `_resolveFxEndpoint`; `entry._orbiting` written never read and `_calcVisualOrbit*` uncalled; FX kind `trail` without producer; hit-glow disposal frees the shared Sprite geometry (re-upload churn); BattleView3D's unused EventBus import and its own weapon-colour copy; `resolveBattle`'s `Date.now()` seed fallback; `round.year` mixes display and civ years; the CLAUDE.md M2a note lists `resolveDeepSpaceBattle` under `KOSMOS.debug` | `ThreeRenderer.js:6359-6372, :5282, :5329, :6447, :6408`; `BattleView3D.js:19, :30-37`; `BattleSystem.js:108`; `DSCS:617` | CV-2a — under `cvFxEngine` the hit glow is a pooled spark (no per-shot disposal); the legacy churn stays on the OFF path until CV-Z |
+| **637** | ⚪ | **Below 10 fps the presentation clock runs slower than real time.** The 100 ms step cap (no jump after a stalled loop) also clips every frame of a steadily slow machine: at 2.3 fps (SwiftShader) an 8 s battle advanced 1.5 s of presentation time, so effects live longer in real time and trail the rounds. Irrelevant at ≥ 10 fps (the RTX 3070 runs 60). Matters for CV-4's lag budget (D-CV-9, ≤ 1 round) and CV-2b's Low preset: either cap only true gaps (e.g. > 1 s) or let the ledger re-sync to the round anchor (`PresentationClock.anchor`) | `src/renderer/combat/PresentationClock.js` (`PRESENTATION_DT_MAX_MS`); live probe CV-2a | CV-4 / CV-2b |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
