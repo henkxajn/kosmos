@@ -13,7 +13,7 @@
 > baseline-JPEG decoders, software silhouettes), all run in a scratchpad outside the repo. Every claim carries `path:line`
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
-> **R** = `combatRoundMs` (real milliseconds per watched round, default 400).
+> **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
 > **Next free finding number: 646** (this plan files **#612–#645**; #637 from CV-2a; #638–#645 from the CV-2a owner's check).
 
 ---
@@ -848,6 +848,20 @@ makes Live Server reload the page.
    path).
 7. **#631** (doctrines barely exist mechanically) — NOT in CV; registered as a candidate future **MECHANICS** arc; the
    owner decides later.
+
+### §3.2 Owner's decisions after the sign-off
+
+1. **2026-11-08 — watched round pace `combatRoundMs` defaults to 1000 ms (was 400, POLISH CP2).** Basis: the owner's live
+   check with the `cvBattle` stager at 400 / 800 / 1000 ms per round — 400 and 800 too fast, 1000 right. Change: the
+   default of the tuning key in `StrikesBackData` (range 50–1000 unchanged); the renderer's glide fallback follows it.
+   The outcome does not depend on the pace (POLISH P1, CP1) — measured on the stager 10v10 (seed 1, headless world with the
+   real `TimeSystem`): at 400 and 1000 ms the same signature `[[20,164,128,"B",null,7,3]]`, the same trace of all 20 rounds
+   (events, hp / shield, logical positions), the same 12 game draws and orbit slots; real battle time 7 616 → 19 040 ms
+   (keeper `cv_fx_results_smoke` A4; `combat_pace_smoke` T2 / T10 on its 3v1 scene). The tuning table stores only changed
+   values (setting the default removes the entry), so every save without its own `combatRoundMs` entry reads 1000; a save
+   with an explicit value (e.g. 800 set in the console) keeps it until `KOSMOS.debug.sbReset('combatRoundMs')`
+   (`combat_pace_smoke` T10i). The numbers in §3.1-3 are rules in R and stay; their "at R = 400" example reads at the
+   new default as: extra lag 0.52 s = 0.52 R, cap 1.5 R = 1.5 s.
 
 ---
 

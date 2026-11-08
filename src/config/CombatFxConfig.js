@@ -34,7 +34,7 @@ export const FX_RING_MS        = 1500;  // rozszerzający pierścień (skan/puls
 export const FX_PING_MS        = 1300;  // „ping" ukończenia (dłużej widoczny)
 
 // POLISH P2b (D3, A7) — tempo efektów salwy OGLĄDANEGO starcia z czasu realnego rundy R (`timeSystem.combatRoundMs()`,
-// klucz `combatRoundMs`, domyślnie 400 ms). Stałe wyżej strojono pod dawne 110 ms na rundę: przy 400 ms smuga (260 ms)
+// klucz `combatRoundMs`, domyślnie 1000 ms od 2026-11-08, dawniej 400). Stałe wyżej strojono pod dawne 110 ms na rundę: przy 400 ms smuga (260 ms)
 // gasła w ~2/3 rundy, a salwa kolejnej rundy startowała po dziurze. Teraz smuga, błysk i pierścień tarczy trwają
 // ~1,2 rundy (salwa trzyma się do następnej — bez dziury między salwami kolejnych rund, każda wciąż osobno: starsza już
 // gaśnie), rozrzut salwy R / 10, uderzenie po ~0,375 R; nigdy krócej niż stałe (przy 110 ms — dokładnie jak dawniej).

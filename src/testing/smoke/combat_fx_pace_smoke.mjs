@@ -16,13 +16,16 @@
 // PINY:
 //   T1  `combatFxPace` — tabela: 110 ms = dawne stałe (bez zmian dla starć nieoglądanych i domyślnej); 400 ms; 1000 ms;
 //       wartość nieokreślona → jak 110
-//   T2  PRAWDZIWE starcie DSCS przy R = 400: każda salwa (runda ze strzałem) wypełnia CAŁĄ swoją rundę efektami (bez
-//       dziury do następnej rundy); KONTROLA: dawne stałe zostawiają w części salw dziurę ≥ 100 ms; pokrycie starcia rośnie
+//   T2  PRAWDZIWE starcie DSCS przy R = 400 i R = 1000 (domyślna od 2026-11-08, ARC CV): każda salwa (runda ze strzałem)
+//       wypełnia CAŁĄ swoją rundę efektami (bez dziury do następnej rundy); KONTROLA: dawne stałe zostawiają w części salw
+//       dziurę ≥ 100 ms; pokrycie starcia rośnie
 //   T3  `glideRetarget` / `glideStep` — ruch liniowy przez rundę, krok klatki ≤ 100 ms, ten sam cel — bez zmian, nowy cel —
 //       od pozycji wyświetlanej
-//   T4  PRAWDZIWE starcie DSCS (klatki 16 ms, R = 400, zegar starcia jak siatka `TimeSystem`): największy skok sprite'a na
-//       klatkę z płynnym zbliżeniem ≤ krok / R × 16 ms (+5 %), ruch dobiega przed następnym krokiem; KONTROLA: bez niego
-//       (pozycja logiczna od razu) — skok = cały krok rundy
+//   T4  PRAWDZIWE starcie DSCS (klatki 16 ms, R = 400 i 1000, zegar starcia jak siatka `TimeSystem`): największy skok
+//       sprite'a na klatkę z płynnym zbliżeniem ≤ krok / R × 16 ms (+5 %); przy 400 ruch dobiega przed następnym krokiem;
+//       przy 1000 runda trwa 62 albo 63 klatki wobec ruchu 62,5 klatki — niedokończona reszta przy kolejnym kroku ≤ jedna
+//       klatka ruchu (bez narastania: nowy ruch rusza z pozycji wyświetlanej); KONTROLA: bez płynnego zbliżenia (pozycja
+//       logiczna od razu) — skok = cały krok rundy
 //   T5  źródło `ThreeRenderer`: tempo salwy z `combatRoundMs()`; czasy smugi / błysku / tarczy / rozrzutu z planu; końce
 //       smug i błyski za sprite'ami; płynne zbliżenie w obu miejscach ustawiania wolnego statku, co klatkę PRZED kamerą,
 //       stoi w pauzie; bez tabeli strojenia
@@ -91,16 +94,15 @@ header('T1  `combatFxPace` — tabela');
   console.log(`     110: ${JSON.stringify(p110)}\n     400: ${JSON.stringify(p400)}\n     1000: ${JSON.stringify(p1000)}`);
   assert(JSON.stringify(p110) === JSON.stringify(TODAY), 'T1a 110 ms (starcie nieoglądane) — dokładnie dawne stałe');
   assert(p400?.tracerMs === 480 && p400?.flashMs === 480 && p400?.shieldMs === 480 && p400?.staggerMs === 40 && p400?.flashDelayMs === 150,
-    'T1b SEDNO: 400 ms (domyślnie, CP2) — smuga / błysk / tarcza 1,2 rundy (480 ms), rozrzut 40 ms, uderzenie po 150 ms');
-  assert(p1000?.tracerMs === 1200 && p1000?.staggerMs === 100 && p1000?.flashDelayMs === 375, 'T1c 1000 ms — proporcjonalnie');
+    'T1b SEDNO: 400 ms (dawna domyślna, CP2) — smuga / błysk / tarcza 1,2 rundy (480 ms), rozrzut 40 ms, uderzenie po 150 ms');
+  assert(p1000?.tracerMs === 1200 && p1000?.staggerMs === 100 && p1000?.flashDelayMs === 375, 'T1c 1000 ms (domyślna od 2026-11-08) — proporcjonalnie');
   assert(JSON.stringify(pNaN) === JSON.stringify(TODAY) && JSON.stringify(pace(0)) === JSON.stringify(TODAY), 'T1d wartość nieokreślona — jak 110');
   assert(CFX.FX_TRACER_MS === 260 && CFX.FX_FLASH_MS === 460, 'T1e dawne stałe bez zmian (bitwa orbitalna — imitacja — dalej na nich)');
 }
 
 // ═══ T2 ═══════════════════════════════════════════════════════════════════════
-header('T2  PRAWDZIWE starcie przy R = 400: salwa wypełnia swoją rundę');
-{
-  const R = 400;
+header('T2  PRAWDZIWE starcie przy R = 400 i 1000: salwa wypełnia swoją rundę');
+for (const R of [400, 1000]) {
   const { dscs, me, foe } = scene();
   const salvos = [];
   EventBus.on('combat:roundFx', (p) => salvos.push({ round: dscs._activeEncounters.get(p.encounterId)?.currentRound ?? null, events: p.events }));
@@ -125,7 +127,7 @@ header('T2  PRAWDZIWE starcie przy R = 400: salwa wypełnia swoją rundę');
   const total = (enc?.currentRound ?? 0) * R;
   console.log(`     rund ${enc?.currentRound}, salw ${salvos.length}; dziury do końca rundy — dawne stałe: [${wt.map((w) => w.hole).join(', ')}] ms; z tempa rundy: [${wp.map((w) => w.hole).join(', ')}] ms`);
   console.log(`     pokrycie starcia efektami: dawne ${(100 * cover(wt, total)).toFixed(1)} % → z tempa rundy ${wp.length ? (100 * cover(wp, total)).toFixed(1) : '—'} %`);
-  assert(salvos.length >= 3 && !enc.isActive, 'T2-0 KONTROLA: starcie rozstrzygnięte, kilka salw');
+  assert(salvos.length >= 3 && !enc.isActive, `T2-0 R = ${R}: KONTROLA: starcie rozstrzygnięte, kilka salw`);
   // salwa SAMYCH PUDEŁ (ta sama reguła okien): przy trafieniu dawny błysk (150 + 460 ms) i tak wypełniał rundę 400 ms —
   // dziura była w rundach, w których wszystko chybiło (sama smuga 260 ms)
   const missOnly = [{ round: 1, events: [{ hit: false, blockedByShield: 0 }, { hit: false, blockedByShield: 0 }] }];
@@ -133,10 +135,10 @@ header('T2  PRAWDZIWE starcie przy R = 400: salwa wypełnia swoją rundę');
   const mt = windows(TODAY)[0]; const mp = pace(R) ? windows(pace(R))[0] : null;
   salvos.splice(0, salvos.length, ...keep);
   console.log(`     salwa samych pudeł (2 smugi): dziura do końca rundy — dawne stałe ${mt.hole} ms, z tempa rundy ${mp?.hole ?? '—'} ms`);
-  assert(mt.hole >= 100, 'T2-1 KONTROLA: dawne stałe przy 400 ms — w rundzie samych pudeł dziura ≥ 100 ms (sama smuga 260 ms)');
-  assert(mp?.hole === 0, 'T2-2 salwa samych pudeł z tempa rundy — bez dziury');
-  assert(wp.length === salvos.length && wp.every((w) => w.hole === 0), 'T2a SEDNO: każda salwa wypełnia całą swoją rundę (bez dziury do następnej rundy)');
-  assert(wp.length > 0 && cover(wp, total) > cover(wt, total), 'T2b pokrycie starcia efektami rośnie');
+  assert(mt.hole >= 100, `T2-1 R = ${R}: KONTROLA: dawne stałe — w rundzie samych pudeł dziura ≥ 100 ms (sama smuga 260 ms)`);
+  assert(mp?.hole === 0, `T2-2 R = ${R}: salwa samych pudeł z tempa rundy — bez dziury`);
+  assert(wp.length === salvos.length && wp.every((w) => w.hole === 0), `T2a R = ${R}: SEDNO: każda salwa wypełnia całą swoją rundę (bez dziury do następnej rundy)`);
+  assert(wp.length > 0 && cover(wp, total) > cover(wt, total), `T2b R = ${R}: pokrycie starcia efektami rośnie`);
 }
 
 // ═══ T3 ═══════════════════════════════════════════════════════════════════════
@@ -155,16 +157,16 @@ header('T3  `glideRetarget` / `glideStep`');
 }
 
 // ═══ T4 ═══════════════════════════════════════════════════════════════════════
-header('T4  PRAWDZIWE starcie: płynne zbliżenie (klatki 16 ms, R = 400)');
-{
-  const R = 400, F = 16;
+header('T4  PRAWDZIWE starcie: płynne zbliżenie (klatki 16 ms, R = 400 i 1000)');
+for (const R of [400, 1000]) {
+  const F = 16;
   const { dscs, me, foe } = scene();
   dscs.handleCombatRangeEnter(me[0].id, foe[0].id, false);
   const enc = [...dscs._activeEncounters.values()][0];
   const S = (v) => v / 10;
   const disp = new Map(); const glide = new Map(); const snap = new Map();
   for (const v of me) { disp.set(v.id, { x: S(v.position.x), z: S(v.position.y) }); snap.set(v.id, { x: S(v.position.x), z: S(v.position.y) }); }
-  let maxGlide = 0, maxSnap = 0, steps = 0, lagged = 0, maxStepWorld = 0;
+  let maxGlide = 0, maxSnap = 0, steps = 0, lagged = 0, maxStepWorld = 0, maxRemain = 0;
   for (let f = 0; f < 4000 && enc?.isActive; f++) {
     window.KOSMOS.timeSystem.simClockMs += F * (ROUND_INTERVAL_MS / R);   // siatka: 110 ms zegara starcia na R ms realnych
     dscs._tick(0.01);
@@ -175,18 +177,19 @@ header('T4  PRAWDZIWE starcie: płynne zbliżenie (klatki 16 ms, R = 400)');
       let g = glide.get(v.id);
       const cur = disp.get(v.id);
       const ng = gRet(g ?? null, to, cur, R);
-      if (ng && ng !== g) { if (g && !g.done) lagged++; steps += g ? 1 : 0; maxStepWorld = Math.max(maxStepWorld, Math.hypot(to.x - (g?.to?.x ?? to.x), to.z - (g?.to?.z ?? to.z))); g = ng; }
+      if (ng && ng !== g) { if (g && !g.done) { lagged++; maxRemain = Math.max(maxRemain, (g.durMs - g.elapsedMs) / g.durMs); } steps += g ? 1 : 0; maxStepWorld = Math.max(maxStepWorld, Math.hypot(to.x - (g?.to?.x ?? to.x), to.z - (g?.to?.z ?? to.z))); g = ng; }
       if (g && !g.done) { const st = gStep(g, F); g.elapsedMs = st.elapsedMs; g.done = st.done; disp.set(v.id, { x: st.x, z: st.z }); }
       glide.set(v.id, g);
       const jg = Math.hypot(disp.get(v.id).x - cur.x, disp.get(v.id).z - cur.z); maxGlide = Math.max(maxGlide, jg);
     }
   }
   const bound = maxStepWorld / R * F * 1.05 + 1e-9;
-  console.log(`     kroków zbliżenia ${steps}; krok rundy max ${maxStepWorld.toFixed(4)} j.; skok na klatkę — bez płynnego zbliżenia ${maxSnap.toFixed(4)} j., z płynnym ${maxGlide.toFixed(5)} j. (granica ${bound.toFixed(5)}); ruch niedokończony przy kolejnym kroku: ${lagged}`);
-  assert(steps >= 2 && maxStepWorld > 0.05, 'T4-0 KONTROLA: zbliżenie przed rundami (kroki ≥ 2, krok > 0,05 j.)');
-  assert(maxSnap >= 0.9 * maxStepWorld, 'T4-1 KONTROLA: bez płynnego zbliżenia skok = cały krok rundy');
-  assert(steps >= 2 && maxGlide <= bound, 'T4a SEDNO: z płynnym zbliżeniem skok na klatkę ≤ krok / R × 16 ms (+5 %)');
-  assert(steps >= 2 && lagged === 0, 'T4b ruch dobiega przed kolejnym krokiem (bez narastającego opóźnienia)');
+  console.log(`     R = ${R}: kroków zbliżenia ${steps}; krok rundy max ${maxStepWorld.toFixed(4)} j.; skok na klatkę — bez płynnego zbliżenia ${maxSnap.toFixed(4)} j., z płynnym ${maxGlide.toFixed(5)} j. (granica ${bound.toFixed(5)}); ruch niedokończony przy kolejnym kroku: ${lagged} (reszta maks. ${(100 * maxRemain).toFixed(2)} % ruchu)`);
+  assert(steps >= 2 && maxStepWorld > 0.05, `T4-0 R = ${R}: KONTROLA: zbliżenie przed rundami (kroki ≥ 2, krok > 0,05 j.)`);
+  assert(maxSnap >= 0.9 * maxStepWorld, `T4-1 R = ${R}: KONTROLA: bez płynnego zbliżenia skok = cały krok rundy`);
+  assert(steps >= 2 && maxGlide <= bound, `T4a R = ${R}: SEDNO: z płynnym zbliżeniem skok na klatkę ≤ krok / R × 16 ms (+5 %)`);
+  if (R === 400) assert(steps >= 2 && lagged === 0, 'T4b R = 400: ruch dobiega przed kolejnym krokiem (bez narastającego opóźnienia)');
+  else assert(steps >= 2 && maxRemain <= (F / R) * 1.05, `T4c R = ${R}: niedokończona reszta przy kolejnym kroku ≤ jedna klatka ruchu (${(100 * maxRemain).toFixed(2)} % ≤ ${(100 * F / R).toFixed(2)} %) — bez narastania`);
 }
 
 // ═══ T5 ═══════════════════════════════════════════════════════════════════════

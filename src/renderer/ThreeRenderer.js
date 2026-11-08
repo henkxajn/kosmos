@@ -6866,7 +6866,7 @@ export class ThreeRenderer {
       p.set(to.x, 0.3, to.z);
       return;
     }
-    entry.glide = glideRetarget(g, to, { x: p.x, z: p.z }, window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 400);
+    entry.glide = glideRetarget(g, to, { x: p.x, z: p.z }, window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000);   // zapas = domyślna klucza
   }
 
   // Co klatkę (także w pauzie gry — wtedy ruch stoi, jak starcie): sprite'y w ruchu o krok czasu realnego klatki.

@@ -37,10 +37,12 @@
 //       w oglądanym starciu przyrasta krokami siatki (klucz 400 ⇒ 110 / 400 tempa czasu realnego)
 //   T9  pin źródłowy (komentarze zdjęte): DSCS bez czasu realnego; orbity (VesselManager ×3, EAH, OSS, ThreeRenderer ×2)
 //       przez `orbitClockSec()`; `TimeSystem` — siatka i zegar klatek
-//   T10 (C2, CP2) klucz strojenia `combatRoundMs`: wiersz tabeli (domyślnie 400, int, 50..1000, jednostka ms);
-//       `sbSet` zmienia tempo od następnej klatki (110 / 1000 — czas realny rund; sygnatura i czas gry rund = dziś);
-//       odmowy `out_of_range` (30, 1200) i `wrong_type` (400,5, '400', NaN) z zakresem — stan bez zmian (świadek:
-//       poprawna zmiana tuż po odmowach zmienia stan); `sbReset` → 400; konsument (`TimeSystem.combatRoundMs`)
+//   T10 (C2, CP2) klucz strojenia `combatRoundMs`: wiersz tabeli (domyślnie 1000 — decyzja właściciela 2026-11-08, ARC CV;
+//       dawniej 400; int, 50..1000, jednostka ms); `sbSet` zmienia tempo od następnej klatki (110 / 1000 — czas realny
+//       rund; sygnatura i czas gry rund = dziś); odmowy `out_of_range` (30, 1200) i `wrong_type` (400,5, '400', NaN)
+//       z zakresem — stan bez zmian (świadek: poprawna zmiana tuż po odmowach zmienia stan); `sbReset` → 1000; konsument
+//       (`TimeSystem.combatRoundMs`); zapis bez wpisu (gra sprzed zmiany przy dawnej domyślnej 400) czyta 1000, jawna
+//       wartość z zapisu (800) zostaje po `sanitizeTuningAfterRestore`
 //
 // ⚠ Fail-first: moduły P1 (`SimClock`, `CombatPaceData`) powstają w tym slice — import dynamiczny w try/catch, wywołania
 //   przez pomocników, żeby na kodzie sprzed zmiany piny DEGRADOWAŁY (czerwone), a nie przerywały suitę.
@@ -388,23 +390,23 @@ header('T9  pin źródłowy: DSCS bez czasu realnego; orbity przez `orbitClockSe
 }
 
 // ═══ T10 ══════════════════════════════════════════════════════════════════════════
-header('T10 klucz strojenia `combatRoundMs` (CP2): tabela, domyślna 400, `sbSet` działa od następnej klatki, odmowy, reset');
+header('T10 klucz strojenia `combatRoundMs` (CP2): tabela, domyślna 1000, `sbSet` działa od następnej klatki, odmowy, reset, zapis');
 {
   const tun = (name, ...a) => (typeof TUN[name] === 'function' ? TUN[name](...a) : undefined);
   const stateOf = () => JSON.stringify(gameState.get('strikesBackTuning') ?? null);
   tun('resetTuning');
   const def = DATA.SB_TUNING?.combatRoundMs;
-  assert(!!def && def.default === 400 && def.type === 'int' && def.min === 50 && def.max === 1000 && def.unit === 'ms',
-    `T10a tabela: combatRoundMs — domyślnie 400, int, zakres 50..1000, jednostka ms (${JSON.stringify(def ?? null)})`);
+  assert(!!def && def.default === 1000 && def.type === 'int' && def.min === 50 && def.max === 1000 && def.unit === 'ms',
+    `T10a tabela: combatRoundMs — domyślnie 1000 (decyzja właściciela 2026-11-08), int, zakres 50..1000, jednostka ms (${JSON.stringify(def ?? null)})`);
   const row = (tun('tuningRows') ?? []).find(r => r.klucz === 'combatRoundMs');
-  assert(!!row && row.domyslna === 400 && row.biezaca === 400 && row.zmiana === '' && row.jednostka === 'ms',
-    `T10b wiersz tabeli sbTuning: domyślna 400, bieżąca 400, bez znacznika zmiany, jednostka ms (${JSON.stringify(row ?? null)})`);
+  assert(!!row && row.domyslna === 1000 && row.biezaca === 1000 && row.zmiana === '' && row.jednostka === 'ms',
+    `T10b wiersz tabeli sbTuning: domyślna 1000, bieżąca 1000, bez znacznika zmiany, jednostka ms (${JSON.stringify(row ?? null)})`);
   world();
   const d0 = ts.combatRoundMs();
   const r110 = tun('setTuning', 'combatRoundMs', 110);
   const d1 = ts.combatRoundMs();
-  assert(d0 === 400 && r110?.ok === true && d1 === 110 && stateOf() === JSON.stringify({ combatRoundMs: 110 }),
-    `T10c świeży świat czyta 400; sbSet('combatRoundMs', 110) → TimeSystem czyta 110 od razu, wartość w gameState.strikesBackTuning (${d0} → ${d1}, ${stateOf()})`);
+  assert(d0 === 1000 && r110?.ok === true && d1 === 110 && stateOf() === JSON.stringify({ combatRoundMs: 110 }),
+    `T10c świeży świat czyta 1000; sbSet('combatRoundMs', 110) → TimeSystem czyta 110 od razu, wartość w gameState.strikesBackTuning (${d0} → ${d1}, ${stateOf()})`);
   const k110 = run();                                                        // tempo z klucza — BEZ zastąpienia metody
   tun('setTuning', 'combatRoundMs', 1000);
   const k1000 = run();
@@ -414,7 +416,7 @@ header('T10 klucz strojenia `combatRoundMs` (CP2): tabela, domyślna 400, `sbSet
     assert(p.n > 1 && Math.abs(p.realMs - (p.n - 1) * k) <= quantum(k) && same(r.sig, ref.sig) && same(gySeq(r), gySeq(ref)),
       `T10d klucz z konsoli ${k}: czas realny rund = (rundy − 1) × ${k} ± kwant; sygnatura i czas gry rund = dziś`);
   }
-  tun('setTuning', 'combatRoundMs', 400);                                    // wartość domyślna = brak wpisu
+  tun('setTuning', 'combatRoundMs', 1000);                                   // wartość domyślna = brak wpisu
   const before = stateOf();
   const cases = [[30, 'out_of_range'], [1200, 'out_of_range'], [400.5, 'wrong_type'], ['400', 'wrong_type'], [NaN, 'wrong_type']];
   for (const [v, reason] of cases) {
@@ -428,11 +430,26 @@ header('T10 klucz strojenia `combatRoundMs` (CP2): tabela, domyślna 400, `sbSet
   assert(ok250?.ok === true && stateOf() !== before && ts.combatRoundMs() === 250,
     'T10f świadek: poprawna zmiana tuż po odmowach zmienia stan (250)');
   const rr = tun('resetTuning', 'combatRoundMs');
-  assert(rr?.ok === true && same(rr.reset, ['combatRoundMs']) && tun('getTuning', 'combatRoundMs') === 400 && ts.combatRoundMs() === 400
-    && stateOf() === JSON.stringify({}), "T10g sbReset('combatRoundMs') → 400, wpis zdjęty");
+  assert(rr?.ok === true && same(rr.reset, ['combatRoundMs']) && tun('getTuning', 'combatRoundMs') === 1000 && ts.combatRoundMs() === 1000
+    && stateOf() === JSON.stringify({}), "T10g sbReset('combatRoundMs') → 1000, wpis zdjęty");
   const tsSrc = readSrc('systems/TimeSystem.js');
   const body = tsSrc.slice(tsSrc.indexOf('  combatRoundMs() {'), tsSrc.indexOf('  _combatView() {'));
   assert(/return getTuning\('combatRoundMs'\);/.test(body), 'T10h konsument: TimeSystem.combatRoundMs() czyta klucz w chwili użycia (getTuning)');
+  // T10i — ZAPIS: tabela niesie wyłącznie wartości ZMIENIONE (ustawienie wartości domyślnej zdejmuje wpis). Gra zapisana
+  //   przy dawnej domyślnej 400 nie ma wpisu `combatRoundMs`, więc po wczytaniu czyta NOWĄ domyślną; jawna wartość z zapisu
+  //   (np. 800 ustawione w konsoli) przechodzi walidację po wczytaniu i zostaje.
+  tun('resetTuning');
+  gameState.set('strikesBackTuning', { fleetMinWarpHulls: DATA.SB_TUNING.fleetMinWarpHulls?.default }, 'keeper_old_save');   // zapis bez wpisu tempa
+  const sOld = tun('sanitizeTuningAfterRestore');
+  const readOld = ts.combatRoundMs();
+  gameState.set('strikesBackTuning', { combatRoundMs: 800 }, 'keeper_old_save');
+  const sOwn = tun('sanitizeTuningAfterRestore');
+  const readOwn = ts.combatRoundMs();
+  const keptOwn = stateOf();
+  const r1000 = tun('resetTuning', 'combatRoundMs');
+  assert(same(sOld?.ignored, []) && readOld === 1000 && same(sOwn?.ignored, []) && readOwn === 800 && keptOwn === JSON.stringify({ combatRoundMs: 800 })
+    && r1000?.ok === true && ts.combatRoundMs() === 1000,
+    `T10i zapis bez wpisu → 1000 (nowa domyślna); zapis z jawnym 800 → 800 po wczytaniu, sbReset → 1000 (${readOld} / ${readOwn} / ${ts.combatRoundMs()})`);
   tun('resetTuning');
 }
 

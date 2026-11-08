@@ -31,6 +31,8 @@
 //   A1 tryb ON naprawdę rysował silnikiem (strzały w pulach, zero dzisiejszych efektów), tryb OFF — dzisiejszą ścieżką
 //   A2 ON == OFF == bez renderera: sygnatura, ślad każdej rundy, sekwencja losowań gry, sloty orbit
 //   A3 KONTROLA przyrządu: słuchacz salwy losujący z `Math.random` przesuwa sloty orbit (i sekwencję)
+//   A4 tempo oglądanego starcia (`combatRoundMs`) 400 == 1000 (decyzja właściciela 2026-11-08: domyślnie 1000): sygnatura,
+//      ślad każdej rundy, sekwencja losowań gry, sloty orbit; świadek — czas realny starcia rośnie z kluczem
 //
 // ⚠ Fail-first: moduły CV-2a (stager, silnik, zegar) powstają w tym kroku — import dynamiczny w try/catch, piny DEGRADUJĄ
 //   (czerwone), suita się nie przerywa. A2 jest STRAŻNIKIEM (wynik nie zależał od FX także przed CV-2a, od CV-0b).
@@ -170,11 +172,12 @@ function world() {
     empireRegistry: { listAll: () => empires, get: (id) => empires.find(e => e.id === id) ?? null },
     debug: { combatTrace: false },
   });
-  rec = { rounds: [], battles: [], wrecks: [] };
+  rec = { rounds: [], battles: [], wrecks: [], clock: [] };
   const nameOf = (id) => vm.getVessel(id)?.name ?? id;
   const orig = dscs._tickEncounter.bind(dscs);
   dscs._tickEncounter = (enc, civDy) => {
     orig(enc, civDy);
+    rec.clock.push(clock.now);   // A4 — czas realny rundy (poza śladem: ślad ma nie zależeć od tempa)
     const last = enc.timeline?.[enc.timeline.length - 1];
     rec.rounds.push({
       round: enc.currentRound,
@@ -215,13 +218,14 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  * Starcie ze stagera, rozegrane do końca. mode: 'none' (bez renderera) · 'off' (renderer, flaga OFF) · 'on' (flaga ON);
  * `control` — słuchacz salwy losujący z `Math.random` (KONTROLA przyrządu).
  */
-function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10 } = {}) {
+function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null } = {}) {
   const flag = GAME_CONFIG.FEATURES.cvFxEngine;
   reseed('cv2a-battle'); reseedRendererRandom();
   let R = null, st = null, outsider = null, recallList = null, recallNoEnc = null, ctlAi = null;
   const arrivals = [];
   const out = recordDraws(() => {
     world();
+    if (roundMs != null) ts.combatRoundMs = () => roundMs;   // A4 — tempo oglądanego starcia (jak `combat_pace_smoke`)
     if (mode !== 'none') {
       GAME_CONFIG.FEATURES.cvFxEngine = mode === 'on';
       R = fakeRenderer();
@@ -249,7 +253,8 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10 
       if (!encActive() && rec.battles.length > 0) { for (let k = 0; k < 60; k++) { frame(16); R?.frame(); } break; }
     }
     const slots = arrivals.map((id) => { const o = oss.getOrbit(id); return o ? [o.r, o.theta0, o.phi] : null; });
-    return { scene, sig: { battles: rec.battles, wrecks: rec.wrecks }, trace: rec.rounds, slots };
+    const realMs = rec.clock.length > 1 ? rec.clock[rec.clock.length - 1] - rec.clock[0] : 0;
+    return { scene, sig: { battles: rec.battles, wrecks: rec.wrecks }, trace: rec.rounds, slots, realMs };
   });
   GAME_CONFIG.FEATURES.cvFxEngine = flag;
   return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name };
@@ -362,6 +367,21 @@ const CTL = runBattle({ mode: 'on', seed: 1, control: true });
   assert(!same(CTL.draws, NONE.draws), `A3b sekwencja losowań inna (${CTL.draws.length} ≠ ${NONE.draws.length})`);
   assert(NONE.sig.battles.length >= 1 && same(CTL.sig, NONE.sig),
     'A3c (świadek) wynik bitwy DSCS nadal ten sam — ziarno starcia jest prywatne; skażenie widać w świecie, nie w bitwie');
+}
+
+header('A4 — tempo oglądanego starcia 400 == 1000 ms na rundę (ten sam wynik; domyślnie 1000 od 2026-11-08)');
+const K400  = runBattle({ mode: 'none', seed: 1, roundMs: 400 });
+const K1000 = runBattle({ mode: 'none', seed: 1, roundMs: 1000 });
+{
+  const rounds = K400.trace.length;
+  console.log(`     400: rund ${rounds}, czas realny ${K400.realMs} ms · 1000: rund ${K1000.trace.length}, czas realny ${K1000.realMs} ms · sygnatura ${JSON.stringify(K400.sig.battles)}`);
+  assert(K400.sig.battles.length >= 1 && same(K400.sig, K1000.sig), `A4a sygnatura identyczna przy 400 i 1000 ms ${JSON.stringify(K1000.sig.battles)}`);
+  assert(rounds >= 5 && same(K400.trace, K1000.trace), `A4b ślad każdej rundy identyczny (${rounds} rund: zdarzenia, HP, osłona, pozycje logiczne)`);
+  assert(K400.draws.length > 0 && same(K400.draws, K1000.draws), `A4c sekwencja losowań gry identyczna (${K400.draws.length} losowań)`);
+  assert(K400.slots.length === ARRIVAL_ROUNDS.length && same(K400.slots, K1000.slots), 'A4d sloty orbit statków przylatujących w trakcie starcia identyczne');
+  const q = (k) => 16 * k / 110 + 16;   // kwant siatki (jak `combat_pace_smoke`)
+  assert(rounds > 1 && Math.abs(K400.realMs - (rounds - 1) * 400) <= q(400) && Math.abs(K1000.realMs - (rounds - 1) * 1000) <= q(1000),
+    `A4e świadek: czas realny starcia = (rundy − 1) × klucz ± kwant (${K400.realMs} / ${K1000.realMs} ms) — klucz działa`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
