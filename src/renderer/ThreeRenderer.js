@@ -36,10 +36,13 @@ import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { loadBuildingTextures } from './BuildingTextures.js';
-import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
+import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT, VESSEL_TARGET_SIZE }
   from './VesselModelResolver.js';
+import { STAGE, solveStage, clusterEncounters, bandEdgesWU, pairKey } from './combat/BattleStageLogic.js';   // ARC CV-3a1 — scena bitwy
+import { stageBlend, lengthPx } from './combat/SemanticZoomLogic.js';                               // ARC CV-3a1 — zoom semantyczny
 import { isStationInActiveSystem } from './StationRenderLogic.js';
-import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep } from './CombatWatchLogic.js';
+import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
+  centroidOf, fitWatchFrameOffset, viewOffsetFrame } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { LIVE_SKY, buildSkyCatalog, skyFrom, allocSkyBuffers, skySeedOf, skyKnobSnapshot, skyKnobsChanged,
@@ -181,6 +184,7 @@ const _WATCH_V = new THREE.Vector3();       // POLISH P2a — wektor roboczy gł
 const _HP_R = new THREE.Vector3();          // POLISH P2b (D2) — oś „w prawo” ekranu w świecie (paski HP)
 const _HP_U = new THREE.Vector3();          // POLISH P2b (D2) — oś „w górę” ekranu w świecie (paski HP)
 const _RING_P = new THREE.Vector3();        // POLISH P2b CLOSE (C6) — punkt okręgu pierścienia starcia (głębia widoku)
+const _STAGE_V = new THREE.Vector3();       // ARC CV-3a1 — środek sceny bitwy (dystans kamery → zoom semantyczny)
 let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstura białego błysku trafienia (jedna, współdzielona)
 // F4 Dok: ping-FX kliku wiersza — ARKUSZ HUD paczka B (D-HUD-16): kolor w roli `primary` (dawniej 0x66ddff, `_spawnFx`).
 const TACTICAL_PING_THROTTLE_MS = 180;     // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
@@ -491,6 +495,18 @@ export class ThreeRenderer {
     this._frameNo              = 0;          // licznik klatek pętli renderu
     this._hpBars               = new Map();  // POLISH P2b (D2, Finding 451) — vesselId → { bg, fill, col } (paski HP starcia)
     this._glideLastMs          = null;       // POLISH P2b (D3, Finding 461) — czas realny ostatniej klatki płynnego zbliżenia
+    // ARC CV-3a1 — SCENA BITWY (flaga `cvStage`): znaczniki sprite'ów sceny (vesselId → { base, drawn, w, k, cluster }),
+    // stan klastrów starć (clusterId → { key, sol, offsets }), zegar prezentacji wejścia / wyjścia ze sceny, statystyka
+    // klatki (fxStats, stageInfo), klaster każdego starcia z tej klatki, przesunięcie ekranowe kadru walki (Finding 643).
+    this._stageMarks           = new Map();
+    this._stageState           = new Map();
+    this._stageClock           = new PresentationClock();
+    this._stageFrame           = null;
+    this._stageClusterOf       = new Map();
+    this._stageEdges           = null;
+    this._stageFitCache        = new Map();
+    this._stageFitFrame        = -1;
+    this._combatViewOffset     = null;
     // POLISH P2a (CP17) — statki aktywnych starć z udziałem gracza (zmiana zbioru → ponowne nałożenie widoczności wywiadu).
     this._combatRevealed       = new Set();
     this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
@@ -4176,7 +4192,9 @@ export class ThreeRenderer {
         // POLISH P2a (CP13) — „Obserwuj”: cel i dystans kamery z kadru walki (co klatkę, także w pauzie gry).
         // POLISH P2b (D3, Finding 461) — płynne zbliżenie uczestników oglądanego starcia, PRZED kamerą i efektami (kadr
         // „Obserwuj”, auto-fokus, końce smug i paski HP czytają pozycje sprite'ów z tej klatki).
+        this._unstageVessels();          // ARC CV-3a1 — sprite'y sceny na pozycje bez sceny (piszą je ruch płynny i orbity)
         this._tickCombatGlide();
+        this._tickBattleStage();         // ARC CV-3a1 — scena bitwy: pozycje rysowane (prawo sceny × zoom semantyczny)
         // ARC GALAXY G1 — w trybie galaktyki kamera należy do płyty: „Obserwuj” i auto-fokus starcia wstrzymane (wracają po wyjściu).
         if (this._watch && !this._galaxyActive && !this._galaxyFlight) this._updateWatchCamera();
         // POLISH P2b (D1, Finding 467) — auto-fokus starcia: cel śledzi środek walki (co klatkę, także w pauzie gry).
@@ -4184,6 +4202,7 @@ export class ThreeRenderer {
 
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
+        this._syncCombatViewOffset();    // ARC CV-3a1 (Finding 643) — kompozycja kadru walki przesunięciem ekranowym
 
         // NIEBO (D-GX-4) — kopuła nieba jedzie z kamerą (obraz nieba zależy tylko od ORIENTACJI — ciągły z konstrukcji);
         // pokrętła nieba co klatkę (przeliczenie tylko przy zmianie). `_sky` = null tylko przed zbudowaniem kopuły.
@@ -4212,6 +4231,7 @@ export class ThreeRenderer {
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
         this._tickEngagementMarkers(performance.now());
+        if (GAME_CONFIG.FEATURES?.cvStage) this._hideEncounterRings();   // ARC CV-3a1 (Finding 642) — scena oznacza bitwę sama
         this._syncCombatReveal();        // POLISH P2a (CP17) — koniec starcia z graczem: widoczność wg wywiadu
         // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
@@ -6544,6 +6564,9 @@ export class ThreeRenderer {
     );
     sph.position.copy(pos);
     this._spawnFx(sph, { kind: 'explosion', lifetime: 600, baseScale: 1, baseOpacity: 1 });
+    // ARC CV-3a1 (Finding 641) — pod flagą `cvStage` bez płaskiego pomarańczowego pierścienia (22–25 długości fregaty nad
+    // sceną bitwy); reszta eksplozji zostaje do CV-5 (wybuch warstwowy w chwili trafienia).
+    if (GAME_CONFIG.FEATURES?.cvStage) return;
     // Pierścień uderzeniowy — płasko w płaszczyźnie orbitalnej, radius 0→b×2.
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(b * 1.75, b * 2.0, 32),
@@ -6645,12 +6668,28 @@ export class ThreeRenderer {
       peak: { beam: 0, tracer: 0, spark: 0, legacy: 0 },
       // CV-2a (diagnoza 7) — długie klatki: co zaszło MIĘDZY dwiema klatkami (zdarzenia gry, nowe programy cieniowania,
       // przesłane geometrie / tekstury). Odstęp klatki i zbiera to, co działo się po początku klatki i − 1.
-      events: new Map(), offs: [], labels: new Array(n), atMs: new Float64Array(n), curLabel: '', mem: null };
+      events: new Map(), offs: [], labels: new Array(n), atMs: new Float64Array(n), curLabel: '', mem: null,
+      // ARC CV-3a1 — przerwy w rysowaniu przeglądarki (karta ukryta, okno bez fokusu: rAF wstrzymany albo dławiony) —
+      // nasłuch zdarzeń okna WYŁĄCZNIE w trakcie pomiaru; etykieta odstępu mówi to sama (wcześniej przerwy 2–85 s bez opisu).
+      winHiddenSeen: false, winBlurSeen: false, winFocusSeen: false, windowGaps: 0,
+      // ARC CV-3a1 — scena bitwy: klatki ze sceną, klatki ze skalą awaryjną (§3.1-2), najwięcej klastrów i złych pasm.
+      stage: { framesStaged: 0, framesFallback: 0, clustersMax: 0, misbandedMax: 0 } };
     const r = this._fxStatsRun;
     for (const ev of FX_STATS_EVENTS) {
       const fn = () => r.events.set(ev, (r.events.get(ev) ?? 0) + 1);
       EventBus.on(ev, fn);
       r.offs.push(() => EventBus.off(ev, fn));
+    }
+    if (typeof document !== 'undefined' && typeof window !== 'undefined' && document.addEventListener && window.addEventListener) {
+      const onVis = () => { if (document.hidden) r.winHiddenSeen = true; };
+      const onBlur = () => { r.winBlurSeen = true; };
+      const onFocus = () => { r.winFocusSeen = true; };
+      document.addEventListener('visibilitychange', onVis);
+      window.addEventListener('blur', onBlur);
+      window.addEventListener('focus', onFocus);
+      r.offs.push(() => document.removeEventListener('visibilitychange', onVis));
+      r.offs.push(() => window.removeEventListener('blur', onBlur));
+      r.offs.push(() => window.removeEventListener('focus', onFocus));
     }
     info.autoReset = false;
     console.log(`[fxStats] pomiar ${n} klatek — wynik w konsoli za ok. ${Math.max(1, Math.round(n / 60))} s`);
@@ -6673,6 +6712,15 @@ export class ThreeRenderer {
       if (mem.tex > r.mem.tex) parts.push(`+${mem.tex - r.mem.tex} tex`);
     }
     for (const [ev, c] of r.events) parts.push(c > 1 ? `${ev}×${c}` : ev);
+    // ARC CV-3a1 — okno: karta ukryta w trakcie odstępu (albo nadal) / utrata albo powrót fokusu w trakcie odstępu, albo
+    // okno bez fokusu przez cały długi odstęp (> 50 ms) — to przerwa rysowania przeglądarki, nie gra.
+    const hiddenNow = typeof document !== 'undefined' && !!document.hidden;
+    const unfocused = typeof document !== 'undefined' && typeof document.hasFocus === 'function' && !document.hasFocus();
+    let winGap = false;
+    if (r.winHiddenSeen || hiddenNow) { parts.push('ukryte okno'); winGap = true; }
+    else if (r.winBlurSeen || r.winFocusSeen || (unfocused && r.cur != null && r.cur > 50)) { parts.push('brak fokusu'); winGap = true; }
+    if (winGap && r.cur != null) r.windowGaps++;
+    r.winHiddenSeen = false; r.winBlurSeen = false; r.winFocusSeen = false;
     r.curLabel = parts.join(' · ');
     r.events.clear();
     r.mem = mem;
@@ -6696,6 +6744,13 @@ export class ThreeRenderer {
         r.peak.spark = Math.max(r.peak.spark, st.pools.spark.active);
       }
       r.peak.legacy = Math.max(r.peak.legacy, this._activeEffects.length);
+      const sf = this._stageFrame;
+      if (sf && sf.clusters > 0) {
+        r.stage.framesStaged++;
+        if (sf.fallback > 0) r.stage.framesFallback++;
+        r.stage.clustersMax = Math.max(r.stage.clustersMax, sf.clusters);
+        r.stage.misbandedMax = Math.max(r.stage.misbandedMax, sf.misbanded);
+      }
     }
     if (r.n < r.frames) return;
     this.renderer.info.autoReset = r.autoReset;
@@ -6712,13 +6767,15 @@ export class ThreeRenderer {
       loopMsP50: r2(q(r.loopMs, 0.5)), loopMsP95: r2(q(r.loopMs, 0.95)),
       callsAvg: Math.round(avg(r.calls)), callsMax: Math.max(...r.calls), trisAvg: Math.round(avg(r.tris)), trisMax: Math.max(...r.tris),
       peakActive: r.peak, pools: this._fxEngine?.stats()?.pools ?? null, longest,
-      cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, pixelRatio: this._pixelRatio,
+      windowGaps: r.windowGaps, stage: { ...r.stage },
+      cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, cvStage: !!GAME_CONFIG.FEATURES?.cvStage, pixelRatio: this._pixelRatio,
     };
     this._fxStatsLast = rep;
     console.log(`[fxStats] ${rep.frames} klatek: klatka p50 ${rep.frameMsP50} ms / p95 ${rep.frameMsP95} ms / śr. ${rep.frameMsMean} ms `
       + `/ maks. ${rep.frameMsMax} ms (${rep.fps} kl./s, klatek > 50 ms: ${rep.longFrames}), JS pętli p50 ${rep.loopMsP50} / p95 ${rep.loopMsP95} ms, `
       + `wywołania śr. ${rep.callsAvg} (maks. ${rep.callsMax}), trójkąty śr. ${rep.trisAvg}, szczyt pul: wiązki ${r.peak.beam}, `
-      + `smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}`);
+      + `smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}; przerwy okna (ukryte / bez fokusu): ${r.windowGaps}; `
+      + `scena: klatki ${r.stage.framesStaged}, skala awaryjna ${r.stage.framesFallback}, klastry maks. ${r.stage.clustersMax}, złe pasma maks. ${r.stage.misbandedMax}`);
     console.table(longest);
     if (rep.pools) console.table(rep.pools);
   }
@@ -6866,7 +6923,9 @@ export class ThreeRenderer {
       p.set(to.x, 0.3, to.z);
       return;
     }
-    entry.glide = glideRetarget(g, to, { x: p.x, z: p.z }, window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000);   // zapas = domyślna klucza
+    // ARC CV-3a1 — start ruchu z pozycji BEZ sceny (`_spriteBase`): między klatkami sprite uczestnika sceny trzyma pozycję
+    // rysowaną, a ruch płynny żyje w przestrzeni logicznej.
+    entry.glide = glideRetarget(g, to, this._spriteBase(vid, entry), window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000);   // zapas = domyślna klucza
   }
 
   // Co klatkę (także w pauzie gry — wtedy ruch stoi, jak starcie): sprite'y w ruchu o krok czasu realnego klatki.
@@ -6886,6 +6945,297 @@ export class ThreeRenderer {
       g.elapsedMs = st.elapsedMs; g.done = st.done;
       e.sprite.position.set(st.x, 0.3, st.z);
     }
+  }
+
+  // ── ARC CV, krok CV-3a1 — SCENA BITWY (D-CV-2 (a), D-CV-3 (a), §3.1-2, Finding 638; D-CV-4 (b) tymczasowo) ─────────────
+  // Przybliżona bitwa w oglądanym układzie: uczestnicy rysowani w lokalnej scenie wokół środka bitwy z odległościami
+  // ściśniętymi prawem sceny (`BattleStageLogic` — prowadnica par, każda para w swoim paśmie), stopień z rozmiaru fregaty
+  // na ekranie (`SemanticZoomLogic`). Jedna scena na klaster starć w jednym miejscu (638). Pozycja BEZ sceny (bazowa) — to,
+  // co piszą ruch płynny i orbity; scena przesuwa sprite o (scena − baza) × blend × wejście. Pozycji logicznych nie pisze
+  // nikt (F1); wszystko, co czyta sprite (smugi, etykiety HUD, nawiasy, klik, kadr „Obserwuj”), idzie za sceną samo.
+  // Tymczasowo (do skorupy przy ciele — CV-3a2): bitwa z uczestnikiem na orbicie ciała zostaje bez sceny.
+
+  // Początek klatki: sprite uczestnika sceny wraca na pozycję bazową — chyba że od poprzedniej klatki ktoś zapisał mu nową
+  // (zdarzenia ruchu i orbit między klatkami piszą pozycję bazową wprost): wtedy bazą jest ta nowa.
+  _unstageVessels() {
+    if (!this._stageMarks.size) return;
+    for (const [id, m] of this._stageMarks) {
+      const e = this._vessels.get(id);
+      if (!e?.sprite) { this._stageMarks.delete(id); continue; }
+      const p = e.sprite.position;
+      if (p.x === m.drawn.x && p.y === m.drawn.y && p.z === m.drawn.z) p.set(m.base.x, m.base.y, m.base.z);
+    }
+  }
+
+  // Pozycja BEZ sceny sprite'a (między klatkami sprite uczestnika sceny trzyma pozycję rysowaną).
+  _spriteBase(vid, entry) {
+    const p = entry.sprite.position;
+    const m = this._stageMarks.get(vid);
+    if (m && p.x === m.drawn.x && p.y === m.drawn.y && p.z === m.drawn.z) return { x: m.base.x, y: m.base.y, z: m.base.z };
+    return { x: p.x, y: p.y, z: p.z };
+  }
+
+  _stageMark(vid) {
+    const m = { w: 0, k: 0, base: { x: 0, y: 0, z: 0 }, drawn: { x: NaN, y: NaN, z: NaN }, cluster: null, releasing: false, rel: null };
+    this._stageMarks.set(vid, m);
+    return m;
+  }
+
+  // JEDYNE miejsce zapisu pozycji rysowanej uczestnika sceny: baza + (cel sceny − baza) × k; pamięta bazę i to, co zapisał.
+  _stagePlace(vid, entry, base, target, k) {
+    const m = this._stageMarks.get(vid) ?? this._stageMark(vid);
+    const p = entry.sprite.position;
+    p.set(base.x + (target.x - base.x) * k, base.y + (target.y - base.y) * k, base.z + (target.z - base.z) * k);
+    m.base.x = base.x; m.base.y = base.y; m.base.z = base.z;
+    m.drawn.x = p.x; m.drawn.y = p.y; m.drawn.z = p.z;
+    m.k = k;
+  }
+
+  // Klastry starć oglądanego układu (Finding 638): uczestnicy, starcia, czy ktoś stoi na orbicie ciała.
+  _stageClusters() {
+    const K = window.KOSMOS;
+    const act = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    if (!act.length) return [];
+    const encs = [];
+    for (const enc of act) {
+      if (!isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: K?.activeSystemId })) continue;
+      const ids = [...(enc.sideA?.vesselIds ?? []), ...(enc.sideA?.joinedVesselIds ?? []),
+        ...(enc.sideB?.vesselIds ?? []), ...(enc.sideB?.joinedVesselIds ?? [])];
+      let sx = 0, sz = 0, n = 0;
+      for (const id of ids) {
+        const e = this._vessels.get(id);
+        if (!e?.sprite || e.sprite.visible === false) continue;
+        sx += e.sprite.position.x; sz += e.sprite.position.z; n++;
+      }
+      const pt = enc.location?.point;
+      const centre = n ? { x: sx / n, z: sz / n }
+        : (pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) ? { x: S(pt.x), z: S(pt.y) } : null);
+      if (centre) encs.push({ id: enc.id, systemId: enc.location?.systemId ?? null, centre, ids, enc });
+    }
+    const byId = new Map(encs.map((e) => [e.id, e]));
+    const vm = K?.vesselManager;
+    return clusterEncounters(encs, STAGE.CLUSTER_AU * GAME_CONFIG.AU_TO_PX / WORLD_SCALE).map((cl) => {
+      const ids = [...new Set(cl.encounterIds.flatMap((eid) => byId.get(eid)?.ids ?? []))].sort();
+      const pinned = ids.some((id) => { const v = vm?.getVessel?.(id); return !!v && !v.isWreck && v.position?.dockedAt != null; });
+      return { ...cl, ids, pinned, encs: cl.encounterIds.map((eid) => byId.get(eid)?.enc).filter(Boolean) };
+    });
+  }
+
+  // Co klatkę (także w pauzie gry — kółko zmienia stopień sceny; wejście i wyjście ze sceny stoją): scena każdego klastra.
+  _tickBattleStage() {
+    this._stageClusterOf.clear();
+    if (!GAME_CONFIG.FEATURES?.cvStage) {
+      // Flaga OFF: sprite'y już na bazie (`_unstageVessels` na początku klatki) — tylko porządek.
+      if (this._stageMarks.size) this._stageMarks.clear();
+      if (this._stageState.size) this._stageState.clear();
+      this._stageFrame = null;
+      return;
+    }
+    const ts = window.KOSMOS?.timeSystem;
+    const dt = this._stageClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0 });
+    const clusters = (this._galaxyActive || this._galaxyFlight) ? [] : this._stageClusters();
+    if (!clusters.length && !this._stageMarks.size) { this._stageFrame = null; this._stageState.clear(); return; }
+    const L = VESSEL_TARGET_SIZE.frigate;
+    const edges = this._stageEdges ?? (this._stageEdges = bandEdgesWU(
+      [GAME_CONFIG.WEAPON_SHORT_AU, GAME_CONFIG.WEAPON_MED_AU, GAME_CONFIG.WEAPON_LONG_AU], GAME_CONFIG.AU_TO_PX / WORLD_SCALE));
+    const H = window.innerHeight || 1;
+    const vm = window.KOSMOS?.vesselManager;
+    const seen = new Set();
+    const frame = { clusters: 0, staged: 0, fallback: 0, misbanded: 0, list: [] };
+    for (const cl of clusters) {
+      const info = { id: cl.id, encounterIds: cl.encounterIds, encs: cl.encs, members: 0, pinned: cl.pinned, blend: 0, pxL: 0,
+        fallback: false, misbanded: 0, misbandedBefore: 0, passes: 0, centre: null };
+      for (const eid of cl.encounterIds) this._stageClusterOf.set(eid, info);
+      frame.list.push(info);
+      if (cl.pinned) continue;   // D-CV-4 (b) do CV-3a2 — uczestnik na orbicie ciała: bitwa bez sceny
+      const pts = [];
+      for (const id of cl.ids) {
+        const e = this._vessels.get(id);
+        if (!e?.sprite || e.sprite.visible === false) continue;
+        const v = vm?.getVessel?.(id);
+        const p = e.sprite.position;   // baza (po `_unstageVessels` i ruchu płynnym)
+        pts.push({ id, side: v && isEnemyVessel(v) ? String(v.ownerEmpireId ?? 'enemy') : 'player', x: p.x, y: p.y, z: p.z });
+      }
+      info.members = pts.length;
+      if (pts.length < 2) continue;
+      const c = { x: 0, y: 0, z: 0 };
+      for (const q of pts) { c.x += q.x; c.y += q.y; c.z += q.z; }
+      c.x /= pts.length; c.y /= pts.length; c.z /= pts.length;
+      // Pary pierwszeństwa: strzelec → cel z ostatniej rundy każdego starcia klastra (to gracz czyta jako zasięg) — pełne
+      // przyciąganie do prawa sceny; reszta par — kompromis prowadnicy.
+      const priority = new Set();
+      for (const enc of cl.encs ?? []) for (const ev of enc?.timeline?.[enc.timeline.length - 1]?.events ?? []) priority.add(pairKey(ev.attacker, ev.target));
+      // Rozwiązanie liczone, gdy pozycje bazowe albo pary pierwszeństwa się zmieniły (w pauzie i między krokami — z pamięci).
+      const st = this._stageState.get(cl.id) ?? { key: null, sol: null, offsets: null, frame: -1 };
+      let key = [...priority].sort().join(',') + '#';
+      for (const q of pts) key += `${q.id}:${q.x.toFixed(6)},${q.z.toFixed(6)};`;
+      if (key !== st.key || !st.sol) {
+        st.sol = solveStage({ points: pts, centre: c, L, edges, prevOffsets: st.offsets, priority });
+        st.offsets = st.sol.offsets;
+        st.key = key;
+      }
+      st.frame = this._frameNo;
+      this._stageState.set(cl.id, st);
+      const sol = st.sol;
+      const pxL = lengthPx({ length: L, depth: this.camera.position.distanceTo(_STAGE_V.set(c.x, c.y, c.z)), fovDeg: this.camera.fov, H });
+      const blend = stageBlend(pxL);
+      Object.assign(info, { blend, pxL, fallback: sol.fallback, misbanded: sol.misbanded, misbandedBefore: sol.misbandedBefore,
+        passes: sol.passes, centre: c });
+      for (const q of pts) {
+        const target = sol.pos.get(q.id);
+        if (!target) continue;
+        const m = this._stageMarks.get(q.id) ?? this._stageMark(q.id);
+        if (m.releasing) { m.releasing = false; m.rel = null; }
+        m.w = Math.min(1, m.w + dt / STAGE.JOIN_MS);   // dołączający wchodzi w scenę przez JOIN_MS czasu prezentacji
+        m.cluster = cl.id;
+        this._stagePlace(q.id, this._vessels.get(q.id), q, target, blend * m.w);
+        seen.add(q.id);
+      }
+      frame.clusters++; frame.staged += pts.length;
+      if (sol.fallback) frame.fallback++;
+      frame.misbanded = Math.max(frame.misbanded, sol.misbanded);
+    }
+    // Wyjście ze sceny (koniec starcia, inny układ, galaktyka, bitwa przy ciele): powrót do skali prawdziwej przez JOIN_MS.
+    for (const [id, m] of this._stageMarks) {
+      if (seen.has(id)) continue;
+      const e = this._vessels.get(id);
+      if (!e?.sprite) { this._stageMarks.delete(id); continue; }
+      if (!m.releasing) {
+        m.releasing = true;
+        m.rel = { x: m.drawn.x - m.base.x, y: m.drawn.y - m.base.y, z: m.drawn.z - m.base.z };
+        m.w = Number.isFinite(m.rel.x) && Number.isFinite(m.rel.y) && Number.isFinite(m.rel.z) ? 1 : 0;
+      }
+      m.w = Math.max(0, m.w - dt / STAGE.JOIN_MS);
+      if (m.w <= 0) { this._stageMarks.delete(id); continue; }   // sprite już na bazie (`_unstageVessels`)
+      const p = e.sprite.position;
+      const base = { x: p.x, y: p.y, z: p.z };
+      this._stagePlace(id, e, base, { x: base.x + m.rel.x, y: base.y + m.rel.y, z: base.z + m.rel.z }, m.w);
+    }
+    for (const [cid, st] of this._stageState) if (st.frame !== this._frameNo) this._stageState.delete(cid);
+    this._stageFrame = frame;
+  }
+
+  /** ARC CV-3a1 — o ile scena przesuwa sprite statku (0 — skala prawdziwa; > 0 — rysowany ≠ bez sceny). HUD: radar. */
+  getVesselStageBlend(vesselId) {
+    return this._stageMarks.get(vesselId)?.k ?? 0;
+  }
+
+  /**
+   * ARC CV-3a1 — KOSMOS.debug.stageInfo(): scena każdego klastra z tej klatki — uczestnicy, starcia, stopień sceny, fregata
+   * w px, prowadnica (złe pasma przed / po, skala awaryjna), odstępy RYSOWANE par strzelec → cel z ostatniej rundy w L
+   * (według broni) obok odstępu logicznego w AU.
+   */
+  stageInfo() {
+    const L = VESSEL_TARGET_SIZE.frigate;
+    const fr = this._stageFrame;
+    const rows = [];
+    for (const c of fr?.list ?? []) {
+      const gaps = {};
+      for (const enc of c.encs ?? []) {
+        const last = enc?.timeline?.[enc.timeline.length - 1];
+        for (const ev of last?.events ?? []) {
+          const a = this._vessels.get(ev.attacker)?.sprite?.position, b = this._vessels.get(ev.target)?.sprite?.position;
+          if (!a || !b) continue;
+          const g = a.distanceTo(b) / L;
+          const k = String(ev.weapon ?? '?').replace(/^weapon_/, '');
+          const r = gaps[k] ?? (gaps[k] = { min: Infinity, max: 0, au: [] });
+          r.min = Math.min(r.min, g); r.max = Math.max(r.max, g);
+          if (Number.isFinite(ev.distanceAU)) r.au.push(ev.distanceAU);
+        }
+      }
+      const fmt = (r) => `${r.min.toFixed(1)}–${r.max.toFixed(1)} L (logicznie ${Math.min(...r.au).toFixed(3)}–${Math.max(...r.au).toFixed(3)} AU)`;
+      rows.push({
+        klaster: c.id, starcia: c.encounterIds.length, statki: c.members, przyCiele: c.pinned, blend: +c.blend.toFixed(3),
+        fregataPx: +c.pxL.toFixed(1), zlePasmaPrzed: c.misbandedBefore, zlePasma: c.misbanded, awaryjna: c.fallback,
+        laser: gaps.laser ? fmt(gaps.laser) : '—', kinetyk: gaps.kinetic ? fmt(gaps.kinetic) : '—', rakiety: gaps.missile ? fmt(gaps.missile) : '—',
+      });
+    }
+    console.table(rows);
+    return { cvStage: !!GAME_CONFIG.FEATURES?.cvStage, clusters: rows };
+  }
+
+  // ARC CV-3a1 (Finding 643) — kadr walki z osią NA bitwie: cel = środek RYSOWANYCH żywych, widocznych uczestników klastra
+  // (wysokość statków — kółko jedzie do statków); dystans „Obserwuj” z dopasowania pozycji BEZ sceny (bitwa w skali
+  // prawdziwej mieści się w kadrze, scenę daje kółko); kompozycja nad kartą walki przesunięciem ekranowym
+  // (`_syncCombatViewOffset`). Pamięć na jedną klatkę.
+  _stageWatchFit(enc) {
+    const cc = this._cameraController;
+    if (!cc || !enc?.id) return null;
+    if (this._stageFitFrame !== this._frameNo) { this._stageFitCache.clear(); this._stageFitFrame = this._frameNo; }
+    if (this._stageFitCache.has(enc.id)) return this._stageFitCache.get(enc.id);
+    const cl = this._stageClusterOf.get(enc.id);
+    const encs = cl?.encs?.length ? cl.encs : [enc];
+    const drawn = [], base = [];
+    for (const en of encs) {
+      const ids = [...(en.sideA?.vesselIds ?? []), ...(en.sideA?.joinedVesselIds ?? []),
+        ...(en.sideB?.vesselIds ?? []), ...(en.sideB?.joinedVesselIds ?? [])];
+      for (const id of ids) {
+        const st = en.vesselStates?.get?.(id);
+        if (st && !(st.hp > 0)) continue;
+        const e = this._vessels.get(id);
+        if (!e?.sprite?.visible) continue;
+        const p = e.sprite.position;
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) continue;
+        drawn.push({ x: p.x, y: p.y, z: p.z });
+        base.push(this._spriteBase(id, e));
+      }
+    }
+    if (!drawn.length) { this._stageFitCache.set(enc.id, null); return null; }
+    const W = window.innerWidth || 1, H = window.innerHeight || 1;
+    const ins = getMapInsets(window.KOSMOS);
+    const safe = watchSafeRect({ W, H, uiScale: window.KOSMOS?.uiScale ?? 1, hudRect: window.KOSMOS?.combatHud?.getPanelRect?.() ?? null,
+      topBarH: COSMIC.TOP_BAR_H, bottomH: ins.bottom, rightW: ins.right, leftW: ins.left });
+    const pivot = centroidOf(drawn);
+    const fit = fitWatchFrameOffset({ points: base, pivot: centroidOf(base), theta: cc._theta, phi: cc._phi,
+      fovDeg: this.camera.fov, aspect: this.camera.aspect, W, H, safe });
+    const out = { target: pivot, dist: fit?.dist ?? cc._targetDist, fits: !!fit?.fits, centroid: pivot, points: drawn, base, safe, W, H };
+    this._stageFitCache.set(enc.id, out);
+    return out;
+  }
+
+  // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć: gdy obserwowane starcie się skończyło, a klaster trwa, kamera
+  // przechodzi na inne aktywne starcie tego klastra (lista starć klastra z poprzedniej klatki).
+  _stageSuccessor(encounterId, clusterIds) {
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    for (const eid of clusterIds ?? []) {
+      if (eid === encounterId) continue;
+      const e = dscs?._activeEncounters?.get?.(eid);
+      if (e?.isActive) return e;
+    }
+    return null;
+  }
+
+  // ARC CV-3a1 (Finding 643) — kompozycja kadru walki przesunięciem EKRANOWYM (statki nad kartą walki), bez przesuwania
+  // celu kamery: kółko jedzie do środka bitwy. Co klatkę po `update()` kontrolera, przy „Obserwuj” albo auto-fokusie pod
+  // flagą `cvStage`; wygaszane płynnie. Podgląd obserwatorium ma własne przesunięcie — wtedy nic tu nie robimy.
+  _syncCombatViewOffset() {
+    const cam = this.camera;
+    if (!cam?.setViewOffset || this._observatoryPreviewActive) { this._combatViewOffset = null; return; }
+    const cc = this._cameraController;
+    let goal = null;
+    const encId = this._watch?.encounterId ?? this._autoFocus?.encounterId ?? null;
+    if (GAME_CONFIG.FEATURES?.cvStage && cc && encId && !this._galaxyActive && !this._galaxyFlight) {
+      const enc = window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(encId);
+      const fit = enc?.isActive ? this._stageWatchFit(enc) : null;
+      if (fit) {
+        const r = viewOffsetFrame({ points: fit.points, pivot: { x: cc._target.x, y: cc._target.y, z: cc._target.z }, d: cc._dist,
+          theta: cc._theta, phi: cc._phi, fovDeg: cam.fov, aspect: cam.aspect, W: fit.W, H: fit.H, safe: fit.safe });
+        if (r.ok) goal = r.offset;
+      }
+    }
+    if (!goal && !this._combatViewOffset) return;
+    const cur = this._combatViewOffset ?? { x: 0, y: 0 };
+    const nx = cur.x + ((goal?.x ?? 0) - cur.x) * 0.25, ny = cur.y + ((goal?.y ?? 0) - cur.y) * 0.25;
+    if (!goal && Math.abs(nx) < 0.5 && Math.abs(ny) < 0.5) { this._combatViewOffset = null; cam.clearViewOffset(); return; }
+    this._combatViewOffset = { x: nx, y: ny };
+    const W = window.innerWidth || 1, H = window.innerHeight || 1;
+    cam.setViewOffset(W, H, -nx, -ny, W, H);
+  }
+
+  // ARC CV-3a1 (Finding 642) — pod flagą `cvStage` pierścień starcia DSCS ukryty (stały promień 0,026 AU był mniejszy od
+  // bitwy — każdy statek 10 na 10 stał poza nim); znacznik imitacji bitwy orbitalnej (`burst`) bez zmian (CV-8).
+  _hideEncounterRings() {
+    for (const [, e] of this._engagementMarkers) if ((e.kind ?? 'encounter') === 'encounter' && e.mesh) e.mesh.visible = false;
   }
 
   // ── POLISH P2b (D2, CP18) — biały błysk trafienia NA MODELU ───────────────────────────────────────────────────
@@ -7009,8 +7359,9 @@ export class ThreeRenderer {
       return;
     }
     cc.setMinDist(Math.min(minDistBefore, COMBAT_WATCH.ZOOM_MIN_DIST));
-    this._watch = { encounterId, fitDist: true, minDistBefore, minDistSet: cc._minDist, goal: null, dist: null };
-    const fit = this._computeWatchFit(enc);
+    this._watch = { encounterId, fitDist: true, minDistBefore, minDistSet: cc._minDist, goal: null, dist: null, clusterIds: null };
+    // ARC CV-3a1 (Finding 643) — pod flagą `cvStage` kadr z osią na bitwie (`_stageWatchFit`); OFF — dzisiejszy kadr.
+    const fit = GAME_CONFIG.FEATURES?.cvStage ? this._stageWatchFit(enc) : this._computeWatchFit(enc);
     if (fit) {
       cc.focusOnInstant(fit.target.x, fit.target.z, fit.target.y);
       cc.setTargetDist(fit.dist);
@@ -7034,12 +7385,16 @@ export class ThreeRenderer {
       return;
     }
     if (w.fitDist && w.dist != null && Math.abs(cc._targetDist - w.dist) > 1e-6) w.fitDist = false;   // kółko gracza
-    const enc = window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(w.encounterId);
+    let enc = window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(w.encounterId);
+    if (GAME_CONFIG.FEATURES?.cvStage) {   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
+      if (!enc?.isActive) { const nx = this._stageSuccessor(w.encounterId, w.clusterIds); if (nx) { w.encounterId = nx.id; enc = nx; } }
+      w.clusterIds = this._stageClusterOf.get(enc?.id)?.encounterIds ?? null;
+    }
     if (!enc?.isActive || !isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) {
       this._endWatch();
       return;
     }
-    const fit = this._computeWatchFit(enc);
+    const fit = GAME_CONFIG.FEATURES?.cvStage ? this._stageWatchFit(enc) : this._computeWatchFit(enc);   // ARC CV-3a1 (643)
     if (!fit) return;
     // Cel — szybkie śledzenie (`focusOnSmooth`, jak kamera na wybranym statku): sam lerp 0,08 na klatkę (`flyTo`) zostawiał
     // kamerę ~12 klatek ruchu za walką — przy dystansie rzędu 0,4 j. formacja wyjeżdżała z kadru, a statek lecący ku
@@ -7068,7 +7423,11 @@ export class ThreeRenderer {
     const a = this._autoFocus;
     const cc = this._cameraController;
     if (!a || !cc) { this._autoFocus = null; return; }
-    const enc = a.encounterId ? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(a.encounterId) : null;
+    let enc = a.encounterId ? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(a.encounterId) : null;
+    if (GAME_CONFIG.FEATURES?.cvStage && a.encounterId) {   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
+      if (!enc?.isActive) { const nx = this._stageSuccessor(a.encounterId, a.clusterIds); if (nx) { a.encounterId = nx.id; enc = nx; } }
+      a.clusterIds = this._stageClusterOf.get(enc?.id)?.encounterIds ?? null;
+    }
     const g = cc._goalTarget;
     const step = autoFocusFollowStep({
       watching: !!this._watch, active: !!enc?.isActive,
@@ -7102,6 +7461,7 @@ export class ThreeRenderer {
   // (sonda P2b w prawdziwej grze, scena 3 na 2: obaj strażnicy pod kartą we wszystkich klatkach auto-fokusu).
   // Bez sprite'ów — null (cel bez zmian).
   _autoFocusTarget(enc) {
+    if (GAME_CONFIG.FEATURES?.cvStage) return this._stageWatchFit(enc)?.target ?? null;   // ARC CV-3a1 (643) — oś na bitwie
     const fit = this._engagementFit(enc);
     const cc = this._cameraController;
     if (!fit || !cc) return null;

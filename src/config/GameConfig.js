@@ -534,6 +534,13 @@ export const GAME_CONFIG = {
     //   rozgrzewce; tempo jak dziś (`combatFxPace`). OFF = dzisiejsza ścieżka `_spawnCombatTracer` co do bitu.
     //   Domyślnie ON od bramki CV-2a (decyzja właściciela 2026-11-08); powrót do dzisiejszej ścieżki: KOSMOS.debug.cvFx(0).
     cvFxEngine: true,
+    // `cvStage` (CV-3a1) — SCENA BITWY: przybliżona bitwa w oglądanym układzie rysowana z odległościami ściśniętymi prawem
+    //   sceny (laser ~3,5 / kinetyk ~8 / rakiety ~13,5 długości fregaty), zoom semantyczny (4 → 24 px fregaty), jedna scena
+    //   na klaster starć w jednym miejscu (Finding 638), kamera „Obserwuj” / auto-fokus z osią na bitwie i kompozycją
+    //   przesunięciem ekranowym (643), bez pierścienia starcia (642) i płaskiego pierścienia eksplozji wraku (641), pierścień
+    //   radaru ukryty przy scenie. Wyłącznie rysunek — pozycji logicznych nie pisze nikt. OFF = dzisiejsza ścieżka.
+    //   Domyślnie ON od commitu CV-3a1 (decyzja właściciela 2026-11-08); wyłączenie: KOSMOS.debug.cvStage(0).
+    cvStage: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

@@ -28,8 +28,10 @@
 //   S4 starcie się rozegrało i ma treść (wszystkie trzy kategorie broni, trafienia, osłona, wrak)
 //   S5 ponowne `cvBattle` w trakcie starcia — `battle_in_progress`, po starciu — stare statki zdjęte, nowa scena kompletna
 //   S6 to samo ziarno = ta sama bitwa (sygnatura i ślad); inne ziarno — inne `seedBase`
-//   A1 tryb ON naprawdę rysował silnikiem (strzały w pulach, zero dzisiejszych efektów), tryb OFF — dzisiejszą ścieżką
-//   A2 ON == OFF == bez renderera: sygnatura, ślad każdej rundy, sekwencja losowań gry, sloty orbit
+//   A1 tryb ON naprawdę rysował silnikiem (strzały w pulach, zero dzisiejszych efektów), tryb OFF — dzisiejszą ścieżką;
+//      CV-3a1: tryb ON (flagi `cvFxEngine` i `cvStage`) naprawdę rysował SCENĘ (kamera 0,4 j. od bitwy — stopień sceny 1,
+//      sprite'y przesunięte), tryb OFF — bez sceny
+//   A2 ON == OFF == bez renderera: sygnatura, ślad każdej rundy, sekwencja losowań gry, sloty orbit (obie warstwy CV)
 //   A3 KONTROLA przyrządu: słuchacz salwy losujący z `Math.random` przesuwa sloty orbit (i sekwencję)
 //   A4 tempo oglądanego starcia (`combatRoundMs`) 400 == 1000 (decyzja właściciela 2026-11-08: domyślnie 1000): sygnatura,
 //      ślad każdej rundy, sekwencja losowań gry, sloty orbit; świadek — czas realny starcia rośnie z kluczem
@@ -53,7 +55,7 @@ import { EnemyAttackHandler }    from '../../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem }    from '../../systems/OrbitalSpaceSystem.js';
 import * as FXC                  from '../../config/CombatFxConfig.js';
 import * as FX                   from '../../utils/VesselFxLogic.js';
-import { vesselTargetSize }      from '../../renderer/VesselModelResolver.js';
+import { vesselTargetSize, VESSEL_TARGET_SIZE } from '../../renderer/VesselModelResolver.js';
 import { isEnemyVessel }         from '../../entities/Vessel.js';
 import { rendererRandom, reseedRendererRandom } from '../../renderer/RendererRng.js';
 import { readFileSync }          from 'node:fs';
@@ -64,6 +66,8 @@ const STAGER = await tryImport('../../debug/CvBattleStager.js');
 const ENGINE = await tryImport('../../renderer/combat/FxEngine.js');
 const CLOCK  = await tryImport('../../renderer/combat/PresentationClock.js');
 const RECALL = await tryImport('../../systems/director/DirectorRecall.js');
+const STAGEL = await tryImport('../../renderer/combat/BattleStageLogic.js');   // CV-3a1 — scena bitwy
+const SZOOM  = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -100,9 +104,11 @@ const TR_STATIC = { _hitGlowTexture: () => (glowTex ??= new THREE.Texture()) };
 const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngagementInView', 'combatFxPace', 'fxWeaponColor',
   'FX_MAX_ACTIVE', 'FX_TRACER_MS', 'FX_SHIELD_COLOR', 'isEnemyVessel', 'isEndpointVisibleInCombat', 'isPlayerEngagement',
   'vesselTargetSize', 'HIT_GLOW', 'hitGlowWorldSize', 'ThreeRenderer', 'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION', 'rendererRandom',
-  'FxEngine', 'logDepthOn'];
+  'FxEngine', 'logDepthOn', 'STAGE', 'solveStage', 'pairKey', 'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'lengthPx', 'VESSEL_TARGET_SIZE',
+  'WORLD_SCALE', '_STAGE_V'];
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
-  '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx'];
+  '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
+  '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend'];
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -110,18 +116,24 @@ function makeMethod(name) {
     THREE, S, GAME_CONFIG, globalThis.window, globalThis.performance, FX.isEngagementInView, FXC.combatFxPace, FXC.weaponColor,
     FXC.FX_MAX_ACTIVE, FXC.FX_TRACER_MS, FXC.FX_SHIELD_COLOR, isEnemyVessel, FX.isEndpointVisibleInCombat, FX.isPlayerEngagement,
     vesselTargetSize, FX.HIT_GLOW, FX.hitGlowWorldSize, TR_STATIC, FX.EXPLOSION_RING_COLOR, FX_HDR_EXPLOSION, rendererRandom,
-    ENGINE?.FxEngine ?? null, () => true);
+    ENGINE?.FxEngine ?? null, () => true, STAGEL?.STAGE, STAGEL?.solveStage, STAGEL?.pairKey, STAGEL?.clusterEncounters, STAGEL?.bandEdgesWU,
+    SZOOM?.stageBlend, SZOOM?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3());
 }
 
 /** Atrapa renderera: prawdziwe metody FX, sprite'y = Object3D za pozycjami logicznymi, zegar prezentacji z CV-2a. */
 function fakeRenderer() {
   const R = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(55, 1600 / 1041, 0.001, 5000),
     _fxGroup: null, _activeEffects: [], _vessels: new Map(), _fxEngine: null, _galaxyActive: false,
-    _presClock: CLOCK ? new CLOCK.PresentationClock() : null, legacySpawned: 0, missing: [] };
+    _presClock: CLOCK ? new CLOCK.PresentationClock() : null, legacySpawned: 0, missing: [],
+    // CV-3a1 — stan sceny (jak konstruktor renderera)
+    _stageMarks: new Map(), _stageState: new Map(), _stageClock: CLOCK ? new CLOCK.PresentationClock() : null, _stageFrame: null,
+    _stageClusterOf: new Map(), _stageEdges: null, _galaxyFlight: false, _frameNo: 0, stagedFrames: 0, stageMaxK: 0 };
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
   const spawn = R._spawnFx;
   R._spawnFx = function (mesh, cfg) { R.legacySpawned++; return spawn.call(R, mesh, cfg); };
-  R.frame = function () {   // jak pętla renderu: sprite'y (TYLKO rysunek) + zegar i silnik
+  R.frame = function () {   // jak pętla renderu: powrót na bazę → sprite'y (TYLKO rysunek) → scena → zegar i silnik
+    R._frameNo++;
+    R._unstageVessels?.();
     for (const v of vm.getAllVessels()) {
       if (v.systemId !== SYS) continue;
       let e = R._vessels.get(v.id);
@@ -129,6 +141,16 @@ function fakeRenderer() {
       e.sprite.visible = true;
       e.sprite.position.set(S(v.position.x), 0.3, S(v.position.y));
     }
+    // CV-3a1 — kamera 0,4 j. od środka uczestników aktywnego starcia (fregata > 24 px — pełna scena)
+    const enc = dscs.listActive()[0];
+    if (enc) {
+      const ids = [...enc.vesselStates.keys()];
+      let cx = 0, cz = 0, n = 0;
+      for (const id of ids) { const e = R._vessels.get(id); if (e) { cx += e.sprite.position.x; cz += e.sprite.position.z; n++; } }
+      if (n) { R.camera.position.set(cx / n, 0.3 + 0.2, cz / n + 0.35); R.camera.lookAt(cx / n, 0.3, cz / n); R.camera.updateMatrixWorld(true); }
+    }
+    R._tickBattleStage?.();
+    if (R._stageMarks.size) { R.stagedFrames++; for (const m of R._stageMarks.values()) R.stageMaxK = Math.max(R.stageMaxK, m.k); }
     R._tickCvFx?.();
   };
   return R;
@@ -220,6 +242,7 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  */
 function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null } = {}) {
   const flag = GAME_CONFIG.FEATURES.cvFxEngine;
+  const stageFlag = GAME_CONFIG.FEATURES.cvStage;
   reseed('cv2a-battle'); reseedRendererRandom();
   let R = null, st = null, outsider = null, recallList = null, recallNoEnc = null, ctlAi = null;
   const arrivals = [];
@@ -228,6 +251,8 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     if (roundMs != null) ts.combatRoundMs = () => roundMs;   // A4 — tempo oglądanego starcia (jak `combat_pace_smoke`)
     if (mode !== 'none') {
       GAME_CONFIG.FEATURES.cvFxEngine = mode === 'on';
+      GAME_CONFIG.FEATURES.cvStage = mode === 'on';   // CV-3a1 — scena bitwy w trybie ON, dzisiejszy rysunek w OFF
+      window.innerWidth = 1600; window.innerHeight = 1041;
       R = fakeRenderer();
       EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
     }
@@ -257,6 +282,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     return { scene, sig: { battles: rec.battles, wrecks: rec.wrecks }, trace: rec.rounds, slots, realMs };
   });
   GAME_CONFIG.FEATURES.cvFxEngine = flag;
+  GAME_CONFIG.FEATURES.cvStage = stageFlag;
   return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name };
 }
 
@@ -347,6 +373,9 @@ const ON  = runBattle({ mode: 'on', seed: 1 });
     'A1b ON: salwy przez silnik (wiązki, smugi, iskry), zero dzisiejszych efektów');
   assert(OFF.R && OFF.R.legacySpawned >= 50 && OFF.R._fxEngine === null, 'A1c OFF: dzisiejsza ścieżka (efekty _spawnFx), silnik nie powstał');
   assert(!!ON.R?._presClock && ON.R._presClock.nowMs > 0, `A1d zegar prezentacji płynął w trybie ON (${ON.R?._presClock?.nowMs ?? 0} ms)`);
+  console.log(`     CV-3a1 scena: ON — klatek ze sceną ${ON.R?.stagedFrames}, stopień maks. ${ON.R?.stageMaxK?.toFixed?.(3)}; OFF — klatek ${OFF.R?.stagedFrames}`);
+  assert((ON.R?.stagedFrames ?? 0) > 100 && (ON.R?.stageMaxK ?? 0) > 0.99 && OFF.R?.stagedFrames === 0,
+    'A1e CV-3a1: tryb ON rysował scenę bitwy (pełny stopień przy kamerze 0,4 j.), tryb OFF — bez sceny');
 }
 
 header('A2 — (a) wynik starcia ON == OFF == bez renderera');

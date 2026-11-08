@@ -201,6 +201,92 @@ export function fitWatchFrame({ points, theta, phi, fovDeg, aspect, W, H, safe,
   return { target: r.target ?? c, dist, fits: ok, centroid: c };
 }
 
+// ── ARC CV, krok CV-3a1 (Finding 643) — kadr z osią obrotu NA bitwie ─────────────────────────────────────────────────
+// Dawny kadr przesuwał CEL kamery w dół (statki nad kartą walki), a kółko jedzie do celu — po przybliżeniu kamera
+// nurkowała pod bitwę (zmierzone: „Obserwuj” 1,816 → 0,605 j. — 0 z 20 statków w kadrze). Teraz cel = środek RYSOWANEJ
+// bitwy na wysokości statków (oś obrotu i zbieżność kółka na statkach), a kompozycję robi przesunięcie EKRANOWE w px
+// (renderer: `camera.setViewOffset`) — przesunięcie nie zmienia, dokąd prowadzi kółko.
+
+/**
+ * Przesunięcie ekranowe [px] stawiające środek prostokąta rzutu punktów w środku prostokąta bezpiecznego, przy kamerze
+ * patrzącej na `pivot` z dystansu `d` (bez przesunięcia). Treść obrazu przesuwa się o `offset` (x w prawo, y w dół).
+ * @returns {{ offset: {x:number,y:number}, bbox: {x0,x1,y0,y1}|null, ok: boolean }}
+ */
+export function viewOffsetFrame({ points, pivot, d, theta, phi, fovDeg, aspect, W, H, safe, near = COMBAT_WATCH.NEAR_DEPTH }) {
+  const pts = (points ?? []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z));
+  if (!pts.length || !pivot || !(d > 0) || !(W > 0) || !(H > 0) || !safe) return { offset: { x: 0, y: 0 }, bbox: null, ok: false };
+  const tanHalf = Math.tan((fovDeg * Math.PI / 180) / 2);
+  const asp = aspect > 0 ? aspect : W / H;
+  const basis = cameraBasis(theta, phi);
+  const cam = add(pivot, mul(basis.zc, d));
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const p of pts) {
+    const s = projectPoint(p, cam, basis, { tanHalf, aspect: asp, W, H });
+    if (!(s.depth > near)) return { offset: { x: 0, y: 0 }, bbox: null, ok: false };
+    x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); y0 = Math.min(y0, s.y); y1 = Math.max(y1, s.y);
+  }
+  const ax = (safe.x0 + safe.x1) / 2, ay = (safe.y0 + safe.y1) / 2;
+  return { offset: { x: ax - (x0 + x1) / 2, y: ay - (y0 + y1) / 2 }, bbox: { x0, x1, y0, y1 }, ok: true };
+}
+
+/**
+ * Kadr „Obserwuj” z osią na bitwie: najmniejszy dystans [minD, maxD], przy którym prostokąt rzutu punktów (kamera na
+ * `pivot`) mieści się w wymiarach prostokąta bezpiecznego (przesunięcie ekranowe i tak go wyśrodkuje), a żaden punkt
+ * nie jest bliżej kamery niż `minDepth`. Bisekcja jak `fitWatchFrame` (wynik sprawdzany, przy niezgodności +5 %).
+ * @returns {{ dist: number, fits: boolean } | null}
+ */
+export function fitWatchFrameOffset({ points, pivot, theta, phi, fovDeg, aspect, W, H, safe,
+  minD = COMBAT_WATCH.MIN_DIST, maxD = COMBAT_WATCH.MAX_DIST, near = COMBAT_WATCH.NEAR_DEPTH, minDepth = COMBAT_WATCH.MIN_DEPTH,
+  iterations = COMBAT_WATCH.FIT_ITERATIONS }) {
+  const pts = (points ?? []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z));
+  if (!pts.length || !pivot || !(W > 0) || !(H > 0) || !safe) return null;
+  const tanHalf = Math.tan((fovDeg * Math.PI / 180) / 2);
+  const asp = aspect > 0 ? aspect : W / H;
+  const basis = cameraBasis(theta, phi);
+  const sw = safe.x1 - safe.x0, sh = safe.y1 - safe.y0;
+  const fits = (d) => {
+    const cam = add(pivot, mul(basis.zc, d));
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const p of pts) {
+      const s = projectPoint(p, cam, basis, { tanHalf, aspect: asp, W, H });
+      if (!(s.depth > near) || !(s.depth >= minDepth)) return false;
+      x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); y0 = Math.min(y0, s.y); y1 = Math.max(y1, s.y);
+    }
+    return x1 - x0 <= sw && y1 - y0 <= sh;
+  };
+  let dist; let ok = true;
+  if (fits(minD)) dist = minD;
+  else if (!fits(maxD)) { dist = maxD; ok = false; }
+  else {
+    let lo = minD, hi = maxD;
+    for (let i = 0; i < iterations; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
+    dist = hi;
+    while (!fits(dist) && dist < maxD) dist = Math.min(maxD, dist * 1.05);
+    ok = fits(dist);
+  }
+  return { dist, fits: ok };
+}
+
+/**
+ * Ile punktów leży w kadrze ekranu (0..W × 0..H) przy kamerze na `pivot` z dystansu `d` i przesunięciu ekranowym `offset`
+ * [px] — miara kryterium Findingu 643 (po przybliżeniu kółkiem statki nadal w kadrze).
+ */
+export function pointsInFrame({ points, pivot, d, theta, phi, fovDeg, aspect, W, H, offset = { x: 0, y: 0 }, near = COMBAT_WATCH.NEAR_DEPTH }) {
+  const pts = (points ?? []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z));
+  if (!pivot || !(d > 0)) return 0;
+  const tanHalf = Math.tan((fovDeg * Math.PI / 180) / 2);
+  const asp = aspect > 0 ? aspect : W / H;
+  const basis = cameraBasis(theta, phi);
+  const cam = add(pivot, mul(basis.zc, d));
+  let n = 0;
+  for (const p of pts) {
+    const s = projectPoint(p, cam, basis, { tanHalf, aspect: asp, W, H });
+    const x = s.x + (offset?.x ?? 0), y = s.y + (offset?.y ?? 0);
+    if (s.depth > near && x >= 0 && x <= W && y >= 0 && y <= H) n++;
+  }
+  return n;
+}
+
 /**
  * Największy rozmiar świata billboardu (sprite'u zwróconego ku kamerze), który przy głębi `depth` [j.] ma na ekranie
  * najwyżej `capPx` [px]: rozmiar px = świat · H / (2 · głębia · tan(fov/2)).

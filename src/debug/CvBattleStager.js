@@ -214,6 +214,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear,
         sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
         empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
+        cvStage: !!GAME_CONFIG.FEATURES?.cvStage,
         autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
       };
     },
@@ -223,6 +224,20 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const F = GAME_CONFIG.FEATURES;
       F.cvFxEngine = on === undefined ? !F.cvFxEngine : !!on;
       return { cvFxEngine: F.cvFxEngine };
+    },
+
+    /** ARC CV-3a1 — flaga `cvStage` (scena bitwy): cvStage(1) — ON, cvStage(0) — OFF, cvStage() — przełącz. Czytana co klatkę. */
+    cvStage(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvStage = on === undefined ? !F.cvStage : !!on;
+      return { cvStage: F.cvStage };
+    },
+
+    /** ARC CV-3a1 — scena bitwy z tej klatki: klastry, stopień sceny, prowadnica, odstępy strzelec → cel w długościach fregaty. */
+    stageInfo() {
+      const r = getRenderer();
+      if (!r?.stageInfo) return { ok: false, reason: 'no_renderer' };
+      return r.stageInfo();
     },
 
     /** Pomiar 300 klatek (wynik w konsoli po ~5 s) + stan pul teraz. */

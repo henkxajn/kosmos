@@ -264,6 +264,9 @@ export class HudRadarLayer {
     let key = `r:1:${F.tactical ? 1 : 0}`;
     let anySelected = false;
     for (const h of raw) {
+      // ARC CV-3a1 — statek na scenie bitwy: pierścień ukryty (promień radaru to odległość LOGICZNA, a rysunek sceny jest
+      // ściśnięty — granica kłamałaby o zasięgu). Wraca, gdy scena go puści (`getVesselStageBlend` = 0).
+      if (h.kind === 'vessel' && (tr?.getVesselStageBlend?.(h.id) ?? 0) > 0) { key += `|st:${h.key}`; continue; }
       const at = this._centerOf(tr, vm, h.kind, h.id, h.anchorBodyId);
       if (!at) continue;
       if (h.selected) anySelected = true;
@@ -279,6 +282,7 @@ export class HudRadarLayer {
       if (a.kind === 'vessel') { const v = vm?.getVessel?.(a.holderId); rangeAU = v ? vesselRange(v) : 0; }
       else { const c = cm?.getColony?.(a.holderId); rangeAU = c ? colonyRange(c) : 0; }
       if (!(rangeAU > 0) || !Number.isFinite(rangeAU)) continue;
+      if (a.kind === 'vessel' && (tr?.getVesselStageBlend?.(a.holderId) ?? 0) > 0) continue;   // ARC CV-3a1 — jak pierścień wyżej
       const v = a.kind === 'vessel' ? vm?.getVessel?.(a.holderId) : null;
       const anchor = a.kind === 'colony' ? a.holderId : (v?.position?.state === 'docked' ? (v.position?.dockedAt ?? null) : null);
       const at = this._centerOf(tr, vm, a.kind, a.holderId, anchor);

@@ -312,6 +312,9 @@ function run(mode) {
   // `cvFxEngine` (od CV-2a domyślnie ON). Neutralność silnika z pulami wobec strumienia gry pinuje `cv_fx_results_smoke`.
   const cvFlag = GAME_CONFIG.FEATURES.cvFxEngine;
   GAME_CONFIG.FEATURES.cvFxEngine = false;
+  // ARC CV-3a1 — `cvStage` (od CV-3a1 domyślnie ON) też OFF: dzisiejsza eksplozja wraku ma płaski pierścień (641).
+  const stFlag = GAME_CONFIG.FEATURES.cvStage;
+  GAME_CONFIG.FEATURES.cvStage = false;
   reseed('cv0b-battle'); reseedRendererRandom();
   let R = null;
   const arrivals = [];
@@ -340,6 +343,7 @@ function run(mode) {
   });
   GAME_CONFIG.FEATURES.fcCombatFx = flag;
   GAME_CONFIG.FEATURES.cvFxEngine = cvFlag;
+  GAME_CONFIG.FEATURES.cvStage = stFlag;
   return { ...out.result, draws: out.draws, R };
 }
 
