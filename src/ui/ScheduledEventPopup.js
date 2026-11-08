@@ -9,6 +9,7 @@
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { getSeverityConfig, injectTerminalPopupCSS } from './TerminalPopupBase.js';
+import { rendererRandom } from '../renderer/RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
 
 // ── Automatyczne mapowanie svgKey → kategoria video ─────────────────
 const SVG_TO_VIDEO = {
@@ -363,9 +364,9 @@ function _generateHexText(lines = 60) {
   let text = '';
   for (let i = 0; i < lines; i++) {
     let line = '';
-    const cols = 30 + Math.floor(Math.random() * 20);
+    const cols = 30 + Math.floor(rendererRandom() * 20);
     for (let j = 0; j < cols; j++) {
-      line += Math.floor(Math.random() * 16).toString(16);
+      line += Math.floor(rendererRandom() * 16).toString(16);
       if (j % 4 === 3) line += ' ';
     }
     text += line + '\n';

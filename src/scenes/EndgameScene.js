@@ -11,6 +11,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { getLocale } from '../i18n/i18n.js';
+import { rendererRandom } from '../renderer/RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
 
 const PL = () => getLocale() !== 'en';
 
@@ -326,16 +327,16 @@ export class EndgameScene {
     if (!container) return;
     for (let i = 0; i < 150; i++) {
       const s = document.createElement('div');
-      const size = Math.random() * 2 + 0.5;
+      const size = rendererRandom() * 2 + 0.5;
       Object.assign(s.style, {
         position:     'absolute',
         width:        size + 'px',
         height:       size + 'px',
         borderRadius: '50%',
         background:   '#fff',
-        opacity:      (Math.random() * 0.6 + 0.1).toString(),
-        left:         (Math.random() * 100) + '%',
-        top:          (Math.random() * 100) + '%',
+        opacity:      (rendererRandom() * 0.6 + 0.1).toString(),
+        left:         (rendererRandom() * 100) + '%',
+        top:          (rendererRandom() * 100) + '%',
       });
       container.appendChild(s);
     }

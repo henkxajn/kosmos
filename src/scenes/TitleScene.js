@@ -8,6 +8,7 @@ import { PRESET_THEMES, applyPreset, saveTheme } from '../config/ThemeConfig.js'
 import { updateCrt } from '../ui/CrtOverlay.js';
 import { t, getLocale, setLocale } from '../i18n/i18n.js';
 import { FactionSelectScene } from './FactionSelectScene.js';
+import { rendererRandom } from '../renderer/RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
 import { pickSaveFile, consumePendingLoad, IMPORT_REASON_KEYS,
          downloadSave, buildSaveFileName, needsPreMigrationBackup,
          PRE_MIGRATION_SUFFIX } from '../utils/SaveFile.js';
@@ -300,15 +301,15 @@ export class TitleScene {
     for (let i = 0; i < 160; i++) {
       const s = document.createElement('div');
       s.className = 'ss-star';
-      const sz = Math.random() * 1.8 + 0.3;
-      const twinkle = Math.random() > 0.7;
-      const dur = 1.5 + Math.random() * 3;
-      const delay = Math.random() * 3;
+      const sz = rendererRandom() * 1.8 + 0.3;
+      const twinkle = rendererRandom() > 0.7;
+      const dur = 1.5 + rendererRandom() * 3;
+      const delay = rendererRandom() * 3;
       s.style.cssText = `
         position:absolute; border-radius:50%; background:#fff;
         width:${sz}px; height:${sz}px;
-        top:${Math.random() * 100}%; left:${Math.random() * 100}%;
-        opacity:${Math.random() * 0.4 + 0.05};
+        top:${rendererRandom() * 100}%; left:${rendererRandom() * 100}%;
+        opacity:${rendererRandom() * 0.4 + 0.05};
         ${twinkle ? `animation:ss-twinkle ${dur}s ease-in-out ${delay}s infinite alternate` : ''}
       `;
       container.appendChild(s);

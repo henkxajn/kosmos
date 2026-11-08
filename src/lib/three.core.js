@@ -308,13 +308,60 @@ let _seed = 1234567;
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 
+// KOSMOS CV-0b (Finding 612): UUID z WŁASNEGO strumienia (xorshift128), NIE z Math.random. Każdy obiekt THREE
+// (Object3D, Material, BufferGeometry, Texture, Source) zjadał 4 losowania ze strumienia GRY — z niego gra losuje
+// sloty orbit (pozycje logiczne), kąty przylotu i heksy desantu — więc samo rysowanie zmieniało świat.
+// UUID potrzebuje unikalności, nie determinizmu: ziarno raz z crypto.getRandomValues (bez niego — z zegara).
+// ⚠ Przy aktualizacji three PONÓW tę łatkę — pilnuje jej keeper `src/testing/smoke/cv_renderer_rng_smoke.mjs`.
+const _uuidState = _seedUuidState();
+
+function _seedUuidState() {
+
+	const s = new Uint32Array( 4 );
+	const c = globalThis.crypto;
+	if ( c && typeof c.getRandomValues === 'function' ) {
+
+		c.getRandomValues( s );
+
+	} else {
+
+		let h = ( ( Date.now() >>> 0 ) ^ 0x9e3779b9 ) >>> 0;
+		if ( typeof performance !== 'undefined' ) h = ( h ^ Math.floor( performance.now() * 1000 ) ) >>> 0;
+		for ( let i = 0; i < 4; i ++ ) {
+
+			h = Math.imul( h ^ ( h >>> 16 ), 0x85ebca6b );
+			h = Math.imul( h ^ ( h >>> 13 ), 0xc2b2ae35 );
+			h = ( h ^ ( h >>> 16 ) ) >>> 0;
+			s[ i ] = h + i * 0x6d2b79f5;
+
+		}
+
+	}
+
+	if ( ( s[ 0 ] | s[ 1 ] | s[ 2 ] | s[ 3 ] ) === 0 ) s[ 0 ] = 0x9e3779b9;
+	return s;
+
+}
+
+function _uuidWord() {
+
+	const s = _uuidState;
+	const t = s[ 0 ] ^ ( s[ 0 ] << 11 );
+	s[ 0 ] = s[ 1 ];
+	s[ 1 ] = s[ 2 ];
+	s[ 2 ] = s[ 3 ];
+	s[ 3 ] = ( s[ 3 ] ^ ( s[ 3 ] >>> 19 ) ) ^ ( t ^ ( t >>> 8 ) );
+	return s[ 3 ] | 0;
+
+}
+
 // http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/21963136#21963136
 function generateUUID() {
 
-	const d0 = Math.random() * 0xffffffff | 0;
-	const d1 = Math.random() * 0xffffffff | 0;
-	const d2 = Math.random() * 0xffffffff | 0;
-	const d3 = Math.random() * 0xffffffff | 0;
+	const d0 = _uuidWord();
+	const d1 = _uuidWord();
+	const d2 = _uuidWord();
+	const d3 = _uuidWord();
 	const uuid = _lut[ d0 & 0xff ] + _lut[ d0 >> 8 & 0xff ] + _lut[ d0 >> 16 & 0xff ] + _lut[ d0 >> 24 & 0xff ] + '-' +
 			_lut[ d1 & 0xff ] + _lut[ d1 >> 8 & 0xff ] + '-' + _lut[ d1 >> 16 & 0x0f | 0x40 ] + _lut[ d1 >> 24 & 0xff ] + '-' +
 			_lut[ d2 & 0x3f | 0x80 ] + _lut[ d2 >> 8 & 0xff ] + '-' + _lut[ d2 >> 16 & 0xff ] + _lut[ d2 >> 24 & 0xff ] +

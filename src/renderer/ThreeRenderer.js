@@ -25,6 +25,7 @@ import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
 import { AtmosphereShader }  from './AtmosphereShader.js';
 import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
+import { rendererRandom } from './RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
 import { createSkyStarMaterial } from './StarPointShader.js';   // NIEBO — PSF gwiazd tła
 import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
@@ -1367,7 +1368,7 @@ export class ThreeRenderer {
           bodyId: dockedAt,
           orbitR: Math.max(0.5, bodyR * 6.0),
           isWreck: true,
-          initAngle: Math.random() * Math.PI * 2,
+          initAngle: rendererRandom() * Math.PI * 2,
         };
       } else {
         entry._orbiting = null;
@@ -1397,8 +1398,8 @@ export class ThreeRenderer {
           child.material = mat;
         });
         // Losowy tilt — wrak przechylony, sygnalizuje uszkodzony kadłub
-        entry.sprite.rotation.z = (Math.random() - 0.5) * 0.6;
-        entry.sprite.rotation.x = (Math.random() - 0.5) * 0.4;
+        entry.sprite.rotation.z = (rendererRandom() - 0.5) * 0.6;
+        entry.sprite.rotation.x = (rendererRandom() - 0.5) * 0.4;
         entry.enemyTint = true;  // dispose cloned materials on remove
       } else if (entry.sprite.material) {
         // Sprite billboard — podmień teksturę na ikonę wraku (ciemnoszara + rdza)
@@ -2973,7 +2974,7 @@ export class ThreeRenderer {
     // Prawy górny narożnik tarczy planety (w lokalnej przestrzeni grupy)
     const offset = r * 0.72 + dotSize;
     sprite.position.set(offset, offset, 0);
-    sprite._phase = Math.random() * Math.PI * 2;
+    sprite._phase = rendererRandom() * Math.PI * 2;
     sprite._isPlayer = isPlayer;
 
     entry.group.add(sprite);
@@ -4796,8 +4797,8 @@ export class ThreeRenderer {
       // Wrak — lekki tilt (przechylony kadłub — sygnalizuje uszkodzenie).
       // Bez scale-up — rdzawy kolor wystarczy żeby odróżnić od żywego statku.
       if (isWreck) {
-        wrapper.rotation.z = (Math.random() - 0.5) * 0.6;  // ±0.3 rad ≈ ±17°
-        wrapper.rotation.x = (Math.random() - 0.5) * 0.4;
+        wrapper.rotation.z = (rendererRandom() - 0.5) * 0.6;  // ±0.3 rad ≈ ±17°
+        wrapper.rotation.x = (rendererRandom() - 0.5) * 0.4;
       }
 
       this.scene.add(wrapper);
@@ -4820,7 +4821,7 @@ export class ThreeRenderer {
         enemyTint: isEnemy || isWreck,  // wszystkie sklonowane materiały do dispose
         isWreck,
         exhaust: exhaustCone,           // stożek wydechu (może być null) — modulowany co tick
-        _exhaustPhase: Math.random() * Math.PI * 2,  // desync flickeru między statkami
+        _exhaustPhase: rendererRandom() * Math.PI * 2,  // desync flickeru między statkami
       });
 
       // M4 P2 — po set: apply intel visibility (rumor ghost / contact dim / detailed)
@@ -4850,7 +4851,7 @@ export class ThreeRenderer {
           bodyId,
           orbitR: Math.max(0.5, bodyR * 6.0),
           isWreck: true,
-          initAngle: Math.random() * Math.PI * 2,  // losowa faza startowa
+          initAngle: rendererRandom() * Math.PI * 2,  // losowa faza startowa
         };
       } else if (isWreck && vessel.wreckLocation && vessel.position.dockedAt == null) {
         // M2a deep-space wrak — brak orbity, sprite zamrożony w wreckLocation.
@@ -5877,13 +5878,13 @@ export class ThreeRenderer {
       for (let i = 0; i < route.count && idx < this._tradeFireflies.length; i++, idx++) {
         const ff = this._tradeFireflies[idx];
         ff.route = route;
-        ff.t = Math.random(); // losowa faza startowa
+        ff.t = rendererRandom(); // losowa faza startowa
         // Prędkość: szybsza na krótkich trasach, wolniejsza na długich
-        ff.speed = 0.15 + Math.random() * 0.1 + (1 / Math.max(1, route.distance)) * 0.1;
+        ff.speed = 0.15 + rendererRandom() * 0.1 + (1 / Math.max(1, route.distance)) * 0.1;
         // Losowy kierunek (A→B lub B→A)
-        ff.reverse = Math.random() < 0.5;
+        ff.reverse = rendererRandom() < 0.5;
         // Losowa wysokość łuku
-        ff.arcHeight = 0.2 + Math.random() * 0.4 + Math.min(0.4, route.distance * 0.03);
+        ff.arcHeight = 0.2 + rendererRandom() * 0.4 + Math.min(0.4, route.distance * 0.03);
         // Intensywność → jasność
         ff.brightness = 0.5 + route.intensity * 0.5;
         // Fade-in: nowe gwiazdki pojawiają się płynnie
@@ -6369,6 +6370,25 @@ export class ThreeRenderer {
     });
     if (!raw) return null;
     return { wx: S(raw.x), wz: S(raw.y), visible: raw.visible };
+  }
+
+  // ARC CV-0b (Finding 612) — przyrząd bramki właściciela: tworzy, klonuje i niszczy obiekty THREE i losuje z
+  // `rendererRandom`; licznik losowań gry zakłada `countGameDraws` (src/debug/RngWatch.js) wokół tego wywołania.
+  // Obiekty nie trafiają do sceny. Konsola: KOSMOS.debug.rngCheck() — oczekiwane gameDraws: 0.
+  debugRngCheck(n = 200) {
+    const uuids = [];
+    for (let i = 0; i < n; i++) {
+      const geo = new THREE.SphereGeometry(0.01, 6, 6), mat = new THREE.MeshBasicMaterial(), mesh = new THREE.Mesh(geo, mat);
+      const lineGeo = new THREE.BufferGeometry(), lineMat = new THREE.LineBasicMaterial(), line = new THREE.Line(lineGeo, lineMat);
+      const spriteMat = new THREE.SpriteMaterial(), sprite = new THREE.Sprite(spriteMat);
+      const tex = new THREE.Texture(), group = new THREE.Group(), copy = mesh.clone();
+      group.add(mesh, line, sprite, copy);
+      uuids.push(geo.uuid, mat.uuid, mesh.uuid, lineGeo.uuid, lineMat.uuid, line.uuid, spriteMat.uuid, sprite.uuid,
+        tex.uuid, tex.source.uuid, group.uuid, copy.uuid);
+      geo.dispose(); mat.dispose(); lineGeo.dispose(); lineMat.dispose(); spriteMat.dispose(); tex.dispose();
+      rendererRandom();
+    }
+    return { objects: uuids.length, uniqueUuids: new Set(uuids).size, rendererDraws: n };
   }
 
   // ── Wspólny silnik FX ──────────────────────────────────────────────────

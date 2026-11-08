@@ -20,6 +20,7 @@ import EventBus from '../core/EventBus.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { rendererRandom } from '../renderer/RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
 
 const TURN_DURATION_MS = 800;    // 0.8s per turn (legacy BattleSystem)
 const POST_BATTLE_PAUSE_MS = 1500; // pauza przed przyciskiem OK
@@ -110,9 +111,9 @@ export class BattleView3D {
     const starCount = 600;
     const positions = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
-      positions[i * 3 + 0] = (Math.random() - 0.5) * 400;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 200;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 400;
+      positions[i * 3 + 0] = (rendererRandom() - 0.5) * 400;
+      positions[i * 3 + 1] = (rendererRandom() - 0.5) * 200;
+      positions[i * 3 + 2] = (rendererRandom() - 0.5) * 400;
     }
     starGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const starMat = new THREE.PointsMaterial({ color: 0xAABBCC, size: 0.5 });
@@ -241,7 +242,7 @@ export class BattleView3D {
 
       ship.userData = {
         baseY: py,
-        phase: Math.random() * Math.PI * 2,
+        phase: rendererRandom() * Math.PI * 2,
         isFlagship: i === 0,
       };
       group.add(ship);
@@ -494,8 +495,8 @@ export class BattleView3D {
     if (!from?.children?.length || !to?.children?.length) return;
 
     const color = new THREE.Color(colorHex);
-    const shooter = from.children[Math.floor(Math.random() * from.children.length)];
-    const target  = to.children[Math.floor(Math.random() * to.children.length)];
+    const shooter = from.children[Math.floor(rendererRandom() * from.children.length)];
+    const target  = to.children[Math.floor(rendererRandom() * to.children.length)];
     const startP = new THREE.Vector3();
     const endP = new THREE.Vector3();
     shooter.getWorldPosition(startP);
@@ -537,8 +538,8 @@ export class BattleView3D {
     const color = new THREE.Color(colorHex);
 
     // Wybierz losowy statek z from i losowy cel z to
-    const shooter = from.children[Math.floor(Math.random() * from.children.length)];
-    const target  = to.children[Math.floor(Math.random() * to.children.length)];
+    const shooter = from.children[Math.floor(rendererRandom() * from.children.length)];
+    const target  = to.children[Math.floor(rendererRandom() * to.children.length)];
     const startP = new THREE.Vector3();
     const endP = new THREE.Vector3();
     shooter.getWorldPosition(startP);

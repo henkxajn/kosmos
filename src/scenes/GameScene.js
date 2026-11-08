@@ -168,6 +168,7 @@ import { layerForKeyCode, layerKeyAllowed, toggleHudLayer, GALAXY_SHIPS_LAYER } 
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
+import { rngWatchToggle, countGameDraws } from '../debug/RngWatch.js';   // ARC CV-0b (Finding 612) — przyrząd: kto losuje ze strumienia gry (tylko konsola)
 import { printStrikeWaves, printSquadronNeeds, squadronMaxShips } from '../utils/StrikeWavePlanner.js';   // AI STRIKES BACK S3 (SB53) — fala desantu AI (odczyt konsoli)
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
@@ -1216,6 +1217,15 @@ export class GameScene {
       },
       // Raport zużycia localStorage — quota to ~5,2 mln ZNAKÓW na wszystkie klucze razem
       // (10 MiB liczone w UTF-16). Pokazuje, co realnie zajmuje miejsce.
+      // ARC CV-0b (Finding 612) — losowania warstwy wizualnej poza strumieniem gry (bramka właściciela):
+      // rngCheck() — obiekty THREE i losowania wizualne, oczekiwane gameDraws: 0; rngWatch() — start, drugie wywołanie
+      // — tabela „plik → losowania gry” (oczekiwane: 0 z warstwy wizualnej).
+      rngCheck: () => {
+        const { result, gameDraws } = countGameDraws(() => this.threeRenderer?.debugRngCheck?.() ?? null);
+        return result ? { ...result, gameDraws } : null;
+      },
+      rngWatch: () => rngWatchToggle(),
+
       storageReport: () => {
         const rows = [];
         let total = 0;
