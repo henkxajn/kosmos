@@ -2,7 +2,8 @@
 
 > **Status: Phase A (CV-0) — read-only audit + plan, SIGNED by the owner 2026-11-08 (§3 column "Signed"; conditions in
 > §3.1; the cut reordered for an early visual payoff, §4). Phase A commits: `c855298 docs(CV A)` (plan) and
-> `docs(CV sign)` (signatures). Next: CV-0b.**
+> `c0700de docs(CV sign)` (signatures). CV-0b ✅ DONE 2026-11-08 (`aeff511`, owner's check PASS, §4 CV-0b — delivered).
+> Next: CV-2a.**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -873,6 +874,53 @@ step changes how many THREE objects exist. The step sections below keep their nu
 | **Keepers (logic)** | NEW `cv_renderer_rng_smoke`: import real three r171 from `src/lib` under node, wrap `Math.random` with a counter, construct Object3D / Mesh / BufferGeometry / Material / Texture ⇒ **0 draws** (control: a copy of the original function draws 4 per call); UUID uniqueness over 10⁵ calls; source tripwire: no `Math.random` in `ThreeRenderer.js` outside comments (control on a mutated copy) |
 | **Owner looks at** | the game loads and plays as before (sanity) |
 
+#### CV-0b — ✅ delivered 2026-11-08 (`aeff511`)
+
+Owner's check PASS 2026-11-08: `KOSMOS.debug.rngCheck()` → `gameDraws: 0`; `KOSMOS.debug.rngWatch()` around a live
+battle (`probe603Battle`) → 48 game draws, **0 from the visual layer**; the look unchanged (title stars, exhaust flicker,
+wreck tilt, trade fireflies, battle FX).
+
+**What changed.** `src/lib/three.core.js` — `generateUUID` draws from a private xorshift128 (`_uuidState`, seeded once
+from `crypto.getRandomValues`; a clock fallback without `Math.random`), marker comment `KOSMOS CV-0b (Finding 612)`; the
+other explicit THREE random APIs (`MathUtils.randInt / randFloat / randFloatSpread`, `Vector2 / 3 / 4.random`,
+`Quaternion.random`, `Vector3.randomDirection`) are untouched — the game calls none of them (grep 0) and new visual code
+uses `rendererRandom`. NEW `src/renderer/RendererRng.js` — `rendererRandom()` / `reseedRendererRandom(seed)` on
+`src/sim/rng.js` (`RNG('kosmos-renderer')`, fixed seed ⇒ reproducible visuals). 40 purely visual calls moved (inventory
+below). Console instruments (quote-free): `KOSMOS.debug.rngCheck()` (renderer `debugRngCheck` under `countGameDraws`)
+and `KOSMOS.debug.rngWatch()` (NEW `src/debug/RngWatch.js` — start / stop, table "file → game draws", verdict).
+
+**Inventory** (line numbers after the change; `src/lib/` and `src/testing/**` outside the inventory):
+
+| Set | file:line | Why |
+|---|---|---|
+| **MOVED → `rendererRandom` (40)** | `ThreeRenderer.js:1371` (wreck orbit-cache phase, `vessel:wrecked`), `:1401-1402` (wreck tilt, `vessel:wrecked`), `:2977` (life-glow pulse phase), `:4800-4801` (wreck tilt at creation), `:4824` (exhaust flicker phase), `:4854` (wreck orbit-cache phase at creation), `:5881, :5883, :5885, :5887` (trade fireflies: phase, speed, direction, arc) · `BattleView3D.js:114-116` (starfield), `:245` (ship bob phase), `:498-499, :541-542` (shooter / target picks — cinema only) · `TitleScene.js:304-307, :311-312` · `FactionSelectScene.js:86-89, :93-94` · `EndgameScene.js:330, :337-339` (starfields) · `ScheduledEventPopup.js:367, :369` (hex noise text) | visual only — nothing feeds back into game state |
+| **KEPT in presentation-adjacent files** | `GameScene.js:1734` (debug `simulateBattleRetreat` angle → fake battle and retreat order), `:4127, :4131` (event effect success / casualty rolls), `:4806` (moon period on restore — physics) · `ConsulElectionModal.js:44` (candidate order — the player's political choice) · `UnitDesignOverlay.js:716` (design id — saved) · `SpawnTestEnemy.js:482, :651` (debug spawn angles → positions) · `AudioSystem.js:340` (noise buffer — audio is outside CV, F8; it moves together with #613) | game state / outside CV |
+| **KEPT — game state** | `OrbitalSpaceSystem.js:273-275, :290-292` (orbit slots — write logical positions) · `VesselManager.js:3098` (arrival angle) · `InvasionSystem.js:635` (landing hexes) · `CombatSystem.js:341, :409` (ground combat) · `GroundUnitManager.js:801` · `IntelSystem.js:372` (intel noise) · `Planet.js:21`, `Moon.js:22`, `Asteroid.js:22`, `Comet.js:22`, `Planetoid.js:23` (mean anomaly M) · `SystemGenerator.js` (79 references, `:111`–`:1068`, world generation) · `GalaxyGenerator.js:81` · `PhysicsSystem.js:211-212, :265-269, :374, :376, :422-423` · `RandomEventSystem.js:32, :215, :227, :240, :260, :268, :349, :457-458` · `ColonyManager.js:1180, :2127, :2219, :2340, :2676` · `ExpeditionSystem.js:1315, :1324, :1436, :1468, :1695` · `MissionSystem.js:1844, :1851, :2006, :2059, :2659` · `ImpactDamageSystem.js:145, :154, :160, :163, :235` · `OrderService.js:208, :304` · `StationSystem.js:55, :275` · `ScheduledEventSystem.js:102, :115` · `AnomalyEffectSystem.js:95` · `DiscoverySystem.js:118` · `SaveMigration.js:1742` · `EmpireData.js:129` (default `rng` parameter) · `StationModuleData.js:221` (module id) | untouched |
+
+(The instrument's own wrapper — `RngWatch.js:51-77` — is the only new `Math.random` reference.)
+
+**Keepers.** NEW `src/testing/smoke/cv_renderer_rng_smoke.mjs` **62 / 0**: T1 (b) 1 350 THREE objects of 16 types +
+clones + `generateUUID` ⇒ 0 game draws, 100 000 UUIDs without a collision, v4 format · T2 source pin on the generator ·
+T3 `RendererRng` · T4 zero `Math.random` in the six moved files and in the whole `src/renderer/` (32 files) + the KEPT
+counts unchanged · T5 (a) scripted DSCS battle (3 frigates vs a destroyer, real `TimeSystem` combat grid) with the
+renderer's REAL FX methods extracted from source and run on real Three.js r171 — 95 effects and 2 explosions inside the
+measurement window, game-draw sequence ON == OFF (12 draws, identical values) · T6 (c) battle signature OFF == ON ==
+recorded `[[17,31,27,A,B,1,0],[1,2,2,A,null,0,1]]` + 4 orbit slots assigned DURING the battle identical ON / OFF ·
+T7 the console instruments (and `rngWatch` does not change the game stream). Controls green on both sides: the old-UUID
+emulation shifts the sequence (1 152 vs 12 draws) and the slots. **Fail-first** against the pre-patch three
+(`git show HEAD:src/lib/three.core.js` copied to the scratchpad, `CV0B_THREE_URL`): **58 / 4** — exactly T1b (6 008
+draws), T5d (1 072 ≠ 12), T6d (slots differ) and T7b (5 600 draws).
+
+**One-time stream shift (§3.1-1).** After CV-0b the same save evolves differently than before the patch — THREE
+allocations no longer advance `Math.random` (removal of contamination, not a mechanic change). Re-tuned keepers:
+**none** — the sweep stayed green without touching a single keeper: keepers that import game modules get the `three`
+stub (no `generateUUID`), and the 17 keepers that import real Three.js r171 pin nothing that depends on the game stream
+after a THREE allocation.
+
+**Sweep 372 / 372 OK, 0 FAIL** (28 advisory, all pre-existing — the new keeper is not among them) · `check-i18n` PASS ·
+no new i18n keys (console instruments only). **CV-0c:** not needed — the whole
+migration fit this session.
+
 ### CV-1a — hardpoints, canonical frame, key-colour emission (flag `cvModels`)
 
 | | |
@@ -1000,7 +1048,7 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 
 | # | | Finding | Evidence | Step |
 |---|---|---|---|---|
-| **612** | 🟠 | **Renderer randomness advances the game's `Math.random`.** `generateUUID` draws 4× per THREE object; `ThreeRenderer.js` calls `Math.random` 12 more times; one hit shot of today's FX ≈ 32–44 draws inside the DSCS tick. The stream places orbit slots that write logical positions, arrival angles, invasion hexes, ground combat, intel noise ⇒ any change in renderer allocations (incl. `fcCombatFx` ON vs OFF today) shifts the world | `three.core.js:312-317` (callers `:1945, :2071, :7274, :9218, :10607`); `ThreeRenderer.js:1370, :1400-1401, :2976, :4799-4853, :5880-5886, :6624-6747`; `OrbitalSpaceSystem.js:273-292` → `VesselManager.js:2600-2616`; `VesselManager.js:3098`; `InvasionSystem.js:635`; `CombatSystem.js:341, :409`; `IntelSystem.js:372` | CV-0b (D-CV-1) |
+| **612** | ✅ | **Renderer randomness advances the game's `Math.random`.** `generateUUID` draws 4× per THREE object; `ThreeRenderer.js` calls `Math.random` 12 more times; one hit shot of today's FX ≈ 32–44 draws inside the DSCS tick. The stream places orbit slots that write logical positions, arrival angles, invasion hexes, ground combat, intel noise ⇒ any change in renderer allocations (incl. `fcCombatFx` ON vs OFF today) shifts the world | `three.core.js:312-317` (callers `:1945, :2071, :7274, :9218, :10607`); `ThreeRenderer.js:1370, :1400-1401, :2976, :4799-4853, :5880-5886, :6624-6747`; `OrbitalSpaceSystem.js:273-292` → `VesselManager.js:2600-2616`; `VesselManager.js:3098`; `InvasionSystem.js:635`; `CombatSystem.js:341, :409`; `IntelSystem.js:372` | **CV-0b ✅ (`aeff511`)** — private `generateUUID` generator + `RendererRng` for the 40 visual calls; game-state calls untouched; keeper `cv_renderer_rng_smoke` 62 / 0 (fail-first 58 / 4); owner's check PASS (`rngWatch`: 48 game draws, 0 from the visual layer) |
 | **613** | 🟠 | **The AudioSystem is deaf in the game scene.** Constructor subscriptions wiped by `EventBus.clear()` at game start; instance reused without re-attach; ☰ music / SFX toggles emit into nothing. Static trace — live check `KOSMOS.eventBus.listeners.get('music:toggle')?.length` | `main.js:37`; `AudioSystem.js:58-100`; `GameScene.js:197, :284`; `BottomBar.js:321, :326`; contrast `DebugLog.js:206-213` | CV-2b (cue listener); toggles = D-CV-19 (b) follow-up |
 | **614** | 🟠 | **HP drops before the hit is drawn.** Damage applied in the round, `roundFx` emitted after; 3D bars and the card read `vesselStates` every frame ⇒ bars and log move 150–430 ms before the flash at R = 400 | `DSCS:681-715, :721-740`; `ThreeRenderer.js:6752-6789` → `VesselFxLogic.js:151-167`; `CombatHUD.js:443-461, :509-540` | CV-4 |
 | **615** | 🟠 | **Kills are invisible until the battle ends.** Wrecks only in `_finalizeBattle`; a dead ship keeps its live sprite and an empty bar; every casualty and every surviving loser explodes in one frame (mechanics untouched; Finding 460 family) | `DSCS:1097-1114, :1447`; `ThreeRenderer.js:1341-1348` | CV-4 / CV-5 (presentation) |
