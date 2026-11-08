@@ -361,3 +361,117 @@ export function clusterEncounters(encs, radiusWU) {
     centre: { x: g.reduce((s, e) => s + e.centre.x, 0) / g.length, z: g.reduce((s, e) => s + e.centre.z, 0) / g.length },
   })).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
+
+// ── ARC CV, krok CV-3a2 — „scena odpowiada”: pole kliku sceny (D-CV-5) i klastry z pozycji logicznych (Finding 638) ─────
+//
+// Pole kliku. Rozkaz z kliknięcia w pustą przestrzeń sceny ma trafić TAM, GDZIE GRACZ WIDZI kursor: punkt rysowany
+// (przecięcie promienia kliku z płaszczyzną statków) przechodzi przez odwrotność mapy promieniowej sceny wokół środka
+// klastra, przy BIEŻĄCYM stopniu sceny. Pole to mapa promieniowa (prawo `radialMap` albo — gdy klaster stoi na skali
+// awaryjnej — skala jednorodna), obie z soczewką: poza LENS_OUT·rIn od środka pole jest tożsamością, więc klik daleko od
+// bitwy niczego nie przesuwa. Statki leżą na polu tylko w przybliżeniu (prowadnica par przesuwa je o ułamki pasma) —
+// klik obok rysowanego statku trafia obok jego pozycji logicznej, nie w nią.
+
+/** Mapa promieniowa POLA sceny: prawo sceny albo (skala awaryjna, `scale`) skala jednorodna; obie z soczewką. Monotoniczna. */
+export function fieldMap(r, { rIn, scale = null, law = STAGE_LAW, lensOut = STAGE.LENS_OUT } = {}) {
+  if (!(r > 0)) return 0;
+  if (scale == null) return radialMap(r, rIn, law, lensOut);
+  if (!(rIn > 0) || !(scale > 0) || !(scale < 1)) return r;   // bez ściśnięcia — tożsamość
+  if (r <= rIn) return r * scale;
+  const rOut = lensOut * rIn;
+  if (r >= rOut) return r;
+  return rIn * scale + (r - rIn) * (rOut - rIn * scale) / (rOut - rIn);
+}
+
+/** Promień RYSOWANY pola przy mieszaniu `blend` ∈ [0, 1]: lerp(r, fieldMap(r), blend) — rosnący dla każdego `blend`. */
+export function fieldDrawnRadius(r, blend, field) {
+  const b = Math.min(1, Math.max(0, blend));
+  return r + (fieldMap(r, field) - r) * b;
+}
+
+/** Odwrotność `fieldDrawnRadius` (bisekcja — funkcja rosnąca). */
+export function fieldDrawnRadiusInverse(rd, blend, field) {
+  if (!(rd > 0)) return 0;
+  const lensOut = field?.lensOut ?? STAGE.LENS_OUT;
+  let lo = 0, hi = Math.max(rd, lensOut * (field?.rIn ?? 0)) * 2 + 1;
+  while (fieldDrawnRadius(hi, blend, field) < rd) hi *= 2;
+  for (let i = 0; i < 64; i++) {
+    const m = (lo + hi) / 2;
+    if (fieldDrawnRadius(m, blend, field) < rd) lo = m; else hi = m;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * Punkt BEZ sceny (logiczny) → punkt RYSOWANY w polu klastra (D-CV-5).
+ * @param {{x:number, z:number}} p
+ * @param {{centre:{x:number,z:number}, rIn:number, blend:number, scale?:number|null}} field
+ */
+export function stagePointDrawn(p, field) {
+  const c = field.centre, dx = p.x - c.x, dz = p.z - c.z, r = Math.hypot(dx, dz);
+  if (!(r > 1e-12)) return { x: p.x, z: p.z };
+  const rd = fieldDrawnRadius(r, field.blend, field);
+  return { x: c.x + dx / r * rd, z: c.z + dz / r * rd };
+}
+
+/** Punkt RYSOWANY (pod kursorem) → punkt BEZ sceny (logiczny) w polu klastra (D-CV-5): kierunek od środka zachowany. */
+export function stagePointLogical(p, field) {
+  const c = field.centre, dx = p.x - c.x, dz = p.z - c.z, rd = Math.hypot(dx, dz);
+  if (!(rd > 1e-12)) return { x: p.x, z: p.z };
+  const r = fieldDrawnRadiusInverse(rd, field.blend, field);
+  return { x: c.x + dx / rd * r, z: c.z + dz / rd * r };
+}
+
+/** Pole klastra, którego soczewka (LENS_OUT·rIn od środka, rysowane = logiczne na brzegu) obejmuje punkt; najbliższy środek. */
+export function pickStageField(fields, p, lensOut = STAGE.LENS_OUT) {
+  let best = null, bestD = Infinity;
+  for (const f of fields ?? []) {
+    if (!f?.centre || !(f.rIn > 0) || !(f.blend > 0)) continue;
+    const d = Math.hypot(p.x - f.centre.x, p.z - f.centre.z);
+    if (d < lensOut * f.rIn && d < bestD) { bestD = d; best = f; }
+  }
+  return best;
+}
+
+/** Uczestnicy starcia (strona A i B, z dołączonymi). */
+export function encounterParticipants(enc) {
+  return [...(enc?.sideA?.vesselIds ?? []), ...(enc?.sideA?.joinedVesselIds ?? []),
+    ...(enc?.sideB?.vesselIds ?? []), ...(enc?.sideB?.joinedVesselIds ?? [])];
+}
+
+/**
+ * Środek starcia z pozycji LOGICZNYCH uczestników (Finding 638): żywi (`vesselStates` hp > 0); brak żywych — wszyscy z pozycją;
+ * brak pozycji — punkt starcia (`location.point`). `getPos(id)` → {x, y} albo null — jednostki dowolne (renderer: j. świata
+ * x / z, karta walki i baner: px rozgrywki); promień klastra podaje wołający w tych samych jednostkach.
+ * @returns {{x:number, y:number}|null}
+ */
+export function encounterCentre(enc, getPos) {
+  const ids = encounterParticipants(enc);
+  const mean = (list) => {
+    let sx = 0, sy = 0, n = 0;
+    for (const id of list) {
+      const q = getPos(id);
+      if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) continue;
+      sx += q.x; sy += q.y; n++;
+    }
+    return n ? { x: sx / n, y: sy / n } : null;
+  };
+  const alive = ids.filter((id) => { const st = enc?.vesselStates?.get?.(id); return !st || st.hp > 0; });
+  const c = mean(alive) ?? mean(ids);
+  if (c) return c;
+  const pt = enc?.location?.point;
+  return pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) ? { x: pt.x, y: pt.y } : null;
+}
+
+/**
+ * Klastry AKTYWNYCH starć z pozycji logicznych (Finding 638) — JEDNO źródło dla sceny bitwy (renderer), karty walki
+ * (jeden wiersz na klaster) i banera wyniku (jeden na klaster): ten sam układ, środki bliżej niż `radius`, pojedyncze
+ * wiązanie, id klastra = najmniejsze id starcia.
+ */
+export function encounterClusters(encs, getPos, radius) {
+  const list = [];
+  for (const e of encs ?? []) {
+    const c = e ? encounterCentre(e, getPos) : null;
+    if (c) list.push({ id: e.id, systemId: e.location?.systemId ?? null, centre: { x: c.x, z: c.y } });
+  }
+  return clusterEncounters(list, radius);
+}

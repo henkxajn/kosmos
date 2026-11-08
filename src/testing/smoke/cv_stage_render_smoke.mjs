@@ -23,6 +23,11 @@
 //   R13 ruch płynny startuje z pozycji BEZ sceny (sprite trzyma rysowaną)
 //   R14 źródło: (b) tripwire — renderer i `src/renderer/combat/*` nie piszą pozycji logicznej statku (KONTROLA:
 //      wstrzyknięty zapis złapany); kolejność w pętli renderu; bramki flagi przy wywołaniach
+//   R15 (CV-3a2, D-CV-5) pole kliku sceny na prawdziwych metodach: punkt rysowany między statkami → `stageLogicalOf` →
+//      `stageWorldOf` = ten sam punkt; poza flagą, w galaktyce, dla innego układu, przed wejściem w scenę (pauza od startu)
+//      i dla bitwy przy ciele — bez pola (punkt bez zmian)
+//   R16 (CV-3a2, Finding 648 (b)) kadr „Obserwuj”: po wejściu w scenę dystans kina (stopień 1 w tym dystansie, < 1/4 kadru
+//      skali prawdziwej); w pauzie przed wejściem — kadr skali prawdziwej (bez nurkowania na statki w skali prawdziwej)
 //
 // ⚠ Fail-first: metody i moduły CV-3a1 powstają w tym kroku — brak metody = pin czerwony, suita się nie przerywa.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -68,10 +73,12 @@ const S = (v) => v / WORLD_SCALE;
 const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngagementInView', 'isEnemyVessel', 'STAGE', 'solveStage', 'pairKey',
   'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'lengthPx', 'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf',
   'fitWatchFrameOffset', 'viewOffsetFrame', 'watchSafeRect', 'getMapInsets', 'COSMIC', 'glideRetarget', 'glideStep',
-  'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION'];
+  'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION',
+  // ARC CV-3a2 — klastry z pozycji logicznych i pole kliku sceny
+  'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn'];
 const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage',
   'getVesselStageBlend', '_stageWatchFit', '_stageSuccessor', '_syncCombatViewOffset', '_hideEncounterRings', '_spawnExplosion',
-  '_placeFreeVessel', '_tickCombatGlide'];
+  '_placeFreeVessel', '_tickCombatGlide', '_stageFields', 'stageLogicalOf', 'stageWorldOf'];
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -80,7 +87,8 @@ function makeMethod(name) {
       THREE, S, GAME_CONFIG, globalThis.window, globalThis.performance, FX.isEngagementInView, isEnemyVessel, SL?.STAGE, SL?.solveStage, SL?.pairKey,
       SL?.clusterEncounters, SL?.bandEdgesWU, SZ?.stageBlend, SZ?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
       CW.centroidOf, CW.fitWatchFrameOffset, CW.viewOffsetFrame, CW.watchSafeRect, getMapInsets, COSMIC, CW.glideRetarget, CW.glideStep,
-      FX.EXPLOSION_RING_COLOR, FX_HDR_EXPLOSION);
+      FX.EXPLOSION_RING_COLOR, FX_HDR_EXPLOSION,
+      SL?.encounterClusters, SL?.encounterParticipants, SL?.pickStageField, SL?.stagePointLogical, SL?.stagePointDrawn);
   } catch (e) { console.log(`    (budowa ${name}: ${e.message})`); return null; }
 }
 
@@ -324,6 +332,52 @@ block('R13 — ruch płynny startuje z pozycji BEZ sceny', () => {
   R._placeFreeVessel(id, e, v.position.x + 30, v.position.y);   // nowy krok zbliżenia (logika przesunęła statek)
   assert(e.glide && !e.glide.done && Math.abs(e.glide.from.x - base.x) < 1e-12 && Math.abs(e.glide.from.z - base.z) < 1e-12,
     `R13 nowy ruch od pozycji BEZ sceny (sprite trzymał rysowaną — ${Math.hypot(e.sprite.position.x - base.x, e.sprite.position.z - base.z).toFixed(4)} j. dalej)`);
+});
+
+// ═══ R15 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+block('R15 — (CV-3a2, D-CV-5) pole kliku sceny: `stageLogicalOf` / `stageWorldOf`', () => {
+  const { R, cc, ts } = world();
+  placeCamera(R, cc, 0.4);
+  for (let i = 0; i < 60; i++) frame(R);
+  const a = R._vessels.get('CV-A03').sprite.position, b = R._vessels.get('CV-B03').sprite.position;
+  const p = { x: (a.x + b.x) / 2 + 0.01, z: (a.z + b.z) / 2 - 0.007 };   // punkt rysowany między statkami
+  const lp = R.stageLogicalOf(SYS, p.x, p.z);
+  const back = lp?.staged ? R.stageWorldOf(SYS, lp.x, lp.z) : null;
+  const shift = lp ? Math.hypot(lp.x - p.x, lp.z - p.z) : 0;
+  assert(lp?.staged === true && back && Math.hypot(back.x - p.x, back.z - p.z) < 1e-9 && shift > 0.05 && lp.blend > 0.99,
+    `R15a SEDNO: klik w scenie (stopień ${lp?.blend?.toFixed(3)}) — punkt bez sceny ${shift.toFixed(3)} j. od rysowanego, powrót do rysowanego co do 1e-9`);
+  const far = R.stageLogicalOf(SYS, p.x + 30, p.z);
+  const other = R.stageLogicalOf('sys_inny', p.x, p.z);
+  R._galaxyActive = true; const gal = R.stageLogicalOf(SYS, p.x, p.z); R._galaxyActive = false;
+  GAME_CONFIG.FEATURES.cvStage = false; const off = R.stageLogicalOf(SYS, p.x, p.z); GAME_CONFIG.FEATURES.cvStage = FLAG0;
+  assert(far?.staged === false && far.x === p.x + 30 && other?.staged === false && gal?.staged === false && off?.staged === false && off.x === p.x,
+    'R15b daleko od bitwy, inny układ, tryb galaktyki, flaga OFF — punkt bez zmian (staged: false)');
+  // pauza od startu: wejście w scenę stoi (stopień × wejście = 0) — brak pola
+  const w2 = world(); placeCamera(w2.R, w2.cc, 0.4); w2.ts.isPaused = true;
+  for (let i = 0; i < 30; i++) frame(w2.R);
+  const pz = w2.R.stageLogicalOf(SYS, p.x, p.z);
+  // bitwa przy ciele (D-CV-4 do CV-3a3): klaster bez sceny — brak pola
+  const w3 = world(); w3.vessels.get('CV-A01').position.dockedAt = 'p_x'; placeCamera(w3.R, w3.cc, 0.4);
+  for (let i = 0; i < 60; i++) frame(w3.R);
+  const pp = w3.R.stageLogicalOf(SYS, p.x, p.z);
+  assert(pz?.staged === false && pp?.staged === false && w3.R._stageFrame?.list?.[0]?.pinned === true,
+    'R15c pauza przed wejściem w scenę i bitwa przy ciele (bez sceny do CV-3a3) — klik bez zmian');
+});
+
+// ═══ R16 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+block('R16 — (CV-3a2, Finding 648 (b)) kadr „Obserwuj”: kino po wejściu w scenę, skala prawdziwa przed', () => {
+  const { R, cc, list, ts } = world();
+  placeCamera(R, cc, 2.7);
+  ts.isPaused = true;
+  for (let i = 0; i < 20; i++) frame(R);
+  const before = R._stageWatchFit(list[0]);
+  ts.isPaused = false;
+  for (let i = 0; i < 60; i++) frame(R);
+  R._stageFitFrame = -1;
+  const after = R._stageWatchFit(list[0]);
+  const H = 1041, blendAt = (d) => SZ.stageBlend(SZ.lengthPx({ length: L, depth: d, fovDeg: R.camera.fov, H }));
+  assert(before?.dist > 2 && after?.cinema === true && after.dist < before.dist / 4 && blendAt(after.dist) >= 0.999,
+    `R16 pauza przed wejściem: kadr ${before?.dist?.toFixed(3)} j. (skala prawdziwa); po wejściu: kino ${after?.dist?.toFixed(3)} j. (stopień ${after ? blendAt(after.dist).toFixed(3) : '—'})`);
 });
 
 // ═══ R14 ══════════════════════════════════════════════════════════════════════════════════════════════════════════

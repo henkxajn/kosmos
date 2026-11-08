@@ -3,6 +3,9 @@
 //   cvBattle()                          — 10 na 10 w oglądanym układzie, mieszane kadłuby (fregata / niszczyciel / krążownik)
 //                                         i broń (laser / kinetyk / rakieta), ziarno 1; gra na PAUZIE — start: wznowienie czasu
 //   cvBattle({nA: 5, nB: 5, seed: 7})   — mniejsze starcie, inne ziarno; to samo ziarno = ta sama bitwa (rundy, strzały, wynik)
+//   cvBattle({nA: 4, nB: 4, split: 1})  — ARC CV-3a2 (Finding 638): starcia PARAMI — każda para A_i–B_i zaczyna własne starcie
+//                                         (rozkaz „Zaangażuj” przed starciem: ścieżka zamiaru gracza w DSCS), więc w jednym
+//                                         miejscu toczy się kilka starć — jedna bitwa na ekranie: jeden wiersz karty, jeden baner
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
 //   fxStats()                           — pomiar 300 klatek: czas klatki p50 / p95, wywołania i trójkąty renderera, pule
 //
@@ -143,7 +146,7 @@ function pickAiEmpire(K) {
 export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeRenderer ?? null, getSaveSystem = () => null } = {}) {
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
-    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1 } = {}) {
+    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false } = {}) {
       if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
       const K = window.KOSMOS ?? {};
       const vm = K.vesselManager, dscs = K.deepSpaceCombatSystem, mos = K.movementOrderSystem, ts = K.timeSystem;
@@ -191,6 +194,31 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const sideA = made.filter((_, i) => layout.ships[i].side === 'A');
       const sideB = made.filter((_, i) => layout.ships[i].side === 'B');
       const ta = made[layout.trigger.a], tb = made[layout.trigger.b];
+
+      // ARC CV-3a2 (Finding 638) — starcia parami: „Zaangażuj” A_i → B_i PRZED starciem, potem para po parze — DSCS zaczyna
+      // starcie od samej pary (pominięcie zbierania przy zamiarze gracza), a statki już walczące w różnych starciach się nie
+      // łączą: kilka starć w jednym miejscu. Ziarno starcia k = ziarno + k (ta sama bitwa przy tym samym ziarnie).
+      if (split) {
+        const pairs = Math.min(sideA.length, sideB.length);
+        const orders = sideA.map((v, i) => mos.issueOrder(v.id, { type: 'engage', targetEntityId: sideB[i % sideB.length].id, issuedBy: 'cvBattle' }));
+        const encs = [];
+        for (let i = 0; i < Math.max(sideA.length, sideB.length); i++) {
+          const a = sideA[Math.min(i, sideA.length - 1)], b = sideB[Math.min(i, sideB.length - 1)];
+          EventBus.emit('vessel:combatRangeEnter', { vesselAId: a.id, vesselBId: b.id, sameFaction: false,
+            distanceAU: Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) / AU });
+          const e = dscs._findActiveEncounterContaining?.(a.id) ?? dscs._findActiveEncounterContaining?.(b.id);
+          if (e && !encs.includes(e)) { e.seedBase = (cvSeedBase(seed) + encs.length) & 0x7fffffff; encs.push(e); }
+        }
+        const members = made.filter((v) => dscs._findActiveEncounterContaining?.(v.id)).length;
+        console.warn(CV_BATTLE.WARNING);
+        return {
+          ok: members === made.length && encs.length >= Math.min(2, pairs), encounters: encs.map((e) => e.id), split: true, system: sys, seed,
+          centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear, sideA: sideA.length, sideB: sideB.length, members,
+          engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`, empire: empire.name ?? empire.id, paused: !!ts.isPaused,
+          cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, cvStage: !!GAME_CONFIG.FEATURES?.cvStage,
+          autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
+        };
+      }
 
       EventBus.emit('vessel:combatRangeEnter', {
         vesselAId: ta.id, vesselBId: tb.id, sameFaction: false,

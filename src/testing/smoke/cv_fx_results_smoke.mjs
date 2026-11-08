@@ -28,6 +28,8 @@
 //   S4 starcie się rozegrało i ma treść (wszystkie trzy kategorie broni, trafienia, osłona, wrak)
 //   S5 ponowne `cvBattle` w trakcie starcia — `battle_in_progress`, po starciu — stare statki zdjęte, nowa scena kompletna
 //   S6 to samo ziarno = ta sama bitwa (sygnatura i ślad); inne ziarno — inne `seedBase`
+//   S7 (CV-3a2, Finding 638) `cvBattle({ split })` — starcia parami: kilka starć w jednym miejscu (każda para własne starcie,
+//      komplet statków), jeden klaster (`encounterClusters`), kolejne ziarna starć; KONTROLA: bez `split` — jedno starcie
 //   A1 tryb ON naprawdę rysował silnikiem (strzały w pulach, zero dzisiejszych efektów), tryb OFF — dzisiejszą ścieżką;
 //      CV-3a1: tryb ON (flagi `cvFxEngine` i `cvStage`) naprawdę rysował SCENĘ (kamera 0,4 j. od bitwy — stopień sceny 1,
 //      sprite'y przesunięte), tryb OFF — bez sceny
@@ -105,7 +107,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'FX_MAX_ACTIVE', 'FX_TRACER_MS', 'FX_SHIELD_COLOR', 'isEnemyVessel', 'isEndpointVisibleInCombat', 'isPlayerEngagement',
   'vesselTargetSize', 'HIT_GLOW', 'hitGlowWorldSize', 'ThreeRenderer', 'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION', 'rendererRandom',
   'FxEngine', 'logDepthOn', 'STAGE', 'solveStage', 'pairKey', 'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'lengthPx', 'VESSEL_TARGET_SIZE',
-  'WORLD_SCALE', '_STAGE_V'];
+  'WORLD_SCALE', '_STAGE_V', 'encounterClusters', 'encounterParticipants'];   // CV-3a2 — klastry z pozycji logicznych
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
   '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
   '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend'];
@@ -117,7 +119,8 @@ function makeMethod(name) {
     FXC.FX_MAX_ACTIVE, FXC.FX_TRACER_MS, FXC.FX_SHIELD_COLOR, isEnemyVessel, FX.isEndpointVisibleInCombat, FX.isPlayerEngagement,
     vesselTargetSize, FX.HIT_GLOW, FX.hitGlowWorldSize, TR_STATIC, FX.EXPLOSION_RING_COLOR, FX_HDR_EXPLOSION, rendererRandom,
     ENGINE?.FxEngine ?? null, () => true, STAGEL?.STAGE, STAGEL?.solveStage, STAGEL?.pairKey, STAGEL?.clusterEncounters, STAGEL?.bandEdgesWU,
-    SZOOM?.stageBlend, SZOOM?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3());
+    SZOOM?.stageBlend, SZOOM?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
+    STAGEL?.encounterClusters, STAGEL?.encounterParticipants);
 }
 
 /** Atrapa renderera: prawdziwe metody FX, sprite'y = Object3D za pozycjami logicznymi, zegar prezentacji z CV-2a. */
@@ -350,6 +353,23 @@ header('S5 — ponowne cvBattle: w trakcie starcia odmowa, po starciu stare stat
   const cvNow = vm.getAllVessels().filter(v => /^CV-/.test(v.name ?? ''));
   assert(before === 6 && b?.ok === true && cvNow.length === 4 && cvNow.every(v => v._cvBattle === 4),
     `S5b po starciu: ${before} statków poprzedniego testu zdjętych, nowa scena ${cvNow.length} (2 na 2, znacznik ziarna 4)`);
+}
+
+header('S7 — (CV-3a2) cvBattle({ split }) — starcia parami w jednym miejscu, jeden klaster');
+{
+  world();
+  const H = helpers();
+  const r = H?.cvBattle({ seed: 5, nA: 3, nB: 3, split: true });
+  const encs = dscs.listActive();
+  const getPos = (id) => vm.getVessel(id)?.position ?? null;
+  const cl = STAGEL?.encounterClusters?.(encs, getPos, STAGEL.STAGE.CLUSTER_AU * AU) ?? [];
+  const seeds = encs.map((e) => e.seedBase).sort((a, b) => a - b);
+  assert(r?.ok === true && encs.length === 3 && encs.every((e) => e.vesselStates.size === 2) && r.members === 6 && cl.length === 1
+    && cl[0].encounterIds.length === 3 && seeds[1] === seeds[0] + 1 && seeds[2] === seeds[0] + 2,
+    `S7a split 3 na 3: ${encs.length} starcia po parze (komplet ${r?.members}), jeden klaster (${cl.map((c) => c.encounterIds.length).join('+')}), ziarna kolejne`);
+  world();
+  const one = helpers()?.cvBattle({ seed: 5, nA: 3, nB: 3 });
+  assert(one?.ok === true && dscs.listActive().length === 1, 'S7b KONTROLA: bez `split` — jedno starcie z kompletem');
 }
 
 header('S6 — to samo ziarno = ta sama bitwa; inne ziarno — inne seedBase');

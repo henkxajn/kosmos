@@ -562,7 +562,7 @@ header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, o
   const hudCtx = () => ({ font: '10px monospace', textAlign: 'left',
     measureText(s) { const px = Number(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1]) || 10; return { width: [...String(s)].length * px * 0.6 }; },
     fillText() {}, fillRect() {}, strokeRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, save() {}, restore() {} });
-  const mkEnc = (id, nA, nB, round = 1) => {
+  const mkEnc = (id, nA, nB, round = 1, point = { x: 0, y: 0 }) => {
     const states = new Map(), vessels = new Map();
     const ids = (n, side) => Array.from({ length: n }, (_, i) => {
       const vid = `${id}_${side}${i}`;
@@ -575,7 +575,7 @@ header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, o
     for (let r = 1; r <= round; r++) timeline.push({ round: r, events: [
       { attacker: b[0], target: a[0], weapon: 'weapon_missile', hit: true, damage: 10, blockedByShield: 0 },
       { attacker: a[0], target: b[0], weapon: 'weapon_laser', hit: true, damage: 13, blockedByShield: 0 }] });
-    return { enc: { id, isActive: true, currentRound: round, timeline, location: { systemId: 'sys_home', planetId: null, point: { x: 0, y: 0 } },
+    return { enc: { id, isActive: true, currentRound: round, timeline, location: { systemId: 'sys_home', planetId: null, point: { ...point } },
       sideA: { vesselIds: a, joinedVesselIds: [], ownerEmpireId: 'player', label: 'Gracz' },
       sideB: { vesselIds: b, joinedVesselIds: [], ownerEmpireId: 'emp_001', label: 'Konsorcjum' }, vesselStates: states }, vessels };
   };
@@ -618,7 +618,9 @@ header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, o
   ok(pb?.mode === 'row' && pb.shifted === true && !over(pb, card) && pb.tab === null && !!zb && zb.y > pb.y + pb.h,
     `S11e wiersz u dołu listy (y ${zb?.y}) poza zasięgiem panelu nad kartą (y ${pb?.y}) — bez łącznika, panel przy kolumnie`);
   // C — dwa starcia (karta wysoka) i krok wyboru celu (360 px): brak miejsca nad i pod kartą → kotwica zapasowa
-  const hud2 = hudOf([mkEnc('e1', 2, 2, 7), mkEnc('e2', 1, 1, 7)], 720);
+  // ARC CV-3a2 — drugie starcie 2 AU dalej: pod flagą `cvStage` starcia w JEDNYM miejscu to jedna bitwa i jeden wiersz karty
+  // (Finding 638); S11f pinuje kartę z DWIEMA bitwami (dwa wiersze — wysoka karta).
+  const hud2 = hudOf([mkEnc('e1', 2, 2, 7), mkEnc('e2', 1, 1, 7, { x: 220, y: 0 })], 720);
   const card2 = hud2.getPanelRect();
   pick('v2');
   const p360 = panelWith(hud2, 720, 360);

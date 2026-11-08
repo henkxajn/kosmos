@@ -149,8 +149,10 @@ header('T4  ciasny ekran — karta nad dolnymi paskami, log skrócony do ostatni
 {
   EventBus.clear();
   // dwa starcia 3 na 3 — przy pełnej wysokości karta ma 2 × (6 linii statków + 6 linii logu)
-  const mkOne = (id) => mkEnc({ id, labelA: 'Gracz (3)', labelB: 'Liga Trzech Słońc (3)', namesA: ['P2A F0', 'P2A F1', 'P2A F2'], namesB: ['Guard0', 'Guard1', 'Guard2'], round: 9 });
-  const mk = () => { const x = mkOne('encounter_a'), y = mkOne('encounter_b'); return { encs: [x.enc, y.enc], vessels: new Map([...x.vessels, ...y.vessels]) }; };
+  const mkOne = (id, point) => mkEnc({ id, point, labelA: 'Gracz (3)', labelB: 'Liga Trzech Słońc (3)', namesA: ['P2A F0', 'P2A F1', 'P2A F2'], namesB: ['Guard0', 'Guard1', 'Guard2'], round: 9 });
+  // ARC CV-3a2 — drugie starcie 2 AU dalej: pod flagą `cvStage` starcia w JEDNYM miejscu to jedna bitwa i jeden wiersz karty
+  // (Finding 638, `BattleClusterLogic`); T4 pinuje kartę z DWIEMA bitwami, więc stoją w dwóch miejscach.
+  const mk = () => { const x = mkOne('encounter_a'), y = mkOne('encounter_b', { x: 357.66, y: -60.03 }); return { encs: [x.enc, y.enc], vessels: new Map([...x.vessels, ...y.vessels]) }; };
   const bottomLimit = (H, dock) => H - (36 + 6) - dock - 8;   // pasek nawigacji + listwa dziennika + Dok taktyczny + odstęp
   // pełna wysokość — JEDNO starcie (dwa przekraczają limit 45 % ekranu — T8)
   const a1 = mkOne('encounter_a'); setKosmos([a1.enc], a1.vessels, { dock: 0 });

@@ -15,6 +15,10 @@
 // paskiem a dolnymi paskami (dawniej dół karty z logiem wchodził pod pasek nawigacji) ani nie zajmuje więcej niż
 // `CARD_MAX_H_FRAC` wysokości ekranu (kadr „Obserwuj” i auto-fokus trzymają statki NAD kartą); „Watch” przy KAŻDYM wierszu
 // starcia (CP22, Finding 465 — dawniej jeden przycisk zawsze do pierwszego starcia); nazwa układu starcia w wierszu (CP23).
+//
+// ARC CV-3a2 (Finding 638, decyzja właściciela §3.2-3) — pod flagą `cvStage` JEDEN WIERSZ NA KLASTER STARĆ (bitwa na ekranie
+// = starcia w jednym miejscu, ta sama reguła co scena bitwy i baner wyniku — `BattleClusterLogic`): strony, stany statków
+// i log scalone, jeden „Watch” (kamera kadruje cały klaster — CV-3a1), nagłówek liczy bitwy, nie starcia.
 
 import { BaseOverlay }    from './BaseOverlay.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
@@ -25,6 +29,8 @@ import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
 import { systemDisplayName } from './MapLabelLogic.js';
+import { GAME_CONFIG }    from '../config/GameConfig.js';
+import { combatCardRows, clusterRadiusPx } from './BattleClusterLogic.js';   // ARC CV-3a2 (Finding 638)
 
 const PANEL_W       = 560;
 const HEADER_H      = 24;
@@ -109,10 +115,24 @@ export class CombatHUD extends BaseOverlay {
     ctx.restore();
   }
 
+  // ARC CV-3a2 (Finding 638) — wiersze karty: pod flagą `cvStage` jeden na klaster starć (widok scalony), inaczej jeden na
+  // starcie (jak dotąd). Etykieta strony scalonej: „Gracz (N)” / „imperium (N)” z tłumaczenia.
+  _cardRows(encounters) {
+    if (!GAME_CONFIG.FEATURES?.cvStage) return encounters;
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager;
+    return combatCardRows(encounters, {
+      getPos: (id) => vm?.getVessel?.(id)?.position ?? null,
+      radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX),
+      labelFor: (owner, n) => `${owner === 'player' ? t('battle.player')
+        : (K?.empireRegistry?.get?.(owner)?.name ?? t('battle.unknownForce'))} (${n})`,
+    });
+  }
+
   _drawPanel(ctx, W, H) {
     const dscs = window.KOSMOS?.deepSpaceCombatSystem;
     if (!dscs?.listActive) return;
-    const encounters = dscs.listActive();
+    const encounters = this._cardRows(dscs.listActive());
     if (encounters.length === 0) {
       this._minimizeBtnBounds = null;
       this._watchBtns = [];

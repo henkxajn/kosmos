@@ -18,7 +18,11 @@
 //   Y=0.45  wraki cmentarz
 // → Three.js Raycaster sortuje hits od najbliższego — closest wygrywa naturalnie.
 //
-// Y=0 plane intersect dla worldPoint: zawsze zwracane, nawet gdy klik trafia w sprite.
+// ARC CV-3a2 (Finding 646, decyzja właściciela (b)) — worldPoint z przecięcia z płaszczyzną STATKÓW (Y = 0.3), nie orbit
+// (Y = 0): statki są rysowane na Y = 0.3, a przy kadrze walki (kamera 27° nad płaszczyzną) klik obok statku trafiał
+// ≈ 0.3 · tg 63° ≈ 0.59 j. ≈ 0.054 AU dalej wzdłuż promienia — cały zasięg lasera. Dotyczy KAŻDEGO kliku w pustą
+// przestrzeń, także poza bitwą. Kamera poniżej płaszczyzny statków (zbliżenie ciała) — płaszczyzna orbit, jak dotąd.
+// worldPoint zwracany zawsze, nawet gdy klik trafia w sprite.
 
 import * as THREE from 'three';
 import { mouseToNDC, findKosmosNode, resolveTargetFromHits } from './RaycasterPure.js';
@@ -26,8 +30,19 @@ import { mouseToNDC, findKosmosNode, resolveTargetFromHits } from './RaycasterPu
 // Re-eksport pure API
 export { mouseToNDC, findKosmosNode, resolveTargetFromHits };
 
+/** Wysokość płaszczyzny statków [j.] — sprite'y statków w wolnej przestrzeni stoją na Y = 0.3 (`ThreeRenderer`). */
+export const SHIP_PLANE_Y = 0.3;
+
 /**
- * Cast ray przez camera + intersect z plane Y=0 i scene objects.
+ * ARC CV-3a2 (Finding 646 (b)) — wysokość płaszczyzny kliku: statków, gdy kamera jest nad nią; inaczej (kamera przy ciele
+ * poniżej Y = 0.3 — promień w dół nie przetnie płaszczyzny statków przed kamerą) płaszczyzna orbit Y = 0, jak dotąd.
+ */
+export function clickPlaneY(cameraY) {
+  return Number.isFinite(cameraY) && cameraY > SHIP_PLANE_Y + 1e-6 ? SHIP_PLANE_Y : 0;
+}
+
+/**
+ * Cast ray przez camera + intersect z płaszczyzną kliku (statków Y = 0.3 — `clickPlaneY`) i scene objects.
  * @param {{x:number, y:number}} ndc — z mouseToNDC()
  * @param {THREE.Camera} camera
  * @param {THREE.Scene} scene
@@ -47,15 +62,17 @@ export function castRay(ndc, camera, scene, raycaster) {
   }
   // hits już posortowane przez raycaster od najbliższego (closest wins — D5).
 
-  // Plane Y=0 intersect dla worldPoint — zawsze zwracane, niezależnie od hits.
+  // Płaszczyzna kliku dla worldPoint — zawsze zwracane, niezależnie od hits.
   // Wykorzystywane przez moveToPoint (P1.3) — klik w sprite zwraca worldPoint
-  // pod sprite, klik w pusty obszar zwraca punkt na płaszczyźnie orbitalnej.
-  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  // pod sprite, klik w pusty obszar zwraca punkt na płaszczyźnie STATKÓW (ARC CV-3a2, Finding 646 (b): Y = 0.3 — tam, gdzie
+  // statki są rysowane; dawniej płaszczyzna orbit Y = 0). Plane(normal, constant): punkty z normal·p + constant = 0 ⇒ y = −constant.
+  const planeY = clickPlaneY(camera?.position?.y);
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY);
   const wp = new THREE.Vector3();
   raycaster.ray.intersectPlane(plane, wp);
 
   return {
     hits,
-    worldPoint: { x: wp.x, y: 0, z: wp.z },
+    worldPoint: { x: wp.x, y: planeY, z: wp.z },
   };
 }

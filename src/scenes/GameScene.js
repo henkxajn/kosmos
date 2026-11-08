@@ -138,6 +138,7 @@ import { SHIPS } from '../data/ShipsData.js';
 import { THEME }             from '../config/ThemeConfig.js';
 import { BattleView3D }      from './BattleView3D.js';
 import { showBattleIntro, showBattleOutcome, getBattleViewPreference } from '../ui/BattleIntroModal.js';
+import { clusterBannerStep, clusterPeerIds, clusterRadiusPx } from '../ui/BattleClusterLogic.js';   // ARC CV-3a2 (Finding 638) — jeden baner na klaster
 import { StarSystemManager } from '../systems/StarSystemManager.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -2787,8 +2788,13 @@ export class GameScene {
       battleData.aggressorArchetype = sides.foeArchetype;
       battleData.playerSide         = sides.playerSide;
 
-      this._battleQueue.push(battleData);
-      this._tryShowNextBattle();
+      // ARC CV-3a2 (Finding 638, decyzja właściciela §3.2-3) — JEDEN baner na klaster starć: wynik starcia, którego klaster
+      // jeszcze trwa (inne aktywne starcie w tym samym miejscu), czeka; baner wychodzi po OSTATNIM `battle:resolved` klastra,
+      // z wynikiem scalonym (`BattleClusterLogic`). Dziennik bez zmian — linia na starcie do CV-6b (#639). Pod flagą `cvStage`.
+      const banners = (battleData.source === 'dscs' && GAME_CONFIG.FEATURES?.cvStage)
+        ? this._clusterBattleBanners(battleData) : [battleData];
+      for (const b of banners) this._battleQueue.push(b);
+      if (banners.length) this._tryShowNextBattle();
     });
 
     // Wpis do EventLoga dla KAŻDEJ bitwy (także obcy-vs-obcy w przyszłości).
@@ -4219,6 +4225,21 @@ export class GameScene {
     // ⚠ D8 (AC-3): kolonia startuje BEZ jednostek naziemnych. Nic ich tu nie stawia i nie ma
     // stawiać — pierwsza jednostka gracza powstaje z rekrutacji (koszary + POP), zrzutu
     // z ładowni albo grupy badawczej, czyli z decyzji gracza.
+  }
+
+  // ARC CV-3a2 (Finding 638) — krok banera klastra dla rozstrzygniętego starcia deep-space (`battle:resolved` leci, gdy
+  // starcie jest jeszcze aktywne — pozostałe aktywne starcia klastra liczone bez niego). Stan oczekujących grup tylko
+  // w pamięci (`_battleClusterHold`) — po wczytaniu zapisu baner oczekującego starcia przepada (prezentacja, nie stan gry).
+  _clusterBattleBanners(battleData) {
+    const K = window.KOSMOS;
+    const dscs = K?.deepSpaceCombatSystem;
+    const encId = String(battleData.battleId ?? '').replace(/^battle_ds_/, 'encounter_');
+    const vm = K?.vesselManager;
+    const getPos = (id) => vm?.getVessel?.(id)?.position ?? null;
+    const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX) });
+    const isActive = (id) => id !== encId && !!dscs?._activeEncounters?.get?.(id)?.isActive;
+    this._battleClusterHold ??= [];
+    return clusterBannerStep(this._battleClusterHold, { encounterId: encId, battleData, peerIds, isActive });
   }
 
   // ── Faza 5: pipeline BattleView3D ──────────────────────────
@@ -6488,6 +6509,15 @@ export class GameScene {
     // currentEmpireId vestigial w resolveTargetFromHits — own/enemy detection
     // przez tolerancyjny 3-field check (vessel.isEnemy/owner/ownerEmpireId).
     // TODO M4: jeśli multi-player → zastąp helperem getPlayerOwnerId().
-    return resolveTargetFromHits(hits, worldPoint, 'player');
+    const target = resolveTargetFromHits(hits, worldPoint, 'player');
+    // ARC CV-3a2 (D-CV-5) — klik w scenie bitwy trafia POD KURSOR: punkt rysowany (płaszczyzna statków, Finding 646 (b)) →
+    // punkt bez sceny przez odwrotność pola sceny (`ThreeRenderer.stageLogicalOf`; poza sceną — bez zmian). JEDNO miejsce dla
+    // wszystkich trzech wejść: picker celu i punkty patrolu (lewy klik), prawy klik (rozkaz), dymek współrzędnych pustej mapy.
+    // Ciało i POI — rysowane w skali prawdziwej (scena przesuwa tylko statki), więc ich punkt zostaje.
+    if (target?.worldPoint && target.type !== 'planet' && target.type !== 'poi') {
+      const lp = tr.stageLogicalOf?.(window.KOSMOS?.activeSystemId ?? null, target.worldPoint.x, target.worldPoint.z);
+      if (lp?.staged) target.worldPoint = { ...target.worldPoint, x: lp.x, z: lp.z };
+    }
+    return target;
   }
 }

@@ -38,7 +38,8 @@ import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { loadBuildingTextures } from './BuildingTextures.js';
 import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT, VESSEL_TARGET_SIZE }
   from './VesselModelResolver.js';
-import { STAGE, solveStage, clusterEncounters, bandEdgesWU, pairKey } from './combat/BattleStageLogic.js';   // ARC CV-3a1 — scena bitwy
+import { STAGE, solveStage, bandEdgesWU, pairKey, encounterClusters, encounterParticipants,
+  pickStageField, stagePointLogical, stagePointDrawn } from './combat/BattleStageLogic.js';   // ARC CV-3a1 — scena bitwy; CV-3a2 — klik i klastry
 import { stageBlend, lengthPx } from './combat/SemanticZoomLogic.js';                               // ARC CV-3a1 — zoom semantyczny
 import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
@@ -6992,32 +6993,21 @@ export class ThreeRenderer {
   }
 
   // Klastry starć oglądanego układu (Finding 638): uczestnicy, starcia, czy ktoś stoi na orbicie ciała.
+  // ARC CV-3a2 — klaster z pozycji LOGICZNYCH uczestników (`encounterClusters`): to samo źródło co karta walki (jeden wiersz
+  // na klaster) i baner wyniku (jeden na klaster); dawniej środek z pozycji sprite'ów (różnica — ruch płynny ≤ 1 rundy).
   _stageClusters() {
     const K = window.KOSMOS;
     const act = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
     if (!act.length) return [];
-    const encs = [];
-    for (const enc of act) {
-      if (!isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: K?.activeSystemId })) continue;
-      const ids = [...(enc.sideA?.vesselIds ?? []), ...(enc.sideA?.joinedVesselIds ?? []),
-        ...(enc.sideB?.vesselIds ?? []), ...(enc.sideB?.joinedVesselIds ?? [])];
-      let sx = 0, sz = 0, n = 0;
-      for (const id of ids) {
-        const e = this._vessels.get(id);
-        if (!e?.sprite || e.sprite.visible === false) continue;
-        sx += e.sprite.position.x; sz += e.sprite.position.z; n++;
-      }
-      const pt = enc.location?.point;
-      const centre = n ? { x: sx / n, z: sz / n }
-        : (pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) ? { x: S(pt.x), z: S(pt.y) } : null);
-      if (centre) encs.push({ id: enc.id, systemId: enc.location?.systemId ?? null, centre, ids, enc });
-    }
-    const byId = new Map(encs.map((e) => [e.id, e]));
+    const inView = act.filter((enc) => isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: K?.activeSystemId }));
+    if (!inView.length) return [];
     const vm = K?.vesselManager;
-    return clusterEncounters(encs, STAGE.CLUSTER_AU * GAME_CONFIG.AU_TO_PX / WORLD_SCALE).map((cl) => {
-      const ids = [...new Set(cl.encounterIds.flatMap((eid) => byId.get(eid)?.ids ?? []))].sort();
+    const byId = new Map(inView.map((e) => [e.id, e]));
+    const logical = (id) => { const q = vm?.getVessel?.(id)?.position; return q ? { x: S(q.x), y: S(q.y) } : null; };
+    return encounterClusters(inView, logical, STAGE.CLUSTER_AU * GAME_CONFIG.AU_TO_PX / WORLD_SCALE).map((cl) => {
+      const ids = [...new Set(cl.encounterIds.flatMap((eid) => encounterParticipants(byId.get(eid))))].sort();
       const pinned = ids.some((id) => { const v = vm?.getVessel?.(id); return !!v && !v.isWreck && v.position?.dockedAt != null; });
-      return { ...cl, ids, pinned, encs: cl.encounterIds.map((eid) => byId.get(eid)?.enc).filter(Boolean) };
+      return { ...cl, ids, pinned, encs: cl.encounterIds.map((eid) => byId.get(eid)).filter(Boolean) };
     });
   }
 
@@ -7044,7 +7034,7 @@ export class ThreeRenderer {
     const frame = { clusters: 0, staged: 0, fallback: 0, misbanded: 0, list: [] };
     for (const cl of clusters) {
       const info = { id: cl.id, encounterIds: cl.encounterIds, encs: cl.encs, members: 0, pinned: cl.pinned, blend: 0, pxL: 0,
-        fallback: false, misbanded: 0, misbandedBefore: 0, passes: 0, centre: null };
+        fallback: false, misbanded: 0, misbandedBefore: 0, passes: 0, centre: null, rIn: 0, scale: null, join: 0 };
       for (const eid of cl.encounterIds) this._stageClusterOf.set(eid, info);
       frame.list.push(info);
       if (cl.pinned) continue;   // D-CV-4 (b) do CV-3a2 — uczestnik na orbicie ciała: bitwa bez sceny
@@ -7080,7 +7070,8 @@ export class ThreeRenderer {
       const pxL = lengthPx({ length: L, depth: this.camera.position.distanceTo(_STAGE_V.set(c.x, c.y, c.z)), fovDeg: this.camera.fov, H });
       const blend = stageBlend(pxL);
       Object.assign(info, { blend, pxL, fallback: sol.fallback, misbanded: sol.misbanded, misbandedBefore: sol.misbandedBefore,
-        passes: sol.passes, centre: c });
+        passes: sol.passes, centre: c, rIn: sol.rIn, scale: sol.fallback ? sol.scale : null });
+      let wSum = 0, wN = 0;   // ARC CV-3a2 — średnie wejście uczestników w scenę (pole kliku: stopień × wejście)
       for (const q of pts) {
         const target = sol.pos.get(q.id);
         if (!target) continue;
@@ -7089,8 +7080,10 @@ export class ThreeRenderer {
         m.w = Math.min(1, m.w + dt / STAGE.JOIN_MS);   // dołączający wchodzi w scenę przez JOIN_MS czasu prezentacji
         m.cluster = cl.id;
         this._stagePlace(q.id, this._vessels.get(q.id), q, target, blend * m.w);
+        wSum += m.w; wN++;
         seen.add(q.id);
       }
+      info.join = wN ? wSum / wN : 0;
       frame.clusters++; frame.staged += pts.length;
       if (sol.fallback) frame.fallback++;
       frame.misbanded = Math.max(frame.misbanded, sol.misbanded);
@@ -7118,6 +7111,39 @@ export class ThreeRenderer {
   /** ARC CV-3a1 — o ile scena przesuwa sprite statku (0 — skala prawdziwa; > 0 — rysowany ≠ bez sceny). HUD: radar. */
   getVesselStageBlend(vesselId) {
     return this._stageMarks.get(vesselId)?.k ?? 0;
+  }
+
+  // ── ARC CV-3a2 (D-CV-5) — POLE KLIKU SCENY: punkt pod kursorem (rysowany) ↔ punkt bez sceny (logiczny) ─────────────────
+  // Pola klastrów z tej klatki (`_tickBattleStage`): środek uczestników bez sceny, promień ściskania rIn, stopień sceny ×
+  // średnie wejście w scenę, skala awaryjna. Pole jest mapą promieniową z soczewką (`BattleStageLogic.fieldMap`) — poza
+  // LENS_OUT·rIn od środka tożsamość. Poza flagą, w galaktyce, dla innego układu niż oglądany i bez sceny (bitwa przy ciele
+  // do skorupy — CV-3a3) — brak pól: klik bez zmian.
+  _stageFields(systemId) {
+    if (!GAME_CONFIG.FEATURES?.cvStage || this._galaxyActive || this._galaxyFlight) return [];
+    if (systemId != null && systemId !== (window.KOSMOS?.activeSystemId ?? null)) return [];
+    const out = [];
+    for (const c of this._stageFrame?.list ?? []) {
+      const blend = (c.blend ?? 0) * (c.join ?? 0);
+      if (c.pinned || !c.centre || !(c.rIn > 0) || !(blend > 0)) continue;
+      out.push({ id: c.id, centre: { x: c.centre.x, z: c.centre.z }, rIn: c.rIn, blend, scale: c.scale ?? null });
+    }
+    return out;
+  }
+
+  /** ARC CV-3a2 (D-CV-5) — punkt RYSOWANY (XZ świata, np. przecięcie promienia kliku) → punkt bez sceny; poza scenami bez zmian. */
+  stageLogicalOf(systemId, wx, wz) {
+    const f = pickStageField(this._stageFields(systemId), { x: wx, z: wz });
+    if (!f) return { x: wx, z: wz, staged: false };
+    const q = stagePointLogical({ x: wx, z: wz }, f);
+    return { x: q.x, z: q.z, staged: true, cluster: f.id, blend: f.blend };
+  }
+
+  /** ARC CV-3a2 — punkt bez sceny (XZ świata) → punkt RYSOWANY w polu sceny (brzeg soczewki ten sam w obu przestrzeniach). */
+  stageWorldOf(systemId, lx, lz) {
+    const f = pickStageField(this._stageFields(systemId), { x: lx, z: lz });
+    if (!f) return { x: lx, z: lz, staged: false };
+    const q = stagePointDrawn({ x: lx, z: lz }, f);
+    return { x: q.x, z: q.z, staged: true, cluster: f.id, blend: f.blend };
   }
 
   /**
@@ -7155,9 +7181,13 @@ export class ThreeRenderer {
   }
 
   // ARC CV-3a1 (Finding 643) — kadr walki z osią NA bitwie: cel = środek RYSOWANYCH żywych, widocznych uczestników klastra
-  // (wysokość statków — kółko jedzie do statków); dystans „Obserwuj” z dopasowania pozycji BEZ sceny (bitwa w skali
-  // prawdziwej mieści się w kadrze, scenę daje kółko); kompozycja nad kartą walki przesunięciem ekranowym
+  // (wysokość statków — kółko jedzie do statków); kompozycja nad kartą walki przesunięciem ekranowym
   // (`_syncCombatViewOffset`). Pamięć na jedną klatkę.
+  // ARC CV-3a2 (Finding 648, decyzja właściciela (b)) — dystans „Obserwuj” z dopasowania PEŁNEJ sceny (rozwiązanie prowadnicy,
+  // stopień 1): „Obserwuj” samo nurkuje w kino, bez kółka. Dopasowanie do pozycji RYSOWANYCH nie nurkuje — przy stopniu ≈ 0
+  // (próg zoomu semantycznego jest płaski, smoothstep od 4 px) kadr zatrzymuje się ≈ 2,6 j. przy stopniu ~3 % (zmierzone,
+  // plan §4 CV-3a2). W dystansie kina stopień < 1 (bardzo rozległy klaster) — kilka kroków ku najbliższemu dystansowi, przy
+  // którym bitwa rysowana przy TYM stopniu mieści się w kadrze. Klaster bez sceny (przy ciele) — kadr w skali prawdziwej.
   _stageWatchFit(enc) {
     const cc = this._cameraController;
     if (!cc || !enc?.id) return null;
@@ -7165,7 +7195,7 @@ export class ThreeRenderer {
     if (this._stageFitCache.has(enc.id)) return this._stageFitCache.get(enc.id);
     const cl = this._stageClusterOf.get(enc.id);
     const encs = cl?.encs?.length ? cl.encs : [enc];
-    const drawn = [], base = [];
+    const drawn = [], base = [], drawnIds = [];
     for (const en of encs) {
       const ids = [...(en.sideA?.vesselIds ?? []), ...(en.sideA?.joinedVesselIds ?? []),
         ...(en.sideB?.vesselIds ?? []), ...(en.sideB?.joinedVesselIds ?? [])];
@@ -7178,6 +7208,7 @@ export class ThreeRenderer {
         if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) continue;
         drawn.push({ x: p.x, y: p.y, z: p.z });
         base.push(this._spriteBase(id, e));
+        drawnIds.push(id);
       }
     }
     if (!drawn.length) { this._stageFitCache.set(enc.id, null); return null; }
@@ -7186,9 +7217,27 @@ export class ThreeRenderer {
     const safe = watchSafeRect({ W, H, uiScale: window.KOSMOS?.uiScale ?? 1, hudRect: window.KOSMOS?.combatHud?.getPanelRect?.() ?? null,
       topBarH: COSMIC.TOP_BAR_H, bottomH: ins.bottom, rightW: ins.right, leftW: ins.left });
     const pivot = centroidOf(drawn);
-    const fit = fitWatchFrameOffset({ points: base, pivot: centroidOf(base), theta: cc._theta, phi: cc._phi,
+    const fitAt = (pts) => fitWatchFrameOffset({ points: pts, pivot: centroidOf(pts), theta: cc._theta, phi: cc._phi,
       fovDeg: this.camera.fov, aspect: this.camera.aspect, W, H, safe });
-    const out = { target: pivot, dist: fit?.dist ?? cc._targetDist, fits: !!fit?.fits, centroid: pivot, points: drawn, base, safe, W, H };
+    const sol = cl && !cl.pinned ? this._stageState.get(cl.id)?.sol : null;
+    // Pozycja sceny × WEJŚCIE statku w scenę (`_stageMarks.w`, 500 ms czasu prezentacji — w pauzie stoi): przed wejściem kadr
+    // zostaje w skali prawdziwej, nurkowanie rusza razem ze zbieraniem się statków (zmierzone: dopasowanie do pełnej sceny
+    // w pauzie przed wejściem dawało 0,4 j. przy statkach w skali prawdziwej — 8 / 20 w kadrze).
+    const staged = sol ? drawnIds.map((id, i) => {
+      const q = sol.pos.get(id), w = this._stageMarks.get(id)?.w ?? 0, b = base[i];
+      return q ? { x: b.x + (q.x - b.x) * w, y: b.y + (q.y - b.y) * w, z: b.z + (q.z - b.z) * w } : b;
+    }) : null;
+    let fit = staged ? fitAt(staged) : null;
+    for (let k = 0; fit && k < 4; k++) {
+      const b = stageBlend(lengthPx({ length: VESSEL_TARGET_SIZE.frigate, depth: fit.dist, fovDeg: this.camera.fov, H }));
+      if (b >= 0.999) break;
+      const f2 = fitAt(base.map((q, i) => ({ x: q.x + (staged[i].x - q.x) * b, y: q.y + (staged[i].y - q.y) * b, z: q.z + (staged[i].z - q.z) * b })));
+      if (!f2 || !(f2.dist > fit.dist + 1e-9)) break;
+      fit = f2;
+    }
+    const cinema = !!fit;
+    if (!fit) fit = fitAt(base);
+    const out = { target: pivot, dist: fit?.dist ?? cc._targetDist, fits: !!fit?.fits, cinema, centroid: pivot, points: drawn, base, safe, W, H };
     this._stageFitCache.set(enc.id, out);
     return out;
   }
