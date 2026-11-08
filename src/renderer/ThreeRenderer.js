@@ -184,6 +184,9 @@ const _RING_P = new THREE.Vector3();        // POLISH P2b CLOSE (C6) — punkt o
 let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstura białego błysku trafienia (jedna, współdzielona)
 // F4 Dok: ping-FX kliku wiersza — ARKUSZ HUD paczka B (D-HUD-16): kolor w roli `primary` (dawniej 0x66ddff, `_spawnFx`).
 const TACTICAL_PING_THROTTLE_MS = 180;     // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
+// ARC CV-2a — zdarzenia, którymi `fxStats` etykietuje długie klatki (subskrypcja tylko na czas pomiaru).
+const FX_STATS_EVENTS = ['vessel:engaged', 'combat:roundFx', 'vessel:wrecked', 'battle:resolved', 'vessel:created', 'vessel:removed',
+  'vessel:launched', 'vessel:arrived', 'vessel:firstSighting', 'notify:added', 'time:stateChanged', 'system:switched', 'ui:toast', 'game:save'];
 // ARKUSZ UI U3-2 (Finding 487) — minimalny promień rdzenia sprite'a statku (px ekranu) dla kliku NA TARCZY ciała.
 const VESSEL_CORE_PICK_PX = 6;
 // 4f-2 — puls „ducha ETA" statku pod kursorem: mocniejszy/szybszy (podgląd „który to statek").
@@ -6629,16 +6632,26 @@ export class ThreeRenderer {
   }
 
   // ARC CV-2a — KOSMOS.debug.fxStats(): pomiar N klatek pętli renderu — czas klatki (odstęp między klatkami: to widzi
-  // gracz, z rasteryzacją), czas JS pętli, wywołania i trójkąty renderera zsumowane po wszystkich przebiegach composera —
-  // oraz stan pul silnika FX. Wynik w konsoli po N klatkach; wywołanie w trakcie pomiaru zwraca postęp.
+  // gracz, z rasteryzacją; p50 / p95 / średnia / maks.), czas JS pętli, wywołania i trójkąty renderera zsumowane po
+  // wszystkich przebiegach composera, stan pul silnika FX oraz 5 NAJDŁUŻSZYCH klatek z chwilą i etykietą (zdarzenia gry od
+  // poprzedniej klatki, przyrost programów / geometrii / tekstur). Wynik w konsoli po N klatkach; w trakcie — postęp.
   cvFxStats(frames = 300) {
     const live = this._fxEngine?.stats() ?? null;
     if (this._fxStatsRun) return { sampling: true, done: this._fxStatsRun.n, of: this._fxStatsRun.frames, live, last: this._fxStatsLast };
     const n = Math.max(30, Math.min(3000, Math.floor(Number(frames) || 300)));
     const info = this.renderer.info;
-    this._fxStatsRun = { frames: n, n: 0, prev: null, cur: null, t0: 0, autoReset: info.autoReset,
+    this._fxStatsRun = { frames: n, n: 0, prev: null, cur: null, t0: 0, start: performance.now(), autoReset: info.autoReset,
       frameMs: new Float64Array(n), loopMs: new Float64Array(n), calls: new Float64Array(n), tris: new Float64Array(n),
-      peak: { beam: 0, tracer: 0, spark: 0, legacy: 0 } };
+      peak: { beam: 0, tracer: 0, spark: 0, legacy: 0 },
+      // CV-2a (diagnoza 7) — długie klatki: co zaszło MIĘDZY dwiema klatkami (zdarzenia gry, nowe programy cieniowania,
+      // przesłane geometrie / tekstury). Odstęp klatki i zbiera to, co działo się po początku klatki i − 1.
+      events: new Map(), offs: [], labels: new Array(n), atMs: new Float64Array(n), curLabel: '', mem: null };
+    const r = this._fxStatsRun;
+    for (const ev of FX_STATS_EVENTS) {
+      const fn = () => r.events.set(ev, (r.events.get(ev) ?? 0) + 1);
+      EventBus.on(ev, fn);
+      r.offs.push(() => EventBus.off(ev, fn));
+    }
     info.autoReset = false;
     console.log(`[fxStats] pomiar ${n} klatek — wynik w konsoli za ok. ${Math.max(1, Math.round(n / 60))} s`);
     return { sampling: true, frames: n, live, last: this._fxStatsLast };
@@ -6650,7 +6663,20 @@ export class ThreeRenderer {
     r.cur = r.prev != null ? now - r.prev : null;   // pierwsza klatka pomiaru nie ma odstępu
     r.prev = now;
     r.t0 = now;
-    this.renderer.info.reset();
+    // Etykieta odstępu: zdarzenia od poprzedniej klatki + przyrost programów / geometrii / tekstur (kompilacja, upload).
+    const info = this.renderer.info;
+    const mem = { prog: info.programs?.length ?? 0, geo: info.memory?.geometries ?? 0, tex: info.memory?.textures ?? 0 };
+    const parts = [];
+    if (r.mem) {
+      if (mem.prog > r.mem.prog) parts.push(`+${mem.prog - r.mem.prog} prog`);
+      if (mem.geo > r.mem.geo) parts.push(`+${mem.geo - r.mem.geo} geo`);
+      if (mem.tex > r.mem.tex) parts.push(`+${mem.tex - r.mem.tex} tex`);
+    }
+    for (const [ev, c] of r.events) parts.push(c > 1 ? `${ev}×${c}` : ev);
+    r.curLabel = parts.join(' · ');
+    r.events.clear();
+    r.mem = mem;
+    info.reset();
   }
 
   _fxStatsEnd() {
@@ -6661,6 +6687,8 @@ export class ThreeRenderer {
       r.loopMs[i] = performance.now() - r.t0;
       r.calls[i] = this.renderer.info.render.calls;
       r.tris[i] = this.renderer.info.render.triangles;
+      r.labels[i] = r.curLabel;
+      r.atMs[i] = r.t0 - r.start;
       const st = this._fxEngine?.stats();
       if (st) {
         r.peak.beam = Math.max(r.peak.beam, st.pools.beam.active);
@@ -6671,21 +6699,27 @@ export class ThreeRenderer {
     }
     if (r.n < r.frames) return;
     this.renderer.info.autoReset = r.autoReset;
+    for (const off of r.offs) off();
     this._fxStatsRun = null;
     const q = (arr, p) => { const v = Array.from(arr).sort((a, b) => a - b); return v[Math.min(v.length - 1, Math.round(p * (v.length - 1)))]; };
     const avg = (arr) => Array.from(arr).reduce((a, b) => a + b, 0) / (arr.length || 1);
     const r2 = (x) => Number(x.toFixed(2));
+    const order = Array.from(r.frameMs.keys()).sort((a, b) => r.frameMs[b] - r.frameMs[a]);
+    const longest = order.slice(0, 5).map((i) => ({ ms: r2(r.frameMs[i]), atMs: Math.round(r.atMs[i]), frame: i, label: r.labels[i] || '—' }));
     const rep = {
       frames: r.frames, frameMsP50: r2(q(r.frameMs, 0.5)), frameMsP95: r2(q(r.frameMs, 0.95)), fps: r2(1000 / avg(r.frameMs)),
+      frameMsMean: r2(avg(r.frameMs)), frameMsMax: r2(Math.max(...r.frameMs)), longFrames: Array.from(r.frameMs).filter((x) => x > 50).length,
       loopMsP50: r2(q(r.loopMs, 0.5)), loopMsP95: r2(q(r.loopMs, 0.95)),
       callsAvg: Math.round(avg(r.calls)), callsMax: Math.max(...r.calls), trisAvg: Math.round(avg(r.tris)), trisMax: Math.max(...r.tris),
-      peakActive: r.peak, pools: this._fxEngine?.stats()?.pools ?? null,
+      peakActive: r.peak, pools: this._fxEngine?.stats()?.pools ?? null, longest,
       cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, pixelRatio: this._pixelRatio,
     };
     this._fxStatsLast = rep;
-    console.log(`[fxStats] ${rep.frames} klatek: klatka p50 ${rep.frameMsP50} ms / p95 ${rep.frameMsP95} ms (${rep.fps} kl./s), `
-      + `JS pętli p50 ${rep.loopMsP50} / p95 ${rep.loopMsP95} ms, wywołania śr. ${rep.callsAvg} (maks. ${rep.callsMax}), `
-      + `trójkąty śr. ${rep.trisAvg}, szczyt pul: wiązki ${r.peak.beam}, smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}`);
+    console.log(`[fxStats] ${rep.frames} klatek: klatka p50 ${rep.frameMsP50} ms / p95 ${rep.frameMsP95} ms / śr. ${rep.frameMsMean} ms `
+      + `/ maks. ${rep.frameMsMax} ms (${rep.fps} kl./s, klatek > 50 ms: ${rep.longFrames}), JS pętli p50 ${rep.loopMsP50} / p95 ${rep.loopMsP95} ms, `
+      + `wywołania śr. ${rep.callsAvg} (maks. ${rep.callsMax}), trójkąty śr. ${rep.trisAvg}, szczyt pul: wiązki ${r.peak.beam}, `
+      + `smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}`);
+    console.table(longest);
     if (rep.pools) console.table(rep.pools);
   }
 
