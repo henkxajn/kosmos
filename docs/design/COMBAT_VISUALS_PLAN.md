@@ -14,7 +14,7 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 400).
-> **Next free finding number: 638** (this plan files **#612–#637**; #637 from CV-2a).
+> **Next free finding number: 646** (this plan files **#612–#645**; #637 from CV-2a; #638–#645 from the CV-2a owner's check).
 
 ---
 
@@ -1036,6 +1036,102 @@ the check `TRACER_CORE = 4`, `MIN_PX = 3`. Decisions: `cvFxEngine` default ON wi
 `feat(CV-2a)` + `docs(CV-2a)`. The owner's observations from the check are diagnosed read-only in §4 CV-2a — findings
 from the check (#638 onward).
 
+#### CV-2a — findings from the owner's check (read-only diagnosis 2026-11-08; #638–#645)
+
+The owner's seven observations from the check, diagnosed without changing game code — the only code is the `fxStats`
+instrument (#644, its own commit). Measurements: headless node probes on the real DSCS / Proximity / Observatory systems
+(scratchpad, outside the repo) and the GATE-S4 fixture in headless Chrome on the RTX 3070 (four `cvBattle` 10v10 back to
+back, window 1584×805; every bus event, Dziennik entry, DOM banner and legacy FX recorded). Line numbers at
+`fc7334d` (the instrument commit).
+
+1. **"Several battles in one place" — #638.** One `cvBattle` 10v10 is exactly ONE DSCS encounter (all 20 ships), one
+   `battle:resolved`, one banner: headless 12 seeds (never two encounters at once, no ship in two), live 4 / 4 / 4. The
+   `_n` suffix is not a fragment — `_makeEncounterId` (`DSCS:1506-1514`) appends `_2`, `_3`, … when the same owner pair
+   already has an active encounter or a battle record with the same 0.01-game-year stamp (runs started from the same
+   paused year); a `_6` means five such encounters / records of the pair in that 0.01 year. Formation: the trigger pair →
+   `startEngagement` gathers every free same-system ship within 0.225 AU of the pair's midpoint (`:241`), EXCEPT under
+   player intent (one ship of the pair has an `engage` order on the other) — then the encounter starts with that pair only
+   (`:229-236`) and the others join one by one through their own `combatRangeEnter` (`_joinEncounter`); two ships already
+   in different encounters never merge (`:186-188`). So normal play does produce several co-located encounters — measured:
+   5v5 with "Engage" on a different target per ship → two concurrent encounters 0.15 AU apart; 5v5 on one target → two
+   sequential encounters (2 ships, then 4). Each encounter has its own engagement ring, card and result.
+   **Proposal — CV-3a:** a presentation "battle" = cluster of co-located encounters (same system, centres within the stage
+   radius) → one stage, one ring / strip (CV-6b), one result; DSCS untouched.
+2. **Result shown many times — #639.** Per battle the result reaches the player THREE times: the banner
+   `showBattleOutcome` with pause (`GameScene:2789` queue → `_tryShowNextBattle` → `BattleIntroModal.js:215`), the Dziennik
+   battle line `log.battleLine` (`GameScene:2867`) and the Dziennik line `log.skirmish` "⚔ Potyczka … bez stanu wojny"
+   (`UIManager:1829-1831` on `war:skirmish`, emitted for every no-war battle at `WarSystem:446`), plus auto-slow. Live, 4
+   battles: banners 4, battle lines 4, skirmish lines 4; no toast, no bell entry, never the pausing intro modal (a DSCS
+   battle shows the banner only). Two co-located encounters double all of it. **A single summary per cluster needs:** the
+   cluster id from #638, the banner after the cluster's LAST `battle:resolved` (dedupe in `_battleQueue`), one Dziennik
+   line with the skirmish note folded in. Step: CV-6b (on CV-3a's cluster id); the skirmish fold alone is a small i18n step.
+3. **"Enemy detected" once per ship — #640** (outside pure VFX — sized only; the owner decides the scope). Three
+   producers, all per ship or per pair:
+   - observatory first sighting → popup "⚔ ENEMY UNIT DETECTED" / "⚠ UNIDENTIFIED CONTACT" with pause, ONE PER SHIP,
+     appended straight to `document.body` — not queued, and each dismiss emits `time:resume` while the others are still
+     open [INF] — plus a Dziennik line "niezidentyfikowany kontakt" (`ObservatorySystem.js:676-697` → `GameScene:3084-3192`).
+     Measured headless: one 10v10 inside a player colony's detection range → 10 popups and 10 lines in the same tick. (In
+     the GATE-S4 fixture the stager's clear spot lay outside colony range → 0; the owner's save evidently did not.)
+   - `vessel:proximityEnter` → "Kontakt sensoryczny: wrogi statek X (d AU)" per (player ship × enemy ship) PAIR, 10-game-
+     year cooldown per pair (`UIManager:1691-1710`). Live: 130 lines per battle in one tick (10 enemies × 13 player ships
+     in sensor range — the 10 test ships and the fixture's 3 home frigates).
+   - `intel:vesselContactChanged` → "🔭 Wykryto obcy statek (KONTAKT): X" per enemy (`GameScene:2878-2895`), 10 per
+     battle; then "Utracono kontakt" per lost ship (`:2897-2912`), 2–10 per battle.
+   Live total over the 4 battles: 520 + 40 + 18 Dziennik lines (587 entries in all — the runtime buffer holds 500 and the
+   save keeps 200, `EventLogSystem.js:17-18`, so the whole earlier history was flushed: Finding 173 class); the bell got
+   one deduplicated entry. **Smallest change:** an aggregation window per system (e.g. one game tick or ~250 ms real) in
+   the three consumers — one popup listing the N new contacts, one line per enemy instead of per pair (or one "N contacts"
+   line), one line listing the N identified ships; about three new i18n keys PL + EN and a keeper. Separate small step
+   outside CV.
+4. **Circles "marking the end of an action" — #641.** They are the wreck explosion rings: `vessel:wrecked`
+   (`ThreeRenderer:1356`) → `_spawnExplosion` (`:6533`) — a flat orange `RingGeometry` 1.75b–2.0b with b = max(0.2, size)
+   ⇒ 0.35–0.40 WU ≈ 22–25 L (the floor, #619), growing for 800 ms; all at once when the battle ends, because kills only
+   materialise in `_finalizeBattle` (#615). Live: the only legacy FX in 4 battles were 55 fireballs + 55 rings, all at
+   the battle ends (13 + 13 in one frame); no movement pulses (`:1625-1627`, `_spawnMovementPulse :7331`), and neither the
+   HUD alert rings (`HudFocusLayer.js:104, :143`) nor the enemy reticle (`_syncEnemyAlertMarkers :7883`) appeared.
+   **Fix — CV-5:** layered explosion sized from the ship, at the killing impact (CV-4 ledger), no flat ring. Earlier
+   stop-gap if wanted: no ring under `cvFxEngine` (one line; the owner's call).
+5. **Engagement ring — #642.** Fixed radius `ENGAGEMENT_RING.RADIUS` 0.285 WU = 0.026 AU (`VesselFxLogic.js:109`) around
+   the encounter point (`planEngagementMarkers :80`; drawn by `_tickEngagementMarkers :7189` / `_upsertEngagementMarker
+   :7156`, called at `ThreeRenderer:4214`), while the 10v10 line-up stands 0.06–0.114 AU (0.66–1.25 WU) from the centre ⇒
+   every ship is outside it. **Retire in CV-3a under `cvStage`** (the stage marks the battle itself): gate
+   `_tickEngagementMarkers` on the flag; `combat_ring_subtle_smoke`, `combat_marker_life_smoke` and
+   `combat_view_scope_smoke` T6e pin the OFF path and stay valid; the code goes in CV-Z.
+6. **Watch / zoom aims below the ships — #643.** Not the 0.3 vs 0 height: the drawn ships sit at y 0.3 and only the
+   first auto-focus frame aims at y 0 (`ThreeRenderer:1577`), corrected the next frame. The cause is the composition
+   shift: `watchTargetAt` / `fitWatchFrame` (`CombatWatchLogic.js:121, :170`) move the orbit target DOWN along the
+   camera's up axis so the ships render above the combat card, and the wheel is a pure dolly toward that target
+   (`ThreeCameraController.wheelZoom :186`). Watch re-fits every frame but always aims at the target computed for the FIT
+   distance (`_updateWatchCamera :7027` → `focusOnSmooth(fit.target…)` `:7047`), also after the wheel has changed the
+   distance (`w.fitDist = false`, `:7036`). Measured (1584×805,
+   φ 63°): auto-focus at 6 WU — target y −0.997, the ships' screen centroid at y 218 against the frame centre 403; Watch
+   fit at 1.816 WU — target y −0.227, 20 / 20 on screen; Watch after zooming to 0.605 WU — target unchanged, 0 / 20 ships
+   on screen. **Fix — CV-3a** (the stage owns where the battle is drawn): pivot on the drawn battle centre at ship height
+   and compose with a screen-space offset (`camera.setViewOffset` or equivalent), so the wheel converges on the ships;
+   minimal alternative — recompute `watchTargetAt` at the current distance every frame in Watch, as auto-focus already
+   does (`:7108`).
+7. **Frame hitches — #644.** The owner's mean of 22.85 fps (43.8 ms) with p50 16.7 / p95 19.7 ms means at most 15 of 300
+   frames held ≈ 8.3 s together — gaps of seconds, not 30–100 ms hitches. Live (RTX 3070, no DevTools, 65 s, 4 battles,
+   3 938 frames): p50 16.6, p95 18.9, p99 20.3, mean 16.72, max 107.8 ms; 3 frames > 50 ms. The long frames: staging —
+   107.8 ms (+3 programs, +4 geometries, +13 textures: first upload of the hull models and textures) and 43.8 ms (+2
+   programs); first salvo — 37.7 ms (+2 programs: the FX engine compiles lazily); end of battle 1 — 99.9 ms (+25
+   geometries, +1 program: 13 explosions, each a new sphere + ring geometry; end of battle 4: 30.7 ms, +17 geometries);
+   one unlabelled 63.2 ms (battle 2, 1 s after play — GC or main-thread work); two long tasks of 98 / 94 ms (staging,
+   battle end). The owner's multi-second gaps were not reproduced; the likely cause is a suspended `requestAnimationFrame`
+   (window covered, tab hidden, DevTools undocked over the game), and the old `fxStats` derived fps from the mean, so one
+   gap dominated. **Instrument** (the only code of this diagnosis, `fc7334d`): `fxStats()` now also reports the mean and max frame,
+   the count over 50 ms and the five longest frames with time and label (bus events since the previous frame + new
+   programs / geometries / textures). **Fixes:** prewarm the FX engine programs when the scene is built (CV-2b); pooled
+   explosions (CV-5); optional hull model / texture prewarm before a battle (CV-1b / CV-2b); the owner re-measures with
+   the game window in front — an unlabelled entry of seconds = suspended rAF, not the game.
+8. **Found while measuring — #645.** The `ProximitySystem` self-heal (`:272-281`) re-emits `vessel:combatRangeEnter` on
+   every pass for ANY pair within combat range of which neither ship is in an encounter — same-faction pairs included,
+   which DSCS rejects at once (`DSCS:142`, `VesselCombatSystem:125`) — and `_tick` runs twice per game tick
+   (`VesselManager:2052, :2073`). Measured headless: a parked group of 5 own ships 0.03 AU apart (no enemy, no battle) →
+   20 emits per tick (10 pairs × 2 passes), 12 000 in 10 s; live 36 439 during the 4 battles (mostly the survivors standing
+   together afterwards). AI guard fleets orbiting a capital do the same [INF]. **Fix:** skip the self-heal / emit for
+   `sameFaction` pairs (and pairs DSCS cannot start). Separate small step outside CV (mechanics hygiene, its own keeper).
+
 ### CV-2b — presets, light pool, cue bus, audio attach (flag `cvPresets`)
 
 | | |
@@ -1157,6 +1253,14 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **635** | ⚪ | **Possible double resolution of one raid** — DSCS on approach and EAH on arrival (DSCS does not exclude ships orbiting a planet) | `DSCS:202-254`; `EnemyAttackHandler.js:41-71` (inference, not run) | CV-8a probe |
 | **636** | ⚪ | **Hygiene bundle**: dead `_resolveFxEndpoint`; `entry._orbiting` written never read and `_calcVisualOrbit*` uncalled; FX kind `trail` without producer; hit-glow disposal frees the shared Sprite geometry (re-upload churn); BattleView3D's unused EventBus import and its own weapon-colour copy; `resolveBattle`'s `Date.now()` seed fallback; `round.year` mixes display and civ years; the CLAUDE.md M2a note lists `resolveDeepSpaceBattle` under `KOSMOS.debug` | `ThreeRenderer.js:6359-6372, :5282, :5329, :6447, :6408`; `BattleView3D.js:19, :30-37`; `BattleSystem.js:108`; `DSCS:617` | CV-2a — under `cvFxEngine` the hit glow is a pooled spark (no per-shot disposal); the legacy churn stays on the OFF path until CV-Z |
 | **637** | ⚪ | **Below 10 fps the presentation clock runs slower than real time.** The 100 ms step cap (no jump after a stalled loop) also clips every frame of a steadily slow machine: at 2.3 fps (SwiftShader) an 8 s battle advanced 1.5 s of presentation time, so effects live longer in real time and trail the rounds. Irrelevant at ≥ 10 fps (the RTX 3070 runs 60). Matters for CV-4's lag budget (D-CV-9, ≤ 1 round) and CV-2b's Low preset: either cap only true gaps (e.g. > 1 s) or let the ledger re-sync to the round anchor (`PresentationClock.anchor`) | `src/renderer/combat/PresentationClock.js` (`PRESENTATION_DT_MAX_MS`); live probe CV-2a | CV-4 / CV-2b |
+| **638** | ⚪ | **One battle, several encounters.** DSCS never merges encounters; under player intent (an `engage` order on the other ship of the trigger pair) an encounter starts with that pair only and the rest join one by one ⇒ normal play produces co-located encounters, each with its own ring, card and result (measured: 5v5 with a target per ship → two concurrent encounters 0.15 AU apart; one target → two sequential, 2 then 4). One `cvBattle` 10v10 = one encounter (12 seeds headless, 4 live); the `_n` id suffix is a 0.01-year stamp collision, not a fragment | `DSCS:186-188, :229-236, :241, :1506-1514`; probes §4 CV-2a findings 1 | **CV-3a** — presentation battle = cluster of co-located encounters (one stage, one ring / strip, one result); DSCS untouched |
+| **639** | 🟠 | **The result is told three times.** Banner with pause + Dziennik battle line + Dziennik skirmish line (every no-war battle) per encounter, plus auto-slow; co-located encounters multiply it (live: 4 battles → 4 banners, 4 battle lines, 4 skirmish lines; no toast, no bell) | `GameScene:2789, :2867`; `BattleIntroModal.js:215`; `UIManager:1829-1831`; `WarSystem:446` | **CV-6b** on the CV-3a cluster id — one banner after the cluster's last `battle:resolved`, one Dziennik line (skirmish note folded in) |
+| **640** | 🔴 | **Contact flood — per ship and per pair.** Observatory first sighting: one pausing popup per ship, not queued (each dismiss resumes the game while the rest stay open [INF]) — 10 popups + 10 lines for one 10v10 in colony range (headless); proximity contact: one line per player × enemy pair — 130 per battle live (13 × 10); contact identified / lost: 10 + 2–10 per battle. 587 Dziennik entries in 4 battles vs a 500-entry runtime buffer (200 saved) ⇒ the earlier history was flushed (Finding 173 class) | `ObservatorySystem.js:676-697` → `GameScene:3084-3192`; `UIManager:1691-1710`; `GameScene:2878-2895, :2897-2912`; `EventLogSystem.js:17-18` | separate small step **outside CV** (owner decides scope): aggregation window per system — one popup / one line listing N contacts; ~3 i18n keys PL + EN + keeper |
+| **641** | ⚪ | **"End-of-action circles" are the wreck explosion rings** — flat orange `RingGeometry` 0.35–0.40 WU (22–25 L, the #619 floor), 800 ms, all at once when the battle ends (#615); live the only legacy FX in 4 battles: 55 fireballs + 55 rings at the battle ends | `ThreeRenderer:1356, :6533` | **CV-5** (layered explosion sized from the ship, at the killing impact); optional stop-gap: no ring under `cvFxEngine` |
+| **642** | ⚪ | **The engagement ring is smaller than the battle** — 0.285 WU (0.026 AU) around the encounter point while a 10v10 line-up stands 0.06–0.114 AU from the centre ⇒ every ship outside it | `VesselFxLogic.js:80, :109`; `ThreeRenderer:4214, :7156, :7189` | **CV-3a** — retired under `cvStage` (gate `_tickEngagementMarkers`; `combat_ring_subtle` / `combat_marker_life` / `combat_view_scope` T6e pin the OFF path); code removed in CV-Z |
+| **643** | 🟠 | **Watch zoom dives under the battle.** The composition shift (orbit target moved down so ships render above the card) is computed for the fit distance and kept after the wheel changes the distance; the wheel dollies toward that target ⇒ Watch at 0.605 WU shows 0 / 20 ships (fit at 1.816 WU: 20 / 20, target y −0.227; auto-focus at 6 WU: target y −0.997, ships at screen y 218 vs centre 403). Not the 0.3 vs 0 height (only the first auto-focus frame aims at y 0) | `CombatWatchLogic.js:121, :170`; `ThreeRenderer:1577, :7027-7050, :7108`; `ThreeCameraController.js:186` | **CV-3a** — pivot on the drawn battle centre at ship height + screen-space composition offset; minimal: recompute `watchTargetAt` at the current distance in Watch |
+| **644** | ⚪ | **Frame hitches are first-use costs; the owner's low mean is a few multi-second gaps.** Live 65 s / 4 battles: p50 16.6, p95 18.9, max 107.8 ms, 3 frames > 50 ms — staging (first hull model / texture upload, +13 textures), first salvo (lazy FX programs, +2), battle end (+25 geometries: one sphere + ring per explosion). The owner's 22.85 fps mean at p95 19.7 needs ≈ 8 s in ≤ 15 frames ⇒ suspended rAF (window covered / DevTools), not reproduced | live probe §4 CV-2a findings 7; instrument `ThreeRenderer.cvFxStats` / `_fxStatsBegin` / `_fxStatsEnd` | instrument delivered (`fc7334d` — `fxStats` max, mean, five longest frames with labels); prewarm FX programs **CV-2b**; pooled explosions **CV-5**; model prewarm CV-1b / CV-2b |
+| **645** | 🟠 | **`combatRangeEnter` flood from the proximity self-heal** — any pair within combat range with no encounter (same faction included, rejected by DSCS at once) is re-emitted on every pass, twice per tick: a parked group of 5 own ships → 20 emits per tick, 12 000 in 10 s (headless); 36 439 during the 4 live battles; AI guard fleets on a capital orbit do the same [INF] | `ProximitySystem.js:272-281, :295`; `VesselManager.js:2052, :2073`; `DSCS:142`; `VesselCombatSystem.js:125` | separate small step **outside CV** — skip the self-heal / emit for `sameFaction` pairs (and pairs DSCS cannot start); own keeper |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
