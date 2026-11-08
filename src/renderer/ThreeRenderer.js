@@ -26,6 +26,8 @@ import { SunShader }         from './SunShader.js';
 import { AtmosphereShader }  from './AtmosphereShader.js';
 import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
 import { rendererRandom } from './RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
+import { PresentationClock } from './combat/PresentationClock.js';   // ARC CV-2a (D-CV-10) — zegar prezentacji: pauza = pauza
+import { FxEngine, LIVE_CV_FX } from './combat/FxEngine.js';         // ARC CV-2a — silnik FX walki na pulach (flaga cvFxEngine)
 import { createSkyStarMaterial } from './StarPointShader.js';   // NIEBO — PSF gwiazd tła
 import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
@@ -317,6 +319,9 @@ export class ThreeRenderer {
     // ⚠ ALIAS LIVE_SKY (nie kopia): _tickSky porównuje go co klatkę z migawką i przelicza niebo przy zmianie
     //   (FILLER_COUNT przebudowuje katalog). Kopia oznaczałaby pokrętło, którego nikt nie czyta.
     this.skyTuning = LIVE_SKY;
+    // ARC CV-2a — ten sam kontrakt dla silnika FX walki: KOSMOS.threeRenderer.cvTuning.BEAM_CORE = 4
+    // ⚠ ALIAS LIVE_CV_FX (nie kopia): `FxEngine.update` przepisuje go co klatkę do uniformów — kopia byłaby pokrętłem bez czytelnika.
+    this.cvTuning = LIVE_CV_FX;
     this._sunCoronaU     = null;  // uniformy ŻYWEJ korony (null przy fladze OFF)
     this._sunStreamerPhase = 0;   // [rad] AKUMULOWANA faza dryfu smug (D-V2u)
     this._sunBreathPhase   = 0;   // [rad] AKUMULOWANA faza oddechu korony
@@ -459,6 +464,12 @@ export class ThreeRenderer {
     // _fxGroup: leniwie tworzony Group (scena może jeszcze nie istnieć w ctor).
     this._activeEffects        = [];
     this._fxGroup              = null;
+    // ARC CV-2a — zegar prezentacji (płynie krokiem klatki tylko, gdy gra biegnie; bez nadrabiania po pauzie — D-CV-10)
+    // i silnik FX walki z pulami (leniwie, przy pierwszej salwie pod flagą `cvFxEngine`); pomiar `KOSMOS.debug.fxStats()`.
+    this._presClock            = new PresentationClock();
+    this._fxEngine             = null;
+    this._fxStatsRun           = null;
+    this._fxStatsLast          = null;
     this._selectedVesselId     = null;       // mirror UIManager (ui:selectionChanged)
     this._factionColorCache    = new Map();  // ownerEmpireId → 0xRRGGBB
     this._engagementMarkers    = new Map();  // encounterId → { mesh, geom, mat } (znacznik starcia, TTL)
@@ -4118,6 +4129,7 @@ export class ThreeRenderer {
       if (!this._renderingEnabled) return;
 
       try {
+        if (this._fxStatsRun) this._fxStatsBegin();   // ARC CV-2a — pomiar fxStats (wyłącznie w trakcie pomiaru)
         const t = this._clock.getElapsedTime();
         this._frameNo++;   // POLISH P2b — klatka pętli renderu (pamięć środka uczestników starcia na jedną klatkę)
 
@@ -4193,6 +4205,7 @@ export class ThreeRenderer {
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
+        this._tickCvFx();                // ARC CV-2a — zegar prezentacji + silnik FX walki (flaga OFF i nic w locie — nic)
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
         this._tickEngagementMarkers(performance.now());
@@ -4223,6 +4236,7 @@ export class ThreeRenderer {
         } finally {
           if (undoFlight) undoFlight();
         }
+        if (this._fxStatsRun) this._fxStatsEnd();     // ARC CV-2a — po pełnej klatce (wszystkie przebiegi composera)
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
       }
@@ -6553,6 +6567,9 @@ export class ThreeRenderer {
     // POLISH P2b (D3, A7) — czasy efektów z czasu realnego rundy oglądanego starcia (`combatRoundMs()`, CP2): salwa trzyma
     // się do następnej rundy zamiast gasnąć po 260 ms (stałe strojone pod dawne 110 ms na rundę).
     const pace = combatFxPace(window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? null);
+    // ARC CV-2a — flaga `cvFxEngine` (czytana w chwili salwy): salwa przez silnik FX z pulami — to samo tempo, ten sam rozrzut
+    // salwy, ta sama bramka mgły wojny. OFF — dzisiejsza ścieżka niżej, co do bitu.
+    if (GAME_CONFIG.FEATURES?.cvFxEngine) { this._cvFxRoundFx(events, pace); return; }
     let stagger = 0;
     for (const ev of events) {
       const aw = this._combatEndpointWorld(ev.attacker, ev.aPos);
@@ -6563,6 +6580,113 @@ export class ThreeRenderer {
     }
     // Znacznik starcia (midpoint) — POLISH P2a (Finding 457): stawia go i zdejmuje `_tickEngagementMarkers` wg STANU
     // starcia (nie salwa z czasem życia — gasł między salwami i w pauzie).
+  }
+
+  // ── ARC CV-2a — silnik FX walki (pule, HDR, zegar prezentacji; flaga `cvFxEngine`) ──────────────────────────────
+  // Salwa jak dziś (`_onCombatRoundFx`): endpointy z `_combatEndpointWorld` (pozycja RYSOWANA, bramka mgły wojny — wróg
+  // niewykryty = brak strzału), rozrzut `(stagger % 8) × staggerMs`, czasy `combatFxPace`. Różnice: wiązka lasera i smuga
+  // pocisku z rdzeniem HDR i podłogą szerokości na ekranie, błysk / pierścień osłony / błysk na modelu jako iskry z pul;
+  // wiek efektu z zegara prezentacji (pauza zatrzymuje wszystko). Pudło — jak dziś: słabsza smuga do celu, bez błysku.
+  _cvFxRoundFx(events, pace) {
+    const eng = this._ensureFxEngine();
+    const vm = window.KOSMOS?.vesselManager;
+    let stagger = 0;
+    for (const ev of events) {
+      const aw = this._combatEndpointWorld(ev.attacker, ev.aPos);
+      const tw = this._combatEndpointWorld(ev.target, ev.tPos);
+      if (!aw || !tw) continue;  // któryś endpoint fog-gated (wróg unknown) → skip, brak przecieku
+      const delayMs = (stagger++ % 8) * pace.staggerMs;
+      const tv = vm?.getVessel?.(ev.target);
+      eng.spawnShot({ a: aw, t: tw, category: ev.category, hit: ev.hit, blockedByShield: ev.blockedByShield, delayMs, pace,
+        attackerId: ev.attacker, targetId: ev.target, targetSize: tv ? vesselTargetSize(tv) : 0 });
+    }
+  }
+
+  // Silnik budowany RAZ (pule = rozgrzewka); potem zero obiektów THREE na strzał. Końce wiązek i iskry idą za sprite'ami
+  // statków (widocznymi) — jak dzisiejsze `_followTracerEnds` / `_followFxTarget`.
+  _ensureFxEngine() {
+    if (this._fxEngine) return this._fxEngine;
+    if (!this._fxGroup) {
+      this._fxGroup = new THREE.Group();
+      this._fxGroup.name = 'fcFxGroup';
+      this.scene.add(this._fxGroup);
+    }
+    this._fxEngine = new FxEngine({
+      THREE, parent: this._fxGroup, logDepth: logDepthOn(), nowMs: this._presClock.nowMs,
+      resolve: (id) => { const e = this._vessels.get(id); return e?.sprite?.visible ? e.sprite.position : null; },
+    });
+    return this._fxEngine;
+  }
+
+  // Raz na klatkę: zegar prezentacji (krok klatki czasu realnego tylko, gdy gra biegnie — pauza = pauza, po wznowieniu bez
+  // nadrabiania) i silnik. Flaga OFF i nic w locie — wyjście (dzisiejsza pętla co do bitu). Tryb galaktyki — efekty ukryte.
+  _tickCvFx() {
+    if (!GAME_CONFIG.FEATURES?.cvFxEngine && !this._fxEngine?.hasActive()) return;
+    const ts = window.KOSMOS?.timeSystem;
+    this._presClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0 });
+    this._fxEngine?.update({ nowMs: this._presClock.nowMs, camera: this.camera, viewportH: window.innerHeight || 1,
+      visible: !this._galaxyActive });
+  }
+
+  // ARC CV-2a — KOSMOS.debug.fxStats(): pomiar N klatek pętli renderu — czas klatki (odstęp między klatkami: to widzi
+  // gracz, z rasteryzacją), czas JS pętli, wywołania i trójkąty renderera zsumowane po wszystkich przebiegach composera —
+  // oraz stan pul silnika FX. Wynik w konsoli po N klatkach; wywołanie w trakcie pomiaru zwraca postęp.
+  cvFxStats(frames = 300) {
+    const live = this._fxEngine?.stats() ?? null;
+    if (this._fxStatsRun) return { sampling: true, done: this._fxStatsRun.n, of: this._fxStatsRun.frames, live, last: this._fxStatsLast };
+    const n = Math.max(30, Math.min(3000, Math.floor(Number(frames) || 300)));
+    const info = this.renderer.info;
+    this._fxStatsRun = { frames: n, n: 0, prev: null, cur: null, t0: 0, autoReset: info.autoReset,
+      frameMs: new Float64Array(n), loopMs: new Float64Array(n), calls: new Float64Array(n), tris: new Float64Array(n),
+      peak: { beam: 0, tracer: 0, spark: 0, legacy: 0 } };
+    info.autoReset = false;
+    console.log(`[fxStats] pomiar ${n} klatek — wynik w konsoli za ok. ${Math.max(1, Math.round(n / 60))} s`);
+    return { sampling: true, frames: n, live, last: this._fxStatsLast };
+  }
+
+  _fxStatsBegin() {
+    const r = this._fxStatsRun;
+    const now = performance.now();
+    r.cur = r.prev != null ? now - r.prev : null;   // pierwsza klatka pomiaru nie ma odstępu
+    r.prev = now;
+    r.t0 = now;
+    this.renderer.info.reset();
+  }
+
+  _fxStatsEnd() {
+    const r = this._fxStatsRun;
+    if (r.cur != null) {
+      const i = r.n++;
+      r.frameMs[i] = r.cur;
+      r.loopMs[i] = performance.now() - r.t0;
+      r.calls[i] = this.renderer.info.render.calls;
+      r.tris[i] = this.renderer.info.render.triangles;
+      const st = this._fxEngine?.stats();
+      if (st) {
+        r.peak.beam = Math.max(r.peak.beam, st.pools.beam.active);
+        r.peak.tracer = Math.max(r.peak.tracer, st.pools.tracer.active);
+        r.peak.spark = Math.max(r.peak.spark, st.pools.spark.active);
+      }
+      r.peak.legacy = Math.max(r.peak.legacy, this._activeEffects.length);
+    }
+    if (r.n < r.frames) return;
+    this.renderer.info.autoReset = r.autoReset;
+    this._fxStatsRun = null;
+    const q = (arr, p) => { const v = Array.from(arr).sort((a, b) => a - b); return v[Math.min(v.length - 1, Math.round(p * (v.length - 1)))]; };
+    const avg = (arr) => Array.from(arr).reduce((a, b) => a + b, 0) / (arr.length || 1);
+    const r2 = (x) => Number(x.toFixed(2));
+    const rep = {
+      frames: r.frames, frameMsP50: r2(q(r.frameMs, 0.5)), frameMsP95: r2(q(r.frameMs, 0.95)), fps: r2(1000 / avg(r.frameMs)),
+      loopMsP50: r2(q(r.loopMs, 0.5)), loopMsP95: r2(q(r.loopMs, 0.95)),
+      callsAvg: Math.round(avg(r.calls)), callsMax: Math.max(...r.calls), trisAvg: Math.round(avg(r.tris)), trisMax: Math.max(...r.tris),
+      peakActive: r.peak, pools: this._fxEngine?.stats()?.pools ?? null,
+      cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, pixelRatio: this._pixelRatio,
+    };
+    this._fxStatsLast = rep;
+    console.log(`[fxStats] ${rep.frames} klatek: klatka p50 ${rep.frameMsP50} ms / p95 ${rep.frameMsP95} ms (${rep.fps} kl./s), `
+      + `JS pętli p50 ${rep.loopMsP50} / p95 ${rep.loopMsP95} ms, wywołania śr. ${rep.callsAvg} (maks. ${rep.callsMax}), `
+      + `trójkąty śr. ${rep.trisAvg}, szczyt pul: wiązki ${r.peak.beam}, smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}`);
+    if (rep.pools) console.table(rep.pools);
   }
 
   // Fix#3 — FX dla bitew orbitalnych/abstrakcyjnych (bez per-rundy combat:roundFx).

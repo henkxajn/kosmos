@@ -527,6 +527,13 @@ export const GAME_CONFIG = {
     // `bodyCardSide` (493), `shipPanelOutliner` (T3), `labelHover` (T1), `labelPin` (T2), `shipPanelHud` (T5), `fleetPanelHud`
     //   (T6): klucze usunięte, kod czyta ścieżkę ON bez rozgałęzień; przełącznikiem warstwy był wyłącznie `hudLabels` (na stałe
     //   ON od ARKUSZA HUD B-Z — wpis wyżej); przestawienie dawnych kluczy w konsoli nie ma już skutku.
+
+    // ── ARC COMBAT VISUALS (docs/design/COMBAT_VISUALS_PLAN.md) — flaga na krok, czytana W CHWILI UŻYCIA ──
+    // `cvFxEngine` (CV-2a) — salwy oglądanego starcia przez silnik FX z pulami (`src/renderer/combat/FxEngine.js`): wiązki
+    //   i smugi HDR z podłogą szerokości na ekranie, zegar prezentacji (pauza zatrzymuje każdy efekt), zero alokacji THREE po
+    //   rozgrzewce; tempo jak dziś (`combatFxPace`). OFF = dzisiejsza ścieżka `_spawnCombatTracer` co do bitu.
+    //   Domyślnie ON od bramki CV-2a (decyzja właściciela 2026-11-08); powrót do dzisiejszej ścieżki: KOSMOS.debug.cvFx(0).
+    cvFxEngine: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

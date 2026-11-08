@@ -266,7 +266,13 @@ ok('chmury: obie ścieżki przez flagę',
    rendCode.includes('logDepthOn() ? withLogDepthVertex(cloudVert)') && rendCode.includes('logDepthOn() ? withLogDepthFragment(cloudFrag)'));
 ok('mgławica: depthTest wyłączany flagą, BEZ chunków (D-D3)',
    rendCode.includes('depthTest: !logDepthOn()') && !rendCode.includes('withLogDepthVertex(nebVert'));
-ok('rdzeń i korona: logDepth przekazywany do OBU fabryk', (rendCode.match(/logDepth: logDepthOn\(\),/g) || []).length === 2);
+// ⚠ PRZECELOWANE w CV-2a (2026-11-08): było „wystąpień `logDepth: logDepthOn(),` w pliku === 2” — licznik po całym
+//   rendererze, więc trzeci, poprawny konsument (silnik FX walki `_ensureFxEngine`) palił pin, który pyta o DWIE fabryki
+//   gwiazdy. Teraz pin czyta argumenty TYCH DWÓCH wywołań; silnik FX pinuje `cv_fx_engine_smoke` (T6a, T9f).
+const sunCallArgs = (name) => { const i = rendCode.indexOf(name + '({'); const j = i < 0 ? -1 : rendCode.indexOf('});', i); return i < 0 || j < 0 ? '' : rendCode.slice(i, j); };
+ok('rdzeń i korona: logDepth przekazywany do OBU fabryk',
+   sunCallArgs('SunShader.createStarCoreMaterial').includes('logDepth: logDepthOn()')
+   && sunCallArgs('SunShader.createStarCoronaMaterial').includes('logDepth: logDepthOn()'));
 ok('powłoka atmosfery: logDepth w OBU gałęziach dayNightAtmosphere',
    rendCode.includes('createLiveAtmosphereMaterial(planet, logDepthOn())') && rendCode.includes('createAtmosphereMaterial(planet, logDepthOn())'));
 for (const [n, pair] of Object.entries({

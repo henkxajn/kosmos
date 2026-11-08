@@ -86,6 +86,7 @@ import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
 import { spawnTestEnemy, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyRaider, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
 import { fleetWarpDebugHelpers } from '../debug/FleetWarpDebug.js';
+import { cvBattleDebugHelpers } from '../debug/CvBattleStager.js';   // ARC CV-2a — cvBattle / cvFx / fxStats (konsola, bez cudzysłowów)
 import { loadCombatSandbox, sandboxInfo, sandboxResetPositions, sandboxSpawnMoreEnemies } from '../scenarios/CombatSandbox.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
@@ -592,6 +593,9 @@ export class GameScene {
     window.KOSMOS.debug = {
       // KOSMOS.debug.fleetWarpRig / Plan / Issue / State / Divert / AI — pomocniki bramki skoku floty (bez cudzysłowów; docs/design/GALAXY_G4_GATE_CHECKLIST.md).
       ...fleetWarpDebugHelpers(),
+      // ARC CV-2a — KOSMOS.debug.cvBattle() (10 na 10 w oglądanym układzie, gra na pauzie, ziarno stałe), cvFx(1) / cvFx(0)
+      // (flaga silnika FX z pulami), fxStats() (czas klatki p50 / p95, wywołania renderera, pule) — COMBAT_VISUALS_PLAN.md §4 CV-2a.
+      ...cvBattleDebugHelpers({ getRenderer: () => this.threeRenderer, getSaveSystem: () => this.saveSystem }),
       // KOSMOS.debug.sunInfo()      — stan warstwy Sun 2.0 dla live gate'u (S1).
       // KOSMOS.debug.sunInfo(0.693) — to samo, ale z ZMIERZONĄ średnią mapy emission
       //   klasy M (K 0.782 · G 0.907 · F 1.012), czyli brzegi wygaszania takie, jakich

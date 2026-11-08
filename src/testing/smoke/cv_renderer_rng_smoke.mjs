@@ -308,6 +308,10 @@ const encActive = () => dscs.listActive().length > 0;
 /** Przebieg: 'off' (FX wyłączone), 'on' (prawdziwe metody FX), 'control' (FX + emulacja dawnego UUID). */
 function run(mode) {
   const flag = GAME_CONFIG.FEATURES.fcCombatFx;
+  // CV-2a — ten keeper pinuje DZISIEJSZĄ ścieżkę FX (metody `_spawnCombatTracer` / `_spawnFx` …), czyli ścieżkę OFF flagi
+  // `cvFxEngine` (od CV-2a domyślnie ON). Neutralność silnika z pulami wobec strumienia gry pinuje `cv_fx_results_smoke`.
+  const cvFlag = GAME_CONFIG.FEATURES.cvFxEngine;
+  GAME_CONFIG.FEATURES.cvFxEngine = false;
   reseed('cv0b-battle'); reseedRendererRandom();
   let R = null;
   const arrivals = [];
@@ -335,6 +339,7 @@ function run(mode) {
     return { sig: { battles: rec.battles, wrecks: rec.wrecks }, slots };
   });
   GAME_CONFIG.FEATURES.fcCombatFx = flag;
+  GAME_CONFIG.FEATURES.cvFxEngine = cvFlag;
   return { ...out.result, draws: out.draws, R };
 }
 
