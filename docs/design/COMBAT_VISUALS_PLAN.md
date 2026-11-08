@@ -1,7 +1,8 @@
 # COMBAT_VISUALS_PLAN — one battle scene with semantic zoom (arc CV)
 
-> **Status: Phase A (CV-0) — read-only audit + plan DRAFT, 2026-11-08. NOT SIGNED: the owner signs §3 (column
-> "Signed") before the first code step (CV-0b).**
+> **Status: Phase A (CV-0) — read-only audit + plan, SIGNED by the owner 2026-11-08 (§3 column "Signed"; conditions in
+> §3.1; the cut reordered for an early visual payoff, §4). Phase A commits: `c855298 docs(CV A)` (plan) and
+> `docs(CV sign)` (signatures). Next: CV-0b.**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -553,8 +554,8 @@ parameter fitted on the laser anchor; it lands every park and every full range i
 
 Compression factors 9.3× / 12.2× / 14.5×. Applied **radially about the encounter midpoint** (static,
 `DSCS:219-222, :382`): `g(r) = G(2r) / 2`, so a symmetric duel lands exactly on the table; pairs not symmetric about the
-midpoint keep their order approximately (measured in CV-3a's probe on real 10v10 scenes; if inversions show, D-CV-2 (b)
-is the fallback). Intra-side spacing compresses too ⇒ a **deconfliction lattice** spreads stacked or near-stacked ships
+midpoint CAN be mis-banded, so the radial map is only the seed — the guard of §3.1-2 (pair-faithful relaxation, a
+per-pair band check every update, uniform-scale fallback) makes every pair band-consistent. Intra-side spacing compresses too ⇒ a **deconfliction lattice** spreads stacked or near-stacked ships
 of one side (fleets often arrive on one point) at ≥ 1.6 L, deterministic by vessel id order.
 
 **Blend (D-CV-3 — semantic zoom).** The stage is not a mode: `stageBlend = smoothstep(4, 24, px_L)` where `px_L` is the
@@ -613,7 +614,8 @@ retro flares, bow-on. `hold_position`: amplitude × 0.3, no strafing, steady bro
 | missile | salvo launch → curved trail (seeded control point), flight 0.5–0.9 R (may spill into the next round) |
 
 Presented HP / shield drop at each IMPACT by the event's values; after the last impact of a round the presented state
-equals the logical round-end state (asserted by a keeper). **Presentation lag ≤ 1 round (D-CV-9).** Misses fly past at a
+equals the logical round-end state (asserted by a keeper). **Presentation lag ≤ 1 round (D-CV-9)** — only a hero shot
+may exceed it, within the caps of §3.1-3. Misses fly past at a
 seeded offset and continue beyond the target. Shield hit ⇒ fresnel bubble with a ripple at the hit point (uniform array of
 ripple origins / ages); hull hit ⇒ sparks + brief heat glow (scorch decals on High only). Weapon colours stay semantic
 data (laser cyan, kinetic amber, missile red — `CombatFxConfig.js:10-21`) but rendered HDR so beam cores bloom.
@@ -646,8 +648,8 @@ Retired behind the flag: the card, 3D HP bars, the ring mesh, hit glow sprites.
 
 Optional chip, default OFF (D-CV-23). Deterministic shot schedule from the encounter seed and ledger events: establishing
 (wide orbit of the stage, 2–3 s) → follow flagship (largest player hull, else the most engaged) → hero shot on a big kill
-(destroyer or larger, or the last ship): presentation-only slow-down ≤ 0.35× for ≤ 0.8 s, lag recovered at ≤ 1.3× inside
-the one-round budget (D-CV-24 — round pace untouched) → back to follow. Hit shake on near impacts (presentation only).
+(destroyer or larger, or the last ship): presentation-only slow-down 0.35× for ≤ 0.8 s, extra lag capped at 1.5 R,
+catch-up at 1.25× afterwards (§3.1-3 — round pace untouched) → back to follow. Hit shake on near impacts (presentation only).
 Framing reuses `fitWatchFrame` with a **9:16 safe rect** when the promo overlay is on (crop guide, darkened outside).
 Any camera input (drag, wheel, keys, outliner focus) takes control back; the chip shows "Director (paused)". Pause
 freezes the director.
@@ -779,42 +781,88 @@ makes Live Server reload the page.
 
 | D | [step] | Question → options | Recommendation | Consequence | Signed |
 |---|---|---|---|---|---|
-| **D-CV-1** | CV-0b | Renderer randomness vs the game stream → (a) patch vendored `generateUUID` (`three.core.js:312-317`) to a private PRNG + one renderer RNG for the 12 direct calls · (b) accept — F1 provable only for DSCS maths · (c) take world systems off `Math.random` | **(a)** | a 5-line patch in a vendored file (re-apply on any three upgrade; a keeper catches it); afterwards any renderer allocation is neutral to the world by construction | |
-| **D-CV-2** | CV-3a | Stage law → (a) power law on pair gaps, α 0.7525, k 0.0913, radial about the midpoint · (b) piecewise-linear through band anchors · (c) uniform scale | **(a)** | one knob (α) meets all three windows (§2.2); pairwise order exact for symmetric pairs, approximate otherwise (probe in CV-3a) | |
-| **D-CV-3** | CV-3a | Stage trigger → (a) semantic-zoom blend for every in-view battle (`px_L` 4 → 24) · (b) only in Watch | **(a)** | zooming into any battle stages it; Watch simply lands in cinema range | |
-| **D-CV-4** | CV-3a | Body-pinned participants → (a) presentation shell around the body · (b) no stage for body-anchored battles | **(a)** | ships never drawn inside a planet; #626 gets a defined look | |
-| **D-CV-5** | CV-3a | Empty-space clicks inside a staged battle → (a) invert through the stage law · (b) refuse with a toast · (c) today (unstaged point) | **(a)** | a move order goes where the player sees | |
-| **D-CV-6** | CV-3b | Envelope + invariant → windows L [3,4] K [7,9] M [12,15]; pair gap strictly between neighbouring windows; E ≤ 1 L (frigate 1.0, destroyer 0.7, battleship 0.4); mostly tangential | **as stated** | "never into another apparent band" becomes a testable property | |
-| **D-CV-7** | CV-3b | Doctrine visibility → (a) posture only + #631 to the owner as a mechanics question · (b) fake distance behaviour | **(a)** | stance visible, no lie about distance | |
-| **D-CV-8** | CV-4 | FX data → (a) add `round`, `weapon`, `side`, `dmg`, `hpAfter`, `shieldAfter`, `killed` to the `combat:roundFx` payload only · (b) renderer reads `encounter.timeline` / `vesselStates` (private, live) | **(a)** | the one DSCS edit of the arc — payload-only, save and `round.events` byte-identical (keeper) | |
-| **D-CV-9** | CV-4 | Presentation lag → ≤ 1 round; HP, shield and kill at IMPACT; wreck look and explosion held; late `vessel:wrecked` deduped | **yes** | the battle reads cause → effect; logic stays authoritative | |
-| **D-CV-10** | CV-2a | Presentation clock → (a) real dt while running (glide pattern), `simClockMs` as phase reference · (b) raw `simClockMs` | **(a)** | smooth and frozen in pause (#616) | |
-| **D-CV-11** | CV-1a | Canonical model frame → (a) bow +Z, up +Y via a per-slot quaternion · (b) keep bow −X | **(a)** | `lookAt` faces targets; `nonwarp_large_science` fixed through its hardpoints | |
-| **D-CV-12** | CV-1a | Key-colour emission → (a) runtime mask chunk with hardpoint params · (b) baked mask texture | **(a)**, (b) as fallback | live tuning = game; no extra texture | |
-| **D-CV-13** | CV-1b | Normalizer stack → (a) node + gltf-transform + sharp (declared, `npm install`) · (b) zero-dependency · (c) in-browser | **(a)** | dev-only dependencies; runtime CDN rule untouched | |
-| **D-CV-14** | CV-1b | Triangle reduction → (a) warn only (Meshy polycount) · (b) automatic simplify (new dev dependency `meshoptimizer`) | **(a)** | no new dependency now | |
-| **D-CV-15** | CV-1b | Textures → (a) 2K master, base colour lossless, normal WebP / PNG, generated 1K variant · (b) KTX2 · (c) 1K only | **(a)** | cyan mask stays crisp; 1K for Medium / Low; normal maps are today's weight (67 %) | |
-| **D-CV-16** | CV-1c | Workshop → (a) `tools/model-workshop/` page, FS Access API save, state survives the Live Server reload · (b) in-game debug overlay · (c) download only | **(a)** | no game coupling; same chunk as the game | |
-| **D-CV-17** | CV-2b | Presets → table §2.10, per machine (localStorage), default from the renderer string, auto-throttle secondary only, ☰ row | **yes** | presets own pixel ratio and bloom — the big levers | |
-| **D-CV-18** | CV-2b | Lights → fixed pool High 4 / Medium 2 / Low 0, idle at 0 | **yes** | no shader recompiles mid-battle | |
-| **D-CV-19** | CV-2b | Audio attach → (a) `AudioSystem.attach()` with ONLY the cue no-op listener (no audible change) · (b) re-attach everything (fixes the dead ☰ toggles, re-enables procedural SFX — audible) | **(a)**, #613 as a separate one-line follow-up | F8 stays strict | |
-| **D-CV-20** | CV-6a | Tactical layer tech → (a) HUD 2D sublayer · (b) 3D sprites | **(a)** | palette roles, crisp at any zoom, idle when nothing moves | |
-| **D-CV-21** | CV-6b | Card replacement → (a) compact combat strip, `MapInsets`-aware, `getPanelRect()` kept · (b) restyled card | **(a)** | #629 closed by construction | |
-| **D-CV-22** | CV-6a | Combat palette → roles only (own primary, enemy alert, neutral foreign, bands dim); weapon colours stay semantic data, HDR | **yes** | themes recolour the tactical layer | |
-| **D-CV-23** | CV-7 | Director → default OFF, chip, input takes control back; 9:16 overlay separate | **yes** | the player always owns the camera | |
-| **D-CV-24** | CV-7 | Hero slow-down → presentation-only warp ≤ 0.35× for ≤ 0.8 s, recovered ≤ 1.3× within one round | **yes** | round pace untouched (F1) | |
-| **D-CV-25** | CV-8a | Orbital replay source → (a) BattleSystem timeline + sibling `fx` key on the event · (b) synthesis from `battleId` only | **(a)** | faithful pacing; result object untouched | |
-| **D-CV-26** | CV-8a | Hangar-docked defenders (counted, no sprite) → (a) fire from planetary batteries · (b) temporary scrambled sprites | **(a)** | no fake ships | |
-| **D-CV-27** | CV-8b | Path A → (a) retire intro modal + BattleView3D; Watch = camera to the stage; banner after the replay; auto-slow · (b) keep the modal | **(a)** | one battle scene for every path | |
-| **D-CV-28** | all | Protocol → F11 light loop; flag per step; keepers a–f only; owner views live with `cvBattle` at 1600×1041 on the RTX 3070 (a GPU CDP clip optional); STOP before every commit | **yes** | no contact sheets for 3D combat — live viewing is the gate | |
+| **D-CV-1** | CV-0b | Renderer randomness vs the game stream → (a) patch vendored `generateUUID` (`three.core.js:312-317`) to a private PRNG + one renderer RNG for the 12 direct calls · (b) accept — F1 provable only for DSCS maths · (c) take world systems off `Math.random` | **(a)** | a 5-line patch in a vendored file (re-apply on any three upgrade; a keeper catches it); afterwards any renderer allocation is neutral to the world by construction | ✅ 2026-11-08 (a) + condition §3.1-1 |
+| **D-CV-2** | CV-3a | Stage law → (a) power law on pair gaps, α 0.7525, k 0.0913, radial about the midpoint · (b) piecewise-linear through band anchors · (c) uniform scale | **(a)** | one knob (α) meets all three windows (§2.2); pairwise order exact for symmetric pairs, approximate otherwise (probe in CV-3a) | ✅ 2026-11-08 (a) + condition §3.1-2 |
+| **D-CV-3** | CV-3a | Stage trigger → (a) semantic-zoom blend for every in-view battle (`px_L` 4 → 24) · (b) only in Watch | **(a)** | zooming into any battle stages it; Watch simply lands in cinema range | ✅ 2026-11-08 as recommended |
+| **D-CV-4** | CV-3a | Body-pinned participants → (a) presentation shell around the body · (b) no stage for body-anchored battles | **(a)** | ships never drawn inside a planet; #626 gets a defined look | ✅ 2026-11-08 as recommended |
+| **D-CV-5** | CV-3a | Empty-space clicks inside a staged battle → (a) invert through the stage law · (b) refuse with a toast · (c) today (unstaged point) | **(a)** | a move order goes where the player sees | ✅ 2026-11-08 as recommended |
+| **D-CV-6** | CV-3b | Envelope + invariant → windows L [3,4] K [7,9] M [12,15]; pair gap strictly between neighbouring windows; E ≤ 1 L (frigate 1.0, destroyer 0.7, battleship 0.4); mostly tangential | **as stated** | "never into another apparent band" becomes a testable property | ✅ 2026-11-08 as recommended |
+| **D-CV-7** | CV-3b | Doctrine visibility → (a) posture only + #631 to the owner as a mechanics question · (b) fake distance behaviour | **(a)** | stance visible, no lie about distance | ✅ 2026-11-08 as recommended |
+| **D-CV-8** | CV-4 | FX data → (a) add `round`, `weapon`, `side`, `dmg`, `hpAfter`, `shieldAfter`, `killed` to the `combat:roundFx` payload only · (b) renderer reads `encounter.timeline` / `vesselStates` (private, live) | **(a)** | the one DSCS edit of the arc — payload-only, save and `round.events` byte-identical (keeper) | ✅ 2026-11-08 as recommended |
+| **D-CV-9** | CV-4 | Presentation lag → ≤ 1 round; HP, shield and kill at IMPACT; wreck look and explosion held; late `vessel:wrecked` deduped | **yes** | the battle reads cause → effect; logic stays authoritative | ✅ 2026-11-08 — reconciled with D-CV-24, numbers §3.1-3 |
+| **D-CV-10** | CV-2a | Presentation clock → (a) real dt while running (glide pattern), `simClockMs` as phase reference · (b) raw `simClockMs` | **(a)** | smooth and frozen in pause (#616) | ✅ 2026-11-08 as recommended |
+| **D-CV-11** | CV-1a | Canonical model frame → (a) bow +Z, up +Y via a per-slot quaternion · (b) keep bow −X | **(a)** | `lookAt` faces targets; `nonwarp_large_science` fixed through its hardpoints | ✅ 2026-11-08 as recommended |
+| **D-CV-12** | CV-1a | Key-colour emission → (a) runtime mask chunk with hardpoint params · (b) baked mask texture | **(a)**, (b) as fallback | live tuning = game; no extra texture | ✅ 2026-11-08 as recommended |
+| **D-CV-13** | CV-1b | Normalizer stack → (a) node + gltf-transform + sharp (declared, `npm install`) · (b) zero-dependency · (c) in-browser | **(a)** | dev-only dependencies; runtime CDN rule untouched | ✅ 2026-11-08 as recommended |
+| **D-CV-14** | CV-1b | Triangle reduction → (a) warn only (Meshy polycount) · (b) automatic simplify (new dev dependency `meshoptimizer`) | **(a)** | no new dependency now | ✅ 2026-11-08 as recommended |
+| **D-CV-15** | CV-1b | Textures → (a) 2K master, base colour lossless, normal WebP / PNG, generated 1K variant · (b) KTX2 · (c) 1K only | **(a)** | cyan mask stays crisp; 1K for Medium / Low; normal maps are today's weight (67 %) | ✅ 2026-11-08 (a) + condition §3.1-4 |
+| **D-CV-16** | CV-1c | Workshop → (a) `tools/model-workshop/` page, FS Access API save, state survives the Live Server reload · (b) in-game debug overlay · (c) download only | **(a)** | no game coupling; same chunk as the game | ✅ 2026-11-08 as recommended |
+| **D-CV-17** | CV-2b | Presets → table §2.10, per machine (localStorage), default from the renderer string, auto-throttle secondary only, ☰ row | **yes** | presets own pixel ratio and bloom — the big levers | ✅ 2026-11-08 as recommended |
+| **D-CV-18** | CV-2b | Lights → fixed pool High 4 / Medium 2 / Low 0, idle at 0 | **yes** | no shader recompiles mid-battle | ✅ 2026-11-08 as recommended |
+| **D-CV-19** | CV-2b | Audio attach → (a) `AudioSystem.attach()` with ONLY the cue no-op listener (no audible change) · (b) re-attach everything (fixes the dead ☰ toggles, re-enables procedural SFX — audible) | **(a)**, #613 as a separate one-line follow-up | F8 stays strict | ✅ 2026-11-08 (a) + condition §3.1-5 |
+| **D-CV-20** | CV-6a | Tactical layer tech → (a) HUD 2D sublayer · (b) 3D sprites | **(a)** | palette roles, crisp at any zoom, idle when nothing moves | ✅ 2026-11-08 as recommended |
+| **D-CV-21** | CV-6b | Card replacement → (a) compact combat strip, `MapInsets`-aware, `getPanelRect()` kept · (b) restyled card | **(a)** | #629 closed by construction | ✅ 2026-11-08 as recommended |
+| **D-CV-22** | CV-6a | Combat palette → roles only (own primary, enemy alert, neutral foreign, bands dim); weapon colours stay semantic data, HDR | **yes** | themes recolour the tactical layer | ✅ 2026-11-08 as recommended |
+| **D-CV-23** | CV-7 | Director → default OFF, chip, input takes control back; 9:16 overlay separate | **yes** | the player always owns the camera | ✅ 2026-11-08 as recommended |
+| **D-CV-24** | CV-7 | Hero slow-down → presentation-only warp ≤ 0.35× for ≤ 0.8 s, recovered ≤ 1.3× within one round | **yes** | round pace untouched (F1) | ✅ 2026-11-08 — reconciled with D-CV-9; §3.1-3 numbers supersede this row |
+| **D-CV-25** | CV-8a | Orbital replay source → (a) BattleSystem timeline + sibling `fx` key on the event · (b) synthesis from `battleId` only | **(a)** | faithful pacing; result object untouched | ✅ 2026-11-08 as recommended |
+| **D-CV-26** | CV-8a | Hangar-docked defenders (counted, no sprite) → (a) fire from planetary batteries · (b) temporary scrambled sprites | **(a)** | no fake ships | ✅ 2026-11-08 as recommended |
+| **D-CV-27** | CV-8b | Path A → (a) retire intro modal + BattleView3D; Watch = camera to the stage; banner after the replay; auto-slow · (b) keep the modal | **(a)** | one battle scene for every path | ✅ 2026-11-08 (a) + condition §3.1-6 |
+| **D-CV-28** | all | Protocol → F11 light loop; flag per step; keepers a–f only; owner views live with `cvBattle` at 1600×1041 on the RTX 3070 (a GPU CDP clip optional); STOP before every commit | **yes** | no contact sheets for 3D combat — live viewing is the gate | ✅ 2026-11-08 as recommended |
+
+### §3.1 Owner's conditions (signed 2026-11-08)
+
+1. **D-CV-1 (a).** CV-0b shifts the game's random stream ONCE: after the patch THREE objects and visual effects no
+   longer draw from `Math.random`, so the same save evolves differently than before the patch — removal of
+   contamination, not a mechanic change (the browser stream is unseeded anyway; keepers run on the seeded stream of
+   `headless/env.js`). Every keeper that pins a `Math.random`-dependent outcome is listed and re-tuned in the CV-0b
+   record (§4).
+2. **D-CV-2 (a).** The band-invariant keeper checks EVERY PAIR of combatants — apparent band of the drawn gap == band of
+   the logical gap (bands laser / kinetic / missile / beyond, edges `G(range)`) — never the distance from the centre.
+   **The radial law can mis-band asymmetric pairs:** a pair on one side of the midpoint, far out, is compressed by the
+   local slope `g′(r) = α·g(r)/r` instead of `G(d)` (allies close together far from the centre fall into a "closer"
+   band; off-axis attacker–target pairs drift too). **Guard (CV-3a):** after the radial seed a deterministic
+   pair-faithful relaxation (a few Gauss–Seidel passes on pair gaps toward `G(d)`, warm-started from the previous update,
+   plus the deconfliction floor) runs on every update; an O(N²) band check (≤ 190 pairs at 10v10) verifies every pair;
+   if any pair is still mis-banded after K passes, that encounter falls back to a uniform similarity scale (exact pair
+   order, windows only approximate) and `fxStats` reports it. The keeper asserts zero mis-banded pairs after the guard on
+   random and recorded 10v10 configurations.
+3. **D-CV-9 + D-CV-24 reconciled.** Normal presentation lag ≤ 1 round (R). A hero shot is the ONLY state allowed to
+   exceed it: presentation speed 0.35× for at most 0.8 s real ⇒ extra lag 0.52 s = 1.3 R at R = 400; hard cap on the
+   extra lag **1.5 R** (the shot ends early when reached); afterwards the presentation catches up at **1.25×** (0.52 s
+   recovered in ≈ 2.1 s); no new hero shot until the lag is back under 1 R; pause freezes both clocks; if the battle ends
+   during a hero shot or the catch-up, the presentation plays out the remaining events at 1.25× after the logical end.
+   Round pace (`combatRoundMs`, the combat grid) untouched.
+4. **D-CV-15 (a).** The normalizer compresses the NORMAL maps first (26 PNG normal maps = 63.8 MiB = 67 % of the ship
+   folder): WebP via `EXT_texture_webp` (GLTFLoader r171 supports it), quality chosen on a contact sheet against the PNG;
+   then base colour (lossless), metallic-roughness, emissive. A one-off pass over the 27 legacy files belongs to CV-1b.
+5. **D-CV-19 (a).** The no-op cue listener subscribes AFTER `EventBus.clear()` at game start (`GameScene.start` →
+   `AudioSystem.attach()` → cue listener only); logic keeper: after a simulated game start (`EventBus.clear()` + attach)
+   the listener is subscribed exactly once and receives a cue. **#613** (☰ audio toggles) stays a separate fix OUTSIDE
+   CV.
+6. **D-CV-27 (a).** When the intro modal and BattleView3D retire, the orbital battle outcome stays visible: the combat
+   strip shows a result row after the replay and the Dziennik keeps `log.battleLine` (today's narrator in `GameScene`);
+   CV-8b re-checks **Finding 157** (auto-slow classifies the player side with `isPlayerParticipant` on every orbital
+   path).
+7. **#631** (doctrines barely exist mechanically) — NOT in CV; registered as a candidate future **MECHANICS** arc; the
+   owner decides later.
 
 ---
 
 ## §4 The cut (each step sized for ONE session; split where marked)
 
-Order: **CV-0b → CV-1a → CV-1b → CV-1c → CV-2a → CV-2b → CV-3a → CV-3b → CV-4 (a/b) → CV-5 → CV-6a → CV-6b → CV-7 →
-CV-8a → CV-8b → CV-Z** (≈ 16–17 sessions). CV-0b goes first because CV-1a already changes how many THREE objects exist
-(material clones, light sprites). The model steps come early so the owner can produce models while the engine is built.
+Order (owner, 2026-11-08 — early visual payoff): **CV-0b → CV-2a → CV-3a → CV-3b → CV-1a → CV-1b → CV-1c → CV-2b →
+CV-4 (a/b) → CV-5 → CV-6a → CV-6b → CV-7 → CV-8a → CV-8b → CV-Z** (≈ 16–17 sessions). CV-0b stays first: every later
+step changes how many THREE objects exist. The step sections below keep their numbers; read them in this order.
+
+**Dependencies on CV-1 and the shims** (CV-2a, CV-3a and CV-3b now run before CV-1a):
+- CV-2a (FX engine, stager) — none: endpoints are drawn positions; muzzle hardpoints arrive with CV-4.
+- CV-3a (stage) — none: the ship length L comes from `VESSEL_TARGET_SIZE` (`VesselModelResolver.js:60-66`).
+- CV-3b (choreography) — **the bow axis**: facing a target needs each model's bow, and models are not rotated today.
+  Shim: `legacyBowSign(modelPath)` in `ChoreographyLogic` — bow along local **−X** with ONE exception,
+  `nonwarp_large_science` (+X, #621); the same shim moves that slot's exhaust cone to `box.min.x` once engines are lit in
+  combat. CV-1a replaces the shim with the hardpoints frame (canonical bow +Z) and deletes it; until then a keeper pins
+  that the exception list has exactly one entry.
 
 ### CV-0b — renderer randomness off the game stream (D-CV-1)
 
@@ -837,7 +885,7 @@ CV-8a → CV-8b → CV-Z** (≈ 16–17 sessions). CV-0b goes first because CV-1
 
 | | |
 |---|---|
-| **Files** | NEW `tools/ship-models/normalize-ship.mjs` + `tools/ship-models/lib/*.mjs` (pure functions) · `.gitignore` (`assets/models/ships/incoming/`, `_archive/`) · `README_modele_statkow.md` (the owner's model standard F10 + pipeline) |
+| **Files** | NEW `tools/ship-models/normalize-ship.mjs` + `tools/ship-models/lib/*.mjs` (pure functions) · `.gitignore` (`assets/models/ships/incoming/`, `_archive/`) · `README_modele_statkow.md` (the owner's model standard F10 + pipeline) · **normal maps first** (§3.1-4): WebP normal maps, then lossless base colour; a one-off pass over the 27 legacy files with a before / after contact sheet |
 | **Keepers (logic)** | pure functions on synthetic in-memory meshes: bbox / centre / scale, bow guess by 8 %-slice density, hardpoints MERGE keeps clicked points, report fields (cyan %, black %, tris) |
 | **Owner looks at** | drops one Meshy GLB in `incoming/`, runs the CLI, reads the report, sees the slot in the game |
 
@@ -862,7 +910,7 @@ CV-8a → CV-8b → CV-Z** (≈ 16–17 sessions). CV-0b goes first because CV-1
 | | |
 |---|---|
 | **Files** | NEW `src/data/CombatFxPresets.js`, `src/data/CombatCueData.js`, `LightPool.js`, `QualityPreset.js` (detect, localStorage, auto-throttle) · `AudioSystem.attach()` + `_onCombatCue` · `GameScene` calls attach after `EventBus.clear()` · ☰ "Graphics" row · i18n PL + EN |
-| **Keepers (logic)** | presets ordered (Low ≤ Medium ≤ High for every budget); degradation never removes shots; cue table covers every (kind, weapon / size) the engine emits and resolves to `null` today; attach survives `EventBus.clear()` (execution); localStorage wrapper tolerant of throws |
+| **Keepers (logic)** | presets ordered (Low ≤ Medium ≤ High for every budget); degradation never removes shots; cue table covers every (kind, weapon / size) the engine emits and resolves to `null` today; after a simulated game start (`EventBus.clear()` + `attach()`) the cue listener is subscribed exactly once and receives a cue (§3.1-5); localStorage wrapper tolerant of throws |
 | **Owner looks at** | switches High / Medium / Low during a 10v10 — fps and look; Low stays readable (all shots visible) |
 
 ### CV-3a — the battle stage (flag `cvStage`)
@@ -870,7 +918,7 @@ CV-8a → CV-8b → CV-Z** (≈ 16–17 sessions). CV-0b goes first because CV-1
 | | |
 |---|---|
 | **Files** | NEW `BattleStageLogic.js`, `SemanticZoomLogic.js` · `ThreeRenderer` single write path `_stagePlace`, ten reads → `getVesselWorldPosition`, `stageWorldOf` export · body shell (#626) · click inversion at `GameScene.js:6436, :6343, :6073` · HUD radar ring hidden while staged |
-| **Keepers (logic)** | (b) the renderer never writes logical positions — source tripwire over `ThreeRenderer.js` and `src/renderer/combat/*` (no assignment to a vessel's `position`), plus execution of the pure modules on frozen vessel objects; stage law monotonic, continuous, `G(d) ≤ d`, park order laser < kinetic < missile; inverse round-trip; blend monotonic in `px_L`; shell never inside the body. Probe (not a keeper): pairwise-order inversions on real 10v10 scenes |
+| **Keepers (logic)** | (b) the renderer never writes logical positions — source tripwire over `ThreeRenderer.js` and `src/renderer/combat/*` (no assignment to a vessel's `position`), plus execution of the pure modules on frozen vessel objects; **every pair of combatants band-consistent after the guard** (§3.1-2: apparent band of the drawn gap == band of the logical gap, random + recorded 10v10 configurations, zero mis-banded pairs; a control configuration mis-bands under the bare radial law, so the guard is proven necessary); stage law monotonic, continuous, `G(d) ≤ d`; inverse round-trip; blend monotonic in `px_L`; shell never inside the body |
 | **Owner looks at** | zooms into a 10v10: ships gather; near zoom gaps ~3–4 / 7–9 / 12–15 L; picking, labels, brackets follow; a right-click move inside the battle goes under the cursor; zoom out → true positions |
 
 ### CV-3b — choreography (flag `cvChoreo`)
@@ -934,8 +982,8 @@ CV-8a → CV-8b → CV-Z** (≈ 16–17 sessions). CV-0b goes first because CV-1
 | | |
 |---|---|
 | **Files** | remove `BattleView3D.js`, the intro flow of `BattleIntroModal.js` (banner may stay), `_onBattleResolvedFx` / `_spawnBattleBurst` / the `'burst'` marker, `suspend` / `resume` if unused, the localStorage preference; re-aim the keepers listed in Q3; lower the `check-i18n` baseline; close `deferred-live-gates.md` ENTRY 4 |
-| **Keepers (logic)** | absence pins (no `BattleView3D` import, no burst producer); T4 frame proof |
-| **Owner looks at** | a Path A battle in view → the stage replay; out of view → the banner |
+| **Keepers (logic)** | absence pins (no `BattleView3D` import, no burst producer); the outcome stays visible after the replay (strip result row + `log.battleLine` in the Dziennik, §3.1-6); Finding 157 re-check — auto-slow classifies the player side with `isPlayerParticipant` on every orbital path; T4 frame proof |
+| **Owner looks at** | a Path A battle in view → the stage replay, then the outcome on the strip and in the Dziennik; out of view → the banner |
 
 ### CV-Z — flags permanent ON, OFF paths removed (T4 method)
 
@@ -971,7 +1019,7 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **628** | 🟠 | **The orbital burst ignores the viewed system and galaxy mode** — no `isEngagementInView` (unlike the round FX) ⇒ a battle elsewhere draws at planet-local coordinates in the viewed system (Finding 453 family) | `ThreeRenderer.js:6531, :6549-6575` | CV-8a / CV-8b |
 | **629** | ⚪ | **The combat card ignores `MapInsets`** (≈ 12 px overlap with the bottom strip without the Dock); the Watch top margin uses 46 while the map top inset is 28 | `CombatHUD.js:150-162`; `MapInsets.js:28, :41`; `CombatWatchLogic.js:97-110` | CV-6b |
 | **630** | ⚪ | **Console-only switches**: `uiPrefs.combatFxVisible` and `battleAutoFocus` are read, never written | `ThreeRenderer.js:1546, :6528, :6551` | CV-6b |
-| **631** | ⚪ | **Doctrine barely exists in deep-space mechanics**: DSCS never reads it; kite only moves the MOS band; hold_position does not hold; retreat_at_50 is checked once per 0.5 civ-years (≈ 14 % of maximal battles). Outside CV (F1) — a mechanics question for the owner | `DSCS:553-584`; `MovementOrderSystem.js:1385, :1391-1392`; `FleetSystem.js:478-486, :751` | owner (mechanics slice); CV-3b posture only |
+| **631** | ⚪ | **Doctrine barely exists in deep-space mechanics**: DSCS never reads it; kite only moves the MOS band; hold_position does not hold; retreat_at_50 is checked once per 0.5 civ-years (≈ 14 % of maximal battles). Outside CV (F1) — a mechanics question for the owner | `DSCS:553-584`; `MovementOrderSystem.js:1385, :1391-1392`; `FleetSystem.js:478-486, :751` | candidate future MECHANICS arc — owner decides later (§3.1-7); CV-3b posture only |
 | **632** | ⚪ | **EAH ordering and scope**: emits before applying wrecks; wrecks a retreating side anyway; `_wreckPlayerVesselsInSystem` uses `systemId ?? 'sys_home'` ⇒ a ship in warp transit is wrecked by a lost home battle it never defended (Finding 151 class); the no-war skirmish is tagged `source: 'dscs'` | `EnemyAttackHandler.js:228-301, :406`; `WarSystem.js:815`; `GameScene.js:2763` | mechanics outside CV; CV-8a relies on the emit order |
 | **633** | ⚪ | **Possible fog leak**: the rumor-ghost override applies only to `in_transit`; orbiting enemies get their live position written back at physics cadence | `ThreeRenderer.js:5601-5603, :7682-7683` (static, not run) | CV-6a (fog audit) |
 | **634** | ⚪ | **No reproducible battle stager**: Combat Sandbox is not deterministic (global `Math.random` system generation); no helper places N ships of a loadout at a point; `DirectorRecall` recalls idle debug raiders on the first tick; `teleportVessel` never sets `systemId` | `CombatSandbox.js:145`; `SystemGenerator.js:689-690`; `DirectorRecall.js:96-121`; `GameScene.js:852-866` | CV-2a (`cvBattle`) |
