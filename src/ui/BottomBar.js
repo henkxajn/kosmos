@@ -317,6 +317,12 @@ export class BottomBar {
         this._toggleFleetMapLabels();
         this._updateDomMenu();
         break;
+      case 'battleAutoFocus':
+        // ARC CV-6b2 (Finding 630, decyzja właściciela §3.2-23) — auto-fokus kamery na starcie z udziałem gracza (`ThreeRenderer`,
+        // `vessel:engaged`); brak klucza ≠ false (domyślnie ON), stan w uiPrefs = w zapisie gry, bez migracji.
+        this._toggleBattleAutoFocus();
+        this._updateDomMenu();
+        break;
       case 'music':
         EventBus.emit('music:toggle');
         // Wartości odświeżą się przy następnym otwarciu
@@ -451,6 +457,7 @@ export class BottomBar {
     // Obraz Operacyjny F1 — plakietki flotowe (default ON: brak klucza ≠ false)
     const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
     const randomEventsOn = window.KOSMOS?.uiPrefs?.randomEventsEnabled !== false;
+    const autoFocusOn = window.KOSMOS?.uiPrefs?.battleAutoFocus !== false;   // ARC CV-6b2 (#630) — domyślnie ON
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
@@ -462,6 +469,7 @@ export class BottomBar {
       { id: 'radar',   label: t('menu.radar'),  value: radarOn ? t('menu.on') : t('menu.off'), valueOn: radarOn },
       { id: 'fleetLabels', label: t('menu.fleetLabels'), value: fleetLblOn ? t('menu.on') : t('menu.off'), valueOn: fleetLblOn },
       { id: 'randomEvents', label: t('menu.randomEvents'), value: randomEventsOn ? t('menu.on') : t('menu.off'), valueOn: randomEventsOn },
+      { id: 'battleAutoFocus', label: t('menu.battleAutoFocus'), value: autoFocusOn ? t('menu.on') : t('menu.off'), valueOn: autoFocusOn },
       { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
       { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },
     ];
@@ -571,6 +579,14 @@ export class BottomBar {
   }
 
   // ── Toggle plakietek flotowych (Obraz Operacyjny F1) ──────────────────
+  // ARC CV-6b2 (Finding 630) — ☰ „Auto-fokus bitwy”: `uiPrefs.battleAutoFocus` (brak klucza = ON; zapis gry niesie uiPrefs,
+  // wczytanie scala je — `GameScene`). Czytany w chwili startu starcia (`ThreeRenderer`, `vessel:engaged`).
+  _toggleBattleAutoFocus() {
+    window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
+    window.KOSMOS.uiPrefs.battleAutoFocus = window.KOSMOS.uiPrefs.battleAutoFocus === false;
+    return window.KOSMOS.uiPrefs.battleAutoFocus;
+  }
+
   // Stan w uiPrefs.fleetMapLabelsVisible (default ON — brak klucza ≠ false;
   // nowe klucze uiPrefs bez migracji save). Warstwa etykiet HUD czyta uiPrefs per
   // frame; event tylko budzi redraw overlayu przy pauzie (UIManager _dirty).

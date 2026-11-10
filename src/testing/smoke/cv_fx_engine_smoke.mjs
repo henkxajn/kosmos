@@ -18,7 +18,8 @@
 //   Źródło: zero `Math.random` w nowych modułach CV-2a; gorąca ścieżka silnika bez `new` (KONTROLA na zmutowanej kopii).
 //   Flaga: OFF i nic w locie — `_tickCvFx` nie rusza zegara ani silnika; `_onCombatRoundFx` z flagą OFF idzie dzisiejszą
 //       ścieżką, z flagą ON — przez silnik (prawdziwe metody wyciągnięte ze źródła); ścieżka OFF co do bitu jak przed CV-2a
-//       (odcisk SHA-256 ciał metod dzisiejszego silnika FX, liczony z `0eabc4f`).
+//       (odcisk SHA-256 ciał metod dzisiejszego silnika FX, liczony z `0eabc4f`). ARC CV-6b2 — T9d przecelowane świadomie: odcisk
+//       liczony po cofnięciu DWÓCH zmian kroku (wycofany `combatFxVisible` — #630, biały błysk pod `cvStrip`); T9g pilnuje, że są.
 // ⚠ Silnik i zegar na PRAWDZIWYM Three.js r171 (`src/lib`); importy CV-2a dynamiczne w try/catch — przy fail-first piny
 //   DEGRADUJĄ (czerwone), suita się nie przerywa.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -324,7 +325,16 @@ const make = (name) => {
   const LEGACY = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer', '_spawnFx',
     '_disposeFx', '_updateActiveEffects', '_spawnHitGlow', '_followTracerEnds', '_followFxTarget'];
   const stripCv = (s) => s.replace(/\n    \/\/ ARC CV-2a — flaga `cvFxEngine`[^\n]*\n[^\n]*\n    if \(GAME_CONFIG\.FEATURES\?\.cvFxEngine\) \{ this\._cvFxRoundFx\(events, pace\); return; \}/, '');
-  const fp = createHash('sha256').update(LEGACY.map(m => stripCv(fullBody(m) ?? `<brak ${m}>`)).join('\n')).digest('hex');
+  // ARC CV-6b2 — DWIE świadome zmiany ścieżki OFF (przecelowanie T9d: odcisk `0eabc4f` liczony po ich COFNIĘCIU, więc reszta ścieżki
+  // nadal co do bitu): (1) Finding 630, decyzja właściciela §3.2-23 — czytelnik `uiPrefs.combatFxVisible` usunięty z `_onCombatRoundFx`;
+  // (2) biały błysk trafienia P2b pod flagą `cvStrip` — bramka przy `_spawnHitGlow` w `_spawnCombatTracer` (§4 CV-6b2). T9g — ŚWIADEK
+  // przecelowania (nie kontrola: na kodzie sprzed CV-6b2 pada, bo cofać nie ma czego), że obie zmiany są w źródle dokładnie tam.
+  const undo6b2 = (s) => s
+    .replace(/\n    \/\/ ARC CV-6b2 \(Finding 630, decyzja właściciela §3\.2-23\)[^\n]*\n    \/\/[^\n]*\n/, '\n    if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;\n')
+    .replace(/\n    \/\/ ARC CV-6b2 — biały błysk na modelu[^\n]*\n    \/\/[^\n]*\n    if \(ids\?\.target && !GAME_CONFIG\.FEATURES\?\.cvStrip\) this\._spawnHitGlow\(/, '\n    if (ids?.target) this._spawnHitGlow(');
+  const fp = createHash('sha256').update(LEGACY.map(m => stripCv(undo6b2(fullBody(m) ?? `<brak ${m}>`))).join('\n')).digest('hex');
+  assert(['_onCombatRoundFx', '_spawnCombatTracer'].every((m) => undo6b2(fullBody(m) ?? '') !== (fullBody(m) ?? '')),
+    'T9g ŚWIADEK przecelowania T9d: obie zmiany CV-6b2 ścieżki OFF są w źródle (`combatFxVisible` wycofany, biały błysk pod `cvStrip`) — odcisk liczony po ich cofnięciu');
   const FP_0EABC4F = '3c19a2433dbfa33e85b22cb2a98b1f51a0797955c56738816fca46b73143b3ae';
   assert(fp === FP_0EABC4F, `T9d ścieżka OFF co do bitu jak w 0eabc4f (odcisk ${fp.slice(0, 12)}…)`);
   assert(stripCv(fullBody('_onCombatRoundFx') ?? '') !== (fullBody('_onCombatRoundFx') ?? ''), 'T9e KONTROLA: gałąź CV-2a jest w `_onCombatRoundFx` (odcisk liczony bez niej, nie z pliku sprzed zmiany)');

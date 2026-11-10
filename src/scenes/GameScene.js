@@ -139,6 +139,7 @@ import { THEME }             from '../config/ThemeConfig.js';
 import { BattleView3D }      from './BattleView3D.js';
 import { showBattleIntro, showBattleOutcome, getBattleViewPreference } from '../ui/BattleIntroModal.js';
 import { clusterBannerStep, clusterPeerIds, clusterRadiusPx } from '../ui/BattleClusterLogic.js';   // ARC CV-3a2 (Finding 638) — jeden baner na klaster
+import { ClusterNarrator, isClusterNarrated, encounterIdOfBattle } from '../ui/CombatNarration.js';   // ARC CV-6b2 (Finding 639) — Dziennik: linia na klaster
 import { StarSystemManager } from '../systems/StarSystemManager.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -2803,81 +2804,25 @@ export class GameScene {
     // Dwupasmowy: legacy war-path (WarSystem/EAH) vs VCS deep-space
     // (warId=null, participantX.type='vessel_group'). Obie ścieżki dają wpis
     // o tym samym schemacie — gracz ma trwały ślad nawet bez wojny formalnej.
-    EventBus.on('battle:resolved', ({ warId, result }) => {
+    EventBus.on('battle:resolved', ({ warId, battleId, result }) => {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog || !result) return;
-
-      const loc = normalizeBattleLocation(result.location);
-      const sysId = loc.systemId;
-      const homeSys = window.KOSMOS?.homePlanet?.systemId ?? 'sys_home';
-      const homeName = window.KOSMOS?.homePlanet?.name ?? t('battle.homeSystem');
-      // ⚠ NIGDY surowe id. Kanon `systemDisplayName` (rejestr → nazwa GWIAZDY → id) jest
-      // zaimportowany w TYM pliku (:15) i użyty przez napis intro (:4911) — ta jedna linia go
-      // omijała, więc KAŻDA bitwa poza układem macierzystym meldowała się jako „sys_024"
-      // (Finding 167, audyt Dziennika 2026-08-27).
-      // ⚠ Gałąź macierzysta zostaje na `homePlanet.name` ŚWIADOMIE: to nazwa PLANETY w miejscu
-      // nazwy układu (ta sama klasa defektu), ale jej zmiana byłaby widoczna w KAŻDEJ bitwie
-      // u siebie ⇒ osobna decyzja, nie przemyt przy okazji.
-      // Ostatni szczebel kanonu zwraca samo id, stąd zachowany fallback na „?".
-      const sysName = sysId === homeSys ? homeName : (sysId
-        ? systemDisplayName(sysId, {
-            systems:  this.starSystemManager?.getAllSystems?.() ?? [],
-            starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
-          })
-        : '?');
-
-      // Finding 155 — jedno źródło tożsamości (patrz listener kina wyżej). NIGDY z ról wojny.
-      const sides = resolveBattleSides(result, {
-        registry:     window.KOSMOS?.empireRegistry,
-        playerLabel:  t('battle.player'),
-        unknownLabel: t('battle.unknownForce'),
-      });
-
-      let playerInvolved, sysLabel;
-
-      if (warId) {
-        // ── Path A: legacy war-driven battle (EAH / forceBattle / _fleetArrived) ──
-        const war = window.KOSMOS?.warSystem?.getWar(warId);
-        if (!war) return;
-        // UDZIAŁ z rekordu wojny (odporne na producenta bez stempla — klasa S25).
-        playerInvolved = (war.aggressor === 'player' || war.defender === 'player');
-        sysLabel = sysName;
-      } else {
-        // ── Path B: deep-space battle (DSCS/VCS), warId=null ──────────────
-        if (!result.participantA || !result.participantB) return;
-        playerInvolved = sides.playerInvolved;
-        if (!playerInvolved) return;
-        // Deep-space zawsze ma point → „w głębokim kosmosie (układ)"
-        sysLabel = isDeepSpaceBattle(loc) ? t('battle.deepSpaceIn', sysName) : sysName;
+      // ARC CV-6b2 (Finding 639) — pod flagą `cvStrip` bitwa DSCS idzie przez narratora klastra: JEDNA linia bitwy (wynik
+      // scalony jak baner) i JEDNA linia potyczki na klaster starć, po ostatnim `battle:resolved` klastra. Reszta (wojna,
+      // obrona orbitalna, bez flagi) — linia na bitwę jak dotąd.
+      if (!warId && GAME_CONFIG.FEATURES?.cvStrip && isClusterNarrated(battleId)) {
+        this._narrateBattleCluster({ battleId, result });
+        return;
       }
+      const entry = this._battleLogEntry({ warId, result });
+      if (entry) evtLog.push(entry);
+    });
 
-      const winnerLabel = battleWinnerName(result, sides);
-
-      // ⚠ Gdy gracza NIE DA SIĘ przypisać do strony (`playerSide === null`), nie ogłaszamy ani
-      //   zwycięstwa, ani porażki — bo obie odpowiedzi byłyby zgadywaniem. Zostaje 'warn'.
-      const playerWon = playerInvolved && !!sides.playerSide && result.winner === sides.playerSide;
-      const severity = !playerInvolved ? 'info'
-        : (result.winner === 'draw' || !sides.playerSide) ? 'warn'
-        : playerWon ? 'info'
-        : 'alert';
-
-      // Adnotacja retreat — D4: TYLKO gdy wiadomo, po której stronie stoi gracz. Wcześniej
-      // dowolny odwrót bez gracza w bitwie meldował „Wróg wycofał się".
-      let retreatNote = '';
-      if (playerInvolved && sides.playerSide && result.retreated) {
-        retreatNote = result.retreated === sides.playerSide
-          ? t('battle.retreatPlayer')
-          : t('battle.retreatEnemy');
-      }
-
-      evtLog.push({
-        text:      t('log.battleLine', sysLabel, sides.sideAName, sides.sideBName, winnerLabel,
-                     Math.round(result.lossesA ?? 0), Math.round(result.lossesB ?? 0),
-                     result.turns ?? 0) + retreatNote,
-        channel:   'combat',
-        severity,
-        entityRef: sysId ?? null,
-      });
+    // ARC CV-6b2 (Finding 639) — potyczka bitwy DSCS pod flagą `cvStrip`: linię pisze narrator klastra (raz na klaster, przed linią
+    // bitwy); ten słuchacz łapie wyłącznie potyczkę SPÓŹNIONĄ (po opowiedzianej grupie) — `UIManager` jej nie pisze.
+    EventBus.on('war:skirmish', ({ empireId, battleId }) => {
+      if (!GAME_CONFIG.FEATURES?.cvStrip || !isClusterNarrated(battleId)) return;
+      for (const text of this._clusterNarratorOf().onSkirmish({ empireId, battleId })) this.uiManager?._log?.(text, 'combat');
     });
 
     // M2b Commit 2 — IntelSystem vessel contact EventLog (lekcja L3 z M2a:
@@ -4242,6 +4187,111 @@ export class GameScene {
     return clusterBannerStep(this._battleClusterHold, { encounterId: encId, battleData, peerIds, isActive });
   }
 
+  // Wpis Dziennika dla bitwy (`battle:resolved`): `{ text, channel, severity, entityRef }` albo null (bitwa bez linii). Ciało
+  // dawnego słuchacza 1:1 — ARC CV-6b2 wyjęło je do metody, żeby linię bitwy klastra (wynik scalony, `CombatNarration`)
+  // budował TEN SAM kod; `GameScene` zostaje jedynym producentem `log.battleLine`.
+  _battleLogEntry({ warId, result }) {
+    if (!result) return null;
+
+    const loc = normalizeBattleLocation(result.location);
+    const sysId = loc.systemId;
+    const homeSys = window.KOSMOS?.homePlanet?.systemId ?? 'sys_home';
+    const homeName = window.KOSMOS?.homePlanet?.name ?? t('battle.homeSystem');
+    // ⚠ NIGDY surowe id. Kanon `systemDisplayName` (rejestr → nazwa GWIAZDY → id) jest
+    // zaimportowany w TYM pliku (:15) i użyty przez napis intro (:4911) — ta jedna linia go
+    // omijała, więc KAŻDA bitwa poza układem macierzystym meldowała się jako „sys_024"
+    // (Finding 167, audyt Dziennika 2026-08-27).
+    // ⚠ Gałąź macierzysta zostaje na `homePlanet.name` ŚWIADOMIE: to nazwa PLANETY w miejscu
+    // nazwy układu (ta sama klasa defektu), ale jej zmiana byłaby widoczna w KAŻDEJ bitwie
+    // u siebie ⇒ osobna decyzja, nie przemyt przy okazji.
+    // Ostatni szczebel kanonu zwraca samo id, stąd zachowany fallback na „?".
+    const sysName = sysId === homeSys ? homeName : (sysId
+      ? systemDisplayName(sysId, {
+          systems:  this.starSystemManager?.getAllSystems?.() ?? [],
+          starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
+        })
+      : '?');
+
+    // Finding 155 — jedno źródło tożsamości (patrz listener kina wyżej). NIGDY z ról wojny.
+    const sides = resolveBattleSides(result, {
+      registry:     window.KOSMOS?.empireRegistry,
+      playerLabel:  t('battle.player'),
+      unknownLabel: t('battle.unknownForce'),
+    });
+
+    let playerInvolved, sysLabel;
+
+    if (warId) {
+      // ── Path A: legacy war-driven battle (EAH / forceBattle / _fleetArrived) ──
+      const war = window.KOSMOS?.warSystem?.getWar(warId);
+      if (!war) return null;
+      // UDZIAŁ z rekordu wojny (odporne na producenta bez stempla — klasa S25).
+      playerInvolved = (war.aggressor === 'player' || war.defender === 'player');
+      sysLabel = sysName;
+    } else {
+      // ── Path B: deep-space battle (DSCS/VCS), warId=null ──────────────
+      if (!result.participantA || !result.participantB) return null;
+      playerInvolved = sides.playerInvolved;
+      if (!playerInvolved) return null;
+      // Deep-space zawsze ma point → „w głębokim kosmosie (układ)"
+      sysLabel = isDeepSpaceBattle(loc) ? t('battle.deepSpaceIn', sysName) : sysName;
+    }
+
+    const winnerLabel = battleWinnerName(result, sides);
+
+    // ⚠ Gdy gracza NIE DA SIĘ przypisać do strony (`playerSide === null`), nie ogłaszamy ani
+    //   zwycięstwa, ani porażki — bo obie odpowiedzi byłyby zgadywaniem. Zostaje 'warn'.
+    const playerWon = playerInvolved && !!sides.playerSide && result.winner === sides.playerSide;
+    const severity = !playerInvolved ? 'info'
+      : (result.winner === 'draw' || !sides.playerSide) ? 'warn'
+      : playerWon ? 'info'
+      : 'alert';
+
+    // Adnotacja retreat — D4: TYLKO gdy wiadomo, po której stronie stoi gracz. Wcześniej
+    // dowolny odwrót bez gracza w bitwie meldował „Wróg wycofał się".
+    let retreatNote = '';
+    if (playerInvolved && sides.playerSide && result.retreated) {
+      retreatNote = result.retreated === sides.playerSide
+        ? t('battle.retreatPlayer')
+        : t('battle.retreatEnemy');
+    }
+
+    return {
+      text:      t('log.battleLine', sysLabel, sides.sideAName, sides.sideBName, winnerLabel,
+                   Math.round(result.lossesA ?? 0), Math.round(result.lossesB ?? 0),
+                   result.turns ?? 0) + retreatNote,
+      channel:   'combat',
+      severity,
+      entityRef: sysId ?? null,
+    };
+  }
+
+  // ARC CV-6b2 (Finding 639) — narrator Dziennika klastra (stan grup i potyczek tylko w pamięci, jak baner): linię bitwy buduje
+  // `_battleLogEntry`, linię potyczki — `UIManager.skirmishLineText` (ci sami autorzy co dotąd).
+  _clusterNarratorOf() {
+    this._clusterNarrator ??= new ClusterNarrator({
+      lineFor: (result) => this._battleLogEntry({ warId: null, result }),
+      skirmishTextFor: (empireId) => this.uiManager?.skirmishLineText?.(empireId) ?? String(empireId ?? '?'),
+    });
+    return this._clusterNarrator;
+  }
+
+  // ARC CV-6b2 (Finding 639) — bitwa DSCS w Dzienniku pod flagą `cvStrip`: krok grupy klastra (pozostałe aktywne starcia — jak
+  // baner), gotowa grupa — linie potyczki (kanał walki, `_log` jak `UIManager`) i jedna linia bitwy.
+  _narrateBattleCluster({ battleId, result }) {
+    const K = window.KOSMOS;
+    const dscs = K?.deepSpaceCombatSystem;
+    const vm = K?.vesselManager;
+    const encId = encounterIdOfBattle(battleId);
+    const getPos = (id) => vm?.getVessel?.(id)?.position ?? null;
+    const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX) });
+    const isActive = (id) => id !== encId && !!dscs?._activeEncounters?.get?.(id)?.isActive;
+    for (const o of this._clusterNarratorOf().onBattleResolved({ battleId, result, peerIds, isActive })) {
+      if (o.kind === 'skirmish') this.uiManager?._log?.(o.text, 'combat');
+      else K?.eventLogSystem?.push?.(o.entry);
+    }
+  }
+
   // ── Faza 5: pipeline BattleView3D ──────────────────────────
   async _tryShowNextBattle() {
     if (this._battleShowing) return;
@@ -4999,6 +5049,11 @@ export class GameScene {
         // REFORMA ZAKŁADEK T2 — okno DOM (raport ciała z przypięcia, `.kosmos-modal-overlay`) zamyka się własnym Esc; kaskada
         // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰).
         if (escapeHeldByModal({ K: window.KOSMOS, domModalOpen: !!document.querySelector('.kosmos-modal-overlay') })) return;
+        // ARC CV-6b2 — rozwinięty pasek walki (flaga `cvStrip`) zwija się PIERWSZY: przed panelem floty, zaznaczeniem i przypięciem.
+        if (um?.combatStripEscape?.()) {
+          e.preventDefault();
+          return;
+        }
         // REFORMA ZAKŁADEK T6 — panel floty w idiomie etykiet: Esc zamyka panel floty (zdejmuje flotę) PRZED zaznaczeniem statków —
         // flota wygrywa mutex, więc Esc zamyka widoczny panel; przy otwartym overlayu i nad oknem DOM — nie (Esc należy do nich).
         if (escapeClosesFleetPanel({ fleetId: um?.getSelectedFleetId?.() ?? null,

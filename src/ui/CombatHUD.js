@@ -76,6 +76,11 @@ export class CombatHUD extends BaseOverlay {
    * statki NAD panelem.
    */
   getPanelRect() {
+    // ARC CV-6b2 (D-CV-21) — pod flagą `cvStrip` panelem walki jest PASEK (`CombatStrip`, `KOSMOS.combatStrip`): kontrakt zostaje —
+    // kadr „Obserwuj” / auto-fokus (`ThreeRenderer`) i przeszkody paneli przy outlinerze (`UIManager`) czytają ten getter; prostokąt
+    // paska niesie krawędź (`edge`), którą rozumie `watchSafeRect`. Bez flagi (albo bez paska) — karta jak dotąd.
+    const strip = GAME_CONFIG.FEATURES?.cvStrip ? window.KOSMOS?.combatStrip : null;
+    if (strip?.getPanelRect) return strip.getPanelRect();
     return this._panelRect ? { ...this._panelRect } : null;
   }
 
@@ -88,6 +93,9 @@ export class CombatHUD extends BaseOverlay {
   }
 
   isMinimized() {
+    // ARC CV-6b2 — pasek walki nie chowa się do czipu „⚔ Walki” (zwinięty to jedna linia na bitwę): pod flagą `cvStrip` karta nie
+    // rysuje się, więc jej dawny stan minimalizacji nie ma prawa wystawić czipu na pasie dolnym.
+    if (GAME_CONFIG.FEATURES?.cvStrip && window.KOSMOS?.combatStrip) return false;
     return this._minimized;
   }
 

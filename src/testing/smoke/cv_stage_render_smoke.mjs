@@ -406,8 +406,9 @@ block('R14 — źródło: tripwire (b), kolejność w pętli renderu, bramki fla
     && at('this._tickBattleStage()') < at('this._updateWatchCamera()') && at('this._cameraController.update()') < at('this._syncCombatViewOffset()')
     && at('this._syncCombatViewOffset()') < at('this._updateActiveEffects('),
     'R14b pętla renderu: powrót na bazę → ruch płynny → scena → kamera walki → `update()` kontrolera → przesunięcie ekranowe → efekty');
-  assert(/this\._tickEngagementMarkers\(performance\.now\(\)\);\s*if \(GAME_CONFIG\.FEATURES\?\.cvStage\) this\._hideEncounterRings\(\);/.test(loop),
-    'R14c (642) pierścień ukrywany przy wywołaniu, pod flagą (ciało `_tickEngagementMarkers` nietknięte — piny ścieżki OFF)');
+  // ARC CV-6b2 — przecelowane świadomie: pierścień ukrywa także flaga `cvStrip` (pierścień odchodzi razem z kartą, §4 CV-6b2).
+  assert(/this\._tickEngagementMarkers\(performance\.now\(\)\);\s*if \(GAME_CONFIG\.FEATURES\?\.cvStage \|\| GAME_CONFIG\.FEATURES\?\.cvStrip\) this\._hideEncounterRings\(\);/.test(loop),
+    'R14c (642) pierścień ukrywany przy wywołaniu, pod flagą `cvStage` albo `cvStrip` (ciało `_tickEngagementMarkers` nietknięte — piny ścieżki OFF)');
   const pf = methodOf('_placeFreeVessel'); const sw = methodOf('_startWatch'); const uw = methodOf('_updateWatchCamera');
   assert(/glideRetarget\(g, to, this\._spriteBase\(vid, entry\),/.test(pf?.body ?? '')
     && /GAME_CONFIG\.FEATURES\?\.cvStage \? this\._stageWatchFit\(enc\) : this\._computeWatchFit\(enc\)/.test(sw?.body ?? '')

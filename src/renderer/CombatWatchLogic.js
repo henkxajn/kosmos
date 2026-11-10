@@ -91,17 +91,21 @@ export function projectPoint(p, cam, basis, { tanHalf, aspect, W, H }) {
 /**
  * Prostokąt bezpieczny kadru (px ekranu): ekran bez górnego paska, dolnych pasków, paneli bocznych (lewy outliner —
  * ARKUSZ UI U2-2 `leftW`; prawy Outliner — `rightW`) i panelu walki, z marginesem. Panel walki (`hudRect`, w jednostkach
- * LOGICZNYCH UI) leży na dole na środku — prostokąt kończy się nad nim. Zbyt mały prostokąt → cały ekran z marginesem
- * (lepiej zahaczyć o panel niż zgubić statki).
+ * LOGICZNYCH UI) leży na dole na środku — prostokąt kończy się nad nim. ARC CV-6b2 — pasek walki (`CombatStrip`) niesie
+ * krawędź: `hudRect.edge === 'top'` (pasek pod górną belką) — prostokąt ZACZYNA się pod nim; bez krawędzi albo 'bottom' — jak
+ * dotąd (kończy się nad panelem). Zbyt mały prostokąt → cały ekran z marginesem (lepiej zahaczyć o panel niż zgubić statki).
  */
 export function watchSafeRect({ W, H, uiScale = 1, hudRect = null, topBarH = 0, bottomH = 0, rightW = 0, leftW = 0,
   marginPx = COMBAT_WATCH.MARGIN_PX, minSide = COMBAT_WATCH.MIN_SAFE_SIDE_PX }) {
   const s = Number.isFinite(uiScale) && uiScale > 0 ? uiScale : 1;
   const x0 = (Number.isFinite(leftW) && leftW > 0 ? leftW : 0) * s + marginPx;
   const x1 = W - rightW * s - marginPx;
-  const y0 = topBarH * s + marginPx;
+  let y0 = topBarH * s + marginPx;
   let bottom = H - bottomH * s;
-  if (hudRect && Number.isFinite(hudRect.y)) bottom = Math.min(bottom, hudRect.y * s);
+  if (hudRect && Number.isFinite(hudRect.y)) {
+    if (hudRect.edge === 'top' && Number.isFinite(hudRect.h)) y0 = Math.max(y0, (hudRect.y + hudRect.h) * s + marginPx);
+    else bottom = Math.min(bottom, hudRect.y * s);
+  }
   const y1 = bottom - marginPx;
   if (x1 - x0 < minSide || y1 - y0 < minSide) {
     return { x0: marginPx, x1: W - marginPx, y0: marginPx, y1: H - marginPx, fallback: true };

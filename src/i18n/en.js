@@ -642,6 +642,7 @@ export default {
   'menu.radar': 'Radar',
   'menu.fleetLabels': 'Fleet plaques',
   'menu.randomEvents': 'Random events',
+  'menu.battleAutoFocus': 'Battle auto-focus',   // ARC CV-6b2 (#630) — the camera flies to a battle the player is in
   // Vessel — spaceport validation messages (Bug 2)
   'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
   'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',
@@ -3381,6 +3382,16 @@ export default {
   'combat.hudNoWeapons':    'unarmed',
   'combat.hudMiss':         'miss',
   'combat.hudShield':       'shield',
+  // ARC CV-6b2 — combat strip (flag `cvStrip`) replacing the combat card
+  'combatStrip.round':      'R{0}/{1}',
+  'combatStrip.more':       '+{0}',
+  'combatStrip.log':        'RECENT FIRE',
+  'combatStrip.logRound':   'R{0}',
+  'combatStrip.miss':       'miss',
+  'combatStrip.shield':     'shield',
+  'combatStrip.watchHint':  'Camera to this battle',
+  'combatStrip.expand':     'Battle details',
+  'combatStrip.collapse':   'Hide details',
 
   // === DiplomacyOverlay ===
   'diplo.state.peace':      'PEACE',

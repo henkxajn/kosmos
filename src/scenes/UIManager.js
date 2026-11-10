@@ -49,6 +49,8 @@ import { WarOverlay }          from '../ui/WarOverlay.js';
 import { POIPanel }            from '../ui/POIPanel.js';
 import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
+import { CombatStrip }         from '../ui/CombatStrip.js';   // ARC CV-6b2 — pasek walki (flaga `cvStrip`) zamiast karty
+import { isClusterNarrated }   from '../ui/CombatNarration.js';   // ARC CV-6b2 (Finding 639) — potyczka DSCS: linia na klaster
 import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
 import { TacticalModeController } from '../ui/TacticalModeController.js';
@@ -353,6 +355,11 @@ export class UIManager {
     this.combatHud = new CombatHUD();
     // Expose dla BottomBar (chip „⚔ Walki") + click handler.
     window.KOSMOS.combatHud = this.combatHud;
+    // ARC CV-6b2 — pasek walki (flaga `cvStrip`): rysunek, klik, kółko, kursor i Esc spina UIManager; prostokąt paska czytają
+    // kadr „Obserwuj” i przeszkody paneli przez `combatHud.getPanelRect()` (kontrakt D-CV-21). Strojenie z konsoli:
+    // `KOSMOS.combatStrip.tune({ EDGE: 'bottom' })`; odczyt dla bramki: `KOSMOS.combatStrip.debug()`.
+    this.combatStrip = new CombatStrip();
+    window.KOSMOS.combatStrip = this.combatStrip;
 
     // S4-2 / REFORMA ZAKŁADEK T4 — StationPanel: STAN przypięcia stacji (`visible` + `_stationId`) i cele przycisków
     // „Zarządzaj” / ✕ przypięcia; treść i przyciski rysuje warstwa etykiet HUD (T2). Bez rysunku i kliku.
@@ -466,6 +473,33 @@ export class UIManager {
     // `fleetHud`, grupa → `groupHud`, pojedynczy statek → `vessel` (panel statku T5).
     return fleetHudSurface(surface, { features: GAME_CONFIG.FEATURES, fleetId: this._selectedFleetId ?? null,
       vesselCount: this._selectedVesselIds.size, leadId: this._selectedVesselId ?? null });
+  }
+
+  /** Linia potyczki (`log.skirmish`) — jedyny autor tekstu: słuchacz `war:skirmish` niżej i narrator klastra w `GameScene`. */
+  skirmishLineText(empireId) {
+    const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);
+    return t('log.skirmish', emp?.namePL ?? emp?.name ?? empireId ?? '?');
+  }
+
+  // ── ARC CV-6b2 — pasek walki: Esc i baner pickera ──
+  /** Esc (`GameScene`, kaskada mapy): zwija rozwinięty pasek walki. True — było co zwinąć (Esc skonsumowany). */
+  combatStripEscape() {
+    if (!GAME_CONFIG.FEATURES?.cvStrip || !this.combatStrip?.collapse?.()) return false;
+    this._dirty = true;
+    return true;
+  }
+
+  /**
+   * Prostokąt banera pickera (`#kosmos-picker-banner`, DOM nad płótnem — `GameScene._createPickerHUD`) w px LOGICZNYCH albo null,
+   * gdy ukryty: pasek walki u góry staje pod nim (baner u góry na środku ekranu zakryłby jego linie).
+   */
+  _pickerBannerRect() {
+    if (typeof document === 'undefined') return null;
+    const el = document.getElementById?.('kosmos-picker-banner');
+    if (!el || el.style?.display === 'none') return null;
+    const r = el.getBoundingClientRect?.();
+    if (!r || !(r.width > 0) || !(r.height > 0)) return null;
+    return { x: r.left / UI_SCALE, y: r.top / UI_SCALE, w: r.width / UI_SCALE, h: r.height / UI_SCALE };
   }
 
   // ── REFORMA ZAKŁADEK T3 — panel statku przy prawym outlinerze (`ShipPanelAnchorLogic`) ──
@@ -1826,9 +1860,11 @@ export class UIManager {
     // zdarzenie niż bitwa wojenna: podnosi napięcie i zostaje w pamięci relacji, ale NIE
     // wyczerpuje nikogo (wojny nie ma). Bez tego wpisu gracz widziałby skutek (rosnące
     // napięcie) bez przyczyny.
-    EventBus.on('war:skirmish', ({ empireId }) => {
-      const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);
-      this._log(t('log.skirmish', emp?.namePL ?? emp?.name ?? empireId ?? '?'), 'combat');
+    // ARC CV-6b2 (Finding 639) — pod flagą `cvStrip` potyczkę bitwy DSCS pisze narrator klastra (`GameScene`, raz na klaster, przed
+    // linią bitwy); tu — pozostałe potyczki (obrona orbitalna bez wojny) i wszystkie bez flagi, jak dotąd.
+    EventBus.on('war:skirmish', ({ empireId, battleId }) => {
+      if (GAME_CONFIG.FEATURES?.cvStrip && isClusterNarrated(battleId)) return;
+      this._log(this.skirmishLineText(empireId), 'combat');
     });
 
     // S3.4 — log dyplomacji: AI envoy, emisariusz gracza, odpowiedź na traktat.
@@ -2079,6 +2115,9 @@ export class UIManager {
     // Górny pasek surowców — trigger/rozwinięty panel (tylko civMode)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.isOver?.(x, y)) return true;
 
+    // ARC CV-6b2 — pasek walki (flaga `cvStrip`): kursor nad nim blokuje kamerę i najechanie mapy.
+    if (window.KOSMOS?.civMode && this.combatStrip?.isOver?.(x, y)) return true;   // prostokąt null, gdy pasek się nie rysuje (bez flagi)
+
     // Dolny pasek nawigacji (stały) — blok kamery (tylko civMode)
     if (window.KOSMOS?.civMode && this._bottomNavBar?.isOver?.(x, y)) return true;
 
@@ -2158,7 +2197,8 @@ export class UIManager {
     if (this._fleetPanelHudClick(x, y)) return true;
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
-    if (this.combatHud?.handleClick?.(x, y)) return true;
+    // ARC CV-6b2 — pod flagą `cvStrip` karta się nie rysuje, więc i nie łapie kliku (jej przyciski z dawnej klatki nie żyją).
+    if (!GAME_CONFIG.FEATURES?.cvStrip && this.combatHud?.handleClick?.(x, y)) return true;
     // Faza 4 — Dok taktyczny (PRZED overlayManager; gate flaga+tryb Y). Konsumuje kliki w pas.
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive
         && !this.overlayManager.isAnyOpen() && this.tacticalDock?.handleClick?.(x, y)) return true;
@@ -2166,6 +2206,9 @@ export class UIManager {
     if (window.KOSMOS?.civMode && this._bottomControlBar?.handleClick?.(x, y)) return true;   // UI v3 — bell/MENU/zegar (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleClick?.(x, y)) return true;   // górny pasek surowców — klik kolonii→panel, reszta pochłaniana (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._eventLogDrawer?.handleClick?.(x, y)) return true;   // dziennik (dolny hover-drawer) — klik → pełny overlay eventLog (PRZED overlayManager)
+    // ARC CV-6b2 — pasek walki: w kolejności rysunku (pod listą kolonii górnej belki i dziennikiem, nad mapą i overlayem); każdy klik
+    // w prostokącie paska pochłonięty (chip „Obserwuj”, ▼ / ▲, reszta — nic).
+    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.cvStrip && this.combatStrip?.handleClick?.(x, y)) return true;
     // ARKUSZ UI U2 — lewy outliner: POD listą kolonii z górnej belki i rozwiniętym dziennikiem (oba leżą nad nim — wyżej
     // w łańcuchu), nad mapą 3D. `hitTest` zawiera warunek widoczności (decyzja 4) i pochłania każdy klik w kolumnę.
     if (this._leftOutliner?.hitTest?.(x, y, W, H)) return true;
@@ -2249,6 +2292,8 @@ export class UIManager {
         && this.tacticalDock?.handleWheel?.(x, y, delta)) return true;
     // Górny pasek surowców — scroll listy kolonii (gdy kursor nad rozwiniętym panelem).
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleWheel?.(x, y, delta)) return true;
+    // ARC CV-6b2 — pasek walki: kółko przewija rozwinięcie, nad paskiem zawsze pochłonięte (nie zoomuje mapy pod nim).
+    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.cvStrip && this.combatStrip?.handleWheel?.(x, y, delta)) return true;
     // Finding 260 — panel statku nad mapą. Bramka MIRROR draw/click (`_mapSurface()==='vessel'`
     // + żaden overlay otwarty), bo panel rysuje się tylko w tym stanie; bez tej trasy kółko
     // przelatywało do kamery i ZOOMOWAŁO mapę zamiast przewinąć panel.
@@ -2312,7 +2357,8 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) {
       this.overlayManager.handleMouseMove(x, y);
     }
-    this.combatHud?.handleMouseMove?.(x, y);       // POLISH P2b (D4, Finding 468) — podpowiedź pełnego tekstu karty walki
+    if (GAME_CONFIG.FEATURES?.cvStrip) this.combatStrip?.handleMouseMove?.(x, y);   // ARC CV-6b2 — podświetlenie chipów i podpowiedź paska
+    else this.combatHud?.handleMouseMove?.(x, y);       // POLISH P2b (D4, Finding 468) — podpowiedź pełnego tekstu karty walki
     if (this.tacticalDock?.isShowing?.() && !this.overlayManager.isAnyOpen()) this.tacticalDock.handleMouseMove(x, y);   // Faza 4 — hover doku taktycznego
     if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
     if (window.KOSMOS?.civMode) this._bottomControlBar.handleMouseMove(x, y); // UI v3 — hover bell/MENU/prędkości
@@ -2466,6 +2512,13 @@ export class UIManager {
       // (§7.17) i pod pływającymi panelami; kolejność układów z tego samego drzewa co lewy (`treeColonies`).
       this._outliner.draw(ctx, W, H, { groundUnits: this._outlinerState?.groundUnits ?? [], treeColonies: this._cachedColonies });
     }
+    // ── ARC CV-6b2 — PASEK WALKI (flaga `cvStrip`) zamiast karty walki: nad mapą (i nad overlayem — jak karta), POD listą kolonii
+    //    z górnej belki (rysowaną zaraz niżej — rozwinięta lista zakrywa pasek), dolnymi paskami i pływającymi panelami;
+    //    położenie z `MapInsets` (#629), pod banerem pickera, gdy ten wisi u góry. Bez flagi — karta niżej (co do bitu). ──
+    if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.cvStrip) {
+      this.combatStrip.draw(ctx, W, H, { insets: getMapInsets(window.KOSMOS),
+        pointer: { x: this._tooltipMouseX, y: this._tooltipMouseY }, banner: this._pickerBannerRect() });
+    } else this.combatStrip?.clear?.();
     if (civMode && !globeOpen) this._topResourceDrawer.draw(ctx, W, H);
     // ── Faza 4 — „Dok taktyczny": pas dowodzenia (tryb Y). Rysowany PRZED nav+control
     //    (te malują się na wierzchu → sterowanie czasem zawsze widoczne przy prawym-dolnym
@@ -2486,7 +2539,8 @@ export class UIManager {
     }
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
-    if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
+    // ARC CV-6b2 — pod flagą `cvStrip` karty nie ma (pasek rysuje się wyżej, nad mapą).
+    if (civMode && !globeOpen && !GAME_CONFIG.FEATURES?.cvStrip) this.combatHud.draw(ctx, W, H);
     // Panel statku (N==1) w idiomie przypięć HUD — REFORMA ZAKŁADEK T5 (renderer `ShipPanelHudLayer`; szerokość i wysokość z treści),
     // geometria T3 (`_shipPanelAtOutliner` — kotwica przy wierszu prawego outlinera, łącznik, karta walki, zapas). Tryb Y
     // z rozwiniętym Dokiem: panel statku nad mapą się nie rysuje (D-TR-10).
@@ -3271,6 +3325,8 @@ export class UIManager {
   }
 
   _detectHoverBtn(x, y) {
+    // ARC CV-6b2 — pasek walki: „rączka” tylko nad chipem („Obserwuj”, ▼ / ▲); reszta paska — zwykły kursor.
+    if (this.combatStrip?.isOver?.(x, y)) return this.combatStrip.chipAt(x, y) ? 'combatstrip' : null;   // prostokąt null bez flagi
     // BottomBar
     if (y >= H - COSMIC.BOTTOM_BAR_H) return 'bottombar';
     // TopBar

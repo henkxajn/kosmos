@@ -541,6 +541,12 @@ export const GAME_CONFIG = {
     //   radaru ukryty przy scenie. Wyłącznie rysunek — pozycji logicznych nie pisze nikt. OFF = dzisiejsza ścieżka.
     //   Domyślnie ON od commitu CV-3a1 (decyzja właściciela 2026-11-08); wyłączenie: KOSMOS.debug.cvStage(0).
     cvStage: true,
+    // `cvStrip` (CV-6b2) — PASEK WALKI zamiast karty walki (`CombatStrip` / `CombatStripLogic`): linia na bitwę (klaster starć),
+    //   idiom HUD (ciemny pasek, font motywu, role palety, cyfry w kratce), rozwinięcie na żądanie (okręty, log rund), położenie
+    //   z `MapInsets` (#629) pod górną belką; jedna linia Dziennika i jedna linia potyczki na klaster (#639); bez karty, bez
+    //   pierścienia starcia i bez białego błysku trafienia (3D paski HP zostają do CV-6a). OFF = dzisiejsza karta co do bitu.
+    //   Wyłączenie: KOSMOS.debug.cvStrip(0).
+    cvStrip: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

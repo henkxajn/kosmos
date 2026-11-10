@@ -11,6 +11,9 @@
 //                                         `atBody: 'id_ciała'` — wskazane ciało; `mixed: 1` — przy ciele mniejszość statków
 //                                         gracza, wróg wolny (skorupa obraca się w stronę wroga)
 //   ARC CV-3a3 (Finding 654) — uzbrojenie LUSTRZANE: statek B_i ma kadłub i broń statku A_i
+//   cvBattle({nA: 3, nB: 3, battles: 3}) — ARC CV-6b2: trzy OSOBNE bitwy w oglądanym układzie (osobne klastry, ≥ 1 AU od siebie)
+//                                         — pasek walki z kilkoma liniami; `battles: 4` — trzy linie i „+1”
+//   cvStrip(1) / cvStrip(0)             — ARC CV-6b2: flaga `cvStrip` (pasek walki zamiast karty walki) ON / OFF, od następnej klatki
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
 //   fxStats()                           — pomiar 300 klatek: czas klatki p50 / p95, wywołania i trójkąty renderera, pule
 //
@@ -190,7 +193,7 @@ function pickAiEmpire(K) {
 export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeRenderer ?? null, getSaveSystem = () => null } = {}) {
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
-    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false } = {}) {
+    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1 } = {}) {
       if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
       const K = window.KOSMOS ?? {};
       const vm = K.vesselManager, dscs = K.deepSpaceCombatSystem, mos = K.movementOrderSystem, ts = K.timeSystem;
@@ -287,6 +290,56 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         };
       }
 
+      // ARC CV-6b2 — `battles: N` (2–5): N OSOBNYCH bitew w oglądanym układzie, każda nA na nB w innym pustym punkcie (≥ 1 AU
+      // od statków poprzednich bitew — osobne klastry starć); nazwy kolejne (`CV-A01…` przez wszystkie bitwy), ziarno bitwy k =
+      // ziarno + k. Do obejrzenia paska walki z kilkoma liniami i „+N”. Jedna bitwa (domyślnie) — ścieżka niżej bez zmian.
+      const nBattles = Math.max(1, Math.min(5, Math.floor(Number(battles) || 1)));
+      if (nBattles > 1 && !split) {
+        const out = [];
+        const placed = others.map((v) => v.position);
+        const perSide = { A: layout.ships.filter((s) => s.side === 'A').length, B: layout.ships.filter((s) => s.side === 'B').length };
+        let made = [];
+        for (let k = 0; k < nBattles; k++) {
+          const ck = k === 0 ? c : cvBattleCenter({ seed: seed + k, vessels: placed, bodies, auPx: AU });
+          const ships = layout.ships.map((s) => {
+            const idx = perSide[s.side] * k + s.index + 1;
+            const name = `${CV_BATTLE.NAME_PREFIX}${s.side}${String(idx).padStart(2, '0')}`;
+            const v = vm.createAndRegister(s.hull, home.id, { name, modules: s.modules, systemId: sys });
+            Object.assign(v.position, { x: ck.x + s.dxAU * AU, y: ck.y + s.dyAU * AU, state: 'orbiting', dockedAt: null });
+            v.systemId = sys; v.status = 'idle'; v.mission = null; v.serviceState = 'active';
+            if (v.fuel) v.fuel.current = v.fuel.max = 9999;
+            v._cvBattle = seed;
+            if (s.side === 'B') { v.ownerEmpireId = empire.id; v.owner = empire.id; v.isEnemy = true; }
+            placed.push(v.position);
+            return v;
+          });
+          made = made.concat(ships);
+          getRenderer()?._restoreActiveSystemVesselSprites?.();
+          const sA = ships.filter((_, i) => layout.ships[i].side === 'A');
+          const sB = ships.filter((_, i) => layout.ships[i].side === 'B');
+          const ta = ships[layout.trigger.a], tb = ships[layout.trigger.b];
+          EventBus.emit('vessel:combatRangeEnter', { vesselAId: ta.id, vesselBId: tb.id, sameFaction: false,
+            distanceAU: Math.hypot(ta.position.x - tb.position.x, ta.position.y - tb.position.y) / AU });
+          const enc = dscs._findActiveEncounterContaining?.(ta.id) ?? null;
+          if (!enc) { out.push({ ok: false, reason: 'no_encounter' }); continue; }
+          for (const v of ships) {
+            if (enc.vesselStates.has(v.id)) continue;
+            const foes = layout.ships[ships.indexOf(v)].side === 'A' ? sB : sA;
+            EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: foes[0].id, sameFaction: false, distanceAU: 0.1 });
+          }
+          enc.seedBase = cvSeedBase(seed + k);
+          sA.forEach((v, i) => mos.issueOrder(v.id, { type: 'engage', targetEntityId: sB[i % sB.length].id, issuedBy: 'cvBattle' }));
+          out.push({ ok: ships.every((v) => enc.vesselStates.has(v.id)), encounter: enc.id,
+            centerAU: [Number((ck.x / AU).toFixed(3)), Number((ck.y / AU).toFixed(3))], clear: !!ck.clear });
+        }
+        console.warn(CV_BATTLE.WARNING);
+        return {
+          ok: out.length === nBattles && out.every((b) => b.ok), battles: out, system: sys, seed, members: made.length,
+          empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvStrip: !!GAME_CONFIG.FEATURES?.cvStrip,
+          autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
+        };
+      }
+
       const made = layout.ships.map((s) => {
         const v = vm.createAndRegister(s.hull, home.id, { name: s.name, modules: s.modules, systemId: sys });
         Object.assign(v.position, { x: c.x + s.dxAU * AU, y: c.y + s.dyAU * AU, state: 'orbiting', dockedAt: null });
@@ -370,6 +423,13 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const F = GAME_CONFIG.FEATURES;
       F.cvStage = on === undefined ? !F.cvStage : !!on;
       return { cvStage: F.cvStage };
+    },
+
+    /** ARC CV-6b2 — flaga `cvStrip` (pasek walki zamiast karty): cvStrip(1) — ON, cvStrip(0) — OFF, cvStrip() — przełącz. Czytana co klatkę. */
+    cvStrip(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvStrip = on === undefined ? !F.cvStrip : !!on;
+      return { cvStrip: F.cvStrip };
     },
 
     /** ARC CV-3a1 — scena bitwy z tej klatki: klastry, stopień sceny, prowadnica, odstępy strzelec → cel w długościach fregaty. */

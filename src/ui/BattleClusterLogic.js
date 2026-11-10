@@ -9,8 +9,9 @@
 // (Finding 638; zmierzone: 5 na 5 z celem na statek → dwa równoległe starcia 0,15 AU od siebie). Scena bitwy (CV-3a1)
 // rysuje je jako jedną bitwę; ta sama reguła klastra (`encounterClusters` — pozycje LOGICZNE uczestników, ten sam układ,
 // środki ≤ 0,30 AU, pojedyncze wiązanie, id = najmniejsze id starcia) daje tu kartę z jednym wierszem na klaster i jeden
-// baner wyniku na klaster — po OSTATNIM `battle:resolved` klastra. Dziennik zostaje przy jednej linii na starcie do CV-6b
-// (#639). Logiki walki (DSCS) nikt tu nie dotyka — moduł czyta starcia i wyniki, niczego nie zapisuje w stanie gry.
+// baner wyniku na klaster — po OSTATNIM `battle:resolved` klastra. Od CV-6b2 (#639, flaga `cvStrip`) tę samą grupę czyta
+// narrator Dziennika (`CombatNarration` — jedna linia bitwy i jedna potyczki na klaster) i pasek walki (`CombatStripLogic`).
+// Logiki walki (DSCS) nikt tu nie dotyka — moduł czyta starcia i wyniki, niczego nie zapisuje w stanie gry.
 
 import { STAGE, encounterClusters } from '../renderer/combat/BattleStageLogic.js';
 
@@ -132,6 +133,17 @@ export function mergeClusterBattles(list) {
  * @returns {object[]} banery do pokazania teraz (scalone wyniki gotowych grup; pusta — klaster jeszcze trwa)
  */
 export function clusterBannerStep(hold, { encounterId, battleData, peerIds = [], isActive = () => false }) {
+  return clusterGroupStep(hold, { encounterId, item: battleData, peerIds, isActive }).map((items) => mergeClusterBattles(items));
+}
+
+/**
+ * ARC CV-6b2 (Finding 639) — krok grupowania klastra bez scalania: ta sama reguła co `clusterBannerStep` (łańcuch starć
+ * w czasie = jedna grupa, czekanie na pozostałe AKTYWNE starcia klastra, grupa nie wisi na starciu nieaktywnym), ale wynikiem
+ * są SUROWE grupy elementów — baner scala je (`mergeClusterBattles`), Dziennik (`CombatNarration`) czyta z nich też potyczki.
+ * @returns {Array<object[]>} grupy gotowe teraz (elementy w kolejności rozstrzygnięć)
+ */
+export function clusterGroupStep(hold, { encounterId, item, peerIds = [], isActive = () => false }) {
+  const battleData = item;
   const id = String(encounterId);
   const linked = hold.filter((g) => g.waitFor.has(id));
   const g = linked[0] ?? { items: [], waitFor: new Set() };
@@ -149,7 +161,7 @@ export function clusterBannerStep(hold, { encounterId, battleData, peerIds = [],
     for (const w of [...h.waitFor]) if (!isActive(w)) h.waitFor.delete(w);
     if (h.waitFor.size > 0) continue;
     hold.splice(hold.indexOf(h), 1);
-    out.push(mergeClusterBattles(h.items));
+    out.push(h.items);
   }
   return out;
 }

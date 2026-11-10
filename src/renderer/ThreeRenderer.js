@@ -4234,7 +4234,9 @@ export class ThreeRenderer {
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
         this._tickEngagementMarkers(performance.now());
-        if (GAME_CONFIG.FEATURES?.cvStage) this._hideEncounterRings();   // ARC CV-3a1 (Finding 642) — scena oznacza bitwę sama
+        // ARC CV-3a1 (Finding 642) — scena oznacza bitwę sama; ARC CV-6b2 — pod flagą `cvStrip` pierścień starcia odchodzi razem z kartą
+        // (pasek walki nazywa bitwy; pierścienie „imitacji” bitew orbitalnych — CV-8b).
+        if (GAME_CONFIG.FEATURES?.cvStage || GAME_CONFIG.FEATURES?.cvStrip) this._hideEncounterRings();
         this._syncCombatReveal();        // POLISH P2a (CP17) — koniec starcia z graczem: widoczność wg wywiadu
         // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
@@ -6599,7 +6601,8 @@ export class ThreeRenderer {
   // ── Slice 1 — smugi walki na żywej mapie (FX-only, z combat:roundFx) ─────
   _onCombatRoundFx(payload) {
     if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
-    if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;
+    // ARC CV-6b2 (Finding 630, decyzja właściciela §3.2-23) — przełącznik `uiPrefs.combatFxVisible` WYCOFANY: chował każdy efekt
+    // walki wbrew celowi arca (wydajność dostaje własne pokrętło w presetach CV-2b); klucz w starym zapisie nie ma już czytelnika.
     // POLISH P2a (CP7, Finding 453) — salwa i znacznik WYŁĄCZNIE dla starcia w oglądanym układzie: pozycje ładunku są
     // lokalne dla układu starcia — w innym układzie smugi, błyski i pierścień lądowały w pustym punkcie widoku.
     if (!isEngagementInView({ encounterSystemId: payload?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
@@ -6800,7 +6803,7 @@ export class ThreeRenderer {
   // Fix#3 — FX dla bitew orbitalnych/abstrakcyjnych (bez per-rundy combat:roundFx).
   _onBattleResolvedFx(payload) {
     if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
-    if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;
+    // ARC CV-6b2 (Finding 630) — `uiPrefs.combatFxVisible` wycofany (patrz `_onCombatRoundFx`); imitacja bitwy orbitalnej — do CV-8b.
     const result = payload?.result;
     if (!result) return;
     const pA = result.participantA, pB = result.participantB;
@@ -6892,7 +6895,9 @@ export class ThreeRenderer {
     this._spawnFx(flash, { kind: 'flash', lifetime: pace.flashMs, baseScale: 1, baseOpacity: 0.85, delay: delay + pace.flashDelayMs,
       onTick: followTarget });
     // POLISH P2b (D2, CP18) — biały błysk NA MODELU trafionego statku (200 ms), w chwili uderzenia.
-    if (ids?.target) this._spawnHitGlow(ids.target, tw, delay + pace.flashDelayMs);
+    // ARC CV-6b2 — biały błysk na modelu (P2b) odchodzi pod flagą `cvStrip` razem z kartą (§4 CV-6b2); błysk trafienia silnika FX
+    // (`cvFxEngine`) to osobna ścieżka i zostaje.
+    if (ids?.target && !GAME_CONFIG.FEATURES?.cvStrip) this._spawnHitGlow(ids.target, tw, delay + pace.flashDelayMs);
     // Pierścień tarczy gdy trafienie zablokowane.
     if (blockedByShield > 0) {
       const sMat = new THREE.MeshBasicMaterial({ color: FX_SHIELD_COLOR, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });

@@ -643,6 +643,7 @@ export default {
   'menu.radar': 'Radar',
   'menu.fleetLabels': 'Plakietki floty',
   'menu.randomEvents': 'Zdarzenia losowe',
+  'menu.battleAutoFocus': 'Auto-fokus bitwy',   // ARC CV-6b2 (#630) — kamera sama leci do starcia z udziałem gracza
   // Vessel — komunikaty walidacji portu kosmicznego (Bug 2)
   'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
   'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',
@@ -3384,6 +3385,16 @@ export default {
   'combat.hudNoWeapons':    'bez broni',
   'combat.hudMiss':         'pudlo',
   'combat.hudShield':       'tarcza',
+  // ARC CV-6b2 — pasek walki (flaga `cvStrip`) zamiast karty walki
+  'combatStrip.round':      'R{0}/{1}',
+  'combatStrip.more':       '+{0}',
+  'combatStrip.log':        'OSTATNIE STRZAŁY',
+  'combatStrip.logRound':   'R{0}',
+  'combatStrip.miss':       'pudło',
+  'combatStrip.shield':     'tarcza',
+  'combatStrip.watchHint':  'Kamera na tę bitwę',
+  'combatStrip.expand':     'Szczegóły bitwy',
+  'combatStrip.collapse':   'Zwiń szczegóły',
 
   // === DiplomacyOverlay ===
   'diplo.state.peace':      'POKÓJ',
