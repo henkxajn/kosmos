@@ -69,6 +69,10 @@ export const LIVE_CV_FX = {
   STAGE_RING_GROW:  1.25,
   STAGE_FIREBALL_K: 1.5,   // promień kuli wybuchu wraku u szczytu = rozmiar kadłuba × K (bez sceny — podłoga 0,2 j. ≈ 5 L i ×3)
   STAGE_RETICLE_FADE_K: 0.25,   // celownik wroga na scenie gaśnie liniowo, gdy stopień sceny statku rośnie od 0 do K
+  // ARC CV-6b (decyzja właściciela 20 — D-CV-3 zmienione) — podłoga stopnia sceny bitwy (renderer `_tickBattleStage`,
+  // `_stageWatchFit`): 1 — bitwa w widoku na scenie przy KAŻDYM zoomie (domyślnie); 0 — krzywa zoomu semantycznego CV-3a1
+  // (skala prawdziwa z daleka) — wyłącznie do porównania z konsoli.
+  STAGE_BLEND_FLOOR: 1,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)

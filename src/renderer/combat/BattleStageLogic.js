@@ -49,8 +49,16 @@ export const STAGE = Object.freeze({
   SHELL_FLOOR_L: 2,       // [L] podłoga skorupy: rysowany promień ciała + to — żaden statek sceny bliżej środka ciała
   SHELL_WARM_PASSES: 0,   // przejścia z przyciąganiem przy CIEPŁYM starcie sceny przy ciele (Finding 652): unieruchomieni prawie
                           //   nie ruszają się w logice (orbity ≈ 0,01 rad na rundę), a przyciąganie co rundę przestawiało ciasną
-                          //   grupę — zmierzone 2,0–2,2 L na rundę (mediana) wobec 0,03–0,23 L bez niego; bitwa w wolnej
-                          //   przestrzeni — PASSES (geometria logiki zmienia się co rundę, okna właściciela wymagają przyciągania)
+                          //   grupę — zmierzone 2,0–2,2 L na rundę (mediana) wobec 0,03–0,23 L bez niego
+  // ARC CV-6b (zgłoszenie właściciela 2026-11-09 — „bitwy się zacinają”) — bitwa w WOLNEJ przestrzeni z ciepłym startem:
+  // 40 przejść z przyciąganiem wszystkich 190 par co rundę (układ nadokreślony) przestawiało statki po wielu poprawnych
+  // rozwiązaniach — zmierzone na trzech nagranych bitwach stagera: względny krok rozwiązania na rundę mediana 0,40–0,55 L,
+  // p95 2,2–2,9 L, 40–50 % kroków odwraca kierunek (błądzenie). 4 przejścia z wagą 0,25: mediana 0,17–0,21 L, p95 0,8–1,5 L,
+  // wierność prawu wszystkich par bez zmiany (w ±15 % G(d): 84–86 % → 85–87 %), zero złych par, zero skali awaryjnej; okna
+  // właściciela par strzelec → cel (F3): ziarno 1 bez zmian (96,4 %), mediany w oknach. Bez przejść (jak przy skorupie) —
+  // ciszej, ale pary bez strzału zostają w tyle za logiką (wierność 77–80 %). Zimny start (pierwsze rozwiązanie) — PASSES.
+  WARM_PASSES: 4,
+  WARM_PULL: 0.25,
   SHELL_PLANE_Y: 0.3,     // [j.] wysokość skorupy = płaszczyzna statków (`RaycasterHelper.SHIP_PLANE_Y`): klik w scenę przy ciele
                           //   trafia płaszczyznę, na której statki są rysowane (Finding 646 (b)), a kamera nad płaszczyzną orbit
                           //   widzi grupę nad krawędzią ciała z każdej strony (z kierunkiem poziomym ciało ją zasłaniało)
@@ -288,8 +296,11 @@ export function solveStage({ points, centre, L, edges, prevOffsets = null, prior
   const keep = () => { const m = countMis(); if (m <= bestMis) { bestMis = m; best = snap(); } };
   let passes = 0;
   // ARC CV-3a3 — scena przy ciele z ciepłym startem: bez przejść z przyciąganiem (SHELL_WARM_PASSES), tylko pierwszeństwo i twarde.
-  const pullPasses = shell?.body && prevOffsets ? o.SHELL_WARM_PASSES : o.PASSES;
-  for (let k = 0; k < pullPasses; k++) { pass(o.PULL); passes++; }
+  // ARC CV-6b — wolna przestrzeń z ciepłym startem: WARM_PASSES z wagą WARM_PULL (błądzenie rozwiązania co rundę — patrz STAGE).
+  const warm = !!prevOffsets;
+  const pullPasses = warm ? (shell?.body ? o.SHELL_WARM_PASSES : o.WARM_PASSES) : o.PASSES;
+  const pullW = warm && !shell?.body ? o.WARM_PULL : o.PULL;
+  for (let k = 0; k < pullPasses; k++) { pass(pullW); passes++; }
   if (P.some((q) => q.pri)) for (let k = 0; k < o.PRIORITY_PASSES; k++) { pass(1, true); passes++; }
   keep();
   for (let k = 0; k < o.HARD_PASSES && hardViolations() > 0; k++) { pass(0); passes++; }

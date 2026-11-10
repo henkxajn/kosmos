@@ -29,6 +29,9 @@
 //      i dla bitwy przy ciele bez rysunku ciała — bez pola (punkt bez zmian; z rysunkiem — `cv_stage_shell_smoke` R6)
 //   R16 (CV-3a2, Finding 648 (b)) kadr „Obserwuj”: po wejściu w scenę dystans kina (stopień 1 w tym dystansie, < 1/4 kadru
 //      skali prawdziwej); w pauzie przed wejściem — kadr skali prawdziwej (bez nurkowania na statki w skali prawdziwej)
+//   R17 (CV-6b, decyzja właściciela 20 — D-CV-3 zmienione) bitwa ściśnięta przy KAŻDYM zoomie: z daleka (6 / 30 / 85 j.)
+//      każdy uczestnik na scenie (stopień 1), żaden w skali prawdziwej, każda para w swoim paśmie, pole kliku odwraca punkt;
+//      KONTROLA: podłoga 0 (krzywa CV-3a1) — skala prawdziwa, złe pasma, brak pola (R5b/R5c — przecelowane tak samo)
 //
 // ⚠ Fail-first: metody i moduły CV-3a1 powstają w tym kroku — brak metody = pin czerwony, suita się nie przerywa.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -47,6 +50,7 @@ const THREE = await import(new URL('../../lib/three.module.js', import.meta.url)
 const tryImport = async (rel) => { try { return await import(rel); } catch (e) { console.log(`  ! import ${rel}: ${e.message}`); return null; } };
 const SL = await tryImport('../../renderer/combat/BattleStageLogic.js');
 const SZ = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
+const SMOT = await tryImport('../../renderer/combat/StageMotionLogic.js');   // ARC CV-6b — ruch sceny ciągły w prędkości
 const PC = await tryImport('../../renderer/combat/PresentationClock.js');
 const ST = await tryImport('../../debug/CvBattleStager.js');
 
@@ -72,7 +76,7 @@ const WORLD_SCALE = Number((TR.match(/const WORLD_SCALE\s*=\s*([\d.]+)/) ?? [])[
 const FX_HDR_EXPLOSION = Number((TR.match(/const FX_HDR_EXPLOSION\s*=\s*([\d.]+)/) ?? [])[1]);
 const S = (v) => v / WORLD_SCALE;
 const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngagementInView', 'isEnemyVessel', 'STAGE', 'solveStage', 'pairKey',
-  'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'lengthPx', 'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf',
+  'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'stageBlendFloored', 'motionSegment', 'motionAt', 'targetVelocity', 'lengthPx', 'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf',
   'fitWatchFrameOffset', 'viewOffsetFrame', 'watchSafeRect', 'getMapInsets', 'COSMIC', 'glideRetarget', 'glideStep',
   'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION',
   // ARC CV-3a2 — klastry z pozycji logicznych i pole kliku sceny
@@ -86,7 +90,7 @@ function makeMethod(name) {
   try {
     return new Function(...NAMES, `return function (${m.params}) {\n${m.body}\n};`)(
       THREE, S, GAME_CONFIG, globalThis.window, globalThis.performance, FX.isEngagementInView, isEnemyVessel, SL?.STAGE, SL?.solveStage, SL?.pairKey,
-      SL?.clusterEncounters, SL?.bandEdgesWU, SZ?.stageBlend, SZ?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
+      SL?.clusterEncounters, SL?.bandEdgesWU, SZ?.stageBlend, SZ?.stageBlendFloored, SMOT?.motionSegment, SMOT?.motionAt, SMOT?.targetVelocity, SZ?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
       CW.centroidOf, CW.fitWatchFrameOffset, CW.viewOffsetFrame, CW.watchSafeRect, getMapInsets, COSMIC, CW.glideRetarget, CW.glideStep,
       FX.EXPLOSION_RING_COLOR, FX_HDR_EXPLOSION,
       SL?.encounterClusters, SL?.encounterParticipants, SL?.pickStageField, SL?.stagePointLogical, SL?.stagePointDrawn);
@@ -228,8 +232,15 @@ block('R5 — (d) pauza: wejście w scenę stoi; stopień sceny idzie za kamerą
   ts.isPaused = true;
   const kNear = R.getVesselStageBlend('CV-A02');
   placeCamera(R, cc, 2.0); frame(R);
+  // ⚠ Przecelowane ŚWIADOMIE (ARC CV-6b, decyzja właściciela 20 — D-CV-3 zmienione): przy podłodze domyślnej (1) bitwa zostaje
+  //   na scenie przy KAŻDYM zoomie — oddalenie nie zmienia stopnia. Dawna asercja („oddalenie zmniejsza stopień”) zostaje jako
+  //   KONTROLA przy podłodze 0 (krzywa CV-3a1): krzywa zoomu dalej idzie za kamerą także w pauzie — scena to widok, nie czas.
   const kFar = R.getVesselStageBlend('CV-A02');
-  assert(kNear > 0.99 && kFar > 0 && kFar < kNear, `R5b w pauzie oddalenie kamery zmniejsza stopień sceny (${kNear.toFixed(3)} → ${kFar.toFixed(3)}) — scena to widok, nie czas`);
+  R.cvTuning = { STAGE_BLEND_FLOOR: 0 }; frame(R);
+  const kFar0 = R.getVesselStageBlend('CV-A02');
+  delete R.cvTuning; frame(R);
+  assert(kNear > 0.99 && kFar > 0.99, `R5b decyzja 20: w pauzie oddalenie kamery (0,4 → 2,0 j.) — stopień zostaje ${kFar.toFixed(3)} (bitwa na scenie przy każdym zoomie)`);
+  assert(kFar0 > 0 && kFar0 < kNear, `R5c KONTROLA podłoga 0 (krzywa CV-3a1): w pauzie oddalenie zmniejsza stopień (${kNear.toFixed(3)} → ${kFar0.toFixed(3)}) — scena to widok, nie czas`);
 });
 
 // ═══ R6 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -402,6 +413,56 @@ block('R14 — źródło: tripwire (b), kolejność w pętli renderu, bramki fla
     && /GAME_CONFIG\.FEATURES\?\.cvStage \? this\._stageWatchFit\(enc\) : this\._computeWatchFit\(enc\)/.test(sw?.body ?? '')
     && /GAME_CONFIG\.FEATURES\?\.cvStage \? this\._stageWatchFit\(enc\) : this\._computeWatchFit\(enc\)/.test(uw?.body ?? ''),
     'R14d ruch płynny od `_spriteBase`; „Obserwuj” (start i śledzenie) — kadr sceny pod flagą, dzisiejszy kadr bez flagi');
+});
+
+// ═══ R17 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// ARC CV-6b (decyzja właściciela 20 — D-CV-3 zmienione): bitwa w widoku zostaje na scenie przy KAŻDYM zoomie — z daleka (6, 30,
+// 85 j.) rysowane = cel sceny (stopień 1), każda para w swoim paśmie, pole kliku odwraca punkt i wraca co do 1e-9.
+// KONTROLA: podłoga 0 (krzywa CV-3a1) — z daleka skala prawdziwa (rysowane = baza), pary w złych pasmach, brak pola kliku.
+block('R17 — decyzja 20: bitwa ściśnięta przy KAŻDYM zoomie (pasma, pole kliku, nikt w skali prawdziwej)', () => {
+  GAME_CONFIG.FEATURES.cvStage = true;
+  const run = (floor) => {
+    const { R, cc, vessels } = world();
+    if (floor != null) R.cvTuning = { STAGE_BLEND_FLOOR: floor };
+    placeCamera(R, cc, 0.4);
+    for (let i = 0; i < 60; i++) frame(R);   // pełne wejście (JOIN_MS)
+    const out = {};
+    for (const d of [6, 30, 85]) {
+      placeCamera(R, cc, d); frame(R);
+      const st = R._stageFrame?.list?.[0];
+      const sp = R._stageState.get(st?.id)?.stagePos;
+      let kMin = Infinity, offTarget = 0, offBase = 0, onBase = 0;
+      const moved = [];
+      for (const [id, e] of R._vessels) {
+        const m = R._stageMarks.get(id), t = sp?.get(id), p = e.sprite.position;
+        kMin = Math.min(kMin, m?.k ?? 0);
+        if (t) offTarget = Math.max(offTarget, Math.hypot(p.x - t.x, p.y - t.y, p.z - t.z));
+        const db = m ? Math.hypot(p.x - m.base.x, p.y - m.base.y, p.z - m.base.z) : 0;
+        moved.push(db); offBase = Math.max(offBase, db);
+        if (db < 1e-9) onBase++;
+      }
+      moved.sort((a, b) => a - b);
+      const mis = misbandedDrawn(R, vessels);
+      const a = R._vessels.get('CV-A01').sprite.position, b = R._vessels.get('CV-B01').sprite.position;
+      const q = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+      const lp = R.stageLogicalOf?.(SYS, q.x, q.z);
+      const back = lp?.staged ? R.stageWorldOf?.(SYS, lp.x, lp.z) : null;
+      out[d] = { kMin, offTarget, onBase, medMoved: moved[moved.length >> 1] ?? 0, mis, staged: !!lp?.staged,
+        err: back ? Math.hypot(back.x - q.x, back.z - q.z) : Infinity, pxL: st?.pxL ?? 0, curve: st?.curve ?? -1 };
+    }
+    return out;
+  };
+  const on = run(null), k0 = run(0);
+  const ds = [6, 30, 85];
+  for (const d of ds) console.log(`     ${d} j.: fregata ${on[d].pxL.toFixed(2)} px (krzywa ${on[d].curve.toFixed(3)}); podłoga 1 — stopień min. ${on[d].kMin.toFixed(3)}, `
+    + `od celu sceny ${on[d].offTarget.toExponential(1)} j., mediana przesunięcia od bazy ${(on[d].medMoved / L).toFixed(1)} L, złych par ${on[d].mis}, pole ${on[d].staged} (${on[d].err.toExponential(1)}); `
+    + `podłoga 0 — stopień ${k0[d].kMin.toFixed(3)}, na bazie ${k0[d].onBase}/20, złych par ${k0[d].mis}, pole ${k0[d].staged}`);
+  assert(ds.every((d) => on[d].kMin > 0.999 && on[d].offTarget < 1e-9 && on[d].medMoved > 5 * L && on[d].curve < 0.01),
+    'R17a SEDNO: z daleka (6 / 30 / 85 j., krzywa zoomu ≈ 0) każdy uczestnik rysowany NA SCENIE (stopień 1, rysowane = cel sceny), żaden w skali prawdziwej (mediana przesunięcia od bazy > 5 L)');
+  assert(ds.every((d) => on[d].mis === 0), 'R17b pasma z daleka: KAŻDA para — pasmo odstępu rysowanego = pasmo logicznego (0 złych par przy 6 / 30 / 85 j.)');
+  assert(ds.every((d) => on[d].staged && on[d].err < 1e-9), 'R17c pole kliku z daleka: punkt między statkami → bez sceny → rysowany co do 1e-9 (6 / 30 / 85 j.)');
+  assert(k0[85].kMin < 0.01 && k0[85].onBase === 20 && k0[85].mis > 0 && !k0[85].staged,
+    `R17d KONTROLA podłoga 0 (krzywa CV-3a1) przy 85 j.: skala prawdziwa (na bazie ${k0[85].onBase}/20), ${k0[85].mis} par w złych pasmach, brak pola kliku`);
 });
 
 GAME_CONFIG.FEATURES.cvStage = FLAG0;

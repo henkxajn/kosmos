@@ -8,6 +8,12 @@
 // „focus pull”); powyżej 24 px (≈ 0,67 j. przy wysokości okna 1041 px i FOV 55°) cała bitwa jest na scenie (kino).
 // rysowane = lerp(bez sceny, scena, blend) — monotoniczne dla każdego `blend`.
 //
+// ⚠ ARC CV-6b, decyzja właściciela 20 (2026-11-09) — D-CV-3 ZMIENIONE: bitwa w widoku jest rysowana na scenie przy KAŻDYM
+// zoomie (stopień = 1, `stageBlendFloored` z podłogą 1). W kadrze układu scena rozwinięta do skali prawdziwej wyglądała jak
+// statki na różnych orbitach daleko od siebie, a wiązki od odległych statków przecinały planetę — inna geometria niż ściśnięte
+// kino. Krzywa `stageBlend` zostaje MIARĄ zoomu (odczyty, przekazanie ikon taktycznych CV-6a), już nie przesuwa statków; daleki
+// „taktyczny” wygląd da warstwa CV-6a (ikony, linie ognia), nie geometria skali prawdziwej.
+//
 // Jednostki: [j.] — jednostki świata 3D; [px] — piksele CSS okna.
 
 /** Progi zoomu semantycznego [px] — rozmiar fregaty na ekranie. */
@@ -38,6 +44,19 @@ export function smoothstep(lo, hi, x) {
 export function stageBlend(pxL, lo = SEMANTIC_ZOOM.PX_LO, hi = SEMANTIC_ZOOM.PX_HI) {
   if (!Number.isFinite(pxL)) return 0;
   return smoothstep(lo, hi, pxL);
+}
+
+/** Domyślna podłoga stopnia sceny — decyzja właściciela 20: pełna scena przy każdym zoomie. */
+export const STAGE_BLEND_FLOOR_DEFAULT = 1;
+
+/**
+ * ARC CV-6b (decyzja 20, D-CV-3 zmienione) — stopień sceny z podłogą: max(podłoga, krzywa zoomu). Podłoga 1 (domyślna,
+ * pokrętło `cvTuning.STAGE_BLEND_FLOOR`) — bitwa zawsze na scenie; 0 — krzywa CV-3a1 (porównanie z konsoli); wartość spoza
+ * [0, 1] klamrowana, nie-liczba — podłoga domyślna.
+ */
+export function stageBlendFloored(pxL, floor = STAGE_BLEND_FLOOR_DEFAULT) {
+  const f = Number.isFinite(floor) ? Math.min(1, Math.max(0, floor)) : STAGE_BLEND_FLOOR_DEFAULT;
+  return Math.max(f, stageBlend(pxL));
 }
 
 /** Dystans kamery [j.], przy którym fregata ma na ekranie `px` px (odwrotność `lengthPx`). */

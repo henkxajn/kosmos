@@ -25,6 +25,13 @@
 //      prawdziwa; oznaczają go romby HUD), wróg w widoku poza starciem i flaga OFF — jak dotąd; (b) silnik FX —
 //      bez sceny pokrętła dzisiejsze (wzrost iskry w shaderze = dawne 1 + 2p co do wartości), ze sceną — pokrętła `STAGE_*`;
 //      (c) kula wybuchu wraku — pod flagą promień z rozmiaru kadłuba (proporcjonalny), bez flagi dzisiejsza podłoga
+//      (CV-6b: „w skali prawdziwej” przy podłodze stopnia 0 — decyzja 20 trzyma scenę przy każdym zoomie)
+//   T9 (CV-6b, zgłoszenie właściciela 2026-11-09 — zacinanie) ruch ciągły w prędkości: rundy dłuższe niż `combatRoundMs`
+//      (jak w grze), na każdej granicy statek jedzie dalej (≥ 30 % prędkości sprzed granicy), skok prędkości ≤ 1/3 przejścia
+//      liniowego; KONTROLA (liczona w keeperze): przejście liniowe z klamrą CV-3a3 na tych samych rozwiązaniach — staje
+//   T10 (CV-6b) zniszczenie w trakcie starcia nie przesuwa osi kadru („Obserwuj”, auto-fokus); KONTROLA: oś z samych żywych
+//   T11 (CV-6b) scena wolnej bitwy nie zależy od ruchu płynnego logiki (inny ruch płynny — te same pozycje rysowane);
+//      ŚWIADEK: pozycje bazowe różne
 //
 // ⚠ Fail-first: metody i pokrętła CV-3a3 powstają w tym kroku — brak = pin czerwony, suita się nie przerywa (każdy blok łapie
 //   wyjątek, importy dynamiczne).
@@ -45,6 +52,7 @@ const THREE = await import(new URL('../../lib/three.module.js', import.meta.url)
 const tryImport = async (rel) => { try { return await import(rel); } catch (e) { console.log(`  ! import ${rel}: ${e.message}`); return null; } };
 const SL = await tryImport('../../renderer/combat/BattleStageLogic.js');
 const SZ = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
+const SMOT = await tryImport('../../renderer/combat/StageMotionLogic.js');   // ARC CV-6b — ruch sceny ciągły w prędkości
 const PC = await tryImport('../../renderer/combat/PresentationClock.js');
 const ST = await tryImport('../../debug/CvBattleStager.js');
 const ENG = await tryImport('../../renderer/combat/FxEngine.js');
@@ -74,7 +82,7 @@ const ALERT_MARKER_REF_DIST = num(/const ALERT_MARKER_REF_DIST\s*=\s*([\d.]+)/);
 const ALERT_MARKER_PULSE_MAX = num(/const ALERT_MARKER_PULSE_MAX\s*=\s*([\d.]+)/);
 const S = (v) => v / WORLD_SCALE;
 const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngagementInView', 'isEnemyVessel', 'STAGE', 'solveStage', 'pairKey',
-  'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'lengthPx', 'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf',
+  'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'stageBlendFloored', 'motionSegment', 'motionAt', 'targetVelocity', 'lengthPx', 'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf',
   'fitWatchFrameOffset', 'viewOffsetFrame', 'watchSafeRect', 'getMapInsets', 'COSMIC', 'glideRetarget', 'glideStep',
   'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn', 'shellBaseAt',
   'simClockMs', 'capBillboardWorld', 'COMBAT_WATCH', 'ALERT_MARKER_SCALE', 'ALERT_MARKER_REF_DIST', 'ALERT_MARKER_PULSE_MAX',
@@ -88,7 +96,7 @@ function makeMethod(name) {
   try {
     return new Function(...NAMES, `return function (${m.params}) {\n${m.body}\n};`)(
       THREE, S, GAME_CONFIG, globalThis.window, globalThis.performance, FX.isEngagementInView, isEnemyVessel, SL?.STAGE, SL?.solveStage, SL?.pairKey,
-      SL?.clusterEncounters, SL?.bandEdgesWU, SZ?.stageBlend, SZ?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
+      SL?.clusterEncounters, SL?.bandEdgesWU, SZ?.stageBlend, SZ?.stageBlendFloored, SMOT?.motionSegment, SMOT?.motionAt, SMOT?.targetVelocity, SZ?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
       CW.centroidOf, CW.fitWatchFrameOffset, CW.viewOffsetFrame, CW.watchSafeRect, getMapInsets, COSMIC, CW.glideRetarget, CW.glideStep,
       SL?.encounterClusters, SL?.encounterParticipants, SL?.pickStageField, SL?.stagePointLogical, SL?.stagePointDrawn, SL?.shellBaseAt,
       simClockMs, CW.capBillboardWorld, CW.COMBAT_WATCH, ALERT_MARKER_SCALE, ALERT_MARKER_REF_DIST, ALERT_MARKER_PULSE_MAX,
@@ -322,14 +330,19 @@ block('T8 — (653) łaty pod flagą `cvStage` — umowa flagi (bez pinów na wa
   w.vessels.set(xs.id, xs);
   const spX = new THREE.Object3D(); spX.visible = true; spX.position.set(S(xs.position.x), 0.3, S(xs.position.y));
   R._vessels.set(xs.id, { sprite: spX, glide: null });
-  const at = (d, on) => {
+  // ⚠ ARC CV-6b (decyzja właściciela 20): „z daleka” przy podłodze 0 (krzywa CV-3a1, skala prawdziwa) — świadek, że celownika nie
+  //   gasi stopień sceny, tylko reguła 666 (b); przy podłodze domyślnej z daleka też jest scena (stopień 1).
+  const tuning0 = R.cvTuning;
+  const at = (d, on, floor = null) => {
     GAME_CONFIG.FEATURES.cvStage = on;
+    R.cvTuning = floor != null ? { ...tuning0, STAGE_BLEND_FLOOR: floor } : tuning0;
     placeCamera(R, d);
     for (let f = 0; f < 40; f++) frame(R);
     R._syncEnemyAlertMarkers();
+    R.cvTuning = tuning0;
     return { foe: R._enemyAlertMarkers.has(foe), other: R._enemyAlertMarkers.has(xs.id), k: R._stageMarks.get(foe)?.k ?? 0 };
   };
-  const cinema = at(0.4, true), far = at(60, true), off = at(0.4, false);
+  const cinema = at(0.4, true), far = at(60, true, 0), off = at(0.4, false);
   GAME_CONFIG.FEATURES.cvStage = true;
   GAME_CONFIG.FEATURES.fcEnemyAlertMarker = prevFeat;
   assert(cinema.k > 0.99 && far.k < 0.01, `T8a-0 świadek: kino — stopień statku ${cinema.k.toFixed(3)}, z daleka — ${far.k.toFixed(3)} (skala prawdziwa)`);
@@ -367,6 +380,120 @@ block('T8 — (653) łaty pod flagą `cvStage` — umowa flagi (bez pinów na wa
   assert(on.length === 2 && Math.abs(on[1].r / on[0].r - 0.028 / 0.016) < 1e-9 && on.every((x) => x.onTick)
     && offR.length === 2 && offR[0].r === offR[1].r && offR[0].r === Math.max(0.2, 0.016) * 0.4,
     `T8c kula wybuchu wraku: pod flagą promień ∝ rozmiar kadłuba (${on.map((x) => x.r?.toFixed?.(5)).join(' / ')} j.), bez flagi dzisiejsza podłoga (${offR.map((x) => x.r).join(' / ')} j.)`);
+});
+
+// ═══ T9 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// ARC CV-6b (zgłoszenie właściciela 2026-11-09 — „bitwy się zacinają”): ruch sceny ciągły w prędkości. Rundy co 64 klatki
+// (1024 ms — w grze rundy szły co ~1013 ms czasu realnego, dłużej niż `combatRoundMs`), logika rusza się co rundę. Na każdej
+// granicy rund statek, który jechał, nie zwalnia poniżej 30 % swojej prędkości sprzed granicy, a skok prędkości na granicy
+// jest najwyżej 1/3 skoku przejścia liniowego. KONTROLA (liczona TU, niezależnie od renderera): przejście liniowe z klamrą
+// (CV-3a3) na TYCH SAMYCH rozwiązaniach — staje (klatka bez ruchu) na każdej granicy i skacze w prędkości.
+block('T9 — CV-6b: na granicy rund prędkość nie spada do zera i nie skacze (ruch ciągły w prędkości)', () => {
+  const w = world();
+  const { R } = w;
+  placeCamera(R, 0.4);
+  for (let i = 0; i < 40; i++) frame(R);
+  const PER = 64, DT = 16, ids = [...w.A, ...w.B];
+  const pos = [], solves = [];
+  for (let f = 0; f < 12 * PER; f++) {
+    if (f % PER === 0) round(w);
+    frame(R, DT);
+    pos.push(drawnOf(R));
+    const st = R._stageState.get('enc_1');
+    if ((R._stageFrame?.solves ?? 0) > 0 && st) {
+      solves.push({ f, to: new Map([...st.to].map(([k, v]) => [k, { ...v }])), from: new Map([...st.from].map(([k, v]) => [k, { ...v }])) });
+    }
+  }
+  // KONTROLA — przejście liniowe CV-3a3 na tych samych rozwiązaniach (układ świata: cele i starty rozwiązań), el od rozwiązania
+  const lin = [];
+  for (let f = 0; f < pos.length; f++) {
+    let s = null; for (const q of solves) if (q.f <= f) s = q;
+    if (!s) { lin.push(null); continue; }
+    const u = Math.min(1, (f - s.f + 1) * DT / 1000);
+    lin.push(new Map(ids.map((id) => { const T = s.to.get(id), F = s.from.get(id); return [id, T && F ? { x: F.x + (T.x - F.x) * u, y: F.y + (T.y - F.y) * u, z: F.z + (T.z - F.z) * u } : null]; })));
+  }
+  const vel = (P, f, id) => { const a = P[f - 1]?.get(id), b = P[f]?.get(id); return a && b ? { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z } : null; };
+  const len = (v) => (v ? Math.hypot(v.x, v.y, v.z) : NaN);
+  const stats = (P) => {
+    let checks = 0, stops = 0, minRatio = Infinity, dvMax = 0;
+    for (const s of solves.slice(1)) {
+      for (const id of ids) {
+        let pre = 0, n = 0;
+        for (let k = s.f - 10; k <= s.f - 3; k++) { const l = len(vel(P, k, id)); if (Number.isFinite(l)) { pre += l; n++; } }
+        pre /= Math.max(1, n);
+        if (!(pre > 1e-5)) continue;   // statek jechał przed granicą (> 6·10⁻⁴ L / s nie ma znaczenia — próg zera)
+        let mn = Infinity; for (let k = s.f - 2; k <= s.f + 2; k++) mn = Math.min(mn, len(vel(P, k, id)));
+        checks++; minRatio = Math.min(minRatio, mn / pre); if (mn < 0.1 * pre) stops++;
+        for (let k = s.f - 1; k <= s.f + 1; k++) {
+          const v0 = vel(P, k, id), v1 = vel(P, k + 1, id);
+          if (v0 && v1) dvMax = Math.max(dvMax, Math.hypot(v1.x - v0.x, v1.y - v0.y, v1.z - v0.z) / L);
+        }
+      }
+    }
+    return { checks, stops, minRatio, dvMax };
+  };
+  const now = stats(pos), old = stats(lin);
+  console.log(`     ${solves.length} rozwiązań w ${12} rundach po ${PER * DT} ms: teraz — kontroli ${now.checks}, zatrzymań ${now.stops}, min. prędkość / sprzed granicy ${now.minRatio.toFixed(2)}, `
+    + `skok prędkości maks. ${now.dvMax.toFixed(4)} L/klatkę; liniowo (CV-3a3) — zatrzymań ${old.stops}/${old.checks}, min. ${old.minRatio.toFixed(2)}, skok ${old.dvMax.toFixed(4)} L/klatkę`);
+  assert(solves.length >= 12 && now.checks >= 100 && now.stops === 0 && now.minRatio >= 0.3,
+    `T9a SEDNO: na każdej granicy rund statek jedzie dalej (${now.checks} kontroli, zatrzymań ${now.stops}, prędkość min. ${(now.minRatio * 100).toFixed(0)} % sprzed granicy ≥ 30 %)`);
+  assert(now.dvMax > 0 && old.dvMax > 0 && now.dvMax <= old.dvMax / 3,
+    `T9b SEDNO: skok prędkości na granicy ${now.dvMax.toFixed(4)} L/klatkę ≤ 1/3 skoku przejścia liniowego (${old.dvMax.toFixed(4)} / 3 = ${(old.dvMax / 3).toFixed(4)})`);
+  assert(old.stops > old.checks / 2, `T9c KONTROLA: przejście liniowe z klamrą (CV-3a3) na tych samych rozwiązaniach staje na granicy (${old.stops}/${old.checks}) — próba nie jest jałowa`);
+});
+
+// ═══ T10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// ARC CV-6b: zniszczenie statku w trakcie starcia nie przesuwa osi kadru „Obserwuj” / auto-fokusu (zmierzone w grze przed:
+// 4 z 4 klatek ze zniszczeniem szarpnęły cel kamery 10–49 L/s) — kadr liczy WSZYSTKICH rysowanych uczestników, także
+// zniszczonych (DSCS trzyma ich w starciu do końca, sprite stoi na scenie). KONTROLA: oś z samych żywych przesuwa się skokiem.
+block('T10 — CV-6b: zniszczenie w trakcie starcia nie przesuwa osi kadru', () => {
+  const run = (kill) => {
+    const w = world();
+    const { R, list } = w;
+    R._cameraController = { _theta: 0.3, _phi: 1.1, _targetDist: 0.4, _dist: 0.4 };
+    placeCamera(R, 0.4);
+    for (let i = 0; i < 40; i++) frame(R);
+    round(w); for (let i = 0; i < 20; i++) frame(R);
+    const enc = list[0];
+    const dead = w.B.slice(0, 5);   // jedna strona traci 5 statków (jak w bitwie, którą ktoś przegrywa)
+    if (kill) for (const id of dead) enc.vesselStates.get(id).hp = 0;
+    frame(R);
+    const fit = R._stageWatchFit?.(enc);
+    let lx = 0, lz = 0, n = 0;
+    for (const [id, e] of R._vessels) if (!dead.includes(id)) { lx += e.sprite.position.x; lz += e.sprite.position.z; n++; }
+    return { target: fit?.target ?? null, live: { x: lx / n, z: lz / n } };
+  };
+  const a = run(false), b = run(true);
+  const d = a.target && b.target ? Math.hypot(b.target.x - a.target.x, b.target.z - a.target.z) / L : Infinity;
+  const dLive = a.target ? Math.hypot(b.live.x - a.target.x, b.live.z - a.target.z) / L : 0;
+  console.log(`     oś kadru: bez zniszczeń / po zniszczeniu 5 statków — różnica ${d.toExponential(2)} L; oś z samych żywych przesunęłaby się o ${dLive.toFixed(2)} L`);
+  assert(Number.isFinite(d) && d < 1e-6, `T10a SEDNO: 5 zniszczonych w klatce — oś kadru ta sama co bez zniszczeń (${d.toExponential(2)} L)`);
+  assert(dLive > 0.1, `T10b KONTROLA: oś z samych żywych przesunęłaby się o ${dLive.toFixed(2)} L (> 0,1 L) — próba nie jest jałowa`);
+});
+
+// ═══ T11 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// ARC CV-6b: wolna bitwa na scenie (stopień 1) nie jedzie na ruchu płynnym logiki — cele sceny w świecie z pozycji LOGICZNYCH
+// w chwili rundy. Dawniej początkiem układu był środek pozycji bazowych (ruch płynny: cele co ~150 ms tików fizyki, koniec ruchu
+// przed kolejnym celem — w grze zatrzymania i szarpnięcia całej bitwy). Dwa światy: ten sam przebieg, w drugim ruch płynny
+// każdego statku przesunięty o 0,05 j. — rysowane pozycje identyczne; ŚWIADEK: pozycje bazowe różnią się o 0,05 j.
+block('T11 — CV-6b: scena wolnej bitwy nie zależy od ruchu płynnego logiki', () => {
+  const run = (shift) => {
+    const w = world();
+    const { R } = w;
+    placeCamera(R, 0.4);
+    for (let i = 0; i < 40; i++) frame(R);
+    round(w);
+    if (shift) for (const [, e] of R._vessels) if (e.glide) { e.glide.from.x += 0.05; e.glide.to.x += 0.05; }
+    for (let i = 0; i < 30; i++) frame(R);
+    return { drawn: drawnOf(R), base: new Map([...R._stageMarks].map(([id, m]) => [id, { ...m.base }])) };
+  };
+  const a = run(false), b = run(true);
+  let dd = 0, db = Infinity;
+  for (const [id, p] of a.drawn) { const q = b.drawn.get(id); dd = Math.max(dd, Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z)); }
+  for (const [id, p] of a.base) { const q = b.base.get(id); if (q) db = Math.min(db, Math.abs(q.x - p.x)); }
+  console.log(`     ruch płynny przesunięty o 0,05 j.: pozycje bazowe różnią się min. ${db.toFixed(4)} j., rysowane maks. ${dd.toExponential(2)} j.`);
+  assert(dd < 1e-9, `T11a SEDNO: rysowane pozycje identyczne mimo innego ruchu płynnego (różnica maks. ${dd.toExponential(2)} j.)`);
+  assert(db > 0.04, `T11b ŚWIADEK: pozycje bazowe różnią się o ${db.toFixed(4)} j. (próba nie jest jałowa)`);
 });
 
 GAME_CONFIG.FEATURES.cvStage = FLAG0;

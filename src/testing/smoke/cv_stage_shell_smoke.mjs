@@ -38,6 +38,9 @@
 //      poprawką: obrót 158–161°, 8 klatek nad tarczą, uwolniony statek nad środkiem planety)
 //   R11 (666 (b), decyzja właściciela) uczestnicy bitwy przy ciele w widoku — bez celownika 3D w kinie i z daleka, także przy
 //      ciele bez rysunku; KONTROLA: wróg w widoku poza starciem — jak dotąd; flaga OFF — celownik u wszystkich
+//      (CV-6b: „z daleka” przy podłodze stopnia 0 — skala prawdziwa; R4 tak samo — decyzja 20 trzyma scenę przy każdym zoomie)
+//   R12 (CV-6b, decyzja właściciela 20) bitwa przy ciele z daleka (krzywa zoomu ≈ 0) — na scenie: każdy statek za skorupą,
+//      żadna linia gracz → wróg przez ciało; KONTROLA: podłoga 0 (krzywa CV-3a1) — linie przez ciało
 //   S1 stager `cvBattle({ atBody })` na świecie headless (prawdziwe DSCS / MOS / Proximity / OrbitalSpace / `TimeSystem`):
 //      statki gracza na orbitach ciała, wróg PRZYPIĘTY przez DSCS (bez orbity), komplet w jednym starciu, ciało wskazane
 //      po id; `mixed` — wróg wolny, przy ciele mniejszość gracza; KONTROLA: zwykłe `cvBattle` — nikt przy ciele
@@ -71,6 +74,7 @@ const THREE = await import(new URL('../../lib/three.module.js', import.meta.url)
 const tryImport = async (rel) => { try { return await import(rel); } catch (e) { console.log(`  ! import ${rel}: ${e.message}`); return null; } };
 const SL = await tryImport('../../renderer/combat/BattleStageLogic.js');
 const SZ = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
+const SMOT = await tryImport('../../renderer/combat/StageMotionLogic.js');   // ARC CV-6b — ruch sceny ciągły w prędkości
 const PC = await tryImport('../../renderer/combat/PresentationClock.js');
 const ST = await tryImport('../../debug/CvBattleStager.js');
 
@@ -280,7 +284,7 @@ function methodOf(name) {
 const WORLD_SCALE = Number((TR.match(/const WORLD_SCALE\s*=\s*([\d.]+)/) ?? [])[1]);
 const S = (v) => v / WORLD_SCALE;
 const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngagementInView', 'isEnemyVessel', 'STAGE', 'solveStage', 'pairKey',
-  'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'lengthPx', 'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf',
+  'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'stageBlendFloored', 'motionSegment', 'motionAt', 'targetVelocity', 'lengthPx', 'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf',
   'fitWatchFrameOffset', 'viewOffsetFrame', 'watchSafeRect', 'getMapInsets', 'COSMIC', 'glideRetarget', 'glideStep',
   'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn', 'shellBaseAt',
   'simClockMs', 'capBillboardWorld', 'COMBAT_WATCH', 'ALERT_MARKER_SCALE', 'ALERT_MARKER_REF_DIST', 'ALERT_MARKER_PULSE_MAX'];
@@ -295,7 +299,7 @@ function makeMethod(name) {
   try {
     return new Function(...NAMES, `return function (${m.params}) {\n${m.body}\n};`)(
       THREE, S, GAME_CONFIG, globalThis.window, globalThis.performance, FX.isEngagementInView, isEnemyVessel, SL?.STAGE, SL?.solveStage, SL?.pairKey,
-      SL?.clusterEncounters, SL?.bandEdgesWU, SZ?.stageBlend, SZ?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
+      SL?.clusterEncounters, SL?.bandEdgesWU, SZ?.stageBlend, SZ?.stageBlendFloored, SMOT?.motionSegment, SMOT?.motionAt, SMOT?.targetVelocity, SZ?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
       CW.centroidOf, CW.fitWatchFrameOffset, CW.viewOffsetFrame, CW.watchSafeRect, getMapInsets, COSMIC, CW.glideRetarget, CW.glideStep,
       SL?.encounterClusters, SL?.encounterParticipants, SL?.pickStageField, SL?.stagePointLogical, SL?.stagePointDrawn, SL?.shellBaseAt,
       simClockMs, CW.capBillboardWorld, CW.COMBAT_WATCH, ALERT_MARKER_SCALE, ALERT_MARKER_REF_DIST, ALERT_MARKER_PULSE_MAX);
@@ -447,6 +451,9 @@ block('R4 — (626) wróg przypięty bez orbity: stoi w pauzie, wchodzi na skoru
   const { R, ts, body } = w;
   const id = 'B02';
   const stale = drawn(R, id).clone();
+  // ⚠ ARC CV-6b (decyzja właściciela 20): przy podłodze domyślnej bitwa jest na scenie przy każdym zoomie — skala prawdziwa
+  //   uczestnika (to, co ten blok pinuje: baza przypiętego bez orbity wchodzi za skorupę) istnieje przy podłodze 0 (krzywa CV-3a1).
+  R.cvTuning = { STAGE_BLEND_FLOOR: 0 };
   cameraAt(R, { x: body.x, y: 0.3, z: body.z }, 6);
   ts.isPaused = true;
   for (let f = 0; f < 30; f++) frame(R);
@@ -644,16 +651,20 @@ block('R11 — bitwa przy ciele: uczestnicy bez celownika przy każdym zoomie (6
     vessels.set(xs.id, xs);
     const spX = new THREE.Object3D(); spX.visible = true; spX.position.set(body.x + 0.6, 0.3, body.z + 0.6);
     R._vessels.set(xs.id, { sprite: spX, glide: null });
-    const at = (target, d, on) => {
+    // ⚠ ARC CV-6b (decyzja właściciela 20): „z daleka” przy podłodze 0 (krzywa CV-3a1, skala prawdziwa) — świadek, że celownika
+    //   nie gasi stopień sceny, tylko reguła 666 (b); przy podłodze domyślnej z daleka też jest scena (stopień 1).
+    const at = (target, d, on, floor = null) => {
       GAME_CONFIG.FEATURES.cvStage = on;
+      if (floor != null) R.cvTuning = { STAGE_BLEND_FLOOR: floor }; else delete R.cvTuning;
       cameraAt(R, target, d);
       for (let f = 0; f < 60; f++) frame(R);
       R._syncEnemyAlertMarkers();
+      delete R.cvTuning;
       return { foes: w.B.filter((id) => R._enemyAlertMarkers.has(id)).length, other: R._enemyAlertMarkers.has(xs.id), k: Math.max(...w.B.map((id) => R._stageMarks.get(id)?.k ?? 0)) };
     };
     cameraAt(R, { x: body.x, y: 0.3, z: body.z }, 6); frame(R);
     const sc = stageCentre(R) ?? { x: body.x, y: 0.3, z: body.z };
-    const cinema = at(sc, 0.4, true), far = at({ x: body.x, y: 0.3, z: body.z }, 30, true), off = at(sc, 0.4, false);
+    const cinema = at(sc, 0.4, true), far = at({ x: body.x, y: 0.3, z: body.z }, 30, true, 0), off = at(sc, 0.4, false);
     GAME_CONFIG.FEATURES.cvStage = FLAG0 ?? true;
     return { cinema, far, off, n: w.B.length };
   };
@@ -666,6 +677,38 @@ block('R11 — bitwa przy ciele: uczestnicy bez celownika przy każdym zoomie (6
     `R11b SEDNO: uczestnicy bitwy przy ciele w widoku — 0 celowników w kinie i z daleka, także przy ciele bez rysunku (${drawnB.cinema.foes} / ${drawnB.far.foes} / ${bare.cinema.foes} / ${bare.far.foes})`);
   assert(drawnB.cinema.other && drawnB.far.other && bare.cinema.other && drawnB.off.foes === drawnB.n && bare.off.foes === bare.n,
     `R11c KONTROLA: wróg w widoku poza starciem — celownik jak dotąd; flaga OFF — celownik u wszystkich ${drawnB.n} uczestników (${drawnB.off.foes} / ${bare.off.foes})`);
+});
+
+// ═══ R12 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// ARC CV-6b (decyzja właściciela 20 — D-CV-3 zmienione): bitwa przy ciele z daleka zostaje ściśniętym węzłem za skorupą — żaden
+// statek w skorupie, żadna linia gracz → wróg (tor wiązki) nie przechodzi przez ciało. KONTROLA: podłoga 0 (krzywa CV-3a1) —
+// z daleka statki na orbitach dookoła ciała (także za planetą), linie przecinają ciało (skarga właściciela).
+block('R12 — decyzja 20: bitwa przy ciele z daleka — węzeł za skorupą, żadna linia przez planetę', () => {
+  GAME_CONFIG.FEATURES.cvStage = true;
+  const segHitsSphere = (p, q, c, r) => {
+    const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, ll = dx * dx + dy * dy + dz * dz;
+    const t = ll > 0 ? Math.max(0, Math.min(1, ((c.x - p.x) * dx + (c.y - p.y) * dy + (c.z - p.z) * dz) / ll)) : 0;
+    return Math.hypot(p.x + dx * t - c.x, p.y + dy * t - c.y, p.z + dz * t - c.z) < r;
+  };
+  // Ciało 0,3 j. (planeta skalista / lodowa; orbity 0,6 j., jeden statek za planetą) — przy małym ciele linie biegną nad nim.
+  const run = (floor) => {
+    const w = world({ r: 0.3 });
+    const { R, body } = w;
+    if (floor != null) R.cvTuning = { STAGE_BLEND_FLOOR: floor };
+    cameraAt(R, { x: body.x, y: 0.3, z: body.z }, 30);
+    for (let f = 0; f < 60; f++) frame(R);   // pełne wejście z daleka
+    const R0 = body.r + FLOOR_L * L;
+    let minOut = Infinity, cross = 0, pairs = 0;
+    for (const id of [...w.A, ...w.B]) minOut = Math.min(minOut, d3(drawn(R, id), body) - R0);
+    for (const a of w.A) for (const b of w.B) { pairs++; if (segHitsSphere(drawn(R, a), drawn(R, b), body, body.r)) cross++; }
+    return { minOut, cross, pairs, k: R._stageFrame?.list?.[0]?.blend ?? 0, curve: R._stageFrame?.list?.[0]?.curve ?? -1 };
+  };
+  const on = run(null), k0 = run(0);
+  console.log(`     30 j. od ciała (krzywa ${on.curve.toFixed(3)}): podłoga 1 — stopień ${on.k.toFixed(3)}, zapas min. ${(on.minOut / L).toFixed(2)} L, linii przez ciało ${on.cross}/${on.pairs}; `
+    + `podłoga 0 — stopień ${k0.k.toFixed(3)}, zapas min. ${(k0.minOut / L).toFixed(2)} L, linii przez ciało ${k0.cross}/${k0.pairs}`);
+  assert(on.k > 0.999 && on.curve < 0.01 && on.minOut >= -1e-9 && on.cross === 0,
+    `R12a SEDNO: z daleka (krzywa zoomu ≈ 0) bitwa przy ciele na scenie (stopień 1): każdy statek za skorupą, 0 / ${on.pairs} linii gracz → wróg przez ciało`);
+  assert(k0.k < 0.01 && k0.cross > 0, `R12b KONTROLA podłoga 0 (krzywa CV-3a1): z daleka skala prawdziwa — ${k0.cross} / ${k0.pairs} linii gracz → wróg przechodzi przez ciało`);
 });
 
 // ═══ S1 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════

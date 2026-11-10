@@ -40,7 +40,8 @@ import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT, VESSEL_TARGET_
   from './VesselModelResolver.js';
 import { STAGE, solveStage, bandEdgesWU, pairKey, encounterClusters, encounterParticipants,
   pickStageField, stagePointLogical, stagePointDrawn, shellBaseAt } from './combat/BattleStageLogic.js';   // ARC CV-3a1 — scena bitwy; CV-3a2 — klik i klastry; CV-3a3 — skorupa
-import { stageBlend, lengthPx } from './combat/SemanticZoomLogic.js';                               // ARC CV-3a1 — zoom semantyczny
+import { stageBlend, stageBlendFloored, lengthPx } from './combat/SemanticZoomLogic.js';            // ARC CV-3a1 — zoom semantyczny (CV-6b — podłoga, decyzja 20)
+import { motionSegment, motionAt, targetVelocity } from './combat/StageMotionLogic.js';            // ARC CV-6b — ruch sceny ciągły w prędkości
 import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
   centroidOf, fitWatchFrameOffset, viewOffsetFrame } from './CombatWatchLogic.js';
@@ -6971,6 +6972,8 @@ export class ThreeRenderer {
   // nikt (F1); wszystko, co czyta sprite (smugi, etykiety HUD, nawiasy, klik, kadr „Obserwuj”), idzie za sceną samo.
   // CV-3a3: bitwa przy ciele — grupa unieruchomionych przy ciele na skorupie (D-CV-4, `BattleStageLogic.solveStage({ shell })`);
   // ciało bez rysunku — bitwa bez sceny. Prowadnica raz na rundę, przesunięcia płyną przez rundę (Finding 652).
+  // CV-6b (decyzja właściciela 20 — D-CV-3 zmienione): stopień sceny z podłogą `cvTuning.STAGE_BLEND_FLOOR` (domyślnie 1) —
+  // bitwa w widoku jest ściśnięta przy KAŻDYM zoomie, także w kadrze układu; wejście i wyjście ze sceny bez zmian (JOIN_MS).
 
   // Początek klatki: sprite uczestnika sceny wraca na pozycję bazową — chyba że od poprzedniej klatki ktoś zapisał mu nową
   // (zdarzenia ruchu i orbit między klatkami piszą pozycję bazową wprost): wtedy bazą jest ta nowa.
@@ -7097,7 +7100,7 @@ export class ThreeRenderer {
     const frame = { clusters: 0, staged: 0, fallback: 0, misbanded: 0, solves: 0, list: [] };
     for (const cl of clusters) {
       const info = { id: cl.id, encounterIds: cl.encounterIds, encs: cl.encs, members: 0, pinned: cl.pinned, shellBodyId: cl.shellBodyId ?? null,
-        blend: 0, pxL: 0, fallback: false, misbanded: 0, misbandedBefore: 0, passes: 0, centre: null, rIn: 0, scale: null, join: 0,
+        blend: 0, curve: 0, pxL: 0, fallback: false, misbanded: 0, misbandedBefore: 0, passes: 0, centre: null, rIn: 0, scale: null, join: 0,
         solves: 0, shell: null };
       for (const eid of cl.encounterIds) this._stageClusterOf.set(eid, info);
       for (const id of cl.ids) this._stageParticipants.add(id);   // Finding 666 (b) — także klaster bez sceny (ciało bez rysunku)
@@ -7123,19 +7126,26 @@ export class ThreeRenderer {
       const c = { x: 0, y: 0, z: 0 };
       for (const q of pts) { c.x += q.x; c.y += q.y; c.z += q.z; }
       c.x /= pts.length; c.y /= pts.length; c.z /= pts.length;
-      // Początek układu przesunięć: środek uczestników bez sceny; przy skorupie — rysowany środek ciała (bitwa idzie za ciałem,
-      // które krąży wokół gwiazdy: ≈ 1,3 L na rundę przy orbicie 1 AU).
-      const origin = shellBody ? { x: shellBody.x, y: Number.isFinite(shellBody.y) ? shellBody.y : 0, z: shellBody.z } : c;
+      // Układ celów: przy skorupie — ciało TERAZ (bitwa idzie za ciałem, które krąży wokół gwiazdy: ≈ 1,3 L na rundę przy orbicie
+      // 1 AU); w wolnej przestrzeni — ŚWIAT. ARC CV-6b (zgłoszenie właściciela 2026-11-09 — „bitwy się zacinają”): dawniej początkiem
+      // wolnej bitwy był środek pozycji BAZOWYCH, więc cały węzeł jechał na ruchu płynnym logiki — jego cele przychodzą co ~150 ms
+      // tików fizyki, a ruch kończy się przed kolejnym celem (zmierzone w grze: stawanie i szarpnięcia całej bitwy). Cele w świecie
+      // pochodzą z rozwiązania (pozycje LOGICZNE w chwili rundy) — ruch płynny logiki nie dosięga już statków na scenie (stopień 1).
+      const fid = shellBody ? `b:${cl.shellBodyId}` : 'w';
+      const origin = shellBody ? { x: shellBody.x, y: Number.isFinite(shellBody.y) ? shellBody.y : 0, z: shellBody.z } : { x: 0, y: 0, z: 0 };
       let key = '';
       for (const enc of cl.encs ?? []) key += `${enc.id}:${enc.currentRound ?? 0};`;
       key += '#' + pts.map((q) => q.id).join(',') + (shellBody ? `@${cl.shellBodyId}` : '');
       let st = this._stageState.get(cl.id);
       if (!st) {
-        st = { key: null, sol: null, offsets: null, from: new Map(), to: new Map(), el: 0, dur: 1, frame: -1, solves: 0, stagePos: new Map() };
+        st = { key: null, sol: null, offsets: null, from: new Map(), to: new Map(), seg: new Map(), el: 0, dur: 1, frame: -1, solves: 0, stagePos: new Map() };
         // Klaster zmienił id (skończyło się starcie o najmniejszym id): ciepły start z poprzedniego stanu tych samych statków.
         const prevIds = new Set(pts.map((q) => this._stageMarks.get(q.id)?.cluster).filter((x) => x != null && x !== cl.id));
         if (prevIds.size === 1) st.offsets = this._stageState.get([...prevIds][0])?.offsets ?? null;
       }
+      // Czas od ostatniego rozwiązania (zegar prezentacji, pauza = pauza; BEZ klamry — po końcu odcinka statek jedzie dalej,
+      // `StageMotionLogic`; dawna klamra do jednej rundy zatrzymywała przesunięcia 1–2 klatki przed każdą rundą).
+      st.el += dt;
       if (key !== st.key || !st.sol) {
         // Pary pierwszeństwa: strzelec → cel z ostatniej rundy każdego starcia klastra (to gracz czyta jako zasięg) — pełne
         // przyciąganie do prawa sceny; reszta par — kompromis prowadnicy.
@@ -7147,54 +7157,77 @@ export class ThreeRenderer {
         st.sol = solveStage({ points: inp, centre: cIn, L, edges, prevOffsets: st.offsets, priority,
           shell: shellBody ? { body: shellBody, pinned: cl.pinnedIds } : null });
         st.offsets = st.sol.offsets;
-        // Cele w układzie przesunięć: przy skorupie względem ciała TERAZ, inaczej względem środka pozycji LOGICZNYCH (gdy ruch
-        // płynny rundy dobiegnie, środek bazowy = ten środek). Start = cel wyświetlany w poprzedniej klatce (świat).
-        const ref = shellBody ? origin : cIn;
+        // ARC CV-6b — RUCH CIĄGŁY W PRĘDKOŚCI: każdy statek dostaje odcinek Hermite'a od pozycji i prędkości wyświetlanej TERAZ
+        // (odcinek tego klastra; po zmianie id klastra — cel i prędkość z poprzedniej klatki; nowy uczestnik — od razu w celu)
+        // do nowego rozwiązania, z prędkością końcową = ruch celu z rundy na rundę (ten sam układ celów). Dawniej przejście
+        // LINIOWE kończyło się przed następną rundą i ruszało od nowa z inną prędkością — na każdej granicy rund pauza i szarpnięcie.
+        const dur = Math.max(1, roundMs);
+        const segs = new Map();
         st.from.clear(); st.to.clear();
         for (const q of pts) {
           const s = st.sol.pos.get(q.id);
           if (!s) continue;
-          const T = { x: s.x - ref.x, y: s.y - ref.y, z: s.z - ref.z };
-          st.to.set(q.id, T);
-          const m = this._stageMarks.get(q.id);
-          const fresh = !!m?.tgt && m.tgtFrame === this._frameNo - 1;
-          st.from.set(q.id, fresh ? { x: m.tgt.x - origin.x, y: m.tgt.y - origin.y, z: m.tgt.z - origin.z } : { x: T.x, y: T.y, z: T.z });
+          const T = { x: s.x - origin.x, y: s.y - origin.y, z: s.z - origin.z };
+          const m = this._stageMarks.get(q.id) ?? this._stageMark(q.id);
+          const old = st.seg.get(q.id);
+          let cur = null;
+          if (old) cur = motionAt(old, st.el);
+          else if (m.tgt && m.tgtFrame === this._frameNo - 1) {
+            const v = m.tgtFid === fid ? m.tgtV : null;   // prędkość w innym układzie celów (ciało ↔ świat) — od zera
+            cur = { p: { x: m.tgt.x - origin.x + (v?.x ?? 0) * dt, y: m.tgt.y - origin.y + (v?.y ?? 0) * dt, z: m.tgt.z - origin.z + (v?.z ?? 0) * dt }, v };
+          }
+          const v1 = m.lastT && m.lastTFid === fid ? targetVelocity(T, m.lastT, dur) : null;
+          segs.set(q.id, motionSegment({ p0: cur?.p ?? T, v0: cur?.v ?? undefined, p1: T, v1: v1 ?? undefined, durMs: dur }));
+          st.from.set(q.id, cur?.p ?? T); st.to.set(q.id, T);
+          m.lastT = T; m.lastTFid = fid;
         }
-        st.el = 0; st.dur = Math.max(1, roundMs);
+        st.seg = segs;
+        st.el = 0; st.dur = dur;
         st.key = key; st.solves++; frame.solves++;
-        // Pole kliku przy skorupie (D-CV-5): środek LOGICZNY prowadnicy w układzie przesunięć (idzie za ciałem jak cele) i
-        // przesunięcie sztywne skorupy — `BattleStageLogic.stagePointLogical` z `shift`.
-        st.cInRel = { x: cIn.x - ref.x, z: cIn.z - ref.z };
+        // Pole kliku (D-CV-5): środek LOGICZNY prowadnicy w układzie celów (przy skorupie idzie za ciałem jak cele; w wolnej
+        // przestrzeni — punkt świata) i przesunięcie: przy skorupie sztywne przesunięcie skorupy, w wolnej przestrzeni — o ile
+        // węzeł wyświetlany odbiega od rozwiązania w trakcie ruchu (niżej, co klatkę).
+        st.cInRel = { x: cIn.x - origin.x, z: cIn.z - origin.z };
         st.shift = st.sol.shell?.shift ? { x: st.sol.shell.shift.x, z: st.sol.shell.shift.z } : null;
       }
-      st.el = Math.min(st.dur, st.el + dt);
-      const u = st.el / st.dur;
       st.frame = this._frameNo;
       this._stageState.set(cl.id, st);
       const sol = st.sol;
-      // Cele wyświetlane tej klatki: początek układu + przesunięcie (liniowo od startu do celu przez rundę).
+      // Cele wyświetlane tej klatki: początek układu + odcinek ruchu (`StageMotionLogic.motionAt`); prędkości — dla ciągłości
+      // przy zmianie klastra (znacznik statku).
       st.stagePos.clear();
+      const vel = new Map();
       const dc = { x: 0, y: 0, z: 0 };
       for (const q of pts) {
-        const T = st.to.get(q.id), F = st.from.get(q.id);
-        if (!T || !F) continue;
-        const t = { x: origin.x + F.x + (T.x - F.x) * u, y: origin.y + F.y + (T.y - F.y) * u, z: origin.z + F.z + (T.z - F.z) * u };
+        const seg = st.seg.get(q.id);
+        if (!seg) continue;
+        const mo = motionAt(seg, st.el);
+        const t = { x: origin.x + mo.p.x, y: origin.y + mo.p.y, z: origin.z + mo.p.z };
         st.stagePos.set(q.id, t);
+        vel.set(q.id, mo.v);
         dc.x += t.x; dc.y += t.y; dc.z += t.z;
       }
       const nT = st.stagePos.size || 1;
+      const dcm = { x: dc.x / nT, y: dc.y / nT, z: dc.z / nT };
       // Stopień sceny z odległości kamery do środka RYSOWANEJ bitwy (przy skorupie — grupa obok ciała, nie środek ciała).
-      const depthAt = shellBody ? { x: dc.x / nT, y: dc.y / nT, z: dc.z / nT } : c;
+      // ARC CV-6b (decyzja właściciela 20 — D-CV-3 zmienione): podłoga stopnia (`cvTuning.STAGE_BLEND_FLOOR`, domyślnie 1) —
+      // bitwa w widoku zostaje ściśnięta przy KAŻDYM zoomie (z daleka skala prawdziwa rozrzucała ją po orbitach, a wiązki
+      // przecinały planetę); krzywa zoomu (`curve`) zostaje miarą (odczyty, ikony taktyczne CV-6a).
+      const depthAt = st.stagePos.size ? dcm : c;
       const pxL = lengthPx({ length: L, depth: this.camera.position.distanceTo(_STAGE_V.set(depthAt.x, depthAt.y, depthAt.z)), fovDeg: this.camera.fov, H });
-      const blend = stageBlend(pxL);
-      // Pole kliku (D-CV-5): środek uczestników bez sceny, promień ściskania prowadnicy. Przy skorupie — środek LOGICZNY
-      // prowadnicy (przy ciele, idzie za ciałem) i przesunięcie sztywne skorupy: grupa rysowana obok ciała jest tą samą mapą
-      // promieniową przesuniętą o nie (dawniej środek = grupa RYSOWANA dla obu stron — punkt logiczny przesunięty o całą
-      // skorupę: statek wysłany pod kursor stawał na scenie 6–11 L dalej, zmierzone).
+      const curve = stageBlend(pxL);
+      const blend = stageBlendFloored(pxL, this.cvTuning?.STAGE_BLEND_FLOOR);
+      // Pole kliku (D-CV-5): środek LOGICZNY prowadnicy, promień ściskania prowadnicy, przesunięcie. Przy skorupie — sztywne
+      // przesunięcie skorupy (grupa rysowana obok ciała jest tą samą mapą promieniową przesuniętą o nie; dawniej środek = grupa
+      // RYSOWANA dla obu stron — statek wysłany pod kursor stawał na scenie 6–11 L dalej, zmierzone). W wolnej przestrzeni
+      // (CV-6b) — o ile środek węzła wyświetlanego odbiega od środka rozwiązania w trakcie ruchu (odcinki Hermite'a) — dokładnie
+      // tam, gdzie scena rysuje.
       const shellOn = !!(shellBody && sol.shell);
-      const fieldCentre = shellOn && st.cInRel ? { x: origin.x + st.cInRel.x, y: c.y, z: origin.z + st.cInRel.z } : c;
-      Object.assign(info, { blend, pxL, fallback: sol.fallback, misbanded: sol.misbanded, misbandedBefore: sol.misbandedBefore,
-        passes: sol.passes, centre: fieldCentre, rIn: sol.rIn, shift: shellOn ? st.shift : null, scale: sol.fallback ? (sol.scale ?? null) : null,
+      const fieldCentre = st.cInRel ? { x: origin.x + st.cInRel.x, y: c.y, z: origin.z + st.cInRel.z } : c;
+      const fieldShift = shellOn ? st.shift
+        : (st.stagePos.size ? { x: dcm.x - fieldCentre.x, z: dcm.z - fieldCentre.z } : null);
+      Object.assign(info, { blend, curve, pxL, fallback: sol.fallback, misbanded: sol.misbanded, misbandedBefore: sol.misbandedBefore,
+        passes: sol.passes, centre: fieldCentre, rIn: sol.rIn, shift: fieldShift, scale: sol.fallback ? (sol.scale ?? null) : null,
         solves: st.solves, shell: shellOn ? { bodyR: sol.shell.bodyR, source: sol.shell.u.source, excluded: sol.shell.excluded, pinned: sol.shell.pinned } : null });
       let wSum = 0, wN = 0, kPin = 0;   // ARC CV-3a2 — średnie wejście uczestników w scenę (pole kliku: stopień × wejście)
       // ARC CV-3a3 — kula skorupy (ciało + podłoga): żaden punkt pośredni zoomu nie wchodzi w ciało (`_stagePlace`, `avoid`).
@@ -7216,6 +7249,7 @@ export class ThreeRenderer {
         }
         this._stagePlace(q.id, this._vessels.get(q.id), base, target, blend * m.w, avoid);
         m.tgt = target; m.tgtFrame = this._frameNo;
+        m.tgtV = vel.get(q.id) ?? null; m.tgtFid = fid;   // ARC CV-6b — prędkość wyświetlana (ciągłość przy zmianie klastra)
         m.avoidId = shellOn ? cl.shellBodyId : null;
         wSum += m.w; wN++;
         seen.add(q.id);
@@ -7233,6 +7267,7 @@ export class ThreeRenderer {
       if (!e?.sprite) { this._stageMarks.delete(id); continue; }
       if (!m.releasing) {
         m.releasing = true;
+        m.lastT = null; m.tgtV = null;   // ARC CV-6b — ruch sceny od nowa przy kolejnej bitwie (bez prędkości z poprzedniej)
         m.rel = { x: m.drawn.x - m.base.x, y: m.drawn.y - m.base.y, z: m.drawn.z - m.base.z };
         m.w = Number.isFinite(m.rel.x) && Number.isFinite(m.rel.y) && Number.isFinite(m.rel.z) ? 1 : 0;
       }
@@ -7315,6 +7350,8 @@ export class ThreeRenderer {
       const fmt = (r) => `${r.min.toFixed(1)}–${r.max.toFixed(1)} L (logicznie ${Math.min(...r.au).toFixed(3)}–${Math.max(...r.au).toFixed(3)} AU)`;
       rows.push({
         klaster: c.id, starcia: c.encounterIds.length, statki: c.members, przyCiele: c.pinned, blend: +c.blend.toFixed(3),
+        // ARC CV-6b (decyzja 20) — `blend` = stopień użyty (z podłogą), `krzywa` = sama krzywa zoomu semantycznego (miara)
+        krzywa: +(c.curve ?? 0).toFixed(3),
         fregataPx: +c.pxL.toFixed(1), zlePasmaPrzed: c.misbandedBefore, zlePasma: c.misbanded, awaryjna: c.fallback,
         // ARC CV-3a3 — rozwiązania prowadnicy od początku sceny klastra (raz na rundę — Finding 652); skorupa przy ciele (D-CV-4)
         rozwiazania: c.solves ?? 0, cialo: c.shell ? c.shellBodyId : (c.pinned ? `${c.shellBodyId} (bez rysunku — bez sceny)` : '—'),
@@ -7343,12 +7380,13 @@ export class ThreeRenderer {
     const cl = this._stageClusterOf.get(enc.id);
     const encs = cl?.encs?.length ? cl.encs : [enc];
     const drawn = [], base = [], drawnIds = [];
+    // ARC CV-6b (zgłoszenie właściciela 2026-11-09 — zacinanie): kadr ze WSZYSTKICH rysowanych uczestników, także zniszczonych
+    // w trakcie starcia (DSCS trzyma ich w starciu do końca, sprite stoi na scenie — Finding 615). Dawniej tylko żywi: każde
+    // zniszczenie przesuwało oś kadru skokiem — zmierzone w grze: 4 z 4 klatek ze zniszczeniem szarpnęły cel kamery (10–49 L/s).
     for (const en of encs) {
       const ids = [...(en.sideA?.vesselIds ?? []), ...(en.sideA?.joinedVesselIds ?? []),
         ...(en.sideB?.vesselIds ?? []), ...(en.sideB?.joinedVesselIds ?? [])];
       for (const id of ids) {
-        const st = en.vesselStates?.get?.(id);
-        if (st && !(st.hp > 0)) continue;
         const e = this._vessels.get(id);
         if (!e?.sprite?.visible) continue;
         const p = e.sprite.position;
@@ -7377,8 +7415,10 @@ export class ThreeRenderer {
       return q ? { x: b.x + (q.x - b.x) * w, y: b.y + (q.y - b.y) * w, z: b.z + (q.z - b.z) * w } : b;
     }) : null;
     let fit = staged ? fitAt(staged) : null;
+    // ARC CV-6b (decyzja 20) — stopień w dystansie kadru z tą samą podłogą co scena (przy podłodze 1 bitwa rysowana = scena przy
+    // każdym dystansie, więc kadr na pozycjach sceny jest dokładny i pętla kończy się od razu).
     for (let k = 0; fit && k < 4; k++) {
-      const b = stageBlend(lengthPx({ length: VESSEL_TARGET_SIZE.frigate, depth: fit.dist, fovDeg: this.camera.fov, H }));
+      const b = stageBlendFloored(lengthPx({ length: VESSEL_TARGET_SIZE.frigate, depth: fit.dist, fovDeg: this.camera.fov, H }), this.cvTuning?.STAGE_BLEND_FLOOR);
       if (b >= 0.999) break;
       const f2 = fitAt(base.map((q, i) => ({ x: q.x + (staged[i].x - q.x) * b, y: q.y + (staged[i].y - q.y) * b, z: q.z + (staged[i].z - q.z) * b })));
       if (!f2 || !(f2.dist > fit.dist + 1e-9)) break;

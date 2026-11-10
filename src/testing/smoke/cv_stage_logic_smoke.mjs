@@ -7,7 +7,8 @@
 //   L2 odwrotności: G⁻¹(G(d)) = d; mapa promieniowa z soczewką monotoniczna, ciągła (r_in, r_out), tożsamość poza soczewką;
 //      odwrotność mapy i promienia rysowanego (każdy stopień sceny) w obie strony
 //   L3 zoom semantyczny: stopień sceny monotoniczny w rozmiarze fregaty [px], 0 poniżej progu dolnego, 1 powyżej górnego;
-//      rozmiar fregaty i dystans — wzajemnie odwrotne
+//      rozmiar fregaty i dystans — wzajemnie odwrotne; (CV-6b, decyzja 20) stopień z podłogą — domyślnie 1 przy każdym
+//      rozmiarze; L3e podłoga 0 = krzywa CV-3a1 co do bitu, klamra, nie-liczba → domyślna
 //   L4 (§3.1-2) KAŻDA para uczestników w swoim paśmie po prowadnicy: szyk stagera 10 na 10 i konfiguracja kontrolna —
 //      KONTROLA: gołe prawo promieniowe psuje pasma (prowadnica jest konieczna), po prowadnicy zero złych par, bez skali
 //      awaryjnej; układy losowe (równomierne i „formacje flot”, ziarniste) — każde rozwiązanie spójne w pasmach: prawem
@@ -17,7 +18,9 @@
 //      pozycje uczestników w każdej rundzie → prowadnica z ciepłym startem i parami pierwszeństwa (strzelec → cel tej
 //      rundy) — zero złych par, zero skali awaryjnej; pary pierwszeństwa w OKNACH WŁAŚCICIELA (F3; CV-3a3 — przecelowane po
 //      uzbrojeniu lustrzanym stagera, §3.2-10): mediana odstęp / G(d) każdej broni w oknie, ≥ 95 % strzałów w oknie;
-//      KONTROLA: bez par pierwszeństwa < 95 % (zmierzone 88 %)
+//      KONTROLA: bez par pierwszeństwa < 95 % (zmierzone 88 %); (CV-6b) L5c rozwiązanie z ciepłym startem nie błądzi z rundy
+//      na rundę (względny krok mediana ≤ 0,3 L, p95 ≤ 1,6 L), wierność prawu wszystkich par nie gorsza niż dawniej;
+//      KONTROLA: dawne 40 przejść z wagą 0,5 błądzi
 //   L6 siatka rozsunięcia: statki jednej strony ≥ 1,6 L z tolerancją 1 % (prowadnica Gaussa–Seidla przy konkurujących
 //      ograniczeniach pasm zostawia resztę ułamka procenta — zmierzone 1,5955 L w szyku stagera; podłoga jest celem
 //      rysunku, nie pasmem) — szyk stagera; kupka 10 w jednym punkcie (wróg daleko od krawędzi pasma); bez siatki
@@ -28,6 +31,8 @@
 //      (zamrożone obiekty, tryb ścisły modułów ES — zapis rzuciłby wyjątek)
 //   L9 (Finding 643) kadr z osią na bitwie: od dystansu kadru w skali prawdziwej kółko do 1/3 — wszyscy uczestnicy sceny
 //      w kadrze; KONTROLA: dawny kadr (cel przesunięty w dół, stały po kółku) — statki poza kadrem
+//   L10 (CV-6b) odcinek ruchu sceny (`StageMotionLogic`): końce dokładne, ciągłość pozycji i prędkości na końcu odcinka,
+//      prędkość = pochodna pozycji, ruch po końcu gaśnie (ograniczony), odcinek w miejscu stoi
 //
 // ⚠ Fail-first: moduły CV-3a1 powstają w tym kroku — import dynamiczny w try/catch, piny DEGRADUJĄ (czerwone), suita się
 //   nie przerywa.
@@ -52,6 +57,7 @@ const tryImport = async (rel) => { try { return await import(rel); } catch (e) {
 const SL = await tryImport('../../renderer/combat/BattleStageLogic.js');
 const SZ = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
 const ST = await tryImport('../../debug/CvBattleStager.js');
+const SMOT = await tryImport('../../renderer/combat/StageMotionLogic.js');   // ARC CV-6b — ruch sceny ciągły w prędkości
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -144,6 +150,18 @@ block('L3 — zoom semantyczny', () => {
   const d = call(SZ, 'depthForPx', { length: L, px: 24, fovDeg: 55, H: 1041 });
   const back = call(SZ, 'lengthPx', { length: L, depth: d, fovDeg: 55, H: 1041 });
   assert(SZ && Math.abs(back - 24) < 1e-9, `L3c dystans dla 24 px (${d?.toFixed?.(3)} j. przy wysokości 1041 px) i rozmiar przy tym dystansie — wzajemnie odwrotne`);
+  // ARC CV-6b (decyzja właściciela 20 — D-CV-3 zmienione): stopień z podłogą — domyślnie 1 przy każdym rozmiarze fregaty;
+  // podłoga 0 = krzywa CV-3a1; klamra [0, 1]; nie-liczba — podłoga domyślna.
+  let allOne = true, curveSame = true;
+  for (let px = 0; px <= 60; px += 0.05) {
+    if (call(SZ, 'stageBlendFloored', px) !== 1) allOne = false;
+    if (call(SZ, 'stageBlendFloored', px, 0) !== call(SZ, 'stageBlend', px)) curveSame = false;
+  }
+  const half = call(SZ, 'stageBlendFloored', 0.5, 0.5), clampHi = call(SZ, 'stageBlendFloored', 0.5, 7), clampLo = call(SZ, 'stageBlendFloored', 0.5, -3);
+  const bad = call(SZ, 'stageBlendFloored', 0.5, NaN);
+  assert(SZ && allOne && SZ.STAGE_BLEND_FLOOR_DEFAULT === 1, 'L3d decyzja 20: podłoga domyślna — stopień 1 przy KAŻDYM rozmiarze fregaty (0 … 60 px)');
+  assert(SZ && curveSame && half === 0.5 && clampHi === 1 && clampLo === 0 && bad === 1,
+    `L3e podłoga 0 = krzywa CV-3a1 co do bitu (wartość porównawcza — nie kontrola: na drzewie sprzed CV-6b funkcji nie ma); podłoga 0,5 → ${half}; klamra 7 → ${clampHi}, −3 → ${clampLo}; NaN → ${bad} (domyślna)`);
 });
 
 // ═══ L4 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -282,6 +300,38 @@ block('L5 — układy nagrane z prawdziwej bitwy DSCS (stager 10 na 10, ziarno 1
   assert(meds.length === 3 && meds.every(Boolean) && withP.share >= 0.95,
     `L5b pary strzelec → cel w oknach właściciela (F3): mediana każdej broni w oknie (${JSON.stringify(withP.med)}), w oknie ${(withP.share * 100).toFixed(1)} % strzałów (≥ 95 %)`);
   assert(SL && noP.share < 0.95, `L5b-KONTROLA: bez par pierwszeństwa w oknie ${(noP.share * 100).toFixed(1)} % strzałów (< 95 %) — pary pierwszeństwa są potrzebne`);
+  // ARC CV-6b (zgłoszenie właściciela 2026-11-09 — zacinanie) — błądzenie rozwiązania z rundy na rundę: względny krok
+  // rozwiązania (bez środka) każdego żywego statku, wierność prawu WSZYSTKICH par (odstęp rysowany w ±15 % G(d)). Ciepły start
+  // w wolnej przestrzeni — `STAGE.WARM_PASSES` z wagą `WARM_PULL`; KONTROLA: dawne 40 przejść z wagą 0,5 (CV-3a3) — błądzi.
+  const walk = (opts) => {
+    let offsets = null; const prev = new Map(), steps = []; let lawIn = 0, lawN = 0, bad = 0;
+    for (const pts of rounds) {
+      const priority = new Set(pts.events.map((e) => SL.pairKey(e.a, e.t)));
+      const r = solve(pts, { prevOffsets: offsets, priority, opts: offsets ? opts : {} });
+      offsets = r?.offsets ?? null;
+      if (misbandedOf(pts, r) !== 0) bad++;
+      let cx = 0, cz = 0; for (const p of pts) { const q = r.pos.get(p.id); cx += q.x; cz += q.z; } cx /= pts.length; cz /= pts.length;
+      for (const p of pts) {
+        const q = r.pos.get(p.id), rel = { x: q.x - cx, y: q.y, z: q.z - cz }, pv = prev.get(p.id);
+        if (pv) steps.push(Math.hypot(rel.x - pv.x, rel.y - pv.y, rel.z - pv.z) / L);
+        prev.set(p.id, rel);
+      }
+      for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+        const g = SL.stageGap(Math.hypot(pts[j].x - pts[i].x, pts[j].z - pts[i].z));
+        const A = r.pos.get(pts[i].id), B = r.pos.get(pts[j].id);
+        if (g > 0) { lawN++; if (Math.abs(Math.hypot(B.x - A.x, B.y - A.y, B.z - A.z) / g - 1) <= 0.15) lawIn++; }
+      }
+    }
+    steps.sort((a, b) => a - b);
+    return { med: steps[steps.length >> 1] ?? NaN, p95: steps[Math.floor(steps.length * 0.95)] ?? NaN, law: lawN ? lawIn / lawN : 0, bad };
+  };
+  const wNow = SL?.pairKey ? walk({}) : { med: Infinity, p95: Infinity, law: 0, bad: 1 };
+  const wOld = SL?.pairKey ? walk({ WARM_PASSES: SL.STAGE.PASSES, WARM_PULL: SL.STAGE.PULL }) : { med: 0, p95: 0, law: 1, bad: 0 };
+  console.log(`     błądzenie rozwiązania (względny krok na rundę): teraz mediana ${wNow.med.toFixed(3)} L, p95 ${wNow.p95.toFixed(3)} L, prawo ±15 % ${(wNow.law * 100).toFixed(1)} %; `
+    + `dawne 40 × 0,5 — mediana ${wOld.med.toFixed(3)} L, p95 ${wOld.p95.toFixed(3)} L, prawo ±15 % ${(wOld.law * 100).toFixed(1)} %`);
+  assert(SL && wNow.bad === 0 && wNow.med <= 0.3 && wNow.p95 <= 1.6 && wNow.law >= wOld.law - 0.01,
+    `L5c SEDNO (CV-6b): rozwiązanie nie błądzi — względny krok na rundę mediana ${wNow.med.toFixed(3)} L ≤ 0,3, p95 ${wNow.p95.toFixed(3)} L ≤ 1,6; wierność prawu ${(wNow.law * 100).toFixed(1)} % (nie gorsza niż dawniej), zero złych par`);
+  assert(SL && wOld.med > 0.35 && wOld.p95 > 1.8, `L5c-KONTROLA: dawne 40 przejść z wagą 0,5 przy ciepłym starcie błądzi — mediana ${wOld.med.toFixed(3)} L, p95 ${wOld.p95.toFixed(3)} L`);
 });
 
 // ═══ L6 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -373,6 +423,29 @@ block('L9 — kadr z osią na bitwie (Finding 643): kółko do 1/3 dystansu — 
   console.log(`     kadr w skali prawdziwej ${d0.toFixed(3)} j. → kółko ${d3.toFixed(3)} j.: z osią na bitwie ${nNew} / 20; dawny kadr (${old.dist.toFixed(3)} → ${(old.dist / 3).toFixed(3)} j., cel ${old.target.y.toFixed(3)} j. w pionie) ${nOld} / 20`);
   assert(fit?.fits === true && nNew === 20, 'L9a SEDNO: oś na środku bitwy + przesunięcie ekranowe + scena — po kółku do 1/3 dystansu 20 / 20 w kadrze');
   assert(nOldFit === 20 && nOld < 20, `L9b KONTROLA: dawny kadr — w dystansie kadru ${nOldFit} / 20, po kółku do 1/3 (cel przesunięty w dół, stały, bez sceny) ${nOld} / 20`);
+});
+
+// ═══ L10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// ARC CV-6b — odcinek ruchu sceny (`StageMotionLogic`, czysty): końce dokładne, ciągłość pozycji i prędkości na końcu odcinka
+// (Hermite → ruch dalej), prędkość = pochodna pozycji, ruch po końcu ograniczony (gaśnie), odcinek „w miejscu” stoi.
+block('L10 — CV-6b: odcinek ruchu sceny ciągły w prędkości (czysta funkcja)', () => {
+  const seg = call(SMOT, 'motionSegment', { p0: { x: 0, y: 0, z: 0 }, v0: { x: 0.001, y: 0, z: -0.0005 }, p1: { x: 2, y: 0.5, z: -1 }, v1: { x: 0.002, y: 0, z: 0.001 }, durMs: 1000 });
+  const at = (el) => call(SMOT, 'motionAt', seg, el);
+  const a = at(0), b = at(1000), bm = at(1000 - 1e-6), bp = at(1000 + 1e-6);
+  const d = (u, v) => Math.hypot(u.x - v.x, u.y - v.y, u.z - v.z);
+  const okEnds = !!seg && d(a.p, { x: 0, y: 0, z: 0 }) < 1e-12 && d(a.v, { x: 0.001, y: 0, z: -0.0005 }) < 1e-12 && d(b.p, { x: 2, y: 0.5, z: -1 }) < 1e-12 && d(b.v, { x: 0.002, y: 0, z: 0.001 }) < 1e-12;
+  const okC1 = !!seg && d(bm.p, bp.p) < 1e-6 && d(bm.v, bp.v) < 1e-6;
+  let okDeriv = !!seg;
+  for (const el of [100, 400, 777, 1200, 2500]) { const p0 = at(el), p1 = at(el + 1e-3); const nd = { x: (p1.p.x - p0.p.x) / 1e-3, y: (p1.p.y - p0.p.y) / 1e-3, z: (p1.p.z - p0.p.z) / 1e-3 }; if (d(nd, p0.v) > 1e-6) okDeriv = false; }
+  const far = at(1e9), E = (SMOT?.STAGE_MOTION?.EXTRAP_E ?? 0.5) * 1000;
+  const okBound = !!seg && d(far.p, { x: 2 + 0.002 * E, y: 0.5, z: -1 + 0.001 * E }) < 1e-9 && Math.hypot(far.v.x, far.v.y, far.v.z) < 1e-12;
+  const still = call(SMOT, 'motionSegment', { p0: { x: 1, y: 2, z: 3 }, p1: { x: 1, y: 2, z: 3 }, durMs: 1000 });
+  const okStill = !!still && [0, 500, 999, 1500].every((el) => d(call(SMOT, 'motionAt', still, el).p, { x: 1, y: 2, z: 3 }) < 1e-12);
+  const tv = call(SMOT, 'targetVelocity', { x: 1, y: 0, z: 2 }, { x: 0, y: 0, z: 0 }, 500), tv0 = call(SMOT, 'targetVelocity', { x: 1, y: 0, z: 2 }, null, 500);
+  assert(okEnds && okC1, 'L10a końce odcinka dokładne (pozycja i prędkość), na końcu odcinka pozycja i prędkość ciągłe (Hermite → ruch dalej)');
+  assert(okDeriv, 'L10b prędkość = pochodna pozycji (w odcinku i po jego końcu)');
+  assert(okBound && okStill, `L10c ruch po końcu odcinka gaśnie i jest ograniczony (do v1 · ${E} ms); odcinek w miejscu stoi`);
+  assert(!!tv && Math.abs(tv.x - 0.002) < 1e-15 && Math.abs(tv.z - 0.004) < 1e-15 && tv0?.x === 0 && tv0?.z === 0, 'L10d prędkość celu z dwóch celów; bez poprzedniego celu — zero');
 });
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
