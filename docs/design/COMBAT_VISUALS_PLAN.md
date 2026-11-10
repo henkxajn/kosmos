@@ -6,8 +6,10 @@
 > CV-2a ✅ DONE 2026-11-08 (`230fd3c`, owner's check PASS, `cvFxEngine` default ON with the owner's tuning; §4 CV-2a — delivered).
 > CV-3a split by the owner into CV-3a1 / CV-3a2 (§3.2-2). CV-3a1 ✅ DONE 2026-11-08 (`d78e8f6`, `cvStage` default ON — §4 CV-3a1 — delivered;
 > owner's look 1–9 PASS). CV-3a2 split again by the owner (§3.2-6): CV-3a2 ✅ DONE 2026-11-08 (`1dfe5ae`, under `cvStage`; #646 (b)
-> everywhere — §4 CV-3a2 — delivered; read-only diagnosis of the CV-3a1 look → #650–#658). Next: CV-3a3 — the body shell (D-CV-4,
-> #626; needs the owner's go — description in §4), then CV-3b (its first commit — the stable stage, #652).**
+> everywhere — §4 CV-3a2 — delivered; owner's live check 1–6 PASS; read-only diagnosis of the CV-3a1 look → #650–#658).
+> Owner's decisions 10–14 (§3.2). CV-3a3 (extended — stage completeness: #654 stager mirror, #652 the stable stage, #653
+> stop-gaps, D-CV-4 body shell #626) ✅ DONE 2026-11-09 (`0490ea5`, under `cvStage` — §4 CV-3a3 — delivered; owner's re-check
+> PASS 2026-11-09). Owner's decisions 15–19 (§3.2). Next: CV-6b (the combat strip, §3.2-15), then the order of §4.**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -17,8 +19,9 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 659** (this plan files **#612–#658**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
-> #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look).
+> **Next free finding number: 669** (this plan files **#612–#668**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
+> CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662).
 
 ---
 
@@ -889,6 +892,43 @@ makes Live Server reload the page.
 8. **2026-11-08 — #647 → (a):** the per-frame stage solve stays; revisit in CV-2b. (The CV-3a2 diagnosis found that the same
    per-frame solve is also the cause of the "swimming" ships — #652 — whose natural place is CV-3b, before choreography.)
 9. **2026-11-08 — #649 → (a):** a dense stack of 5+ ships at a band edge keeps the uniform fallback scale.
+10. **2026-11-08 — #654 → stager variant (1):** mirrored loadouts — side B takes side A's per-index loadout (offset 0); "Engage"
+    stays for side A only, as in real play. The DSCS asymmetries (side A fires first, player-only techs, AI-only auto-retreat) are
+    mechanics — untouched.
+11. **2026-11-08 — #653 → stop-gap under `cvStage` until CV-4 / CV-5 / CV-6a:** hide the 3D enemy reticle on staged ships; cap the
+    wreck explosion fireball to ship scale (≈ 1–1.5 L instead of ≥ 5 L); reduce the shield ring and impact flash growth / size
+    (tuning defaults, no pins). Final looks stay in CV-4b / CV-5 / CV-6a.
+12. **2026-11-08 — #658 → accepted for now;** revisit in CV-7 (director camera).
+13. **2026-11-08 — #652 moves from CV-3b into CV-3a3** (a stage-solver issue, not choreography). CV-3b = choreography only.
+14. **2026-11-08 — #640 (contact flood) → a separate small step OUTSIDE CV right after CV-3a3;** not in the CV-3a3 session.
+    *Superseded in its position by 15 — #640 now follows CV-1c.*
+15. **2026-11-09 — the cut is reordered: CV-3a3 → CV-6b (combat strip) → CV-1a → CV-1b → CV-1c → #640 (small step OUTSIDE CV)
+    → CV-3b**; the rest keeps its order (CV-2b → CV-4 → CV-5 → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z). Reason: the combat card
+    covers half the screen or more and hampers every later check; the owner's six new warship models are ready for CV-1. With CV-1a
+    before CV-3b, CV-3b needs no bow shim (the `legacyBowSign` shim of §4 "Dependencies on CV-1" is dropped — CV-3b faces targets
+    through CV-1a's hardpoints frame, canonical bow +Z).
+16. **2026-11-09 — owner's requirements for CV-6b (combat strip replacing the card).** Today's card plus the rounds log cover half the
+    screen or more and the style does not match the game UI. The strip must be much smaller, in the game's HUD / label idiom (dark
+    bar, theme font, colours from palette roles — like the T5 / T6 panels), collapsible to ONE line of essentials (sides, ship counts
+    alive / total, HP totals, round / time, Watch) and expandable on demand to detail (ship list, round log); losing information in
+    the collapsed state is acceptable.
+    **Dependency on CV-6a (checked 2026-11-09, read-only):** one — the card row "no 3D HP bars" (§4 CV-6b) assumes CV-6a's HUD micro
+    bars; removing the 3D bars (`_syncCombatHpBars`, POLISH P2b) before CV-6a would leave the map without per-ship HP. **Minimal
+    shim:** under `cvStrip` only the card and its round log go; the 3D HP bars stay until CV-6a retires them. Everything else the strip
+    needs exists: palette roles (`HudPalette`, H0), the theme font, `MapInsets` (#629); HP totals, counts and the round log read the
+    encounter (`vesselStates`, `timeline`) exactly like today's card (the presented-HP ledger arrives with CV-4 and is a drop-in
+    source); `getPanelRect()` stays (D-CV-21 — its three consumers: the Watch safe rect `ThreeRenderer:7357, :7687` and the ship-panel
+    anchor obstacle `ShipPanelAnchorLogic`, Finding 545). Not CV-6a but later: the Director chip waits for CV-7 (omitted until then);
+    the orbital result row (§3.1-6) belongs to CV-8a / CV-8b.
+17. **2026-11-09 — #662 → (a):** no body snap when an empty-space click resolves inside a battle stage — the ship flies to the
+    point (± 2.5 L from the cursor) and stays there without orbit; everywhere else the snap rule stays as today. Narrowly at the
+    click / order-spec seam (the issuing UI passes an explicit "no snap" when the click resolved inside a staged cluster), under
+    `cvStage`, flag OFF = today. The body-pinned "both sides at the body" case (points under the group lie logically next to the
+    planet) is accepted.
+18. **2026-11-09 — #663 → a separate small MECHANICS step OUTSIDE CV, right after #640** (the rendezvous point on the far side of
+    the orbit / behind the star). Not fixed in CV; the finding carries the measurements and a proposed fix shape.
+19. **2026-11-09 — #666 → (b):** no 3D reticle on battle participants at any zoom while their cluster is in view; enemies stay
+    marked by the HUD (red rhombs / the alert stack).
 
 ---
 
@@ -898,10 +938,15 @@ Order (owner, 2026-11-08 — early visual payoff): **CV-0b → CV-2a → CV-3a �
 CV-4 (a/b) → CV-5 → CV-6a → CV-6b → CV-7 → CV-8a → CV-8b → CV-Z** (≈ 16–17 sessions). CV-0b stays first: every later
 step changes how many THREE objects exist. The step sections below keep their numbers; read them in this order.
 
+**Reordered 2026-11-09 (owner, §3.2-15, §3.2-18):** … CV-3a3 → **CV-6b → CV-1a → CV-1b → CV-1c → #640 (outside CV) → #663 (MECHANICS, outside CV) → CV-3b** → CV-2b →
+CV-4 (a/b) → CV-5 → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z. CV-6b keeps the 3D HP bars until CV-6a (§3.2-16 shim); CV-3b runs after
+CV-1a, so the bow shim below is no longer needed.
+
 **Dependencies on CV-1 and the shims** (CV-2a, CV-3a and CV-3b now run before CV-1a):
 - CV-2a (FX engine, stager) — none: endpoints are drawn positions; muzzle hardpoints arrive with CV-4.
 - CV-3a (stage) — none: the ship length L comes from `VESSEL_TARGET_SIZE` (`VesselModelResolver.js:60-66`).
-- CV-3b (choreography) — **the bow axis**: facing a target needs each model's bow, and models are not rotated today.
+- CV-3b (choreography) — **the bow axis** (*dropped by the 2026-11-09 reorder: CV-1a now runs first and gives the hardpoints
+  frame; kept for reference*): facing a target needs each model's bow, and models are not rotated today.
   Shim: `legacyBowSign(modelPath)` in `ChoreographyLogic` — bow along local **−X** with ONE exception,
   `nonwarp_large_science` (+X, #621); the same shim moves that slot's exhaust cone to `box.min.x` once engines are lit in
   combat. CV-1a replaces the shim with the hardpoints frame (canonical bow +Z) and deletes it; until then a keeper pins
@@ -1334,6 +1379,8 @@ real resolution — 4 encounters, one row, one merged banner for the cluster ("T
 re-engaged retreating AI ship after the cluster ended (#657); zero exceptions (the console holds only the 31 + 1 known building
 PNG 404s, O16).
 
+**Owner's live check — PASS 2026-11-08 (steps 1–6).**
+
 **Read-only diagnosis of the CV-3a1 look (owner's points 1–6)** — findings **#650–#658** in §5, each with its recommended step.
 Probes (scratchpad, outside the repo): the stager battle in a headless node world with the real DSCS / MOS / `TimeSystem` (seeds
 1–6; variants: engage orders as the stager / none / both sides; fire order B first — the source method with two calls swapped,
@@ -1349,7 +1396,246 @@ drawn / base / logical positions at cinema and 1/3 zoom; the scene and HUD inven
 | **Owner looks at** | a right-click move between staged ships goes under the cursor (also a plain empty-space click far from any battle, #646 (b)); a battle near a planet — ships on the shell, never inside the planet; two co-located encounters — one card row, one banner |
 | **Open options for the owner** | #647 (stage cost), #648 (Watch lands at true scale vs cinema), #649 (stack at a band edge falls back) — §5 |
 
-### CV-3a3 — the body shell (flag `cvStage`; split out of CV-3a2 by the owner, §3.2-6; needs the owner's go)
+### CV-3a3 — stage completeness (flag `cvStage`; the body shell split out of CV-3a2 by the owner, §3.2-6; extended by §3.2-10…13)
+
+#### CV-3a3 — ✅ delivered 2026-11-09 (`0490ea5`; under `cvStage`; owner's check 1–4, 6, 7 PASS, 5 FAIL → fixes and owner's decisions 17 / 19 implemented the same day; owner's re-check PASS 2026-11-09)
+
+**What changed.**
+- **#654 — stager mirror (§3.2-10).** `cvBattle`: side B takes side A's loadout per index (both from `CV_BATTLE.LOADOUTS[i % n]`,
+  offset 0; before, side B was shifted by one index). "Engage" stays for side A only; the DSCS asymmetries are mechanics and
+  untouched. In the real game (GATE-S4, 10v10, 19.8 s each): seed 1 defeat (losses 7 / 4), seed 2 defeat (7 / 4), seed 3 victory
+  (6 / 6) — before the mirror the owner saw 7 / 3, 7 / 2 and 7 / 4; what still favours side B is the mechanics (side A's "Engage"
+  focus, the DSCS order), not the stager. Seed 1 gives the same signature in the game and in the headless world
+  (`[[20,168,133,"B",null,7,4]]`, was `[[20,164,128,"B",null,7,3]]`) — the recorded stager battle changed, hence the L5b re-aim
+  below.
+- **#652 — the stable stage (§3.2-13).** The stage solves ONCE per round per cluster: the key is each encounter's round + the
+  member list (+ the shell body), no longer positions (base positions changed on every frame of the 1 000 ms glide, so the
+  warm-started guard re-solved per frame and moved ships relative to each other by several L per second). The solver input is the
+  LOGICAL positions (where the round's glide ends); the drawn stage offsets — relative to the cluster's origin (the centroid of the
+  unstaged ships, or the drawn body centre for a shell) — go LINEARLY from the target displayed in the previous frame to the new
+  solution over one round of the presentation clock (pause = pause). A joiner costs one extra solve; a cluster that changes id
+  (its lowest encounter ended) inherits the warm start, and every ship starts from the target it was displayed at — no jump.
+  Close-up motion is the logic's round-to-round motion, not the solver's; the per-frame solve cost (#647) is gone with it.
+- **#653 — stop-gaps under `cvStage` (§3.2-11; tuning defaults, no pins on values).** (a) The 3D enemy reticle fades out with the
+  ship's stage weight and is gone from 0.25 of it (`cvTuning.STAGE_RETICLE_FADE_K`); at true scale unchanged. Without the 3D
+  reticle the HUD draws its own alert rings the way it already does for any intruder without one (B-2: two thin rings for 1.6 s
+  of sim time on a FRESH radar alert, one set per intruder) — the permanent reticle on every enemy is gone (measured live at
+  cinema, `cvBattle()` seed 1: 0 reticles and 0 HUD rings over 219 frames; before — 10 reticles on every frame). (b)(c) FX engine
+  `update({ stage })`: hit flash 1.2 × model, growth ×1.5 (was 3.0, ×3); shield ring 1.8 × model, growth ×1.25 (was 4.0, ×3) —
+  `STAGE_FLASH_K` / `STAGE_FLASH_GROW` / `STAGE_RING_K` / `STAGE_RING_GROW`; the spark shader reads the growth from a uniform
+  (`uGrow`; without the stage 1 + 2p to the value). (d) Wreck explosion: the fireball peaks at hull size × `STAGE_FIREBALL_K` 1.5
+  (a frigate — radius 1.5 L) with no 0.2 WU floor (was 5 L at the start, 15 L at the peak), no ring (#641). Final looks stay in
+  CV-4b / CV-5 / CV-6a.
+- **D-CV-4 — the body shell (#626).** A cluster with participants at a body (`dockedAt`) gets a shell body = the body of most of
+  them (tie — the smaller id) with its drawn centre and radius (`getBodyWorldInfo`); a body without a drawing — the battle stays
+  unstaged as before. `solveStage({ shell })`: the pair guard solves as always (logical positions), then the whole solution is
+  translated RIGIDLY so the pinned group stands just beyond the shell (the body's drawn radius + `SHELL_FLOOR_L` 2 L) at the shell
+  bearing, at the ship plane (y 0.3, `SHELL_PLANE_Y`); every pair gap is kept, so the band result passes unchanged; a free ship
+  still inside the shell would be pushed out radially (`excluded` — 0 in every measured battle). The click field (D-CV-5) is
+  centred on the shell group; Watch fits the displayed shell group and dives as on any stage. Ships orbiting the body keep the
+  orbit as their base; an enemy pinned WITHOUT an orbit (#626 — logically at the body centre, its sprite used to stay frozen where
+  it was pinned) gets a base just beyond the shell at the bearing (`shellBaseAt`, on the deconfliction lattice) and glides there
+  from its last sprite position over `JOIN_MS`. The zoom path avoids the body: `_stagePlace` pushes every intermediate position
+  out of the shell sphere (an orbiter behind the planet does not fly through it while zooming), and so does the return to true
+  scale. Orbit writes between frames (`_tickOrbitingVessels` on `physics:updated`) go through `_setSpriteBase`: a staged ship
+  keeps its drawn position and the new base waits in its mark (measured without it: the HUD and the click saw the orbiters
+  off-stage on every physics tick — drawn relative speed mean 637 L/s at a median of 1.3 L/s).
+- **Stager** — `cvBattle({ atBody })`: `atBody: 1` → the first planet (then moons, planetoids — by id) with no ship within the
+  clear radius, `atBody: 'entity_10'` → that body; the player's ships on orbit slots of the body (`OrbitalSpaceSystem.assignOrbit`
+  + `getPosition` on the orbit clock), the enemies near it, the encounter pinned the way DSCS pins it (`_freezeAsStationary` —
+  enemies `dockedAt`, no orbit); `mixed: 1` → only a minority of side A at the body (`max(1, floor((nA − 1) / 2))`), the enemies
+  free, "Engage" for the free side-A ships.
+- **Instruments** — `fxStats` counts stage solves (`stage.solves`, `solvesPerSec`); `stageInfo` adds `rozwiazania` (solves since the
+  cluster's stage began), `cialo` (the shell body; "(bez rysunku — bez sceny)" for a body without a drawing) and `kierunek` (the
+  bearing source).
+
+**Decided in the step — the shell bearing** (the open question of §3.2-6): toward the FREE opposing side when there is one
+(`free-opposing`), else toward any free ships (`free`); when everyone is pinned — the side of the PLAYER's ships at true scale
+(`player`: the centroid of their logical positions seen from the body centre — independent of the camera and stable, orbits
+turn ≈ 0.1 rad/s); when that centroid lies within a quarter of the mean spread from the body centre (ships all around) — toward the
+player ship with the lowest id (`player-first`); everyone at the centre — +X (`default`). The group sits at the ship plane, so a
+click in it lands on the plane it is drawn on (#646 (b)) and a camera above the orbit plane sees it above the body's limb — on a
+small body it floats well above the body (#659).
+
+**Deviations from the plan text.**
+1. No fixed points in the guard — the rigid translation keeps every pair gap of the guard's solution (P3: 157 configurations,
+   0 differences to 1e-9), which is what fixed points were meant to protect.
+2. The shell has no uniform-scale fallback — it would collapse the enemies pinned at the body centre into ONE point (measured:
+   10 ships on one spot); the relaxed best arrangement is ranked floor-first instead (fewest pairs under the deconfliction floor,
+   then fewest mis-banded pairs — the band-first ranking kept two ships on top of each other, smallest pair 0.06 L on 200
+   configurations) and flagged `fallback` without `scale` (#661).
+3. A warm-started shell stage runs no pull passes (`SHELL_WARM_PASSES` 0 — priority and hard passes only): pinned ships barely
+   move in logic (orbits ≈ 0.01 rad per round), and the pull passes re-arranged the tight group every round — measured 2.0–2.2 L
+   per round (median) against 0.03–0.23 L without them. Free-space stages keep the pull passes (their geometry changes every
+   round and the owner's windows need the pull).
+4. Enemies pinned without an orbit are drawn beyond the shell at every zoom while their battle is staged, true scale included —
+   #626 asks exactly for that (no longer frozen where they were pinned).
+5. `cv_stage_logic_smoke` L5b re-aimed (the mirror changed the recorded battle): the old ±5 % around the law was a tolerance fitted
+   to the old battle (laser median 1.006 → now 0.940 — all laser shots at the stand-off, drawn 2.7–3.5 L, median 3.38 L, inside the
+   owner's [3, 4] L window); the criterion is now the owner's F3 windows — every weapon's median ratio inside its window and ≥ 95 %
+   of shooter → target pairs inside (96.4 %; KONTROLA without priority pairs 88.1 %). `cv_stage_render_smoke` R8 / R15c — labels
+   only ("body without a drawing" instead of "body-pinned").
+
+**Keepers.** NEW `cv_stage_temporal_smoke` **15 / 0** — T1 (654) per-index loadouts equal (10v10, 4v6, a fixed weapon; WITNESS:
+loadouts differ between indices) · T2 (652) at most one solve per round per cluster with unchanged membership over 20 rounds
+(WITNESS: base positions change on 1 240 / 1 240 frames — the old position key solved per frame) · T3 drawn positions continuous at
+60 fps at cinema, no step > ε 0.25 L (KONTROLA: consecutive round solutions differ by more than ε — without the transition a jump)
+· T4 (d) pause mid-transition freezes the drawn positions, the offsets and the solve count bit for bit over 60 frames; resume
+continues · T5 a joiner — one extra solve, the rest without a jump · T6 a cluster id change — no jump · T7 (b) zero writes on ships
+(Proxy trap) · T8 (653) the stop-gaps as a FLAG contract, not values (reticle on a staged ship at cinema — none, at true scale and
+with the flag OFF — present; FX engine knobs chosen by `stage`; fireball radius ∝ hull under the flag, today's floor without).
+NEW `cv_stage_shell_smoke` **35 / 0** — P1 bearing (free opposing / both pinned → player / spread → lowest id / default) · P2 on
+168 random configurations (moon … gas giant, 3+3 … 10+10, both pinned and mixed): no ship inside the shell (KONTROLA: without the
+shell 277 ships inside the body), no pair under 1 L (smallest 1.278 L), every solution band-consistent or flagged · P3 rigid
+translation · P4 `shellBaseAt` beyond the shell for 25 ships · P5 (652) a warm-started shell stage stands still (median drawn
+shift 0.094 L per round; KONTROLA with pull passes 1.548 L) · R1–R9 on the real renderer methods: cinema — every ship outside the
+shell, the group on the player's side, bands; R2 zoom 6 → 0.4 WU — every frame outside the shell (KONTROLA: a straight base →
+target lerp went 0.207 L inside); R3 mixed → toward the enemy; R4 (626) pinned without an orbit — frozen in a pause from the start,
+glides onto the shell without a jump (largest step 1.78 L of 55.5 L), beyond the shell at true scale; R5 the group follows the
+moving body; R6 click field round trip at a body battle (KONTROLA: a body without a drawing — no field); R7 Watch — true scale
+before the join, cinema 0.400 WU after; R8 sources; R9 orbit writes between frames · S1 `cvBattle({ atBody })` on a headless world
+with the real DSCS / MOS / Proximity / OrbitalSpace / `TimeSystem` (orbits, the DSCS pin, one encounter, a body by id; `mixed`;
+KONTROLA: plain `cvBattle` — nobody at a body). `cv_fx_results_smoke` **40 / 0** (+A5 body battle: ON (shell) == OFF == no renderer
+— signature, every round's trace, game draws (60), orbit slots; witness — ON drew the shell on 845 frames; the keeper's world now
+resets the mocked clock and the vessel id counter — #660). `cv_stage_logic_smoke` **35 / 0** (L5b re-aimed), `cv_stage_render_smoke`
+**32 / 0** (labels). Fail-first on `457f1f8` (the new keeper files in a detached worktree): temporal **3 / 12** (greens: two
+witnesses, method extraction), shell **4 / 23** (greens: the P2b control, the P2d invariant — it holds without a shell too, R4a —
+trivial before the shell, the S1d control; fewer asserts because a throwing block degrades to one red), results **38 / 2** (the A5
+premise and witness), logic **35 / 0** and render **32 / 0** (the re-aim and the labels hold on both). Sweep **379 / 379 OK, 0 FAIL**
+(28 advisory, pre-existing) · `check-i18n` PASS (no new keys) · save v101 untouched.
+
+**Measured in the real game** (isolated headless Chrome on the RTX 3070, GATE-S4 fixture, 1600×1041 CSS, `cvStage` ON; 6 s sampled
+at cinema after Watch and `fxStats(300)`; "before" = the same game with the HEAD renderer-side files served by the harness and the
+same stager):
+
+| | stage solves / s | JS loop p50 / p95 | drawn ship speed at cinema, centroid removed (mean / median / p95) | logic at true scale (mean) |
+|---|---|---|---|---|
+| `cvBattle()` 10v10 seed 1 — before | 60.2 (every frame) | 1.9 / 2.7 ms | 14.08 / 10.52 / 34.78 L/s | 2.12 L/s |
+| the same — after | 1 (one per round) | 0.8 / 1.2 ms | 0.66 / 0.43 / 2.33 L/s | 2.05 L/s |
+| `cvBattle({ atBody: 1 })` — after | 1 | 0.9 / 1.3 ms | 0.17 / 0.08 / 0.51 L/s | 0.40 L/s |
+| `cvBattle({ atBody: 1, mixed: 1 })` — after | 1 | 0.8 / 1.2 ms | 0.11 / 0.07 / 0.31 L/s | 0.27 L/s |
+
+60 fps in every run, zero exceptions, the console holds only the 32 known 404s (O16). `atBody: 1` picked `entity_10`, a gas giant
+(drawn radius 0.588 WU ≈ 37 L): 10 player orbiters + 10 enemies pinned by DSCS (both sides pinned → bearing `player`), every ship
+≥ 5.12 L beyond the shell floor, 0 pushed out, 0 mis-banded, no fallback, click field round trip 2·10⁻¹⁵ WU, Watch 0.40 WU (cinema),
+0 enemy reticles at cinema; mixed — 4 player ships at the body, bearing `free-opposing`, margin ≥ 4.51 L. Node, on the recorded
+deep battle: drawn per-round motion at full blend median 0.32–0.51 L against 2.9–3.2 L per round of the logic at true scale.
+
+**Owner's check (2026-11-09, live).** PASS: (1) no swimming close up · (2) `stageInfo` — `awaryjna` false, `zlePasma` 0 ·
+(3) no reticles in cinema, small flashes / rings, ship-sized explosions · (4) `cvBattle({atBody: 1})` — the group beside the planet,
+never inside, Watch dives · (6) mixed — `kierunek` `free-opposing` · (7) F5 restores. **FAIL (5):** in the body battle, an own ship
+selected, a right-click on empty space between the ships → "Lecisz tutaj": the target is not under the cursor, the ship goes "as if
+through the planet's centre". **Observation:** red enemy reticles visible again in the body battle (owner's `stageInfo` at that
+moment: `przyCiele` true, blend 0.019–0.092, `fregataPx` 5.6–7.7 — not cinema).
+
+**Diagnosis of FAIL 5 (2026-11-09, measured in the real game — GATE-S4, RTX 3070, 1600×1041, `cvBattle({ atBody: 1 })` at
+HD-4177 j, a gas giant of drawn radius 0.588 WU; the owner's path replayed through the real right-click and menu).** Two causes, one
+in each layer, plus a secondary one:
+1. **Mechanics (F1) — the move order snaps to the body.** The menu gives "Lecisz tutaj" (`type: 'empty'`), the spec is
+   `{ type: 'moveToPoint', targetPoint }` with NO `targetBodyId`; `MovementOrderSystem._issueMoveToPoint` then takes the body nearest
+   the point within `VesselManager.SNAP_TO_BODY_AU` = 0.5 AU (`_findBodyNearPoint`). A battle at a planet lies entirely inside that
+   radius — the clicked point was 0.02–0.13 AU from the planet (logical, after the stage inverse; 0.066–0.071 AU even without it) —
+   so EVERY empty-space click in a body battle becomes "fly to the planet": `mission.targetId` = the planet (3 / 3 runs). The target
+   point is then the body intercept (`_interceptBody`, SB39): for a ship slower than the planet and behind it on the orbit, the first
+   meeting is on the far side of the orbit — 2 of 3 runs put the target 32.7 AU away, beyond the star (CV-A03 at ≈ 1.2 AU/yr ⇒ ≈ 28
+   years; panel "ruch: (222, −1683)" / "(202, −1686)"); the third (CV-A05, 1.54 AU/yr, ahead of the planet) — 0.06 AU, 12 days.
+   **Not changed here** (order semantics = mechanics): Finding 662 (variants for the owner) and Finding 663 (the cross-system
+   intercept for a ship that is already at the body).
+2. **CV — freeing one ship swung the whole shell.** The order takes the ship off its orbit (`dockedAt` null), and the shell bearing
+   (`shellBearing`) counted every free ship outside the side with more ships at the body as "the opposing side": in a 10 + 10 battle
+   at the body the enemy then has 10 : 9, the freed player ship became `free-opposing` and the bearing jumped to it — the whole group
+   rotated around the planet within one round, the transition cut straight through the body (`avoid` pressed the ships onto the
+   shell). Measured, freeing the own ship farthest in slot angle from the group: rotation 158° / 161°, ships drawn over the planet's
+   disc on 8 of 30 sampled frames, the freed ship down to 0.41 body radii from the centre — "through the planet's centre". The
+   `player` / `player-first` source alone could also jump (its centroid was taken over the pinned player ships only). Finding 664 ✅.
+3. **CV, secondary — the shell click field used the drawn group as the centre on BOTH sides.** The stage draws a body battle as the
+   guard's radial map around the LOGICAL centroid of the inputs (at the body) translated rigidly by the shell shift; the field (D-CV-5)
+   inverted the click around the drawn group for the logical side too, so the logical point was off by the shift compressed by the
+   law. Measured as agreement between the field and what the stage draws (node, real renderer methods; median over the ships of
+   |field(logical) − drawn target|): pinned 6 + 6 at bodies of drawn radius 0.1 / 0.3 / 0.6 — 1.27 / 2.40 / 4.22 L before, 0.81 / 0.91 /
+   0.90 L after; free space 1.8 L. A free ship sent to the inverted point lands (median) 3.6 → 2.5 L from the cursor with the
+   bearing held (pinned majority, free enemies; free space 3.2 L). Finding 665 ✅.
+
+**Fixes (2026-11-09, under `cvStage`; the snap untouched).**
+- `shellBearing` — "the opposing side" = an OUTSIDE force: with one side at the body, the free ships of the other sides (as before);
+  with BOTH sides at the body, the free ships of a side whose MAJORITY is free (a ship leaving orbit is not one; when most of a side
+  leaves, the group does turn toward them); the `free` fallback only with one side at the body; the `player` source over ALL player
+  ships of the battle (pinned and free), so freeing one does not move its centroid. Measured in the game after the fix (two runs):
+  rotation 2.4° / 5.1°, `kierunek` unchanged, 0 frames with a ship over the disc, the freed ship ≥ 1.08 body radii from the centre.
+- Shifted click field — `applyShell` returns the rigid `shift`; the renderer's field for a shell = the logical centroid of the guard
+  (in the offset frame, it follows the body like the targets) + `shift`, radius = the guard's `rIn`; `stagePointDrawn` /
+  `stagePointLogical` / `pickStageField` take the optional `shift`: inside r_in full shift (× blend), linear to zero across the lens,
+  identity beyond LENS_OUT·r_in as before; the field radius is at least |shift|, so the map stays one-to-one and the inverse is a
+  1-D bisection on the logical radius. Free-space clusters unchanged (no shift).
+- Reticles (the observation): **by design of the #653 stop-gap, no change.** The 3D reticle fades with the ship's stage weight and is
+  gone from 0.25 of it — identical for free and body battles (measured in the game, both kinds, 10 zoom steps: 0 reticles at
+  `fregataPx` ≥ 10.6 (blend ≥ 0.25), 10 of 10 below; at the owner's 5.6–7.7 px they show at 63–92 % of their opacity). Finding 666 —
+  the owner decides (the tactical layer CV-6a owns enemy marking).
+
+**Keepers.** `cv_stage_shell_smoke` **47 / 0** (was 35): P1e (both sides at the body, the player ship behind the planet freed while
+the enemy has the majority 6 : 5 — the bearing stays), P1f (the lowest-id player ship freed — `player-first` stays), P1g KONTROLA
+(most of a side left orbit — toward them), P6 (shifted field: round trip to 1e-9 on 600 points incl. |shift| > r_in, identity beyond
+the lens, inside r_in = radial map + blend × shift; KONTROLA — without a shift the pre-CV-3a3 inverse), R6c (field ↔ stage agreement
+at bodies 0.3 / 0.6 / 1 WU: 0.74 / 0.60 / 0.79 L ≤ the deconfliction floor 1.6 L; KONTROLA R6d — the pre-fix formula computed in the
+keeper at 1 WU: 2.49 L), R10 (the player ship behind the planet freed in the renderer: rotation 0.4°, 0 frames over the disc, the
+freed ship ≥ 1.30 body radii; witness: the enemy has the majority at the body, the ship 179° from the group). Fail-first on the
+pre-fix tree (this session's edits reverse-applied to a copy of the working tree): **41 / 6** — red exactly P1e, P1f, P6c, R6c,
+R10b, R10c; P1g, P6d, R6d, R10a green on both. The other CV keepers unchanged (answers 22, render 32, temporal 15, logic 35, results
+40, engine 38, rng 62). Sweep **379 / 379 OK, 0 FAIL** (28 advisory, pre-existing) · `check-i18n` PASS (no new keys) · save v101
+untouched.
+
+**Owner's decisions 2026-11-09 (§3.2-17…19) — implemented the same day (under `cvStage`).**
+- **#662 (a) — a click inside a battle stage is a point.** `GameScene._resolveClickTarget` stamps the target `staged` exactly
+  when `ThreeRenderer.stageLogicalOf` answered `staged` (the only stamp in the file; with `cvStage` OFF the stage never answers
+  `staged` ⇒ today); the left-click picker passes it with the point (`_finalizeTargetPointPicker({ …gp, staged: true })`). The
+  producers add `noBodySnap: true` to a `moveToPoint` built from such a click — `OrderDispatcher.buildOrderSpec` (the ship),
+  `RightClickMenu._buildFleetSpec` (the fleet), and the two fleet move pickers (`FleetManagerOverlay._handleFleetMoveToPoint`,
+  `FleetCommandPanel._armMovePicker` — the same click seam, an unhardened twin otherwise). The consumers honour it:
+  `MovementOrderSystem._issueMoveToPoint` skips `_findBodyNearPoint`, and so does `FleetSystem._bodyGroupArrival` (the fleet's
+  arrival sync then treats the order as a point, not a body intercept). Without the flag nothing changes — the spec outside a stage
+  is the same key for key. Measured in the game (GATE-S4, `cvBattle({ atBody: 1 })`, the real right-click and menu): "Lecisz
+  tutaj" → `mission.targetId` null, the order's `targetPoint` = the clicked point (panel "ruch: (−379, 1871)"), `kierunek`
+  unchanged, the ship drawn 0.9–2.4 L from the cursor at the start of its hop. Two consequences, both inherent to (a): the point is
+  fixed in space while the planet moves on its orbit, so after arriving the ship separates from the group slowly (on the stage
+  ≈ 0.2 L per game day at this gas giant; measured against the world-fixed cursor point 2.4 → 10.4 L over 1.8 game days, most of it
+  the group following the body); and in this fixture the player usually loses the 10 + 10 body battle on time-out, and DSCS wrecks
+  the losing side's survivors at the end (`_finalizeBattle`, mechanics) — the hop is to be watched during the battle.
+- **#666 (b) — no reticle on battle participants.** `_tickBattleStage` collects the participants of every encounter cluster in view
+  (`_stageParticipants`, also a cluster at a body without a drawing); `_syncEnemyAlertMarkers` skips them at every zoom. The fade with
+  the stage weight stays only for ships leaving the stage after their encounter ended. Measured in the game during the body battle:
+  0 reticles at `fregataPx` 40.9 / 15.0 / 9.1 / 6.3 / 4.3 (was 10 below ≈ 10.6 px); the enemies stay marked by the HUD alert stack
+  "⚠ ×10" and its red rhomb.
+- **#668 ✅ (found while validating #662) — a ship in flight inside a battle was written straight to its true-scale position
+  between frames.** The in-flight branch of `_syncVesselPositions` (`vessel:positionUpdate`) set the sprite directly, like the orbit
+  write before R9; every reader between that tick and the next frame (the HUD layer's own loop, the click) saw the ship off the stage
+  — measured: the ship's drawn position jumped 26–31 L for one to two samples every ≈ 11 s. Now through `_setSpriteBase` (the
+  in-flight branch; the no-mission branch stays a direct write — battle participants without a mission are frozen by DSCS as
+  `orbiting` and go through `_placeFreeVessel`, and `patrol_render_sync_smoke` T6 pins that branch); outside a stage — the same
+  direct write as before. After: 0 jumps over the flight.
+
+**Keepers (second pass).** NEW `cv_stage_no_snap_smoke` **15 / 0** — N1 `buildOrderSpec` (staged → `targetPoint` + `noBodySnap`, no
+`targetBodyId`; KONTROLA: unstaged — the spec key for key as before) · N2 the real MOS (a point 0.085 AU from the planet with the
+flag → no body, the clicked point; KONTROLA: without the flag → the planet; far from bodies — the same with and without) · N3 the menu,
+a ship · N4 the menu, a fleet (both members → the point; the body-intercept sync not used; KONTROLA → the planet) · N5 both fleet move
+pickers (KONTROLA → the planet) · N6 `GameScene` source (the only `staged` stamp, from the stage's answer; the picker passes it) ·
+N7 the flag contract through the real `_stageFields` / `stageLogicalOf` (ON → a point; OFF → the planet, today).
+`cv_stage_temporal_smoke` **17 / 0** — T8a re-aimed deliberately (666 (b)): a participant of a viewed cluster has no reticle at cinema
+AND at true scale; KONTROLA: an enemy in view outside the encounter — as before; the flag OFF — present. `cv_stage_shell_smoke`
+**51 / 0** — R11 (body battle: 0 reticles at cinema and from afar, also at a body without a drawing; KONTROLA: an enemy outside the
+encounter and the flag OFF — present), R9d (the in-flight branch writes through `_setSpriteBase`). The four renderer
+harnesses mirror the new constructor field (`_stageParticipants`). Fail-first on a copy of the tree before this pass: no-snap **7 / 8**
+(red exactly the eight SEDNO pins), temporal **16 / 1** (T8a), shell **49 / 2** (R9d, R11b); every KONTROLA green on both. Sweep
+**380 / 380 OK, 0 FAIL** (28 advisory, pre-existing) · `check-i18n` PASS (no new keys) · save v101 untouched.
+
+**Owner's re-check — PASS 2026-11-09 (every console line validated on the live engine).** (1) `KOSMOS.debug.cvBattle({atBody: 1})`, then
+Watch on the card — the dive into cinema; (2) select an own ship, right-click empty space close to it between the ships → "Lecisz
+tutaj" — the ship heads to the cursor and stops there; `KOSMOS.vesselManager.getVessel(KOSMOS.uiManager.getSelectedVesselId()).mission.targetId`
+→ `null` (a point, not the planet); `KOSMOS.movementOrderSystem.getOrder(KOSMOS.uiManager.getSelectedVesselId()).targetPoint` →
+`{x, y}`, the same pair as "ruch:" in the ship panel; (3) the group stays beside the planet, nothing crosses the disc;
+`KOSMOS.debug.stageInfo()` — `kierunek` the same as before the order; (4) wheel out until `fregataPx` < 10 — no red reticles on the
+battle; `KOSMOS.threeRenderer._enemyAlertMarkers.size` → `0`; the enemies keep the HUD "⚠ ×N" stack; (5) F5 without saving.
+
+#### CV-3a3 — the scope as signed (kept for reference)
 
 | | |
 |---|---|
@@ -1362,6 +1648,7 @@ drawn / base / logical positions at cinema and 1/3 zoom; the scene and HUD inven
 
 | | |
 |---|---|
+| **Scope (owner, §3.2-13)** | **choreography only** — the stable stage (#652) moved into CV-3a3 and is delivered there: the envelope rides on the per-round solve (`_stageState` `from` / `to`, offsets eased over one round of the presentation clock), so its motion (E ≤ 1 L, D-CV-6) is no longer drowned in solver motion |
 | **Files** | NEW `ChoreographyLogic.js` · glue in `_stagePlace` (offset, quaternion, engine) · posture from `fleetSystem` / `movementOrder` / retreat markers · sprites recreated mid-battle take their heading from choreography (#622) |
 | **Keepers (logic)** | (e) same inputs ⇒ same pose, other encounter ⇒ other phases; D-CV-6 band invariant over sampled time on random configurations; envelope bound per class; (d) frozen clock ⇒ frozen pose |
 | **Owner looks at** | frigates strafe, destroyers arc, battleships turn broadside; ships face targets, engines lit, vertical spread; kite backs off, hold stays steady, retreating ships turn away |
@@ -1444,14 +1731,14 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **616** | ✅ | **Combat FX animate through pause** (absolute `performance.now`) and expire unseen while the main loop is suspended | `ThreeRenderer.js:4115-4117, :4194, :6393, :6412` | **CV-2a ✅** — presentation clock under `cvFxEngine` (default ON since the owner's check; `cv_fx_engine_smoke` T1–T2, live pause check); the OFF path keeps the old clock until CV-Z |
 | **617** | ✅ | **FX cap shared and lossy**: 120 slots shared with pulses / pings; drop-oldest discards delayed effects not yet visible; ~30 hits fill it (4 meshes per hit) | `CombatFxConfig.js:26`; `ThreeRenderer.js:6385-6387, :7175, :7305` | **CV-2a ✅** — combat shots use the engine's own pools (beam 1024 · tracer 1024 · spark 8192; `cvFxEngine` default ON), a new shot always gets a slot (`cv_fx_engine_smoke` T4–T5); the shared 120-slot cap stays for non-combat FX and on the OFF path until CV-Z |
 | **618** | ⚪ | **Only the fireball blooms**; the explosion ring (0.77 × 0.8) and the wreck glow (0.49) stay under threshold 1.0 although their comments say otherwise; tracers 0.27–0.61; ship emissive ≤ 0.78 linear | `ThreeRenderer.js:416, :6518, :1385-1386`; CDN UnrealBloomPass high-pass | CV-2a — under `cvFxEngine` beam / tracer / flash cores are HDR above the threshold (seen glowing on the RTX 3070); explosion ring and wreck glow → CV-5 |
-| **619** | ⚪ | **Floors fix effect sizes**: explosion `Math.max(0.2, …)` ⇒ fireball 5 L, ring 25 L; exhaust floors ⇒ every plume 0.03 × 0.024 WU (1.9 L); the flicker scales plume thickness, not length | `ThreeRenderer.js:6498, :4716-4717, :4740, :6478-6492` | CV-1a (exhaust) / CV-5 (explosion) |
+| **619** | ⚪ | **Floors fix effect sizes**: explosion `Math.max(0.2, …)` ⇒ fireball 5 L, ring 25 L; exhaust floors ⇒ every plume 0.03 × 0.024 WU (1.9 L); the flicker scales plume thickness, not length | `ThreeRenderer.js:6498, :4716-4717, :4740, :6478-6492` | CV-1a (exhaust) / CV-5 (explosion) — under `cvStage` the fireball floor is lifted as a stop-gap (CV-3a3, #653 (d): peak = hull × 1.5) |
 | **620** | 🟠 | **Enemy tint and wreck glow are invisible on 24 of 27 models** — `emissiveColor` multiplies an emissive map that is black on all six warships (max 12–29/255); a wreck rebuilt after load / system switch gets `0x110000` | `three.module.js:348`; `ThreeRenderer.js:4782, :4791, :1387-1388`; §1 Q6 Table B | CV-1a / CV-5 |
 | **621** | 🟠 | **`nonwarp_large_science` flies stern-first**: 26/27 models have the bow at local −X, this one +X; the README says +X (wrong); the heading comment says +X (wrong); the exhaust code is right | silhouettes in the audit scratchpad; `README_modele_statkow.md:14-15`; `ThreeRenderer.js:4706-4707, :4715, :4759-4760` | CV-1a (hardpoints frame + README) |
 | **622** | ⚪ | **Heading defects**: orbit heading `θ + π` turns the bow against the orbital motion (maths verified, not seen live); combat free-floaters are never rotated; a sprite recreated mid-battle gets yaw 0 | `ThreeRenderer.js:5107-5110, :6677-6711, :1761-1770, :4751-4761`; `OrbitalSpaceSystem.js:158, :211-213` | CV-1a (orbit) / CV-3b (combat) |
 | **623** | ⚪ | **Duplicate GLBs** load and upload twice and look identical in different roles (`default = cargo3d`, `nonwarp_large_cargo = nonwarp_medium_cargo`, `warp_frigate = warp_large_science`); `cargo3d.glb` and `research1.glb` have no code reference | SHA-256 (audit); `VesselModelResolver.js` | owner's new models; CV-Z hygiene |
 | **624** | ⚪ | **Material sharing**: player ships use the template materials ⇒ the maintenance tint greys every player ship of the same file [INF]; the wreck handler replaces enemy clones without disposing them [INF] | `ThreeRenderer.js:4767-4794, :5492-5528, :1381, :1397` | CV-1a |
 | **625** | ⚪ | **Swallowed ReferenceError**: `entry` declared in a block at `:4828`, used at `:4837 / :4849` for wrecks with `dockedAt` ⇒ throws inside the GLB `.then`, caught as "GLB load failed (retry)" | `ThreeRenderer.js:4828-4868` (verified by reading) | CV-1a |
-| **626** | 🟠 | **A pinned enemy without an orbit never moves on screen** while its logical position snaps to the body centre — `_freezeAsStationary` sets `dockedAt` but nothing assigns an orbit | `DSCS:1309-1312`; `OrbitalSpaceSystem.js:62-70`; `ThreeRenderer.js:5088-5089, :5419-5435`; `VesselManager.js:2702-2707` (static trace, not run) | **CV-3a3** (shell, D-CV-4 — split out of CV-3a2 by the owner, §3.2-6) + live check |
+| **626** | ✅ | **A pinned enemy without an orbit never moves on screen** while its logical position snaps to the body centre — `_freezeAsStationary` sets `dockedAt` but nothing assigns an orbit | `DSCS:1309-1312`; `OrbitalSpaceSystem.js:62-70`; `ThreeRenderer.js:5088-5089, :5419-5435`; `VesselManager.js:2702-2707` (static trace, not run) | **✅ CV-3a3** (`0490ea5`, D-CV-4): the body shell — a pinned enemy without an orbit gets a base just beyond the shell (`shellBaseAt`) and glides there over `JOIN_MS`; the logic is untouched (the DSCS pin stays); owner's live check pending |
 | **627** | ⚪ | **Wreck drawn ≠ logical**: DSCS wrecks' logical position is the battle-start midpoint; deep-space wrecks never enter `moving`, so the sprite stays where the ship died until recreated, then jumps; orbiters go to the graveyard orbit (Finding 460 family) | `DSCS:1055, :1101, :1112`; `VesselManager.js:2625`; `ThreeRenderer.js:4855-4861`; `OrbitalSpaceSystem.js:97-104` | CV-5 (presentation rule) |
 | **628** | 🟠 | **The orbital burst ignores the viewed system and galaxy mode** — no `isEngagementInView` (unlike the round FX) ⇒ a battle elsewhere draws at planet-local coordinates in the viewed system (Finding 453 family) | `ThreeRenderer.js:6531, :6549-6575` | CV-8a / CV-8b |
 | **629** | ⚪ | **The combat card ignores `MapInsets`** (≈ 12 px overlap with the bottom strip without the Dock); the Watch top margin uses 46 while the map top inset is 28 | `CombatHUD.js:150-162`; `MapInsets.js:28, :41`; `CombatWatchLogic.js:97-110` | CV-6b |
@@ -1465,25 +1752,35 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **637** | ⚪ | **Below 10 fps the presentation clock runs slower than real time.** The 100 ms step cap (no jump after a stalled loop) also clips every frame of a steadily slow machine: at 2.3 fps (SwiftShader) an 8 s battle advanced 1.5 s of presentation time, so effects live longer in real time and trail the rounds. Irrelevant at ≥ 10 fps (the RTX 3070 runs 60). Matters for CV-4's lag budget (D-CV-9, ≤ 1 round) and CV-2b's Low preset: either cap only true gaps (e.g. > 1 s) or let the ledger re-sync to the round anchor (`PresentationClock.anchor`) | `src/renderer/combat/PresentationClock.js` (`PRESENTATION_DT_MAX_MS`); live probe CV-2a | CV-4 / CV-2b |
 | **638** | ⚪ | **One battle, several encounters.** DSCS never merges encounters; under player intent (an `engage` order on the other ship of the trigger pair) an encounter starts with that pair only and the rest join one by one ⇒ normal play produces co-located encounters, each with its own ring, card and result (measured: 5v5 with a target per ship → two concurrent encounters 0.15 AU apart; one target → two sequential, 2 then 4). One `cvBattle` 10v10 = one encounter (12 seeds headless, 4 live); the `_n` id suffix is a 0.01-year stamp collision, not a fragment | `DSCS:186-188, :229-236, :241, :1506-1514`; probes §4 CV-2a findings 1 | **CV-3a1 ✅ part** — cluster = stage unit, Watch frames the cluster and follows its encounters (`clusterEncounters`, `cv_stage_logic_smoke` L7, `cv_stage_render_smoke` R12); **CV-3a2 ✅ rest** (`1dfe5ae`) — clusters from logical positions for stage, card and banner (`encounterClusters`), one card row and one result banner per cluster (`BattleClusterLogic`; `cv_stage_answers_smoke` A4–A6; live: one row, one banner); DSCS untouched; the Dziennik line per encounter stays until CV-6b (#639) |
 | **639** | 🟠 | **The result is told three times.** Banner with pause + Dziennik battle line + Dziennik skirmish line (every no-war battle) per encounter, plus auto-slow; co-located encounters multiply it (live: 4 battles → 4 banners, 4 battle lines, 4 skirmish lines; no toast, no bell) | `GameScene:2789, :2867`; `BattleIntroModal.js:215`; `UIManager:1829-1831`; `WarSystem:446` | **CV-6b** on the CV-3a cluster id — one banner after the cluster's last `battle:resolved`, one Dziennik line (skirmish note folded in) |
-| **640** | 🔴 | **Contact flood — per ship and per pair.** Observatory first sighting: one pausing popup per ship, not queued (each dismiss resumes the game while the rest stay open [INF]) — 10 popups + 10 lines for one 10v10 in colony range (headless); proximity contact: one line per player × enemy pair — 130 per battle live (13 × 10); contact identified / lost: 10 + 2–10 per battle. 587 Dziennik entries in 4 battles vs a 500-entry runtime buffer (200 saved) ⇒ the earlier history was flushed (Finding 173 class) | `ObservatorySystem.js:676-697` → `GameScene:3084-3192`; `UIManager:1691-1710`; `GameScene:2878-2895, :2897-2912`; `EventLogSystem.js:17-18` | separate small step **outside CV** (owner decides scope): aggregation window per system — one popup / one line listing N contacts; ~3 i18n keys PL + EN + keeper |
+| **640** | 🔴 | **Contact flood — per ship and per pair.** Observatory first sighting: one pausing popup per ship, not queued (each dismiss resumes the game while the rest stay open [INF]) — 10 popups + 10 lines for one 10v10 in colony range (headless); proximity contact: one line per player × enemy pair — 130 per battle live (13 × 10); contact identified / lost: 10 + 2–10 per battle. 587 Dziennik entries in 4 battles vs a 500-entry runtime buffer (200 saved) ⇒ the earlier history was flushed (Finding 173 class) | `ObservatorySystem.js:676-697` → `GameScene:3084-3192`; `UIManager:1691-1710`; `GameScene:2878-2895, :2897-2912`; `EventLogSystem.js:17-18` | **owner's decision 2026-11-08 (§3.2-14): the NEXT step, outside CV, right after CV-3a3** — separate small step **outside CV** (owner decides scope): aggregation window per system — one popup / one line listing N contacts; ~3 i18n keys PL + EN + keeper |
 | **641** | ⚪ | **"End-of-action circles" are the wreck explosion rings** — flat orange `RingGeometry` 0.35–0.40 WU (22–25 L, the #619 floor), 800 ms, all at once when the battle ends (#615); live the only legacy FX in 4 battles: 55 fireballs + 55 rings at the battle ends | `ThreeRenderer:1356, :6533` | **CV-3a1 ✅ stop-gap** — no flat ring under `cvStage` (§3.2-4; `cv_stage_render_smoke` R10); **CV-5** — layered explosion sized from the ship, at the killing impact |
 | **642** | ⚪ | **The engagement ring is smaller than the battle** — 0.285 WU (0.026 AU) around the encounter point while a 10v10 line-up stands 0.06–0.114 AU from the centre ⇒ every ship outside it | `VesselFxLogic.js:80, :109`; `ThreeRenderer:4214, :7156, :7189` | **CV-3a1 ✅** — hidden under `cvStage` at the call site (`_hideEncounterRings`; the OFF-path pins `combat_ring_subtle` / `combat_marker_life` / `combat_view_scope` T6e unchanged; `cv_stage_render_smoke` R9, R14c); code removed in CV-Z |
 | **643** | 🟠 | **Watch zoom dives under the battle.** The composition shift (orbit target moved down so ships render above the card) is computed for the fit distance and kept after the wheel changes the distance; the wheel dollies toward that target ⇒ Watch at 0.605 WU shows 0 / 20 ships (fit at 1.816 WU: 20 / 20, target y −0.227; auto-focus at 6 WU: target y −0.997, ships at screen y 218 vs centre 403). Not the 0.3 vs 0 height (only the first auto-focus frame aims at y 0) | `CombatWatchLogic.js:121, :170`; `ThreeRenderer:1577, :7027-7050, :7108`; `ThreeCameraController.js:186` | **CV-3a1 ✅** — pivot on the drawn cluster centre at ship height, distance fitted without the stage, composition by `setViewOffset`; criterion live 20 / 20 at 1/3 of the start distance (KONTROLA OFF: 0 / 20); `cv_stage_logic_smoke` L9, `cv_stage_render_smoke` R11 |
 | **644** | ⚪ | **Frame hitches are first-use costs; the owner's low mean is a few multi-second gaps.** Live 65 s / 4 battles: p50 16.6, p95 18.9, max 107.8 ms, 3 frames > 50 ms — staging (first hull model / texture upload, +13 textures), first salvo (lazy FX programs, +2), battle end (+25 geometries: one sphere + ring per explosion). The owner's 22.85 fps mean at p95 19.7 needs ≈ 8 s in ≤ 15 frames ⇒ suspended rAF (window covered / DevTools), not reproduced | live probe §4 CV-2a findings 7; instrument `ThreeRenderer.cvFxStats` / `_fxStatsBegin` / `_fxStatsEnd` | instrument delivered (`fc7334d` — `fxStats` max, mean, five longest frames with labels); prewarm FX programs **CV-2b**; pooled explosions **CV-5**; model prewarm CV-1b / CV-2b |
 | **645** | 🟠 | **`combatRangeEnter` flood from the proximity self-heal** — any pair within combat range with no encounter (same faction included, rejected by DSCS at once) is re-emitted on every pass, twice per tick: a parked group of 5 own ships → 20 emits per tick, 12 000 in 10 s (headless); 36 439 during the 4 live battles; AI guard fleets on a capital orbit do the same [INF] | `ProximitySystem.js:272-281, :295`; `VesselManager.js:2052, :2073`; `DSCS:142`; `VesselCombatSystem.js:125` | separate small step **outside CV** — skip the self-heal / emit for `sameFaction` pairs (and pairs DSCS cannot start); own keeper |
 | **646** | ⚪ | **Empty-space clicks hit the plane y = 0 while ships are drawn at y = 0.3.** At Watch zoom (camera 27° above the plane, φ ≈ 63°) a click beside a ship lands ≈ 0.3 × tan 63° ≈ 0.59 WU ≈ 0.054 AU further along the ray — the whole laser range; inside a stage that is several bands | `src/utils/RaycasterHelper.js:53` (`new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)`); `GameScene.js:6083, :6358, :6451` | **CV-3a2 ✅** (`1dfe5ae`, decision (b) §3.2-5) — `castRay` on the ship plane (`clickPlaneY`; y 0 only with the camera below it) for every empty-space click; inside a stage the point is also inverted through the stage (D-CV-5); keeper `cv_stage_answers_smoke` A1–A3 (KONTROLA: the old plane 0.0535 AU off along the centre ray); live: target under the cursor at every zoom (old: 22–48 px at ~8 WU, 118–436 px at the cinema frame) |
-| **647** | ⚪ | **The stage re-solves every frame while ships glide** — base positions change each frame during the 1 000 ms glide, so the guard (40 + ≤ 96 passes over 190 pairs) runs per frame: JS loop p50 1.8 vs 1.0 ms with the stage OFF (live, 10v10, RTX 3070; frame time unchanged 16.7 ms, 60 fps). Two co-located battles ≈ double | live probe CV-3a1 (`fxStats` at Watch 1/3 zoom); `ThreeRenderer._tickBattleStage` (key = base positions + priority pairs) | **owner's decision (a) 2026-11-08 (§3.2-8):** the per-frame solve stays, revisit in CV-2b — but the same per-frame solve is the cause of #652 (swimming), whose fix (solve per round, interpolate) also removes this cost |
+| **647** | ✅ | **The stage re-solves every frame while ships glide** — base positions change each frame during the 1 000 ms glide, so the guard (40 + ≤ 96 passes over 190 pairs) runs per frame: JS loop p50 1.8 vs 1.0 ms with the stage OFF (live, 10v10, RTX 3070; frame time unchanged 16.7 ms, 60 fps). Two co-located battles ≈ double | live probe CV-3a1 (`fxStats` at Watch 1/3 zoom); `ThreeRenderer._tickBattleStage` (key = base positions + priority pairs) | **✅ CV-3a3** (`0490ea5`, with #652 — §3.2-13 overtook the decision (a) of §3.2-8): the stage solves once per round per cluster — live 10v10: 60.2 → 1 solve/s, JS loop p50 1.9 → 0.8 ms (§4 CV-3a3) |
 | **648** | ⚪ | **Watch lands at the true-scale frame, not in cinema** — the plan's D-CV-3 consequence says "Watch simply lands in cinema range"; CV-3a1 fits the Watch distance on positions WITHOUT the stage (2.5–2.8 WU, blend ≈ 0.02–0.04), so Watch first shows the whole battle in true geometry and the wheel gives the stage (the #643 criterion "wheel to 1/3 of the start distance" is meaningful only this way). Fitting on drawn positions instead makes Watch dive by itself (fit → blend → smaller fit) to ≈ 0.4 WU (cinema) | `ThreeRenderer._stageWatchFit` (`fitWatchFrameOffset` on `base`) | **CV-3a2 ✅ (b)** (`1dfe5ae`, decision §3.2-7) — Watch fits on the stage solution × each ship's join (the "one switch: fit on `points`" of this row does NOT dive — it stalls at ≈ 2.6 WU, blend ~3 %, measured; keeper A7b); `cv_stage_render_smoke` R16; live: 5.14 → 0.40 WU in ≈ 0.66 s; the dive transient → #658 |
 | **649** | ⚪ | **Geometric limit of the band guard: a stack at a band edge.** ≥ 5 ships at one logical point engaged by an enemy parked near a band edge (DSCS parks at 0.95 × range, staged ≈ 3.8 % inside the apparent band) cannot all stay in the band with the 1.6 L floor in any 3D arrangement (they need a ball of radius ≤ 1 L) ⇒ that cluster takes the uniform fallback (stack overlapping as today, windows approximate; `fxStats` counts it). Measured fallback rate 0–2 % on random / formation 10v10, 0 on the stager and recorded battles | `BattleStageLogic.solveStage`; probes CV-3a1 (scratchpad) | **owner's decision (a) 2026-11-08 (§3.2-9):** accept — a dense stack at a band edge keeps the uniform fallback |
 | **650** | ⚪ | **Battle time: 19 s measured, ~10 s seen by the owner.** In the GATE-S4 fixture at `combatRoundMs` 1000 every stager 10v10 runs the full 20 rounds (time-out): first salvo 0.16 s after unpausing (round 1 fires at the first grid tick), banner in the same frame as `battle:resolved` — first salvo → banner 18.98 / 19.07 / 19.07 s (seeds 1–3), = 19 rounds × 1000 ms; headless the same 20 rounds. The owner's ~10 s is ≈ 500 ms per round or a ≈ 10-round battle — candidates: a `combatRoundMs` value stored in the owner's save (the tuning table persists in the save; setting the default removes the entry, any other value stays until `sbReset`), or a battle that ends early (the banner's "Tur: N" shows the round count; player weapon techs make DSCS battles shorter — #654) | live probe CV-3a2 (timing seeds 1–3); `TimeSystem._updateCombatGrid`; `StrikesBackTuning` | owner checks `KOSMOS.timeSystem.combatRoundMs()` and the "Tur" on the banner; no code step |
 | **651** | ⚪ | **`stageInfo` reads like a missing band, but it is a missile-only round.** It reports the LAST round's shots grouped by WEAPON; weapons fire on cooldowns (laser every 2nd round, kinetic every 3rd, missile every 5th), so a round with only missiles shows "laser —, kinetyk —"; and the bands are DISTANCE bands — the stager lines start 0.12 AU apart and close in, so missiles fire at kinetic-band distances: the owner's "rakiety 7.0–10.4 L (0.122–0.182 AU)" is exactly round 6 of seed 1 (missiles only, 0.122–0.182 AU), drawn on the law (G 7.2 / 8.3 / 9.6 L at 0.122 / 0.150 / 0.182 AU), zero mis-banded pairs. The windows 3–4 / 7–9 / 12–15 L are windows for PAIRS at those distances, not for weapons | node probe (per-round shots by weapon); `ThreeRenderer.stageInfo`; DSCS cooldowns | small instrument fix — `stageInfo` by distance band over the last N rounds (with the CV-3b look) |
-| **652** | 🟠 | **Close up the ships "swim": the motion is the stage solver, not the logic.** The stage re-solves on 232 of 240 frames (the key holds the base positions, which change every frame while ships glide and the MOS engage order kites) and each warm-started solve moves ships by several L: at 1/3 zoom (0.93 WU, blend 0.72) drawn motion 6.4 L/s against 0.4 L/s of the logical base (17×); at the cinema frame after the gathering 200–600 px/s against 4–190 px/s; no global rotation (−0.1 / +1.8 °/s) — the ships move RELATIVE to each other (the pair relaxation drifts along its many valid solutions; priority pairs change every round and get the full pull). Not missing choreography: CV-3b's envelope (E ≤ 1 L, mostly tangential, D-CV-6) would be invisible on top of 5–15 L/s of solver motion | live probe CV-3a2 (frame samples: drawn / base / logical, 4 s at cinema, 3 s at 1/3; decomposition drawn = base + stage offset) | **CV-3b, first commit (prerequisite)** — temporal stability: solve once per round on the glide END positions and interpolate the drawn offsets over the round (removes #647's cost too), ease priority-pair changes instead of a full pull; keeper: drawn speed ≤ k × logical speed between rounds |
-| **653** | ⚪ | **The circles and rings the owner does not want — four effects.** (a) red reticles on every enemy all battle long = the enemy alert markers (`_syncEnemyAlertMarkers`, 3D sprite #cc4433, pulsing, every enemy with intel ≥ rumor; 10 in a 10v10); (b) cyan rings at hits = the FX engine shield ring (`FxEngine` spark kind 1, `FX_SHIELD_COLOR` 0x66ccff, grows ×1 → ×3 over 1.2 R ≈ 1.2 s, alpha 0.8); (c) bright yellow / beige blobs at hits = the impact flash (spark kind 0, weapon colour — laser cyan, kinetic amber 0xFFD060, missile red 0xFF6060 — with a white core, ×1 → ×3 over 1.2 R, 6–48 px) plus the model glow (kind 2, white); (d) at the end 13 big pale-yellow discs = the wreck explosion fireballs (`_spawnExplosion`: additive HDR sphere of radius ≥ 0.08 WU = 5 L, 600 ms; colour ≈ #ffff96 measured) in ONE frame, because kills only materialise in `_finalizeBattle` (#615); the flat ring is already gone (#641). No HUD-canvas arcs during the battle (patched `arc`: 0) | live probe CV-3a2 (scene inventory + screenshots at hits and at the end; `FxEngine.js:265-271`, `FxShaders.js` spark, `ThreeRenderer._spawnExplosion`, `_syncEnemyAlertMarkers`) | (a) **CV-6a** (the tactical layer owns enemy marking) — stop-gap option: hide the 3D reticle on staged ships under `cvStage`; (b) **CV-4b** (shield ripple on the hull instead of a flat ring); (c) **CV-4** (weapon language: charge / flash / sparks sized from the ship); (d) **CV-5** (layered explosion sized from the ship, at the killing impact) — stop-gap option: fireball radius from the hull (no 0.2 floor) under `cvStage`; owner's call |
-| **654** | 🟠 | **"The player always wins" does not reproduce in the fixture — the stager favours the AI.** GATE-S4, live: seed 1 PORAŻKA (losses 7 / 3), seed 2 PORAŻKA (7 / 2), seed 3 ZWYCIĘSTWO (7 / 4), all 20 rounds (time-out by total HP); headless seeds 1–6: the player wins 1 / 6; the player loses 7 of 10 ships in every run. Cause in the stager: side B's weapons are shifted by one position in the cycle (`pickName(weapons, …, i + offset)`, offset 1 for B) ⇒ the player's frigates carry lasers (0.05 AU) and the AI's frigates kinetics (0.15 AU) while the lines start 0.12 AU apart. DSCS asymmetries (mechanics, untouched): side A — always the player — fires first in a round (a B ship killed in A's volley does not fire that round; measured with B first: the player wins 0 / 6, loses 7 in every seed, the AI loses 1–3 instead of 1–4); player-only tech multipliers (`weapon_range_*`, `weapon_tracking_*`); AI-only auto-retreat; "Engage" only for side A (variants: as the stager B,B,A · none A,B,A · both A,B,A for seeds 1–3). The owner's save (not the fixture) likely has player weapon techs — DSCS applies them to the player only | node probe (seeds 1–6, variants, fire-order swap); live timing seeds 1–3; `CvBattleStager.cvBattleLayout`; `DSCS._tickEncounter` (`fireFromSide` A then B), `_resolveWeaponRange` | **owner's decision (stager, outside the mechanics):** (1) mirrored loadouts — B takes A's per-index loadout (offset 0); (2) "Engage" for both sides, or none; (3) leave. The fire order and player-only techs → the MECHANICS candidate (#631) |
+| **652** | ✅ | **Close up the ships "swim": the motion is the stage solver, not the logic.** The stage re-solves on 232 of 240 frames (the key holds the base positions, which change every frame while ships glide and the MOS engage order kites) and each warm-started solve moves ships by several L: at 1/3 zoom (0.93 WU, blend 0.72) drawn motion 6.4 L/s against 0.4 L/s of the logical base (17×); at the cinema frame after the gathering 200–600 px/s against 4–190 px/s; no global rotation (−0.1 / +1.8 °/s) — the ships move RELATIVE to each other (the pair relaxation drifts along its many valid solutions; priority pairs change every round and get the full pull). Not missing choreography: CV-3b's envelope (E ≤ 1 L, mostly tangential, D-CV-6) would be invisible on top of 5–15 L/s of solver motion | live probe CV-3a2 (frame samples: drawn / base / logical, 4 s at cinema, 3 s at 1/3; decomposition drawn = base + stage offset) | **✅ CV-3a3** (`0490ea5`; moved from CV-3b by §3.2-13): one solve per round on the LOGICAL positions (the glide end), the drawn offsets eased linearly over one round from the target displayed in the previous frame; a warm-started shell stage without pull passes — live drawn relative speed at cinema 14.08 → 0.66 L/s mean (logic 2.05), a body battle 0.17 (logic 0.40); keepers `cv_stage_temporal_smoke` T2–T6, `cv_stage_shell_smoke` P5 |
+| **653** | ⚪ | **The circles and rings the owner does not want — four effects.** (a) red reticles on every enemy all battle long = the enemy alert markers (`_syncEnemyAlertMarkers`, 3D sprite #cc4433, pulsing, every enemy with intel ≥ rumor; 10 in a 10v10); (b) cyan rings at hits = the FX engine shield ring (`FxEngine` spark kind 1, `FX_SHIELD_COLOR` 0x66ccff, grows ×1 → ×3 over 1.2 R ≈ 1.2 s, alpha 0.8); (c) bright yellow / beige blobs at hits = the impact flash (spark kind 0, weapon colour — laser cyan, kinetic amber 0xFFD060, missile red 0xFF6060 — with a white core, ×1 → ×3 over 1.2 R, 6–48 px) plus the model glow (kind 2, white); (d) at the end 13 big pale-yellow discs = the wreck explosion fireballs (`_spawnExplosion`: additive HDR sphere of radius ≥ 0.08 WU = 5 L, 600 ms; colour ≈ #ffff96 measured) in ONE frame, because kills only materialise in `_finalizeBattle` (#615); the flat ring is already gone (#641). No HUD-canvas arcs during the battle (patched `arc`: 0) | live probe CV-3a2 (scene inventory + screenshots at hits and at the end; `FxEngine.js:265-271`, `FxShaders.js` spark, `ThreeRenderer._spawnExplosion`, `_syncEnemyAlertMarkers`) | **owner's decision 2026-11-08 (§3.2-11): stop-gaps under `cvStage` until CV-4 / CV-5 / CV-6a — done in CV-3a3** (`0490ea5`): (a) the 3D reticle fades with the ship's stage weight (gone from 0.25); (b)(c) flash 1.2 × model, growth ×1.5 / shield ring 1.8 × model, ×1.25; (d) fireball peak = hull × 1.5, no floor. Final looks: (a) **CV-6a** (the tactical layer owns enemy marking), (b) **CV-4b** (shield ripple on the hull), (c) **CV-4** (weapon language), (d) **CV-5** (layered explosion at the killing impact) |
+| **654** | ✅ | **"The player always wins" does not reproduce in the fixture — the stager favours the AI.** GATE-S4, live: seed 1 PORAŻKA (losses 7 / 3), seed 2 PORAŻKA (7 / 2), seed 3 ZWYCIĘSTWO (7 / 4), all 20 rounds (time-out by total HP); headless seeds 1–6: the player wins 1 / 6; the player loses 7 of 10 ships in every run. Cause in the stager: side B's weapons are shifted by one position in the cycle (`pickName(weapons, …, i + offset)`, offset 1 for B) ⇒ the player's frigates carry lasers (0.05 AU) and the AI's frigates kinetics (0.15 AU) while the lines start 0.12 AU apart. DSCS asymmetries (mechanics, untouched): side A — always the player — fires first in a round (a B ship killed in A's volley does not fire that round; measured with B first: the player wins 0 / 6, loses 7 in every seed, the AI loses 1–3 instead of 1–4); player-only tech multipliers (`weapon_range_*`, `weapon_tracking_*`); AI-only auto-retreat; "Engage" only for side A (variants: as the stager B,B,A · none A,B,A · both A,B,A for seeds 1–3). The owner's save (not the fixture) likely has player weapon techs — DSCS applies them to the player only | node probe (seeds 1–6, variants, fire-order swap); live timing seeds 1–3; `CvBattleStager.cvBattleLayout`; `DSCS._tickEncounter` (`fireFromSide` A then B), `_resolveWeaponRange` | **✅ CV-3a3** (`0490ea5`; owner's decision (1), §3.2-10): mirrored loadouts — B takes A's per-index loadout (offset 0), "Engage" for side A only; live after: seed 1 PORAŻKA (7 / 4), seed 2 PORAŻKA (7 / 4), seed 3 ZWYCIĘSTWO (6 / 6). The rest is mechanics — the fire order and player-only techs → the MECHANICS candidate (#631) |
 | **655** | ⚪ | **The course shown during the battle does not match the result.** (i) dead ships stay drawn and on the card until `_finalizeBattle` (#615), then 10–13 vanish / explode in one frame; (ii) the time-out (20 rounds) decides by total HP, so the side with fewer living ships can win (seed 3, round 11: the player 6 alive / 54 % HP against the AI 8 / 49 % → the player wins at time-out) — the card's "żywych N / M" looks like a loss; (iii) the time-out loser's survivors are wrecked at the end (side-level wreck), so "3 player ships left" disappear in a defeat | node + live per-round side HP and alive counts; `DSCS._checkEndConditions`, `_finalizeBattle` | **CV-4** (presented HP and kills at the killing impact) and **CV-6b** (the strip shows HP, not only counts); the time-out rule — mechanics (#631) |
 | **656** | ⚪ | **How a ship picks its target in DSCS today** (answer, not a defect). Each weapon off cooldown picks: the "Engage" target (only ships with that MOS order — in the stager side A) when it is alive, on the other side and within THIS weapon's range; otherwise the NEAREST living enemy by logical distance, regardless of range — and if that nearest one is out of the weapon's range, the weapon does not fire (no fallback to another target in range). AI ships have no orders ⇒ always the nearest; no threat, role or doctrine logic. Between rounds a ship with no enemy within its longest weapon closes toward its "Engage" target, else the nearest enemy | `DSCS._pickTarget`, `_tickEncounter`, `_closeToWeaponRange` | none in CV — targeting / doctrines belong to the MECHANICS candidate (#631) |
 | **657** | ⚪ | **A retreating AI ship is re-engaged at once.** After an encounter ends with the AI's retreat, its survivor is still within combat range and a new `combatRangeEnter` starts another encounter (by the #645 description the ProximitySystem self-heal re-emits it for such pairs [INF]) ⇒ a 1-round follow-up encounter with its own banner and Dziennik line (measured: split 2 × 2 → 3 battles, 2 banners; split 4 × 4 live → 7 battles, a merged cluster banner plus one short banner after the cluster ended). Inside a cluster's lifetime it folds into the cluster banner; after the cluster — a separate banner | node and live probes CV-3a2 (`cvBattle({ split })`); `ProximitySystem.js:272-281`; `DSCS._checkEndConditions` (AI auto-retreat) | separate small step **outside CV** together with #645 (no re-engagement of a retreating ship for a short window, or no self-heal for it) |
-| **658** | ⚪ | **The Watch dive overflows the frame for ≈ 0.3 s.** During the automatic dive (#648 (b)) the drawn battle exceeds the safe rect while the blend is still low (as few as 6 / 20 ships inside the safe rect, 18 / 20 inside the window, for ≈ 0.3 s), then all 20 are in frame from 0.58 s. Inherent to the semantic-zoom curve: the battle's on-screen size peaks mid-zoom (the fit of the drawn battle exceeds the camera distance between ≈ 0.95 and ≈ 2.6 WU), so no continuous dive keeps every ship in frame | live probe CV-3a2 (dive frames); keeper A7b (the drawn fit stalls at 2.63 WU) | owner's call: (a) accept · (b) a faster dive (shorter ease) · (c) a dive path that keeps the drawn battle in frame (needs a different blend curve — with CV-7's director) |
+| **658** | ⚪ | **The Watch dive overflows the frame for ≈ 0.3 s.** During the automatic dive (#648 (b)) the drawn battle exceeds the safe rect while the blend is still low (as few as 6 / 20 ships inside the safe rect, 18 / 20 inside the window, for ≈ 0.3 s), then all 20 are in frame from 0.58 s. Inherent to the semantic-zoom curve: the battle's on-screen size peaks mid-zoom (the fit of the drawn battle exceeds the camera distance between ≈ 0.95 and ≈ 2.6 WU), so no continuous dive keeps every ship in frame | live probe CV-3a2 (dive frames); keeper A7b (the drawn fit stalls at 2.63 WU) | **owner's decision 2026-11-08 (§3.2-12): (a) accept for now; revisit in CV-7** (director camera) |
+| **659** | ⚪ | **The shell group at the ship plane floats above small bodies.** The group stands at y 0.3 (the ship plane, `SHELL_PLANE_Y`) so that a click in it lands on the plane it is drawn on (#646 (b)) and a camera above the orbit plane sees it over the body's limb; at a big body it stands beside the body (gas giant, drawn r 0.59 WU: 0.65 WU sideways, 0.3 up), but at a moon (r 0.015–0.04 WU) or a small rocky body it is ≈ 0.09–0.2 WU sideways and 0.3 WU (≈ 19 L) above the body's plane — it may read as hovering over the body rather than around it. Not seen live (the stager's `atBody: 1` picked a gas giant) | `BattleStageLogic.applyShell` (`P.y = planeY`), `STAGE.SHELL_PLANE_Y`; `RaycasterHelper.SHIP_PLANE_Y` | owner's look (`cvBattle({ atBody: '<moon id>' })`); option — height `min(0.3, body radius + k L)` with the click plane following the group (the #646 trade-off returns) — with CV-6a / CV-7 |
+| **660** | ⚪ | **`cvBattle({ atBody })` — the same seed is not the same battle at another moment.** Orbit slots take their phase and ω jitter from a hash of the vessel id and their angle from the orbit clock (`orbitClockSec` — the sim clock, anchored to real time at the first tick); the stager makes new vessel ids on every call (a module counter) and reads the clock at the call ⇒ the orbiters' logical positions, and with them the DSCS result, differ between calls and sessions. Deep-space stager battles are unaffected (fixed points; seed 1 gives the same signature in the game and headless). Keepers reset the mocked clock and the id counter (`cv_fx_results_smoke` A5: without that, the same body battle without a renderer gave two different signatures) | `OrbitalSpaceSystem.js:148-158, :208`; `SimClock.orbitClockSec`; `CvBattleStager.cvBattle` (`atBody`) | accept — a body battle is for looking, not for comparing results; if needed, orbit phases from the seed (an `assignOrbit` option) — a small stager change |
+| **661** | ⚪ | **Geometric limit of the shell: a dense 10+10 battle with both sides pinned at a rocky or icy body falls back.** With everyone at the body (10 enemies pinned at its centre, 10 orbiters at 1.9–2.5 body radii) almost every pair is in the laser band, so 20 ships must keep ALL pairwise gaps inside [1.6, 3.64] L — a packing limit. Node, 40 random configurations per cell: rocky / icy bodies (drawn r 0.06–0.20 WU) 10+10 — 43–78 % end in the relaxed arrangement (`fallback`, 1.5–4 mis-banded pairs of 190, smallest pair 1.0–1.3 L — once 0.93 L in 200); 8+8 and smaller, moons and gas giants — 0 %. Live (gas giant, 10+10) — 0 mis-banded. The class of #649 (accepted (a), §3.2-9), but without a uniform scale (it would collapse the pinned enemies into one point) | node probe (scratchpad, `solveStage({ shell })`); `cv_stage_shell_smoke` P2 (11 of 168 configurations, all 10+10 with both sides pinned) | owner's call — recommended: accept like #649 (a few pairs drawn one band off in the densest colony battles, `stageInfo` shows `awaryjna`) |
+| **662** | ✅ | **A move order clicked inside a battle at a body always becomes "fly to the planet" — the 0.5 AU snap (FAIL 5 of the CV-3a3 check).** "Lecisz tutaj" builds `{ type: 'moveToPoint', targetPoint }` without a body; `_issueMoveToPoint` takes the body nearest the point within `SNAP_TO_BODY_AU` 0.5 AU (made for "a click next to a planet should orbit it", live gate T7). A battle at a planet lies entirely inside that radius (gas giant drawn radius 0.054 AU; the clicked point 0.02–0.13 AU from it after the stage inverse, 0.07 AU before), so no empty-space click in such a battle can be a point: 3 / 3 menu runs → `mission.targetId` = the planet. Order semantics are mechanics (F1) — not changed in CV. **Variants for the owner:** (a) no snap when the click resolves inside a staged battle (the producer marks the spec, e.g. `noBodySnap`, when `stageLogicalOf` answered `staged`; MOS skips `_findBodyNearPoint`) — the ship goes to the logical point (± the guard, measured 2.5 L median from the cursor), it leaves its orbit and drifts there; in a battle with BOTH sides at the body the logical points under the drawn group lie at the body itself (≤ 1–2 body radii, partly inside the planet at true scale) · (b) snap only within the body's drawn radius (× margin) — changes every move order in the game, and in a body battle the logical points still fall inside that radius (the ships are logically at the body) ⇒ does not fix FAIL 5 · (c) keep: a click in a body battle = "orbit this planet" (then 663 must be fixed and the menu should say so). Recommendation: **(a)**, scoped to staged clicks, together with 663 | real game, `f5_probe` / `gate_lines_probe` (scratchpad): spec, `_findBodyNearPoint` distance, `mission.targetId`; `MovementOrderSystem.js` `_issueMoveToPoint` (snap block); `VesselManager.js:99` `SNAP_TO_BODY_AU`; `RightClickMenuOptions.js` `empty` | **owner 2026-11-09: (a) ✅** — implemented in the CV-3a3 second pass: `staged` click → `noBodySnap` (menu ship / fleet, both fleet move pickers) → MOS and the fleet arrival sync skip the snap; flag OFF = today (`cv_stage_no_snap_smoke` 15 / 0) |
+| **663** | 🟠 | **"Fly to the planet" for a ship already at the planet can send it across the system.** `_interceptBody` (SB39) takes the FIRST time the ship can meet the body; for a ship slower than the body's orbital speed and behind it on the orbit that meeting is on the far side of the orbit — measured twice: the target 32.7 AU away beyond the star (≈ 28 years at ≈ 1.2 AU/yr) for a ship that was 0.1 AU from the planet on its orbit slot; a ship ahead of the planet (1.54 AU/yr) — 12 days. Reachable without CV: a docked ship given "Lecisz do planety" on its own body, or any point within 0.5 AU (662). Mechanics, outside CV | real game (two of three runs; panel "ruch: (222, −1683)" / "(202, −1686)"); `VesselManager._interceptBody`, `_bodyMotionBound` | **owner 2026-11-09: a separate small MECHANICS step OUTSIDE CV, right after #640.** Measured three times: the game (two of three menu runs) — target 32.7 AU beyond the star (≈ 28 years at ≈ 1.2 AU/yr), panel "ruch: (222, −1683)" / "(202, −1686)"; headless (`cv_stage_no_snap_smoke` N2a on the pre-fix tree) — a 1.0 AU/yr ship 0.05 AU from a 3 AU planet (orbital 3.6 AU/yr) gets the target (41.4, −327.4) px, beyond the star. **Proposed fix shape:** (i) a ship docked at / orbiting the target body → no new intercept (keep the orbit; refuse with a translated `already_at_target`, or hide "Lecisz do planety" for its own body); (ii) otherwise cap the first-meeting search of `_interceptBody` at a short horizon (e.g. a quarter of the body's orbital period) — when the ship cannot meet the body within it, refuse with a translated reason (e.g. `target_outruns_ship`) instead of a cross-system rendezvous; (iii) keepers: slower ship behind the planet → refusal, not a 30 AU trip; ship ahead / faster → today's near meeting unchanged; fleets (`GroupArrival`) the same rule |
+| **664** | ✅ | **Freeing one ship swung the whole body-battle stage around the planet.** `shellBearing` treated every free ship outside the side with more ships at the body as "the opposing side": a player ship taken off its orbit by an order (10 : 9 for the enemy) flipped the bearing to it, and the group rotated around the body in one round on a chord through it (measured 158° / 161°, ships over the disc on 8 / 30 frames, the freed ship at 0.41 body radii); the `player` source (centroid of the pinned player ships) could jump too | real game `swing_probe` before / after (scratchpad); `cv_stage_shell_smoke` P1e, P1f, R10 | **CV-3a3 fixes 2026-11-09 ✅** — outside force = sides mostly free (with both sides at the body); `player` over all player ships; after: 2.4° / 5.1°, 0 frames over the disc |
+| **665** | ✅ | **The body-battle click field inverted around the drawn group on both sides.** The stage draws a shell battle as the radial map around the logical centroid translated by the shell shift; the field took the drawn group as the logical centre too — logical point off by the compressed shift (field ↔ stage agreement 1.3 / 2.4 / 4.2 L median at bodies 0.1 / 0.3 / 0.6 WU; a ship sent to the inverted point 3.6 L from the cursor vs 3.2 L in free space) | node, real renderer methods (scratchpad `agree_probe`, `field_probe3`); `cv_stage_shell_smoke` P6, R6c | **CV-3a3 fixes 2026-11-09 ✅** — shifted field (`shift`): agreement 0.6–0.9 L, a sent ship 2.5 L |
+| **666** | ✅ | **Enemy 3D reticles return at the tactical zoom — by design of the #653 stop-gap.** The reticle fades with the ship's stage weight and is gone from 0.25 of it (`STAGE_RETICLE_FADE_K`) — identical for free and body battles (measured, both kinds: 0 reticles at `fregataPx` ≥ 10.6, 10 / 10 below; at the owner's 5.6–7.7 px 63–92 % opacity). Options: (a) keep until CV-6a · (b) no 3D reticle on any participant of a battle in view, at every zoom (the HUD ship markers — red rhombs, role `alert` — still mark enemies) · (c) hide from blend > 0 (frigate ≥ 4 px), keep only at true scale. Recommendation (b) — the owner's complaint was "reticles on every enemy all battle long", and CV-6a owns enemy marking | real game `reticle_probe` (scratchpad); `ThreeRenderer._syncEnemyAlertMarkers` (`stageFade`) | **owner 2026-11-09: (b) ✅** — implemented in the CV-3a3 second pass: `_stageParticipants` (every encounter cluster in view, also without a stage) — no reticle at any zoom; measured 0 at `fregataPx` 40.9 → 4.3 during the battle; `cv_stage_temporal_smoke` T8a (re-aimed), `cv_stage_shell_smoke` R11 |
+| **667** | ⚪ | **A real bearing change is drawn as a straight transition through the body.** Offsets go linearly from the displayed target to the new solution over one round; when the shell bearing does change (after 664 only on a real change — most of a side leaves orbit, a free side appears), the chord crosses the body and `avoid` presses the ships onto the shell sphere for the round. An angular (polar, around the body) transition would arc around it | code reading + the 664 measurements before the fix | CV-3b (stage motion) or later |
+| **668** | ✅ | **A ship in flight inside a battle was written straight to its true-scale position between frames.** The in-flight branch of `_syncVesselPositions` (on `vessel:positionUpdate`) set the sprite directly (the class of R9's orbit write); readers between that tick and the next frame — the HUD layer's own loop, the click — saw the ship off the stage. Measured in the game while validating #662 (a ship hopping inside the body battle): the read drawn position jumped 26–31 L for one to two samples every ≈ 11 s; the rendered frame was right (the next frame re-staged it) | real game `gate_lines2_probe` (scratchpad); `ThreeRenderer._syncVesselPositions` (in-flight branch) | **CV-3a3 second pass 2026-11-09 ✅** — the in-flight branch through `_setSpriteBase`; after: 0 jumps; `cv_stage_shell_smoke` R9d |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
