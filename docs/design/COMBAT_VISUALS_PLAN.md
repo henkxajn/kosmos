@@ -11,7 +11,9 @@
 > stop-gaps, D-CV-4 body shell #626) ✅ DONE 2026-11-09 (`0490ea5`, under `cvStage` — §4 CV-3a3 — delivered; owner's re-check
 > PASS 2026-11-09). Owner's decisions 15–23 (§3.2). CV-6b (item 0 — a compact stage at every zoom, §3.2-20 — and the
 > stutter fix, §3.2-22) ✅ DONE 2026-11-09 (`5f99a1a`, under `cvStage` — §4 CV-6b — delivered; owner's check PASS
-> 2026-11-10). Next: CV-6b2 (the combat strip, flag `cvStrip`), then CV-1a → CV-3b (§4 order).**
+> 2026-11-10). CV-6b2 (the combat strip, flag `cvStrip` default ON; #629, #630, #639) ✅ DONE 2026-11-10 (`de682b4` — §4 CV-6b2
+> — delivered; owner's check PASS, steps 1–7, the strip at the top accepted). Owner's decisions 24–25 (§3.2: #676 accepted as
+> designed; #675 → a grace window, scheduled with #640 outside CV). Next: CV-1a → CV-3b (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -21,10 +23,10 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 675** (this plan files **#612–#674**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 677** (this plan files **#612–#676**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
 > CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
-> stutter measurement and item 0).
+> stutter measurement and item 0; #675–#676 from CV-6b2).
 
 ---
 
@@ -953,6 +955,13 @@ makes Live Server reload the page.
     burst — against the arc's goal; performance gets its own knob in CV-2b's presets; the burst dies in CV-8b) and
     `uiPrefs.battleAutoFocus` becomes a ☰ toggle (a real player preference — the camera is not taken; CV-7's director inherits
     it). Done in CV-6b2, with the strip. Same day: the owner's check of CV-6b PASS (steps 1–8).
+24. **2026-11-10 — #676 → accepted as designed:** the strip is in `isOverUI` like every other panel — the camera drag, the
+    wheel and the map hover stop under it (the card never blocked them); the card on the `cvStrip` OFF path keeps the old
+    behaviour until CV-Z removes it. Same day: the owner's check of CV-6b2 PASS (steps 1–7; the strip at the top accepted).
+25. **2026-11-10 — #675 → yes to a short grace window before the result is announced (≈ 1–2 rounds)**: a battle's banner,
+    battle line and skirmish line wait that long after its last `battle:resolved`, and an encounter that starts within it with
+    ships of the same battle (the mop-up) folds into the same announcement — **but not now**: scheduled together with #640 in
+    the small step OUTSIDE CV, whose rule is one message per event (#640 — contacts; #675 — the battle result).
 
 ---
 
@@ -972,6 +981,9 @@ canonical bow frame.
 
 **CV-6b split 2026-11-09 (§3.2-22):** item 0 + the stutter fix filled the session ⇒ CV-6b = those two (delivered), the strip
 = **CV-6b2**, next: … CV-3a3 → CV-6b → **CV-6b2** → CV-1a → CV-3b → CV-1b → CV-1c → #640 → #663 → CV-2b → …
+
+**2026-11-10 (§3.2-25):** #675 joins #640 — ONE small step outside CV (one message per event); otherwise the order stands:
+… CV-6b2 → CV-1a → CV-3b → CV-1b → CV-1c → **#640 + #675 (outside CV)** → #663 (MECHANICS, outside CV) → CV-2b → …
 
 **Dependencies on CV-1 and the shims** (CV-2a, CV-3a and CV-3b now run before CV-1a):
 - CV-2a (FX engine, stager) — none: endpoints are drawn positions; muzzle hardpoints arrive with CV-4.
@@ -1831,6 +1843,95 @@ The scope as written for CV-6b (owner's requirements §3.2-16 and the CV-6b prom
 - Owner looks at: the strip at 1600×1041 on 5 themes (collapsed, expanded), split 4v4 — one line, one banner, one Dziennik
   line; Watch from the strip; `cvStrip` OFF = today's card.
 
+#### CV-6b2 — the combat strip ✅ delivered 2026-11-10 (`de682b4`; flag `cvStrip` default ON; owner's check PASS 2026-11-10)
+
+Built in one session; nothing of the scope moved to a CV-6b3.
+
+**What changed**
+- NEW `src/ui/CombatStripLogic.js` (pure — no three, no DOM, no `window`; runs under node): `stripBattles` (the unit is the
+  encounter CLUSTER — `encounterClusters` with the stage radius `clusterRadiusPx`, the same rule as the stage, the banner and
+  the Dziennik; per side alive / total and HP % from `vesselStates`; fog as the card today — `isEndpointVisibleInCombat` per
+  ship: an invisible ship is not counted and the side shows "?"; battles in the viewed system first), `stripLayout` (the area
+  of the MAP from `MapInsets` — never under the outliner columns, the top band or the bottom strip, #629; default edge **top**:
+  the block centred in the map area 4 px under the top band, natural width clamped to 280–640 logical px, the location
+  column ≤ 170 px with an ellipsis and a tooltip; the expansion under the block, capped at 45 % of the height and scrolled
+  by the wheel; the block yields under the picker banner; `EDGE: 'bottom'` = above the bottom strip, a console comparison),
+  `stripWatchPayload` (today's `camera:watchBattle` payload — encounter id, system, point — the same as the card's row under
+  `cvStage`), `stripLog` (the last 5 shots of the battle), `stripHitAt`, `ROUND_CAP` (= DSCS `MAX_ROUNDS` 20).
+- NEW `src/ui/CombatStrip.js` — the strip in the T5 / T6 idiom: a dark translucent bar without a frame (`THEME.bgPrimary`
+  × 0.72), the theme font, colours only from the HUD roles (`primary` own, `alert` enemy, `dim` tracks), digits in the fixed
+  grid (`layoutTabular`), columns aligned across lines. Collapsed: `⚔ location · own alive/total + bar + % · enemy the same ·
+  R n/20 · [ Obserwuj ] · [ ▼ ]`, at most 3 lines, then "+N". Expanded (one battle at a time): both sides' ships
+  (name · class · micro HP and shield bars, destroyed greyed) and "OSTATNIE STRZAŁY" (round · attacker → target (weapon)
+  −damage / miss / shield); ▲ or Esc collapses. The expansion FOLLOWS the battle when the cluster id changes (its smallest
+  encounter ends) and through a mop-up encounter of the same ships; it collapses when the battle ends. Every click inside
+  the strip is consumed; tooltips in the same idiom. Knobs live: `KOSMOS.combatStrip.tune({…})` (`tune()` resets);
+  readout `KOSMOS.combatStrip.debug()`.
+- **Card façade:** `CombatHUD.getPanelRect()` returns the strip's rectangle under the flag, so the D-CV-21 consumers (the
+  Watch frame, the ship / fleet panel obstacles) are unchanged; `CombatWatchLogic.watchSafeRect` learns `edge: 'top'` — the
+  Watch frame starts UNDER a strip at the top (the old card at the bottom keeps today's rule). `isMinimized()` is false
+  under the flag (the ☰ chip "⚔ Walki" has nothing to restore).
+- `UIManager`: the strip drawn after the outliners and before the top drawer (over the map and an overlay like the card;
+  under the top band's colony list, the bottom strips and the floating panels); click, mouse move (chip hover, cursor), wheel,
+  `isOverUI` (the strip blocks the camera and map hover — #676) and the Esc hook `combatStripEscape`; under the flag the old
+  card is neither drawn nor clickable. `GameScene` Esc cascade: an expanded strip collapses after DOM windows, before the
+  fleet panel and the selection.
+- **One battle line per cluster (#639).** NEW `src/ui/CombatNarration.js` — `ClusterNarrator`: under the flag a DSCS
+  battle (`battle_ds_…`, no `warId`) is held until the cluster's LAST `battle:resolved` — the same grouping as the banner
+  (`BattleClusterLogic.clusterGroupStep`, now shared: `clusterBannerStep` = group + merge) — then ONE skirmish line (per
+  empire, when the encounters were skirmishes — the semantics kept, not multiplied) and ONE battle line (the text by
+  `GameScene._battleLogEntry`, the old body 1:1, the cluster merged with `mergeClusterBattles` like the banner). War battles
+  and non-DSCS battles keep today's line; the flag OFF = one line per encounter as today.
+- Under `cvStrip`: no ring mesh (`_hideEncounterRings`), no white hit glow on the model; the 3D HP bars stay until CV-6a
+  (§3.2-16 shim).
+- **#630 (§3.2-23):** the readers of `uiPrefs.combatFxVisible` are removed from `ThreeRenderer` (both paths; the key in old
+  saves is ignored); ☰ "Auto-fokus bitwy" / "Battle auto-focus" toggles `uiPrefs.battleAutoFocus` (no key = ON; the save
+  carries `uiPrefs`, v101 without migration).
+- G5-C parity: a HUD rectangle over the strip (the open jump picker, `HudLayer.uiPassThroughRects`) is cut out of the strip
+  — the picker shows through and gets the click, like the card.
+- Stager: `cvBattle({ battles: 2..5 })` — separate battles in the viewed system; `KOSMOS.debug.cvStrip(0|1)`.
+- i18n: 10 new keys (9 `combatStrip.*`, `menu.battleAutoFocus`), pl = en = 3380.
+
+**Measured (the real game, headless Chrome with GPU, fixture GATE-S4-fresh-gy60, window 1600×1041 CSS, UI scale 1.25)**
+- Contact sheet `kosmos-handover/cv-6b2/kontakt_CV6b2.html` — 5 themes × 5 frames (1 battle collapsed / expanded, 3 battles
+  collapsed / expanded, 4 battles = 3 lines + "+1"), 0 console errors. The strip: one battle (449, 32) 383 × 21 logical px,
+  centred in the map area; 10v10 expanded 254 px (no scroll); 3 battles 55; 4 battles 67.
+- Owner's check list run on the live engine (`kosmos-handover/cv-6b2/validate_CV6b2.mjs`, `validate.json`): **7/7 PASS** —
+  one line under the top band, the card not drawn; ▼ by the mouse expands, Esc collapses (the ☰ menu does not open);
+  Watch from the strip → cinema (distance 0.4), the battle framed under the strip (strip bottom 66 CSS px); split 4v4 → ONE
+  strip line (4 encounters); at the end **2 banners = 2 battle lines = 2 skirmish lines** — the four duels (20 rounds, 3
+  enemy losses) and then the mop-up of the last enemy in a new encounter (1 round) — **#675**; ☰ auto-focus OFF → the
+  camera stays (distance 450 → 450), ON → it jumps to the battle (450 → 6); `cvStrip(0)` → today's card (560 × 248 at the
+  bottom), the strip off; `cvStrip(1)` → the strip; 0 console errors.
+
+**Keepers** — NEW `cv_strip_smoke` **48/0** (P1 layout at 1280×833 and 1600×1041 in both edges, insets, expansion,
+scroll, width clamp, banner yield, #629 control with the real card · P2 split 4v4 on a real DSCS + stager + `WarSystem`
+world: one strip line per cluster, fog · P3 the Watch payload — the card's click and the strip's click emit the same ·
+P4 the Dziennik — the compiled `GameScene` narrator: lines == banners == battles counted independently from the encounter
+timeline; the flag OFF control = one line per encounter; battle outcomes identical with and without the flag · P5 ☰ toggle
++ save / load round trip; `combatFxVisible` has no reader · P6 the flag OFF = the card; `watchSafeRect` edge · P7
+interaction — "+N", Watch, ▼ / ▲, scroll, consumption, cursor, Esc; the expansion follows the battle; P7k the G5-C cut-out
+· P8 source: the ring and the glow under the flag, the HP bars ungated, the Esc cascade, the Dziennik routing, i18n,
+`ROUND_CAP`). Fail-first on a clean `git archive HEAD` tree **2/19** (green: the P4a timeline witness and the P4f outcome
+control); on a copy without the G5-C cut-out **46/2** (exactly P7k). Re-aimed: `cv_fx_engine_smoke` T9d — the OFF-path
+fingerprint `0eabc4f` is hashed after undoing the two documented CV-6b2 edits (the `combatFxVisible` reader, the glow gate);
+witness T9g that both edits are in the source — 39/0 (fail-first on HEAD 38/1, T9g; T9d green on both sides);
+`cv_stage_render_smoke` R14c — the ring hidden under `cvStage || cvStrip` — 37/0 (fail-first 36/1). Sweep **381/381**,
+`check-i18n` PASS.
+
+**Choices within the scope (for the owner's eye):** the strip at the TOP edge (the bottom holds the bottom strip with the Dock
+chips; the Watch frame keeps the battle under the strip); "+N" is a count, not a list; the strip consumes every click
+and blocks the camera under it (the card did not — #676); the contact sheet is in the Polish locale.
+
+**Owner looks at** — (1) `KOSMOS.debug.cvBattle()`: one line under the top band, ▼ expands (ships, last shots), ▲ / Esc
+collapses, [ Obserwuj ] dives with the battle under the strip; (2) `KOSMOS.debug.cvBattle({nA: 4, nB: 4, split: 1})`: one
+strip line; at the end banners = battle lines (2 with the mop-up, #675); (3) ☰ "Auto-fokus bitwy" OFF / ON; (4)
+`KOSMOS.debug.cvStrip(0)` = today's card, `cvStrip(1)` back; (5) the 5 themes on the contact sheet; F5 without saving.
+
+**Owner's check — PASS 2026-11-10 (steps 1–7 of the session's check list; the strip at the top accepted).** Decisions the same
+day (§3.2-24, -25): #676 accepted as designed; #675 → a grace window of ≈ 1–2 rounds before the result is announced, not now —
+scheduled with #640 in the small step outside CV (one message per event).
+
 ### CV-7 — director camera and 9:16 (flag `cvDirector`)
 
 | | |
@@ -1887,8 +1988,8 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **626** | ✅ | **A pinned enemy without an orbit never moves on screen** while its logical position snaps to the body centre — `_freezeAsStationary` sets `dockedAt` but nothing assigns an orbit | `DSCS:1309-1312`; `OrbitalSpaceSystem.js:62-70`; `ThreeRenderer.js:5088-5089, :5419-5435`; `VesselManager.js:2702-2707` (static trace, not run) | **✅ CV-3a3** (`0490ea5`, D-CV-4): the body shell — a pinned enemy without an orbit gets a base just beyond the shell (`shellBaseAt`) and glides there over `JOIN_MS`; the logic is untouched (the DSCS pin stays); owner's live check pending |
 | **627** | ⚪ | **Wreck drawn ≠ logical**: DSCS wrecks' logical position is the battle-start midpoint; deep-space wrecks never enter `moving`, so the sprite stays where the ship died until recreated, then jumps; orbiters go to the graveyard orbit (Finding 460 family) | `DSCS:1055, :1101, :1112`; `VesselManager.js:2625`; `ThreeRenderer.js:4855-4861`; `OrbitalSpaceSystem.js:97-104` | CV-5 (presentation rule) |
 | **628** | 🟠 | **The orbital burst ignores the viewed system and galaxy mode** — no `isEngagementInView` (unlike the round FX) ⇒ a battle elsewhere draws at planet-local coordinates in the viewed system (Finding 453 family) | `ThreeRenderer.js:6531, :6549-6575` | CV-8a / CV-8b |
-| **629** | ⚪ | **The combat card ignores `MapInsets`** (≈ 12 px overlap with the bottom strip without the Dock); the Watch top margin uses 46 while the map top inset is 28 | `CombatHUD.js:150-162`; `MapInsets.js:28, :41`; `CombatWatchLogic.js:97-110` | CV-6b |
-| **630** | ⚪ | **Console-only switches**: `uiPrefs.combatFxVisible` and `battleAutoFocus` are read, never written | `ThreeRenderer.js:1546, :6528, :6551` | CV-6b |
+| **629** | ✅ | **The combat card ignores `MapInsets`** (≈ 12 px overlap with the bottom strip without the Dock); the Watch top margin uses 46 while the map top inset is 28 | `CombatHUD.js:150-162`; `MapInsets.js:28, :41`; `CombatWatchLogic.js:97-110` | **CV-6b2 ✅ (`de682b4`, under `cvStrip`)** — the strip lays out in the map area from `MapInsets` (never under the outliners, the top band or the bottom strip; `cv_strip_smoke` P1, control P1e with the real card); the Watch frame starts under a strip at the top (`watchSafeRect` `edge: 'top'`); the card on the OFF path unchanged until CV-Z |
+| **630** | ✅ | **Console-only switches**: `uiPrefs.combatFxVisible` and `battleAutoFocus` are read, never written | `ThreeRenderer.js:1546, :6528, :6551` | **CV-6b2 ✅ (`de682b4`, owner's decision §3.2-23)** — `combatFxVisible` retired (no reader left, both paths; `cv_strip_smoke` P5, `cv_fx_engine_smoke` T9d / T9g); ☰ "Auto-fokus bitwy" / "Battle auto-focus" toggles `uiPrefs.battleAutoFocus` (no key = ON; the save carries it, v101 without migration; live: OFF — the camera stays, ON — it jumps) |
 | **631** | ⚪ | **Doctrine barely exists in deep-space mechanics**: DSCS never reads it; kite only moves the MOS band; hold_position does not hold; retreat_at_50 is checked once per 0.5 civ-years (≈ 14 % of maximal battles). Outside CV (F1) — a mechanics question for the owner | `DSCS:553-584`; `MovementOrderSystem.js:1385, :1391-1392`; `FleetSystem.js:478-486, :751` | candidate future MECHANICS arc — owner decides later (§3.1-7); CV-3b posture only |
 | **632** | ⚪ | **EAH ordering and scope**: emits before applying wrecks; wrecks a retreating side anyway; `_wreckPlayerVesselsInSystem` uses `systemId ?? 'sys_home'` ⇒ a ship in warp transit is wrecked by a lost home battle it never defended (Finding 151 class); the no-war skirmish is tagged `source: 'dscs'` | `EnemyAttackHandler.js:228-301, :406`; `WarSystem.js:815`; `GameScene.js:2763` | mechanics outside CV; CV-8a relies on the emit order |
 | **633** | ⚪ | **Possible fog leak**: the rumor-ghost override applies only to `in_transit`; orbiting enemies get their live position written back at physics cadence | `ThreeRenderer.js:5601-5603, :7682-7683` (static, not run) | CV-6a (fog audit) |
@@ -1897,8 +1998,8 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **636** | ⚪ | **Hygiene bundle**: dead `_resolveFxEndpoint`; `entry._orbiting` written never read and `_calcVisualOrbit*` uncalled; FX kind `trail` without producer; hit-glow disposal frees the shared Sprite geometry (re-upload churn); BattleView3D's unused EventBus import and its own weapon-colour copy; `resolveBattle`'s `Date.now()` seed fallback; `round.year` mixes display and civ years; the CLAUDE.md M2a note lists `resolveDeepSpaceBattle` under `KOSMOS.debug` | `ThreeRenderer.js:6359-6372, :5282, :5329, :6447, :6408`; `BattleView3D.js:19, :30-37`; `BattleSystem.js:108`; `DSCS:617` | CV-2a — under `cvFxEngine` the hit glow is a pooled spark (no per-shot disposal); the legacy churn stays on the OFF path until CV-Z |
 | **637** | ⚪ | **Below 10 fps the presentation clock runs slower than real time.** The 100 ms step cap (no jump after a stalled loop) also clips every frame of a steadily slow machine: at 2.3 fps (SwiftShader) an 8 s battle advanced 1.5 s of presentation time, so effects live longer in real time and trail the rounds. Irrelevant at ≥ 10 fps (the RTX 3070 runs 60). Matters for CV-4's lag budget (D-CV-9, ≤ 1 round) and CV-2b's Low preset: either cap only true gaps (e.g. > 1 s) or let the ledger re-sync to the round anchor (`PresentationClock.anchor`) | `src/renderer/combat/PresentationClock.js` (`PRESENTATION_DT_MAX_MS`); live probe CV-2a | CV-4 / CV-2b |
 | **638** | ⚪ | **One battle, several encounters.** DSCS never merges encounters; under player intent (an `engage` order on the other ship of the trigger pair) an encounter starts with that pair only and the rest join one by one ⇒ normal play produces co-located encounters, each with its own ring, card and result (measured: 5v5 with a target per ship → two concurrent encounters 0.15 AU apart; one target → two sequential, 2 then 4). One `cvBattle` 10v10 = one encounter (12 seeds headless, 4 live); the `_n` id suffix is a 0.01-year stamp collision, not a fragment | `DSCS:186-188, :229-236, :241, :1506-1514`; probes §4 CV-2a findings 1 | **CV-3a1 ✅ part** — cluster = stage unit, Watch frames the cluster and follows its encounters (`clusterEncounters`, `cv_stage_logic_smoke` L7, `cv_stage_render_smoke` R12); **CV-3a2 ✅ rest** (`1dfe5ae`) — clusters from logical positions for stage, card and banner (`encounterClusters`), one card row and one result banner per cluster (`BattleClusterLogic`; `cv_stage_answers_smoke` A4–A6; live: one row, one banner); DSCS untouched; the Dziennik line per encounter stays until CV-6b (#639) |
-| **639** | 🟠 | **The result is told three times.** Banner with pause + Dziennik battle line + Dziennik skirmish line (every no-war battle) per encounter, plus auto-slow; co-located encounters multiply it (live: 4 battles → 4 banners, 4 battle lines, 4 skirmish lines; no toast, no bell) | `GameScene:2789, :2867`; `BattleIntroModal.js:215`; `UIManager:1829-1831`; `WarSystem:446` | **CV-6b** on the CV-3a cluster id — one banner after the cluster's last `battle:resolved`, one Dziennik line (skirmish note folded in) |
-| **640** | 🔴 | **Contact flood — per ship and per pair.** Observatory first sighting: one pausing popup per ship, not queued (each dismiss resumes the game while the rest stay open [INF]) — 10 popups + 10 lines for one 10v10 in colony range (headless); proximity contact: one line per player × enemy pair — 130 per battle live (13 × 10); contact identified / lost: 10 + 2–10 per battle. 587 Dziennik entries in 4 battles vs a 500-entry runtime buffer (200 saved) ⇒ the earlier history was flushed (Finding 173 class) | `ObservatorySystem.js:676-697` → `GameScene:3084-3192`; `UIManager:1691-1710`; `GameScene:2878-2895, :2897-2912`; `EventLogSystem.js:17-18` | **owner's decision 2026-11-08 (§3.2-14): the NEXT step, outside CV, right after CV-3a3** — separate small step **outside CV** (owner decides scope): aggregation window per system — one popup / one line listing N contacts; ~3 i18n keys PL + EN + keeper |
+| **639** | ✅ | **The result is told three times.** Banner with pause + Dziennik battle line + Dziennik skirmish line (every no-war battle) per encounter, plus auto-slow; co-located encounters multiply it (live: 4 battles → 4 banners, 4 battle lines, 4 skirmish lines; no toast, no bell) | `GameScene:2789, :2867`; `BattleIntroModal.js:215`; `UIManager:1829-1831`; `WarSystem:446` | **CV-6b2 ✅ (`de682b4`, under `cvStrip`)** on the CV-3a cluster id — one banner (CV-3a2, kept) and, by the same grouping (`clusterGroupStep`), ONE battle line and ONE skirmish line per cluster (`ClusterNarrator`; the skirmish line kept as a line — §4 CV-6b2 scope "the skirmish semantics kept, not multiplied"); live split 4v4: 2 banners = 2 battle lines = 2 skirmish lines instead of 5 + 5 (the second = the mop-up, #675); `cv_strip_smoke` P4 with the OFF control; the OFF path per encounter until CV-Z |
+| **640** | 🔴 | **Contact flood — per ship and per pair.** Observatory first sighting: one pausing popup per ship, not queued (each dismiss resumes the game while the rest stay open [INF]) — 10 popups + 10 lines for one 10v10 in colony range (headless); proximity contact: one line per player × enemy pair — 130 per battle live (13 × 10); contact identified / lost: 10 + 2–10 per battle. 587 Dziennik entries in 4 battles vs a 500-entry runtime buffer (200 saved) ⇒ the earlier history was flushed (Finding 173 class) | `ObservatorySystem.js:676-697` → `GameScene:3084-3192`; `UIManager:1691-1710`; `GameScene:2878-2895, :2897-2912`; `EventLogSystem.js:17-18` | **owner's decision 2026-11-08 (§3.2-14): the NEXT step, outside CV, right after CV-3a3** — separate small step **outside CV** (owner decides scope): aggregation window per system — one popup / one line listing N contacts; ~3 i18n keys PL + EN + keeper · **+ #675 (owner's decision 2026-11-10, §3.2-25):** the same step carries the grace window (≈ 1–2 rounds) before a battle's result is announced — the step's rule: one message per event |
 | **641** | ⚪ | **"End-of-action circles" are the wreck explosion rings** — flat orange `RingGeometry` 0.35–0.40 WU (22–25 L, the #619 floor), 800 ms, all at once when the battle ends (#615); live the only legacy FX in 4 battles: 55 fireballs + 55 rings at the battle ends | `ThreeRenderer:1356, :6533` | **CV-3a1 ✅ stop-gap** — no flat ring under `cvStage` (§3.2-4; `cv_stage_render_smoke` R10); **CV-5** — layered explosion sized from the ship, at the killing impact |
 | **642** | ⚪ | **The engagement ring is smaller than the battle** — 0.285 WU (0.026 AU) around the encounter point while a 10v10 line-up stands 0.06–0.114 AU from the centre ⇒ every ship outside it | `VesselFxLogic.js:80, :109`; `ThreeRenderer:4214, :7156, :7189` | **CV-3a1 ✅** — hidden under `cvStage` at the call site (`_hideEncounterRings`; the OFF-path pins `combat_ring_subtle` / `combat_marker_life` / `combat_view_scope` T6e unchanged; `cv_stage_render_smoke` R9, R14c); code removed in CV-Z |
 | **643** | 🟠 | **Watch zoom dives under the battle.** The composition shift (orbit target moved down so ships render above the card) is computed for the fit distance and kept after the wheel changes the distance; the wheel dollies toward that target ⇒ Watch at 0.605 WU shows 0 / 20 ships (fit at 1.816 WU: 20 / 20, target y −0.227; auto-focus at 6 WU: target y −0.997, ships at screen y 218 vs centre 403). Not the 0.3 vs 0 height (only the first auto-focus frame aims at y 0) | `CombatWatchLogic.js:121, :170`; `ThreeRenderer:1577, :7027-7050, :7108`; `ThreeCameraController.js:186` | **CV-3a1 ✅** — pivot on the drawn cluster centre at ship height, distance fitted without the stage, composition by `setViewOffset`; criterion live 20 / 20 at 1/3 of the start distance (KONTROLA OFF: 0 / 20); `cv_stage_logic_smoke` L9, `cv_stage_render_smoke` R11 |
@@ -1934,6 +2035,8 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **672** | ✅ | **The warm-started stage solver random-walked (the "jitter rounds").** Every round 40 pull passes at weight 0.5 over 190 pairs moved the whole solution although the logic barely changed | live: relative solution step per round median 0.41 L, p95 2.31 L; 40–52 % of consecutive steps reversed direction; offline on 3 recorded battles 0.40–0.55 / 2.2–2.9 L | **CV-6b ✅** — `STAGE.WARM_PASSES` 4 at `WARM_PULL` 0.25 (cold unchanged): live 0.21 / 0.69 L; shots in the weapon window 96.4 / 90.9 / 93.3 % (was 96.4 / 93.5 / 96.1); keeper L5c (KONTROLA — the old setting walks) |
 | **673** | ⚪ | **The logic glide quantizes and ends early.** `glideRetarget` re-aims in 150 ms steps and the linear glide finishes before the next round, so a ship's base motion is a staircase of short linear moves. After CV-6b the stage no longer shows it in a free battle; it is still visible for a ship joining or leaving the stage (the 500 ms entry / exit blends base and stage) and with `cvStage` OFF | `CombatWatchLogic` `glideRetarget` / `glideStep`; `ThreeRenderer._tickCombatGlide`; live probe (before CV-6b) | CV-3b (choreography gives participants their own motion) or later — not blocking |
 | **674** | ⚪ | **Far zoom after decision 20: a 10v10 is a knot of a few pixels.** With the stage held at every zoom the drawn battle keeps its stage size, which at the whole-system view (camera 85 WU) is a knot of ≈ 3.5 px; the HUD stack "⚠ ×N" carries it, while the FX engine's pixel floors (`MIN_PX` 3, `TRACER_CORE` 4 — the owner's tuning) make beams and sparks as wide as the knot itself [INF — not looked at live] | render harness at 85 WU (R17 setup); `LIVE_CV_FX.MIN_PX` / `TRACER_CORE` | CV-6a — the tactical layer's far language (icons, bands, fire lines) is meant for exactly this view |
+| **675** | ⚪ | **A mop-up encounter re-tells the battle.** The banner and (under `cvStrip`) the Dziennik announce a cluster at its LAST `battle:resolved`; when survivors of the same battle engage again (a duel ran out at 20 rounds and the ships freed by the other duels, still in range, engage the last enemy), DSCS opens a NEW encounter in the same frame, after the announcement — a second cluster in time, so a second banner (pause), battle line and skirmish line. Live split 4v4: 5 encounters → 2 announcements (the four duels — 20 rounds, 3 enemy losses; then the mop-up — 1 round, 1 loss); the strip shows it as one battle (the expansion follows the same ships). Proposal: hold the cluster's announcement a short grace on presentation time and fold an encounter that starts within it with ships of the cluster — it changes the CV-3a2 banner timing ⇒ the owner's decision | `BattleClusterLogic.clusterGroupStep`; `GameScene._clusterBattleBanners` / `_narrateBattleCluster`; `DeepSpaceCombatSystem` (encounter start after `_finalizeBattle`); `validate.json` step 4 | **owner's decision 2026-11-10 (§3.2-25): yes to a grace window ≈ 1–2 rounds — not now; scheduled with #640 in the small step outside CV (one message per event)** |
+| **676** | ✅ | **The combat card never took part in `isOverUI`.** The wheel, a camera drag and map hover went through the card (only its clicks were caught); the strip is in `isOverUI` like every other panel, so the camera does not move under it — a deliberate difference; the card on the OFF path keeps the old behaviour | `UIManager.isOverUI` (no `combatHud` test); `CombatHUD.handleClick` | **accepted as designed (owner 2026-11-10, §3.2-24)** — the strip blocks like every panel; the card's OFF path keeps the old behaviour until CV-Z removes the card |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
