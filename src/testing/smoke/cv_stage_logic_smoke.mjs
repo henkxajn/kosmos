@@ -15,8 +15,9 @@
 //      rzadka (< 5 %)
 //   L5 układy NAGRANE z prawdziwej bitwy DSCS (stager 10 na 10, ziarno 1, świat headless z prawdziwym `TimeSystem`):
 //      pozycje uczestników w każdej rundzie → prowadnica z ciepłym startem i parami pierwszeństwa (strzelec → cel tej
-//      rundy) — zero złych par, zero skali awaryjnej; pary pierwszeństwa przy prawie sceny (mediana odstęp / G(d) w
-//      0,95–1,05 dla każdej broni); KONTROLA: bez par pierwszeństwa laser odstaje (mediana < 0,95 — pomiar CV-3a1: 0,84)
+//      rundy) — zero złych par, zero skali awaryjnej; pary pierwszeństwa w OKNACH WŁAŚCICIELA (F3; CV-3a3 — przecelowane po
+//      uzbrojeniu lustrzanym stagera, §3.2-10): mediana odstęp / G(d) każdej broni w oknie, ≥ 95 % strzałów w oknie;
+//      KONTROLA: bez par pierwszeństwa < 95 % (zmierzone 88 %)
 //   L6 siatka rozsunięcia: statki jednej strony ≥ 1,6 L z tolerancją 1 % (prowadnica Gaussa–Seidla przy konkurujących
 //      ograniczeniach pasm zostawia resztę ułamka procenta — zmierzone 1,5955 L w szyku stagera; podłoga jest celem
 //      rysunku, nie pasmem) — szyk stagera; kupka 10 w jednym punkcie (wróg daleko od krawędzi pasma); bez siatki
@@ -232,8 +233,11 @@ block('L5 — układy nagrane z prawdziwej bitwy DSCS (stager 10 na 10, ziarno 1
   const sc = H?.cvBattle?.({ seed: 1 });
   ts.play();
   for (let n = 0; n < 40000 && (dscs.listActive().length > 0 || rounds.length === 0); n++) { clock.now += 16; ts.update(16); }
+  // Okna właściciela (F3) dla odstępu pary w postoju 0,95 zasięgu — jako przedział stosunku odstęp rysowany / G(d):
+  // laser [3, 4] L / 3,50 L, kinetyk [7, 9] / 8,00, rakiety [12, 15] / 13,5 (plan §2.2).
+  const WIN = { weapon_laser: [3 / 3.5, 4 / 3.5], weapon_kinetic: [7 / 8, 9 / 8], weapon_missile: [12 / 13.5, 15 / 13.5] };
   const replay = (withPriority) => {
-    let offsets = null, bad = 0, fb = 0, maxMis = 0; const ratios = {};
+    let offsets = null, bad = 0, fb = 0, maxMis = 0, inWin = 0, shots = 0; const ratios = {};
     for (const pts of rounds) {
       const priority = withPriority ? new Set(pts.events.map((e) => SL.pairKey(e.a, e.t))) : null;
       const r = solve(pts, { prevOffsets: offsets, priority });
@@ -246,22 +250,38 @@ block('L5 — układy nagrane z prawdziwej bitwy DSCS (stager 10 na 10, ziarno 1
         const a = byId.get(e.a), t = byId.get(e.t), A = r?.pos?.get(e.a), T = r?.pos?.get(e.t);
         if (!a || !t || !A || !T) continue;
         const g = SL.stageGap(Math.hypot(t.x - a.x, t.z - a.z));
-        if (g > 0) (ratios[e.w] ??= []).push(Math.hypot(T.x - A.x, T.y - A.y, T.z - A.z) / g);
+        if (g > 0) {
+          const ratio = Math.hypot(T.x - A.x, T.y - A.y, T.z - A.z) / g;
+          (ratios[e.w] ??= []).push(ratio);
+          const w = WIN[e.w];
+          if (w) { shots++; if (ratio >= w[0] && ratio <= w[1]) inWin++; }
+        }
       }
     }
-    const med = {};
-    for (const [w, a] of Object.entries(ratios)) { a.sort((x, y) => x - y); med[w.replace(/^weapon_/, '')] = +a[Math.floor(a.length / 2)].toFixed(3); }
-    return { bad, fb, maxMis, med };
+    const med = {}, medOk = {};
+    for (const [w, a] of Object.entries(ratios)) {
+      a.sort((x, y) => x - y);
+      const m = a[Math.floor(a.length / 2)];
+      med[w.replace(/^weapon_/, '')] = +m.toFixed(3);
+      medOk[w.replace(/^weapon_/, '')] = !!WIN[w] && m >= WIN[w][0] && m <= WIN[w][1];
+    }
+    return { bad, fb, maxMis, med, medOk, share: shots ? inWin / shots : 0, inWin, shots };
   };
-  const withP = SL?.pairKey ? replay(true) : { bad: 1, fb: 1, maxMis: 0, med: {} };
-  const noP = SL ? replay(false) : { med: {} };
+  const withP = SL?.pairKey ? replay(true) : { bad: 1, fb: 1, maxMis: 0, med: {}, medOk: {}, share: 0 };
+  const noP = SL ? replay(false) : { med: {}, share: 1 };
   console.log(`     nagrane rundy ${rounds.length} (${rounds[0]?.length ?? 0} uczestników): niespójnych ${withP.bad}, skala awaryjna ${withP.fb}; złych par przed prowadnicą maks. ${withP.maxMis}`);
   console.log(`     mediana odstęp rysowany / G(d) par strzelec → cel: z parami pierwszeństwa ${JSON.stringify(withP.med)}; bez ${JSON.stringify(noP.med)}`);
+  console.log(`     strzały w oknie właściciela (F3): z parami pierwszeństwa ${withP.inWin}/${withP.shots}; bez ${noP.inWin}/${noP.shots}`);
   assert(sc?.ok === true && rounds.length >= 5, `L5-0 KONTROLA: bitwa stagera rozegrana (${rounds.length} rund)`);
   assert(SL && rounds.length >= 5 && withP.bad === 0 && withP.fb === 0, 'L5a każda nagrana runda: zero złych par prawem sceny, zero skali awaryjnej (ciepły start z poprzedniej rundy)');
-  const meds = Object.values(withP.med);
-  assert(meds.length === 3 && meds.every((m) => m >= 0.95 && m <= 1.05), `L5b pary strzelec → cel przy prawie sceny: mediana 0,95–1,05 dla każdej broni (${JSON.stringify(withP.med)})`);
-  assert(SL && (noP.med.laser ?? 1) < 0.95, `L5b-KONTROLA: bez par pierwszeństwa laser odstaje (mediana ${noP.med.laser})`);
+  // ARC CV-3a3 — PRZECELOWANE (stager z uzbrojeniem lustrzanym, Finding 654 / §3.2-10 zmienił nagraną bitwę): dawny przedział
+  // ±5 % wokół prawa był tolerancją dobraną na starej bitwie (mediana lasera 1,006 → teraz 0,940 — wszystkie strzały lasera
+  // w postoju, rysowane 2,7–3,5 L, mediana 3,38 L, w oknie [3, 4] L). Kryterium z OKIEN WŁAŚCICIELA (F3): mediana każdej broni
+  // w oknie, ≥ 95 % strzałów strzelec → cel w oknie; KONTROLA: bez par pierwszeństwa udział spada poniżej 95 % (88 %).
+  const meds = Object.values(withP.medOk);
+  assert(meds.length === 3 && meds.every(Boolean) && withP.share >= 0.95,
+    `L5b pary strzelec → cel w oknach właściciela (F3): mediana każdej broni w oknie (${JSON.stringify(withP.med)}), w oknie ${(withP.share * 100).toFixed(1)} % strzałów (≥ 95 %)`);
+  assert(SL && noP.share < 0.95, `L5b-KONTROLA: bez par pierwszeństwa w oknie ${(noP.share * 100).toFixed(1)} % strzałów (< 95 %) — pary pierwszeństwa są potrzebne`);
 });
 
 // ═══ L6 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════

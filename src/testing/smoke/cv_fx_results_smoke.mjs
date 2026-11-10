@@ -37,6 +37,9 @@
 //   A3 KONTROLA przyrządu: słuchacz salwy losujący z `Math.random` przesuwa sloty orbit (i sekwencję)
 //   A4 tempo oglądanego starcia (`combatRoundMs`) 400 == 1000 (decyzja właściciela 2026-11-08: domyślnie 1000): sygnatura,
 //      ślad każdej rundy, sekwencja losowań gry, sloty orbit; świadek — czas realny starcia rośnie z kluczem
+//   A5 (CV-3a3, D-CV-4) bitwa PRZY CIELE (`cvBattle({ atBody })` — gracz na orbitach, wróg przypięty przez DSCS): ON (scena
+//      ze skorupą) == OFF == bez renderera — sygnatura, ślad każdej rundy, sekwencja losowań gry, sloty orbit; świadek — tryb ON
+//      rysował skorupę
 //
 // ⚠ Fail-first: moduły CV-2a (stager, silnik, zegar) powstają w tym kroku — import dynamiczny w try/catch, piny DEGRADUJĄ
 //   (czerwone), suita się nie przerywa. A2 jest STRAŻNIKIEM (wynik nie zależał od FX także przed CV-2a, od CV-0b).
@@ -58,7 +61,7 @@ import { OrbitalSpaceSystem }    from '../../systems/OrbitalSpaceSystem.js';
 import * as FXC                  from '../../config/CombatFxConfig.js';
 import * as FX                   from '../../utils/VesselFxLogic.js';
 import { vesselTargetSize, VESSEL_TARGET_SIZE } from '../../renderer/VesselModelResolver.js';
-import { isEnemyVessel }         from '../../entities/Vessel.js';
+import { isEnemyVessel, setNextVesselId } from '../../entities/Vessel.js';
 import { rendererRandom, reseedRendererRandom } from '../../renderer/RendererRng.js';
 import { readFileSync }          from 'node:fs';
 
@@ -107,7 +110,8 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'FX_MAX_ACTIVE', 'FX_TRACER_MS', 'FX_SHIELD_COLOR', 'isEnemyVessel', 'isEndpointVisibleInCombat', 'isPlayerEngagement',
   'vesselTargetSize', 'HIT_GLOW', 'hitGlowWorldSize', 'ThreeRenderer', 'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION', 'rendererRandom',
   'FxEngine', 'logDepthOn', 'STAGE', 'solveStage', 'pairKey', 'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'lengthPx', 'VESSEL_TARGET_SIZE',
-  'WORLD_SCALE', '_STAGE_V', 'encounterClusters', 'encounterParticipants'];   // CV-3a2 — klastry z pozycji logicznych
+  'WORLD_SCALE', '_STAGE_V', 'encounterClusters', 'encounterParticipants',   // CV-3a2 — klastry z pozycji logicznych
+  'shellBaseAt'];                                                              // CV-3a3 — skorupa przy ciele
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
   '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
   '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend'];
@@ -120,7 +124,7 @@ function makeMethod(name) {
     vesselTargetSize, FX.HIT_GLOW, FX.hitGlowWorldSize, TR_STATIC, FX.EXPLOSION_RING_COLOR, FX_HDR_EXPLOSION, rendererRandom,
     ENGINE?.FxEngine ?? null, () => true, STAGEL?.STAGE, STAGEL?.solveStage, STAGEL?.pairKey, STAGEL?.clusterEncounters, STAGEL?.bandEdgesWU,
     SZOOM?.stageBlend, SZOOM?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
-    STAGEL?.encounterClusters, STAGEL?.encounterParticipants);
+    STAGEL?.encounterClusters, STAGEL?.encounterParticipants, STAGEL?.shellBaseAt);
 }
 
 /** Atrapa renderera: prawdziwe metody FX, sprite'y = Object3D za pozycjami logicznymi, zegar prezentacji z CV-2a. */
@@ -130,7 +134,9 @@ function fakeRenderer() {
     _presClock: CLOCK ? new CLOCK.PresentationClock() : null, legacySpawned: 0, missing: [],
     // CV-3a1 — stan sceny (jak konstruktor renderera)
     _stageMarks: new Map(), _stageState: new Map(), _stageClock: CLOCK ? new CLOCK.PresentationClock() : null, _stageFrame: null,
-    _stageClusterOf: new Map(), _stageEdges: null, _galaxyFlight: false, _frameNo: 0, stagedFrames: 0, stageMaxK: 0 };
+    _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _galaxyFlight: false, _frameNo: 0, stagedFrames: 0, stageMaxK: 0, shellFrames: 0,
+    // CV-3a3 — rysowane ciało (skorupa): środek z encji, promień jak `computeBodyRadius` skalistej planety bez masy
+    getBodyWorldInfo: (id) => { const b = EntityManager.get(id); return b ? { x: S(b.x), y: 0, z: S(b.y), r: 0.062 } : null; } };
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
   const spawn = R._spawnFx;
   R._spawnFx = function (mesh, cfg) { R.legacySpawned++; return spawn.call(R, mesh, cfg); };
@@ -154,6 +160,7 @@ function fakeRenderer() {
     }
     R._tickBattleStage?.();
     if (R._stageMarks.size) { R.stagedFrames++; for (const m of R._stageMarks.values()) R.stageMaxK = Math.max(R.stageMaxK, m.k); }
+    if (R._stageFrame?.list?.some?.((c) => c.shell)) R.shellFrames++;
     R._tickCvFx?.();
   };
   return R;
@@ -172,6 +179,14 @@ let ts, vm, mos, prox, dscs, eah, oss, rec, saveSys;
 function world() {
   EventBus.clear(); EntityManager.clear();
   global.window = global.window ?? {};
+  // CV-3a3 — zegar realny wirtualny od tej samej chwili w każdym świecie: kąt orbit statków przy ciele liczy się od kotwicy
+  // zegara klatek (= czas realny pierwszego tiku, POLISH P1 CP5), więc bitwa przy ciele z innym startem zegara zaczynałaby
+  // z innych slotów orbit (zmierzone: ta sama bitwa „bez renderera” dwa razy — dwie różne sygnatury). Bitwy w wolnej
+  // przestrzeni od zegara nie zależą (A2, A4 — różnice czasu).
+  clock.now = 1e7;
+  // … i ta sama numeracja statków: prędkość kątowa orbity ma rozrzut z hasha id statku (`OrbitalSpaceSystem.assignOrbit`), a licznik
+  // id jest modułowy — bez tego kolejny świat dostawał inne id, więc inne orbity (zmierzone: ω 0,1133 / 0,1142 / 0,1153).
+  setNextVesselId(1);
   ts = new TimeSystem();
   ts.gameTime = GY0;
   ts.multiplierIndex = 1;                                // 1 d/s
@@ -243,7 +258,7 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  * Starcie ze stagera, rozegrane do końca. mode: 'none' (bez renderera) · 'off' (renderer, flaga OFF) · 'on' (flaga ON);
  * `control` — słuchacz salwy losujący z `Math.random` (KONTROLA przyrządu).
  */
-function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null } = {}) {
+function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null } = {}) {
   const flag = GAME_CONFIG.FEATURES.cvFxEngine;
   const stageFlag = GAME_CONFIG.FEATURES.cvStage;
   reseed('cv2a-battle'); reseedRendererRandom();
@@ -262,7 +277,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     if (control) EventBus.on('combat:roundFx', () => { Math.random(); Math.random(); Math.random(); });
     outsider = ship({ xAU: 3, yAU: 0, name: 'Postronny', modules: ['weapon_laser', 'engine_ion'], dockedAt: 'p_rock' });
     const H = helpers();
-    st = H ? H.cvBattle({ seed, nA, nB }) : null;
+    st = H ? H.cvBattle({ seed, nA, nB, ...(atBody ? { atBody } : {}) }) : null;
     // `DirectorRecall` (prawdziwy zamiatacz) przed pierwszym tikiem — KONTROLA: zbrojny okręt AI poza starciem.
     ctlAi = ship({ xAU: -6, yAU: 3, name: 'AI-poza', empire: EMP, hull: 'hull_destroyer', modules: ['weapon_kinetic', 'engine_ion'] });
     const P = RECALL?.DirectorRecall?.prototype;
@@ -431,6 +446,22 @@ const K1000 = runBattle({ mode: 'none', seed: 1, roundMs: 1000 });
   const q = (k) => 16 * k / 110 + 16;   // kwant siatki (jak `combat_pace_smoke`)
   assert(rounds > 1 && Math.abs(K400.realMs - (rounds - 1) * 400) <= q(400) && Math.abs(K1000.realMs - (rounds - 1) * 1000) <= q(1000),
     `A4e świadek: czas realny starcia = (rundy − 1) × klucz ± kwant (${K400.realMs} / ${K1000.realMs} ms) — klucz działa`);
+}
+
+header('A5 — (CV-3a3) bitwa przy ciele: wynik ON (skorupa) == OFF == bez renderera');
+const BN  = runBattle({ mode: 'none', seed: 1, atBody: 'p_home' });
+const BOF = runBattle({ mode: 'off', seed: 1, atBody: 'p_home' });
+const BON = runBattle({ mode: 'on', seed: 1, atBody: 'p_home' });
+{
+  console.log(`     przy ciele: cvBattle ${JSON.stringify(BN.st && { ok: BN.st.ok, body: BN.st.body, docked: BN.st.docked, enemyPinned: BN.st.enemyPinned })}, `
+    + `sygnatura ${JSON.stringify(BN.sig.battles)}, rund ${BN.trace.length}; ON — klatek ze skorupą ${BON.R?.shellFrames}`);
+  assert(BN.st?.ok === true && BN.st.docked === 10 && BN.st.enemyPinned === 10 && BN.sig.battles.length >= 1 && BN.trace.length >= 3,
+    `A5-0 PRZESŁANKA: bitwa przy ciele rozegrana (gracz ${BN.st?.docked}/10 na orbitach, wróg ${BN.st?.enemyPinned}/10 przypięty, ${BN.trace.length} rund)`);
+  assert(same(BON.sig, BOF.sig) && same(BOF.sig, BN.sig) && same(BON.trace, BOF.trace) && same(BOF.trace, BN.trace),
+    'A5a sygnatura i ślad każdej rundy identyczne ON == OFF == bez renderera');
+  assert(BN.draws.length > 0 && same(BON.draws, BOF.draws) && same(BOF.draws, BN.draws) && same(BON.slots, BOF.slots) && same(BOF.slots, BN.slots),
+    `A5b sekwencja losowań gry (${BN.draws.length}) i sloty orbit identyczne`);
+  assert((BON.R?.shellFrames ?? 0) > 100 && BOF.R?.shellFrames === 0, `A5c świadek: tryb ON rysował skorupę (${BON.R?.shellFrames} klatek), OFF — nie`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

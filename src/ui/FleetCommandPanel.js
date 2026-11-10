@@ -95,7 +95,8 @@ export class FleetCommandPanel {
         });
         return;
       }
-      const res = this._fs()?.issueFleetOrder?.(fleetId, { type: 'moveToPoint', targetPoint: { x: point.x, y: point.y } });
+      const res = this._fs()?.issueFleetOrder?.(fleetId, { type: 'moveToPoint', targetPoint: { x: point.x, y: point.y },
+        ...(point.staged === true ? { noBodySnap: true } : {}) });   // ARC CV — Finding 662 (a): klik w scenie bitwy = punkt
       this._announce(res);
       this._markDirty();
     }, { intent: 'fleetcmd_move', fleetId });

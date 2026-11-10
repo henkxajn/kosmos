@@ -58,6 +58,17 @@ export const LIVE_CV_FX = {
   GLOW_K:       HIT_GLOW.MODEL_K,   // błysk na modelu = rozmiar modelu × K (jak dziś, CP18)
   GLOW_MIN_PX:  HIT_GLOW.MIN_PX,
   GLOW_MAX_PX:  96,
+  FLASH_GROW:   3.0,     // błysk trafienia rośnie w czasie życia ×1 → ×GROW (jak dziś)
+  RING_GROW:    3.0,     // pierścień osłony — j.w.
+  // ARC CV-3a3 (Finding 653, decyzja właściciela §3.2-11 — ŁATA do CV-4 / CV-4b / CV-5 / CV-6a) — pod flagą `cvStage` (scena
+  // bitwy): błysk i pierścień osłony mniejsze i wolniej rosnące (silnik: `update({ stage })`), kula wybuchu wraku w skali
+  // kadłuba i celownik wroga gasnący na scenie (renderer: `_spawnExplosion`, `_syncEnemyAlertMarkers`). Strojenie, bez pinów.
+  STAGE_FLASH_K:    1.2,   // średnica błysku = rozmiar modelu × K (bez sceny — FLASH_K)
+  STAGE_FLASH_GROW: 1.5,
+  STAGE_RING_K:     1.8,   // średnica pierścienia osłony = rozmiar modelu × K (bez sceny — RING_K)
+  STAGE_RING_GROW:  1.25,
+  STAGE_FIREBALL_K: 1.5,   // promień kuli wybuchu wraku u szczytu = rozmiar kadłuba × K (bez sceny — podłoga 0,2 j. ≈ 5 L i ×3)
+  STAGE_RETICLE_FADE_K: 0.25,   // celownik wroga na scenie gaśnie liniowo, gdy stopień sceny statku rośnie od 0 do K
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)
@@ -220,7 +231,7 @@ export class FxEngine {
       ...common,
       uniforms: { uTime: { value: 0 }, uPxToWorld: { value: 0.001 }, uCore: { value: 2.4 },
         uSizeK: { value: new THREE.Vector3(3, 4, 1.6) }, uMinPx: { value: new THREE.Vector3(6, 8, 12) },
-        uMaxPx: { value: new THREE.Vector3(48, 64, 96) } },
+        uMaxPx: { value: new THREE.Vector3(48, 64, 96) }, uGrow: { value: new THREE.Vector3(3, 3, 1) } },
       vertexShader: src.spark.vertexShader, fragmentShader: src.spark.fragmentShader,
     });
     const STREAK_FIELDS = [['aStart', 3], ['aEnd', 3], ['aColor', 3], ['aParams', 4]];
@@ -285,10 +296,11 @@ export class FxEngine {
 
   /**
    * Raz na klatkę pętli renderu.
-   * @param {{ nowMs:number, camera?:{fov:number}, viewportH?:number, visible?:boolean }} frame
-   *   nowMs — czas ZEGARA PREZENTACJI (stoi w pauzie); viewportH — wysokość widoku w CSS px.
+   * @param {{ nowMs:number, camera?:{fov:number}, viewportH?:number, visible?:boolean, stage?:boolean }} frame
+   *   nowMs — czas ZEGARA PREZENTACJI (stoi w pauzie); viewportH — wysokość widoku w CSS px; stage — scena bitwy (flaga
+   *   `cvStage`, ARC CV-3a3): błysk i pierścień osłony z pokręteł `STAGE_*` (bez sceny — dzisiejsze, co do bitu).
    */
-  update({ nowMs, camera = null, viewportH = 1, visible = true } = {}) {
+  update({ nowMs, camera = null, viewportH = 1, visible = true, stage = false } = {}) {
     if (Number.isFinite(nowMs)) this.nowMs = nowMs;
     const now = this.nowMs;
     for (let i = 0; i < this.pools.length; i++) this.pools[i].retire(now);
@@ -302,9 +314,11 @@ export class FxEngine {
     bu.uTime.value = tRel; bu.uPxToWorld.value = pxToWorld; bu.uWidth.value = T.BEAM_WIDTH; bu.uMinPx.value = T.MIN_PX; bu.uCore.value = T.BEAM_CORE;
     tu.uTime.value = tRel; tu.uPxToWorld.value = pxToWorld; tu.uWidth.value = T.TRACER_WIDTH; tu.uMinPx.value = T.MIN_PX; tu.uCore.value = T.TRACER_CORE;
     su.uTime.value = tRel; su.uPxToWorld.value = pxToWorld; su.uCore.value = T.FLASH_CORE;
-    su.uSizeK.value.set(T.FLASH_K, T.RING_K, T.GLOW_K);
+    const st = stage === true;   // ARC CV-3a3 (Finding 653 (b)(c)) — łata sceny bitwy
+    su.uSizeK.value.set(st ? T.STAGE_FLASH_K : T.FLASH_K, st ? T.STAGE_RING_K : T.RING_K, T.GLOW_K);
     su.uMinPx.value.set(T.FLASH_MIN_PX, T.RING_MIN_PX, T.GLOW_MIN_PX);
     su.uMaxPx.value.set(T.FLASH_MAX_PX, T.RING_MAX_PX, T.GLOW_MAX_PX);
+    su.uGrow.value.set(st ? T.STAGE_FLASH_GROW : T.FLASH_GROW, st ? T.STAGE_RING_GROW : T.RING_GROW, 1);
     for (let i = 0; i < this.pools.length; i++) this.pools[i].upload();
     this.root.visible = visible !== false;
   }

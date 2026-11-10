@@ -6382,7 +6382,8 @@ export class GameScene {
             um.addPickerWaypoint(gp);
           } else if (ps?.mode === 'targetPoint') {
             // Inline finalize: zapisz point w metadata, wywołaj callback bezpośrednio.
-            this._finalizeTargetPointPicker(gp);
+            // Finding 662 (a) — punkt z kliku w scenie bitwy niesie `staged` (pickery ruchu floty: `noBodySnap`).
+            this._finalizeTargetPointPicker(target.staged ? { ...gp, staged: true } : gp);
           }
         }
       }
@@ -6516,7 +6517,9 @@ export class GameScene {
     // Ciało i POI — rysowane w skali prawdziwej (scena przesuwa tylko statki), więc ich punkt zostaje.
     if (target?.worldPoint && target.type !== 'planet' && target.type !== 'poi') {
       const lp = tr.stageLogicalOf?.(window.KOSMOS?.activeSystemId ?? null, target.worldPoint.x, target.worldPoint.z);
-      if (lp?.staged) target.worldPoint = { ...target.worldPoint, x: lp.x, z: lp.z };
+      // Finding 662 (a) — `staged`: klik rozwiązany w scenie bitwy; producenci rozkazu ruchu przekazują wtedy `noBodySnap`
+      // (punkt, bez przyciągania do ciała). Bez sceny (także flaga `cvStage` OFF — `stageLogicalOf` nie odpowiada `staged`) — jak dziś.
+      if (lp?.staged) { target.worldPoint = { ...target.worldPoint, x: lp.x, z: lp.z }; target.staged = true; }
     }
     return target;
   }

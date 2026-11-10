@@ -210,7 +210,10 @@ export class RightClickMenu {
       if (wp && typeof wp.x === 'number' && Number.isFinite(wp.x)) {
         const yVal = typeof wp.z === 'number' ? wp.z : wp.y;
         if (typeof yVal === 'number' && Number.isFinite(yVal)) {
-          return { type: 'moveToPoint', targetPoint: { x: wp.x, y: yVal } };
+          // ARC CV — Finding 662 (a): klik w scenie bitwy (`target.staged`) — punkt bez przyciągania do ciała (`noBodySnap`).
+          return target.staged === true
+            ? { type: 'moveToPoint', targetPoint: { x: wp.x, y: yVal }, noBodySnap: true }
+            : { type: 'moveToPoint', targetPoint: { x: wp.x, y: yVal } };
         }
       }
       return null;

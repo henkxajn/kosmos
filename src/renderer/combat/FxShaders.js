@@ -82,14 +82,16 @@ void main() {
 
 // ── SPARK ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 // Geometria bazowa: 4 narożniki `position.xy` w [−1, 1]². aKind: 0 błysk trafienia · 1 pierścień osłony · 2 błysk na
-// modelu. Błysk i pierścień rosną ×1 → ×3 i gasną liniowo (jak dziś); błysk na modelu ma stały rozmiar. Billboard
-// przysunięty do kamery o pół rozmiaru (nie więcej niż pół głębi) — inaczej przód modelu zasłaniałby rdzeń błysku.
+// modelu. Błysk i pierścień rosną ×1 → ×uGrow i gasną liniowo (dziś ×3; ARC CV-3a3 — pod sceną bitwy mniej, Finding 653);
+// błysk na modelu ma stały rozmiar (uGrow.z = 1). Billboard przysunięty do kamery o pół rozmiaru (nie więcej niż pół
+// głębi) — inaczej przód modelu zasłaniałby rdzeń błysku.
 export const SPARK_VERT = `
 uniform float uTime;
 uniform float uPxToWorld;
 uniform vec3 uSizeK;
 uniform vec3 uMinPx;
 uniform vec3 uMaxPx;
+uniform vec3 uGrow;
 attribute vec3 aPos;
 attribute vec3 aColor;
 attribute vec4 aParams;
@@ -113,7 +115,7 @@ void main() {
   }
   float p = age / max(aParams.z, 1.0);
   vAlpha = aParams.x * (1.0 - p);
-  float grow = aKind < 1.5 ? 1.0 + 2.0 * p : 1.0;
+  float grow = 1.0 + (pickKind(uGrow, aKind) - 1.0) * p;
   vec4 mv = modelViewMatrix * vec4(aPos, 1.0);
   float depth = max(-mv.z, 1e-4);
   float pxW = uPxToWorld * depth;

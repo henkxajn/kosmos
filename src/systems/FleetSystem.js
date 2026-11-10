@@ -330,7 +330,9 @@ export class FleetSystem {
     if (typeof vm?._interceptBody !== 'function' || eligible.length === 0) return null;
     const p = spec.targetPoint;
     let bodyId = spec.targetBodyId ?? null;
-    if (!bodyId && p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+    // ARC CV — Finding 662 (a): klik rozwiązany w scenie bitwy (`spec.noBodySnap`) jest PUNKTEM — synchronizacja przylotu jak
+    // dla punktu, nie dla przechwycenia ciała (lustro bramki w `MovementOrderSystem._issueMoveToPoint`).
+    if (!bodyId && !spec.noBodySnap && p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
       bodyId = vm._findBodyNearPoint?.(p.x, p.y, undefined, eligible[0])?.id ?? null;
     }
     if (!bodyId) return null;

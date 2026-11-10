@@ -67,9 +67,11 @@ export function buildOrderSpec(option, target, vesselId) {
       // 2D (tactical FleetOverlay, P1.3.5). POINT_FROM_WORLD obsługuje OBA.
       const point = POINT_FROM_WORLD(target.worldPoint);
       if (point) {
+        // ARC CV — Finding 662 (a): klik rozwiązany w scenie bitwy (`target.staged` z `GameScene._resolveClickTarget`) — punkt,
+        // bez przyciągania do ciała (`noBodySnap`); poza sceną spec bez zmian.
         return {
           ok: true,
-          spec: { type: 'moveToPoint', targetPoint: point },
+          spec: target.staged === true ? { type: 'moveToPoint', targetPoint: point, noBodySnap: true } : { type: 'moveToPoint', targetPoint: point },
         };
       }
       return { ok: false, reason: 'no_target_point' };

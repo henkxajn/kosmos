@@ -14,7 +14,8 @@
 //   R4 `_spriteBase` — baza, gdy sprite trzyma pozycję rysowaną; po nowym zapisie — ta nowa
 //   R5 (d) pauza: wejście w scenę stoi (zegar prezentacji), stopień sceny dalej idzie za kamerą
 //   R6 koniec starcia: powrót do skali prawdziwej przez JOIN_MS czasu prezentacji (nie skokiem), w pauzie stoi
-//   R7 tryb galaktyki — bez sceny; R8 uczestnik na orbicie ciała — bez sceny (D-CV-4 (b) do CV-3a2)
+//   R7 tryb galaktyki — bez sceny; R8 uczestnik przy ciele, ciało BEZ rysunku (atrapa bez `getBodyWorldInfo`) — bez sceny
+//      (CV-3a3: skorupa przy ciele wymaga rysunku ciała — przy ciele z rysunkiem scena jest: `cv_stage_shell_smoke`)
 //   R9 (642) pierścień starcia DSCS ukryty pod flagą, znacznik imitacji orbitalnej — nie; R10 (641) eksplozja wraku pod
 //      flagą bez płaskiego pierścienia (OFF — z pierścieniem)
 //   R11 (643) przesunięcie ekranowe kadru walki: przy „Obserwuj” — `setViewOffset`, cel kamery nietknięty; po końcu —
@@ -25,7 +26,7 @@
 //      wstrzyknięty zapis złapany); kolejność w pętli renderu; bramki flagi przy wywołaniach
 //   R15 (CV-3a2, D-CV-5) pole kliku sceny na prawdziwych metodach: punkt rysowany między statkami → `stageLogicalOf` →
 //      `stageWorldOf` = ten sam punkt; poza flagą, w galaktyce, dla innego układu, przed wejściem w scenę (pauza od startu)
-//      i dla bitwy przy ciele — bez pola (punkt bez zmian)
+//      i dla bitwy przy ciele bez rysunku ciała — bez pola (punkt bez zmian; z rysunkiem — `cv_stage_shell_smoke` R6)
 //   R16 (CV-3a2, Finding 648 (b)) kadr „Obserwuj”: po wejściu w scenę dystans kina (stopień 1 w tym dystansie, < 1/4 kadru
 //      skali prawdziwej); w pauzie przed wejściem — kadr skali prawdziwej (bez nurkowania na statki w skali prawdziwej)
 //
@@ -122,7 +123,7 @@ function world({ encs = null } = {}) {
   const cam = new THREE.PerspectiveCamera(55, 1600 / 1041, 0.001, 5000);
   const R = { camera: cam, scene: new THREE.Scene(), _vessels: new Map(), _galaxyActive: false, _galaxyFlight: false,
     _stageMarks: new Map(), _stageState: new Map(), _stageClock: PC ? new PC.PresentationClock() : null, _stageFrame: null,
-    _stageClusterOf: new Map(), _stageEdges: null, _stageFitCache: new Map(), _stageFitFrame: -1, _combatViewOffset: null,
+    _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _stageFitCache: new Map(), _stageFitFrame: -1, _combatViewOffset: null,
     _frameNo: 0, _watch: null, _autoFocus: null, _observatoryPreviewActive: false, _engagementMarkers: new Map(), _activeEffects: [],
     spawned: [], missing: [] };
   R._spawnFx = (mesh, cfg) => { R.spawned.push(cfg?.kind); };
@@ -255,7 +256,7 @@ block('R6 — koniec starcia: powrót do skali prawdziwej przez JOIN_MS, w pauzi
 });
 
 // ═══ R7 / R8 ══════════════════════════════════════════════════════════════════════════════════════════════════════
-block('R7 / R8 — tryb galaktyki bez sceny; uczestnik na orbicie ciała — bitwa bez sceny (D-CV-4 (b) do CV-3a2)', () => {
+block('R7 / R8 — tryb galaktyki bez sceny; uczestnik przy ciele bez rysunku ciała — bitwa bez sceny (CV-3a3)', () => {
   const w1 = world(); placeCamera(w1.R, w1.cc, 0.4);
   for (let i = 0; i < 60; i++) frame(w1.R);
   const marksBefore = w1.R._stageMarks.size;
@@ -267,7 +268,7 @@ block('R7 / R8 — tryb galaktyki bez sceny; uczestnik na orbicie ciała — bit
   const pinned = w2.vessels.get('CV-B01'); pinned.position.dockedAt = 'p_x';
   for (let i = 0; i < 60; i++) frame(w2.R);
   assert(w2.R._stageMarks.size === 0 && w2.R._stageFrame?.list?.[0]?.pinned === true && JSON.stringify(snapSprites(w2.R)) === before,
-    'R8 uczestnik z `dockedAt` (orbita ciała): klaster oznaczony, sprite\'y nietknięte');
+    'R8 uczestnik z `dockedAt`, ciało bez rysunku: klaster oznaczony, sprite\'y nietknięte (CV-3a3 — przecelowane: dawniej „każda bitwa przy ciele”)');
 });
 
 // ═══ R9 / R10 ═════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -356,12 +357,12 @@ block('R15 — (CV-3a2, D-CV-5) pole kliku sceny: `stageLogicalOf` / `stageWorld
   const w2 = world(); placeCamera(w2.R, w2.cc, 0.4); w2.ts.isPaused = true;
   for (let i = 0; i < 30; i++) frame(w2.R);
   const pz = w2.R.stageLogicalOf(SYS, p.x, p.z);
-  // bitwa przy ciele (D-CV-4 do CV-3a3): klaster bez sceny — brak pola
+  // bitwa przy ciele BEZ rysunku ciała (CV-3a3: skorupa wymaga rysunku): klaster bez sceny — brak pola
   const w3 = world(); w3.vessels.get('CV-A01').position.dockedAt = 'p_x'; placeCamera(w3.R, w3.cc, 0.4);
   for (let i = 0; i < 60; i++) frame(w3.R);
   const pp = w3.R.stageLogicalOf(SYS, p.x, p.z);
   assert(pz?.staged === false && pp?.staged === false && w3.R._stageFrame?.list?.[0]?.pinned === true,
-    'R15c pauza przed wejściem w scenę i bitwa przy ciele (bez sceny do CV-3a3) — klik bez zmian');
+    'R15c pauza przed wejściem w scenę i bitwa przy ciele bez rysunku ciała (bez sceny) — klik bez zmian');
 });
 
 // ═══ R16 ══════════════════════════════════════════════════════════════════════════════════════════════════════════

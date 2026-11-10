@@ -4313,6 +4313,7 @@ export class FleetManagerOverlay {
       const res = fs?.issueFleetOrder?.(fleetId, {
         type: 'moveToPoint',
         targetPoint: { x: point.x, y: point.y },
+        ...(point.staged === true ? { noBodySnap: true } : {}),   // ARC CV — Finding 662 (a): klik w scenie bitwy = punkt
       });
       this._announceFleetOrderResult(res, fleetId, 'moveToPoint');
     }, { intent: 'fleet_move', fleetId });

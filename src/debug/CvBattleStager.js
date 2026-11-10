@@ -6,6 +6,11 @@
 //   cvBattle({nA: 4, nB: 4, split: 1})  — ARC CV-3a2 (Finding 638): starcia PARAMI — każda para A_i–B_i zaczyna własne starcie
 //                                         (rozkaz „Zaangażuj” przed starciem: ścieżka zamiaru gracza w DSCS), więc w jednym
 //                                         miejscu toczy się kilka starć — jedna bitwa na ekranie: jeden wiersz karty, jeden baner
+//   cvBattle({atBody: 1})               — ARC CV-3a3 (D-CV-4): bitwa PRZY CIELE — statki gracza na orbicie pierwszej wolnej
+//                                         planety oglądanego układu, wróg obok; DSCS przypina wroga do ciała (jak w grze).
+//                                         `atBody: 'id_ciała'` — wskazane ciało; `mixed: 1` — przy ciele mniejszość statków
+//                                         gracza, wróg wolny (skorupa obraca się w stronę wroga)
+//   ARC CV-3a3 (Finding 654) — uzbrojenie LUSTRZANE: statek B_i ma kadłub i broń statku A_i
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
 //   fxStats()                           — pomiar 300 klatek: czas klatki p50 / p95, wywołania i trójkąty renderera, pule
 //
@@ -28,6 +33,8 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { resolveVesselOrbitalRole } from '../data/OrbitalRolesData.js';   // ARC CV-3a3 — `atBody`: rola orbity jak przy przylocie
+import { orbitClockSec } from '../utils/SimClock.js';                     // ARC CV-3a3 — `atBody`: kąt orbity z zegara orbit
 
 export const CV_BATTLE = Object.freeze({
   MAX_PER_SIDE: 10,
@@ -40,6 +47,11 @@ export const CV_BATTLE = Object.freeze({
   RINGS_AU: [2.5, 3.5, 5.0, 7.0, 1.6, 10.0],   // [AU] promienie szukania miejsca wokół gwiazdy
   ANGLES: 16,
   NAME_PREFIX: 'CV-',
+  // ARC CV-3a3 — `cvBattle({ atBody })`: wróg w linii po jednej stronie ciała, `mixed` — wolni statki gracza między nimi
+  BODY_ENEMY_AU: 0.07,    // [AU] linia wroga od środka ciała
+  BODY_FREE_AU: 0.035,    // [AU] wolni statki gracza (`mixed`) od środka ciała, po stronie wroga
+  BODY_ROW_AU: 0.02,      // [AU] odstęp w linii
+  BODY_LINE_AU: 0.025,    // [AU] odstęp kolejnych linii (> 5 statków)
   WARNING: '⚠ cvBattle: statki testowe weszły do stanu gry — nie zapisuj gry po teście (F5 bez zapisu wraca do stanu sprzed testu). Autozapis wyłączony do przeładowania strony.',
 });
 
@@ -75,6 +87,10 @@ function weaponModules(hullName, primary, fixed) {
 /**
  * Czysty szyk starcia (bez świata): kadłub, moduły, nazwa i przesunięcie od środka w AU dla każdego statku.
  * Ten sam szyk buduje keeper `cv_fx_results_smoke` — bitwa z keepera to bitwa z konsoli.
+ * ARC CV-3a3 (Finding 654, decyzja właściciela §3.2-10 (1)) — uzbrojenie LUSTRZANE: statek strony B o indeksie i ma
+ *   kadłub i broń statku strony A o tym samym indeksie (dawniej broń strony B przesunięta o jedną pozycję w cyklu —
+ *   fregaty gracza z laserem 0,05 AU przeciw fregatom AI z kinetykiem 0,15 AU przy liniach 0,12 AU od siebie). Asymetrie
+ *   DSCS (strona A strzela pierwsza, techy tylko gracza) to mechanika — nietknięte.
  * @param {{ nA?: number, nB?: number, hulls?: string|string[], weapons?: string|string[] }} [opts]
  * @returns {{ ships: Array<{side:'A'|'B', index:number, name:string, hull:string, hullName:string, modules:string[], dxAU:number, dyAU:number}>,
  *             trigger: { a: number, b: number } }}  trigger — indeksy (w `ships`) pary ze środka frontu
@@ -84,7 +100,7 @@ export function cvBattleLayout({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'm
   const fixedWeapon = typeof weapons === 'string' && !!WEAPON_KEYS[weapons];
   const ships = [];
   const trigger = { a: -1, b: -1 };
-  for (const [side, n, sign, offset] of [['A', clampN(nA), -1, 0], ['B', clampN(nB), 1, 1]]) {
+  for (const [side, n, sign, offset] of [['A', clampN(nA), -1, 0], ['B', clampN(nB), 1, 0]]) {
     let best = -1, bestDy = Infinity;
     for (let i = 0; i < n; i++) {
       const hullName = pickName(hulls, HULL_CYCLE, HULL_KEYS, i);
@@ -132,6 +148,34 @@ export function cvBattleCenter({ seed = 1, vessels = [], bodies = [], auPx = 110
   return fallback;
 }
 
+/**
+ * ARC CV-3a3 — ciało bitwy `cvBattle({ atBody })`: id podane jako tekst (ciało oglądanego układu); inaczej pierwsza planeta
+ * (potem księżyc, planetoida) wg id, przy której żaden obcy statek nie stoi bliżej niż `CLEAR_VESSEL_AU` (team-up 0,225 AU
+ * wciągnąłby go do bitwy); brak takiej — pierwsza z listy. `vessels` — pozycje obcych statków (px rozgrywki).
+ * @returns {object|null}
+ */
+export function cvBattleBody({ atBody, bodies = [], vessels = [], auPx = 110 }) {
+  if (typeof atBody === 'string') return bodies.find((b) => b?.id === atBody) ?? null;
+  const order = { planet: 0, moon: 1, planetoid: 2 };
+  const cands = bodies.filter((b) => b && order[b.type] != null && Number.isFinite(b.x) && Number.isFinite(b.y))
+    .sort((a, b) => (order[a.type] - order[b.type]) || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+  const clear = cands.find((b) => vessels.every((v) => Math.hypot(v.x - b.x, v.y - b.y) / auPx >= CV_BATTLE.CLEAR_VESSEL_AU));
+  return clear ?? cands[0] ?? null;
+}
+
+/**
+ * ARC CV-3a3 — przesunięcie [AU] wroga (`side` 'B') albo wolnego statku gracza (`mixed`, 'Afree') od środka ciała: linie
+ * po jednej stronie ciała w kierunku `a0` [rad], rząd w poprzek kierunku.
+ */
+export function cvBodyOffsetAU(kind, k, n, a0) {
+  const dist = kind === 'B' ? CV_BATTLE.BODY_ENEMY_AU : CV_BATTLE.BODY_FREE_AU;
+  const line = Math.floor(k / CV_BATTLE.PER_LINE), j = k % CV_BATTLE.PER_LINE;
+  const inLine = Math.min(CV_BATTLE.PER_LINE, n - line * CV_BATTLE.PER_LINE);
+  const r = dist + line * CV_BATTLE.BODY_LINE_AU, t = (j - (inLine - 1) / 2) * CV_BATTLE.BODY_ROW_AU;
+  const ux = Math.cos(a0), uy = Math.sin(a0);
+  return { dxAU: ux * r - uy * t, dyAU: uy * r + ux * t };
+}
+
 const isCvVessel = (v) => !!v && (v._cvBattle != null || (typeof v.name === 'string' && /^CV-[AB]\d\d$/.test(v.name)));
 
 function pickAiEmpire(K) {
@@ -146,7 +190,7 @@ function pickAiEmpire(K) {
 export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeRenderer ?? null, getSaveSystem = () => null } = {}) {
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
-    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false } = {}) {
+    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false } = {}) {
       if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
       const K = window.KOSMOS ?? {};
       const vm = K.vesselManager, dscs = K.deepSpaceCombatSystem, mos = K.movementOrderSystem, ts = K.timeSystem;
@@ -175,6 +219,73 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         .filter((b) => Number.isFinite(b?.x) && Number.isFinite(b?.y));
       const c = cvBattleCenter({ seed, vessels: others.map((v) => v.position), bodies, auPx: AU });
       const layout = cvBattleLayout({ nA, nB, hulls, weapons });
+
+      // ARC CV-3a3 (D-CV-4, Finding 626) — bitwa PRZY CIELE: statki gracza na slotach orbit ciała (`OrbitalSpaceSystem.assignOrbit`
+      // — sama zmiana `position` nie stawia sprite'a na orbicie), wróg w linii obok; starcie zakłada DSCS tak jak w grze: gdy
+      // większość strony gracza stoi przy ciele, wróg zostaje do niego PRZYPIĘTY (`_freezeAsStationary` — `dockedAt`, bez orbity;
+      // w logice stoi w środku ciała). `mixed` — przy ciele tylko mniejszość statków gracza, reszta wolna: wróg zostaje wolny,
+      // skorupa ustawia się w stronę wroga. Statki przy ciele bez rozkazu „Zaangażuj” (rozkaz zdejmuje statek z orbity).
+      if (atBody) {
+        const oss = K.orbitalSpaceSystem;
+        if (!oss) return { ok: false, reason: 'no_orbital_space' };
+        const body = cvBattleBody({ atBody, bodies: bodies.filter((b) => b.type !== 'star'), vessels: others.map((v) => v.position), auPx: AU });
+        if (!body) return { ok: false, reason: 'no_body', warning: CV_BATTLE.WARNING };
+        const nAs = layout.ships.filter((s) => s.side === 'A').length, nBs = layout.ships.length - nAs;
+        const nDock = mixed ? Math.max(1, Math.floor((nAs - 1) / 2)) : nAs;
+        const a0 = ((cvSeedBase(seed) % 360) * Math.PI) / 180;
+        let kFree = 0;
+        const made = layout.ships.map((s) => {
+          const v = vm.createAndRegister(s.hull, home.id, { name: s.name, modules: s.modules, systemId: sys });
+          v.systemId = sys;
+          v.status = 'idle';
+          v.mission = null;
+          v.serviceState = 'active';
+          if (v.fuel) v.fuel.current = v.fuel.max = 9999;
+          v._cvBattle = seed;
+          if (s.side === 'B') {
+            const o = cvBodyOffsetAU('B', s.index, nBs, a0);
+            Object.assign(v.position, { x: body.x + o.dxAU * AU, y: body.y + o.dyAU * AU, state: 'orbiting', dockedAt: null });
+            v.ownerEmpireId = empire.id; v.owner = empire.id; v.isEnemy = true;
+          } else if (s.index < nDock) {
+            Object.assign(v.position, { state: 'orbiting', dockedAt: body.id });
+            oss.assignOrbit(body.id, v.id, resolveVesselOrbitalRole(v));
+            const p = oss.getPosition(v.id, { x: body.x / 10, z: body.y / 10 }, orbitClockSec());
+            v.position.x = p ? p.x * 10 : body.x;
+            v.position.y = p ? p.z * 10 : body.y;
+          } else {
+            const o = cvBodyOffsetAU('Afree', kFree++, nAs - nDock, a0);
+            Object.assign(v.position, { x: body.x + o.dxAU * AU, y: body.y + o.dyAU * AU, state: 'orbiting', dockedAt: null });
+          }
+          return v;
+        });
+        getRenderer()?._restoreActiveSystemVesselSprites?.();
+        const sideA = made.filter((_, i) => layout.ships[i].side === 'A');
+        const sideB = made.filter((_, i) => layout.ships[i].side === 'B');
+        const ta = sideA[0], tb = sideB[0];
+        EventBus.emit('vessel:combatRangeEnter', { vesselAId: ta.id, vesselBId: tb.id, sameFaction: false,
+          distanceAU: Math.hypot(ta.position.x - tb.position.x, ta.position.y - tb.position.y) / AU });
+        const enc = dscs._findActiveEncounterContaining?.(ta.id) ?? null;
+        if (!enc) return { ok: false, reason: 'no_encounter', warning: CV_BATTLE.WARNING };
+        for (const v of made) {
+          if (enc.vesselStates.has(v.id)) continue;
+          const foes = sideA.includes(v) ? sideB : sideA;
+          EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: foes[0].id, sameFaction: false, distanceAU: 0.1 });
+        }
+        enc.seedBase = cvSeedBase(seed);
+        const free = sideA.filter((v) => v.position?.dockedAt == null);
+        const orders = free.map((v, i) => mos.issueOrder(v.id, { type: 'engage', targetEntityId: sideB[i % sideB.length].id, issuedBy: 'cvBattle' }));
+        const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
+        console.warn(CV_BATTLE.WARNING);
+        return {
+          ok: members === made.length, encounter: enc.id, system: sys, seed, seedBase: enc.seedBase, atBody: true, mixed: !!mixed,
+          body: body.id, bodyName: body.name ?? body.id, bodyType: body.type,
+          docked: sideA.filter((v) => v.position?.dockedAt === body.id).length,
+          enemyPinned: sideB.filter((v) => v.position?.dockedAt === body.id).length,
+          sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
+          empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
+          cvStage: !!GAME_CONFIG.FEATURES?.cvStage, autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
+        };
+      }
 
       const made = layout.ships.map((s) => {
         const v = vm.createAndRegister(s.hull, home.id, { name: s.name, modules: s.modules, systemId: sys });

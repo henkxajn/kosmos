@@ -907,7 +907,11 @@ export class MovementOrderSystem {
     // heliocentrycznego i ZAMARZAŁ, gdy planeta orbitowała dalej (nie orbitował wskazanego ciała —
     // ground-truth tmp_moveto_orbit_groundtruth). Chokepoint = wszystkie ścieżki rozkazu ruchu.
     let bodyId = spec.targetBodyId ?? null;
-    if (!bodyId && p && typeof p.x === 'number' && typeof p.y === 'number') {
+    // ARC CV — Finding 662 (decyzja właściciela 2026-11-09, wariant (a)): `spec.noBodySnap` = klik w pustą przestrzeń rozwiązany
+    // WEWNĄTRZ sceny bitwy (`cvStage`; ustawia go WYŁĄCZNIE producent rozkazu z kliku — menu prawego kliku i pickery celu, gdy
+    // `ThreeRenderer.stageLogicalOf` odpowiedział `staged`). Statek leci w ten punkt i zostaje tam bez orbity. Bitwa przy planecie
+    // leży cała w promieniu przyciągania (0,5 AU), więc bez tego KAŻDY klik w niej był „leć do planety”. Poza sceną — bez zmian.
+    if (!bodyId && !spec.noBodySnap && p && typeof p.x === 'number' && typeof p.y === 'number') {
       // ⚠ `vessel` W 4. ARGUMENCIE JEST OBOWIĄZKOWY (Finding 138, D-SS1=W1): bez niego snap
       // przeszukuje CAŁĄ GALAKTYKĘ i bierze ciało z cudzego układu, po czym bramka trzy linie
       // niżej słusznie odrzuca rozkaz jako `target_other_system`. Bramka była poprawna — zepsuty

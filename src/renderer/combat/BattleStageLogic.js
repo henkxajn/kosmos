@@ -45,6 +45,15 @@ export const STAGE = Object.freeze({
   SEED_Y_L: 1.0,          // [L] rozrzut ziarna w pionie (deterministyczny, z indeksu) — bez niego prowadnica zostaje płaska
   CLUSTER_AU: 0.30,       // [AU] starcia o środkach bliżej niż to = jedna bitwa na ekranie (zasięg rakiet — Finding 638)
   JOIN_MS: 500,           // [ms] czasu prezentacji — wejście dołączającego do sceny i powrót do skali prawdziwej po końcu
+  // ARC CV-3a3 — skorupa przy ciele (D-CV-4, Finding 626)
+  SHELL_FLOOR_L: 2,       // [L] podłoga skorupy: rysowany promień ciała + to — żaden statek sceny bliżej środka ciała
+  SHELL_WARM_PASSES: 0,   // przejścia z przyciąganiem przy CIEPŁYM starcie sceny przy ciele (Finding 652): unieruchomieni prawie
+                          //   nie ruszają się w logice (orbity ≈ 0,01 rad na rundę), a przyciąganie co rundę przestawiało ciasną
+                          //   grupę — zmierzone 2,0–2,2 L na rundę (mediana) wobec 0,03–0,23 L bez niego; bitwa w wolnej
+                          //   przestrzeni — PASSES (geometria logiki zmienia się co rundę, okna właściciela wymagają przyciągania)
+  SHELL_PLANE_Y: 0.3,     // [j.] wysokość skorupy = płaszczyzna statków (`RaycasterHelper.SHIP_PLANE_Y`): klik w scenę przy ciele
+                          //   trafia płaszczyznę, na której statki są rysowane (Finding 646 (b)), a kamera nad płaszczyzną orbit
+                          //   widzi grupę nad krawędzią ciała z każdej strony (z kierunkiem poziomym ciało ją zasłaniało)
 });
 
 const GOLDEN = 2.399963229728653;   // [rad] kąt złoty — deterministyczny kierunek dla punktów pokrywających się
@@ -169,8 +178,11 @@ function bandInterval(b, appEdges, marginFrac) {
  *   od środka) — start prowadnicy (ciepły start); brak — ziarno promieniowe
  * @param {Set<string>|null} [a.priority] — pary pierwszeństwa jako `pairKey(a, b)` (strzelec → cel z ostatniej rundy): pełne
  *   przyciąganie do G(d); reszta par — kompromis prowadnicy
+ * @param {{body:{x:number,y?:number,z:number,r:number}, pinned:Set<string>|string[], floorL?:number, planeY?:number}|null} [a.shell]
+ *   — ARC CV-3a3: bitwa przy ciele — rysowany środek i promień ciała, id statków unieruchomionych przy nim (skorupa, D-CV-4)
  * @returns {{ pos: Map<string,{x:number,y:number,z:number}>, offsets: Map<string,{x:number,y:number,z:number}>, misbanded: number,
- *   misbandedBefore: number, fallback: boolean, scale: number|null, passes: number, rIn: number, pairs: number }}
+ *   misbandedBefore: number, fallback: boolean, scale: number|null, passes: number, rIn: number, pairs: number,
+ *   shell: object|null }}  shell — kierunek `u`, środek grupy `P`, wykluczeni, przesunięcie sztywne `shift` (pole kliku)
  */
 /** Klucz pary (kolejność bez znaczenia). */
 export function pairKey(a, b) {
@@ -178,14 +190,14 @@ export function pairKey(a, b) {
   return x < y ? `${x}|${y}` : `${y}|${x}`;
 }
 
-export function solveStage({ points, centre, L, edges, prevOffsets = null, priority = null, law = STAGE_LAW, opts = {} }) {
+export function solveStage({ points, centre, L, edges, prevOffsets = null, priority = null, shell = null, law = STAGE_LAW, opts = {} }) {
   const o = { ...STAGE, ...opts };
   const pts = [...(points ?? [])].filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z))
     .sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
   const n = pts.length;
   const pos = new Map(), offsets = new Map();
   const c = { x: centre?.x ?? 0, y: Number.isFinite(centre?.y) ? centre.y : 0, z: centre?.z ?? 0 };
-  if (n === 0) return { pos, offsets, misbanded: 0, misbandedBefore: 0, fallback: false, scale: null, passes: 0, rIn: 0, pairs: 0 };
+  if (n === 0) return { pos, offsets, misbanded: 0, misbandedBefore: 0, fallback: false, scale: null, passes: 0, rIn: 0, pairs: 0, shell: null };
   const app = apparentEdges(edges, law);
 
   // Pary: odstęp logiczny, pasmo, cel G(d) w przedziale twardym pasma z podłogą rozsunięcia / kolizji.
@@ -275,15 +287,33 @@ export function solveStage({ points, centre, L, edges, prevOffsets = null, prior
   let best = snap(), bestMis = misbandedBefore;
   const keep = () => { const m = countMis(); if (m <= bestMis) { bestMis = m; best = snap(); } };
   let passes = 0;
-  for (let k = 0; k < o.PASSES; k++) { pass(o.PULL); passes++; }
+  // ARC CV-3a3 — scena przy ciele z ciepłym startem: bez przejść z przyciąganiem (SHELL_WARM_PASSES), tylko pierwszeństwo i twarde.
+  const pullPasses = shell?.body && prevOffsets ? o.SHELL_WARM_PASSES : o.PASSES;
+  for (let k = 0; k < pullPasses; k++) { pass(o.PULL); passes++; }
   if (P.some((q) => q.pri)) for (let k = 0; k < o.PRIORITY_PASSES; k++) { pass(1, true); passes++; }
   keep();
   for (let k = 0; k < o.HARD_PASSES && hardViolations() > 0; k++) { pass(0); passes++; }
+  const hardSnap = shell?.body ? snap() : null;
   keep();
+  let misbanded = bestMis;
+  // ARC CV-3a3 — przy skorupie najpierw PODŁOGA, potem pasma: unieruchomieni przeciwnicy stoją w logice w jednym punkcie, a
+  // pasmo lasera łapie też pary nałożone na siebie — migawka „zero złych pasm” potrafiła trzymać statki na sobie (zmierzone
+  // na 200 układach 10 na 10 przy ciele: najmniejsza para 0,06 L). Wybór: mniej par pod podłogą (−5 %), przy remisie mniej
+  // złych pasm. Scena bez skorupy — bez zmian (prowadnica CV-3a1).
+  if (hardSnap) {
+    const under = (snapArr) => { let v = 0; for (const q of P) if (gap3(snapArr[q.i], snapArr[q.j]) < q.lo * 0.95) v++; return v; };
+    const misOf = (snapArr) => { let m = 0; for (const q of P) if (bandIndex(gap3(snapArr[q.i], snapArr[q.j]), app) !== q.band) m++; return m; };
+    const uB = under(best), uH = under(hardSnap);
+    const mH = misOf(hardSnap);
+    if (uH < uB || (uH === uB && mH < bestMis)) { best = hardSnap; misbanded = mH; }
+  }
   for (let i = 0; i < n; i++) s[i] = best[i];
-  const misbanded = bestMis;
 
-  if (misbanded > 0) {
+  let out;
+  // ARC CV-3a3 — przy skorupie (bitwa przy ciele) BEZ skali jednorodnej: unieruchomieni przeciwnicy stoją w logice w JEDNYM
+  // punkcie (środek ciała), więc skala jednorodna zrzucała ich na siebie (zmierzone: 10 statków w jednym punkcie). Zostaje
+  // najlepsze ułożenie prowadnicy (najmniej złych pasm, podłoga rozsunięcia), oznaczone jako awaryjne (`fallback`, bez `scale`).
+  if (misbanded > 0 && !shell?.body) {
     // Skala jednorodna wokół środka: kolejność par dokładna, okna w przybliżeniu (§3.1-2). Współczynnik z mediany par.
     const ds = P.map((q) => q.d).filter((d) => d > 0).sort((a, b) => a - b);
     const dMed = ds.length ? ds[Math.floor(ds.length / 2)] : 1;
@@ -293,21 +323,126 @@ export function solveStage({ points, centre, L, edges, prevOffsets = null, prior
       pos.set(p.id, { x, y: c.y, z });
       offsets.set(p.id, null);
     });
-    return { pos, offsets, misbanded, misbandedBefore, fallback: true, scale, passes, rIn, pairs: P.length };
+    out = { pos, offsets, misbanded, misbandedBefore, fallback: true, scale, passes, rIn, pairs: P.length, shell: null };
+  } else {
+    // Wyśrodkowanie: środek sceny = środek uczestników bez sceny (przesunięcie nie zmienia odstępów par) — przy każdym
+    // mieszaniu środek rysowanej bitwy stoi w miejscu (przybliżenie kółkiem jest „focus pull”, nie przesuwa bitwy).
+    let mx = 0, my = 0, mz = 0;
+    for (const q of s) { mx += q.x; my += q.y; mz += q.z; }
+    mx /= n; my /= n; mz /= n;
+    const sx = c.x - mx, sy = c.y - my, sz = c.z - mz;
+    pts.forEach((p, i) => {
+      const x = s[i].x + sx, y = s[i].y + sy, z = s[i].z + sz;
+      pos.set(p.id, { x, y, z });
+      offsets.set(p.id, { x: x - c.x, y: y - c.y, z: z - c.z });
+    });
+    out = { pos, offsets, misbanded, misbandedBefore, fallback: misbanded > 0, scale: null, passes, rIn, pairs: P.length, shell: null };
   }
+  // ARC CV-3a3 (D-CV-4) — skorupa przy ciele: rozwiązanie przesunięte SZTYWNO (każdy odstęp pary zostaje — wynik prowadnicy
+  // pasm przechodzi bez zmian) tak, by grupa unieruchomionych przy ciele stała tuż za skorupą; `offsets` (ciepły start)
+  // zostają w układzie prowadnicy, przed przesunięciem.
+  if (shell?.body) out.shell = applyShell(out, pts, { shell, L, edges, law, o });
+  return out;
+}
 
-  // Wyśrodkowanie: środek sceny = środek uczestników bez sceny (przesunięcie nie zmienia odstępów par) — przy każdym
-  // mieszaniu środek rysowanej bitwy stoi w miejscu (przybliżenie kółkiem jest „focus pull”, nie przesuwa bitwy).
-  let mx = 0, my = 0, mz = 0;
-  for (const q of s) { mx += q.x; my += q.y; mz += q.z; }
-  mx /= n; my /= n; mz /= n;
-  const sx = c.x - mx, sy = c.y - my, sz = c.z - mz;
-  pts.forEach((p, i) => {
-    const x = s[i].x + sx, y = s[i].y + sy, z = s[i].z + sz;
-    pos.set(p.id, { x, y, z });
-    offsets.set(p.id, { x: x - c.x, y: y - c.y, z: z - c.z });
-  });
-  return { pos, offsets, misbanded: 0, misbandedBefore, fallback: false, scale: null, passes, rIn, pairs: P.length };
+// ── ARC CV, krok CV-3a3 — SKORUPA PRZY CIELE (D-CV-4 (a), Finding 626) ─────────────────────────────────────────────────
+// Bitwa przy ciele: uczestnicy stojący przy ciele (`dockedAt` — orbita gracza, wróg przypięty przez `_freezeAsStationary`
+// bez orbity) są w logice przy samym ciele, więc każda ich para leży w paśmie lasera (≤ 3,64 L na scenie), a rysowane ciało
+// ma 4–38 L promienia — prawo sceny wokół ich środka rysowałoby statki WEWNĄTRZ planety. Skorupa: kula o promieniu
+// (rysowany promień ciała + SHELL_FLOOR_L), grupa unieruchomionych tuż za nią, w KIERUNKU (poziomym) — przeciwnika wolnego
+// „z zewnątrz” (przy ciele jedna strona — wolni innych stron; przy ciele obie — wolni strony w większości wolnej; statek
+// schodzący z orbity się nie liczy), inaczej wolnych w ogóle (tylko przy jednej stronie przy ciele), a gdy przy ciele stoją
+// OBIE strony — po stronie statków GRACZA w skali prawdziwej (decyzja kroku CV-3a3: niezależne od kamery, stabilne — orbity obracają się
+// powoli; średnia blisko środka ciała (statki rozłożone dookoła) — statek o najmniejszym id). Wysokość grupy = płaszczyzna
+// statków (klik trafia płaszczyznę, na której grupa jest rysowana; kamera nad płaszczyzną orbit widzi grupę nad ciałem).
+// Prowadnica pasm liczy scenę jak zawsze; potem całe rozwiązanie przesuwa się sztywno (odstępy par bez zmian), a statek
+// wolny, który mimo to wypadłby wewnątrz skorupy, wypychamy promieniowo na jej powierzchnię (liczone w `excluded`).
+
+/**
+ * Kierunek skorupy (poziomy, wektor jednostkowy w XZ) od środka ciała — patrz wyżej. `points` — pozycje LOGICZNE [j.]
+ * z `side` ('player' — gracz; inaczej id imperium), `pinned` — id statków unieruchomionych przy tym ciele (Set albo tablica).
+ * @returns {{ x:number, z:number, source:string }}
+ */
+export function shellBearing(points, body, pinned) {
+  const has = (id) => (typeof pinned?.has === 'function' ? pinned.has(id) : Array.isArray(pinned) && pinned.includes(id));
+  const byId = (a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
+  const pin = [], free = [];
+  for (const p of points ?? []) {
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.z)) continue;
+    (has(p.id) ? pin : free).push(p);
+  }
+  // Przeciwnik „z zewnątrz” (CV-3a3, poprawka po kontroli właściciela — FAIL 5): przy ciele JEDNA strona — wolni statki
+  // innych stron; przy ciele OBIE strony — wolni statki strony, której WIĘKSZOŚĆ jest wolna. Dawniej „przeciwnik” = każdy wolny
+  // spoza strony z przewagą przy ciele: w bitwie 10 + 10 przy ciele jeden statek gracza zdjęty z orbity rozkazem (wróg miał
+  // przewagę 10 : 9) przestawiał kierunek z `player` na `free-opposing` i cała grupa obracała się wokół planety w jednej
+  // rundzie — zmierzone w grze o 115°, statek nad tarczą planety. Statek schodzący z orbity nie jest siłą z zewnątrz.
+  const pinCount = new Map(), freeCount = new Map();
+  for (const p of pin) pinCount.set(p.side, (pinCount.get(p.side) ?? 0) + 1);
+  for (const p of free) freeCount.set(p.side, (freeCount.get(p.side) ?? 0) + 1);
+  const outside = pinCount.size === 1
+    ? free.filter((p) => !pinCount.has(p.side))
+    : free.filter((p) => (freeCount.get(p.side) ?? 0) > (pinCount.get(p.side) ?? 0));
+  // Strona gracza — WSZYSTKIE jego statki w bitwie (przy ciele i wolne): zdjęcie statku z orbity nie zmienia zbioru (dawniej
+  // tylko przy ciele — środek po zdjęciu jednego statku potrafił przeskoczyć z `player-first` na `player`, o > 100°).
+  const players = [...pin, ...free].filter((p) => p.side === 'player');
+  const tries = [['free-opposing', outside], ['free', pinCount.size === 1 ? free : []], ['player', players.length ? players : pin]];
+  for (const [source, set] of tries) {
+    if (!set.length) continue;
+    let cx = 0, cz = 0, spread = 0;
+    for (const p of set) { cx += p.x; cz += p.z; spread += Math.hypot(p.x - body.x, p.z - body.z); }
+    cx /= set.length; cz /= set.length; spread /= set.length;
+    const dx = cx - body.x, dz = cz - body.z, d = Math.hypot(dx, dz);
+    if (d > Math.max(1e-9, 0.25 * spread)) return { x: dx / d, z: dz / d, source };
+    const first = [...set].sort(byId)[0];
+    const fx = first.x - body.x, fz = first.z - body.z, fd = Math.hypot(fx, fz);
+    if (fd > 1e-9) return { x: fx / fd, z: fz / fd, source: `${source}-first` };
+  }
+  return { x: 1, z: 0, source: 'default' };
+}
+
+/**
+ * Pozycja BAZOWA (skala prawdziwa) statku unieruchomionego przy ciele BEZ orbity (Finding 626 — w logice stoi w środku
+ * ciała, sprite nie ruszał się wcale): tuż za skorupą w kierunku `u`, siatka rozsunięcia po `k` (kolejne statki obok siebie).
+ */
+export function shellBaseAt(body, u, k, L, { floorL = STAGE.SHELL_FLOOR_L, latticeL = STAGE.DECONFLICT_L, planeY = STAGE.SHELL_PLANE_Y } = {}) {
+  const h = body.r + (floorL + 2 * latticeL) * L;   // dwie powłoki siatki (do 25 statków) — każdy punkt za skorupą
+  const off = latticeOffset(k, latticeL * L);
+  return { x: body.x + u.x * h + off.x, y: planeY + off.y, z: body.z + u.z * h + off.z };
+}
+
+function applyShell(out, pts, { shell, L, edges, law, o }) {
+  const body = shell.body;
+  const pinned = shell.pinned;
+  const has = (id) => (typeof pinned?.has === 'function' ? pinned.has(id) : Array.isArray(pinned) && pinned.includes(id));
+  const pinIds = pts.filter((p) => has(p.id)).map((p) => p.id);
+  if (!pinIds.length || !Number.isFinite(body.x) || !Number.isFinite(body.z) || !(body.r >= 0)) return null;
+  const floor = (shell.floorL ?? o.SHELL_FLOOR_L) * L;
+  const planeY = shell.planeY ?? o.SHELL_PLANE_Y;
+  const u = shellBearing(pts, body, pinned);
+  const core = { x: 0, y: 0, z: 0 };
+  for (const id of pinIds) { const q = out.pos.get(id); core.x += q.x; core.y += q.y; core.z += q.z; }
+  core.x /= pinIds.length; core.y /= pinIds.length; core.z /= pinIds.length;
+  let extent = 0;
+  for (const id of pinIds) { const q = out.pos.get(id); extent = Math.max(extent, Math.hypot(q.x - core.x, q.y - core.y, q.z - core.z)); }
+  const h = body.r + floor + extent;
+  const P = { x: body.x + u.x * h, y: planeY, z: body.z + u.z * h };
+  const dx = P.x - core.x, dy = P.y - core.y, dz = P.z - core.z;
+  for (const q of out.pos.values()) { q.x += dx; q.y += dy; q.z += dz; }
+  // Wykluczenie ciała: nikt bliżej środka ciała niż skorupa (unieruchomieni z konstrukcji — h − extent = skorupa).
+  const by = Number.isFinite(body.y) ? body.y : 0;
+  const R0 = body.r + floor;
+  let excluded = 0;
+  for (const q of out.pos.values()) {
+    const vx = q.x - body.x, vy = q.y - by, vz = q.z - body.z, d = Math.hypot(vx, vy, vz);
+    if (d >= R0 * (1 - 1e-9)) continue;
+    excluded++;
+    if (d < 1e-12) { q.x = body.x + u.x * R0; q.y = by; q.z = body.z + u.z * R0; continue; }
+    q.x = body.x + vx / d * R0; q.y = by + vy / d * R0; q.z = body.z + vz / d * R0;
+  }
+  if (excluded > 0 && out.scale == null) { out.misbanded = countMisbanded(pts, out.pos, edges, law); out.fallback = out.misbanded > 0; }
+  // `shift` — przesunięcie sztywne całego rozwiązania (pole kliku D-CV-5 przy skorupie: mapa promieniowa prowadnicy wokół
+  // środka LOGICZNEGO grupy, przesunięta o nie — `stagePointDrawn` / `stagePointLogical`).
+  return { P, u, h, floor, extent, excluded, pinned: pinIds.length, bodyR: body.r, shift: { x: dx, y: dy, z: dz } };
 }
 
 /**
@@ -401,24 +536,68 @@ export function fieldDrawnRadiusInverse(rd, blend, field) {
   return (lo + hi) / 2;
 }
 
+// ARC CV-3a3 (D-CV-5 przy skorupie) — pole PRZESUNIĘTE. Bitwa przy ciele jest rysowana jako mapa promieniowa prowadnicy wokół
+// środka LOGICZNEGO grupy (`centre` — tam, gdzie statki są w logice: przy ciele), przesunięta sztywno o `shift` (przesunięcie
+// skorupy z `applyShell`: grupa rysowana obok ciała). Pole z jednym środkiem rysowanym dla obu stron (przed poprawką) liczyło
+// punkt logiczny wokół grupy RYSOWANEJ — przesunięty o całe przesunięcie skorupy; statek wysłany w taki punkt stawał na scenie
+// zmierzone 6–11 L (mediana) od kursora, w wolnej przestrzeni 3 L. Wewnątrz r_in przesunięcie pełne (× stopień sceny), w pasie
+// soczewki maleje liniowo do zera — poza LENS_OUT·r_in pole jest tożsamością jak bez skorupy. Promień ściskania pola co najmniej
+// |shift|: wtedy promień rysowany w pasie rośnie szybciej, niż maleje przesunięcie, więc mapa jest różnowartościowa, a odwrotność
+// ma jedno rozwiązanie (bisekcja po promieniu logicznym). Statki stoją wewnątrz r_in prowadnicy — powiększenie nie zmienia ich mapy.
+
+/** Waga przesunięcia pola: 1 do r_in, liniowo do 0 na LENS_OUT·r_in (brzeg soczewki — tożsamość), dalej 0. */
+export function fieldShiftWeight(r, rIn, lensOut = STAGE.LENS_OUT) {
+  if (!(rIn > 0) || r <= rIn) return 1;
+  const rOut = lensOut * rIn;
+  if (r >= rOut) return 0;
+  return (rOut - r) / (rOut - rIn);
+}
+
+// Pole z przesunięciem: promień ściskania ≥ |shift| (różnowartościowość — patrz wyżej); bez przesunięcia — pole bez zmian.
+function fieldWithShift(field) {
+  const sx = Number.isFinite(field?.shift?.x) ? field.shift.x : 0, sz = Number.isFinite(field?.shift?.z) ? field.shift.z : 0;
+  const len = Math.hypot(sx, sz);
+  if (!(len > 0)) return { f: field, sx: 0, sz: 0 };
+  return { f: { ...field, rIn: Math.max(field.rIn ?? 0, len) }, sx, sz };
+}
+
 /**
  * Punkt BEZ sceny (logiczny) → punkt RYSOWANY w polu klastra (D-CV-5).
  * @param {{x:number, z:number}} p
- * @param {{centre:{x:number,z:number}, rIn:number, blend:number, scale?:number|null}} field
+ * @param {{centre:{x:number,z:number}, rIn:number, blend:number, scale?:number|null, shift?:{x:number,z:number}|null}} field
  */
 export function stagePointDrawn(p, field) {
-  const c = field.centre, dx = p.x - c.x, dz = p.z - c.z, r = Math.hypot(dx, dz);
-  if (!(r > 1e-12)) return { x: p.x, z: p.z };
-  const rd = fieldDrawnRadius(r, field.blend, field);
-  return { x: c.x + dx / r * rd, z: c.z + dz / r * rd };
+  const { f, sx, sz } = fieldWithShift(field);
+  const c = f.centre, dx = p.x - c.x, dz = p.z - c.z, r = Math.hypot(dx, dz);
+  const w = sx || sz ? Math.min(1, Math.max(0, f.blend)) * fieldShiftWeight(r, f.rIn, f.lensOut ?? STAGE.LENS_OUT) : 0;
+  if (!(r > 1e-12)) return { x: p.x + w * sx, z: p.z + w * sz };
+  const rd = fieldDrawnRadius(r, f.blend, f);
+  return { x: c.x + dx / r * rd + w * sx, z: c.z + dz / r * rd + w * sz };
 }
 
 /** Punkt RYSOWANY (pod kursorem) → punkt BEZ sceny (logiczny) w polu klastra (D-CV-5): kierunek od środka zachowany. */
 export function stagePointLogical(p, field) {
-  const c = field.centre, dx = p.x - c.x, dz = p.z - c.z, rd = Math.hypot(dx, dz);
-  if (!(rd > 1e-12)) return { x: p.x, z: p.z };
-  const r = fieldDrawnRadiusInverse(rd, field.blend, field);
-  return { x: c.x + dx / rd * r, z: c.z + dz / rd * r };
+  const { f, sx, sz } = fieldWithShift(field);
+  const c = f.centre, dx = p.x - c.x, dz = p.z - c.z;
+  if (!(sx || sz)) {
+    const rd = Math.hypot(dx, dz);
+    if (!(rd > 1e-12)) return { x: p.x, z: p.z };
+    const r = fieldDrawnRadiusInverse(rd, f.blend, f);
+    return { x: c.x + dx / rd * r, z: c.z + dz / rd * r };
+  }
+  // Pole przesunięte: promień logiczny r — pierwiastek g(r) = promień rysowany(r) − |u − waga(r)·shift| (rosnąca, g(0) ≤ 0).
+  const b = Math.min(1, Math.max(0, f.blend)), lensOut = f.lensOut ?? STAGE.LENS_OUT;
+  const rest = (r) => { const w = b * fieldShiftWeight(r, f.rIn, lensOut); return { x: dx - w * sx, z: dz - w * sz }; };
+  const g = (r) => { const v = rest(r); return fieldDrawnRadius(r, b, f) - Math.hypot(v.x, v.z); };
+  let lo = 0, hi = Math.max(Math.hypot(dx, dz), lensOut * f.rIn) * 2 + 1;
+  while (g(hi) < 0) hi *= 2;
+  for (let i = 0; i < 64; i++) {
+    const m = (lo + hi) / 2;
+    if (g(m) < 0) lo = m; else hi = m;
+  }
+  const r = (lo + hi) / 2, v = rest(r), vl = Math.hypot(v.x, v.z);
+  if (!(vl > 1e-12)) return { x: c.x, z: c.z };
+  return { x: c.x + v.x / vl * r, z: c.z + v.z / vl * r };
 }
 
 /** Pole klastra, którego soczewka (LENS_OUT·rIn od środka, rysowane = logiczne na brzegu) obejmuje punkt; najbliższy środek. */
@@ -427,7 +606,7 @@ export function pickStageField(fields, p, lensOut = STAGE.LENS_OUT) {
   for (const f of fields ?? []) {
     if (!f?.centre || !(f.rIn > 0) || !(f.blend > 0)) continue;
     const d = Math.hypot(p.x - f.centre.x, p.z - f.centre.z);
-    if (d < lensOut * f.rIn && d < bestD) { bestD = d; best = f; }
+    if (d < lensOut * fieldWithShift(f).f.rIn && d < bestD) { bestD = d; best = f; }
   }
   return best;
 }
