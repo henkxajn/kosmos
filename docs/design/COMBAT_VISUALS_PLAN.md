@@ -9,7 +9,9 @@
 > everywhere — §4 CV-3a2 — delivered; owner's live check 1–6 PASS; read-only diagnosis of the CV-3a1 look → #650–#658).
 > Owner's decisions 10–14 (§3.2). CV-3a3 (extended — stage completeness: #654 stager mirror, #652 the stable stage, #653
 > stop-gaps, D-CV-4 body shell #626) ✅ DONE 2026-11-09 (`0490ea5`, under `cvStage` — §4 CV-3a3 — delivered; owner's re-check
-> PASS 2026-11-09). Owner's decisions 15–19 (§3.2). Next: CV-6b (the combat strip, §3.2-15), then the order of §4.**
+> PASS 2026-11-09). Owner's decisions 15–23 (§3.2). CV-6b (item 0 — a compact stage at every zoom, §3.2-20 — and the
+> stutter fix, §3.2-22) ✅ DONE 2026-11-09 (`5f99a1a`, under `cvStage` — §4 CV-6b — delivered; owner's check PASS
+> 2026-11-10). Next: CV-6b2 (the combat strip, flag `cvStrip`), then CV-1a → CV-3b (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -19,9 +21,10 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 669** (this plan files **#612–#668**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 675** (this plan files **#612–#674**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
-> CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662).
+> CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
+> stutter measurement and item 0).
 
 ---
 
@@ -929,6 +932,27 @@ makes Live Server reload the page.
     the orbit / behind the star). Not fixed in CV; the finding carries the measurements and a proposed fix shape.
 19. **2026-11-09 — #666 → (b):** no 3D reticle on battle participants at any zoom while their cluster is in view; enemies stay
     marked by the HUD (red rhombs / the alert stack).
+20. **2026-11-09 — D-CV-3 amended: a compact stage at EVERY zoom.** Owner's observation: at far zoom (`fregataPx` < 10) the stage
+    un-blends to true scale, so a battle looks like ships on different orbits far apart and beams from distant ships cross the
+    planet — a geometry very different from the compact cinema. Change: while a battle is in view its participants stay on the
+    stage at every camera distance — the semantic-zoom blend no longer returns them to true scale. The far "tactical" look comes
+    from CV-6a's layer (icons, fire lines), not from true-scale geometry. Done in CV-6b (item 0): the blend has a floor
+    (`stageBlendFloored`, knob `cvTuning.STAGE_BLEND_FLOOR` — 1 by default = this decision; 0 = the CV-3a1 curve, for comparison
+    only); `px_L` stays the zoom measure (readouts, CV-6a's icon hand-over). Joining and leaving the stage keep their 500 ms of
+    presentation time (rule 4 — a battle that starts in a pause shows its true-scale positions until the game runs).
+21. **2026-11-09 — the cut is reordered again: CV-6b → CV-1a → CV-3b → CV-1b → CV-1c → #640 (small step OUTSIDE CV) → #663
+    (MECHANICS, OUTSIDE CV)**; the rest keeps its order (CV-2b → CV-4 → CV-5 → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z). Reason: after
+    the #652 fix battles look static (the earlier "circling" was the solver artefact); choreography needs only the canonical bow
+    frame from CV-1a, so it moves right after CV-1a (no bow shim).
+22. **2026-11-09 — owner's report, PRIORITY: battles stutter badly** (a round with shots — ships jitter; a fairly smooth round; jitter
+    again; a visible stop-and-go at round boundaries). To be fixed right after item 0 (decision 20), before the strip and before
+    more effects land: measure first (live, `cvBattle()` 10v10, cinema and mid zoom), then fix under `cvStage` — one continuous
+    motion timeline across rounds (velocity-continuous, no easing to zero at boundaries, no mid-round re-solve from combat events,
+    pause freezes everything). If item 0 + this fix fill the session, the strip becomes **CV-6b2** (it did — §4 CV-6b).
+23. **2026-11-10 — #630 → as proposed:** `uiPrefs.combatFxVisible` is retired (it hid every combat FX and the orbital
+    burst — against the arc's goal; performance gets its own knob in CV-2b's presets; the burst dies in CV-8b) and
+    `uiPrefs.battleAutoFocus` becomes a ☰ toggle (a real player preference — the camera is not taken; CV-7's director inherits
+    it). Done in CV-6b2, with the strip. Same day: the owner's check of CV-6b PASS (steps 1–8).
 
 ---
 
@@ -941,6 +965,13 @@ step changes how many THREE objects exist. The step sections below keep their nu
 **Reordered 2026-11-09 (owner, §3.2-15, §3.2-18):** … CV-3a3 → **CV-6b → CV-1a → CV-1b → CV-1c → #640 (outside CV) → #663 (MECHANICS, outside CV) → CV-3b** → CV-2b →
 CV-4 (a/b) → CV-5 → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z. CV-6b keeps the 3D HP bars until CV-6a (§3.2-16 shim); CV-3b runs after
 CV-1a, so the bow shim below is no longer needed.
+
+**Reordered again 2026-11-09 (owner, §3.2-21):** … CV-3a3 → **CV-6b → CV-1a → CV-3b → CV-1b → CV-1c → #640 (outside CV) → #663
+(MECHANICS, outside CV)** → CV-2b → CV-4 (a/b) → CV-5 → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z — choreography right after CV-1a's
+canonical bow frame.
+
+**CV-6b split 2026-11-09 (§3.2-22):** item 0 + the stutter fix filled the session ⇒ CV-6b = those two (delivered), the strip
+= **CV-6b2**, next: … CV-3a3 → CV-6b → **CV-6b2** → CV-1a → CV-3b → CV-1b → CV-1c → #640 → #663 → CV-2b → …
 
 **Dependencies on CV-1 and the shims** (CV-2a, CV-3a and CV-3b now run before CV-1a):
 - CV-2a (FX engine, stager) — none: endpoints are drawn positions; muzzle hardpoints arrive with CV-4.
@@ -1685,6 +1716,121 @@ battle; `KOSMOS.threeRenderer._enemyAlertMarkers.size` → `0`; the enemies keep
 | **Keepers (logic)** | strip layout math (fits, insets, safe rect); Watch emits `camera:watchBattle` with today's payload; i18n |
 | **Owner looks at** | the strip at 1600×1041 on 5 themes; Watch works; nothing overlaps |
 
+#### CV-6b — item 0 + the stutter fix ✅ delivered 2026-11-09 (`5f99a1a`; under `cvStage`; owner's check PASS 2026-11-10) — the strip → CV-6b2
+
+Item 0 (§3.2-20) and the stutter report (§3.2-22) filled the session; by the prompt's rule the strip moved to **CV-6b2**
+(next section). Nothing of the strip is built; the card, ring mesh and hit glow are unchanged.
+
+**Item 0 — the battle stays compressed at every zoom (D-CV-3 amended).**
+- `SemanticZoomLogic.stageBlendFloored(pxL, floor)` = max(floor, the CV-3a1 curve); default floor **1**
+  (`STAGE_BLEND_FLOOR_DEFAULT`); live knob `KOSMOS.threeRenderer.cvTuning.STAGE_BLEND_FLOOR` (1 = decision 20; 0 = the CV-3a1
+  curve — comparison only).
+- Every consumer reads the one floored value: placement weight `k = blend × join` (drawn = base + (target − base)·k);
+  the click field (`blend × join` — the D-CV-5 / #662 inversion holds at every zoom); `_stageWatchFit` (Watch fit and dive);
+  `stageInfo` (`blend` = used, NEW `krzywa` = the raw curve, a measure for CV-6a's icons). Blend-blind and unchanged: the
+  reticle rule (#666 (b) — participants by `_stageParticipants`; the k fade now applies at every zoom), the body shell and the
+  fallback (solver output), HUD markers and stacks (read the drawn sprite positions), `fxStats` (no blend reader).
+- Measured (keeper R17): camera at 6 / 30 / 85 WU — curve 0, blend 1, every participant at its stage target (none at true
+  scale), 0 mis-banded pairs, field round trip ≤ 1e-9 (1e-16 measured); KONTROLA floor 0: 20/20 at the base position,
+  190 mis-banded pairs, no field. Body battle far (R12): every ship behind the shell, 0 / 36 player → enemy lines through the
+  body; KONTROLA floor 0: 6 / 36 through it.
+- Expected, not measured: **#658** (Watch dive overflow) should be gone — the drawn battle no longer changes shape with the
+  distance. Owner's look.
+
+**The stutter (§3.2-22) — measured first** (live, RTX 3070, GATE-S4 fixture, `cvBattle()` 10v10, cinema 0.4 WU and mid
+≈ 2.5 WU; per-frame drawn positions of 4 ships over 6+ rounds, solves per round and their trigger, frame times; session probe
+in the scratchpad, not in the repo). Four causes, all measured:
+1. **#669** — the stage offset went linearly from the displayed target to the new solution in `combatRoundMs` and then stood
+   at the solution; a round lasts longer than `combatRoundMs` in the game ⇒ ships stopped for the rest of the round and
+   restarted with a velocity jump (boundary stops 18 % cinema / 11.1 % mid; speed down to 0.21 / 0.32 of the pre-boundary
+   value, median).
+2. **#670** — a free-space battle was drawn as the logic glide + the offset; the glide retargets in 150 ms steps and ends early
+   ⇒ the knot jerked with the glide while the offsets stood.
+3. **#671** — the Watch / auto-focus pivot was built from ships with hp > 0; a kill dropped a ship from the axis in one frame
+   while its sprite stayed on the stage ⇒ the camera goal jerked 10–49 L/s on 4 / 4 kill frames.
+4. **#672** — the warm-started solver random-walked: 40 pull passes at weight 0.5 over 190 pairs every round moved the whole
+   solution although the logic barely changed (relative step median 0.41 L, p95 2.31 L; 40–52 % of consecutive steps reversed)
+   ⇒ the "jitter rounds".
+Rejected: mid-round re-solves from combat events (1 solve per round — the key holds rounds + membership) and frame hitches
+(dt p95 16.8 ms, max 19.8 ms during the battle).
+
+**The fix (under `cvStage`; pause freezes everything — D-CV-10, presentation clock):**
+- NEW `src/renderer/combat/StageMotionLogic.js` (pure, zero imports): each solve starts a cubic Hermite segment
+  (`motionSegment` / `motionAt`) from the CURRENT drawn state — position and velocity — to the new target with the target's own
+  velocity (`targetVelocity` from the last two solutions) over `combatRoundMs`; past the end the motion continues and decays
+  (`STAGE_MOTION.EXTRAP_E` 0.5 × segment) instead of clamping ⇒ position and velocity continuous at every boundary (C1).
+- Free clusters solve and move in the WORLD frame, body battles in the body frame (`fid`, a frame change resets the segment
+  start): the drawn stage no longer depends on the logic glide; the click field's shift = displayed centroid − field centre.
+- `_stageWatchFit` takes every drawn participant, the dead included (DSCS keeps them in the encounter until the end and the
+  sprite stays) ⇒ a kill does not move the pivot.
+- Warm start: `STAGE.WARM_PASSES` 4 at `WARM_PULL` 0.25 (cold solves: 40 at 0.5, unchanged; the shell warm passes unchanged).
+  Offline on 3 recorded battles: shots in the weapon window 96.4 / 90.9 / 93.3 % (40 × 0.5: 96.4 / 93.5 / 96.1; 0 passes:
+  91–93 %), relative step median 0.17–0.21 L (was 0.40–0.55), p95 0.8–1.46 L (2.2–2.9), pairs within ±15 % of the law
+  85.3–86.5 % (84–86 %). ⚠ One battle of three loses 2.6 points of shots in the window — taken for the smoothness; the keeper's
+  battle keeps L5b at 96.4 % (≥ 95 %).
+
+**Live, before → after** (same fixture, same stager seed, cinema / mid):
+
+| measure | before | after |
+|---|---|---|
+| boundary checks where the ship stopped (< 10 % of its pre-boundary speed) | 18 % / 11.1 % | 1 % / 0 % |
+| speed at the boundary ÷ speed before it (median) | 0.21 / 0.32 | 0.77 / 0.81 |
+| velocity jump at the boundary, p95 (L/s between frames) | 4.25 / 1.43 | 0.64 / 0.065 |
+| velocity jump at the boundary, max (L/s) | 4.63 / 2.16 | 0.99 / 0.23 |
+| camera goal speed on the 4 kill frames (L/s) | 12.8 / 10.5 / 48.7 / 24.7 | 0.1 / 0.3 / 0.0 / 0.4 |
+| solution step per round, median / p95 (L, relative) | 0.41 / 2.31 | 0.21 / 0.69 |
+| solves per round | 1 | 1 |
+| frame dt median / max (ms) | 16.7 / 19.8 | 16.7 / 20.9 |
+
+Slowdowns anywhere in the round (not only at boundaries) rose in cinema 1.6 % → 4.4 %: these are smooth reversals through zero
+speed when the next target lies behind the ship — before, the same reversal happened as a stop at the boundary.
+
+**Keepers** (logic only): `cv_stage_logic` **43/0** (L3d/L3e floored blend; L5c the solver does not walk — KONTROLA the old
+40 × 0.5 walks; L10 the motion segment — exact ends, C1 at the end, velocity = derivative, bounded decay) · `cv_stage_render`
+**37/0** (R5b/R5c re-aimed to floor 0 — they pinned "far = true scale", the rule decision 20 replaced; R17 compact at every
+zoom) · `cv_stage_shell` **53/0** (R4 / R11 far at floor 0; R12 body battle far) · `cv_stage_temporal` **24/0** (T8a far at
+floor 0; T9 velocity continuous across boundaries — KONTROLA the CV-3a3 linear transition, computed in the keeper, stops on
+219/219; T10 a kill does not move the pivot — KONTROLA the live-only axis moves 1.04 L; T11 the free stage does not depend on
+the glide — witness: base positions differ by 0.05 WU) · `cv_fx_results` 40/0 (harness names only) · `cv_stage_answers` 22/0
+· `cv_stage_no_snap` 15/0. **Fail-first** on HEAD + the CV-3a3 tree with the CV-6b keepers: logic 36/4 (L3d, L3e, L5c, L10),
+render 33/4 (R5b, R17a–c), shell 52/1 (R12a), temporal 20/4 (T9a, T9b, T10a, T11a); every KONTROLA and witness green on
+both sides (L3e is a property pin of the new function, not a control — relabelled). Sweep **380/380**, `check-i18n` PASS
+(no new strings).
+
+**Owner looks at** — (1) `cvBattle()` at cinema and mid: continuous motion, no stop at round boundaries, no jitter rounds, a
+kill does not jerk the camera; (2) zoom out to the whole system: a compact knot, `stageInfo()` → `blend 1`, `krzywa` ≈ 0;
+(3) `cvBattle({atBody: 1})` far: the knot behind the planet, no beams across it; (4) right-click "Leć tutaj" at far zoom lands
+under the cursor; (5) `cvTuning.STAGE_BLEND_FLOOR = 0` → the old spreading, back to 1; (6) `cvStage(0)` = today; (7) pause
+freezes, resume continues smoothly; F5 without saving.
+
+**Owner's check — PASS 2026-11-10 (steps 1–8 of the session's check list).** **#630 → owner's decision 2026-11-10
+(§3.2-23):** `uiPrefs.combatFxVisible` is retired and `uiPrefs.battleAutoFocus` becomes a ☰ toggle — done in CV-6b2,
+together with the strip.
+
+### CV-6b2 — combat strip replaces the card (flag `cvStrip`) — split from CV-6b (§3.2-22)
+
+The scope as written for CV-6b (owner's requirements §3.2-16 and the CV-6b prompt), unchanged:
+- NEW `src/ui/CombatStrip.js` + pure `CombatStripLogic.js`; the unit is the **encounter cluster** (`encounterClusters`,
+  CV-3a2 — one source for the stage, the banner and the strip).
+- **Collapsed**: one line per battle — `⚔ location · own alive/total + HP bar · enemy alive/total + HP bar · round n/20 ·
+  [Obserwuj] · [▾]`; up to 3 lines, then "+N"; fog gating as the card today (`isEndpointVisibleInCombat`).
+- **Expanded** per battle: ship lists of both sides, the last ~5 round-log lines, scroll, ▴ / Esc closes.
+- **Placement**: never over the outliners or the bottom strip — `getPanelRect()` + `MapInsets` (#629); in cinema never over the
+  battle (the Watch safe rect).
+- [Obserwuj] emits `camera:watchBattle` with today's payload; the Director chip hidden until CV-7.
+- ONE result banner per cluster (exists since CV-3a2 — kept); the Dziennik ONE battle line per CLUSTER (#639) — the skirmish
+  semantics kept, not multiplied.
+- Under `cvStrip`: no old card, no ring mesh, no hit glow; the 3D HP bars stay until CV-6a (§3.2-16 shim).
+- **#630** — owner's decision 2026-11-10 (§3.2-23), as proposed: **retire** `uiPrefs.combatFxVisible` (it hides every combat FX and the
+  orbital burst — against the arc's goal; performance gets its own knob in CV-2b's presets; the burst dies in CV-8b) and
+  **expose** `uiPrefs.battleAutoFocus` as a ☰ toggle (a real player preference — the camera is not taken; CV-7's director
+  inherits it).
+- All strings PL + EN through `t()`.
+- Keepers (logic): strip layout math (fits, insets, safe rect, "+N"); one line / one banner / one Dziennik line per cluster
+  (split 4v4); Watch payload identical to today's; fog gating; i18n.
+- Owner looks at: the strip at 1600×1041 on 5 themes (collapsed, expanded), split 4v4 — one line, one banner, one Dziennik
+  line; Watch from the strip; `cvStrip` OFF = today's card.
+
 ### CV-7 — director camera and 9:16 (flag `cvDirector`)
 
 | | |
@@ -1781,6 +1927,13 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **666** | ✅ | **Enemy 3D reticles return at the tactical zoom — by design of the #653 stop-gap.** The reticle fades with the ship's stage weight and is gone from 0.25 of it (`STAGE_RETICLE_FADE_K`) — identical for free and body battles (measured, both kinds: 0 reticles at `fregataPx` ≥ 10.6, 10 / 10 below; at the owner's 5.6–7.7 px 63–92 % opacity). Options: (a) keep until CV-6a · (b) no 3D reticle on any participant of a battle in view, at every zoom (the HUD ship markers — red rhombs, role `alert` — still mark enemies) · (c) hide from blend > 0 (frigate ≥ 4 px), keep only at true scale. Recommendation (b) — the owner's complaint was "reticles on every enemy all battle long", and CV-6a owns enemy marking | real game `reticle_probe` (scratchpad); `ThreeRenderer._syncEnemyAlertMarkers` (`stageFade`) | **owner 2026-11-09: (b) ✅** — implemented in the CV-3a3 second pass: `_stageParticipants` (every encounter cluster in view, also without a stage) — no reticle at any zoom; measured 0 at `fregataPx` 40.9 → 4.3 during the battle; `cv_stage_temporal_smoke` T8a (re-aimed), `cv_stage_shell_smoke` R11 |
 | **667** | ⚪ | **A real bearing change is drawn as a straight transition through the body.** Offsets go linearly from the displayed target to the new solution over one round; when the shell bearing does change (after 664 only on a real change — most of a side leaves orbit, a free side appears), the chord crosses the body and `avoid` presses the ships onto the shell sphere for the round. An angular (polar, around the body) transition would arc around it | code reading + the 664 measurements before the fix | CV-3b (stage motion) or later |
 | **668** | ✅ | **A ship in flight inside a battle was written straight to its true-scale position between frames.** The in-flight branch of `_syncVesselPositions` (on `vessel:positionUpdate`) set the sprite directly (the class of R9's orbit write); readers between that tick and the next frame — the HUD layer's own loop, the click — saw the ship off the stage. Measured in the game while validating #662 (a ship hopping inside the body battle): the read drawn position jumped 26–31 L for one to two samples every ≈ 11 s; the rendered frame was right (the next frame re-staged it) | real game `gate_lines2_probe` (scratchpad); `ThreeRenderer._syncVesselPositions` (in-flight branch) | **CV-3a3 second pass 2026-11-09 ✅** — the in-flight branch through `_setSpriteBase`; after: 0 jumps; `cv_stage_shell_smoke` R9d |
+
+| **669** | ✅ | **Ships stopped at every round boundary (the "stop-and-go" of the owner's stutter report, §3.2-22).** The stage offset went linearly from the displayed target to the new solution in `combatRoundMs`, then stood at the solution; in the game a round lasts longer than `combatRoundMs`, so ships stood for the rest of the round and restarted with a velocity jump | live (RTX 3070, GATE-S4, `cvBattle()` 10v10): boundary stops 18 % cinema / 11.1 % mid, speed at the boundary 0.21 / 0.32 of the pre-boundary value (median), velocity jump p95 4.25 / 1.43 L/s | **CV-6b ✅** — `StageMotionLogic` Hermite segments from the drawn state with the target's velocity, decaying continuation past the end: stops 1 % / 0 %, ratio 0.77 / 0.81, jump p95 0.64 / 0.065 L/s; keeper T9 |
+| **670** | ✅ | **A free-space battle rode on the logic glide.** Drawn = glided base + stage offset; the glide retargets in 150 ms steps and ends before the round does, so the knot jerked with the glide while the offsets stood | `_placeFreeVessel` / `_tickCombatGlide` (`glideRetarget` / `glideStep`, linear over `combatRoundMs`); live probe — the drawn path follows the base steps | **CV-6b ✅** — free clusters solve and move in the world frame (`fid 'w'`), body battles in the body frame; keeper T11 (another glide — identical drawn positions; witness: base positions differ by 0.05 WU) |
+| **671** | ✅ | **A kill jerked the Watch / auto-focus camera.** `_stageWatchFit` built the pivot from ships with hp > 0; a kill dropped the ship from the axis in one frame while its sprite stayed on the stage | live: camera goal speed 12.8 / 10.5 / 48.7 / 24.7 L/s on 4 / 4 kill frames | **CV-6b ✅** — the pivot takes every drawn participant (DSCS keeps the dead in the encounter until the end): 0.1 / 0.3 / 0.0 / 0.4 L/s; keeper T10 (KONTROLA — the live-only axis moves 1.04 L) |
+| **672** | ✅ | **The warm-started stage solver random-walked (the "jitter rounds").** Every round 40 pull passes at weight 0.5 over 190 pairs moved the whole solution although the logic barely changed | live: relative solution step per round median 0.41 L, p95 2.31 L; 40–52 % of consecutive steps reversed direction; offline on 3 recorded battles 0.40–0.55 / 2.2–2.9 L | **CV-6b ✅** — `STAGE.WARM_PASSES` 4 at `WARM_PULL` 0.25 (cold unchanged): live 0.21 / 0.69 L; shots in the weapon window 96.4 / 90.9 / 93.3 % (was 96.4 / 93.5 / 96.1); keeper L5c (KONTROLA — the old setting walks) |
+| **673** | ⚪ | **The logic glide quantizes and ends early.** `glideRetarget` re-aims in 150 ms steps and the linear glide finishes before the next round, so a ship's base motion is a staircase of short linear moves. After CV-6b the stage no longer shows it in a free battle; it is still visible for a ship joining or leaving the stage (the 500 ms entry / exit blends base and stage) and with `cvStage` OFF | `CombatWatchLogic` `glideRetarget` / `glideStep`; `ThreeRenderer._tickCombatGlide`; live probe (before CV-6b) | CV-3b (choreography gives participants their own motion) or later — not blocking |
+| **674** | ⚪ | **Far zoom after decision 20: a 10v10 is a knot of a few pixels.** With the stage held at every zoom the drawn battle keeps its stage size, which at the whole-system view (camera 85 WU) is a knot of ≈ 3.5 px; the HUD stack "⚠ ×N" carries it, while the FX engine's pixel floors (`MIN_PX` 3, `TRACER_CORE` 4 — the owner's tuning) make beams and sparks as wide as the knot itself [INF — not looked at live] | render harness at 85 WU (R17 setup); `LIVE_CV_FX.MIN_PX` / `TRACER_CORE` | CV-6a — the tactical layer's far language (icons, bands, fire lines) is meant for exactly this view |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
