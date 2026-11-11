@@ -13,7 +13,10 @@
 > stutter fix, §3.2-22) ✅ DONE 2026-11-09 (`5f99a1a`, under `cvStage` — §4 CV-6b — delivered; owner's check PASS
 > 2026-11-10). CV-6b2 (the combat strip, flag `cvStrip` default ON; #629, #630, #639) ✅ DONE 2026-11-10 (`de682b4` — §4 CV-6b2
 > — delivered; owner's check PASS, steps 1–7, the strip at the top accepted). Owner's decisions 24–25 (§3.2: #676 accepted as
-> designed; #675 → a grace window, scheduled with #640 outside CV). Next: CV-1a → CV-3b (§4 order).**
+> designed; #675 → a grace window, scheduled with #640 outside CV). CV-1a (hardpoints, canonical frame bow +Z, key-colour
+> emission, light points; flag `cvModels` default ON) ✅ DONE 2026-11-11 (`53cd49b` — §4 CV-1a — delivered; owner's check: two
+> corrections — readability lighting (fill + side-colour rim) and the rest heading (the enemy stood broadside) — re-check PASS
+> 2026-11-11). Owner's decisions 26–27 (§3.2: #678 kept; #681 → CV-3b). Next: CV-3b (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -23,10 +26,10 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 677** (this plan files **#612–#676**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 682** (this plan files **#612–#681**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
 > CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
-> stutter measurement and item 0; #675–#676 from CV-6b2).
+> stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check).
 
 ---
 
@@ -747,16 +750,37 @@ longest axis = 1.0):
 }
 ```
 
-`keyColour.mode` ∈ mask (new models) / points (legacy: the clicked `lights`) / none. The loader computes one quaternion
-per slot from `frame` to the canonical frame **bow +Z, up +Y** (D-CV-11 — `Object3D.lookAt`-native, so facing a target
-is one call); legacy files start from measured defaults (bow −X for 26 slots, +X for `nonwarp_large_science`; nozzle at
-the stern slice centre; no turrets) — the Workshop refines them.
+~~`keyColour.mode` ∈ mask (new models) / points (legacy: the clicked `lights`) / none.~~ **Amended in CV-1a (2026-11-10,
+from measurement — §4 CV-1a):** `keyColour.mode` ∈ **mask / none** and governs ONLY the texture mask; **`lights[]` are
+drawn whenever the list is non-empty, independent of `mode`** (the `points` mode is retired). Reason: on the owner's six
+new warships the only cyan is the warp-core ring (174–192°) — there are no cyan windows — so for his Meshy models the
+clicked light points are the PRIMARY glow path, not a legacy fallback; mask AND points together are valid (the ring from
+the mask, windows from points). The mask has HARD bounds (one GLSL chunk, mirrored in JS by `keyColourMask`): hue distance
+≥ `hueTol`, saturation ≤ `satMin` or value ≤ `valMin` ⇒ exactly 0; `soft` widens INWARD (full mask from `satMin + soft`,
+`valMin + soft` and hue distance ≤ `hueTol − soft × 100°`). Defaults from the measurement: hue 182, hueTol 12 (hard zero
+from 194°), satMin 0.45, valMin 0.55, soft 0.06, gain 3.5 — the battleships' blue-grey panels (196–216°, saturation < 0.3
+or value < 0.4) are excluded by BOTH bounds. Light point fields: `p`, `size` (diameter, normalized), optional `colour`
+(`#rrggbb`, default key cyan) and `gain`. Files: `hardpoints/<slot>.json` (the slot's model — 27 from measurement) and
+`hardpoints/incoming/<slot>.json` + `incoming/index.json` (the owner's model waiting in `incoming/`, before CV-1b swaps
+the slot). The loader computes one quaternion per slot from `frame` to the canonical frame **bow +Z, up +Y** (D-CV-11 —
+`Object3D.lookAt`-native, so facing a target is one call); legacy files start from measured defaults (bow −X for 26 slots,
++X for `nonwarp_large_science`; nozzle at the stern slice centre; no turrets) — the Workshop refines them. A missing or
+invalid file ⇒ fallback defaults in code (bow −X / +X for the one listed exception, nozzle at the stern end) — a ship
+never waits for its hardpoints and never flies stern-first because a file is missing.
 
 **Key-colour emission (D-CV-12)** — an `onBeforeCompile` chunk on the (now always cloned) `MeshStandardMaterial`,
 injected at `emissivemap_fragment`: mask = hue distance to the key hue × saturation × value thresholds (smoothstep with
 `soft`), `totalEmissiveRadiance += baseColor · mask · gain` (HDR — windows bloom), keeping the existing emissive-map term
 (lit colony windows stay); the enemy tint and the wreck burn-out ride the same chunk as uniforms (#620); one program for
 all ships (uniforms only, constant `customProgramCacheKey`). The Workshop imports the same chunk, so preview = game.
+**CV-1a as built:** the mask classifies the UNTINTED texture sample (`sampledDiffuseColor`, converted back to sRGB — the
+space the thresholds were measured in), so the enemy tint and the maintenance grey never move a window out of the key
+hue; the tint is modulated by the texture luminance (`0.2 + 1.2·L` — panels redden, trenches stay dark; a flat red
+silhouette was rejected at the first look); the burn is a thin fresnel⁴ edge plus a 3 % glow (CV-5 refines it); three
+shared multipliers — the SAME uniform objects in every ship material — are live knobs `cvTuning.MODEL_KC_GAIN /
+MODEL_ENEMY_TINT / MODEL_WRECK_BURN`. Uniforms live in a WeakMap, not in `userData` (`Material.copy` JSON-clones
+`userData` and does not copy `onBeforeCompile`), so a clone of a masked material is a plain material, never one carrying
+the mask's program key without its uniforms.
 
 **Normalizer (D-CV-13/14/15)** — `node tools/ship-models/normalize-ship.mjs <slot>` (gltf-transform + sharp, already in
 `package.json`; output free of Draco / meshopt / KTX2 — the loader has no decoders): read `incoming/<slot>.glb` → report
@@ -962,6 +986,11 @@ makes Live Server reload the page.
     battle line and skirmish line wait that long after its last `battle:resolved`, and an encounter that starts within it with
     ships of the same battle (the mop-up) folds into the same announcement — **but not now**: scheduled together with #640 in
     the small step OUTSIDE CV, whose rule is one message per event (#640 — contacts; #675 — the battle result).
+26. **2026-11-11 — #678 → kept:** the small cyan spots outside the stern ring on the warp frigate / destroyer light as small
+    lights — by design under F10 (one key colour = lights); no repaint and no region masking in CV-1c. Same day: the owner's
+    check of CV-1a (two corrections — readability lighting, the rest heading — §4 CV-1a) and the re-check PASS.
+27. **2026-11-11 — #681 → CV-3b:** a ship whose sprite is placed while it carries a synthetic order mission (`engage`, no
+    coordinates) keeps facing the star until CV-3b turns every combat ship towards its target; no interim fix.
 
 ---
 
@@ -1059,6 +1088,242 @@ migration fit this session.
 | **Keepers (logic)** | schema validation (valid / invalid files); legacy defaults complete for every resolver slot; frame quaternion maps ±X / ±Z inputs to bow +Z; mask classification function (pure JS mirror) on given parameters; maintenance tint touches only its own ship's materials (execution on real three) |
 | **Owner looks at** | all ship types fly bow-first (incl. `nonwarp_large_science`), plume at the nozzle, enemy tint and wreck glow visible, maintenance grey only on the immobilised ship; key-colour glow on a test model (his first Meshy model if ready) |
 
+#### CV-1a — hardpoints, canonical frame, key-colour emission, light points ✅ delivered 2026-11-11 (`53cd49b`; flag `cvModels` default ON; owner's check 2026-11-11 → two corrections → re-check PASS 2026-11-11 — below)
+
+Built in one session; nothing of the scope moved to a CV-1a2.
+
+**Input measured first (the owner's six new warships in `assets/models/ships/incoming/`, decoded by Chrome — the same
+libjpeg-turbo the game textures go through; UV islands rasterised; per-texel 3D localisation).** One mesh, one material,
+2K textures (base JPEG, metallic-roughness JPEG, normal PNG), no emissive map; triangles 9 681–10 034 (battleships 28 968 /
+29 238 — above the 15k guideline, CV-1b warns). Longest axis X in all six; **bow at local −X** (vertices in the last 8 % of
+length bow / stern: 165 / 2 264, 153 / 1 572, 18 / 992, 44 / 1 095, 43 / 2 557, 47 / 3 335); nozzle = the stern 3 % slice
+centre at (0.5, ≈ 0, ≈ 0) in normalized space, radius 0.032–0.058. **Key colour:** the strong cyan sits at hue 174–192°
+(peak 180–183°), saturation 0.45–1, value 0.55–1; the battleships' blue-grey panels at 196–216° with saturation < 0.3 or
+value < 0.4. With the defaults (hue 182 ± 12, satMin 0.45, valMin 0.55, soft 0.06) the mask lights — % of UV-covered texels
+(% of the whole texture): nonwarp_frigate 0.000 (0.000) · warp_frigate 0.557 (0.289) · nonwarp_destroyer 0.002 (0.001) ·
+warp_destroyer 0.439 (0.258) · nonwarp_battleship 0.000 (0.000) · warp_battleship 0.531 (0.300); **panel texels (hue ≥ 205°)
+lit: 0 in all six** (424 895 · 47 542 · 470 647 · 17 417 · 738 195 · 361 359 texels). Where the lit texels sit:
+warp_battleship 100 % on the stern ring; warp_destroyer ≈ 94 % ring + small spots mid-aft; warp_frigate ≈ 77 % ring + small
+symmetric spots (stern-corner pads, mid-ship, near the bow) — "the only cyan is the ring" holds approximately (#678).
+Contact sheet with the mask in magenta: the ring and the small spots, nothing on the panels; bow and nozzle confirmed by eye.
+
+**What changed**
+- NEW `src/data/ShipHardpointsSchema.js` — schema v1 + `validateHardpoints` (strict: unknown top-level keys are errors;
+  bow / up unit and orthogonal; nozzles, weapons `W<n>` unique, lights size (0; 0.2], `#rrggbb`; keyColour ranges; mode
+  mask / none). `KEY_COLOUR_DEFAULTS` from the measurement. Zero imports.
+- NEW `src/renderer/ShipHardpoints.js` — `slotOfModelPath`, `defaultHardpoints` (fallback: bow −X, `BOW_PLUS_X_SLOTS` =
+  [`nonwarp_large_science`], nozzle at the stern end), `frameQuaternion` (rows right / up / bow, Shepperd), `rotateVec`,
+  heading helpers `yawToward` (canonical `atan2(dx, dz)`; legacy `+ π/2` kept bit for bit), `orbitYaw` (canonical along the
+  orbital motion `(−sin θ, cos θ)·sgn ω`; legacy `θ + π` kept), `bankRoll` (canonical: the wrapper's Z rotation is a TRUE
+  roll about the bow axis, so it banks INTO the turn — at the old bow −X it was a nose pitch); `ShipHardpointsCache` (one
+  request per slot, never rejects: missing / invalid / network error ⇒ fallback + one warning; overrides; the incoming
+  index). No three.
+- NEW `src/renderer/KeyColourEmission.js` — the GLSL chunk (`KC_PARS_GLSL` after `emissivemap_pars_fragment`,
+  `KC_MAIN_GLSL` after `emissivemap_fragment`; a missing anchor or a double injection throws), `keyColourMask` (the JS
+  mirror), `applyKeyColour` (own-property `onBeforeCompile` + constant `customProgramCacheKey`, uniforms in a WeakMap),
+  `KC_SHARED` multipliers, tint / burn / gain setters. Zero imports.
+- NEW `src/renderer/ShipLightPoints.js` — light points: instanced billboard quads (log-depth chunks), one geometry per slot,
+  one pooled Mesh per ship as a child of the canonical group (inherits position, heading, banking and the class scale —
+  world size = `size` × class length, from the model matrix in the shader); pulled toward the camera by half its size (it
+  sits ON the hull); fades instead of growing below `MODEL_LIGHT_MIN_PX`; static (nothing to freeze in a pause). Each pooled
+  Mesh has its OWN material (the program is shared) whose size / gain uniforms are SHARED objects and whose opacity is its
+  own (`onBeforeRender` copies `material.opacity`) — the intel-ghost and maintenance paths `traverse` the ship and write
+  `material.opacity`, which on a shared material would dim every ship's lights. `acquire` / `release` allocate nothing after
+  warm-up.
+- NEW `src/renderer/ShipModelRig.js` — `buildShipRig`: wrapper → `canon` (frame quaternion, scale = class length) → model
+  (scale 1 / longest, offset −centre / longest ⇒ the normalized space of the hardpoints file) + exhaust (apex at the file's
+  nozzle, plume along `d`, unit geometry scaled per frame) + lights (only when `lights[]` is non-empty — independent of the
+  mask mode); OWN material clones for every ship with the mask (#624 — textures shared, template untouched);
+  `paintRigMaterials` (enemy: today's colour lerp + tint uniform; wreck: colour, emissive map off, mask off, burn uniform,
+  opaque); `lightTestPattern` (test lights ON the hull — mesh vertices); `disposeShipRig` (clones, exhaust, lights back to
+  the pool — the TEMPLATE geometry is shared and no longer disposed per ship, #679).
+- NEW `assets/models/ships/hardpoints/*.json` — 27 legacy files (bow, nozzle, sha256 of the GLB, mask none) and
+  `hardpoints/incoming/*.json` + `index.json` for the six owner models (mask ON, no lights / turrets yet — CV-1c clicks them).
+  `.gitignore` +`/assets/models/ships/incoming/` (the GLBs, 10–13 MB each; their hardpoints are tracked).
+- `ThreeRenderer`: `_addVesselModel3D` reads `cvModels` at placement → NEW `_addVesselModelCv` (the canonical rig; the
+  hardpoints loaded in parallel with the GLB; a PLACEMENT error is logged and no longer enters the load-fallback chain);
+  the heading at creation, in flight and on an orbit keyed on `entry.canonical` (the OFF formulas literally kept); banking
+  sign; `_applyExhaust` canonical branch (length and radius from `cvTuning.MODEL_PLUME_*` every frame, the flicker changes the
+  LENGTH — #619); `vessel:wrecked` canonical branch paints the ship's own clones (no re-clone, burn visible — #620); 
+  `_removeVesselSprite` canonical branch (`disposeShipRig`); `_tickCvModels` per frame (shared multipliers, light pool).
+  **#625 fixed on BOTH paths** (precedent V-260 / D-V2z: the flag may not restore a defect). Dev override `cvIncoming`:
+  slots listed in `hardpoints/incoming/index.json` take `incoming/<slot>.glb`; a missing incoming file falls back to the
+  slot's model at once. ⚠ `entry.enemyTint` keeps the OFF meaning in canonical entries — the CTRL labels read it for the
+  enemy colour and the identity fog "?" (#680).
+- `FxEngine.LIVE_CV_FX` += `MODEL_PLUME_LEN` 0.8 · `MODEL_PLUME_R_MIN` 0.03 · `MODEL_PLUME_R_MUL` 1 · `MODEL_KC_GAIN` 1 ·
+  `MODEL_ENEMY_TINT` 1 · `MODEL_WRECK_BURN` 1 · `MODEL_LIGHT_GAIN` 1 · `MODEL_LIGHT_MIN_PX` 1.5 — all read EVERY FRAME (no
+  rebuild needed). `GameConfig.FEATURES.cvModels: true`.
+- `CvBattleStager`: `cvBattle({warp: 1|2})` (a warp tank on the test ships — model choice only; DSCS never reads
+  `warpFuel`), NEW `cvParade({dir})` (24 slots in flight, parallel, no body snap), `cvModels(1|0)` (toggle + rebuild),
+  `cvIncoming(1|0)` (Promise), `cvLightTest(1|0)`, `modelInfo()`. `README_modele_statkow.md` rewritten (#621 — the "+X"
+  claim was wrong; bow direction now free, hardpoints, the F10 standard, the incoming preview).
+
+**Keepers (logic only).** NEW `cv_models_logic_smoke` **64 / 0** (schema valid / invalid; every resolver slot has a valid
+file whose sha256 matches its GLB; fallback agrees with measurement, one +X exception; frame quaternion; heading along the
+motion in flight and on the orbit (derivative of the `OrbitalSpaceSystem` formula), OFF formulas bit for bit; cache; the
+mask's hard bounds on a 614k-sample sRGB grid; **T9 on the six REAL textures** — fixture
+`src/testing/fixtures/models/CV1a-incoming-key-colour.json.gz`, 124 KB, unique UV-island colours from Chrome's decoder,
+metryczka beside it: panels ≥ 205° never lit, the warp ring lit, % lit = the measurement). NEW `cv_models_render_smoke`
+**39 / 0** on real three r171 (rig normalisation, bow → +Z, heading in the world, nozzle; per-ship clones — the maintenance
+grey (the real `_applyVesselMaintenanceTint`) only on its own ship; the injection into the real `ShaderLib.standard`; one
+program key; enemy tint / wreck burn, no new material on the wreck switch; lights iff present regardless of mode; (f) the
+pool: 0 Object3D / Material / BufferGeometry constructions in 50 cycles after warm-up; dispose keeps the template geometry;
+the real renderer methods under ON / OFF incl. (b) zero writes to the vessel state and (c) `enemyTint` for the CTRL fog;
+#625; (a) zero `Math.random`). **Fail-first** on HEAD (`git archive`): logic 3 / 10, render 4 / 10 — the blocks needing the
+new modules degrade red; the controls that need nothing new stay green on both sides (T5k: the old orbit heading `θ + π`
+in the source points against the motion; R2k: shared template materials spread the grey to another ship), and R10 (#625)
+is a true fail-first pin (red on HEAD: "GLB load failed" ×1). For the modules that do not exist on HEAD a **mutation
+battery** stands in: **21 / 21 mutants killed** (identity frame, the old `+ π/2`, `θ + π`, outward hue ramp, no clones,
+lights only with the mask, pool allocating, template geometry disposed, no flag gate, #625 reverted, empty exception list,
+unknown keys accepted, mask before the emissive map, hueTol 30, old plume scaling, wreck re-clone, renderer orbit formula,
+no enemy tint, fallback nozzle at the bow, shared light opacity, `enemyTint` false). `cv_fx_results_smoke` and
+`cv_renderer_rng_smoke` green (the renderer stays off the game stream). Sweep **383 / 383 OK, 0 FAIL** (28 advisory,
+pre-existing) · `check-i18n` PASS · no new i18n keys (console tools only).
+
+**GLSL compile probe** (`kosmos-handover/cv-1a/probe_glsl.mjs`, rule V2): the masked MeshStandardMaterial (map + emissive
+map / no emissive map, transparent / no map, mode none) and the light points with log-depth compile on the RTX 3070 and on
+SwiftShader — **6 / 6**; both CONTROLS fail as they must (a broken mask call: "no matching overloaded function"; a light
+shader without `uOpacity`: "undeclared identifier").
+
+**Live validation** (`probe_live2.mjs` 8 / 8, `validate_CV1a.mjs` 7 / 7 — the real game in headless Chrome on the RTX 3070,
+GATE-S4 fixture, 1600×1041; every line of the owner's list executed literally): the 24 parade ships nose-first (cos 1.000,
+incl. `nonwarp_large_science`), plume apex exactly at −0.5 ship length; the incoming models in the six warship slots with
+the ring glowing; enemy tint uniform > 0 only on side B; the `unpaidYears = 3` line greys CV-A01 only (CV-A04 — the same
+model — untouched, separate materials); wrecks with the burn; the flag OFF rebuilds 20 / 20 ships on the old path and ON
+back; zero shader errors.
+
+**Owner's check list** (game tab of the owner; console lines quote-free; ⚠ `cvParade` / `cvBattle` put test ships into
+the game state — do not save afterwards, F5 without saving):
+1. `KOSMOS.debug.cvParade()` → resume time → 24 test ships (CV-P01…P24, every slot) fly in parallel, every one NOSE-FIRST —
+   including CV-P10 (`nonwarp_large_science`, the long science ship that used to fly stern-first); a short engine plume
+   comes out of each ship's nozzle at the stern.
+2. `await KOSMOS.debug.cvIncoming(1)` → `slots` lists 6; the six warship slots of the parade (CV-P01–P03, CV-P13–P15) switch
+   to your new models; the warp variants (P13–P15) carry a glowing cyan ring at the stern; the blue-grey battleship panels
+   stay dark.
+3. `KOSMOS.debug.cvLightTest(1)` → small glow points on every test ship (cyan bow tip, red / green flanks, white top, cyan
+   stern) that scale with the ship and fade when it is far; `KOSMOS.debug.cvLightTest(0)` removes them.
+4. `KOSMOS.debug.cvBattle({warp: 1})` → resume time → your warp models on both sides with the ring; the enemy ships (CV-B)
+   reddish also on the shadowed side (the texture detail stays readable), your ships normal; then
+   `KOSMOS.vesselManager.getAllVessels().filter(v => v._cvBattle)[0].unpaidYears = 3` → CV-A01 turns grey and
+   semi-transparent, CV-A04 (the same model) stays normal.
+5. Let the battle end → the wrecks are dark with a glowing red edge (not black).
+6. `KOSMOS.debug.cvModels(0)` → today's look: long fat plumes, enemies dark in shadow, wrecks black (and on a stern-first
+   model the plume at the nose); `KOSMOS.debug.cvModels(1)` back.
+7. F5 without saving.
+Knobs live (no rebuild): `KOSMOS.threeRenderer.cvTuning.MODEL_PLUME_LEN = 0.5`, `…MODEL_KC_GAIN = 2`,
+`…MODEL_ENEMY_TINT = 0.6`, `…MODEL_WRECK_BURN = 0.5`, `…MODEL_LIGHT_GAIN = 2`.
+
+**Not in CV-1a (by scope):** turrets / clicked windows (CV-1c), slot swap + archive + texture compression (CV-1b), facing
+targets and engines in combat (CV-3b — the canonical frame is ready: wrapper yaw `atan2(dx, dz)`, `lookAt`-native), the
+final wreck burn-out (CV-5).
+
+#### CV-1a — owner's check 2026-11-11: two corrections (readability lighting, rest heading); owner's re-check PASS 2026-11-11
+
+**What the owner saw:** (1) in a red-star system the ships are reddish and dark, little is visible, and the enemy's red tint
+drowns in the star colour; (2) in `cvBattle` the enemy ships stand broadside and the owner's ships show their sterns to the
+enemy. Asked: (1) a neutral fill independent of the star colour + a fresnel rim in the SIDE colour as the main friend / foe
+cue, with a weaker enemy body tint (uniforms only, one program, live knobs, no pins); (2) a diagnosis — fix now under
+`cvModels` if CV-1a changed or flipped the combat headings, otherwise leave it (facing the target is CV-3b) and say so.
+
+**(2) Orientation — measured BEFORE code** (real game, headless Chrome on the RTX 3070, GATE-S4 fixture, `cvBattle({warp: 1})`
+in `sys_home` (F), battle centre (2.50, −0.04) AU; bow in the world vs the direction to the nearest foe and to the star;
+"before CV-1a" = pristine HEAD `98cfabe` in a separate worktree):
+
+| side | ON (CV-1a) | OFF | before CV-1a |
+|---|---|---|---|
+| A — player, `engage` orders | cos to foe −1.00 · to star +1.00 | the same | the same |
+| B — enemy, no mission | cos to foe **0.00** (broadside — bow +Z) | +1.00 | +1.00 |
+
+- **B — changed by CV-1a ⇒ fixed now (under `cvModels`).** A ship whose heading the renderer does not know keeps yaw 0;
+  on the OFF path that is the model's bow at local −X ⇒ world −X, in the canonical frame yaw 0 is bow +Z — a 90° turn.
+  Fix: the rest heading `REST_YAW_CANONICAL = −π/2` (`ShipHardpoints.js`; world −X, exactly the OFF picture) and the wreck
+  tilt made equivalent to OFF (`wreckTiltQuaternion` — writing Euler z / x straight onto the canonical wrapper rolled the hull
+  around the bow instead of pitching the nose; `_cvTiltWreck` serves both the wreck placed from a save and the live switch).
+  The enemy faces the player again in the stager — because the stager puts side A at −X, not because anything is
+  combat-aware.
+- **A — unchanged by CV-1a (identical ON / OFF / before CV-1a) ⇒ left as it is; facing the target is CV-3b.** The sprite
+  is placed asynchronously, after `cvBattle` has issued the `engage` orders, and `_issueEngage` writes a synthetic mission
+  without coordinates (M4 P3 hotfix #2), so the placement heading falls back to `(0, 0)` — the system origin, i.e. the star
+  (`liveTargetX ?? targetX ?? 0`, both paths). With the battle centre on the far side of the enemy line from the star, the
+  player's ships show their sterns to the enemy; free-floating combat ships are never rotated afterwards (#622, combat part).
+  Filed as **#681**.
+- After the fix, live in three systems (M — simulated, see below; K; F): ON == OFF on both sides in each (A: cos to foe −1.00
+  / −0.93 — the star; B: +1.00 — the player).
+
+**(1) Readability — built** (the key-colour chunk; uniforms only, one program, live knobs, no pins). A second insert after
+ALL lighting (before `opaque_fragment`):
+- **fill** — neutral, independent of the star colour, camera-relative: `albedo × colour × MODEL_FILL × (0.35 + 0.65·N·V)`,
+  fading with the pixel's luminance — the shadow side gets it in full, the star-lit side almost nothing, so the star keeps
+  the mood on the lit side;
+- **rim** — fresnel `(1 − N·V)^MODEL_RIM_POWER × MODEL_RIM_GAIN` in the SIDE colour: own ships cool white `#cfe9ff`
+  (theme-independent — the theme's `primary` is red or amber in crimson / terminal_red / amber / kosmos and would merge with
+  the enemy), enemies the theme's `alert` role (repainted on a theme change — `_tickCvModels`, epoch check); wrecks none;
+- both under a ceiling `MODEL_LIFT_CEIL` 0.95 (linear; the bloom threshold is 1.0); a pixel already above it (mask HDR,
+  highlights, wreck burn) is untouched ⇒ the lift never makes bloom, unless the ceiling is raised on purpose;
+- the enemy body tint is now a uniform (was `color.lerp` at build), so `MODEL_ENEMY_TINT` drives ALL of it live (albedo and
+  emission); default 1.0 → 0.45 (1.0 = the strength before the check).
+Knobs (live, no rebuild): `MODEL_FILL` 0.25, `MODEL_RIM_GAIN` 0.8, `MODEL_RIM_POWER` 4, `MODEL_LIFT_CEIL`
+0.95, `MODEL_ENEMY_TINT` 0.45.
+
+**Checked in three systems** (live engine, RTX 3070, GATE-S4; `probe_light.mjs`, contact shots + a measure over the central
+box of each close-up, ship pixels = sRGB luminance > 0.035). The fixture has no M system: an M star was simulated by
+recolouring a K star (`spectralType` + `visual.color` — the same two fields `_starLightBaseline` reads) BEFORE switching the
+view, so the light is the real M path (`ff6b47` × 1.38). Defaults chosen by eye from four calibration runs (fill 0.15–0.30,
+rim power 2.5–5): at power 2.5 the cool rim reached deep into the hull and neutralised the star colour by itself; at 4 it is an
+edge.
+
+| star | own ship — visible hull px (PRE → NEW) · mean luminance | enemy — texture detail (luminance σ, PRE → NEW) · red share (own / enemy) | saturated px |
+|---|---|---|---|
+| M (simulated, `ff6b47` × 1.38) | 1 609 → 8 846 · 0.142 → 0.357 | 0.056 → 0.137 · 0.34 / 0.49 | 0 |
+| K (`ffaa55` × 2.29) | 2 657 → 9 131 · 0.170 → 0.357 | 0.079 → 0.145 · 0.35 / 0.49 | 0 |
+| F (`ffffff` × 3.57) | 4 051 → 8 112 · 0.247 → 0.374 | 0.102 → 0.148 · 0.33 / 0.47 | 0 |
+
+PRE = the same build with `MODEL_FILL` 0, `MODEL_RIM_GAIN` 0, `MODEL_ENEMY_TINT` 1 (= the look before the check; the OFF path
+measures the same for own ships). The 95th-percentile luminance of the own hull under F goes DOWN (0.831 → 0.765) — the lift
+fills shadows, it does not brighten lit metal; no saturated pixel in any close-up. Contact shots (PRE / NEW, M and F) and the
+probes (`probe_heading.mjs`, `probe_light.mjs`, `validate_recheck.mjs`, `measure_shots.py`): `kosmos-handover/cv-1a/recheck/`
+(untracked).
+
+**Stager** — `cvBattle({star: 1})` / `cvBattle({star: 2})` (also `cvParade`): switch the view first to the generated system
+with the DIMMEST / BRIGHTEST star class (`STAR_TYPES.luminosity`; the viewed system when it matches, else the first by id),
+then stage there; numbers so the console lines stay quote-free; the result reports `star: { system, name, cls, switched }`.
+
+**Keepers:** `cv_models_logic_smoke` 69 / 0 (NEW T5r — rest heading and wreck tilt = the OFF picture, computed with
+independent Euler matrices; T5rk control; T11 — the stager pick), `cv_models_render_smoke` 58 / 0 (R3a2 / R3b — the lift
+insert added once after the lighting, a missing `opaque_fragment` is loud; **R4a re-aimed on purpose** — it pinned
+"the enemy colour as today" = the `color.lerp`, now a uniform from the palette with the shared `MODEL_ENEMY_TINT`; NEW R11 —
+side uniforms are each material's OWN objects (own ≠ enemy, two own ships ≠ each other, wreck without rim), a theme change
+repaints only enemy rims, the shared knobs reach every material through `_tickCvModels`; NEW R12 — the real placement
+methods ON vs OFF give the same bow AND up in the world for: own / enemy at rest, `engage` without coordinates, in flight,
+wreck free / at a body; control R12c green on both sides; R12e — the +X model (#621) differs on purpose). Fail-first on the
+CV-1a code before the corrections: logic 65 / 3, render 38 / 11 — exactly the new pins red, the controls green. GLSL probe
+8 / 8 on the RTX 3070 (the enemy material with body tint + rim + fill compiles; a broken lift insert fails as it must).
+Sweep 383 / 383 OK, 0 FAIL (28 advisory, as before) · `check-i18n` PASS (no new keys) · `cv_fx_results_smoke` 40 / 0 ·
+`cv_renderer_rng_smoke` 62 / 0. Live validation of the re-check lines 7 / 7 (`validate_recheck.mjs` — each owner line executed
+literally on the live engine): `star: 1` / `star: 2` switch the view and stage there, the battle ends after resuming time,
+side uniforms (own cool rim without body tint, enemy `alert` rim with tint), `cvModels(0)` / `(1)` rebuild 30 sprites with
+NO ship turning (min cos of the bow ON → OFF → ON 1.000000 on all 20), the knobs reach the shared uniforms next frame, zero
+console / shader errors.
+
+**Owner's re-check list** (console lines quote-free; test ships enter the game state — F5 without saving):
+1. `KOSMOS.debug.cvBattle({warp: 1, star: 1})` → the result's `star` names the system with the dimmest star class (yours
+   is probably the current red one); resume time and click [ Obserwuj ] on the combat strip → your ships: grey hulls with
+   readable detail and a cool white edge, the star-lit side still in the star's colour; enemies: reddish with a red edge and
+   visible texture; the enemies stand bow-on to your line, your ships — as before CV-1a — bow to the star (facing the target
+   is CV-3b).
+2. Let the battle end (the strip disappears — `cvBattle` refuses while a battle runs), then
+   `KOSMOS.debug.cvBattle({warp: 1, star: 2})` → the system with the brightest star (F or G); resume, [ Obserwuj ] → bright
+   hulls, nothing washed out and no new glow (bloom only on hits and the warp ring); the same split — cool edge on yours, red
+   on the enemies.
+3. `KOSMOS.debug.cvModels(0)` → the old look: shadow sides dark on both sides (under the red star your ships nearly black-red
+   silhouettes, the enemies dark too — #620), and NO ship turns when switching; `KOSMOS.debug.cvModels(1)` back.
+4. Knobs live: `KOSMOS.threeRenderer.cvTuning.MODEL_RIM_GAIN = 1.5` (stronger edge), `…MODEL_FILL = 0` (shadows as before),
+   `…MODEL_ENEMY_TINT = 1` (enemy tint as before the check); F5 without saving at the end.
+
+**Owner's re-check 2026-11-11: PASS** (the owner's report: steps 0–5). Tuning: the defaults stay as shipped (`MODEL_FILL` 0.25,
+`MODEL_RIM_GAIN` 0.8, `MODEL_RIM_POWER` 4, `MODEL_LIFT_CEIL` 0.95, `MODEL_ENEMY_TINT` 0.45 — the tuning line of the report came
+without values). Owner's decisions 26–27 (§3.2): #678 kept, #681 → CV-3b. Committed `53cd49b` (code) + the docs commit.
+
 ### CV-1b — normalizer CLI (tools; no runtime flag)
 
 | | |
@@ -1066,6 +1331,7 @@ migration fit this session.
 | **Files** | NEW `tools/ship-models/normalize-ship.mjs` + `tools/ship-models/lib/*.mjs` (pure functions) · `.gitignore` (`assets/models/ships/incoming/`, `_archive/`) · `README_modele_statkow.md` (the owner's model standard F10 + pipeline) · **normal maps first** (§3.1-4): WebP normal maps, then lossless base colour; a one-off pass over the 27 legacy files with a before / after contact sheet |
 | **Keepers (logic)** | pure functions on synthetic in-memory meshes: bbox / centre / scale, bow guess by 8 %-slice density, hardpoints MERGE keeps clicked points, report fields (cyan %, black %, tris) |
 | **Owner looks at** | drops one Meshy GLB in `incoming/`, runs the CLI, reads the report, sees the slot in the game |
+| **From CV-1a** | hardpoints live at `assets/models/ships/hardpoints/<slot>.json` (not `<slot>.hardpoints.json`); a model waiting in `incoming/` has `hardpoints/incoming/<slot>.json` + an entry in `incoming/index.json` — the slot swap PROMOTES it to `hardpoints/<slot>.json` (merge: clicked points survive), updates `source.sha256` / `source.normalizer` and removes the index entry; `.gitignore` already has `/assets/models/ships/incoming/` (add `_archive/`); the six owner models today: bow −X, 9.7–10k tris, battleships ≈ 29k (warn — D-CV-14 (a)); `cv_models_logic_smoke` T2c pins `source.sha256` = the slot GLB — a swap without a hardpoints update turns it red |
 
 ### CV-1c — Model Workshop (tools; no runtime flag)
 
@@ -1695,6 +1961,7 @@ battle; `KOSMOS.threeRenderer._enemyAlertMarkers.size` → `0`; the enemies keep
 | **Files** | NEW `ChoreographyLogic.js` · glue in `_stagePlace` (offset, quaternion, engine) · posture from `fleetSystem` / `movementOrder` / retreat markers · sprites recreated mid-battle take their heading from choreography (#622) |
 | **Keepers (logic)** | (e) same inputs ⇒ same pose, other encounter ⇒ other phases; D-CV-6 band invariant over sampled time on random configurations; envelope bound per class; (d) frozen clock ⇒ frozen pose |
 | **Owner looks at** | frigates strafe, destroyers arc, battleships turn broadside; ships face targets, engines lit, vertical spread; kite backs off, hold stays steady, retreating ships turn away |
+| **From CV-1a (no bow shim)** | every ship placed under `cvModels` is an `entry.canonical` rig: `wrapper → canon (frame quaternion, class scale) → model`; the bow is wrapper-local **+Z** for every slot, so facing a target is `wrapper.lookAt(target)` / yaw `atan2(dx, dz)` (helpers `yawToward`, `orbitYaw`, `bankRoll` in `ShipHardpoints.js`); the plume is `entry.exhaust` (apex at the file's nozzle — `_applyExhaust` canonical branch, lit by `exhaustIntensityRaw` today only in transit — "engines lit in combat" changes that call); free-floating combat ships are still never rotated and a sprite recreated mid-battle still gets yaw 0 (#622 combat part); `legacyBowSign` is NOT needed and must not be written; from the CV-1a owner's check: a ship with no known heading rests at `REST_YAW_CANONICAL` (world −X = the OFF picture — keeper R12 pins ON == OFF), a sprite placed while its ship carries a synthetic order mission (`engage`, no coordinates) faces the system origin — the star (#681) — CV-3b's facing replaces both; the rim / fill readability light and the enemy tint are uniforms on the ship's own materials (`paintRigRim`, `setKeyColourBody`) |
 
 ### CV-4 — weapon language and the ledger (flag `cvWeapons`; split 4a / 4b if needed)
 
@@ -1978,13 +2245,13 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **616** | ✅ | **Combat FX animate through pause** (absolute `performance.now`) and expire unseen while the main loop is suspended | `ThreeRenderer.js:4115-4117, :4194, :6393, :6412` | **CV-2a ✅** — presentation clock under `cvFxEngine` (default ON since the owner's check; `cv_fx_engine_smoke` T1–T2, live pause check); the OFF path keeps the old clock until CV-Z |
 | **617** | ✅ | **FX cap shared and lossy**: 120 slots shared with pulses / pings; drop-oldest discards delayed effects not yet visible; ~30 hits fill it (4 meshes per hit) | `CombatFxConfig.js:26`; `ThreeRenderer.js:6385-6387, :7175, :7305` | **CV-2a ✅** — combat shots use the engine's own pools (beam 1024 · tracer 1024 · spark 8192; `cvFxEngine` default ON), a new shot always gets a slot (`cv_fx_engine_smoke` T4–T5); the shared 120-slot cap stays for non-combat FX and on the OFF path until CV-Z |
 | **618** | ⚪ | **Only the fireball blooms**; the explosion ring (0.77 × 0.8) and the wreck glow (0.49) stay under threshold 1.0 although their comments say otherwise; tracers 0.27–0.61; ship emissive ≤ 0.78 linear | `ThreeRenderer.js:416, :6518, :1385-1386`; CDN UnrealBloomPass high-pass | CV-2a — under `cvFxEngine` beam / tracer / flash cores are HDR above the threshold (seen glowing on the RTX 3070); explosion ring and wreck glow → CV-5 |
-| **619** | ⚪ | **Floors fix effect sizes**: explosion `Math.max(0.2, …)` ⇒ fireball 5 L, ring 25 L; exhaust floors ⇒ every plume 0.03 × 0.024 WU (1.9 L); the flicker scales plume thickness, not length | `ThreeRenderer.js:6498, :4716-4717, :4740, :6478-6492` | CV-1a (exhaust) / CV-5 (explosion) — under `cvStage` the fireball floor is lifted as a stop-gap (CV-3a3, #653 (d): peak = hull × 1.5) |
-| **620** | 🟠 | **Enemy tint and wreck glow are invisible on 24 of 27 models** — `emissiveColor` multiplies an emissive map that is black on all six warships (max 12–29/255); a wreck rebuilt after load / system switch gets `0x110000` | `three.module.js:348`; `ThreeRenderer.js:4782, :4791, :1387-1388`; §1 Q6 Table B | CV-1a / CV-5 |
-| **621** | 🟠 | **`nonwarp_large_science` flies stern-first**: 26/27 models have the bow at local −X, this one +X; the README says +X (wrong); the heading comment says +X (wrong); the exhaust code is right | silhouettes in the audit scratchpad; `README_modele_statkow.md:14-15`; `ThreeRenderer.js:4706-4707, :4715, :4759-4760` | CV-1a (hardpoints frame + README) |
-| **622** | ⚪ | **Heading defects**: orbit heading `θ + π` turns the bow against the orbital motion (maths verified, not seen live); combat free-floaters are never rotated; a sprite recreated mid-battle gets yaw 0 | `ThreeRenderer.js:5107-5110, :6677-6711, :1761-1770, :4751-4761`; `OrbitalSpaceSystem.js:158, :211-213` | CV-1a (orbit) / CV-3b (combat) |
+| **619** | ⚪ | **Floors fix effect sizes**: explosion `Math.max(0.2, …)` ⇒ fireball 5 L, ring 25 L; exhaust floors ⇒ every plume 0.03 × 0.024 WU (1.9 L); the flicker scales plume thickness, not length | `ThreeRenderer.js:6498, :4716-4717, :4740, :6478-6492` | CV-1a (exhaust) ✅ under `cvModels` — the plume is a unit cone with its apex at the hardpoints nozzle, length / radius from `cvTuning.MODEL_PLUME_*` every frame, the flicker changes the LENGTH (live: apex at −0.500 ship length on all 24 parade slots); the OFF path keeps the floors until CV-Z / CV-5 (explosion) — under `cvStage` the fireball floor is lifted as a stop-gap (CV-3a3, #653 (d): peak = hull × 1.5) |
+| **620** | ✅ | **Enemy tint and wreck glow are invisible on 24 of 27 models** — `emissiveColor` multiplies an emissive map that is black on all six warships (max 12–29/255); a wreck rebuilt after load / system switch gets `0x110000` | `three.module.js:348`; `ThreeRenderer.js:4782, :4791, :1387-1388`; §1 Q6 Table B | **CV-1a ✅** under `cvModels` — tint and burn ride the key-colour chunk as uniforms ADDED after the emissive map (tint modulated by texture luminance; burn = fresnel⁴ edge + 3 % glow), visible on every model; a wreck built after load gets the burn at once; the wreck switch paints the ship's own clones. Final burn-out look → CV-5 |
+| **621** | ✅ | **`nonwarp_large_science` flies stern-first**: 26/27 models have the bow at local −X, this one +X; the README says +X (wrong); the heading comment says +X (wrong); the exhaust code is right | silhouettes in the audit scratchpad; `README_modele_statkow.md:14-15`; `ThreeRenderer.js:4706-4707, :4715, :4759-4760` | **CV-1a ✅** — the hardpoints frame (`frame.bow` per slot, `nonwarp_large_science` +X) rotates every model to bow +Z; live: CV-P10 flies nose-first (cos 1.000), plume at the stern; README rewritten |
+| **622** | ⚪ | **Heading defects**: orbit heading `θ + π` turns the bow against the orbital motion (maths verified, not seen live); combat free-floaters are never rotated; a sprite recreated mid-battle gets yaw 0 | `ThreeRenderer.js:5107-5110, :6677-6711, :1761-1770, :4751-4761`; `OrbitalSpaceSystem.js:158, :211-213` | CV-1a ✅ (orbit, under `cvModels`: `orbitYaw` along the orbital motion; keeper T5c on the derivative of the `OrbitalSpaceSystem` formula, T5k shows the old `θ + π` pointing against it) / CV-3b (combat free-floaters, mid-battle yaw 0) |
 | **623** | ⚪ | **Duplicate GLBs** load and upload twice and look identical in different roles (`default = cargo3d`, `nonwarp_large_cargo = nonwarp_medium_cargo`, `warp_frigate = warp_large_science`); `cargo3d.glb` and `research1.glb` have no code reference | SHA-256 (audit); `VesselModelResolver.js` | owner's new models; CV-Z hygiene |
-| **624** | ⚪ | **Material sharing**: player ships use the template materials ⇒ the maintenance tint greys every player ship of the same file [INF]; the wreck handler replaces enemy clones without disposing them [INF] | `ThreeRenderer.js:4767-4794, :5492-5528, :1381, :1397` | CV-1a |
-| **625** | ⚪ | **Swallowed ReferenceError**: `entry` declared in a block at `:4828`, used at `:4837 / :4849` for wrecks with `dockedAt` ⇒ throws inside the GLB `.then`, caught as "GLB load failed (retry)" | `ThreeRenderer.js:4828-4868` (verified by reading) | CV-1a |
+| **624** | ✅ | **Material sharing**: player ships use the template materials ⇒ the maintenance tint greys every player ship of the same file [INF]; the wreck handler replaces enemy clones without disposing them [INF] | `ThreeRenderer.js:4767-4794, :5492-5528, :1381, :1397` | **CV-1a ✅** under `cvModels` — every ship gets its own material clones (textures shared), so the maintenance grey stays on its ship (live: CV-A01 grey, CV-A04 — same model — untouched); the wreck switch reuses the clones (no leak); the OFF path keeps sharing until CV-Z |
+| **625** | ✅ | **Swallowed ReferenceError**: `entry` declared in a block at `:4828`, used at `:4837 / :4849` for wrecks with `dockedAt` ⇒ throws inside the GLB `.then`, caught as "GLB load failed (retry)" | `ThreeRenderer.js:4828-4868` (verified by reading) | **CV-1a ✅** on BOTH paths (`const entry = this._vessels.get(vessel.id)`; precedent V-260 / D-V2z); keeper R10 red on HEAD ("GLB load failed" ×1), green after; under `cvModels` a placement error no longer enters the load-fallback chain |
 | **626** | ✅ | **A pinned enemy without an orbit never moves on screen** while its logical position snaps to the body centre — `_freezeAsStationary` sets `dockedAt` but nothing assigns an orbit | `DSCS:1309-1312`; `OrbitalSpaceSystem.js:62-70`; `ThreeRenderer.js:5088-5089, :5419-5435`; `VesselManager.js:2702-2707` (static trace, not run) | **✅ CV-3a3** (`0490ea5`, D-CV-4): the body shell — a pinned enemy without an orbit gets a base just beyond the shell (`shellBaseAt`) and glides there over `JOIN_MS`; the logic is untouched (the DSCS pin stays); owner's live check pending |
 | **627** | ⚪ | **Wreck drawn ≠ logical**: DSCS wrecks' logical position is the battle-start midpoint; deep-space wrecks never enter `moving`, so the sprite stays where the ship died until recreated, then jumps; orbiters go to the graveyard orbit (Finding 460 family) | `DSCS:1055, :1101, :1112`; `VesselManager.js:2625`; `ThreeRenderer.js:4855-4861`; `OrbitalSpaceSystem.js:97-104` | CV-5 (presentation rule) |
 | **628** | 🟠 | **The orbital burst ignores the viewed system and galaxy mode** — no `isEngagementInView` (unlike the round FX) ⇒ a battle elsewhere draws at planet-local coordinates in the viewed system (Finding 453 family) | `ThreeRenderer.js:6531, :6549-6575` | CV-8a / CV-8b |
@@ -2037,6 +2304,11 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **674** | ⚪ | **Far zoom after decision 20: a 10v10 is a knot of a few pixels.** With the stage held at every zoom the drawn battle keeps its stage size, which at the whole-system view (camera 85 WU) is a knot of ≈ 3.5 px; the HUD stack "⚠ ×N" carries it, while the FX engine's pixel floors (`MIN_PX` 3, `TRACER_CORE` 4 — the owner's tuning) make beams and sparks as wide as the knot itself [INF — not looked at live] | render harness at 85 WU (R17 setup); `LIVE_CV_FX.MIN_PX` / `TRACER_CORE` | CV-6a — the tactical layer's far language (icons, bands, fire lines) is meant for exactly this view |
 | **675** | ⚪ | **A mop-up encounter re-tells the battle.** The banner and (under `cvStrip`) the Dziennik announce a cluster at its LAST `battle:resolved`; when survivors of the same battle engage again (a duel ran out at 20 rounds and the ships freed by the other duels, still in range, engage the last enemy), DSCS opens a NEW encounter in the same frame, after the announcement — a second cluster in time, so a second banner (pause), battle line and skirmish line. Live split 4v4: 5 encounters → 2 announcements (the four duels — 20 rounds, 3 enemy losses; then the mop-up — 1 round, 1 loss); the strip shows it as one battle (the expansion follows the same ships). Proposal: hold the cluster's announcement a short grace on presentation time and fold an encounter that starts within it with ships of the cluster — it changes the CV-3a2 banner timing ⇒ the owner's decision | `BattleClusterLogic.clusterGroupStep`; `GameScene._clusterBattleBanners` / `_narrateBattleCluster`; `DeepSpaceCombatSystem` (encounter start after `_finalizeBattle`); `validate.json` step 4 | **owner's decision 2026-11-10 (§3.2-25): yes to a grace window ≈ 1–2 rounds — not now; scheduled with #640 in the small step outside CV (one message per event)** |
 | **676** | ✅ | **The combat card never took part in `isOverUI`.** The wheel, a camera drag and map hover went through the card (only its clicks were caught); the strip is in `isOverUI` like every other panel, so the camera does not move under it — a deliberate difference; the card on the OFF path keeps the old behaviour | `UIManager.isOverUI` (no `combatHud` test); `CombatHUD.handleClick` | **accepted as designed (owner 2026-11-10, §3.2-24)** — the strip blocks like every panel; the card's OFF path keeps the old behaviour until CV-Z removes the card |
+| **677** | ⚪ | **The engine-plume flicker runs on real time.** `_applyExhaust` takes the flicker phase from `performance.now()`, so a plume in transit keeps throbbing through a pause (rule 4: pause freezes everything). Pre-existing on both paths; harmless until engines are lit in combat | `ThreeRenderer._applyExhaust` (`flick = 0.8 + 0.2·sin(performance.now()·0.02 + phase)`) | CV-3b (engines lit in combat — move the phase to the presentation clock) |
+| **678** | ✅ | **"The only cyan is the warp ring" holds approximately.** Measured on the owner's textures (per-texel 3D localisation): warp_battleship 100 % of the lit texels on the stern ring; warp_destroyer ≈ 94 % ring + small spots mid-aft (x 0.09–0.29); warp_frigate ≈ 77 % ring + small symmetric spots (stern-corner pads, mid-ship x 0.05–0.15, near the bow x ≈ −0.39). Under F10 cyan = lights, so the mask lights them by design | `cv_models_logic_smoke` T9 fixture; contact sheet in the CV-1a scratchpad | **kept** — owner's decision 2026-11-11 (§3.2-26): the spots light as small lights, per F10 |
+| **679** | ⚪ | **Removing a ship disposed the SHARED template geometry.** The OFF path's `_removeVesselSprite` calls `geometry.dispose()` on every mesh of a `template.clone()` — the clone shares the template geometry, so every removal frees the GPU buffers of every other ship of that slot and forces a re-upload (the #636 hit-glow churn's twin for models) | `ThreeRenderer._removeVesselSprite` (OFF branch) | CV-1a ✅ under `cvModels` (`disposeShipRig` frees only what the rig owns; keeper R7); OFF until CV-Z |
+| **680** | ⚪ | **`entry.enemyTint` carries two meanings.** It marks cloned materials to dispose AND the CTRL labels read it as "is enemy" (colour, identity fog "?" below `contact`) — a canonical entry written with `enemyTint: false` (disposal handled by the rig) leaked enemy names into the CTRL labels during CV-1a development; fixed before the check by keeping the OFF meaning (keeper R8d2, mutant M21) | `ThreeRenderer.getAllVisibleLabels` (`isEnemy = !!entry.enemyTint || !!vessel?.isEnemy`); `_addVesselModelCv` | CV-Z hygiene — split into `entry.isEnemy` + rig-owned disposal |
+| **681** | ⚪ | **A ship placed while it carries a synthetic order mission faces the star.** The placement heading reads `liveTargetX ?? targetX ?? 0` from `vessel.mission`; `_issueEngage` (M4 P3 hotfix #2) writes a synthetic mission WITHOUT coordinates, so the fallback `(0, 0)` — the system origin, i.e. the star — becomes the heading, and free-floating combat ships are never rotated afterwards. Both paths, before CV-1a too; measured live: in `cvBattle` the player's ships stand bow to the star (cos to the star +1.00), sterns to the enemy when the battle lies beyond the enemy line. Same for any order whose mission has no coordinates when the sprite is (re)built (system switch, `cvModels` toggle) | `ThreeRenderer._addVesselModelCv` / `_addVesselModel3D` (heading at placement); `MovementOrderSystem._issueEngage` (synthetic mission) | **CV-3b** — owner's decision 2026-11-11 (§3.2-27): facing the target supersedes it; unchanged until then |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
