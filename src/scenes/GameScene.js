@@ -138,8 +138,12 @@ import { SHIPS } from '../data/ShipsData.js';
 import { THEME }             from '../config/ThemeConfig.js';
 import { BattleView3D }      from './BattleView3D.js';
 import { showBattleIntro, showBattleOutcome, getBattleViewPreference } from '../ui/BattleIntroModal.js';
-import { clusterBannerStep, clusterPeerIds, clusterRadiusPx } from '../ui/BattleClusterLogic.js';   // ARC CV-3a2 (Finding 638) — jeden baner na klaster
+import { clusterBannerStep, clusterPeerIds, clusterRadiusPx, clusterGraceJoin, clusterBannerDue, clusterGraceMs, CLUSTER_GRACE } from '../ui/BattleClusterLogic.js';   // ARC CV-3a2 (Finding 638) — jeden baner na klaster; #675 — okno łaski
 import { ClusterNarrator, isClusterNarrated, encounterIdOfBattle } from '../ui/CombatNarration.js';   // ARC CV-6b2 (Finding 639) — Dziennik: linia na klaster
+import { ContactBatcher, CONTACT_NARRATION, PROXIMITY_COOLDOWN_YEARS, contactLogEntry } from '../ui/ContactNarration.js';   // #640 — jedna linia kontaktów na zdarzenie
+import { PresentationClock } from '../renderer/combat/PresentationClock.js';   // #640 / #675 — zegar okien ogłoszeń (pauza = pauza; zero importów)
+import { systemIdOf } from '../utils/SystemScope.js';   // #640 — układ kontaktu (klucz partii)
+import { enemyVesselNamed } from '../utils/VesselReveal.js';   // #687 — jedna reguła nazwy obcego statku (jak etykiety CTRL)
 import { StarSystemManager } from '../systems/StarSystemManager.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -601,6 +605,27 @@ export class GameScene {
       // ARC CV-1a — cvModels(1) / cvModels(0) (rama kanoniczna), cvIncoming(1) / cvIncoming(0) (modele z `incoming/`),
       // cvLightTest(1) / cvLightTest(0) (testowy wzór punktów świetlnych), modelInfo() — §4 CV-1a.
       ...cvBattleDebugHelpers({ getRenderer: () => this.threeRenderer, getSaveSystem: () => this.saveSystem }),
+      // #640 / #675 — okna ogłoszeń (bez cudzysłowów; pokrętła na sesję — F5 przywraca wartości domyślne):
+      //   KOSMOS.debug.battleGrace(1.5)   — okno łaski przed banerem i linią bitwy w rundach oglądanego starcia (0 = bez okna,
+      //                                     ogłoszenie od razu — jak przed krokiem); bez argumentu — odczyt (rundy i ms).
+      //   KOSMOS.debug.contactWindow(250) — okno zbierania linii kontaktów w ms czasu prezentacji (0 = linia na klatkę).
+      //   KOSMOS.debug.announceInfo()     — co czeka na ogłoszenie: bitwy (baner, linie), partie kontaktów, okno wykryć.
+      battleGrace: (rounds) => {
+        if (rounds !== undefined) CLUSTER_GRACE.ROUNDS = Math.max(0, Number(rounds) || 0);
+        return { rounds: CLUSTER_GRACE.ROUNDS, ms: this._battleGraceMs() };
+      },
+      contactWindow: (ms) => {
+        if (ms !== undefined) CONTACT_NARRATION.WINDOW_MS = Math.max(0, Number(ms) || 0);
+        return { windowMs: CONTACT_NARRATION.WINDOW_MS, listMax: CONTACT_NARRATION.LIST_MAX };
+      },
+      announceInfo: () => ({
+        nowMs: Math.round(this._announceNowMs()),
+        graceMs: this._battleGraceMs(),
+        bannerGroups: this._battleClusterHold?.length ?? 0,
+        lineGroups: this._clusterNarrator?.holding ?? 0,
+        contactBatches: this._contactBatcher?.size ?? 0,
+        sightingPopupOpen: !!this._sightingPopupOpen,
+      }),
       // KOSMOS.debug.sunInfo()      — stan warstwy Sun 2.0 dla live gate'u (S1).
       // KOSMOS.debug.sunInfo(0.693) — to samo, ale z ZMIERZONĄ średnią mapy emission
       //   klasy M (K 0.782 · G 0.907 · F 1.012), czyli brzegi wygaszania takie, jakich
@@ -2827,44 +2852,43 @@ export class GameScene {
       for (const text of this._clusterNarratorOf().onSkirmish({ empireId, battleId })) this.uiManager?._log?.(text, 'combat');
     });
 
+    // #675 (decyzja właściciela §3.2-25) — starcie zaczęte ze statkami bitwy, która czeka na ogłoszenie (na swoje starcia albo
+    // w oknie łaski): dobicie ostatniego wroga albo ponowne zwarcie uciekiniera (#657) dołącza do tego samego banera i tej samej
+    // linii Dziennika. `vessel:engaged` ma JEDNEGO producenta (`DeepSpaceCombatSystem.startEngagement`).
+    EventBus.on('vessel:engaged', ({ encounterId, sideA, sideB }) => {
+      this._joinBattleGrace({ encounterId, vesselIds: [...(sideA ?? []), ...(sideB ?? [])] });
+    });
+
     // M2b Commit 2 — IntelSystem vessel contact EventLog (lekcja L3 z M2a:
     // UI w tym samym commicie co system emitujący — zapobiega silent skip)
+    // #640 — linie zbierane w partie (układ × poziom wywiadu, okno `CONTACT_NARRATION.WINDOW_MS` czasu prezentacji): jeden statek —
+    // dzisiejsza linia, kilka — jedna linia zbiorcza (`ContactNarration`); wpis pisze `_tickAnnouncements` po oknie.
     EventBus.on('intel:vesselContactChanged', ({ vesselId, oldQuality, newQuality, reason }) => {
-      const evtLog = window.KOSMOS?.eventLogSystem;
-      if (!evtLog) return;
       // Reforma detekcji — loguj WYŁĄCZNIE ujawnienie tożsamości (contact+). Fog-of-war:
       // rumor = anonim „?" (nazwa zakazana; po fixie _isPlayerVessel proximity gracza emituje
       // teraz rumor — bez tej bramki ujawniałby nazwę). Pierwsze wykrycie rumor loguje osobno
       // ObservatorySystem (anonimowo). Skan obserwatorium → NotificationCenter (bogatszy wpis,
-      // unik duplikatu).
-      if (newQuality !== 'contact' && newQuality !== 'detailed') return;
+      // unik duplikatu). #687 — próg z reguły kanonicznej (identyfikacja = reguła pozwala na nazwę).
+      if (!enemyVesselNamed(newQuality)) return;
       if (reason === 'observatory_scan') return;
       const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
-      const label = vessel?.name ?? vesselId;
-      evtLog.push({
-        text:      t('log.el.vesselDetected',
-                     t(newQuality === 'detailed' ? 'intel.levelDetailed' : 'intel.levelContact'), label),
-        channel:   'intel',
-        severity:  'info',
-        entityRef: vesselId,
-      });
+      this._noteContact('identified', { vessel, id: vesselId, sub: newQuality === 'detailed' ? 'detailed' : 'contact', named: true });
     });
 
-    EventBus.on('intel:vesselContactLost', ({ vesselId, lastKnownPosition, reason }) => {
-      const evtLog = window.KOSMOS?.eventLogSystem;
-      if (!evtLog) return;
+    // #687 — nazwa w „Utracono kontakt” wg reguły kanonicznej, z jakości wywiadu W CHWILI UTRATY (`quality` w ładunku — Wywiad zdejmuje
+    // rekord wraku przed zdarzeniem; brak pola — bieżący rekord). Rumor (np. kontakt wygasły po degradacji) — sama pozycja.
+    EventBus.on('intel:vesselContactLost', ({ vesselId, lastKnownPosition, quality }) => {
       const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
-      const label = vessel?.name ?? vesselId;
-      const pos = lastKnownPosition
-        ? `[${Math.round(lastKnownPosition.x)},${Math.round(lastKnownPosition.y)}]`
-        : `[${t('log.el.positionUnknown')}]`;
-      evtLog.push({
-        text:      t('log.el.contactLost', label, pos),
-        channel:   'intel',
-        severity:  'warn',
-        entityRef: vesselId,
-      });
+      const q = quality ?? window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality;
+      this._noteContact('lost', { vessel, id: vesselId, position: lastKnownPosition ?? null, named: enemyVesselNamed(q) });
     });
+
+    // #640 — kontakt sensoryczny (wróg w zasięgu sensorów statku gracza). Do kroku #640 pisał go `UIManager` — linię na PARĘ
+    // (statek gracza × wróg) z przerwą 10 lat na parę: 13 statków gracza × 10 wrogów = 130 linii w jednym tiku. Teraz: wróg raz
+    // na 10 lat (dowolnym statkiem gracza), partia na układ (`_noteProximityContact`). Bramka `m4Notifications` jak dotąd.
+    if (GAME_CONFIG.FEATURES?.m4Notifications) {
+      EventBus.on('vessel:proximityEnter', (e) => this._noteProximityContact(e));
+    }
 
     // M2b Commit 5 — POI lifecycle EventLog (channel 'intel' — POI to lokacje strategiczne).
     // poi:deleted payload zawiera `name` (D1: capture w POIRegistry.deletePOI PRZED mutation
@@ -3034,118 +3058,11 @@ export class GameScene {
       this.uiManager?.addInfo(`🛡 ${name} — ${t('eventChoice.blocked')} [${colonyName}]`);
     });
 
-    // Pierwsze wykrycie wrogiej jednostki — popup DATASHEET z pauzą
-    EventBus.on('vessel:firstSighting', ({ vessel, empireId, empireName, firstContactFlyby }) => {
-      if (!vessel) return;
-      // Decyzja 5 — Director PRZEJMUJE beat dla sondy pierwszego kontaktu. Bez tego gracz
-      // dostawałby DWA popupy o tym samym fakcie: generyczny „wykryto obcy statek" i narracyjny
-      // „Nie jesteśmy sami". Popup narracyjny wystawia `DirectorFirstContact`.
-      if (firstContactFlyby) return;
-      const isPL = getLocale() !== 'en';
-      const mission = vessel.mission;
-      const currentYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-      const home = window.KOSMOS?.homePlanet;
-
-      // Typ kadłuba czytelnie (namePL/nameEN z HullsData, fallback shipId)
-      const hullId = vessel.shipId ?? vessel.hullId ?? '?';
-      const hullDef = HULLS[hullId] ?? null;
-      const hullName = hullDef?.namePL ?? hullDef?.nameEN ?? hullId;
-
-      // Dystans od homePlanet
-      let distAU = null;
-      if (home) {
-        const dx = (home.x ?? 0) - (vessel.position?.x ?? 0);
-        const dy = (home.y ?? 0) - (vessel.position?.y ?? 0);
-        distAU = Math.sqrt(dx * dx + dy * dy) / GAME_CONFIG.AU_TO_PX;
-      }
-
-      // ETA — jeśli statek ma misję attack, wylicz lata do arrivalYear
-      const etaYears = (mission?.arrivalYear != null)
-        ? Math.max(0, mission.arrivalYear - currentYear)
-        : null;
-
-      // Cel misji — nazwa planety docelowej
-      let targetName = null;
-      if (mission?.targetId) {
-        const target = EntityManager.get(mission.targetId);
-        targetName = target?.name ?? mission.targetName ?? mission.targetId;
-      }
-
-      // Fog-of-war tożsamości: detekcja obserwatorium = poziom 'rumor' (pozycja bez tożsamości).
-      // Popup pierwszego wykrycia pokazuje pełne dane (nazwa/imperium/kadłub/misja/ETA) DOPIERO
-      // przy intel ≥ contact (bliskie spotkanie proximity). Inaczej anonimowy alert „niezident.".
-      const intelQ = window.KOSMOS?.intelSystem?.getVesselContact?.(vessel.id)?.quality ?? 'unknown';
-      const identified = (intelQ === 'contact' || intelQ === 'detailed');
-
-      let stats = '';
-      if (identified) {
-        stats += formatStatLine(isPL ? 'Jednostka'  : 'Unit',     vessel.name ?? '?');
-        stats += formatStatLine(isPL ? 'Imperium'   : 'Empire',   empireName ?? '?');
-        stats += formatStatLine(isPL ? 'Kadłub'     : 'Hull',     hullName);
-        if (distAU != null) {
-          stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
-        }
-        if (mission?.type === 'attack') {
-          stats += formatStatLine(isPL ? 'Misja' : 'Mission', isPL ? 'ATAK' : 'ATTACK', 'at-stat-neg');
-          if (targetName) {
-            stats += formatStatLine(isPL ? 'Cel'   : 'Target', targetName);
-          }
-          if (etaYears != null) {
-            stats += formatStatLine(
-              isPL ? 'ETA' : 'ETA',
-              `${etaYears.toFixed(2)} ${isPL ? 'lat' : 'yr'}`,
-              'at-stat-neg'
-            );
-          }
-        } else {
-          stats += formatStatLine(isPL ? 'Stan' : 'State', vessel.position?.state ?? '?');
-        }
-      } else {
-        // Anonimowy: ujawniamy tylko to, co daje radar — pozycję (dystans), bez tożsamości.
-        stats += formatStatLine(isPL ? 'Jednostka' : 'Unit', isPL ? 'Niezidentyfikowana' : 'Unidentified');
-        if (distAU != null) {
-          stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
-        }
-        stats += formatStatLine(isPL ? 'Intel' : 'Intel', isPL ? 'Brak identyfikacji — zbliż statek' : 'No ID — close in to identify');
-      }
-      stats += formatStatLineWithCursor(
-        isPL ? 'ZAGROŻENIE' : 'THREAT',
-        isPL ? 'AKTYWNE'    : 'ACTIVE',
-        'at-stat-neg'
-      );
-
-      // M4 P1 fix — najpierw auto-slow do 1d/s, potem pauza. Po dismiss czas wraca
-      // na 1d/s (nie na poprzedni multiplier, np. 1r/s). _triggerAutoSlow zapamiętuje
-      // multiplier=1 zanim pause go zamrozi → resume kontynuuje na slow.
-      const ts = window.KOSMOS?.timeSystem;
-      if (ts?._triggerAutoSlow) {
-        try { ts._triggerAutoSlow(t('log.autoSlowEnemyDetected')); } catch (e) { /* defensive */ }
-      }
-      EventBus.emit('time:pause');
-      const headline = identified
-        ? (isPL ? '⚔ WYKRYTO WROGĄ JEDNOSTKĘ' : '⚔ ENEMY UNIT DETECTED')
-        : (isPL ? '⚠ NIEZIDENTYFIKOWANY KONTAKT' : '⚠ UNIDENTIFIED CONTACT');
-      const desc = identified
-        ? (isPL
-            ? `Systemy obserwatorium wykryły obcy statek w naszym układzie. Analizuj dane, rozważ odpowiedź.`
-            : `Observatory detected an alien vessel in our system. Analyze intel, consider response.`)
-        : (isPL
-            ? `Obserwatorium wykryło kontakt w naszym układzie — znamy tylko pozycję. Zbliż statek, by zidentyfikować.`
-            : `Observatory detected a contact in our system — position only. Bring a vessel closer to identify.`);
-      const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
-        severity:    'danger',
-        svgKey:      'alert',
-        headline,
-        description: desc,
-        contentHTML: stats,
-        gameYear:    currentYear,
-        buttons: [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }],
-        onDismiss: () => EventBus.emit('time:resume'),
-      });
-      btnElements[0]?.addEventListener('click', () => dismiss());
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
-    });
+    // Pierwsze wykrycie wrogich jednostek — popup DATASHEET z pauzą.
+    // #640 (krok poza CV, COMBAT_VISUALS_PLAN.md §Findings 640) — JEDNO okno na PARTIĘ wykryć (`ObservatorySystem`: jeden tik,
+    //   jeden oglądany układ), pauza raz i wznowienie raz (`_showFirstSightings`). Dotąd okno na KAŻDY statek: 10 na 10
+    //   w zasięgu kolonii = 10 okien z pauzą naraz, a zamknięcie każdego wznawiało grę, choć reszta wisiała otwarta.
+    EventBus.on('vessel:firstSightings', ({ sightings }) => this._showFirstSightings(sightings));
 
     // Powiadomienia o uderzeniach kosmicznych — popup DATASHEET
     EventBus.on('impact:colonyDamage', (data) => {
@@ -3910,6 +3827,9 @@ export class GameScene {
       const deltaMs = now - lastTime;
       lastTime = now;
       this.timeSystem.update(deltaMs);
+      // #640 / #675 — okna ogłoszeń (partie kontaktów, okno łaski wyniku bitwy) na zegarze prezentacji, PO tikach tej klatki:
+      // zdarzenie z tej samej klatki (np. dobicie zaczęte zaraz po końcu klastra) zdąży dołączyć, zanim okno się zamknie.
+      this._tickAnnouncements(now);
       requestAnimationFrame(gameLoop);
     };
     requestAnimationFrame(gameLoop);
@@ -4174,6 +4094,278 @@ export class GameScene {
     // z ładowni albo grupy badawczej, czyli z decyzji gracza.
   }
 
+  // #640 (krok poza CV, COMBAT_VISUALS_PLAN.md §Findings 640) — okno pierwszego wykrycia na PARTIĘ wykryć: jedno okno z pauzą,
+  // pauza raz (przy pierwszym oknie) i wznowienie raz (przy zamknięciu ostatniego). Partia przychodząca, gdy okno już jest
+  // otwarte (gra wznowiona z zewnątrz w trakcie), czeka i wychodzi zaraz po zamknięciu — bez wznowienia pomiędzy oknami.
+  // Partia jednego statku — okno jak dotąd (`_sightingPopupOne`, te same teksty i pola); kilku — lista kontaktów
+  // (`_sightingPopupMany`) z mgłą wojny jak w oknie pojedynczym: nazwa, imperium i kadłub dopiero przy intel ≥ contact.
+  _showFirstSightings(sightings) {
+    // Decyzja 5 — Director PRZEJMUJE beat dla sondy pierwszego kontaktu. Bez tego gracz
+    // dostawałby DWA popupy o tym samym fakcie: generyczny „wykryto obcy statek" i narracyjny
+    // „Nie jesteśmy sami". Popup narracyjny wystawia `DirectorFirstContact`.
+    const list = (sightings ?? []).filter((s) => s?.vessel && !s.firstContactFlyby);
+    if (!list.length) return;
+    if (this._sightingPopupOpen) { (this._sightingQueue ??= []).push(...list); return; }
+    this._sightingPopupOpen = true;
+    if (!this._sightingPaused) {
+      // M4 P1 fix — najpierw auto-slow do 1d/s, potem pauza. Po dismiss czas wraca
+      // na 1d/s (nie na poprzedni multiplier, np. 1r/s). _triggerAutoSlow zapamiętuje
+      // multiplier=1 zanim pause go zamrozi → resume kontynuuje na slow.
+      const ts = window.KOSMOS?.timeSystem;
+      if (ts?._triggerAutoSlow) {
+        try { ts._triggerAutoSlow(t('log.autoSlowEnemyDetected')); } catch (e) { /* defensive */ }
+      }
+      EventBus.emit('time:pause');
+      this._sightingPaused = true;
+    }
+    const cfg = list.length === 1 ? this._sightingPopupOne(list[0]) : this._sightingPopupMany(list);
+    const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
+      severity:    'danger',
+      svgKey:      'alert',
+      headline:    cfg.headline,
+      description: cfg.desc,
+      contentHTML: cfg.stats,
+      gameYear:    window.KOSMOS?.timeSystem?.gameTime ?? 0,
+      buttons: [{ label: cfg.button, primary: true }],
+      onDismiss: () => this._onSightingPopupDismissed(),
+    });
+    btnElements[0]?.addEventListener('click', () => dismiss());
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
+  }
+
+  // #640 — zamknięcie okna wykryć: czekająca partia wychodzi od razu (gra dalej w pauzie), inaczej wznowienie — raz.
+  _onSightingPopupDismissed() {
+    this._sightingPopupOpen = false;
+    const queued = this._sightingQueue ?? [];
+    this._sightingQueue = [];
+    if (queued.length) { this._showFirstSightings(queued); return; }
+    this._sightingPaused = false;
+    EventBus.emit('time:resume');
+  }
+
+  // Okno pierwszego wykrycia JEDNEGO statku — treść jak przed #640 (te same teksty i pola, mgła wojny bez zmian).
+  _sightingPopupOne({ vessel, empireName }) {
+    const isPL = getLocale() !== 'en';
+    const mission = vessel.mission;
+    const currentYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const home = window.KOSMOS?.homePlanet;
+
+    // Typ kadłuba czytelnie (namePL/nameEN z HullsData, fallback shipId)
+    const hullId = vessel.shipId ?? vessel.hullId ?? '?';
+    const hullDef = HULLS[hullId] ?? null;
+    const hullName = hullDef?.namePL ?? hullDef?.nameEN ?? hullId;
+
+    // Dystans od homePlanet
+    let distAU = null;
+    if (home) {
+      const dx = (home.x ?? 0) - (vessel.position?.x ?? 0);
+      const dy = (home.y ?? 0) - (vessel.position?.y ?? 0);
+      distAU = Math.sqrt(dx * dx + dy * dy) / GAME_CONFIG.AU_TO_PX;
+    }
+
+    // ETA — jeśli statek ma misję attack, wylicz lata do arrivalYear
+    const etaYears = (mission?.arrivalYear != null)
+      ? Math.max(0, mission.arrivalYear - currentYear)
+      : null;
+
+    // Cel misji — nazwa planety docelowej
+    let targetName = null;
+    if (mission?.targetId) {
+      const target = EntityManager.get(mission.targetId);
+      targetName = target?.name ?? mission.targetName ?? mission.targetId;
+    }
+
+    // Fog-of-war tożsamości: detekcja obserwatorium = poziom 'rumor' (pozycja bez tożsamości).
+    // Popup pierwszego wykrycia pokazuje pełne dane (nazwa/imperium/kadłub/misja/ETA) DOPIERO
+    // przy intel ≥ contact (bliskie spotkanie proximity). Inaczej anonimowy alert „niezident.".
+    const intelQ = window.KOSMOS?.intelSystem?.getVesselContact?.(vessel.id)?.quality ?? 'unknown';
+    const identified = enemyVesselNamed(intelQ);   // #687 — próg z reguły kanonicznej (ten sam: contact / detailed)
+
+    let stats = '';
+    if (identified) {
+      stats += formatStatLine(isPL ? 'Jednostka'  : 'Unit',     vessel.name ?? '?');
+      stats += formatStatLine(isPL ? 'Imperium'   : 'Empire',   empireName ?? '?');
+      stats += formatStatLine(isPL ? 'Kadłub'     : 'Hull',     hullName);
+      if (distAU != null) {
+        stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
+      }
+      if (mission?.type === 'attack') {
+        stats += formatStatLine(isPL ? 'Misja' : 'Mission', isPL ? 'ATAK' : 'ATTACK', 'at-stat-neg');
+        if (targetName) {
+          stats += formatStatLine(isPL ? 'Cel'   : 'Target', targetName);
+        }
+        if (etaYears != null) {
+          stats += formatStatLine(
+            isPL ? 'ETA' : 'ETA',
+            `${etaYears.toFixed(2)} ${isPL ? 'lat' : 'yr'}`,
+            'at-stat-neg'
+          );
+        }
+      } else {
+        stats += formatStatLine(isPL ? 'Stan' : 'State', vessel.position?.state ?? '?');
+      }
+    } else {
+      // Anonimowy: ujawniamy tylko to, co daje radar — pozycję (dystans), bez tożsamości.
+      stats += formatStatLine(isPL ? 'Jednostka' : 'Unit', isPL ? 'Niezidentyfikowana' : 'Unidentified');
+      if (distAU != null) {
+        stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
+      }
+      stats += formatStatLine(isPL ? 'Intel' : 'Intel', isPL ? 'Brak identyfikacji — zbliż statek' : 'No ID — close in to identify');
+    }
+    stats += formatStatLineWithCursor(
+      isPL ? 'ZAGROŻENIE' : 'THREAT',
+      isPL ? 'AKTYWNE'    : 'ACTIVE',
+      'at-stat-neg'
+    );
+
+    const headline = identified
+      ? (isPL ? '⚔ WYKRYTO WROGĄ JEDNOSTKĘ' : '⚔ ENEMY UNIT DETECTED')
+      : (isPL ? '⚠ NIEZIDENTYFIKOWANY KONTAKT' : '⚠ UNIDENTIFIED CONTACT');
+    const desc = identified
+      ? (isPL
+          ? `Systemy obserwatorium wykryły obcy statek w naszym układzie. Analizuj dane, rozważ odpowiedź.`
+          : `Observatory detected an alien vessel in our system. Analyze intel, consider response.`)
+      : (isPL
+          ? `Obserwatorium wykryło kontakt w naszym układzie — znamy tylko pozycję. Zbliż statek, by zidentyfikować.`
+          : `Observatory detected a contact in our system — position only. Bring a vessel closer to identify.`);
+    return { headline, desc, stats, button: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood' };
+  }
+
+  // #640 — okno pierwszego wykrycia KILKU statków: lista kontaktów (najbliższe domu pierwsze, najwyżej 8, dalej „…i jeszcze N”).
+  // Mgła wojny jak w oknie pojedynczym, statek po statku: zidentyfikowany (intel ≥ contact) — nazwa, kadłub, imperium,
+  // odległość i znacznik ataku; niezidentyfikowany — sama odległość (radar). Nagłówek „wrogie jednostki” tylko, gdy
+  // zidentyfikowane są wszystkie; inaczej „kontakty”. Liczba w nagłówku po dwukropku — bez odmiany liczebnika.
+  _sightingPopupMany(list) {
+    const home = window.KOSMOS?.homePlanet;
+    const intel = window.KOSMOS?.intelSystem;
+    const en = getLocale() === 'en';
+    const rows = list.map((s) => {
+      const v = s.vessel;
+      const q = intel?.getVesselContact?.(v.id)?.quality ?? 'unknown';
+      let distAU = null;
+      if (home) distAU = Math.hypot((home.x ?? 0) - (v.position?.x ?? 0), (home.y ?? 0) - (v.position?.y ?? 0)) / GAME_CONFIG.AU_TO_PX;
+      return { s, v, distAU, identified: enemyVesselNamed(q) };   // #687 — reguła kanoniczna
+    }).sort((a, b) => (a.distAU ?? Infinity) - (b.distAU ?? Infinity));
+    const MAX_ROWS = 8;
+    let stats = '';
+    for (const r of rows.slice(0, MAX_ROWS)) {
+      const dist = r.distAU != null ? `${r.distAU.toFixed(2)} AU` : '?';
+      if (!r.identified) { stats += formatStatLine(t('intel.unidentifiedContact'), dist); continue; }
+      const hullId = r.v.shipId ?? r.v.hullId ?? '?';
+      const hullDef = HULLS[hullId] ?? null;
+      const hullName = (en ? (hullDef?.nameEN ?? hullDef?.namePL) : (hullDef?.namePL ?? hullDef?.nameEN)) ?? hullId;
+      const attack = r.v.mission?.type === 'attack';
+      const parts = [hullName, r.s.empireName ?? '?', dist];
+      if (attack) parts.push(t('sighting.attack'));
+      stats += formatStatLine(r.v.name ?? '?', parts.join(' · '), attack ? 'at-stat-neg' : '');
+    }
+    if (rows.length > MAX_ROWS) stats += formatStatLine('…', t('sighting.more', rows.length - MAX_ROWS));
+    stats += formatStatLineWithCursor(t('sighting.threat'), t('sighting.threatActive'), 'at-stat-neg');
+    const allIdentified = rows.every((r) => r.identified);
+    return {
+      headline: t(allIdentified ? 'sighting.headlineEnemy' : 'sighting.headlineContacts', rows.length),
+      desc:     t(allIdentified ? 'sighting.descEnemy' : 'sighting.descContacts'),
+      stats,
+      button:   t('sighting.understood'),
+    };
+  }
+
+  // #640 / #675 — okna ogłoszeń na zegarze PREZENTACJI (krok klatki czasu realnego, w pauzie stoi, po wznowieniu bez nadrabiania —
+  // ten sam zegar co silnik FX, `PresentationClock`). Raz na klatkę z pętli gry, PO `timeSystem.update`: partie linii kontaktów,
+  // którym minęło okno (#640), i bitwy, którym minęło okno łaski (#675).
+  _tickAnnouncements(realNowMs) {
+    const ts = this.timeSystem ?? window.KOSMOS?.timeSystem;
+    this._announceClock ??= new PresentationClock();
+    this._announceClock.tick(realNowMs, { paused: !!ts?.isPaused || ts?.multiplier === 0 });
+    const nowMs = this._announceClock.nowMs;
+    if (this._contactBatcher?.size) {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      for (const b of this._contactBatcher.due(nowMs, CONTACT_NARRATION.WINDOW_MS)) {
+        const entry = contactLogEntry(b);
+        if (entry) evtLog?.push?.(entry);
+      }
+    }
+    this._releaseBattleGrace(nowMs);
+  }
+
+  /** #640 / #675 — bieżący czas prezentacji okien ogłoszeń [ms] (0 przed pierwszą klatką). */
+  _announceNowMs() {
+    return this._announceClock?.nowMs ?? 0;
+  }
+
+  /** #675 — okno łaski przed ogłoszeniem bitwy [ms czasu prezentacji]: `CLUSTER_GRACE.ROUNDS` × czas realny rundy oglądanego starcia. */
+  _battleGraceMs() {
+    const ts = this.timeSystem ?? window.KOSMOS?.timeSystem;
+    return clusterGraceMs(ts?.combatRoundMs?.() ?? 1000);
+  }
+
+  // #675 — raz na klatkę: bitwy, którym minęło okno łaski bez dołączonego starcia — baner (pod `cvStage`) i linie Dziennika
+  // (pod `cvStrip`). Starcie nieaktywne (np. po wczytaniu zapisu) przestaje wstrzymywać grupę — jej okno zaczyna się teraz.
+  _releaseBattleGrace(nowMs) {
+    if (!this._battleClusterHold?.length && !this._clusterNarrator?.holding) return;   // nic nie czeka — bez pracy na klatkę
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    const isActive = (id) => !!dscs?._activeEncounters?.get?.(id)?.isActive;
+    const graceMs = this._battleGraceMs();
+    if (this._battleClusterHold?.length) {
+      const banners = clusterBannerDue(this._battleClusterHold, { nowMs, graceMs, isActive });
+      for (const b of banners) this._battleQueue.push(b);
+      if (banners.length) this._tryShowNextBattle();
+    }
+    if (this._clusterNarrator?.holding) this._writeNarration(this._clusterNarrator.releaseDue({ nowMs, graceMs, isActive }));
+  }
+
+  // #675 — starcie zaczęte ze statkami bitwy czekającej na ogłoszenie dołącza do niej — w banerze i w narratorze Dziennika.
+  _joinBattleGrace({ encounterId, vesselIds }) {
+    if (!encounterId) return;
+    if (this._battleClusterHold?.length) clusterGraceJoin(this._battleClusterHold, { encounterId, vesselIds });
+    this._clusterNarrator?.onEncounterStarted({ encounterId, vesselIds });
+  }
+
+  // ARC CV-6b2 / #675 — wpisy narratora klastra: linia potyczki (kanał walki, `_log` jak `UIManager`) i linia bitwy.
+  _writeNarration(outs) {
+    for (const o of outs ?? []) {
+      if (o.kind === 'skirmish') this.uiManager?._log?.(o.text, 'combat');
+      else window.KOSMOS?.eventLogSystem?.push?.(o.entry);
+    }
+  }
+
+  // #640 — zdarzenie kontaktu do partii (rodzaj × układ statku × poziom wywiadu); linię pisze `_tickAnnouncements` po oknie.
+  // #687 — `named`: reguła kanoniczna (`enemyVesselNamed`) w chwili zdarzenia; bez niej pozycja anonimowa i bez nazwy (fail-closed).
+  _noteContact(kind, { vessel = null, id, sub = '', position = null, distanceAU = null, named = false } = {}) {
+    if (id == null) return;
+    this._contactBatcher ??= new ContactBatcher();
+    this._contactBatcher.add(kind, {
+      systemId: vessel ? systemIdOf(vessel) : null,
+      sub, id, named, name: named ? (vessel?.name ?? null) : null, distanceAU, position,
+    }, this._announceNowMs());
+  }
+
+  // #640 — kontakt sensoryczny (`vessel:proximityEnter`): para statek gracza × wróg → wróg, raz na `PROXIMITY_COOLDOWN_YEARS`
+  // (dawniej raz na parę — `UIManager`, M4 P1). Strony kanonem statków (`isEnemyVessel`), jak wpis dzwonka o uzbrojonym kontakcie
+  // (`NotificationCenter._handleProximityContact`): dokładnie jedna strona to wróg — para imperium ↔ imperium (obie wrogie) i para
+  // statków gracza nie trafiają do Dziennika gracza. Dawna kopia inline (`!v.ownerEmpireId || …`) poza kanonem — nie przeniesiona.
+  _noteProximityContact({ vesselAId, vesselBId, distanceAU, sameFaction } = {}) {
+    if (sameFaction) return;
+    const vm = window.KOSMOS?.vesselManager;
+    if (!vm) return;
+    const vA = vm.getVessel?.(vesselAId);
+    const vB = vm.getVessel?.(vesselBId);
+    if (!vA || !vB) return;
+    const aEnemy = isEnemyVessel(vA);
+    if (aEnemy === isEnemyVessel(vB)) return;
+    const enemy = aEnemy ? vA : vB;
+    const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    this._lastProximityLog ??= new Map();   // id wroga → rok gry ostatniej linii
+    const last = this._lastProximityLog.get(enemy.id);
+    if (last != null && (now - last) < PROXIMITY_COOLDOWN_YEARS) return;
+    this._lastProximityLog.set(enemy.id, now);
+    // #687 — nazwa wg reguły kanonicznej na wywiadzie o tym wrogu. Wywiad obserwuje tę samą parę wcześniej (subskrybuje w konstruktorze,
+    // przed sceną), więc jakość jest już po tej obserwacji — ta sama, którą w tej chwili pokazuje etykieta CTRL (≥ 0,3 AU — `rumor`).
+    const quality = window.KOSMOS?.intelSystem?.getVesselContact?.(enemy.id)?.quality;
+    this._noteContact('proximity', { vessel: enemy, id: enemy.id, distanceAU: distanceAU ?? 0, named: enemyVesselNamed(quality) });
+  }
+
   // ARC CV-3a2 (Finding 638) — krok banera klastra dla rozstrzygniętego starcia deep-space (`battle:resolved` leci, gdy
   // starcie jest jeszcze aktywne — pozostałe aktywne starcia klastra liczone bez niego). Stan oczekujących grup tylko
   // w pamięci (`_battleClusterHold`) — po wczytaniu zapisu baner oczekującego starcia przepada (prezentacja, nie stan gry).
@@ -4186,7 +4378,9 @@ export class GameScene {
     const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX) });
     const isActive = (id) => id !== encId && !!dscs?._activeEncounters?.get?.(id)?.isActive;
     this._battleClusterHold ??= [];
-    return clusterBannerStep(this._battleClusterHold, { encounterId: encId, battleData, peerIds, isActive });
+    // #675 — gotowy klaster czeka jeszcze okno łaski (baner wychodzi z `_releaseBattleGrace`; dobicie w oknie dołącza).
+    return clusterBannerStep(this._battleClusterHold, { encounterId: encId, battleData, peerIds, isActive,
+      nowMs: this._announceNowMs(), graceMs: this._battleGraceMs() });
   }
 
   // Wpis Dziennika dla bitwy (`battle:resolved`): `{ text, channel, severity, entityRef }` albo null (bitwa bez linii). Ciało
@@ -4288,10 +4482,9 @@ export class GameScene {
     const getPos = (id) => vm?.getVessel?.(id)?.position ?? null;
     const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX) });
     const isActive = (id) => id !== encId && !!dscs?._activeEncounters?.get?.(id)?.isActive;
-    for (const o of this._clusterNarratorOf().onBattleResolved({ battleId, result, peerIds, isActive })) {
-      if (o.kind === 'skirmish') this.uiManager?._log?.(o.text, 'combat');
-      else K?.eventLogSystem?.push?.(o.entry);
-    }
+    // #675 — jak baner: gotowa grupa czeka okno łaski (linie wychodzą z `_releaseBattleGrace`).
+    this._writeNarration(this._clusterNarratorOf().onBattleResolved({ battleId, result, peerIds, isActive,
+      nowMs: this._announceNowMs(), graceMs: this._battleGraceMs() }));
   }
 
   // ── Faza 5: pipeline BattleView3D ──────────────────────────

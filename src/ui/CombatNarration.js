@@ -10,10 +10,14 @@
 // linii potyczki bez zmian (starcie bez wojny — napięcie rośnie, wyczerpanie bez zmian); mechanika potyczki (`WarSystem` —
 // napięcie i pamięć NA STARCIE) nietknięta.
 //
+// #675 (krok poza CV, decyzja właściciela §3.2-25) — okno łaski: linie bitwy i potyczki czekają półtorej rundy po ostatnim
+// `battle:resolved` klastra, a starcie zaczęte w tym oknie ze statkami tej bitwy (dobicie, ponowne zwarcie uciekiniera — #657)
+// dołącza do tej samej linii (`onEncounterStarted`, `releaseDue`) — jeden komunikat na zdarzenie.
+//
 // Treść linii zostaje u dotychczasowych autorów: linię bitwy buduje `GameScene._battleLogEntry` (jedyny producent `log.battleLine`),
 // linię potyczki — `UIManager.skirmishLineText`; narrator dostaje je jako funkcje i decyduje wyłącznie KIEDY i ILE razy.
 // Czysty (bez DOM i bez `window`) — wykonuje się pod node (keeper `cv_strip_smoke`).
-import { clusterGroupStep, mergeClusterBattles } from './BattleClusterLogic.js';
+import { clusterGroupStep, clusterGraceJoin, clusterGraceDue, mergeClusterBattles } from './BattleClusterLogic.js';
 import { resolveBattleSides } from '../utils/BattleSides.js';
 
 const DONE_CAP = 400;      // pamięć rozstrzygniętych bitew (spóźniona potyczka) — najstarsze wypadają
@@ -68,14 +72,39 @@ export class ClusterNarrator {
 
   /**
    * `battle:resolved` bitwy narratora. Grupa klastra trwa (inne starcie w tym samym miejscu jeszcze aktywne) — nic; grupa
-   * gotowa — linie potyczki (jedna na imperium) i JEDNA linia bitwy z wynikiem scalonym.
-   * @param {{ battleId:string, result:object, peerIds?:string[], isActive?:(encounterId:string)=>boolean }} p
+   * gotowa — linie potyczki (jedna na imperium) i JEDNA linia bitwy z wynikiem scalonym. #675 — przy `graceMs` > 0 gotowa
+   * grupa czeka jeszcze okno łaski (wychodzi z `releaseDue`; dobicie w oknie dołącza — `onEncounterStarted`).
+   * @param {{ battleId:string, result:object, peerIds?:string[], isActive?:(encounterId:string)=>boolean, nowMs?:number, graceMs?:number }} p
    * @returns {Array<{kind:'skirmish', text:string, empireId:string} | {kind:'battle', entry:object, size:number}>}
    */
-  onBattleResolved({ battleId, result, peerIds = [], isActive = () => false }) {
+  onBattleResolved({ battleId, result, peerIds = [], isActive = () => false, nowMs = 0, graceMs = 0 }) {
     if (!result) return [];
     const item = { battleId, result, playerSide: resolveBattleSides(result).playerSide ?? null };
-    const groups = clusterGroupStep(this._hold, { encounterId: encounterIdOfBattle(battleId), item, peerIds, isActive });
+    const groups = clusterGroupStep(this._hold, { encounterId: encounterIdOfBattle(battleId), item, peerIds, isActive, nowMs, graceMs });
+    return this._narrateGroups(groups);
+  }
+
+  /**
+   * #675 — starcie zaczęte (`vessel:engaged`) ze statkami bitwy, która czeka na ogłoszenie: dołącza do niej (`clusterGraceJoin`).
+   * @param {{ encounterId:string, vesselIds:string[] }} p
+   * @returns {number} ile grup dołączyło starcie
+   */
+  onEncounterStarted({ encounterId, vesselIds = [] }) {
+    return clusterGraceJoin(this._hold, { encounterId, vesselIds });
+  }
+
+  /**
+   * #675 — raz na klatkę (zegar prezentacji): grupy, którym minęło okno łaski, wychodzą — linie jak w `onBattleResolved`.
+   * @param {{ nowMs:number, graceMs:number, isActive?:(encounterId:string)=>boolean }} p
+   */
+  releaseDue({ nowMs = 0, graceMs = 0, isActive = () => false } = {}) {
+    return this._narrateGroups(clusterGraceDue(this._hold, { nowMs, graceMs, isActive }));
+  }
+
+  /** Czy jakaś bitwa czeka na ogłoszenie (diagnostyka i keeper). */
+  get holding() { return this._hold.length; }
+
+  _narrateGroups(groups) {
     const out = [];
     for (const items of groups) {
       const rec = { empires: new Set() };

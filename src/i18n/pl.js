@@ -3334,6 +3334,11 @@ export default {
   'log.m4.enemyFleetMoving':       'Wykryto ruch obcej floty (Imperium {0}, ETA {1} lat)',
   'log.m4.enemyFleetArrival':      'OBCA FLOTA materializuje się przy domu! Imperium {0}, {1} statków',
   'log.m4.proximityContact':       'Kontakt sensoryczny: wrogi statek "{0}" ({1} AU)',
+  // #640 — jedna linia na partię kontaktów w układzie: {0} — liczba statków, {1} — lista nazw („A, B, C +N”)
+  'log.m4.proximityContacts':      'Kontakt sensoryczny: wrogie statki ({0}): {1}',
+  // #687 — mgła wojny: statek poniżej progu nazwy (`VesselReveal.enemyVesselNamed`) — bez nazwy; {0} — odległość / liczba
+  'log.m4.proximityContactAnon':   'Kontakt sensoryczny: niezidentyfikowany wrogi statek ({0} AU)',
+  'log.m4.proximityContactsAnon':  'Kontakt sensoryczny: niezidentyfikowane wrogie statki ({0})',
   'log.m4.battleResolvedVictory':  'Zwycięstwo w bitwie {0} — strona przeciwna pokonana',
   'log.m4.battleResolvedDefeat':   'Porażka w bitwie {0} — nasze siły rozbite',
   'log.m4.battleResolvedDraw':     'Bitwa {0} zakończona remisem',
@@ -3357,6 +3362,18 @@ export default {
   // M4 P1.5 — first sighting + weapons warning
   'log.m4.firstSighting':          'Pierwsze wykrycie statku obcego: "{0}" (Imperium {1})',
   'log.unidentifiedContact':       '🔭 Wykryto niezidentyfikowany kontakt w układzie.',
+  // #640 — partia wykryć obserwatorium (jeden tik, jeden układ): {0} — liczba kontaktów
+  'log.unidentifiedContacts':      '🔭 Wykryto niezidentyfikowane kontakty w układzie: {0}.',
+  // #640 — jedno okno pierwszego wykrycia na partię (kilka statków): nagłówek z liczbą po dwukropku (bez odmiany liczebnika)
+  'sighting.headlineEnemy':        '⚔ WYKRYTO WROGIE JEDNOSTKI: {0}',
+  'sighting.headlineContacts':     '⚠ KONTAKTY W UKŁADZIE: {0}',
+  'sighting.descEnemy':            'Systemy obserwatorium wykryły obce statki w naszym układzie. Analizuj dane, rozważ odpowiedź.',
+  'sighting.descContacts':         'Obserwatorium wykryło kontakty w naszym układzie — niezidentyfikowane znamy tylko z pozycji. Zbliż statek, by zidentyfikować.',
+  'sighting.more':                 'i jeszcze {0}',
+  'sighting.attack':               'ATAK',
+  'sighting.threat':               'ZAGROŻENIE',
+  'sighting.threatActive':         'AKTYWNE',
+  'sighting.understood':           '[ENTER] Rozumiem',
   'director.unknownEmpire':        'nieznane imperium',
   'director.flybyProbeName':       'sonda badawcza',
   'director.firstContactBar':      'PIERWSZY KONTAKT',
@@ -3756,6 +3773,13 @@ export default {
   // `check-i18n` ich nie widzial, bo pyta o klucze w `t()`, a nie o napisy w `push({text})`.
   'log.el.vesselDetected':       "🔭 Wykryto obcy statek ({0}): {1}",
   'log.el.contactLost':          "🔭 Utracono kontakt z {0} — ostatnia pozycja {1}",
+  // #640 — jedna linia na partię (układ × poziom wywiadu / układ): {0}/{1} — poziom i liczba albo liczba, dalej lista nazw
+  'log.el.vesselsDetected':      "🔭 Wykryto obce statki ({0}, {1}): {2}",
+  'log.el.contactsLost':         "🔭 Utracono kontakt ({0}): {1}",
+  // #687 — mgła wojny: statek poniżej progu nazwy — {0}: ostatnia pozycja / liczba; ogon listy mieszanej („A, B; niezidentyfikowane: 3”)
+  'log.el.contactLostAnon':      "🔭 Utracono kontakt z niezidentyfikowanym statkiem — ostatnia pozycja {0}",
+  'log.el.contactsLostAnon':     "🔭 Utracono kontakt z niezidentyfikowanymi statkami ({0})",
+  'log.el.unidentifiedCount':    "niezidentyfikowane: {0}",
   'log.el.positionUnknown':      "nieznana",
   'log.el.poiCreated':           "📍 Utworzono POI ({0}): „{1}\"",
   'log.el.poiDeleted':           "📍 Usunięto POI: „{0}\"",

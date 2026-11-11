@@ -15,6 +15,11 @@
 //      prawdziwe metody `GameScene` (`_narrateBattleCluster`, `_clusterNarratorOf`, `_battleLogEntry`) i `UIManager.skirmishLineText`
 //      wycięte ze źródła; wynik scalony jak baner (straty sumą, tury maks.); KONTROLA: bez flagi — linia na starcie (4 + 4);
 //      świadek: DSCS ogłosił 4 bitwy, `WarSystem` 4 potyczki
+//      ⚠ PRZECELOWANE ŚWIADOMIE (#675, krok poza CV, decyzja właściciela §3.2-25): ogłoszenie czeka okno łaski, a dobicie zaczęte
+//      w nim ze statkami tej bitwy dołącza do tej samej linii i banera — uprząż tyka okna jak pętla gry (`_tickAnnouncements`
+//      po `timeSystem.update`) i podpina `vessel:engaged` → `_joinBattleGrace`; niezależna definicja bitwy (P4a) łączy starcia
+//      nakładające się w czasie ORAZ starcie zaczęte w oknie łaski po końcu starcia, z którym dzieli statek (dawniej: dobicie
+//      = druga bitwa — split 4v4 dawał 2 linie i 2 banery). P4i: z oknem — jedna bitwa; KONTROLA w P4i: okno 0 — po dwie
 //   P5 ☰ „Auto-fokus bitwy” (#630): przełącznik w uiPrefs, wiersz menu z i18n, zapis i wczytanie (kształt `SaveSystem` /
 //      `GameScene`) — stan przeżywa; `combatFxVisible` bez czytelnika w kodzie (KONTROLA: komentarz o wycofaniu jest)
 //   P6 flaga OFF = dzisiejsza karta: `combatHud.getPanelRect` / `isMinimized` bez flagi jak dotąd, z flagą — pasek; UIManager
@@ -53,6 +58,8 @@ import { normalize as normalizeBattleLocation, isDeepSpace as isDeepSpaceBattle 
 import { resolveBattleSides, battleWinnerName } from '../../utils/BattleSides.js';
 import { systemDisplayName }     from '../../ui/MapLabelLogic.js';
 import { clusterPeerIds, clusterRadiusPx, clusterBannerStep } from '../../ui/BattleClusterLogic.js';
+import * as BCX                  from '../../ui/BattleClusterLogic.js';   // #675 — okno łaski (nowe eksporty: przestrzeń nazw — fail-first bez błędu linkowania)
+import { PresentationClock }     from '../../renderer/combat/PresentationClock.js';   // #675 — zegar okien ogłoszeń w `_tickAnnouncements`
 import { CombatHUD }             from '../../ui/CombatHUD.js';
 import { BottomBar }             from '../../ui/BottomBar.js';
 
@@ -61,6 +68,7 @@ const SL = await tryImport('../../ui/CombatStripLogic.js');
 const SR = await tryImport('../../ui/CombatStrip.js');
 const NR = await tryImport('../../ui/CombatNarration.js');
 const STAGER = await tryImport('../../debug/CvBattleStager.js');
+const CNX = await tryImport('../../ui/ContactNarration.js');   // #640 — zakres `_tickAnnouncements` (partie kontaktów)
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -210,7 +218,8 @@ function world() {
   EventBus.on('camera:watchBattle', (p) => out.watch.push(p));
 }
 const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, getSaveSystem: () => saveSys }) ?? null;
-const frame = (ms) => { clock.now += ms; ts.update(ms); };
+let onFrame = null;   // #675 — zaczep klatki: okna ogłoszeń (`GameScene._tickAnnouncements`) jak w pętli gry
+const frame = (ms) => { clock.now += ms; ts.update(ms); onFrame?.(clock.now); };
 const vessel = (id) => vm?.getVessel?.(id) ?? null;
 const env = () => ({ getPos: (id) => vessel(id)?.position ?? null, radius: clusterRadiusPx(AU), activeSystemId: SYS,
   quality: (id) => window.KOSMOS.intelSystem.getVesselContact(id).quality,
@@ -298,16 +307,23 @@ block('P3 — „Obserwuj”: ładunek paska == ładunek karty pod `cvStage` (pr
 // Prawdziwe metody `GameScene` / `UIManager` ze źródła; słuchacze — jak w `GameScene` (routing pinowany źródłem w P8).
 const gsScope = { window: globalThis.window, GAME_CONFIG, t, EntityManager, normalizeBattleLocation, isDeepSpaceBattle, systemDisplayName,
   resolveBattleSides, battleWinnerName, ClusterNarrator: NR?.ClusterNarrator, encounterIdOfBattle: NR?.encounterIdOfBattle, clusterPeerIds, clusterRadiusPx,
-  clusterBannerStep };
-function runNarration(flagOn) {
+  clusterBannerStep, clusterGraceJoin: BCX.clusterGraceJoin, clusterBannerDue: BCX.clusterBannerDue, clusterGraceMs: BCX.clusterGraceMs,
+  PresentationClock, ContactBatcher: CNX?.ContactBatcher, CONTACT_NARRATION: CNX?.CONTACT_NARRATION, contactLogEntry: CNX?.contactLogEntry };
+function runNarration(flagOn, { graceRounds = null } = {}) {
   reseed('cv6b2-strip'); world();
   F.cvStrip = flagOn;
+  const keepGrace = BCX.CLUSTER_GRACE?.ROUNDS;
+  if (graceRounds != null && BCX.CLUSTER_GRACE) BCX.CLUSTER_GRACE.ROUNDS = graceRounds;
   const scope = { ...gsScope, window: globalThis.window };
-  const gs = { starSystemManager: { getAllSystems: () => [] } };
+  const gs = { starSystemManager: { getAllSystems: () => [] }, timeSystem: ts, _battleQueue: [] };
   gs._battleLogEntry = compile(GS, '_battleLogEntry', scope);
   gs._clusterNarratorOf = compile(GS, '_clusterNarratorOf', scope);
   gs._narrateBattleCluster = compile(GS, '_narrateBattleCluster', scope);
   gs._clusterBattleBanners = compile(GS, '_clusterBattleBanners', scope);   // baner gry (CV-3a2) — ten sam strumień
+  // #675 — okno łaski: te same metody co gra (zegar prezentacji, wyjście po oknie, dołączenie dobicia, wpisy narratora)
+  for (const m of ['_tickAnnouncements', '_announceNowMs', '_battleGraceMs', '_releaseBattleGrace', '_joinBattleGrace', '_writeNarration']) {
+    gs[m] = compile(GS, m, scope);
+  }
   const ui = { lines: [] };
   ui.skirmishLineText = compile(UI, 'skirmishLineText', { window: globalThis.window, t });
   ui._log = (text, type) => out.legacy.push({ text, type });
@@ -327,6 +343,8 @@ function runNarration(flagOn) {
     for (const text of gs._clusterNarratorOf().onSkirmish({ empireId, battleId })) ui._log(text, 'combat');
   });
   const results = [], banners = [], spans = new Map();
+  // baner gry: wynik gotowy od razu (okno łaski 0) albo po oknie (`_releaseBattleGrace` → kolejka → `_tryShowNextBattle`)
+  gs._tryShowNextBattle = function () { while (this._battleQueue.length) banners.push(this._battleQueue.shift()); };
   EventBus.on('battle:resolved', ({ battleId, result }) => {
     if (!String(battleId).startsWith('battle_ds_')) return;
     results.push({ battleId, ...result });
@@ -334,29 +352,42 @@ function runNarration(flagOn) {
     const sp = spans.get(String(battleId).replace(/^battle_ds_/, 'encounter_')); if (sp) sp.end = clock.now;
     banners.push(...(gs._clusterBattleBanners?.({ battleId, result }) ?? []));
   });
-  EventBus.on('vessel:engaged', ({ encounterId }) => { if (encounterId && !spans.has(encounterId)) spans.set(encounterId, { start: clock.now, end: Infinity }); });
+  EventBus.on('vessel:engaged', ({ encounterId, sideA, sideB }) => {
+    if (encounterId && !spans.has(encounterId)) spans.set(encounterId, { start: clock.now, end: Infinity, ships: [...(sideA ?? []), ...(sideB ?? [])] });
+  });
+  // słuchacz dołączenia `GameScene` (#675; routing pinowany źródłem w `announce_once_smoke` G6b)
+  EventBus.on('vessel:engaged', ({ encounterId, sideA, sideB }) => gs._joinBattleGrace?.({ encounterId, vesselIds: [...(sideA ?? []), ...(sideB ?? [])] }));
+  onFrame = (now) => gs._tickAnnouncements?.(now);
   const st = helpers()?.cvBattle({ seed: 1, nA: 4, nB: 4, split: true });
   ts.play();
   // Bez starcia (np. świat niekompletny) — bez pętli: suita ma się skończyć i pokazać czerwone piny, nie wisieć.
   if (dscs.listActive().length) for (let n = 0; n < 60000; n++) { frame(16); if (!dscs.listActive().length) break; }
+  // #675 — ogłoszenie czeka okno łaski: dalsze klatki, aż banery i linie wyjdą (najwyżej 10 s czasu gry)
+  for (let n = 0; n < 625 && ((gs._battleClusterHold?.length ?? 0) || (gs._clusterNarrator?.holding ?? 0)); n++) frame(16);
+  const graceMs = gs._battleGraceMs?.() ?? 0;
+  onFrame = null;
   ts.pause();
   F.cvStrip = true;
+  if (BCX.CLUSTER_GRACE) BCX.CLUSTER_GRACE.ROUNDS = keepGrace;
   const battleLines = out.log.filter((e) => /^⚔ Bitwa/.test(e.text));
   const skLines = out.legacy.filter((e) => /^⚔ Potyczka/.test(e.text));
-  // Bitwy NIEZALEŻNIE od narratora: starcia, których okresy aktywności się nakładają (koniec wyłącznie — dobicie zaczęte w chwili
-  // końca poprzedniego starcia to już następna bitwa), łączone przechodnio; wszystkie w jednym miejscu (szyk stagera).
+  // Bitwy NIEZALEŻNIE od narratora: starcia, których okresy aktywności się nakładają (koniec wyłącznie), ORAZ — od #675 — starcie
+  // zaczęte w oknie łaski po końcu starcia, z którym dzieli statek (dobicie należy do tej samej bitwy); łączone przechodnio;
+  // wszystkie w jednym miejscu (szyk stagera). Okno łaski 0 — dobicie zaczęte w chwili końca poprzedniego starcia to następna bitwa.
   const ids = [...spans.keys()].sort();
   const par = new Map(ids.map((i) => [i, i]));
   const root = (i) => { while (par.get(i) !== i) i = par.get(i); return i; };
+  const sharesShip = (A, B) => A.ships.some((x) => B.ships.includes(x));
+  const graceJoin = (A, B) => graceMs > 0 && Number.isFinite(A.end) && B.start >= A.end && B.start - A.end <= graceMs && sharesShip(A, B);
   for (const a of ids) for (const b of ids) {
     if (a >= b) continue;
     const A = spans.get(a), B = spans.get(b);
-    if (A.start < B.end && B.start < A.end) par.set(root(b), root(a));
+    if ((A.start < B.end && B.start < A.end) || graceJoin(A, B) || graceJoin(B, A)) par.set(root(b), root(a));
   }
   const groups = new Map();
   for (const i of ids) { const r = root(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
   return { st, battleLines, skLines, results, banners, groups: [...groups.values()], battles: [...out.battles], skirmishes: [...out.skirmishes],
-    legacy: [...out.legacy], log: [...out.log] };
+    legacy: [...out.legacy], log: [...out.log], graceMs };
 }
 
 block('P4 — Dziennik (#639): split 4v4 — JEDNA linia bitwy i JEDNA linia potyczki na bitwę (klaster); bez flagi — linia na starcie', () => {
@@ -387,6 +418,13 @@ block('P4 — Dziennik (#639): split 4v4 — JEDNA linia bitwy i JEDNA linia pot
   if (JSON.stringify(sig(OFF)) !== JSON.stringify(sig(ON))) { console.log('     ON ', JSON.stringify(sig(ON))); console.log('     OFF', JSON.stringify(sig(OFF))); }
   assert(JSON.stringify(sig(OFF)) === JSON.stringify(sig(ON)),
     'P4f wyniki starć z flagą i bez — identyczne (narrator nie dotyka walki)');
+  // #675 — pin naprawy: z oknem łaski dobicie dołącza (jedna bitwa); KONTROLA w środku: okno 0 (zachowanie sprzed kroku) — druga bitwa
+  const fl0 = F.cvStrip;
+  const G0 = runNarration(true, { graceRounds: 0 });
+  F.cvStrip = fl0;
+  assert(ON.graceMs > 0 && nBat === 1 && ON.battleLines.length === 1 && G0.graceMs === 0 && G0.groups.length === 2
+    && G0.battleLines.length === 2 && G0.skLines.length === 2 && G0.banners.length === 2,
+    `P4i #675 dobicie w oknie łaski (${ON.graceMs} ms) — ${nBat} bitwa, ${ON.battleLines.length} linia; KONTROLA okno 0 — ${G0.groups.length} bitwy, ${G0.battleLines.length} linie bitwy, ${G0.skLines.length} potyczki, ${G0.banners.length} banery`);
 });
 
 block('P4g — spóźniona potyczka (po opowiedzianej grupie): jedna linia, druga nigdy; potyczka czekająca — z linią grupy', () => {

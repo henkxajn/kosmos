@@ -3331,6 +3331,11 @@ export default {
   'log.m4.enemyFleetMoving':       'Alien fleet movement detected (Empire {0}, ETA {1} yrs)',
   'log.m4.enemyFleetArrival':      'ALIEN FLEET materializing at home! Empire {0}, {1} vessels',
   'log.m4.proximityContact':       'Sensor contact: hostile vessel "{0}" ({1} AU)',
+  // #640 — one line per batch of contacts in a system: {0} — number of vessels, {1} — name list ("A, B, C +N")
+  'log.m4.proximityContacts':      'Sensor contact: hostile vessels ({0}): {1}',
+  // #687 — fog of war: vessel below the naming threshold (`VesselReveal.enemyVesselNamed`) — no name; {0} — distance / count
+  'log.m4.proximityContactAnon':   'Sensor contact: unidentified hostile vessel ({0} AU)',
+  'log.m4.proximityContactsAnon':  'Sensor contact: unidentified hostile vessels ({0})',
   'log.m4.battleResolvedVictory':  'Victory in battle {0} — enemy defeated',
   'log.m4.battleResolvedDefeat':   'Defeat in battle {0} — our forces destroyed',
   'log.m4.battleResolvedDraw':     'Battle {0} ended in draw',
@@ -3354,6 +3359,18 @@ export default {
   // M4 P1.5 — first sighting + weapons warning
   'log.m4.firstSighting':          'First sighting of alien vessel: "{0}" (Empire {1})',
   'log.unidentifiedContact':       '🔭 Unidentified contact detected in the system.',
+  // #640 — observatory batch (one tick, one system): {0} — number of contacts
+  'log.unidentifiedContacts':      '🔭 Unidentified contacts detected in the system: {0}.',
+  // #640 — one first-sighting window per batch (several vessels): the count after a colon
+  'sighting.headlineEnemy':        '⚔ ENEMY UNITS DETECTED: {0}',
+  'sighting.headlineContacts':     '⚠ CONTACTS IN THE SYSTEM: {0}',
+  'sighting.descEnemy':            'Observatory detected alien vessels in our system. Analyze intel, consider response.',
+  'sighting.descContacts':         'Observatory detected contacts in our system — the unidentified ones by position only. Bring a vessel closer to identify.',
+  'sighting.more':                 'and {0} more',
+  'sighting.attack':               'ATTACK',
+  'sighting.threat':               'THREAT',
+  'sighting.threatActive':         'ACTIVE',
+  'sighting.understood':           '[ENTER] Understood',
   'director.unknownEmpire':        'an unknown empire',
   'director.flybyProbeName':       'science probe',
   'director.firstContactBar':      'FIRST CONTACT',
@@ -3751,6 +3768,13 @@ export default {
   // ── Journal entries that were HARDCODED IN POLISH until the 2026-08-27 audit (Finding 170) ──
   'log.el.vesselDetected':       "🔭 Alien vessel detected ({0}): {1}",
   'log.el.contactLost':          "🔭 Lost contact with {0} — last position {1}",
+  // #640 — one line per batch (system × intel level / system): {0}/{1} — level and count or count, then the name list
+  'log.el.vesselsDetected':      "🔭 Alien vessels detected ({0}, {1}): {2}",
+  'log.el.contactsLost':         "🔭 Lost contact ({0}): {1}",
+  // #687 — fog of war: vessel below the naming threshold — {0}: last position / count; tail of a mixed list ("A, B; unidentified: 3")
+  'log.el.contactLostAnon':      "🔭 Lost contact with an unidentified vessel — last position {0}",
+  'log.el.contactsLostAnon':     "🔭 Lost contact with unidentified vessels ({0})",
+  'log.el.unidentifiedCount':    "unidentified: {0}",
   'log.el.positionUnknown':      "unknown",
   'log.el.poiCreated':           "📍 POI created ({0}): \"{1}\"",
   'log.el.poiDeleted':           "📍 POI deleted: \"{0}\"",

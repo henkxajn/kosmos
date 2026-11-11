@@ -477,9 +477,12 @@ export class IntelSystem {
     const copy = { ...vessels };
     delete copy[vesselId];
     gameState.set('intel.vessels', copy, 'vessel_wrecked');
+    // #687 — `quality`: jakość wywiadu w chwili utraty (rekord zdjęty PRZED zdarzeniem) — z niej linia „Utracono kontakt” pyta
+    // regułę nazwy (`VesselReveal.enemyVesselNamed`); bez tego wrak wroga, którego gracz znał z nazwy, wyszedłby anonimowo
     EventBus.emit('intel:vesselContactLost', {
       vesselId,
       lastKnownPosition: rec.positionLastKnown,
+      quality: rec.quality,
       reason: 'wrecked',
     });
   }
@@ -506,6 +509,7 @@ export class IntelSystem {
         EventBus.emit('intel:vesselContactLost', {
           vesselId: id,
           lastKnownPosition: rec.positionLastKnown,
+          quality: rec.quality,   // #687 — jakość w chwili utraty (zwykle już `rumor` po degradacji)
           reason: 'timeout',
         });
         continue;

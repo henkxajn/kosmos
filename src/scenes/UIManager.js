@@ -1708,41 +1708,19 @@ export class UIManager {
   /**
    * M4 P1 — subskrypcje UI dla eventów combat/fleet/diplomacy/drift.
    * Gated przez FEATURES.m4Notifications (rollback toggle).
-   * Anti-spam: proximityEnter używa _lastProximityLog Map z 10-year cooldown per parę.
+   * #640 — linia „Kontakt sensoryczny” (`vessel:proximityEnter`) przeszła do `GameScene._noteProximityContact` (jedna linia
+   * zbiorcza na partię kontaktów w układzie, wróg raz na 10 lat — dawniej tu: linia na PARĘ statek gracza × wróg).
    */
   _subscribeM4Notifications() {
     if (!GAME_CONFIG?.FEATURES?.m4Notifications) return;
 
-    this._lastProximityLog = new Map();   // pairKey → gameYear
-    this._PROXIMITY_LOG_COOLDOWN_YEARS = 10;
-
     // ⚠ W3-8 — TU BYŁY NASŁUCHY `empire:fleetMoved` i `empire:fleetMaterialized`.
     // Oba zdarzenia straciły producentów razem z warstwą abstrakcyjnej floty; ruch wrogich
-    // sił widać dziś po PRAWDZIWYCH kadłubach (kontakt sensorowy niżej + `invasion:*`).
+    // sił widać dziś po PRAWDZIWYCH kadłubach (kontakt sensorowy — `GameScene._noteProximityContact` — + `invasion:*`).
 
-    // Sensor proximity contact (wróg <0.5 AU od naszego statku).
-    // Anti-spam: cooldown per para 10 game-years.
-    EventBus.on('vessel:proximityEnter', ({ vesselAId, vesselBId, distanceAU, sameFaction }) => {
-      if (sameFaction) return;
-      const vm = window.KOSMOS?.vesselManager;
-      if (!vm) return;
-      const vA = vm.getVessel?.(vesselAId);
-      const vB = vm.getVessel?.(vesselBId);
-      if (!vA || !vB) return;
-      // Tylko gdy jedna ze stron to player vessel (nie loguj kontaktów empire↔empire).
-      const isPlayerA = !vA.ownerEmpireId || vA.ownerEmpireId === 'player';
-      const isPlayerB = !vB.ownerEmpireId || vB.ownerEmpireId === 'player';
-      if (!isPlayerA && !isPlayerB) return;
-      const enemy = isPlayerA ? vB : vA;
-      const pairKey = vesselAId < vesselBId ? `${vesselAId}|${vesselBId}` : `${vesselBId}|${vesselAId}`;
-      const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-      const last = this._lastProximityLog.get(pairKey);
-      if (last != null && (now - last) < this._PROXIMITY_LOG_COOLDOWN_YEARS) return;
-      this._lastProximityLog.set(pairKey, now);
-      this._log(t('log.m4.proximityContact',
-        enemy.name ?? enemy.id ?? '?',
-        (distanceAU ?? 0).toFixed(2)), 'intel');
-    });
+    // ⚠ #640 — TU BYŁ NASŁUCH „Sensor proximity contact” (`vessel:proximityEnter`) → „Kontakt sensoryczny: wrogi statek X (d AU)” na KAŻDĄ parę statek
+    // gracza × wróg (przerwa 10 lat na parę): 13 statków gracza × 10 wrogów = 130 linii w jednym tiku, ~600 wpisów w 4 bitwach
+    // przy buforze Dziennika 500. Linię pisze teraz `GameScene` (partia na układ, wróg raz na 10 lat, ta sama bramka flagi).
 
     // Bitwa rozpoczęta (DSCS) — auto-slow + log. Daje graczowi czas zobaczyć
     // CombatHUD i HP bary (hotfix M4 P3: combat per-tick lecial za szybko).

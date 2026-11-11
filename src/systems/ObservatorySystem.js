@@ -573,8 +573,9 @@ export class ObservatorySystem {
   //   się dopiero z alarmu desantu (M6). Para (statek, kolonia) liczona WYŁĄCZNIE w jednym układzie — współrzędne są
   //   lokalne dla układu (gwiazda każdego w (0,0)). Koszt na tik: jeden przebieg po statkach + odległość do kolonii gracza
   //   TEGO układu; zasięg kolonii liczony raz na tik (dawniej raz na parę statek–kolonia).
-  // ⚠ OKNO PIERWSZEGO WYKRYCIA (wpis Dziennika „niezidentyfikowany kontakt” + `vessel:firstSighting` → okno z pauzą
-  //   w GameScene, beat pierwszego kontaktu) zostaje przy OGLĄDANYM układzie — jak przed S4: statek wykryty poza widokiem
+  // ⚠ OKNO PIERWSZEGO WYKRYCIA (wpis Dziennika „niezidentyfikowany kontakt” + `vessel:firstSightings` → okno z pauzą
+  //   w GameScene — jedno na partię tiku, #640; `vessel:firstSighting` na statek → beat pierwszego kontaktu) zostaje przy
+  //   OGLĄDANYM układzie — jak przed S4: statek wykryty poza widokiem
   //   dostaje okno dopiero, gdy gracz spojrzy na jego układ. Dlatego przebieg „wykryty, w widoku, nie zgłoszony” idzie na
   //   KAŻDYM tiku, nie tylko przy zmianie zbioru — przełączenie widoku nie zmienia już detekcji.
   _tickVesselDetection(civDeltaYears = 0) {
@@ -665,33 +666,43 @@ export class ObservatorySystem {
     }
 
     // EventLog + popup alert — tylko PIERWSZE wykrycie w sesji i wyłącznie w OGLĄDANYM układzie (nagłówek wyżej).
+    // #640 (krok poza CV, COMBAT_VISUALS_PLAN.md §Findings 640) — JEDNA PARTIA NA TIK: wszystkie pierwsze wykrycia tego tiku
+    //   w oglądanym układzie dają JEDEN wpis Dziennika i JEDNO zdarzenie partii (`vessel:firstSightings` → jedno okno z pauzą
+    //   w GameScene). Dotąd wpis i okno szły na KAŻDY statek: 10 na 10 w zasięgu kolonii = 10 okien z pauzą naraz, a każde
+    //   zamknięcie wznawiało grę, choć reszta okien wisiała otwarta. Zdarzenie na statek (`vessel:firstSighting`) zostaje —
+    //   słucha go beat pierwszego kontaktu (`DirectorFirstContact`). Partia jednego statku — wpis jak dotąd (ten sam tekst).
     const reg = window.KOSMOS?.empireRegistry;
     const evtLog = window.KOSMOS?.eventLogSystem;
+    const sightings = [];
     for (const [id, v] of detectedVessels) {
       if (this._reportedVesselSightings.has(id)) continue;
       if (systemIdOf(v) !== viewSys) continue;
       this._reportedVesselSightings.add(id);
       const empId = v.ownerEmpireId ?? v.owner;
       const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : t('director.unknownEmpire');
-      // Fog-of-war tożsamości: detekcja obserwatorium = rumor (pozycja bez identyfikacji).
-      // Log NIE ujawnia nazwy statku — tylko fakt wykrycia kontaktu. Pełne dane = proximity.
-      evtLog?.push({
-        text:      t('log.unidentifiedContact'),
-        channel:   'intel',
-        severity:  'warn',
-        entityRef: id,
-      });
-      // Dedykowany event dla GameScene — popup z pauzą gry.
-      //
       // ⚠ `firstContactFlyby` (decyzja 5): dla sondy przelotu pierwszego kontaktu generyczny
       // popup jest TŁUMIONY (GameScene wychodzi na tej fladze), a beat narracyjny „Nie jesteśmy
       // sami" wystawia `DirectorFirstContact`. Jeden fakt = jeden popup; wcześniej groziły dwa.
-      EventBus.emit('vessel:firstSighting', {
+      const sighting = {
         vessel: v,
         empireId: empId,
         empireName: empName,
         firstContactFlyby: window.KOSMOS?.directorFirstContact?.isFlyby?.(id) === true,
+      };
+      sightings.push(sighting);
+      EventBus.emit('vessel:firstSighting', sighting);
+    }
+    if (sightings.length) {
+      // Fog-of-war tożsamości: detekcja obserwatorium = rumor (pozycja bez identyfikacji).
+      // Log NIE ujawnia nazwy statku — tylko fakt wykrycia (i liczbę kontaktów). Pełne dane = proximity.
+      evtLog?.push({
+        text:      sightings.length === 1 ? t('log.unidentifiedContact') : t('log.unidentifiedContacts', sightings.length),
+        channel:   'intel',
+        severity:  'warn',
+        entityRef: sightings[0].vessel.id,
       });
+      // Dedykowany event dla GameScene — JEDNO okno z pauzą gry na partię.
+      EventBus.emit('vessel:firstSightings', { systemId: viewSys, sightings });
     }
   }
 

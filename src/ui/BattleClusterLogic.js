@@ -11,6 +11,8 @@
 // środki ≤ 0,30 AU, pojedyncze wiązanie, id = najmniejsze id starcia) daje tu kartę z jednym wierszem na klaster i jeden
 // baner wyniku na klaster — po OSTATNIM `battle:resolved` klastra. Od CV-6b2 (#639, flaga `cvStrip`) tę samą grupę czyta
 // narrator Dziennika (`CombatNarration` — jedna linia bitwy i jedna potyczki na klaster) i pasek walki (`CombatStripLogic`).
+// #675 (krok poza CV, §3.2-25) — okno łaski przed ogłoszeniem: dobicie zaczęte zaraz po końcu klastra ze statkami tej bitwy
+// dołącza do jej ogłoszenia (`clusterGraceJoin` / `clusterGraceDue`, pokrętło `CLUSTER_GRACE`).
 // Logiki walki (DSCS) nikt tu nie dotyka — moduł czyta starcia i wyniki, niczego nie zapisuje w stanie gry.
 
 import { STAGE, encounterClusters } from '../renderer/combat/BattleStageLogic.js';
@@ -125,28 +127,36 @@ export function mergeClusterBattles(list) {
 
 /**
  * Krok banera klastra przy `battle:resolved` starcia `encounterId`. `hold` — tablica grup czekających na resztę klastra
- * (stan wołającego, wyłącznie w pamięci): `{ items: battleData[], waitFor: Set<encounterId> }`.
+ * (stan wołającego, wyłącznie w pamięci): `{ items: battleData[], waitFor: Set<encounterId>, graceUntil: number|null }`.
  *   1. grupy czekające na TO starcie łączą się w jedną (łańcuch starć w czasie = jedna bitwa); bez takiej — nowa grupa;
  *   2. wynik starcia dołącza do grupy, a grupa zaczyna czekać na pozostałe AKTYWNE starcia klastra (`peerIds`);
  *   3. ze wszystkich grup znikają starcia już nieaktywne (`isActive`) — grupa nie zawiśnie na starciu, które skończyło się
- *      inną drogą; grupa bez czekania wychodzi — scalony wynik (`mergeClusterBattles`).
+ *      inną drogą; grupa bez czekania wychodzi — scalony wynik (`mergeClusterBattles`) — od razu (`graceMs` 0) albo po
+ *      oknie łaski (#675: `graceMs` > 0 — wychodzi z `clusterGraceDue`).
  * @returns {object[]} banery do pokazania teraz (scalone wyniki gotowych grup; pusta — klaster jeszcze trwa)
  */
-export function clusterBannerStep(hold, { encounterId, battleData, peerIds = [], isActive = () => false }) {
-  return clusterGroupStep(hold, { encounterId, item: battleData, peerIds, isActive }).map((items) => mergeClusterBattles(items));
+export function clusterBannerStep(hold, { encounterId, battleData, peerIds = [], isActive = () => false, nowMs = 0, graceMs = 0 }) {
+  return clusterGroupStep(hold, { encounterId, item: battleData, peerIds, isActive, nowMs, graceMs }).map((items) => mergeClusterBattles(items));
 }
 
 /**
  * ARC CV-6b2 (Finding 639) — krok grupowania klastra bez scalania: ta sama reguła co `clusterBannerStep` (łańcuch starć
  * w czasie = jedna grupa, czekanie na pozostałe AKTYWNE starcia klastra, grupa nie wisi na starciu nieaktywnym), ale wynikiem
  * są SUROWE grupy elementów — baner scala je (`mergeClusterBattles`), Dziennik (`CombatNarration`) czyta z nich też potyczki.
+ *
+ * #675 (decyzja właściciela §3.2-25) — OKNO ŁASKI: przy `graceMs` > 0 grupa, której nie zostało już żadne aktywne starcie,
+ * nie wychodzi od razu, tylko czeka `graceMs` czasu prezentacji (`graceUntil`); starcie zaczęte w tym oknie ze statkami tej
+ * bitwy (dobicie ostatniego wroga, ponowne zwarcie uciekiniera — #657) dołącza do grupy (`clusterGraceJoin`), a grupa wychodzi
+ * z `clusterGraceDue`, gdy okno minie bez dołączenia. `graceMs` 0 — wyjście od razu (zachowanie sprzed kroku).
+ * @param {object[]} hold — stan wołającego
+ * @param {{ encounterId:string, item:object, peerIds?:string[], isActive?:(id:string)=>boolean, nowMs?:number, graceMs?:number }} p
  * @returns {Array<object[]>} grupy gotowe teraz (elementy w kolejności rozstrzygnięć)
  */
-export function clusterGroupStep(hold, { encounterId, item, peerIds = [], isActive = () => false }) {
+export function clusterGroupStep(hold, { encounterId, item, peerIds = [], isActive = () => false, nowMs = 0, graceMs = 0 }) {
   const battleData = item;
   const id = String(encounterId);
   const linked = hold.filter((g) => g.waitFor.has(id));
-  const g = linked[0] ?? { items: [], waitFor: new Set() };
+  const g = linked[0] ?? { items: [], waitFor: new Set(), graceUntil: null };
   for (const other of linked.slice(1)) {
     g.items.push(...other.items);
     for (const w of other.waitFor) g.waitFor.add(w);
@@ -155,13 +165,89 @@ export function clusterGroupStep(hold, { encounterId, item, peerIds = [], isActi
   if (!linked.length) hold.push(g);
   g.waitFor.delete(id);
   g.items.push(battleData);
+  g.graceUntil = null;   // nowy wynik w grupie — okno łaski (jeśli było) liczy się od nowa
   for (const p of peerIds) if (String(p) !== id) g.waitFor.add(String(p));
+  return _releaseReady(hold, { isActive, nowMs, graceMs });
+}
+
+/**
+ * #675 — starcie zaczęte (`vessel:engaged`) ze statkami bitwy, która czeka (na swoje starcia albo w oknie łaski), dołącza do
+ * niej: grupa czeka teraz także na to starcie, a okno łaski gaśnie (zacznie się od nowa, gdy grupie nie zostanie żadne
+ * aktywne starcie). Statki bitwy — uczestnicy jej rozstrzygniętych starć (`result.participantA/B.vesselIds`). Kilka grup
+ * z tymi statkami — wszystkie czekają na to starcie, a jego rozstrzygnięcie łączy je w jedną (`clusterGroupStep`, krok 1).
+ * @param {object[]} hold — stan wołającego
+ * @param {{ encounterId:string, vesselIds:string[] }} p
+ * @returns {number} ile grup dołączyło starcie
+ */
+export function clusterGraceJoin(hold, { encounterId, vesselIds = [] }) {
+  if (encounterId == null || !hold?.length) return 0;
+  const id = String(encounterId);
+  const ships = new Set((vesselIds ?? []).map(String));
+  if (!ships.size) return 0;
+  let joined = 0;
+  for (const g of hold) {
+    if (g.waitFor.has(id) || !_groupShips(g).some((s) => ships.has(s))) continue;
+    g.waitFor.add(id);
+    g.graceUntil = null;
+    joined++;
+  }
+  return joined;
+}
+
+/**
+ * #675 — grupy, którym minęło okno łaski (żadne starcie nie dołączyło), wychodzą; grupa, której właśnie skończyło się
+ * ostatnie czekanie inną drogą (`isActive`), zaczyna swoje okno teraz. Wołane raz na klatkę (zegar prezentacji — pauza
+ * zatrzymuje okno).
+ * @returns {Array<object[]>} grupy gotowe teraz
+ */
+export function clusterGraceDue(hold, { nowMs = 0, graceMs = 0, isActive = () => false } = {}) {
+  if (!hold?.length) return [];
+  return _releaseReady(hold, { isActive, nowMs, graceMs });
+}
+
+/** #675 — `clusterGraceDue` dla banera: scalone wyniki grup, którym minęło okno łaski (lustro `clusterBannerStep`). */
+export function clusterBannerDue(hold, opts = {}) {
+  return clusterGraceDue(hold, opts).map((items) => mergeClusterBattles(items));
+}
+
+/** Statki rozstrzygniętych starć grupy (uczestnicy obu stron z wyników) — klucz dołączenia dobicia (#675). */
+function _groupShips(g) {
+  const out = [];
+  for (const it of g.items ?? []) {
+    const r = it?.result ?? null;
+    for (const p of [r?.participantA, r?.participantB]) for (const v of p?.vesselIds ?? []) out.push(String(v));
+  }
+  return out;
+}
+
+/** Wspólny koniec kroku: czekanie bez nieaktywnych starć; grupa bez czekania wychodzi od razu albo po oknie łaski. */
+function _releaseReady(hold, { isActive, nowMs, graceMs }) {
   const out = [];
   for (const h of [...hold]) {
     for (const w of [...h.waitFor]) if (!isActive(w)) h.waitFor.delete(w);
     if (h.waitFor.size > 0) continue;
+    if (graceMs > 0) {
+      if (h.graceUntil == null) h.graceUntil = nowMs + graceMs;
+      if (nowMs < h.graceUntil) continue;
+    }
     hold.splice(hold.indexOf(h), 1);
     out.push(h.items);
   }
   return out;
+}
+
+/**
+ * #675 (decyzja właściciela §3.2-25) — okno łaski przed ogłoszeniem wyniku bitwy, w RUNDACH oglądanego starcia (pokrętło
+ * na żywo: `KOSMOS.debug.battleGrace(r)`; 0 — bez okna, ogłoszenie od razu jak przed krokiem). Zmierzone przed kodem: dobicie
+ * ostatniego wroga i ponowne zwarcie uciekiniera (#657) zaczynają się w TEJ SAMEJ klatce co ostatnie `battle:resolved`
+ * klastra (odstęp 0 ms na split 4v4, ziarna 1–3) — okno łapie je zawsze, a półtorej rundy daje graczowi chwilę na zobaczenie
+ * końca walki przed banerem.
+ */
+export const CLUSTER_GRACE = { ROUNDS: 1.5 };
+
+/** Okno łaski w ms czasu prezentacji dla rundy `roundMs` (czas realny rundy oglądanego starcia — `combatRoundMs`). */
+export function clusterGraceMs(roundMs) {
+  const r = Number(CLUSTER_GRACE.ROUNDS);
+  const ms = Number(roundMs);
+  return r > 0 && ms > 0 ? r * ms : 0;
 }

@@ -163,7 +163,8 @@ console.log('E6 — pozostałe inline kształty pod kontrolą liczby');
   // ⚠ JAWNY ZBIÓR, NIE PRÓG. D6=W2 podpisano jako „kanon + nazwane kopie TERAZ, reszta PINOWANA",
   //   więc pin musi WYMIENIAĆ, co zostaje i DLACZEGO — próg „co najwyżej N" toleruje dowolną
   //   podmianę. Każda pozycja zmierzona co do PODMIOTU (D6 dotyczy KOLONII):
-  //     • UIManager:1290-1291    — STATKI (`vA`/`vB`)         ⇒ poza D6 (kanon statków = isEnemyVessel)
+  //     • (UIManager:1290-1291   — STATKI (`vA`/`vB`) — ZNIKNĘŁO w #640: linia kontaktu sensorycznego przeszła do
+  //       `GameScene._noteProximityContact` i pyta KANONEM statków `isEnemyVessel`, więc pozycja zeszła z listy)
   //     • PlayerViability:50     — STATEK (`v.isWreck`)       ⇒ poza D6
   //     • BodyName:57            — STACJA (`s.id`)            ⇒ poza D6 (stacje wyłączone podpisem)
   //     • StationGroup:37        — STACJA (`isPlayerStation`) ⇒ poza D6 (jw.)
@@ -173,7 +174,7 @@ console.log('E6 — pozostałe inline kształty pod kontrolą liczby');
   //   Trzy ostatnie to KOLONIJNE słabe kształty, które W2 ŚWIADOMIE zostawia (W1 = pełny sweep
   //   został odrzucony). Są zarazem pierwszymi kandydatami, gdyby D6 kiedyś rozszerzać.
   const ALLOWED = ['BodyName.js', 'ColonyManager.js', 'InvasionSystem.js', 'PlayerViability.js',
-                   'StationGroup.js', 'UIManager.js', 'WarSystem.js'];
+                   'StationGroup.js', 'WarSystem.js'];
   const unexpected = offenders.filter(f => !ALLOWED.includes(f));
   const vanished   = ALLOWED.filter(f => !offenders.includes(f));
   console.log('    [pomiar] pliki z inline kształtem:', offenders.join(', ') || 'brak');

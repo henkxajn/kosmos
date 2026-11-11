@@ -239,8 +239,13 @@ console.log('\nT8: sonda ogłasza ruch kanałem vessel:positionUpdate + lewary')
 console.log('\nT5: Director przejmuje beat (decyzja 5) + sightingi w round-tripie');
 {
   const GS = codeOnly('src/scenes/GameScene.js');
-  A(/firstContactFlyby/.test(handlerBody(GS, 'vessel:firstSighting')),
-    'T5a: generyczny popup GameScene ustępuje, gdy to przelot pierwszego kontaktu');
+  // ⚠ PRZECELOWANE ŚWIADOMIE (#640, krok poza CV): okno pierwszego wykrycia słucha od #640 PARTII wykryć
+  //   (`vessel:firstSightings` → `_showFirstSightings` — jedno okno na tik i układ), a nie zdarzenia na statek; zdarzenie na
+  //   statek (`vessel:firstSighting`) zostaje dla beatu Directora. Niezmiennik ten sam: generyczne okno ustępuje przelotowi.
+  //   Ciało JEDNEGO subskrybenta (metody) — pin nie może być spełniony przez sąsiedni kod.
+  const showBody = (() => { const i = GS.indexOf('\n  _showFirstSightings('); if (i < 0) return ''; const e = GS.indexOf('\n  }\n', i); return e < 0 ? '' : GS.slice(i, e); })();
+  A(/_showFirstSightings\(sightings\)/.test(handlerBody(GS, 'vessel:firstSightings')) && /firstContactFlyby/.test(showBody),
+    'T5a: generyczny popup GameScene ustępuje, gdy to przelot pierwszego kontaktu (partia → `_showFirstSightings`, filtr przelotu)');
 
   const OBS = codeOnly('src/systems/ObservatorySystem.js');
   A(/firstContactFlyby:\s*window\.KOSMOS\?\.directorFirstContact/.test(OBS),
