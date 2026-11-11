@@ -53,6 +53,9 @@ export const LIVE_CV_FX = {
   FLASH_CORE:   2.4,     // wzmocnienie HDR rdzenia błysku
   FLASH_MIN_PX: 6,       // [CSS px] podłoga / sufit błysku na ekranie
   FLASH_MAX_PX: 48,
+  // Finding 663 (dodatek 2, decyzja właściciela 2026-11-11: „wygląda sztucznie”) — płaski cyjanowy pierścień osłony przy trafieniu
+  // w tarczę (iskra `SPARK_KIND.ring`) WYŁĄCZONY do CV-4b (bańka osłony z falą). `true` z konsoli przywraca go od następnego strzału.
+  SHIELD_RING_ENABLED: false,
   RING_K:       4.0,     // średnica pierścienia osłony = rozmiar modelu × K
   RING_MIN_PX:  8,
   RING_MAX_PX:  64,
@@ -312,7 +315,9 @@ export class FxEngine {
     const ti = t0 + pace.flashDelayMs;
     this._spark(SPARK_KIND.flash, t, color, FLASH_ALPHA, ti, pace.flashMs, size, shot.targetId);
     this._spark(SPARK_KIND.glow, t, HIT_GLOW.COLOR, GLOW_ALPHA, ti, HIT_GLOW.MS, size, shot.targetId);
-    if (shot.blockedByShield > 0) this._spark(SPARK_KIND.ring, t, FX_SHIELD_COLOR, RING_ALPHA, ti, pace.shieldMs, size, shot.targetId);
+    if (shot.blockedByShield > 0 && this.tuning.SHIELD_RING_ENABLED === true) {   // dodatek 2 — pierścień osłony do CV-4b wyłączony
+      this._spark(SPARK_KIND.ring, t, FX_SHIELD_COLOR, RING_ALPHA, ti, pace.shieldMs, size, shot.targetId);
+    }
   }
 
   _spark(kind, p, hex, alpha, t0, lifeMs, size, followId) {

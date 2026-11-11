@@ -16,6 +16,11 @@
 
 import EventBus from './EventBus.js';
 
+// Rekordy bitew w zapisie (`serialize`): najwięcej MAX_BATTLE_RECORDS najnowszych; oś rund tylko w BATTLE_TIMELINE_KEEP z nich
+// (Finding 663, dodatek 3 — reszta jako streszczenie).
+export const MAX_BATTLE_RECORDS = 50;
+export const BATTLE_TIMELINE_KEEP = 10;
+
 // Domyślny kształt stanu — nowe domeny inicjalizujemy jako puste obiekty
 function createDefaultState() {
   return {
@@ -136,21 +141,27 @@ class GameState {
   }
 
   // Serializacja do save'a — zwraca surowe referencje (JSON.stringify w SaveSystem je klonuje).
-  // Battles: prune do ostatnich MAX_BATTLES po year. Stare referencje (vessel.lastBattleId)
+  // Battles: prune do ostatnich MAX_BATTLE_RECORDS po year. Stare referencje (vessel.lastBattleId)
   // grace fail przez getBattleRecord → null (FleetManagerOverlay i WarOverlay obsluguja brak).
   // Bez prune battles rosly bez konca (timeline per round) → save quota crash po wielu wojnach.
+  // Finding 663 (dodatek 3, propozycja M1 — Finding 691) — oś rund (`timeline`) zostaje WYŁĄCZNIE w BATTLE_TIMELINE_KEEP
+  // najnowszych rekordach; starsze idą do zapisu jako streszczenie (strony, straty, zwycięzca, tury, `endReason`, miejsce, rok)
+  // z `timeline: []` i `timelineTrimmed: true`. Rekordy w pamięci są nietknięte (kopia płytka tylko w wyniku). Bitwa 10 na 10
+  // po M1 to 35–40 tys. znaków osi rund przy ≈ 1 tys. streszczenia. Kolejność: rok malejąco, przy remisie id (deterministycznie).
+  // Zapis v101 bez migracji: stary zapis wczytuje się jak dotąd, a przy następnym zapisie przechodzi tę samą drogę.
   serialize() {
-    const MAX_BATTLES = 50;
     const battles = this._state.battles ?? {};
     const ids = Object.keys(battles);
-    if (ids.length <= MAX_BATTLES) return this._state;
-
+    if (ids.length === 0) return this._state;
     const sorted = ids
       .map(id => ({ id, year: battles[id]?.year ?? 0 }))
-      .sort((a, b) => b.year - a.year)
-      .slice(0, MAX_BATTLES);
+      .sort((a, b) => (b.year - a.year) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .slice(0, MAX_BATTLE_RECORDS);
     const kept = {};
-    for (const { id } of sorted) kept[id] = battles[id];
+    sorted.forEach(({ id }, i) => {
+      const rec = battles[id];
+      kept[id] = (i < BATTLE_TIMELINE_KEEP || !(rec?.timeline?.length > 0)) ? rec : { ...rec, timeline: [], timelineTrimmed: true };
+    });
     return { ...this._state, battles: kept };
   }
 

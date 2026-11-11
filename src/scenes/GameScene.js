@@ -87,6 +87,7 @@ import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
 import { spawnTestEnemy, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyRaider, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
 import { fleetWarpDebugHelpers } from '../debug/FleetWarpDebug.js';
 import { cvBattleDebugHelpers } from '../debug/CvBattleStager.js';   // ARC CV-2a — cvBattle / cvFx / fxStats (konsola, bez cudzysłowów)
+import { rendezvousDebugHelpers } from '../debug/RendezvousDebug.js';   // Finding 663 — rendezvousPlace / rendezvousInfo (konsola, bez cudzysłowów)
 import { loadCombatSandbox, sandboxInfo, sandboxResetPositions, sandboxSpawnMoreEnemies } from '../scenarios/CombatSandbox.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
@@ -160,6 +161,7 @@ import { Tooltip }           from '../ui/Tooltip.js';
 import { getTooltipContent } from '../utils/TooltipContent.js';
 import { PlanetScene }       from './PlanetScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
+import { RENDEZVOUS_TUNING } from '../data/RendezvousData.js';   // Finding 663 — pokrętła „leć do ciała” (alias w window.KOSMOS)
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
 import { TECHS }             from '../data/TechData.js';          // POWER TEST
 import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_BUILD_PLAN, BOOSTED_STARTER_POP } from '../data/StarterLoadout.js';
@@ -455,6 +457,8 @@ export class GameScene {
     // from P1.3.5 known-issues + RaycasterPure planet lookup needing entityManager).
     window.KOSMOS.gameScene        = this;
     window.KOSMOS.gameConfig       = GAME_CONFIG;
+    // Finding 663 — ALIAS (nie kopia): `KOSMOS.rendezvousTuning.HORIZON_MULT = 5` działa od następnego rozkazu.
+    window.KOSMOS.rendezvousTuning = RENDEZVOUS_TUNING;
     window.KOSMOS.entityManager    = EntityManager;
     window.KOSMOS.saveCurrentVersion = CURRENT_VERSION;
     window.KOSMOS.buildingSystem   = this.buildingSystem;
@@ -605,6 +609,9 @@ export class GameScene {
       // ARC CV-1a — cvModels(1) / cvModels(0) (rama kanoniczna), cvIncoming(1) / cvIncoming(0) (modele z `incoming/`),
       // cvLightTest(1) / cvLightTest(0) (testowy wzór punktów świetlnych), modelInfo() — §4 CV-1a.
       ...cvBattleDebugHelpers({ getRenderer: () => this.threeRenderer, getSaveSystem: () => this.saveSystem }),
+      // Finding 663 — KOSMOS.debug.rendezvousPlace(0.8) (zaznaczony statek 0,8 AU za najbliższą planetą; drugi argument 1 — przed),
+      // rendezvousInfo() (wynik „Lecisz do planety” dla ciał układu) — src/debug/RendezvousDebug.js.
+      ...rendezvousDebugHelpers({ getSaveSystem: () => this.saveSystem }),
       // #640 / #675 — okna ogłoszeń (bez cudzysłowów; pokrętła na sesję — F5 przywraca wartości domyślne):
       //   KOSMOS.debug.battleGrace(1.5)   — okno łaski przed banerem i linią bitwy w rundach oglądanego starcia (0 = bez okna,
       //                                     ogłoszenie od razu — jak przed krokiem); bez argumentu — odczyt (rundy i ms).

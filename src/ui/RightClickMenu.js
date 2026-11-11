@@ -430,7 +430,9 @@ export class RightClickMenu {
       const result = os ? os.issueMove(vid, built.spec) : mos.issueOrder(vid, built.spec);
       if (result?.ok) anyOk = true;
       else {
-        fails.push({ vesselId: vid, reason: result?.reason });
+        // Finding 663 — odmowa za horyzontem niesie ETA i horyzont spotkania (pokazuje je `describeOrderFail`).
+        fails.push({ vesselId: vid, reason: result?.reason,
+          ...(Number.isFinite(result?.etaYears) ? { etaYears: result.etaYears, horizonYears: result.horizonYears } : {}) });
         console.warn(`[RightClickMenu] MOS.issueOrder failed (${option.orderType}, ${vid}):`, result?.reason);
       }
     }

@@ -655,6 +655,8 @@ export default {
   'vessel.reasonVesselInWarpTransit': 'Vessel is in interstellar transit — wait for arrival',
   // Finding 579 (D-4) — "Full Scan" at a body without a colony map (anomalies live only on a colony grid)
   'vessel.reasonFullScanNoGrid': 'Full Scan needs a colony map on the orbited body',
+  // Finding 663 (part B) — "fly to a body": the earliest meeting lies beyond the horizon (ETA {0}, horizon {1}, game years)
+  'vessel.reasonRendezvousBeyondHorizon': 'The body can be met only in {0} years (limit {1}) — it moves faster than the ship',
   // W3-4 (D6) — a hull in reserve takes no movement orders (MovementOrderSystem.issueOrder)
   'vessel.reasonVesselInReserve': 'Hull in reserve — crew it first (Deploy)',
   // Attack-order (engage/pursue) rejection reasons — shown per skipped vessel

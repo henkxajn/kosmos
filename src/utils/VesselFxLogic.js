@@ -12,22 +12,12 @@ export function isEndpointVisibleByQuality(isEnemy, quality) {
   return quality === 'contact' || quality === 'detailed';
 }
 
-// AI STRIKES BACK pre-S3 (SB43, Finding 415) — czy wolno narysować pierścień ruchu statku (start / przylot / dok)
-// w OGLĄDANYM układzie. Współrzędne są lokalne dla układu (gwiazda każdego układu w (0,0)), więc pierścień statku
-// z innego układu stawał w miejscu bez statku; a ruch AI był widoczny bez wykrycia (bramka S2: 8 pierścieni od
-// statków AI z innych układów przy widoku `sys_home`).
-//   • układ statku = oglądany; brak pola (stary zapis) → `sys_home`; `null` (skok warp) → układ startu skoku;
-//   • statek nie-gracza — tylko przy wykryciu pokazującym go W MIEJSCU (wywiad ≥ contact, jak smugi walki).
-// in: { systemId, fromSystemId, activeSystemId, isEnemy, quality }
-export function isMovementPulseVisible({ systemId, fromSystemId = null, activeSystemId, isEnemy, quality }) {
-  const sys = systemId === undefined ? 'sys_home' : (systemId ?? fromSystemId ?? null);
-  if (!sys || sys !== (activeSystemId ?? 'sys_home')) return false;
-  return isEndpointVisibleByQuality(isEnemy, quality);
-}
+// ⚠ Finding 663 (decyzja właściciela 37, 2026-11-11) — usunięta reguła `isMovementPulseVisible` (SB43, Finding 415: pierścień
+//   ruchu statku tylko w oglądanym układzie i przy wywiadzie ≥ contact) — pierścieni ruchu statku już nie ma.
 
 // POLISH P2a (CP7, Finding 453) — czy starcie w przestrzeni (DSCS) toczy się w OGLĄDANYM układzie. JEDNA reguła dla
 // czterech wejść renderera (smugi i błyski salwy, auto-fokus kamery przy starcie, znacznik starcia, „Obserwuj”) — wzór
-// SB43 (`isMovementPulseVisible`). Współrzędne są lokalne dla układu (gwiazda każdego układu w (0,0)), a ładunek salwy
+// SB43 (dawna reguła pierścienia ruchu, usunięta w #663). Współrzędne są lokalne dla układu (gwiazda każdego układu w (0,0)), a ładunek salwy
 // niesie migawki pozycji — bez tej reguły starcie z innego układu rysowało smugi, błyski i pierścień w pustym punkcie
 // oglądanego układu, a auto-fokus i „Obserwuj” zbliżały tam kamerę (zmierzone: P2 §10.2).
 //   • układ starcia = `encounter.location.systemId` (DSCS stempluje go przy utworzeniu — układ pary wyzwalającej);

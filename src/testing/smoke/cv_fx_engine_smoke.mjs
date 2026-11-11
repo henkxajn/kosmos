@@ -20,6 +20,7 @@
 //       ścieżką, z flagą ON — przez silnik (prawdziwe metody wyciągnięte ze źródła); ścieżka OFF co do bitu jak przed CV-2a
 //       (odcisk SHA-256 ciał metod dzisiejszego silnika FX, liczony z `0eabc4f`). ARC CV-6b2 — T9d przecelowane świadomie: odcisk
 //       liczony po cofnięciu DWÓCH zmian kroku (wycofany `combatFxVisible` — #630, biały błysk pod `cvStrip`); T9g pilnuje, że są.
+//       Krok #663 (decyzja właściciela 37) — także po przywróceniu usuniętej gałęzi 'pulse' w `_updateActiveEffects`; T9h — świadek.
 // ⚠ Silnik i zegar na PRAWDZIWYM Three.js r171 (`src/lib`); importy CV-2a dynamiczne w try/catch — przy fail-first piny
 //   DEGRADUJĄ (czerwone), suita się nie przerywa.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -332,7 +333,14 @@ const make = (name) => {
   const undo6b2 = (s) => s
     .replace(/\n    \/\/ ARC CV-6b2 \(Finding 630, decyzja właściciela §3\.2-23\)[^\n]*\n    \/\/[^\n]*\n/, '\n    if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;\n')
     .replace(/\n    \/\/ ARC CV-6b2 — biały błysk na modelu[^\n]*\n    \/\/[^\n]*\n    if \(ids\?\.target && !GAME_CONFIG\.FEATURES\?\.cvStrip\) this\._spawnHitGlow\(/, '\n    if (ids?.target) this._spawnHitGlow(');
-  const fp = createHash('sha256').update(LEGACY.map(m => stripCv(undo6b2(fullBody(m) ?? `<brak ${m}>`))).join('\n')).digest('hex');
+  // Krok #663 (decyzja właściciela 37, 2026-11-11) — świadoma zmiana wspólnego `_updateActiveEffects`: usunięta gałąź animacji
+  // rodzaju 'pulse' (pierścienie ruchu statku). Odcisk liczony po jej PRZYWRÓCENIU (wzór CV-6b2) — reszta ścieżki OFF co do bitu;
+  // T9h — świadek, że gałęzi nie ma w źródle.
+  const PULSE_CASE = "        case 'pulse':\n          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);\n          ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 2));\n          break;";
+  const undo663 = (m, s) => (m === '_updateActiveEffects' ? s.replace("\n        case 'ping':", "\n" + PULSE_CASE + "\n        case 'ping':") : s);
+  const fp = createHash('sha256').update(LEGACY.map(m => stripCv(undo6b2(undo663(m, fullBody(m) ?? `<brak ${m}>`)))).join('\n')).digest('hex');
+  assert(!/case 'pulse'/.test(fullBody('_updateActiveEffects') ?? '') && undo663('_updateActiveEffects', fullBody('_updateActiveEffects') ?? '') !== (fullBody('_updateActiveEffects') ?? ''),
+    "T9h ŚWIADEK przecelowania T9d (#663): gałęzi 'pulse' nie ma w `_updateActiveEffects` — odcisk liczony po jej przywróceniu");
   assert(['_onCombatRoundFx', '_spawnCombatTracer'].every((m) => undo6b2(fullBody(m) ?? '') !== (fullBody(m) ?? '')),
     'T9g ŚWIADEK przecelowania T9d: obie zmiany CV-6b2 ścieżki OFF są w źródle (`combatFxVisible` wycofany, biały błysk pod `cvStrip`) — odcisk liczony po ich cofnięciu');
   const FP_0EABC4F = '3c19a2433dbfa33e85b22cb2a98b1f51a0797955c56738816fca46b73143b3ae';

@@ -75,7 +75,8 @@ export function dispatchDockTo(vesselIds, bodyId) {
     //   warunek raportu (`okCount === 0 && firstFail`) nie zachodził i odmowa była CAŁKOWICIE CICHA
     //   (zmierzone). To ta sama klasa co `if (!res) return` w anonsach rozkazów floty (Finding 255).
     const reason = r?.reason ?? 'unknown';
-    fails.push({ vesselId: id, reason });
+    fails.push({ vesselId: id, reason,   // Finding 663 — ETA i horyzont spotkania przy odmowie za horyzontem
+      ...(Number.isFinite(r?.etaYears) ? { etaYears: r.etaYears, horizonYears: r.horizonYears } : {}) });
     if (!firstFail) firstFail = reason;
   }
   // ── Finding 256 / D4 — ODMOWA MUSI MÓWIĆ, I MÓWIĆ NAZWAMI ─────────────────────────────────

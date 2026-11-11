@@ -54,6 +54,7 @@ import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / 
 import { warGateRefusal, cargoUnloadRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny (away team); D13a — ładownia (107)
 import { resolveTemplate } from '../utils/ShipTemplateResolver.js';   // AI STRIKES BACK S1 (SB22) — kadłub puli AI
 import { orbitClockSec } from '../utils/SimClock.js';                  // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
+import { RENDEZVOUS_TUNING } from '../data/RendezvousData.js';          // Finding 663 — „leć do ciała”: przy ciele / horyzont
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';   // Finding 603
 import { combatCheckOf } from '../ui/FleetGroupPanelLogic.js';                  // Finding 607 — predykat „Odwrotu” grupy (Finding 562)
 import { describeOrderFail } from '../utils/CameraFrame.js';           // Finding 579 (D-4) — „<statek> (<powód>)” jak inne odmowy
@@ -3980,6 +3981,68 @@ export class VesselManager {
       if (speed * (mid - now) >= lenAU(mid, useRoute)) hi = mid; else lo = mid;
     }
     return make(hi);
+  }
+
+  /**
+   * Finding 663 (część A) — statek JUŻ przy ciele: przylot od razu, bez przechwycenia (`RENDEZVOUS_TUNING`). Przy ciele =
+   * zadokowany / na orbicie tego ciała (albo jego stacji), albo bliżej niż `CAPTURE_AU` od ciała; dla księżyca także od jego
+   * planety — statek przy planecie leci razem z nią, a księżyce krążą w jej otoczeniu (≤ 0,28 AU). Stacja → jej ciało.
+   * Statek w aktywnym starciu NIE — skok na orbitę mógłby wyjąć go z bitwy (wyjście poza 0,5 AU od punktu starcia).
+   * Pozycje ciał z `_predictPosition` na TERAZ (jak `_interceptBody`), nie z `x/y` — te bywają nieodświeżone (świat headless
+   * przed pierwszym tikiem fizyki: wszystkie ciała w (0, 0) ⇒ „blisko” byłoby każde).
+   * ⚠ Bez tego statek przy planecie dostawał spotkanie po drugiej stronie orbity: zmierzone 32,7 AU za gwiazdą (≈ 28 lat),
+   *   w wygenerowanych układach mediana 3,7 roku i do 19 lat dla statku 0,05 AU za planetą, a statek przy planecie wysłany
+   *   na jej księżyc (0,04 AU) — 1,2–4,0 roku. Jedno źródło dla rozkazu statku (`MovementOrderSystem._issueMoveToPoint`)
+   *   i wspólnej chwili przylotu grupy (`GroupArrival`).
+   * @param {object} vessel
+   * @param {string} bodyId — planeta / księżyc / planetoida / stacja
+   * @returns {boolean}
+   */
+  _rendezvousCapture(vessel, bodyId) {
+    let ent = this._findEntity(bodyId);
+    if (ent?.type === 'station') ent = this._findEntity(ent.bodyId) ?? null;
+    const p = vessel?.position;
+    if (!ent || !p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+    if (combatCheckOf(window.KOSMOS)?.(vessel.id)) return false;   // ten sam predykat „w starciu” co odwrót i skok (Finding 562 / 607)
+    const parent = ent.type === 'moon' ? this._findEntity(ent.parentPlanetId) : null;
+    let dockEnt = this._findEntity(p.dockedAt);
+    if (dockEnt?.type === 'station') dockEnt = this._findEntity(dockEnt.bodyId) ?? null;
+    if (dockEnt && (p.state === 'docked' || p.state === 'orbiting') && (dockEnt.id === ent.id || dockEnt.id === parent?.id)) return true;
+    const capPx = RENDEZVOUS_TUNING.CAPTURE_AU * AU_TO_PX;
+    const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const near = (b) => {
+      if (!b) return false;
+      const q = this._predictPosition(b.id, now);
+      return Number.isFinite(q?.x) && Number.isFinite(q?.y) && Math.hypot(q.x - p.x, q.y - p.y) <= capPx;
+    };
+    return near(ent) || near(parent);
+  }
+
+  /**
+   * Finding 663 (część B) — odmowa rozkazu GRACZA, gdy najwcześniejsze spotkanie z ciałem jest dalej niż horyzont
+   * (`RENDEZVOUS_TUNING`): max(`HORIZON_MIN_YEARS`, `HORIZON_MULT` × czas lotu po prostej do BIEŻĄCEJ pozycji ciała).
+   * Spotkanie = własne najwcześniejsze przechwycenie statku (bez synchronizacji floty — czekanie na flotę to decyzja floty,
+   * nie zasięg statku). Statki AI nigdy nie są odrzucane. Statek przy ciele (część A) — tu nie trafia.
+   * @param {object} vessel
+   * @param {string} bodyId
+   * @param {{arrivalYear:number}|null} [ownIntercept] — przechwycenie bez `notBefore`, gdy wołający już je ma
+   * @returns {{reason:'rendezvous_beyond_horizon', etaYears:number, horizonYears:number}|null}
+   */
+  _rendezvousRefusal(vessel, bodyId, ownIntercept = null) {
+    if (!vessel || isEnemyVessel(vessel)) return null;
+    let ent = this._findEntity(bodyId);
+    if (ent?.type === 'station') ent = this._findEntity(ent.bodyId) ?? null;
+    const p = vessel.position;
+    if (!ent || !p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+    const speed = Math.max(0.01, vessel.speedAU ?? 1.0);
+    const ic = ownIntercept ?? this._interceptBody(ent.id, p.x, p.y, speed, { systemId: vessel.systemId ?? 'sys_home' });
+    if (!ic || !Number.isFinite(ic.arrivalYear)) return null;
+    const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const q = this._predictPosition(ent.id, now);   // pozycja ciała TERAZ — jak w `_interceptBody` (nie nieodświeżone `x/y`)
+    const etaYears = ic.arrivalYear - now;
+    const directYears = Math.hypot(q.x - p.x, q.y - p.y) / AU_TO_PX / speed;
+    const horizonYears = Math.max(RENDEZVOUS_TUNING.HORIZON_MIN_YEARS, RENDEZVOUS_TUNING.HORIZON_MULT * directYears);
+    return etaYears > horizonYears ? { reason: 'rendezvous_beyond_horizon', etaYears, horizonYears } : null;
   }
 
   /**

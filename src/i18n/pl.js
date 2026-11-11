@@ -656,6 +656,8 @@ export default {
   'vessel.reasonVesselInWarpTransit': 'Statek jest w skoku międzygwiezdnym — poczekaj na przylot',
   // Finding 579 (D-4) — „Pełny Skan" przy ciele bez mapy kolonii (anomalie żyją wyłącznie na siatce kolonii)
   'vessel.reasonFullScanNoGrid': 'Pełny Skan wymaga mapy kolonii na orbitowanym ciele',
+  // Finding 663 (część B) — „leć do ciała”: najwcześniejsze spotkanie dalej niż horyzont (ETA {0}, horyzont {1}, lata gry)
+  'vessel.reasonRendezvousBeyondHorizon': 'Spotkanie z ciałem dopiero za {0} lat (limit {1} lat) — ciało ucieka szybciej, niż leci statek',
   // W3-4 (D6) — kadłub w rezerwie nie przyjmuje rozkazów ruchu (MovementOrderSystem.issueOrder)
   'vessel.reasonVesselInReserve': 'Kadłub w rezerwie — najpierw obsadź go załogą (Rozmieść)',
   // Powody odrzucenia rozkazu ataku (engage/pursue) — pokazywane per pominięty statek

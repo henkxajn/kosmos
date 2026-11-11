@@ -92,7 +92,7 @@ export function fleetOffendersOutOfFrame(fleetId) {
  * i drugim argumentem bywa indeks tablicy.
  */
 export function describeOrderFail(f, reasonText) {
-  const reason = (typeof reasonText === 'function' ? reasonText : _reasonText)(f?.reason);
+  const reason = (typeof reasonText === 'function' ? reasonText : _reasonText)(f?.reason, f);
   const nm     = window.KOSMOS?.vesselManager?.getVessel?.(f?.vesselId)?.name ?? f?.vesselId;
   return `${nm} (${reason})`;
 }
@@ -132,10 +132,15 @@ export function describeFleetOrderRefusal(res, reasonText = _reasonText) {
   return null;
 }
 
-/** Przetłumaczony powód (`vessel.reason<PascalCase>`), z fallbackiem na surowy slug gdy klucza brak. */
-function _reasonText(reason) {
-  const key = `vessel.reason${_pascalCase(reason ?? 'unknown')}`;
-  const rt  = t(key);
+/**
+ * Przetłumaczony powód (`vessel.reason<PascalCase>`), z fallbackiem na surowy slug gdy klucza brak.
+ * Finding 663 — odmowa niosąca `etaYears` / `horizonYears` (spotkanie z ciałem dalej niż horyzont): obie liczby (lata gry,
+ * jedno miejsce po przecinku) idą do klucza jako {0} / {1}; klucze bez tych miejsc je pomijają.
+ */
+function _reasonText(reason, f = null) {
+  const key  = `vessel.reason${_pascalCase(reason ?? 'unknown')}`;
+  const args = Number.isFinite(f?.etaYears) ? [f.etaYears.toFixed(1), Number(f.horizonYears ?? 0).toFixed(1)] : [];
+  const rt   = t(key, ...args);
   return rt !== key ? rt : (reason ?? 'unknown');
 }
 

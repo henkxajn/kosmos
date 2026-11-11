@@ -257,7 +257,9 @@ export class FleetSystem {
         memberOrderIds[v.id] = res.orderId;
         if (mt?.targetBodyId) memberTargets[v.id] = mt.targetBodyId;
       } else {
-        rejected.push({ vesselId: v.id, reason: res?.reason ?? 'unknown' });
+        // Finding 663 — odmowa za horyzontem niesie ETA i horyzont (powód w Dzienniku je pokazuje, `describeOrderFail`).
+        rejected.push({ vesselId: v.id, reason: res?.reason ?? 'unknown',
+          ...(Number.isFinite(res?.etaYears) ? { etaYears: res.etaYears, horizonYears: res.horizonYears } : {}) });
       }
     }
 
@@ -337,7 +339,10 @@ export class FleetSystem {
     }
     if (!bodyId) return null;
     const body = vm._findEntity?.(bodyId) ?? EntityManager.get(bodyId);
-    const members = eligible.filter(v => !body || isSameSystem(v, body));
+    // Finding 663 (część B) — członek, któremu MOS odmówi (spotkanie dalej niż horyzont, `vm._rendezvousRefusal`), nie leci,
+    //   więc nie wyznacza chwili floty (inaczej reszta czekałaby na jego spotkanie po drugiej stronie orbity). Członków przy
+    //   ciele (część A) pomija `groupArrivalYear`.
+    const members = eligible.filter(v => (!body || isSameSystem(v, body)) && !vm._rendezvousRefusal?.(v, bodyId));
     if (members.length === 0) return null;
     return groupArrivalYear(vm, bodyId, members, { now: gameYear, maxBoost: MAX_SYNC_BOOST_FACTOR });
   }

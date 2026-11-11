@@ -204,7 +204,7 @@ export const GAME_CONFIG = {
     fcScanFx:             true,   // Slice 2 — efekty skanu (snop/pierścień/ping)
     fcBrackets:           true,   // Slice 4 — ramki zaznaczenia + paski HP/tarcza (#ui-canvas)
     fcEnemyAlertMarker:   true,   // Pulsujący czerwony marker wykrytego wroga (≥rumor) na mapie 3D
-    fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
+    fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata; pulsy startu / przylotu / doku usunięte w #663)
     fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
     fcMultiSelect:        true,   // Slice 8 — multi-select (CTRL+klik toggle + SHIFT box-select)
     fcGroupPanel:         true,   // Slice 8b — panel zaznaczonej grupy statków (od REFORMY ZAKŁADEK T6 — przy prawym outlinerze)

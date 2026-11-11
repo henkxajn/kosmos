@@ -933,7 +933,22 @@ export class MovementOrderSystem {
       }
     }
 
-    if (bodyId) {
+    // Finding 663 (część A, decyzja właściciela 2026-11-11) — statek JUŻ przy ciele (zadokowany / na orbicie tego ciała albo
+    //   bliżej niż `RENDEZVOUS_TUNING.CAPTURE_AU`; dla księżyca także od jego planety — `VesselManager._rendezvousCapture`) NIE
+    //   dostaje przechwycenia: przylot od razu (`arrivalYear` = teraz), więc w następnym tiku zwykła detekcja przylotu stawia
+    //   go na orbicie ciała, a rozkaz kończy się jak każdy inny (`vessel:arrived` → `vessel:orderCompleted`, dok floty, slot
+    //   orbity). Dotąd statek wolniejszy od ciała i za nim leciał na drugą stronę orbity (32,7 AU za gwiazdą, ≈ 28 lat).
+    //   Wszyscy, także AI (strażnik przy stolicy wysyłany na jej księżyc leciał 1,2–4 roku); odwrót z bitwy — nie (lot ucieczki
+    //   zostaje prawdziwym lotem, M1).
+    const isRetreatOrder = isRetreatSpec(spec);
+    const captured = !!bodyId && !isRetreatOrder && this._vm._rendezvousCapture?.(vessel, bodyId) === true;
+    if (captured) {
+      // pozycja ciała TERAZ z elementów orbity (jak przechwycenie; stacja → jej ciało), nie z `x/y` — te bywają nieodświeżone
+      const q = this._vm._predictPosition?.(bodyId, window.KOSMOS?.timeSystem?.gameTime ?? 0);
+      if (Number.isFinite(q?.x) && Number.isFinite(q?.y)) p = { x: q.x, y: q.y };
+    }
+
+    if (bodyId && !captured) {
       const bodyNow = this._vm._findEntity?.(bodyId);
       const nowX = bodyNow?.x ?? p?.x;
       const nowY = bodyNow?.y ?? p?.y;
@@ -956,12 +971,21 @@ export class MovementOrderSystem {
     //   (kontrakt synchronizacji: nikt nie przylatuje przed nią). Brak wyniku (VM bez pomocnika, ciało bez pozycji)
     //   — predykcja wyżej, jak dotąd.
     let intercept = null;
-    if (bodyId) {
+    if (bodyId && !captured) {
       const sync = spec._arrivalSyncYear;
       intercept = this._vm._interceptBody?.(bodyId, vessel.position.x, vessel.position.y,
         Math.max(0.01, vessel.speedAU ?? 1.0),
         { systemId: vessel.systemId ?? 'sys_home', notBefore: (typeof sync === 'number') ? sync : undefined }) ?? null;
       if (intercept) p = { x: intercept.x, y: intercept.y };
+      // Finding 663 (część B, wariant (a)) — najwcześniejsze spotkanie (statek może przylecieć wcześniej i czekać na orbicie
+      //   w punkcie, przez który ciało przejdzie) dalej niż horyzont ⇒ rozkaz GRACZA odrzucony z powodem i ETA, zamiast lotu na
+      //   dziesiątki lat (`VesselManager._rendezvousRefusal`; AI i odwrót — nigdy). Odmowa PRZED jakąkolwiek mutacją, więc
+      //   dwufazowa preempcja `issueOrder` zostawia poprzedni rozkaz. Przy synchronizacji floty liczy się własne spotkanie
+      //   statku (bez `notBefore`).
+      if (intercept && !isRetreatOrder) {
+        const refusal = this._vm._rendezvousRefusal?.(vessel, bodyId, (typeof sync === 'number') ? null : intercept) ?? null;
+        if (refusal) return { ok: false, ...refusal };
+      }
     }
 
     // §8.5 — reject gdy punkt wewnątrz strefy wykluczenia Słońca (nie do obejścia).
@@ -1013,7 +1037,8 @@ export class MovementOrderSystem {
     //   niż swoja v_max). Jeśli sync_year < natural → użyj natural (vessel jest
     //   tym najwolniejszym, nie ma czego dopasować).
     const naturalArrival = gameYear + travelYears;
-    const arrivalYear = intercept ? intercept.arrivalYear                  // SB39 — chwila przechwycenia (wyżej)
+    const arrivalYear = captured ? gameYear                                // Finding 663 (A) — przy ciele: przylot od razu
+      : intercept ? intercept.arrivalYear                                  // SB39 — chwila przechwycenia (wyżej)
       : (typeof spec._arrivalSyncYear === 'number')
       ? Math.max(spec._arrivalSyncYear, naturalArrival)
       : naturalArrival;

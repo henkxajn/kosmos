@@ -80,7 +80,7 @@ import {
   FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR, combatFxPace,
 } from '../config/CombatFxConfig.js';
-import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
+import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
   isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS, ENGAGEMENT_RING, engagementRingBand,
   isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR, HIT_GLOW, hitGlowWorldSize,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
@@ -1667,11 +1667,9 @@ export class ThreeRenderer {
       if (b && Number.isFinite(b.x)) this._spawnScanPing(b.x, b.y);
     }));
 
-    // Slice 6 — pulsy startu/przybycia (satysfakcjonujące sprzężenie zwrotne ruchu).
-    // ARKUSZ HUD paczka B (D-HUD-16) — kolor pulsu w roli motywu (`_spawnMovementPulse`).
-    EventBus.on('vessel:launched', safe(({ vessel }) => this._spawnMovementPulse(vessel)));
-    EventBus.on('vessel:arrived',  safe(({ vessel }) => this._spawnMovementPulse(vessel)));
-    EventBus.on('vessel:docked',   safe(({ vessel }) => this._spawnMovementPulse(vessel)));
+    // ⚠ Finding 663 (dodatek 1 i decyzja właściciela 37, 2026-11-11) — BEZ pierścieni ruchu statku: dawne pulsy Slice 6 przy
+    //   starcie, przylocie i doku (`vessel:launched` / `vessel:arrived` / `vessel:docked`, `_spawnMovementPulse`) usunięte;
+    //   nic innego od nich nie zależało (pin: `sb2b_pulse_scope_smoke`).
 
     // Centruj kamerę na statku (kliknięcie w liście floty / Outliner)
     EventBus.on('vessel:focus', safe(({ vesselId }) => {
@@ -6766,10 +6764,6 @@ export class ThreeRenderer {
           break;
         case 'shieldRing':
         case 'ring':
-        case 'pulse':
-          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
-          ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 2));
-          break;
         case 'ping':
           if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
           ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 3));
@@ -8453,32 +8447,6 @@ export class ThreeRenderer {
     this._bodyVeil.geom.dispose();
     this._bodyVeil.mat.dispose();
     this._bodyVeil = null;
-  }
-
-  // ── Slice 6 — puls startu/przybycia statku (FX harness) ──────────────────
-  _spawnMovementPulse(vessel) {
-    if (!GAME_CONFIG.FEATURES?.fcMovementFx) return;
-    // SB43 (Finding 415) — pierścień tylko dla statku z OGLĄDANEGO układu (w skoku warp — układu startu), a statku
-    //   nie-gracza tylko przy wykryciu ≥ contact (`isMovementPulseVisible`). Statek z wydarzenia, nie z rejestru:
-    //   `destroyVessel` emituje `vessel:docked` PO usunięciu statku z rejestru.
-    const isEnemy = isEnemyVessel(vessel);
-    if (!isMovementPulseVisible({
-      systemId:       vessel?.systemId,
-      fromSystemId:   vessel?.mission?.fromSystemId ?? null,
-      activeSystemId: window.KOSMOS?.activeSystemId ?? 'sys_home',
-      isEnemy,
-      quality:        isEnemy ? (window.KOSMOS?.intelSystem?.getVesselContact?.(vessel.id)?.quality ?? 'unknown') : null,
-    })) return;
-    const p = vessel?.position;
-    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.08, 0.13, 24),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
-    );
-    ring.position.set(S(p.x), 0.3, S(p.y)); ring.rotation.x = -Math.PI / 2;
-    // ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli motywu (`_spawnFx`): własny statek `primary`, obcy `foreign` (dawniej
-    // 0x88ffcc przy starcie, 0x88ddff przy przylocie i doku — bez rozróżnienia własny / obcy).
-    this._spawnFx(ring, { kind: 'pulse', lifetime: FX_RING_MS, baseScale: 1, baseOpacity: 0.8, hudRole: isEnemy ? 'foreign' : 'primary' });
   }
 
   // Miękka tekstura glow (radial) — współdzielona dla smug silnika (i innych FX).

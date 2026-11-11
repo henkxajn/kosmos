@@ -432,7 +432,9 @@ export class WarSystem {
       // player-only, ale D5 (pary AI↔AI) to zmieni — guard ma być na miejscu WCZEŚNIEJ.
       if (!this._hasPlayerSide(result)) return;
       const war = this.getWarWith(empireId);
-      if (war) this.recordBattle(war.id, result, { announce: false });
+      // Finding 663 (dodatek 3, Finding 156) — `battleId` producenta: rekord bitwy JUŻ jest w `gameState.battles`, wojna go
+      //   tylko dopisuje (dawniej drugi rekord z tą samą osią rund — podwójny zapis i niepowiązane id).
+      if (war) this.recordBattle(war.id, result, { announce: false, battleId });
       return;
     }
 
@@ -500,18 +502,23 @@ export class WarSystem {
    *
    * @param {string} warId
    * @param {object} result
-   * @param {{ announce?: boolean }} [opts] — `announce: false` KSIĘGUJE BEZ OGŁASZANIA
+   * @param {{ announce?: boolean, battleId?: string }} [opts] — `announce: false` KSIĘGUJE BEZ OGŁASZANIA
    *   (Finding 150). Używa tego WYŁĄCZNIE `_classifyBattle`, bo tam producent bitwy już
    *   wyemitował `battle:resolved` i drugie ogłoszenie było duplikatem u wszystkich
    *   konsumentów. Domyślnie ogłaszamy — wywołania WPROST (`EnemyAttackHandler`,
    *   `forceBattle`, `_fleetArrived`) są jedynym ogłoszeniem swojej bitwy.
+   *   `battleId` producenta (Finding 663, dodatek 3 / Finding 156): gdy rekord już jest
+   *   w `gameState.battles` (bitwa DSCS / VCS zapisana przez producenta), wojna NIE tworzy drugiego — dopisuje `warId` do
+   *   istniejącego i jego id do `war.battles`. Dawniej powstawał drugi rekord o niepowiązanym id z tą samą osią rund
+   *   (podwójny zapis). Bez `battleId` (EAH i wywołania wprost) — nowy rekord jak dotąd.
    */
   recordBattle(warId, result, opts = {}) {
     const war = this.getWar(warId);
     if (!war) return null;
     const year = this._year();
-    const battleId = `battle_${year}_${warId}_${war.battles.length + 1}`.replace(/\./g, '_');
-    const battleRec = {
+    const existing = opts.battleId ? (gameState.get(`battles.${opts.battleId}`) ?? null) : null;
+    const battleId = existing ? opts.battleId : `battle_${year}_${warId}_${war.battles.length + 1}`.replace(/\./g, '_');
+    const battleRec = existing ? { ...existing, warId } : {
       id: battleId,
       warId,
       year,

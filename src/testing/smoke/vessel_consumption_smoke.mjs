@@ -444,7 +444,11 @@ console.log('\nC11 — okablowanie: orbita, renderer, Dziennik, helper, i18n');
   const TR = src('../../renderer/ThreeRenderer.js');
   const trRm = handlerBodies(TR, 'vessel:removed').join('\n');
   ok(/_removeVesselSprite\(/.test(trRm) && /_focusVesselId/.test(trRm), 'C11c renderer: `vessel:removed` usuwa sprite i zdejmuje śledzenie kamery');
-  ok(handlerBodies(TR, 'vessel:docked').length === 2, 'C11d KONTROLA: renderer zachowuje dwóch słuchaczy prawdziwego doku');
+  // ⚠ Przecelowane świadomie (krok #663, dodatek 1 — decyzja właściciela 2026-11-11): drugi słuchacz prawdziwego doku był pulsem
+  //   (pierścień przy doku) i został usunięty na życzenie właściciela; zostaje słuchacz, który zdejmuje sprite i śledzenie kamery.
+  const trDock = handlerBodies(TR, 'vessel:docked');
+  ok(trDock.length === 1 && /_removeVesselSprite\(/.test(trDock[0]) && !/_spawnMovementPulse/.test(trDock.join('\n')),
+    'C11d KONTROLA: renderer zachowuje słuchacza prawdziwego doku (sprite), bez pulsu doku (#663, dodatek 1)');
 
   const UI = src('../../scenes/UIManager.js');
   const dk = handlerBodies(UI, 'vessel:docked');

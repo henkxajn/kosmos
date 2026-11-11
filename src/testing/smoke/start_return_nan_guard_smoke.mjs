@@ -167,8 +167,11 @@ ok(/Number\.isFinite/.test(vmSrc.slice(vmSrc.indexOf('startReturn(vesselId'), vm
   'startReturn używa jawnego testu skończoności (nie samego `??`, które NaN-a nie łapie)');
 // _issueMoveToPoint:826 ma ten sam wzór `pred?.x ?? nowX` i jest bezpieczny WYŁĄCZNIE dlatego,
 // że jego rok jest skończony z konstrukcji (clamp prędkości). Pinujemy POWÓD, nie wzór.
-const mvIdx = mosSrc.indexOf('_predictPosition');
-const mvWin = mosSrc.slice(Math.max(0, mvIdx - 700), mvIdx + 200);
+// ⚠ Przecelowane (krok #663, 2026-11-11): locator brał PIERWSZE `_predictPosition` w MOS, a część A #663 dodała wcześniej
+//   wywołanie dla statku przy ciele (rok = teraz, wynik sprawdzany jawnie `Number.isFinite`) — pin trafiał w zły site.
+//   Teraz kotwica to sam site predykcji jednorazowej (`estArrival`), którego dotyczy powód.
+const mvIdx = mosSrc.indexOf('_predictPosition?.(bodyId, estArrival)');
+const mvWin = mvIdx >= 0 ? mosSrc.slice(Math.max(0, mvIdx - 700), mvIdx + 200) : '';
 ok(/Math\.max\(0\.01,/.test(mvWin),
   '_issueMoveToPoint liczy ETA z clampem prędkości ⇒ rok SKOŃCZONY z konstrukcji — to jest ' +
   'jedyny powód, dla którego tamtejsze `?? nowX` nie jest miną (Finding 145 §145.8)');

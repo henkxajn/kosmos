@@ -33,13 +33,24 @@ function memberInput(v) {
  *   (`FleetSystem.MAX_SYNC_BOOST_FACTOR`): członek, którego najwcześniejsze przechwycenie leży dalej niż `maxBoost ×`
  *   najkrótszy czas lotu w grupie, nie wstrzymuje reszty (przylatuje sam, później) — wzór klamry sprzed SB54. Bez klamry
  *   chwilę ustala najwolniejszy (grupa AI).
- * @returns {{arrivalYear:number, earliest:Object<string,number>, core:string[], outliers:string[], iterations:number,
- *            converged:boolean} | null}  `null` — brak menedżera, ciała albo przechwycenia któregoś członka
+ * @returns {{arrivalYear:number, earliest:Object<string,number>, core:string[], outliers:string[], captured:string[],
+ *            iterations:number, converged:boolean} | null}  `null` — brak menedżera, ciała albo przechwycenia któregoś członka
+ *            (spoza `captured` — członkowie przy ciele, Finding 663)
  */
 export function groupArrivalYear(vm, bodyId, vessels, opts = {}) {
   if (typeof vm?._interceptBody !== 'function' || !bodyId) return null;
-  const list = (vessels ?? []).filter(Boolean);
-  if (list.length === 0) return null;
+  const all = (vessels ?? []).filter(Boolean);
+  if (all.length === 0) return null;
+  // Finding 663 (część A) — członek JUŻ przy ciele (`vm._rendezvousCapture`) przylatuje od razu (`_issueMoveToPoint`), więc nie
+  //   wyznacza chwili grupy: jego „przechwycenie” bywa spotkaniem po drugiej stronie orbity i przeciągałoby resztę o lata.
+  //   Wszyscy przy ciele — chwila grupy = teraz (rozkazy idą, każdy przylatuje od razu).
+  const captured = all.filter(v => vm._rendezvousCapture?.(v, bodyId) === true).map(v => v.id);
+  const list = all.filter(v => !captured.includes(v.id));
+  if (list.length === 0) {
+    const now = Number.isFinite(opts.now) ? opts.now : 0;
+    const t = Number.isFinite(opts.notBefore) ? Math.max(now, opts.notBefore) : now;
+    return { arrivalYear: t, earliest: {}, core: [], outliers: [], captured, iterations: 0, converged: true };
+  }
   const maxIter = Number.isFinite(opts.maxIter) ? opts.maxIter : GROUP_ARRIVAL_MAX_ITER;
   const intercept = (v, notBefore) => {
     const m = memberInput(v);
@@ -77,5 +88,5 @@ export function groupArrivalYear(vm, bodyId, vessels, opts = {}) {
     if (next <= T) { converged = true; break; }
     T = next;
   }
-  return { arrivalYear: T, earliest, core: core.map(v => v.id), outliers, iterations, converged };
+  return { arrivalYear: T, earliest, core: core.map(v => v.id), outliers, captured, iterations, converged };
 }

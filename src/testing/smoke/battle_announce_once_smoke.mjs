@@ -24,9 +24,10 @@
 //       nadgorliwym zastosowaniem `announce:false`
 //   T4  potyczka bez wojny: jedno ogłoszenie + `war:skirmish` (widelec W3-2 nietknięty)
 //   T5  `AutoRetreatSystem` wydaje JEDEN rozkaz i pobiera paliwo RAZ (fail-first: 2 i 2x)
-//   T6  ⚠ PIN ZNANEGO LIMITU (Finding 156): w `gameState.battles` zostają DWA rekordy jednej
-//       bitwy, o niepowiązanych id. Naprawa 150 tego NIE rusza — pin stoi, żeby nikt nie uznał
-//       tego za załatwione.
+//   T6  Finding 156 ZAMKNIĘTY (krok #663, dodatek 3 — przycięcie zapisu, 2026-11-11): jedna bitwa DSCS-w-wojnie
+//       zostawia JEDEN rekord (id producenta), `war.battles` wskazuje go, rekord niesie `warId`.
+//       ⚠ ODWRÓCONY ŚWIADOMIE: do kroku #663 pin stał na LIMICIE (dwa rekordy o niepowiązanych id),
+//       „żeby nikt nie uznał tego za załatwione”. Teraz to jest załatwione — pin pilnuje naprawy.
 //   T7  ⚠ PIN Z2/D2 — KOLEJNOŚĆ SUBSKRYBENTÓW JEST KONTRAKTEM. Po naprawie jedynym ogłoszeniem
 //       bitwy DSCS jest emit producenta, czyli SPRZED księgowania. Spójność świata dla dalszych
 //       konsumentów bierze się WYŁĄCZNIE stąd, że `EventBus.emit` jest synchroniczny w kolejności
@@ -226,8 +227,8 @@ console.log('T5 — ⚠ SZKODA STANOWA: AutoRetreat wydaje JEDEN rozkaz i pobier
     'przed naprawą stosunek wynosił 2.0');
 }
 
-// ── T6 — PIN ZNANEGO LIMITU (Finding 156) ───────────────────────────────────
-console.log('T6 — ⚠ PIN LIMITU: jedna bitwa DSCS-w-wojnie ZOSTAWIA DWA rekordy (Finding 156)');
+// ── T6 — Finding 156 zamknięty (krok #663, dodatek 3): JEDEN rekord na bitwę ─────────────
+console.log('T6 — jedna bitwa DSCS-w-wojnie zostawia JEDEN rekord (id producenta), wojna go wskazuje (Finding 156 ✅)');
 {
   const core = boot();
   const empireId = empireOf(core);
@@ -238,12 +239,13 @@ console.log('T6 — ⚠ PIN LIMITU: jedna bitwa DSCS-w-wojnie ZOSTAWIA DWA rekor
   const ids = Object.keys(gameState.get('battles') ?? {});
   const fromDscs = ids.filter(id => id.startsWith('battle_ds_'));
   const fromWar  = ids.filter(id => !id.startsWith('battle_ds_'));
+  const war = core.warSystem.getWarWith(empireId);
+  const rec = fromDscs[0] ? gameState.get(`battles.${fromDscs[0]}`) : null;
 
-  assert(fromDscs.length === 1 && fromWar.length === 1,
-    `T6: DWA rekordy jednej bitwy (DSCS: ${fromDscs.join()} | wojenny: ${fromWar.join()}) — ` +
-    'naprawa 150 dotyczy OGŁOSZEŃ, nie rekordów; Finding 156 otwarty');
-  assert(fromDscs[0] !== fromWar[0],
-    'T6: …i ich id są NIEPOWIĄZANE — z id DSCS nie da się dojść do rekordu wojennego');
+  assert(fromDscs.length === 1 && fromWar.length === 0,
+    `T6a: JEDEN rekord bitwy (DSCS: ${fromDscs.join()} | wojenny: ${fromWar.join() || '—'}) — bez drugiego zapisu tej samej osi rund`);
+  assert(!!war && (war.battles ?? []).includes(fromDscs[0]) && rec?.warId === war.id,
+    `T6b: wojna wskazuje rekord producenta (${(war?.battles ?? []).join()}), rekord niesie warId (${rec?.warId})`);
 }
 
 // ── T7 — PIN Z2/D2: kolejność subskrybentów jest kontraktem ─────────────────
