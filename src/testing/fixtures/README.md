@@ -110,3 +110,16 @@ nie dekoder własny; (2) metryczka podaje sha256 każdego źródła — podmiana
 ```
 models/CV1a-incoming-key-colour.json.gz — kolory tekstur bazowych 6 modeli właściciela → `cv_models_logic_smoke` T9
 ```
+
+## `three-stub/` — moduł `three` dla testów headless (nie zapis, nie ślad, nie tekstury)
+
+> Powołane 2026-11-11 (Finding 683, decyzja właściciela przed CV-1c). Czwarty rodzaj: **stub modułu**. Łańcuch importów
+> GameCore → GroundUnitManager → GroundUnitFactory → GlbSnapshotRenderer importuje `three` (w grze z importmapy, pod node —
+> z `node_modules`). Stub żył dotąd wyłącznie w `node_modules/three` (gitignorowane) i każde `npm ci` / `npm install` go
+> kasowało. Teraz jest tutaj (git), a `package.json` → `devDependencies.three = "file:src/testing/fixtures/three-stub"`:
+> instalacja pakietów tworzy `node_modules/three` jako ŁĄCZE do tego folderu.
+
+Reguły: (1) stub NIE eksportuje `TextureLoader` — granica dowodu (`ColonyOverlay` / `GameScene` nie importują się pod node;
+patrz nagłówek `three-stub/index.js`); (2) zmiana stubu = zmiana tego, co dowodliwe pod node — wymaga uzasadnienia w commicie;
+(3) pilnuje keeper `three_stub_fixture_smoke` (wskaźnik w package.json, wpis lockfile'a `link: true`, rozwiązywanie `three`
+do tego folderu, łącze — nie kopia, granica dowodu z kontrolą na prawdziwym three gry).

@@ -55,7 +55,7 @@ async function loadDeps() {
   } catch (e) {
     console.error('\n✖ Brak bibliotek normalizatora (sharp, glTF-Transform).');
     console.error('  W folderze gry uruchom raz:  npm ci   — albo poproś Claude o instalację.');
-    console.error('  ⚠ `npm ci` usuwa stub `node_modules/three` używany przez testy — Claude odtworzy go w tej samej sesji.');
+    console.error('  (Stub `three` dla testów jest w git — `src/testing/fixtures/three-stub` — i `npm ci` odtwarza go sam, Finding 683.)');
     console.error(`  (szczegóły: ${e.message})\n`);
     process.exit(2);
   }

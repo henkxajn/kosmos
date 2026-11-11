@@ -1,0 +1,9 @@
+{
+  "name": "three",
+  "version": "0.0.0-headless-stub",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./addons/*": "./addons/*"
+  }
+}

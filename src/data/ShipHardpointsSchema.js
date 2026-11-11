@@ -154,3 +154,18 @@ export function validateHardpoints(doc) {
   if (doc.notes !== undefined && typeof doc.notes !== 'string') err('notes: string');
   return { ok: errors.length === 0, errors };
 }
+
+/**
+ * Tekst pliku hardpointów w formacie plików CV-1a: wcięcie 2, wektory i macierze w jednej linii, LF, znak nowej linii na końcu.
+ * JEDNO źródło formatu dla normalizatora (CV-1b, reeksport w `tools/ship-models/lib/hardpoints.mjs`) i Model Workshopu (CV-1c) —
+ * ten sam dokument daje te same bajty niezależnie od tego, które narzędzie go zapisało (mniejszy diff, idempotentny zapis).
+ * @param {object} doc
+ * @returns {string}
+ */
+export function formatHardpointsJson(doc) {
+  const txt = JSON.stringify(doc, null, 2);
+  // [\n  -1,\n  0,\n  0\n] → [-1, 0, 0] — tablice liczb w jednej linii (czytelność, mniejszy diff)
+  const flat = txt.replace(/\[\s+(-?[\d.e+-]+(?:,\s+-?[\d.e+-]+)*)\s+\]/g, (_, inner) => '[' + inner.split(/,\s+/).join(', ') + ']');
+  // [[1, 0, 0],\n [0, 1, 0], …] — macierz (tablica krótkich tablic liczb) też w jednej linii
+  return flat.replace(/\[\s+(\[[^[\]\n]*\](?:,\s+\[[^[\]\n]*\])*)\s+\]/g, (_, inner) => '[' + inner.split(/,\s+(?=\[)/).join(', ') + ']') + '\n';
+}

@@ -17,11 +17,41 @@ Jak zrobić nowy model statku i wstawić go do gry — bez Blendera i bez termin
 7. **Obejrzyj w grze** — otwórz grę, konsola (F12), polecenia bez cudzysłowów:
    `KOSMOS.debug.cvParade()` (24 statki w locie, każdy slot) albo `KOSMOS.debug.cvBattle({warp: 1})` /
    `KOSMOS.debug.cvBattle()` (bitwa okrętów). Po teście **F5 bez zapisu** (statki testowe nie mogą trafić do zapisu).
-8. **Model Workshop** (CV-1c, w przygotowaniu) — klikniesz na modelu dziób, dyszę, wieżyczki i światła.
+8. **Model Workshop** — kliknij na modelu dziób, dyszę, wieżyczki i światła (sekcja niżej).
 
 Z terminala to samo: `npm run ship -- warp_frigate` albo `node tools/ship-models/normalize-ship.mjs warp_frigate`
 (opcje: `--dry` — tylko raport; `--podglad` — kandydat do obejrzenia w grze bez podmiany slotu,
 `await KOSMOS.debug.cvIncoming(1)`; `--help`).
+
+## Model Workshop — klikanie dziobu, dyszy, wieżyczek i świateł (CV-1c)
+
+**Adres** (gra i Workshop idą przez Live Server w VS Code — „Go Live", port 5500):
+**http://127.0.0.1:5500/tools/model-workshop/index.html**
+(port widać na pasku stanu VS Code: „Port : 5500"; jeśli jest inny, podmień liczbę w adresie).
+
+Kolejność (pomoc jest też na stronie):
+
+1. **Wybierz model** z listy u góry — Twoje okręty są pierwsze.
+2. **1 Dziób** — kliknij czubek dziobu. Kierunek zaokrąglamy do osi modelu; żółta strzałka nad statkiem pokazuje dziób.
+3. **2 Dysza** — kliknij wylot silnika; smuga pojawia się od razu (jak w grze). Kierunek „za rufę" pasuje prawie zawsze;
+   suwak „promień dyszy" — grubość smugi.
+4. **3 Wieżyczki** — klikaj działa. **LUSTRO** (włączone, klawisz `M`) stawia bliźniaka po drugiej burcie (W1 + W2…).
+5. **4 Światła** — wybierz kolor (cyjan / czerwony / zielony / biały) i rozmiar, klikaj okna i światła pozycyjne. LUSTRO jak
+   wyżej; opcja „lustro zamienia czerwony ↔ zielony" — dla świateł pozycyjnych. Przycisk **„Odległość jak w bitwie"** pokazuje
+   statek tak mały jak w bitwie (ok. 48 px) — punkt mniejszy niż 1,5 px gaśnie, więc tam widać, czy światła są dość duże.
+6. **Maska** (suwaki) — tylko modele z cyjanem na teksturze (pierścień warp); pod suwakami: ile procent tekstury świeci.
+7. **Zapisz do gry** — okno pokaże nazwę slotu i ścieżkę pliku; za pierwszym razem wskaż folder
+   `assets/models/ships/hardpoints` (Chrome zapyta o zgodę na zapis). Strona i gra przeładują się same (Live Server),
+   Twoje zmiany zostają (pamięć karty). **„Pobierz plik"** — zapas: plik `<slot>.json` do ręcznego przeniesienia do
+   `assets/models/ships/hardpoints/`.
+
+Pomyłka: `Ctrl+Z` cofa, `Ctrl+Y` ponawia. Tryb **5 Wybierz** — kliknij punkt, przeciągnij go po kadłubie albo usuń `Del`;
+w tym trybie kolor i rozmiar zmieniają zaznaczone światło. Mysz: lewy przycisk — obrót (krótki klik = postaw punkt),
+kółko — zoom, prawy — przesuwanie. Podgląd jest liczony **kodem gry** (te same materiały, maska, punkty świetlne i smuga);
+przełączniki: „jak wróg", gwiazda F / G / K / M, „obróć jak w grze".
+
+Sprawdzenie w grze: `KOSMOS.debug.cvBattle()` albo `KOSMOS.debug.cvParade()` w konsoli gry, potem **F5 bez zapisu**.
+Ponowna normalizacja tego samego modelu (`.bat`) **zachowuje** kliknięte punkty — Workshop nie zmienia pola `source`.
 
 ## Standard nowego modelu (rama właściciela F10)
 
