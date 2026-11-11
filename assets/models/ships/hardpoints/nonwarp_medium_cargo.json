@@ -4,8 +4,8 @@
   "slot": "nonwarp_medium_cargo",
   "source": {
     "file": "nonwarp_medium_cargo.glb",
-    "sha256": "4c34a7944197a7bbc19056a83474220380ba290fc90f241552c3500a83ff1bca",
-    "normalizer": null
+    "sha256": "cbb23de45550ee3085211d31187b6fc0cb49073e72264b2354d8c1bbf51df136",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

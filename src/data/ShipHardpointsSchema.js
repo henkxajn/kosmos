@@ -30,8 +30,12 @@
 //                               barwy ≥ hueTol, nasyceniu ≤ satMin albo jasności ≤ valMin maska = 0 dokładnie; `soft` łagodzi
 //                               do wewnątrz (pełna maska od satMin + soft, valMin + soft i odległości ≤ hueTol − soft·100°).
 //   damagePoints 'auto' | [p…]  punkty uszkodzeń (CV-5); 'auto' — wyznaczy renderer.
-//   source     { file, sha256, normalizer }  skąd wartości (sha256 pliku GLB w chwili pomiaru — CV-1b po nim wykrywa
+//   source     { file, sha256, normalizer, input? }  skąd wartości (sha256 pliku GLB w chwili pomiaru — CV-1b po nim wykrywa
 //                               nieaktualny plik hardpointów); normalizer = null, gdy plik nie przeszedł normalizatora.
+//                               `input` (opcjonalny, pisze go normalizator CV-1b `normalize-ship@1`): { file, sha256, verts,
+//                               tris, rotation } — plik WEJŚCIOWY z `incoming/`, z którego powstał model slotu, i obrót
+//                               (permutacja ze znakami 3×3, wiersze), którym normalizator ułożył go dziobem w −X. Po nich
+//                               ponowna normalizacja tego samego modelu rozpoznaje go i NIE kasuje klikniętych punktów.
 //   notes      opcjonalny opis (string).
 //
 // ⚠ ZERO importów — moduł wykonuje się pod node (keeper `cv_models_logic_smoke` sprawdza nim wszystkie pliki z dysku).
@@ -86,6 +90,19 @@ export function validateHardpoints(doc) {
     if (typeof src.file !== 'string' || !/\.glb$/i.test(src.file)) err('source.file: wymagana nazwa pliku .glb');
     if (!(src.sha256 === null || (typeof src.sha256 === 'string' && /^[0-9a-f]{64}$/.test(src.sha256)))) err('source.sha256: null albo 64 znaki hex');
     if (!(src.normalizer === null || typeof src.normalizer === 'string')) err('source.normalizer: null albo string');
+    if (src.input !== undefined) {
+      const inp = src.input;
+      const isCount = (x) => Number.isInteger(x) && x >= 0;
+      const isRot = (r) => Array.isArray(r) && r.length === 3 && r.every((row) => Array.isArray(row) && row.length === 3 && row.every(isNum));
+      if (!inp || typeof inp !== 'object' || Array.isArray(inp)) err('source.input: obiekt');
+      else {
+        if (typeof inp.file !== 'string' || !/\.glb$/i.test(inp.file)) err('source.input.file: nazwa pliku .glb');
+        if (typeof inp.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(inp.sha256)) err('source.input.sha256: 64 znaki hex');
+        if (inp.verts !== undefined && !isCount(inp.verts)) err('source.input.verts: liczba całkowita ≥ 0');
+        if (inp.tris !== undefined && !isCount(inp.tris)) err('source.input.tris: liczba całkowita ≥ 0');
+        if (inp.rotation !== undefined && !isRot(inp.rotation)) err('source.input.rotation: macierz 3×3 (wiersze)');
+      }
+    }
   }
 
   const fr = doc.frame;

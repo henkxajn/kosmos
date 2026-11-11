@@ -4,8 +4,15 @@
   "slot": "nonwarp_frigate",
   "source": {
     "file": "nonwarp_frigate.glb",
-    "sha256": "0ffeda377476e36415b0b171d6ef62b52545828eedd228d6cbfaa8597f28ff24",
-    "normalizer": null
+    "sha256": "44e12c9cf1233324ffca22620ffa05d30b75c186f042799c4a6339c4f727a64f",
+    "normalizer": "normalize-ship@1",
+    "input": {
+      "file": "incoming/nonwarp_frigate.glb",
+      "sha256": "93f180ab151dc2db19778869a095b6c6abb480227a172026327a41bb554d7f16",
+      "verts": 10567,
+      "tris": 9681,
+      "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    }
   },
   "frame": {
     "bow": [-1, 0, 0],
@@ -13,15 +20,15 @@
   },
   "nozzles": [
     {
-      "p": [0.5, 0.016, 0.001],
+      "p": [0.5, 0, 0],
       "d": [1, 0, 0],
-      "r": 0.038
+      "r": 0.047
     }
   ],
   "weapons": [],
   "lights": [],
   "keyColour": {
-    "mode": "none",
+    "mode": "mask",
     "hue": 182,
     "hueTol": 12,
     "satMin": 0.45,
@@ -30,5 +37,5 @@
     "gain": 3.5
   },
   "damagePoints": "auto",
-  "notes": "CV-1a: wartości z pomiaru (audyt Q6 + 2026-11-10): dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości (27/27), dysza = środek bbox przekroju 3 % przy rufie. Bez maski (model sprzed standardu F10); wieżyczki i światła klika Workshop (CV-1c)."
+  "notes": "normalize-ship@1 (2026-11-11 10:35): model właściciela w slocie; dziób, dysza i maska przeniesione z hardpoints/incoming/ (pomiar CV-1a / Workshop). Wieżyczki i światła klika Model Workshop (CV-1c)."
 }

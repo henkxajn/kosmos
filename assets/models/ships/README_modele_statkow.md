@@ -1,141 +1,108 @@
-# Modele 3D statków — instrukcja wgrywania plików
+# Modele 3D statków — przewodnik właściciela
 
-## Gdzie wgrać pliki
+Jak zrobić nowy model statku i wstawić go do gry — bez Blendera i bez terminala.
+(ARC COMBAT VISUALS: CV-1a — rama i hardpointy, CV-1b — normalizator, CV-1c — Model Workshop.)
 
-Wszystkie modele wrzucasz do tego folderu:
+## Krok po kroku
 
-```
-assets/models/ships/
-```
+1. **Midjourney** — obraz statku zgodny ze standardem niżej (jedna dysza, jasny kadłub, cyjan tylko na światłach).
+2. **Meshy** — model 3D z obrazu; pobierz jako **GLB** (2K PBR, ok. 10–15 tys. trójkątów).
+3. **Nazwij plik nazwą slotu**, np. `warp_frigate.glb` (lista slotów niżej). Inna nazwa też zadziała — program
+   zapyta, do którego slotu wstawić model, i poprosi o potwierdzenie („t").
+4. **Zamknij grę w przeglądarce** (zapis plików przeładowuje kartę otwartą przez Live Server).
+5. **Przeciągnij plik GLB na `tools/ship-models/normalize-ship.bat`** (w Eksploratorze Windows). Okno samo:
+   skopiuje plik do `assets/models/ships/incoming/`, przygotuje model dla gry, pokaże raport i poczeka na klawisz.
+6. **Przeczytaj raport** (zostaje też w `assets/models/ships/incoming/<slot>.report.txt`): ✔ spełnia standard,
+   ⚠ odstępstwo (model działa, ale następny warto poprawić), ℹ informacja, ☐ tego program nie zmierzy — sprawdź oczami.
+7. **Obejrzyj w grze** — otwórz grę, konsola (F12), polecenia bez cudzysłowów:
+   `KOSMOS.debug.cvParade()` (24 statki w locie, każdy slot) albo `KOSMOS.debug.cvBattle({warp: 1})` /
+   `KOSMOS.debug.cvBattle()` (bitwa okrętów). Po teście **F5 bez zapisu** (statki testowe nie mogą trafić do zapisu).
+8. **Model Workshop** (CV-1c, w przygotowaniu) — klikniesz na modelu dziób, dyszę, wieżyczki i światła.
 
-Format: **glTF 2.0 binarny `.glb`** (bez Draco / KTX2 — tak jak istniejące
-`cargo3d.glb`, `research1.glb`, `Ring_Station.glb`). Skala modelu **nie ma
-znaczenia** — gra automatycznie normalizuje rozmiar do klasy statku (przez
-bounding box).
+Z terminala to samo: `npm run ship -- warp_frigate` albo `node tools/ship-models/normalize-ship.mjs warp_frigate`
+(opcje: `--dry` — tylko raport; `--podglad` — kandydat do obejrzenia w grze bez podmiany slotu,
+`await KOSMOS.debug.cvIncoming(1)`; `--help`).
 
-## Kierunek dziobu i hardpointy (ARC COMBAT VISUALS, CV-1a)
+## Standard nowego modelu (rama właściciela F10)
 
-> ⚠ Sprostowanie (Finding 621): ten plik mówił dawniej, że dziób ma być wzdłuż
-> **+X** „jak w obecnych modelach". To była nieprawda — **26 z 27 obecnych modeli
-> ma dziób w lokalnym −X**, a wyjątek `nonwarp_large_science` (+X) latał rufą.
+- **jedna dysza silnika na rufie**; kadłub **nie czarny** (jasne płyty czytają się pod każdą gwiazdą);
+- **jeden kolor-klucz = jasny cyjan** wyłącznie na oknach / światłach / pierścieniu warp, nigdzie indziej — gra liczy
+  z niego prawdziwą emisję (Meshy nie daje map emisji). Maska ma twarde progi: przy domyślnych (barwa 182° ± 12°,
+  nasycenie > 0,45, jasność > 0,55) nic od barwy 194° w górę nie świeci — niebiesko-szare płyty zostają ciemne;
+- widoczne wieżyczki na okrętach wojennych; **bez napisów i logo**;
+- ok. 10–15 tys. trójkątów (więcej — raport ostrzega; liczbę ustawia się w Meshy), tekstury 2K PBR, plik GLB;
+- **kierunek dziobu w pliku dowolny** — normalizator sam układa model dziobem w −X.
 
-**Kierunek dziobu w pliku jest dowolny.** Gra czyta go z pliku hardpointów i obraca
-model jednym kwaternionem do ramy kanonicznej (dziób **+Z**, góra **+Y**) — flaga
-`cvModels`, domyślnie ON.
+## Co robi normalizator (`tools/ship-models/normalize-ship.mjs`)
 
-Pliki hardpointów (`schema: kosmos-ship-hardpoints`, wersja 1 — `src/data/ShipHardpointsSchema.js`):
+- środek modelu w (0, 0, 0), najdłuższy wymiar 1,0, najdłuższa oś wzdłuż X, **dziób w −X** — zgadnięty z gęstości
+  wierzchołków w ostatnich 8 % długości (rufa z dyszami jest gęstsza; 33 / 33 trafień na obecnych modelach);
+- scala identyczne wierzchołki i duplikaty, usuwa nieużywane dane;
+- tekstury: **kolor bazowy zostaje bajt w bajt** (żadnej ponownej kompresji — cienki cyjan by się rozlał), mapa
+  normalnych → WebP bez widocznej straty (near-lossless), metal / szorstkość → WebP; wybrane na arkuszu kontaktowym
+  (zbliżenie w grze: PSNR 49–52 dB wobec oryginału — różnicy nie widać);
+- zapisuje `<slot>.glb` (2K — gra) i `<slot>@1k.glb` (1K — dla słabszych komputerów, presety Medium / Low, CV-2b);
+- **stary model slotu trafia do `assets/models/ships/_archive/`** (poza git) — razem ze starym plikiem hardpointów;
+- tworzy albo **scala** `hardpoints/<slot>.json`: punkty kliknięte wcześniej (dziób, dysza, wieżyczki, światła,
+  strojenie maski) **przeżywają** ponowną normalizację tego samego modelu; punkty STAREGO modelu slotu nie trafiają na
+  nowy kadłub. Ponowne uruchomienie dla tego samego pliku daje te same bajty (można bezpiecznie powtarzać).
 
-```
-assets/models/ships/hardpoints/<slot>.json            — model w slocie (24 + default + 2 nieużywane)
-assets/models/ships/hardpoints/incoming/<slot>.json   — model właściciela czekający w incoming/ (przed podmianą slotu)
-assets/models/ships/hardpoints/incoming/index.json    — lista slotów z plikami w incoming/
-```
+**Jak cofnąć podmianę:** skopiuj z `_archive/` pliki `<slot>__<data>.glb` i `<slot>__<data>.json` z powrotem jako
+`<slot>.glb` i `hardpoints/<slot>.json` (albo poproś Claude — historia git też trzyma każdą wersję).
 
-Współrzędne w **znormalizowanej przestrzeni modelu**: środek prostopadłościanu
-otaczającego w (0, 0, 0), najdłuższy wymiar = 1,0 (tak samo normalizuje gra przy
-stawianiu statku). Pola: `frame` (dziób, góra), `nozzles` (dysza: punkt, kierunek
-smugi za rufą, promień), `weapons` (wieżyczki W1…Wn — CV-4), `lights` (punkty
-świetlne: okna, światła pozycyjne — rysowane zawsze, gdy lista nie jest pusta),
-`keyColour` (emisja z koloru-klucza tekstury: `mode` `mask` / `none`, barwa,
-tolerancja, progi nasycenia i jasności, miękkość, wzmocnienie), `damagePoints`.
-Wartości obecnych plików pochodzą z pomiaru (dziób = koniec o mniejszej liczbie
-wierzchołków w ostatnich 8 % długości, dysza = środek przekroju 3 % przy rufie);
-wieżyczki i światła klika Model Workshop (CV-1c). Brak pliku albo plik niepoprawny
-⇒ wartości zapasowe (dziób −X, dla `nonwarp_large_science` +X) — statek nigdy nie
-czeka na plik i nie leci rufą.
+## Hardpointy (`assets/models/ships/hardpoints/`)
 
-### Standard nowego modelu (rama właściciela F10)
+Plik `<slot>.json` (`schema: kosmos-ship-hardpoints`, wersja 1 — `src/data/ShipHardpointsSchema.js`), współrzędne
+w znormalizowanej przestrzeni modelu (środek bbox w 0, najdłuższy wymiar 1,0 — tak samo normalizuje gra). Pola:
+`frame` (dziób, góra), `nozzles` (dysza: punkt, kierunek smugi, promień), `weapons` (wieżyczki W1…Wn), `lights`
+(punkty świetlne — rysowane zawsze, gdy lista nie jest pusta, razem z maską), `keyColour` (maska koloru-klucza:
+`mode` `mask` / `none`, barwa, tolerancja, progi, miękkość, wzmocnienie), `damagePoints`, `source` (plik, sha256,
+normalizator, plik wejściowy z `incoming/`). Brak pliku albo plik niepoprawny ⇒ wartości zapasowe (dziób −X) — statek
+nigdy nie czeka na plik i nie leci rufą. `hardpoints/incoming/` + `index.json` — kandydaci do podglądu
+(`--podglad`, `cvIncoming`); podmiana slotu zdejmuje wpis.
 
-- jedna dysza silnika na rufie; kadłub NIE czarny;
-- **jeden kolor-klucz = jasny cyjan** wyłącznie na oknach / światłach / pierścieniu
-  warp, nigdzie indziej na kadłubie — gra liczy z niego prawdziwą emisję (Meshy nie
-  daje map emisji). Maska ma twarde progi: przy domyślnych (barwa 182° ± 12°,
-  nasycenie > 0,45, jasność > 0,55) nic od barwy 194° w górę nie świeci — niebiesko-
-  szare panele kadłuba (196–216°) zostają ciemne;
-- widoczne wieżyczki na okrętach wojennych; bez napisów i logo;
-- ~10–15 tys. trójkątów, tekstury 2K PBR, GLB.
+## Stan modeli (CV-1b, 2026-11-11)
 
-### Modele z `incoming/` (podgląd przed podmianą slotu)
+- **Sześć okrętów wojennych to modele właściciela** (fregata, niszczyciel, pancernik — bez warp i z warp).
+- Pozostałe 18 slotów i `default` to stare modele (tylko tekstury skompresowane: 74,8 → 44,8 MB, bez widocznej różnicy).
+- **Identyczne pliki — czekają na własne modele:** `default` = `cargo3d` · `nonwarp_large_cargo` = `nonwarp_medium_cargo` ·
+  `warp_large_science` = dawna fregata warp. `cargo3d.glb` i `research1.glb` nie są używane przez grę.
 
-Plik `<slot>.glb` wrzucony do `assets/models/ships/incoming/` (folder poza git)
-podmienia slot dopiero normalizator (CV-1b). Do tego czasu można go obejrzeć w grze
-z konsoli (bez cudzysłowów): `await KOSMOS.debug.cvIncoming(1)` — sloty z
-`hardpoints/incoming/index.json` biorą model z `incoming/`; `cvIncoming(0)` wraca do
-slotów. Statki testowe: `KOSMOS.debug.cvParade()` (24 sloty w locie) i
-`KOSMOS.debug.cvBattle({warp: 1})` (okręty z wariantem warp).
-
-## Podział: A = bez warp, B = warp
-
-Każdy statek ma dwa warianty modelu zależnie od napędu:
+## Podział: bez warp / warp
 
 | Oś | Prefiks pliku | Kiedy używany |
 |----|---------------|---------------|
 | **A — bez warp** | `nonwarp_` | statek bez Komory Warp (brak baku `warp_cores`) |
 | **B — warp**     | `warp_`    | statek z Komorą Warp (`warpFuel.max > 0`) |
 
-## Lista plików (24 + 1 default)
+## Lista slotów (24 + `default`)
 
-### A — bez warp (`nonwarp_`)
+| Typ statku | bez warp | warp |
+|---|---|---|
+| mały naukowy | `nonwarp_small_science` | `warp_small_science` |
+| mały towarowy | `nonwarp_small_cargo` | `warp_small_cargo` |
+| mały kolonizacyjny | `nonwarp_small_colony` | `warp_small_colony` |
+| średni naukowy | `nonwarp_medium_science` | `warp_medium_science` |
+| średni towarowy | `nonwarp_medium_cargo` | `warp_medium_cargo` |
+| średni kolonizacyjny | `nonwarp_medium_colony` | `warp_medium_colony` |
+| duży naukowy | `nonwarp_large_science` | `warp_large_science` |
+| duży towarowy | `nonwarp_large_cargo` | `warp_large_cargo` |
+| duży kolonizacyjny | `nonwarp_large_colony` | `warp_large_colony` |
+| fregata | `nonwarp_frigate` | `warp_frigate` |
+| niszczyciel | `nonwarp_destroyer` | `warp_destroyer` |
+| pancernik (krążownik) | `nonwarp_battleship` | `warp_battleship` |
 
-| #  | Typ statku        | Nazwa pliku                     |
-|----|-------------------|---------------------------------|
-| 1  | small hull science  | `nonwarp_small_science.glb`   |
-| 2  | small hull cargo    | `nonwarp_small_cargo.glb`     |
-| 3  | small hull colony   | `nonwarp_small_colony.glb`    |
-| 4  | medium hull science | `nonwarp_medium_science.glb`  |
-| 5  | medium hull cargo   | `nonwarp_medium_cargo.glb`    |
-| 6  | medium hull colony  | `nonwarp_medium_colony.glb`   |
-| 7  | large hull science  | `nonwarp_large_science.glb`   |
-| 8  | large hull cargo    | `nonwarp_large_cargo.glb`     |
-| 9  | large hull colony   | `nonwarp_large_colony.glb`    |
-| 10 | frigate (fregata)   | `nonwarp_frigate.glb`         |
-| 11 | destroyer (niszczyciel) | `nonwarp_destroyer.glb`   |
-| 12 | battleship (krążownik / kadłub bojowy duży) | `nonwarp_battleship.glb` |
-
-### B — warp (`warp_`)
-
-| #  | Typ statku        | Nazwa pliku                  |
-|----|-------------------|------------------------------|
-| 1  | small hull science  | `warp_small_science.glb`   |
-| 2  | small hull cargo    | `warp_small_cargo.glb`     |
-| 3  | small hull colony   | `warp_small_colony.glb`    |
-| 4  | medium hull science | `warp_medium_science.glb`  |
-| 5  | medium hull cargo   | `warp_medium_cargo.glb`    |
-| 6  | medium hull colony  | `warp_medium_colony.glb`   |
-| 7  | large hull science  | `warp_large_science.glb`   |
-| 8  | large hull cargo    | `warp_large_cargo.glb`     |
-| 9  | large hull colony   | `warp_large_colony.glb`    |
-| 10 | frigate             | `warp_frigate.glb`         |
-| 11 | destroyer           | `warp_destroyer.glb`       |
-| 12 | battleship          | `warp_battleship.glb`      |
-
-### Plik domyślny (fallback)
-
-```
-default.glb
-```
-
-**Jeśli brakuje któregokolwiek z 24 plików powyżej — gra automatycznie użyje
-`default.glb` dla danego statku** (a w ostateczności, gdyby i `default.glb`
-nie było, prosty sprite 2D). Możesz podmienić `default.glb` na własny model
-„awaryjny". Obecnie `default.glb` to kopia `cargo3d.glb`, więc gra działa od
-razu, nawet zanim wgrasz pozostałe pliki.
+Brak pliku slotu ⇒ gra użyje `default.glb` (a gdyby i jego nie było — prostego sprite'a 2D).
 
 ## Jak gra mapuje statki na pliki
 
-- **Kadłuby bojowe** (`hull_frigate`, `hull_destroyer`, `hull_cruiser`) →
-  odpowiednio `frigate` / `destroyer` / `battleship` (niezależnie od modułów).
-- **Kadłuby ogólne** (`hull_small`/`hull_medium`/`hull_large`) oraz statki
-  legacy (`science_vessel`, `cargo_ship`, `colony_ship`, `space_supply_ship`) →
-  rozmiar (small/medium/large) + rola (priorytet **colony > science > cargo**):
-  **colony** jeśli ma moduł kolonizacyjny (`habitat_pod` / `cryo_pod`),
-  **science** jeśli ma moduł naukowy (`science_lab` / `deep_scanner` /
-  `quantum_scanner`), w przeciwnym razie **cargo**.
-- **Warp** rozpoznawany po zamontowanej Komorze Warp (bak `warp_cores`).
+- **Kadłuby bojowe** (`hull_frigate`, `hull_destroyer`, `hull_cruiser`) → `frigate` / `destroyer` / `battleship`.
+- **Kadłuby ogólne** (`hull_small` / `hull_medium` / `hull_large`) i statki legacy → rozmiar + rola (priorytet
+  **colony > science > cargo**): colony — moduł `habitat_pod` / `cryo_pod`, science — `science_lab` / `deep_scanner` /
+  `quantum_scanner`, inaczej cargo.
+- **Warp** — zamontowana Komora Warp (bak `warp_cores`).
 
-## Strojenie rozmiaru (jeśli model za duży/mały)
+## Strojenie rozmiaru
 
-Docelowe rozmiary per klasa są w `src/renderer/VesselModelResolver.js`
-(`VESSEL_TARGET_SIZE`). Globalny mnożnik wszystkich statków: `VESSEL_SIZE_SCALE`.
-Modele są normalizowane do tych wartości — wystarczy zmienić jedną liczbę,
-bez przeskalowywania plików .glb.
+Rozmiary per klasa: `src/renderer/VesselModelResolver.js` (`VESSEL_TARGET_SIZE`), mnożnik wszystkich statków:
+`VESSEL_SIZE_SCALE`. Model jest normalizowany do tych wartości — wystarczy zmienić jedną liczbę, bez ruszania plików.

@@ -4,8 +4,8 @@
   "slot": "nonwarp_small_colony",
   "source": {
     "file": "nonwarp_small_colony.glb",
-    "sha256": "0f34d8aa9d6346a7d3e72ee36b948353baffe00484b5551c93cd294285b5cad0",
-    "normalizer": null
+    "sha256": "50140929975a9c5fbb86a0691e39145a3a00a76a067f1aa86183f3862fb98c35",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

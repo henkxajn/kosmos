@@ -4,8 +4,8 @@
   "slot": "warp_small_colony",
   "source": {
     "file": "warp_small_colony.glb",
-    "sha256": "462c95d9fe283b5f094b0e459e6aa316c1e66512ae2b170e785097346fe0aa0a",
-    "normalizer": null
+    "sha256": "bb5316cd251c269e5f7442450a358bcb9662581c22f9a1f0865bc04704497319",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

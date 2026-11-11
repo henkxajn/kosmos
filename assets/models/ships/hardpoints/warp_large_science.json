@@ -4,8 +4,8 @@
   "slot": "warp_large_science",
   "source": {
     "file": "warp_large_science.glb",
-    "sha256": "32ea37a363d1d40910ba593d32468885452a08b5e06c48feb8709f162ca4d5ad",
-    "normalizer": null
+    "sha256": "0cfa778ff318fc5db7380a031b5a891fa7e81438e7e13f95f1fa1192f48b18e0",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

@@ -4,8 +4,8 @@
   "slot": "nonwarp_medium_science",
   "source": {
     "file": "nonwarp_medium_science.glb",
-    "sha256": "bb43396ba2ac761a1569b731f38ebf4d320ac62ddff46369983e56ea4f04a53c",
-    "normalizer": null
+    "sha256": "4d9d444d545f8427abfa7787244d81847466cbee611525436513dd7b50722d28",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

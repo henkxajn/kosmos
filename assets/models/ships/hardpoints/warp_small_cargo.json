@@ -4,8 +4,8 @@
   "slot": "warp_small_cargo",
   "source": {
     "file": "warp_small_cargo.glb",
-    "sha256": "889b3936df39a3cdf948a4ffc910a7f4ba3cdcff88670aca386f4a05e6c497ae",
-    "normalizer": null
+    "sha256": "808d3b86ed3745fefbf1c57d98ebf3bcf15721930691793d2ab919fb7f37252c",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

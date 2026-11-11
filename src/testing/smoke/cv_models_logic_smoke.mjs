@@ -26,6 +26,12 @@
 //   T5r (kontrola właściciela CV-1a) kurs spoczynkowy i pochylenie wraku ramy kanonicznej = orientacja ścieżki OFF w świecie;
 //      KONTROLA: dawny zapis Eulera na ramie kanonicznej daje inny obraz. T11 stager — układ pod najciemniejszą / najjaśniejszą gwiazdą.
 // ⚠ Importy CV-1a dynamiczne w try/catch — przy fail-first piny DEGRADUJĄ (czerwone), suita się nie przerywa.
+// ⚠ PRZECELOWANE ŚWIADOMIE w CV-1b (2026-11-11): T2d / T4c pinowały LICZBY ze stanu CV-1a (6 wpisów indeksu incoming, ≥ 31 plików
+//   = 27 slotów + 6 incoming), a CV-1b z projektu PRZENIÓSŁ sześć modeli właściciela do slotów (wpisy i pliki incoming zdjęte —
+//   plan §4 CV-1b „From CV-1a"). Niezmienniki zostają: indeks = dokładnie pliki incoming/, każdy plik — dziób → +Z, smuga za rufą.
+//   T2e pinował modele właściciela w incoming/ — dziś te same modele żyją w slotach (`source.normalizer` = normalize-ship@1),
+//   więc pin obejmuje oba miejsca i wymaga ŚWIADKA (pusty zbiór nie przechodzi). Liczby po podmianie pinuje `cv_normalizer_logic_smoke`.
+
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -94,11 +100,13 @@ await block('T2 pliki hardpointów na dysku — poprawne, komplet slotów, sha25
   }
   assert(stale.length === 0, `T2c sha256 każdego starego GLB = source.sha256 pliku hardpointów (nieaktualne: ${stale.join(', ') || '—'})`);
   const idx = JSON.parse(read(HP_DIR + 'incoming/index.json'));
-  assert(JSON.stringify([...idx.slots].sort()) === JSON.stringify(inc.map((f) => f.replace('.json', '')).sort()) && idx.slots.length === 6,
-    `T2d indeks incoming = dokładnie pliki incoming/ (${idx.slots.join(', ')})`);
+  assert(JSON.stringify([...idx.slots].sort()) === JSON.stringify(inc.map((f) => f.replace('.json', '')).sort()),
+    `T2d indeks incoming = dokładnie pliki incoming/ (${idx.slots.join(', ') || 'pusty — CV-1b przeniósł modele do slotów'})`);
   const incDocs = inc.map((f) => JSON.parse(read(HP_DIR + 'incoming/' + f)));
-  assert(incDocs.every((d) => d.keyColour.mode === 'mask' && d.source.file === 'incoming/' + d.slot + '.glb' && d.lights.length === 0 && d.weapons.length === 0),
-    'T2e modele właściciela: maska ON, źródło incoming/<slot>.glb, bez świateł i wieżyczek (klika je Workshop CV-1c)');
+  const ownerSlotDocs = [...docs.values()].filter((d) => d.source.normalizer === 'normalize-ship@1');
+  const owner = [...incDocs.map((d) => ({ d, file: 'incoming/' + d.slot + '.glb' })), ...ownerSlotDocs.map((d) => ({ d, file: d.source.input?.file }))];
+  assert(owner.length >= 6 && owner.every(({ d, file }) => d.keyColour.mode === 'mask' && file === 'incoming/' + d.slot + '.glb' && d.lights.length === 0 && d.weapons.length === 0),
+    `T2e modele właściciela (${incDocs.length} w incoming/, ${ownerSlotDocs.length} w slotach po normalizatorze): maska ON, źródło incoming/<slot>.glb, bez świateł i wieżyczek (klika je Workshop CV-1c)`);
 });
 
 // ── T3 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -135,7 +143,7 @@ await block('T4 kwaternion ramy kanonicznej — dziób → +Z, góra → +Y; w k
     const b = HP.rotateVec(qq, d.frame.bow), nd = HP.rotateVec(qq, d.nozzles[0].d), np = HP.rotateVec(qq, d.nozzles[0].p);
     if (!vnear(b, [0, 0, 1], 1e-9) || nd[2] > -0.9 || np[2] > -0.3) wrong.push(f);
   }
-  assert(wrong.length === 0 && all.length >= 31, `T4c ${all.length} plików: dziób → +Z, dysza za rufą (z < −0,3), smuga ku −Z (złe: ${wrong.join(', ') || '—'})`);
+  assert(wrong.length === 0 && all.length >= 27, `T4c ${all.length} plików: dziób → +Z, dysza za rufą (z < −0,3), smuga ku −Z (złe: ${wrong.join(', ') || '—'})`);
 });
 
 // ── T5 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

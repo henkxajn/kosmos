@@ -4,8 +4,8 @@
   "slot": "cargo3d",
   "source": {
     "file": "cargo3d.glb",
-    "sha256": "123a7f3d808a44a60e964f8a2488272e5e0c5f9620b2544e063b05abef80432d",
-    "normalizer": null
+    "sha256": "d2e298da5a82afe82a30aaa6141dece8362248b8ddb75b10614ae77c451876c8",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

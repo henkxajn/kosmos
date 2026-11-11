@@ -4,8 +4,15 @@
   "slot": "warp_battleship",
   "source": {
     "file": "warp_battleship.glb",
-    "sha256": "5f67186e8f3f2d2630c69a4c84c4209ee4a219b72a204bca342a1a8940be9ef7",
-    "normalizer": null
+    "sha256": "3ea5d8c8cc7a176acef59c1b5f205a08fc8c1a6bc8de0127417e068fdfe6f7fd",
+    "normalizer": "normalize-ship@1",
+    "input": {
+      "file": "incoming/warp_battleship.glb",
+      "sha256": "586c4a4d3f856c91fe7968313b793dc8b25e30a4efa090c2f66e752c77223712",
+      "verts": 23875,
+      "tris": 29238,
+      "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    }
   },
   "frame": {
     "bow": [-1, 0, 0],
@@ -13,15 +20,15 @@
   },
   "nozzles": [
     {
-      "p": [0.5, -0.031, 0.001],
+      "p": [0.5, -0.039, 0],
       "d": [1, 0, 0],
-      "r": 0.029
+      "r": 0.051
     }
   ],
   "weapons": [],
   "lights": [],
   "keyColour": {
-    "mode": "none",
+    "mode": "mask",
     "hue": 182,
     "hueTol": 12,
     "satMin": 0.45,
@@ -30,5 +37,5 @@
     "gain": 3.5
   },
   "damagePoints": "auto",
-  "notes": "CV-1a: wartości z pomiaru (audyt Q6 + 2026-11-10): dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości (27/27), dysza = środek bbox przekroju 3 % przy rufie. Bez maski (model sprzed standardu F10); wieżyczki i światła klika Workshop (CV-1c)."
+  "notes": "normalize-ship@1 (2026-11-11 10:36): model właściciela w slocie; dziób, dysza i maska przeniesione z hardpoints/incoming/ (pomiar CV-1a / Workshop). Wieżyczki i światła klika Model Workshop (CV-1c)."
 }

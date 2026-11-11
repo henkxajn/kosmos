@@ -4,8 +4,8 @@
   "slot": "research1",
   "source": {
     "file": "research1.glb",
-    "sha256": "27e1ea2d06a5599454fbb9c90c88e26027c2deac367c35cf87b0431e16d448e2",
-    "normalizer": null
+    "sha256": "b2fc604ff048ab5d0c03cc61a8f1419374d8d936bfa4cfe5e7df28158e044e76",
+    "normalizer": "legacy-textures@1"
   },
   "frame": {
     "bow": [-1, 0, 0],

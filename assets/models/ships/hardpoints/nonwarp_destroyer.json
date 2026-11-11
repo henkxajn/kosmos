@@ -4,8 +4,15 @@
   "slot": "nonwarp_destroyer",
   "source": {
     "file": "nonwarp_destroyer.glb",
-    "sha256": "72cd5a52deaef9dc812a4b7816b498d19205f8f0a60f9f700be54857d7d53b58",
-    "normalizer": null
+    "sha256": "d7d8bb8a99b678b813444a652d8a831056fb08fefddad211eab43ef1a1f2cf58",
+    "normalizer": "normalize-ship@1",
+    "input": {
+      "file": "incoming/nonwarp_destroyer.glb",
+      "sha256": "c3ef40a0bb88865cb96e15631df7ddca4e3c312e1fe5bdd8f7778102fe97ac28",
+      "verts": 9944,
+      "tris": 9806,
+      "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    }
   },
   "frame": {
     "bow": [-1, 0, 0],
@@ -13,15 +20,15 @@
   },
   "nozzles": [
     {
-      "p": [0.5, -0.029, 0],
+      "p": [0.5, -0.002, -0.001],
       "d": [1, 0, 0],
-      "r": 0.049
+      "r": 0.033
     }
   ],
   "weapons": [],
   "lights": [],
   "keyColour": {
-    "mode": "none",
+    "mode": "mask",
     "hue": 182,
     "hueTol": 12,
     "satMin": 0.45,
@@ -30,5 +37,5 @@
     "gain": 3.5
   },
   "damagePoints": "auto",
-  "notes": "CV-1a: wartości z pomiaru (audyt Q6 + 2026-11-10): dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości (27/27), dysza = środek bbox przekroju 3 % przy rufie. Bez maski (model sprzed standardu F10); wieżyczki i światła klika Workshop (CV-1c)."
+  "notes": "normalize-ship@1 (2026-11-11 10:36): model właściciela w slocie; dziób, dysza i maska przeniesione z hardpoints/incoming/ (pomiar CV-1a / Workshop). Wieżyczki i światła klika Model Workshop (CV-1c)."
 }

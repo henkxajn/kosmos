@@ -4,7 +4,8 @@
   "description": "- Kliknięcie **preferuje planety** (żeby nie łapało głównie księżyców).\r - Widzisz **nazwy planet i gwiazdy** (księżyce tylko po zbliżeniu albo gdy zaznaczone).\r - Jest **Inspector** z informacjami o wybranym ciele (masa, promień, g, orbit).\r - Lista wyboru ma podział: Gwiazda / Planety / Księżyce.\r - Zoom max podniesiony, żeby dało się zejść do skali księżyców.",
   "main": "generate-planets.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "ship": "node tools/ship-models/normalize-ship.mjs"
   },
   "repository": {
     "type": "git",

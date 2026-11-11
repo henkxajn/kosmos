@@ -37,3 +37,7 @@ src/testing/reports/balans/
 # ARC COMBAT VISUALS CV-1a — modele właściciela czekające na podmianę slotu (CV-1b); ich hardpointy SĄ w git
 # (assets/models/ships/hardpoints/incoming/), same pliki GLB (10–13 MB każdy) — nie.
 /assets/models/ships/incoming/
+
+# ARC COMBAT VISUALS CV-1b — archiwum normalizatora modeli statków (stare sloty, stare hardpointy, kopie sprzed przebiegu po
+# starych modelach); tylko lokalnie — historia git i tak trzyma poprzednie wersje.
+/assets/models/ships/_archive/

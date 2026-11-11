@@ -14,3 +14,7 @@
 *.woff2 binary
 *.pdf   binary
 *.gz    binary
+
+# Pliki wsadowe Windows (CV-1b `tools/ship-models/normalize-ship.bat`) — cmd.exe czyta je pewnie tylko z CRLF.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
