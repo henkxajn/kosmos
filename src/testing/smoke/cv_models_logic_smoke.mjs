@@ -31,6 +31,9 @@
 //   plan §4 CV-1b „From CV-1a"). Niezmienniki zostają: indeks = dokładnie pliki incoming/, każdy plik — dziób → +Z, smuga za rufą.
 //   T2e pinował modele właściciela w incoming/ — dziś te same modele żyją w slotach (`source.normalizer` = normalize-ship@1),
 //   więc pin obejmuje oba miejsca i wymaga ŚWIADKA (pusty zbiór nie przechodzi). Liczby po podmianie pinuje `cv_normalizer_logic_smoke`.
+// ⚠ PRZECELOWANE ŚWIADOMIE po łącznej kontroli właściciela CV-1b + CV-1c (2026-11-11): T2e wymagał „bez świateł i wieżyczek”
+//   (stan sprzed Workshopu). Od CV-1c punkty klika właściciel (warp_frigate: 2 wieżyczki, 4 światła) — pin wymaga teraz dokumentu
+//   poprawnego wg schematu; maska ON i źródło incoming/<slot>.glb zostają.
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -105,8 +108,11 @@ await block('T2 pliki hardpointów na dysku — poprawne, komplet slotów, sha25
   const incDocs = inc.map((f) => JSON.parse(read(HP_DIR + 'incoming/' + f)));
   const ownerSlotDocs = [...docs.values()].filter((d) => d.source.normalizer === 'normalize-ship@1');
   const owner = [...incDocs.map((d) => ({ d, file: 'incoming/' + d.slot + '.glb' })), ...ownerSlotDocs.map((d) => ({ d, file: d.source.input?.file }))];
-  assert(owner.length >= 6 && owner.every(({ d, file }) => d.keyColour.mode === 'mask' && file === 'incoming/' + d.slot + '.glb' && d.lights.length === 0 && d.weapons.length === 0),
-    `T2e modele właściciela (${incDocs.length} w incoming/, ${ownerSlotDocs.length} w slotach po normalizatorze): maska ON, źródło incoming/<slot>.glb, bez świateł i wieżyczek (klika je Workshop CV-1c)`);
+  // ⚠ PRZECELOWANE ŚWIADOMIE po łącznej kontroli właściciela CV-1b + CV-1c (2026-11-11): warunek „bez świateł i wieżyczek”
+  // opisywał stan SPRZED Workshopu — od CV-1c punkty klika właściciel (warp_frigate ma już 2 wieżyczki i 4 światła). Zostaje:
+  // maska ON, źródło incoming/<slot>.glb, a punkty — poprawne wg schematu (walidacja dokumentu, jak w grze).
+  assert(owner.length >= 6 && owner.every(({ d, file }) => d.keyColour.mode === 'mask' && file === 'incoming/' + d.slot + '.glb' && SC.validateHardpoints(d).ok),
+    `T2e modele właściciela (${incDocs.length} w incoming/, ${ownerSlotDocs.length} w slotach po normalizatorze): maska ON, źródło incoming/<slot>.glb, punkty Workshopu poprawne wg schematu (${owner.map(({ d }) => d.weapons.length + '/' + d.lights.length).join(' ')} wieżyczek / świateł)`);
 });
 
 // ── T3 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

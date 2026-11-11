@@ -32,13 +32,18 @@ Z terminala to samo: `npm run ship -- warp_frigate` albo `node tools/ship-models
 Kolejność (pomoc jest też na stronie):
 
 1. **Wybierz model** z listy u góry — Twoje okręty są pierwsze.
-2. **1 Dziób** — kliknij czubek dziobu. Kierunek zaokrąglamy do osi modelu; żółta strzałka nad statkiem pokazuje dziób.
-3. **2 Dysza** — kliknij wylot silnika; smuga pojawia się od razu (jak w grze). Kierunek „za rufę" pasuje prawie zawsze;
-   suwak „promień dyszy" — grubość smugi.
+2. **1 Dziób** — kliknij czubek dziobu. Kierunek bierzemy z osi najdłuższej modelu (dziób albo rufa — wg strony kliku);
+   żółta strzałka nad statkiem pokazuje dziób. Klik przy środku statku (np. wieża) jest odrzucany z komunikatem, a „góra"
+   statku zostaje taka jak w pliku — statek nie przewróci się na bok.
+3. **2 Dysza** — kliknij wylot silnika; smuga pojawia się od razu (jak w grze). Przy włączonym „wyśrodkuj w otworze"
+   (domyślnie) klik w otwór (pierścień, dzwon silnika) ustawia dyszę w ŚRODKU wylotu i dobiera promień — nawet gdy klik
+   trafił w ściankę wewnątrz. Kierunek „za rufę" pasuje prawie zawsze; suwak „promień dyszy" — grubość smugi.
 4. **3 Wieżyczki** — klikaj działa. **LUSTRO** (włączone, klawisz `M`) stawia bliźniaka po drugiej burcie (W1 + W2…).
 5. **4 Światła** — wybierz kolor (cyjan / czerwony / zielony / biały) i rozmiar, klikaj okna i światła pozycyjne. LUSTRO jak
-   wyżej; opcja „lustro zamienia czerwony ↔ zielony" — dla świateł pozycyjnych. Przycisk **„Odległość jak w bitwie"** pokazuje
-   statek tak mały jak w bitwie (ok. 48 px) — punkt mniejszy niż 1,5 px gaśnie, więc tam widać, czy światła są dość duże.
+   wyżej (bliźniak po drugiej BURCIE); opcja „lustro zamienia czerwony ↔ zielony" — dla świateł pozycyjnych. Przycisk
+   **„Odległość jak w bitwie"** pokazuje statek tak mały jak w bitwie (ok. 48 px). Punkt nigdy nie jest mniejszy niż 2 px
+   na ekranie; światła gasną dopiero, gdy cały statek ma mniej niż ok. 10 px (daleki widok). Punkt na grzbiecie albo pod
+   kadłubem widać tylko z tej strony — światła widoczne z każdej strony stawiaj na burtach.
 6. **Maska** (suwaki) — tylko modele z cyjanem na teksturze (pierścień warp); pod suwakami: ile procent tekstury świeci.
 7. **Zapisz do gry** — okno pokaże nazwę slotu i ścieżkę pliku; za pierwszym razem wskaż folder
    `assets/models/ships/hardpoints` (Chrome zapyta o zgodę na zapis). Strona i gra przeładują się same (Live Server),

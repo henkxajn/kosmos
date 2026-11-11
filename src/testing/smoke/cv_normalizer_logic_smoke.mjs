@@ -27,6 +27,9 @@
 // ⚠ GLTFLoader gry przychodzi z CDN (w node jest tylko stub `three`) — samo parsowanie loaderem sprawdza przebieg na żywym
 //   silniku (kosmos-handover/cv-1b); tu przypięty jest kontrakt pliku, na którym loader polega, i rig gry na tych danych.
 // ⚠ Importy narzędzia dynamiczne w try/catch — przy braku modułu piny DEGRADUJĄ (czerwone), suita się nie przerywa.
+// ⚠ PRZECELOWANE ŚWIADOMIE po łącznej kontroli właściciela CV-1b + CV-1c (2026-11-11): N11f wymagał dyszy = pomiar normalizatora
+//   dla KAŻDEGO slotu. Od CV-1c dyszę może ustawić właściciel w Workshopie (dopisek „Model Workshop <data>:” w notes) — taki slot
+//   ma dyszę w prostopadłościanie modelu, w rufowej połowie; reszta slotów — równość jak dotąd, ze świadkiem (≥ 1 slot równością).
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -263,6 +266,10 @@ await block('N11 round-trip: sześć modeli właściciela w slotach + rig gry na
   const EXH = { gradient: exhaustGradientColors({ isEnemy: false }), hdr: 4.5 };
   const L = 0.016;
   const bad = [], rigBad = [], kBad = [], nozBad = [];
+  let nozMeasured = 0, nozClicked = 0, nozCtl = null;
+  // dysza ustawiona w Workshopie: w prostopadłościanie modelu (|c| ≤ 0,5) i po stronie przeciwnej do dziobu (rufowa połowa)
+  const workshopNozzleOk = (hp) => { const p = hp.nozzles[0].p, b = hp.frame.bow;
+    return p.every((c) => Math.abs(c) <= 0.5 + 1e-9) && -(p[0] * b[0] + p[1] * b[1] + p[2] * b[2]) > 0; };
   for (const slot of NEW6) {
     const buf = readFileSync(new URL(`assets/models/ships/${slot}.glb`, ROOT));
     const hp = JSON.parse(read(`assets/models/ships/hardpoints/${slot}.json`));
@@ -302,15 +309,30 @@ await block('N11 round-trip: sześć modeli właściciela w slotach + rig gry na
     const apex = rig.exhaust ? rig.exhaust.getWorldPosition(new THREE.Vector3()) : null;
     const ok = Math.abs(Math.max(sz.x, sz.y, sz.z) - L) < 1e-6 && Math.abs(sz.z - L) < 1e-6 && bow.z > 0.999 && apex && apex.z / L < -0.45;
     if (!ok) rigBad.push(`${slot} (rozmiar ${sz.z.toFixed(4)}, dziób z ${bow.z.toFixed(3)}, smuga ${apex ? (apex.z / L).toFixed(3) : '—'})`);
-    // dysza z pliku = dysza zmierzona na geometrii slotu (pomiar CV-1a przeniesiony bez przesunięcia)
+    // dysza z pliku = dysza zmierzona na geometrii slotu (pomiar CV-1a przeniesiony bez przesunięcia). ⚠ PRZECELOWANE ŚWIADOMIE
+    // po łącznej kontroli właściciela CV-1b + CV-1c (2026-11-11): dyszę może teraz ustawić właściciel w Workshopie (dopisek
+    // „Model Workshop <data>:” w notes) — wtedy równość z pomiarem nie obowiązuje; dysza ma leżeć w prostopadłościanie modelu
+    // w rufowej połowie. Pozostałe sloty — równość jak dotąd (świadek: co najmniej jeden slot sprawdzony równością).
     const pos = accessorArray(glb, prim.attributes.POSITION), nz = G.measureNozzle(pos);
-    if (!vnear(nz.p, hp.nozzles[0].p, 1e-9)) nozBad.push(`${slot}: ${nz.p} ≠ ${hp.nozzles[0].p}`);
+    const clicked = /Model Workshop \d{4}-\d{2}-\d{2}:/.test(hp.notes ?? '');
+    if (clicked) {
+      if (!workshopNozzleOk(hp)) nozBad.push(`${slot} (Workshop): dysza poza rufową połową modelu ${hp.nozzles[0].p}`);
+      if (!nozCtl) nozCtl = hp;
+      nozClicked++;
+    } else {
+      nozMeasured++;
+      if (!vnear(nz.p, hp.nozzles[0].p, 1e-9)) nozBad.push(`${slot}: ${nz.p} ≠ ${hp.nozzles[0].p}`);
+    }
   }
   assert(bad.length === 0, `N11a sześć slotów: sha256 = hardpointy, źródło zapisane, tylko EXT_texture_webp (bez Draco / meshopt / KTX2), obrazy dekodowalne, kolor bazowy JPEG, węzeł bez transformacji, geometria wyśrodkowana o długości 1,0 wzdłuż X (złe: ${bad.join('; ') || '—'})`);
   assert(kBad.length === 0, `N11b wariant @1k: ta sama geometria, te same dozwolone rozszerzenia (złe: ${kBad.join(', ') || '—'})`);
   // N11c — KONTROLA zielona po obu stronach (rig normalizuje każdą geometrię): dane slotu i hardpointy działają w ścieżce gry.
   assert(rigBad.length === 0, `N11c rig gry (buildShipRig, three r171) na geometrii slotu: model znormalizowany do klasy, dziób z pliku → +Z ramy kanonicznej, smuga za rufą (złe: ${rigBad.join('; ') || '—'})`);
-  assert(nozBad.length === 0, `N11f dysza zmierzona WPROST na geometrii pliku = dysza z hardpointów (geometria zapisana w przestrzeni znormalizowanej, punkt przeniesiony bez przesunięcia) (złe: ${nozBad.join('; ') || '—'})`);
+  // KONTROLA PINU: ta sama dysza z Workshopu przeniesiona na DZIÓB albo poza model musi zostać odrzucona
+  const nozFlip = nozCtl && workshopNozzleOk({ ...nozCtl, nozzles: [{ ...nozCtl.nozzles[0], p: nozCtl.nozzles[0].p.map((c) => -c) }] });
+  const nozOut = nozCtl && workshopNozzleOk({ ...nozCtl, nozzles: [{ ...nozCtl.nozzles[0], p: [0.8, 0, 0] }] });
+  assert(nozCtl == null || (nozFlip === false && nozOut === false), `N11f-ctl KONTROLA PINU: dysza z Workshopu odbita na dziób albo poza model — odrzucona (${nozCtl ? 'sprawdzone na ' + nozCtl.slot : 'brak slotu z Workshopu'})`);
+  assert(nozBad.length === 0 && nozMeasured >= 1, `N11f dysza zmierzona WPROST na geometrii pliku = dysza z hardpointów (geometria w przestrzeni znormalizowanej, punkt przeniesiony bez przesunięcia) — ${nozMeasured} slotów równością, ${nozClicked} z dyszą z Workshopu w rufowej połowie (złe: ${nozBad.join('; ') || '—'})`);
   // stare modele po przebiegu tekstur: dysza zmierzona na geometrii = dysza z pliku pomiaru CV-1a ⇒ geometria nietknięta
   const docs = readdirSync(new URL('assets/models/ships/hardpoints/', ROOT)).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(read('assets/models/ships/hardpoints/' + f)));
   const legacy = docs.filter((d) => d.source.normalizer !== HPL.NORMALIZER_ID);

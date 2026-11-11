@@ -20,7 +20,9 @@
 import { validateHardpoints, KEY_COLOUR_DEFAULTS, KEY_COLOUR_LIMITS, KEY_COLOUR_MODES, LIGHT_DEFAULTS } from '../../src/data/ShipHardpointsSchema.js';
 import { VESSEL_MODEL_KEYS } from '../../src/renderer/VesselModelResolver.js';
 
-export const WORKSHOP_VERSION = 1;
+// 2 — od poprawki po kontroli właściciela (2026-11-11): stan sprzed niej mógł nieść ramę z „górą” przestawioną przez klik dziobu
+// w punkt z przewagą osi Y (statek w grze na boku) — sesja v1 nie jest przywracana.
+export const WORKSHOP_VERSION = 2;
 export const MIRROR_EPS = 0.004;        // [przestrzeń znormalizowana] punkt bliżej płaszczyzny środkowej — bez bliźniaka (0,4 % długości)
 export const TWIN_INFER_TOL = 0.02;     // tolerancja rozpoznania pary lustrzanej przy wczytaniu pliku (bliźniak „przyklejony" do kadłuba)
 export const HISTORY_CAP = 200;
@@ -154,15 +156,108 @@ export function snapBowAxis(p) {
   return out;
 }
 
-/** Rama z nowym dziobem: „góra" zostaje, gdy jest prostopadła; inaczej pierwsza prostopadła z +Y, +Z, +X. */
-export function frameWithBow(frame, bow) {
+// Klik dziobu przyjmowany tylko przy KOŃCU statku: |p · oś najdłuższa| ≥ BOW_CLICK_MIN (kadłub ma −0,5…0,5). Kontrola
+// właściciela 2026-11-11: klik w wieżę na środku (przewaga osi Y) ustawiał dziób na ±Y, a „góra” przeskakiwała na +Z i już
+// nie wracała — statek w grze leciał na boku, lustro odbijało góra ↔ dół.
+export const BOW_CLICK_MIN = 0.25;
+
+/** Oś najdłuższego wymiaru prostopadłościanu (przestrzeń znormalizowana) — dziób leży na niej we wszystkich modelach gry. */
+export function longestAxisOf(min, max) {
+  const ext = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+  const i = ext[0] >= ext[1] && ext[0] >= ext[2] ? 0 : (ext[1] >= ext[2] ? 1 : 2);
+  const out = [0, 0, 0];
+  out[i] = 1;
+  return out;
+}
+
+/**
+ * Dziób z kliku: znak rzutu punktu na oś najdłuższą (bez osi — oś przeważającej składowej). Klik bliżej środka niż
+ * BOW_CLICK_MIN — odmowa (wieża, mostek, środek kadłuba to nie dziób).
+ * @returns {{ bow: number[]|null, reason: null|'mid' }}
+ */
+export function bowFromClick(p, { longAxis = null, minAbs = BOW_CLICK_MIN } = {}) {
+  const axis = Array.isArray(longAxis) ? norm(longAxis) : snapBowAxis(p);
+  if (!axis) return { bow: null, reason: 'mid' };
+  const t = dot(p, axis);
+  if (Math.abs(t) < minAbs) return { bow: null, reason: 'mid' };
+  const sg = t > 0 ? 1 : -1;
+  return { bow: axis.map((c) => c * sg + 0), reason: null };
+}
+
+/** Rama z nowym dziobem: „góra" — pierwsza prostopadła z: preferowanej (z PLIKU), bieżącej, +Y, +Z, +X. */
+export function frameWithBow(frame, bow, upPref = null) {
   const b = norm(bow);
-  for (const up of [frame?.up, [0, 1, 0], [0, 0, 1], [1, 0, 0]]) {
+  for (const up of [upPref, frame?.up, [0, 1, 0], [0, 0, 1], [1, 0, 0]]) {
     if (!up) continue;
     const u = norm(up);
     if (Math.abs(dot(u, b)) < 0.05) return { bow: b.map((c) => c + 0), up: u.map((c) => roundSym(c, 6)) };
   }
   return { bow: b, up: [0, 1, 0] };
+}
+
+// ── dysza w OTWORZE ──────────────────────────────────────────────────────────────────────────────────────────────────
+// Wylot silnika to zwykle pierścień albo dzwon — jego środek to PUSTKA, więc klik „w wylot” trafia ścianę tunelu (kontrola
+// właściciela 2026-11-11: dysza warp_frigate na dolnej ścianie wnętrza pierścienia, 0,024 pod osią — smuga wychodziła z boku
+// otworu). Workshop rzuca promienie w płaszczyźnie ⟂ kierunku smugi z punktu przy kliku; trafienia w ściany otworu wyznaczają
+// okrąg (dopasowanie algebraiczne Kåsy — dokładne dla punktów na okręgu niezależnie od ich rozkładu), środek = dysza,
+// promień = promień otworu. Za mało trafień (płaska rufa, zewnętrzna krawędź) — dysza zostaje w punkcie kliku.
+export const OPENING = Object.freeze({ RAYS: 16, MIN_HITS: 12, FAR: 0.25, R_MIN: 0.006, R_MAX: 0.2, MAX_RMS_REL: 0.15, STEP: 0.004, MOUTH_STEP: 0.004, MOUTH_STEPS: 40, MOUTH_GAP: 4 });
+
+/** Ortonormalna baza (u, v) płaszczyzny prostopadłej do d (u × v = d). */
+export function planeBasis(d) {
+  const n = norm(d);
+  const a = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const u = norm(cross(a, n));
+  return [u, cross(n, u)];
+}
+
+/** Okrąg dopasowany do punktów 2D (Kåsa: min Σ(x² + y² + Dx + Ey + F)²) → { cx, cy, r, rms } albo null. */
+export function fitCircle2D(pts) {
+  const n = pts.length;
+  if (n < 3) return null;
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0, sz = 0;
+  for (const [x, y] of pts) {
+    const z = x * x + y * y;
+    sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; sxz += x * z; syz += y * z; sz += z;
+  }
+  // [sxx sxy sx; sxy syy sy; sx sy n] · [D E F] = −[sxz syz sz]
+  const A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]];
+  const b = [-sxz, -syz, -sz];
+  const det3 = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  const det = det3(A);
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-18) return null;
+  const col = (k) => A.map((row, i) => row.map((v, j) => (j === k ? b[i] : v)));
+  const D = det3(col(0)) / det, E = det3(col(1)) / det, F = det3(col(2)) / det;
+  const cx = -D / 2, cy = -E / 2, r2 = cx * cx + cy * cy - F;
+  if (!(r2 > 0)) return null;
+  const r = Math.sqrt(r2);
+  let ss = 0;
+  for (const [x, y] of pts) { const e = Math.hypot(x - cx, y - cy) - r; ss += e * e; }
+  return { cx, cy, r, rms: Math.sqrt(ss / n) };
+}
+
+/**
+ * Środek otworu dyszy z trafień promieni rzuconych w płaszczyźnie ⟂ d z punktu `origin`.
+ * @param {{ origin:number[], d:number[], hits:number[][], o?:object }} a — hits: punkty trafień (przestrzeń modelu)
+ * @returns {{ centre:number[], r:number, rms:number, count:number }|null}
+ */
+export function openingFromHits({ origin, d, hits, o = OPENING }) {
+  if (!Array.isArray(hits) || hits.length < o.MIN_HITS) return null;
+  const [u, v] = planeBasis(d);
+  const pts = hits.map((h) => { const w = [h[0] - origin[0], h[1] - origin[1], h[2] - origin[2]]; return [dot(w, u), dot(w, v)]; });
+  const c = fitCircle2D(pts);
+  if (!c || c.r < o.R_MIN || c.r > o.R_MAX || c.rms > o.MAX_RMS_REL * c.r) return null;
+  const centre = [0, 1, 2].map((k) => origin[k] + c.cx * u[k] + c.cy * v[k]);
+  return { centre, r: c.r, rms: c.rms, count: hits.length };
+}
+
+/** Kierunki promieni szukania otworu (w płaszczyźnie ⟂ d, równo rozłożone). */
+export function openingRayDirs(d, n = OPENING.RAYS) {
+  const [u, v] = planeBasis(d);
+  return Array.from({ length: n }, (_, k) => {
+    const a = (2 * Math.PI * k) / n, c = Math.cos(a), s = Math.sin(a);
+    return [c * u[0] + s * v[0], c * u[1] + s * v[1], c * u[2] + s * v[2]];
+  });
 }
 
 /** Kierunek smugi dyszy: 'stern' — przeciwnie do dziobu (domyślnie); 'normal' — normalna powierzchni w punkcie kliku. */
@@ -229,10 +324,11 @@ const listOf = (edit, cat) => (cat === 'weapons' ? edit.weapons : edit.lights);
 const withList = (edit, cat, list) => (cat === 'weapons' ? { ...edit, weapons: list } : { ...edit, lights: list });
 
 /** Ustaw dziób z punktu kliku (zaokrąglony do osi). Klik w środek — bez zmiany. */
-export function setBow(edit, p) {
-  const axis = snapBowAxis(p);
-  if (!axis) return edit;
-  return { ...edit, frame: frameWithBow(edit.frame, axis) };
+export function setBow(edit, p, { longAxis = null, upPref = null } = {}) {
+  const { bow } = bowFromClick(p, { longAxis });
+  if (!bow) return edit;
+  const frame = frameWithBow(edit.frame, bow, upPref);
+  return frame.bow.join() === edit.frame.bow.join() && frame.up.join() === edit.frame.up.join() ? edit : { ...edit, frame };
 }
 
 /** Ustaw dyszę (jedna — gra czyta `nozzles[0]`). Promień: podany, inaczej dotychczasowy, inaczej 0,04. */

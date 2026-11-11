@@ -105,6 +105,7 @@
       <div>Kierunek smugi:</div>
       <label class="chk"><input type="radio" name="nozDir" value="stern" checked /> za rufę (przeciwnie do dziobu) — zwykle dobrze</label>
       <label class="chk"><input type="radio" name="nozDir" value="normal" /> prostopadle do klikniętej powierzchni</label>
+      <label class="chk"><input type="checkbox" id="nozCentreChk" checked /> wyśrodkuj w otworze (pierścień, dzwon silnika) — zalecane</label>
       <div class="slider"><span>promień dyszy</span><input type="range" id="nozR" min="0.01" max="0.15" step="0.002" /><span class="v" id="nozRv">—</span></div>
     </div>
     <div class="opt hidden" id="optLights">
@@ -116,7 +117,7 @@
       </div>
       <div class="slider"><span>rozmiar punktu</span><input type="range" id="lightSize" min="0.005" max="0.08" step="0.001" /><span class="v" id="lightSizeV">—</span></div>
       <label class="chk"><input type="checkbox" id="swapNavChk" /> lustro zamienia czerwony ↔ zielony (światła pozycyjne)</label>
-      <div class="muted">W bitwie statek ma na ekranie 20–60 px; punkt mniejszy niż 1,5 px gaśnie. Sprawdź przyciskiem „Odległość jak w bitwie".</div>
+      <div class="muted">W bitwie statek ma na ekranie 20–60 px; punkt rysujemy co najmniej 2 px, gaśnie dopiero, gdy statek ma mniej niż ok. 10 px. Punkt na grzbiecie albo pod kadłubem widać tylko z jednej strony — sprawdź przyciskiem „Odległość jak w bitwie".</div>
     </div>
 
     <h2>Punkty <span class="muted" id="countInfo"></span></h2>
@@ -180,8 +181,8 @@
       <summary>Jak to działa (kolejność)</summary>
       <ol>
         <li><b>Wybierz model</b> z listy u góry (Twoje okręty są pierwsze).</li>
-        <li><b>Dziób</b> — kliknij czubek dziobu. Kierunek zaokrąglamy do osi modelu; żółta strzałka pokazuje dziób.</li>
-        <li><b>Dysza</b> — kliknij wylot silnika. Smuga pojawi się od razu. Kierunek „za rufę" pasuje prawie zawsze.</li>
+        <li><b>Dziób</b> — kliknij czubek dziobu (koniec kadłuba). Kierunek bierzemy z najdłuższej osi modelu; żółta strzałka pokazuje dziób. Klik przy środku statku jest odrzucany, „góra" zostaje z pliku.</li>
+        <li><b>Dysza</b> — kliknij w otwór silnika. Przy „wyśrodkuj w otworze" dysza staje w środku wylotu (nawet gdy klik trafił w ściankę w środku). Smuga pojawi się od razu. Kierunek „za rufę" pasuje prawie zawsze.</li>
         <li><b>Wieżyczki</b> — klikaj działa (W1, W2…). Z LUSTREM bliźniak staje sam po drugiej burcie.</li>
         <li><b>Światła</b> — wybierz kolor i klikaj okna / światła pozycyjne. LUSTRO działa tak samo. Kolor i rozmiar
           dotyczą NASTĘPNYCH punktów; postawione światło zmienisz w trybie 5 (Wybierz).</li>

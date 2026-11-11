@@ -60,7 +60,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const S = {
   slot: null, variant: 'slot', baseDoc: null, fileEdit: null, fileSig: null, fileWarn: null,
   history: null, transient: null, shown: null,
-  mode: 'bow', mirror: true, swapNav: false, nozzleDir: 'stern', lightColour: 'cyan', lightSize: WL.LIGHT_SIZE_DEFAULT,
+  mode: 'bow', mirror: true, swapNav: false, nozzleDir: 'stern', nozzleCentre: true, lightColour: 'cyan', lightSize: WL.LIGHT_SIZE_DEFAULT,
   enemy: false, engine: true, star: 'G', gameFrame: false, markers: true,
   sel: null,                       // { cat: 'weapons'|'lights'|'nozzle', uid }
   template: null, bboxN: null, rig: null, rigKind: null, texData: null,
@@ -388,6 +388,61 @@ function hullHit(clientX, clientY) {
   return p ? { p, n } : null;
 }
 
+/** Oś najdłuższa modelu (przestrzeń znormalizowana) — dziób leży na niej. */
+function longAxis() { return S.bboxN ? WL.longestAxisOf(S.bboxN.min, S.bboxN.max) : null; }
+
+/** Promień w przestrzeni MODELU → pierwsze trafienie kadłuba { p, n } (przestrzeń modelu) albo null; `far` w długościach statku. */
+function castModel(o, dir, far) {
+  if (!S.rig) return null;
+  const canon = S.rig.canon;
+  canon.updateMatrixWorld(true);
+  const from = canon.localToWorld(new THREE.Vector3(o[0], o[1], o[2]));
+  const dw = new THREE.Vector3(dir[0], dir[1], dir[2]).transformDirection(canon.matrixWorld);
+  const s = canon.getWorldScale(new THREE.Vector3()).x || 1;
+  raycaster.set(from, dw);
+  raycaster.far = far * s;
+  const h = raycaster.intersectObject(S.rig.model, true)[0];
+  raycaster.far = Infinity;
+  if (!h) return null;
+  const m = canon.matrixWorld.elements;
+  const nWorld = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld).toArray() : null;
+  return { p: WL.worldToModel(h.point.toArray(), m), n: nWorld ? WL.dirWorldToModel(nWorld, m) : null };
+}
+
+/**
+ * Dysza w środku otworu (pierścień, dzwon): z punktu kliku (lekko w stronę wylotu i do wnętrza otworu) promienie w płaszczyźnie
+ * ⟂ smugi; trafienia w ściany → okrąg → środek i promień (`WL.openingFromHits`), dwa przebiegi z nowego środka. Za mało trafień —
+ * null (dysza zostaje w punkcie kliku: płaska rufa, zewnętrzna krawędź).
+ */
+function nozzleInOpening(p, n, d) {
+  const dn = WL.orthoUp({ bow: d, up: n ?? [0, 1, 0] });   // składowa normalnej ⟂ d (dla ściany tunelu — ku osi otworu)
+  const inward = n && Math.abs(n[0] * d[0] + n[1] * d[1] + n[2] * d[2]) < 0.95 ? dn : [0, 0, 0];
+  let origin = [0, 1, 2].map((k) => p[k] + d[k] * WL.OPENING.STEP + inward[k] * WL.OPENING.STEP);
+  const ring = (o) => {
+    const hits = [];
+    for (const dir of WL.openingRayDirs(d)) { const h = castModel(o, dir, WL.OPENING.FAR); if (h?.p) hits.push(h.p); }
+    return WL.openingFromHits({ origin: o, d, hits });
+  };
+  let best = null;
+  for (let pass = 0; pass < 3; pass++) {
+    const res = ring(origin);
+    if (!res) break;
+    best = res;
+    origin = res.centre;
+  }
+  if (!best) return null;
+  // Do WYLOTU: wzdłuż smugi, dopóki przekrój jest wciąż otworem — dysza = środek ostatniego przekroju (smuga zaczyna się w ujściu,
+  // nie w głębi tunelu), promień = promień ujścia. Wynik nie zależy od tego, jak głęboko trafił klik (sonda 2026-11-11).
+  // Pojedynczy przekrój bywa „dziurawy” (szczeliny w pierścieniu) — marsz kończą dopiero MOUTH_GAP kolejne przekroje bez otworu.
+  let probe = best.centre, misses = 0;
+  for (let i = 1; i <= WL.OPENING.MOUTH_STEPS && misses < WL.OPENING.MOUTH_GAP; i++) {
+    probe = [0, 1, 2].map((k) => probe[k] + d[k] * WL.OPENING.MOUTH_STEP);
+    const res = ring(probe);
+    if (res) { best = res; misses = 0; probe = res.centre; } else misses++;
+  }
+  return best;
+}
+
 /** Bliźniak lustrzany „przyklejony" do kadłuba (model rzadko jest idealnie symetryczny); bez kadłuba w pobliżu — dokładne odbicie. */
 function twinOnHull(p, n) {
   const q = WL.mirrorPoint(p, edit().frame);
@@ -411,13 +466,18 @@ function placeAt(clientX, clientY) {
   const e = S.history.present;
   const { p, n } = hit;
   if (S.mode === 'bow') {
-    const next = WL.setBow(e, p);
+    // Dziób na osi najdłuższej modelu, „góra” z PLIKU (nigdy nie przeskakuje); klik przy środku statku — odmowa.
+    const { bow } = WL.bowFromClick(p, { longAxis: longAxis() });
+    if (!bow) { note('To środek statku — kliknij <b>czubek dziobu</b> (koniec kadłuba).', 'warn', { ttl: 3500 }); return; }
+    const next = WL.setBow(e, p, { longAxis: longAxis(), upPref: S.fileEdit?.frame?.up ?? null });
     commit(next);
-    const b = next.frame.bow;
-    note(`Dziób: ${axisName(b)}. Następny krok: <b>2 Dysza</b>.`, 'ok', { ttl: 3500 });
+    note(`Dziób: ${axisName(next.frame.bow)}. Następny krok: <b>2 Dysza</b>.`, 'ok', { ttl: 3500 });
   } else if (S.mode === 'nozzle') {
-    commit(WL.setNozzle(e, p, WL.nozzleDirection(S.nozzleDir, e.frame, n), e.nozzle?.r ?? 0.04));
+    const d = WL.nozzleDirection(S.nozzleDir, e.frame, n);
+    const op = S.nozzleCentre ? nozzleInOpening(p, n, d) : null;
+    commit(WL.setNozzle(e, op ? op.centre : p, d, op ? op.r : (e.nozzle?.r ?? 0.04)));
     S.sel = { cat: 'nozzle', uid: 0 };
+    if (op) note(`Dysza w środku otworu (promień ${op.r.toFixed(3)}). Smuga wychodzi ze środka wylotu.`, 'ok', { ttl: 4000 });
   } else if (S.mode === 'weapons' || S.mode === 'lights') {
     const cat = S.mode;
     const mirror = S.mirror && !WL.onMirrorPlane(p, e.frame);
@@ -821,7 +881,7 @@ let persistTimer = 0;
 function persistSoon() { clearTimeout(persistTimer); persistTimer = setTimeout(() => persistNow(), 250); }
 function persistNow() {
   if (!S.history || !S.slot) return;
-  const ui = { mode: S.mode, mirror: S.mirror, swapNav: S.swapNav, nozzleDir: S.nozzleDir, lightColour: S.lightColour, lightSize: S.lightSize,
+  const ui = { mode: S.mode, mirror: S.mirror, swapNav: S.swapNav, nozzleDir: S.nozzleDir, nozzleCentre: S.nozzleCentre, lightColour: S.lightColour, lightSize: S.lightSize,
     enemy: S.enemy, engine: S.engine, star: S.star, gameFrame: S.gameFrame, markers: S.markers,
     cam: { p: camera.position.toArray(), t: controls.target.toArray() } };
   const txt = WL.sessionSnapshot({
@@ -833,7 +893,7 @@ function persistNow() {
 function applyUi(ui) {
   if (!ui) return;
   if (typeof ui.mode === 'string' && MODE_HINT[ui.mode]) S.mode = ui.mode;
-  for (const k of ['mirror', 'swapNav', 'enemy', 'engine', 'gameFrame', 'markers']) if (typeof ui[k] === 'boolean') S[k] = ui[k];
+  for (const k of ['mirror', 'swapNav', 'nozzleCentre', 'enemy', 'engine', 'gameFrame', 'markers']) if (typeof ui[k] === 'boolean') S[k] = ui[k];
   if (ui.nozzleDir === 'stern' || ui.nozzleDir === 'normal') S.nozzleDir = ui.nozzleDir;
   if (WL.LIGHT_COLOURS[ui.lightColour]) S.lightColour = ui.lightColour;
   if (Number.isFinite(ui.lightSize)) S.lightSize = ui.lightSize;
@@ -904,6 +964,7 @@ function bindUi() {
   $('mirrorChk').onchange = (e) => { S.mirror = e.target.checked; refresh(); };
   $('swapNavChk').onchange = (e) => { S.swapNav = e.target.checked; refresh(); };
   for (const r of document.querySelectorAll('input[name=nozDir]')) r.onchange = () => { if (r.checked) S.nozzleDir = r.value; persistSoon(); };
+  $('nozCentreChk').onchange = (e) => { S.nozzleCentre = e.target.checked; persistSoon(); };
   $('nozR').addEventListener('input', (ev) => {
     if (!S.history.present.nozzle) return;
     S.transient = WL.setNozzleRadius(S.history.present, Number(ev.target.value));
@@ -977,6 +1038,7 @@ function syncChecks() {
   $('frameChk').checked = S.gameFrame;
   $('markersChk').checked = S.markers;
   for (const r of document.querySelectorAll('input[name=nozDir]')) r.checked = r.value === S.nozzleDir;
+  $('nozCentreChk').checked = S.nozzleCentre;
 }
 
 // ── pętla ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1002,7 +1064,8 @@ function tick() {
   KC_SHARED.uKcRimMul.value = T.MODEL_RIM_GAIN ?? 0;
   KC_SHARED.uKcRimPow.value = T.MODEL_RIM_POWER ?? 4;
   KC_SHARED.uKcLiftCeil.value = T.MODEL_LIFT_CEIL ?? 0.95;
-  pool.update({ fovDeg: camera.fov, viewportH: canvas.clientHeight || 1, gain: T.MODEL_LIGHT_GAIN ?? 1, minPx: T.MODEL_LIGHT_MIN_PX ?? 1.5 });
+  pool.update({ fovDeg: camera.fov, viewportH: canvas.clientHeight || 1, gain: T.MODEL_LIGHT_GAIN, minPx: T.MODEL_LIGHT_MIN_PX,
+    fadePx: T.MODEL_LIGHT_FADE_PX, fadeEndPx: T.MODEL_LIGHT_FADE_END_PX });
   // Smuga jak `_applyExhaust` (gałąź kanoniczna): promień z dyszy, długość z pokręteł, migotanie długości.
   const cone = S.rig?.exhaust;
   if (cone) {
@@ -1053,6 +1116,18 @@ window.WS = {
   /** Punkt modelu → współrzędne klienta (do kliknięć testu). */
   client: (p) => { const s = screenOf(p); const r = canvas.getBoundingClientRect(); return s ? { x: r.left + s.x, y: r.top + s.y, inView: s.inView } : null; },
   hullAt: (x, y) => hullHit(x, y),
+  castModel: (o, dir, far = 1) => castModel(o, dir, far),
+  nozzleInOpening: (p, n, d) => nozzleInOpening(p, n, d),
+  /** Wierzchołek smugi i dysza w świecie + uniformy punktów świetlnych (test: smuga ze środka dyszy, podłoga światła). */
+  rigProbe: () => {
+    const r = S.rig, nz = edit()?.nozzle;
+    if (!r?.exhaust || !r.canon) return null;
+    r.root.updateMatrixWorld(true);
+    const u = r.lights?.material?.uniforms ?? null;
+    return { apex: r.exhaust.getWorldPosition(new THREE.Vector3()).toArray(),
+      nozzleWorld: nz ? r.canon.localToWorld(new THREE.Vector3(...nz.p)).toArray() : null,
+      len: r.canon.scale.x, minPx: u?.uMinPx?.value ?? null, fadeHi: u?.uFadeHi?.value ?? null, fadeLo: u?.uFadeLo?.value ?? null, gain: u?.uGain?.value ?? null };
+  },
   docText: () => { const r = WL.docFromEdit(S.baseDoc, edit(), { date: today() }); return r.ok ? formatHardpointsJson(r.doc) : null; },
   writeDocTo,
   /** Ścieżka zapisu bez okien (test: katalog OPFS zamiast wyboru folderu). */

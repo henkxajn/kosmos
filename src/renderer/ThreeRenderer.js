@@ -5188,7 +5188,7 @@ export class ThreeRenderer {
       }
     }
     this._shipLightPool?.update({ fovDeg: this.camera?.fov ?? 55, viewportH: window.innerHeight || 1,
-      gain: T.MODEL_LIGHT_GAIN ?? 1, minPx: T.MODEL_LIGHT_MIN_PX ?? 1.5 });
+      gain: T.MODEL_LIGHT_GAIN, minPx: T.MODEL_LIGHT_MIN_PX, fadePx: T.MODEL_LIGHT_FADE_PX, fadeEndPx: T.MODEL_LIGHT_FADE_END_PX });
   }
 
   // Jeden load per modelPath (deduplikacja). Zwraca Promise<gltf.scene>.

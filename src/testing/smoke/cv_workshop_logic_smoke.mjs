@@ -25,6 +25,9 @@
 //   W10 źródło: zero three / DOM / `Math.random` w logice; strona woła `worldToModel` (klik) i `docFromEdit` (zapis); importmap
 //      strony = importmap gry (ten sam three, ta sama linia CDN).
 //   W11 sloty: opisy po polsku dla wszystkich slotów, okręty wojenne = dokładnie sześć, lista strony = lista normalizatora.
+//   W12 / W13 (poprawki po łącznej kontroli właściciela 2026-11-11, Findingi 685 / 686): dziób z kliku na osi najdłuższej,
+//      odmowa przy środku statku, góra z PLIKU (W12h — leczy ramę sesji); dysza w otworze — okrąg z trafień promieni, odmowy
+//      dla płaskiej rufy / elipsy / za dużego otworu, strona domyślnie środkuje (W13g, z kontrolą).
 // ⚠ Moduły nowe importowane dynamicznie w try/catch — przy braku modułu piny DEGRADUJĄ (czerwone), suita się nie przerywa.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -55,6 +58,10 @@ if (existsSync(incomingDir)) {
   for (const f of readdirSync(incomingDir).filter((x) => /^[a-z0-9_]+\.json$/.test(x) && x !== 'index.json')) diskDocs.push({ name: 'incoming/' + f, doc: JSON.parse(readFileSync(new URL(f, incomingDir), 'utf8')) });
 }
 const near = (a, b, eps = 1e-9) => a.length === b.length && a.every((x, i) => Math.abs(x - b[i]) <= eps);
+// Plik slotu warp_frigate jako baza testów zapisu — BEZ punktów właściciela (wieżyczki, światła, dopisek Workshopu w notes):
+// keeper nie może zależeć od tego, co właściciel kliknie (jego dane w tym pliku zmieniają się z każdym zapisem Workshopu).
+const wfBase = () => { const d = readHp('warp_frigate.json'); d.weapons = []; d.lights = [];
+  d.notes = String(d.notes ?? '').replace(/\s*·\s*Model Workshop \d{4}-\d{2}-\d{2}:[^·]*$/, ''); return d; };
 const rnd = (lo, hi) => lo + (hi - lo) * Math.random();
 const rndUnit = () => { const v = [rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)]; const l = Math.hypot(...v) || 1; return v.map((c) => c / l); };
 const randomFrame = () => {
@@ -234,7 +241,7 @@ await section('W3  zapis — dokument zawsze zgodny ze schematem, zmienione tylk
   ok(leaked === 0, 'W3c schema / version / slot / source / damagePoints / notes (bez daty) — bajt w bajt z pliku');
   ok(roundTripBad === 0, 'W3d wczytanie i zapis bez zmian = plik (pola modelu identyczne — zapis bez kliknięć nie zmienia pliku)');
   // losowe kliknięcia w dużej liczbie
-  const base = readHp('warp_frigate.json');
+  const base = wfBase();
   let e = WL.editFromDoc(base);
   e = WL.setBow(e, [0.49, 0.01, -0.02]);
   e = WL.setNozzle(e, [-0.5, 0.0, 0.01], WL.nozzleDirection('stern', e.frame), 0.05);
@@ -318,7 +325,7 @@ await section('W5  suwaki ↔ keyColour w obie strony', async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 await section('W6  zapisany plik wczytuje się w grze z tymi samymi punktami', async () => {
-  const base = readHp('warp_frigate.json');
+  const base = wfBase();
   let e = WL.editFromDoc(base);
   e = WL.setNozzle(e, [0.497, 0.004, -0.003], [1, 0, 0], 0.05);
   e = WL.addPoint(e, 'weapons', [0.1, 0.07, 0.06], { mirror: true }).edit;
@@ -350,7 +357,7 @@ await section('W6  zapisany plik wczytuje się w grze z tymi samymi punktami', a
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 await section('W7  bezpieczny dla scalania normalizatora', async () => {
-  const base = readHp('warp_frigate.json');
+  const base = wfBase();
   let e = WL.editFromDoc(base);
   e = WL.addPoint(e, 'weapons', [0.1, 0.07, 0.06], { mirror: true }).edit;
   e = WL.addPoint(e, 'lights', [-0.4, 0.02, 0.03], { mirror: true }).edit;
@@ -431,6 +438,109 @@ await section('W11  sloty', async () => {
   ok(JSON.stringify(WL.WORKSHOP_SLOTS) === JSON.stringify(all), `W11c lista slotów strony = SHIP_SLOTS normalizatora (to samo źródło: VESSEL_MODEL_KEYS + default; ${WL.WORKSHOP_SLOTS.length})`);
   const war = all.filter(WL.isWarshipSlot).sort().join();
   ok(war === 'nonwarp_battleship,nonwarp_destroyer,nonwarp_frigate,warp_battleship,warp_destroyer,warp_frigate', `W11b okręty wojenne = dokładnie sześć slotów modeli właściciela (${war})`);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Poprawki po łącznej kontroli właściciela CV-1b + CV-1c (2026-11-11): rama właściciela zapisana z „górą" +Z (statek na boku,
+// lustro góra ↔ dół) — klik dziobu w punkt z przewagą osi Y ustawił dziób na ±Y, góra przeskoczyła na +Z i już nie wróciła.
+await section('W12  dziób z kliku: oś najdłuższa, odmowa przy środku, „góra" z pliku nigdy nie przeskakuje', async () => {
+  const fileFrame = { bow: [-1, 0, 0], up: [0, 1, 0] };
+  const base = baseDocFor('w12', fileFrame);
+  const AX = WL.longestAxisOf([-0.5, -0.06, -0.1], [0.5, 0.08, 0.1]);
+  ok(AX.join() === '1,0,0', `W12a oś najdłuższa prostopadłościanu = X (${AX.join(', ')})`);
+  const tower = [0.08, 0.2, 0.01];   // wieża na środku: przewaga osi Y
+  ok(WL.bowFromClick(tower, { longAxis: AX }).bow === null && WL.bowFromClick(tower, { longAxis: AX }).reason === 'mid', 'W12b klik w wieżę na środku statku ⇒ odmowa (to nie dziób)');
+  ok(WL.bowFromClick([-0.3, 0.35, 0], { longAxis: AX }).bow.join() === '-1,0,0', 'W12c klik przy dziobie z dużą składową Y ⇒ dziób −X (oś najdłuższa), nie ±Y');
+  let e = WL.editFromDoc(base);
+  const ref = e;
+  e = WL.setBow(e, tower, { longAxis: AX, upPref: fileFrame.up });
+  ok(e === ref, 'W12d odmowa nie zmienia stanu (ten sam obiekt — bez kroku cofania)');
+  // sekwencja właściciela odtworzona: klik z przewagą Y, potem czubek dziobu — góra ma zostać +Y
+  const seq = [tower, [-0.48, 0.01, -0.02], [0.46, 0.0, 0.01], [-0.3, 0.35, 0]];
+  let s = WL.editFromDoc(base);
+  for (const p of seq) s = WL.setBow(s, p, { longAxis: AX, upPref: fileFrame.up });
+  ok(s.frame.bow.join() === '-1,0,0' && s.frame.up.join() === '0,1,0', `W12e sekwencja właściciela (wieża → dziób → rufa → dziób): dziób −X, góra +Y (${s.frame.up.join(', ')})`);
+  let bad = 0;
+  for (let i = 0; i < 500; i++) {
+    s = WL.setBow(s, [rnd(-0.5, 0.5), rnd(-0.08, 0.3), rnd(-0.1, 0.1)], { longAxis: AX, upPref: fileFrame.up });
+    if (s.frame.up.join() !== '0,1,0' || Math.abs(s.frame.bow[0]) !== 1) bad++;
+  }
+  ok(bad === 0, `W12f 500 losowych klików dziobu: góra zawsze +Y, dziób zawsze ±X (złe: ${bad})`);
+  // KONTROLA: dawne zachowanie (oś przeważającej składowej + góra z BIEŻĄCEJ ramy) — ta sama sekwencja przestawia górę na +Z
+  const oldSetBow = (ed, p) => { const ax = WL.snapBowAxis(p); return ax ? { ...ed, frame: WL.frameWithBow(ed.frame, ax) } : ed; };
+  let o = WL.editFromDoc(base);
+  for (const p of [tower, [-0.48, 0.01, -0.02]]) o = oldSetBow(o, p);
+  ok(o.frame.up.join() === '0,0,1' && WL.mirrorNormal(o.frame).join() === '0,-1,0', `W12g KONTROLA: dawny dziób po (wieża → czubek) daje górę ${o.frame.up.join(', ')} i lustro przez Y — W12e to odrzuca`);
+  // góra z PLIKU wygrywa z bieżącą ramą sesji: rama zepsuta (góra +Z, np. sesja sprzed poprawki) + klik czubka ⇒ góra +Y
+  const healed = WL.setBow({ ...WL.editFromDoc(base), frame: { bow: [-1, 0, 0], up: [0, 0, 1] } }, [-0.47, 0.02, 0], { longAxis: AX, upPref: fileFrame.up });
+  const kept = WL.setBow({ ...WL.editFromDoc(base), frame: { bow: [-1, 0, 0], up: [0, 0, 1] } }, [-0.47, 0.02, 0], { longAxis: AX });
+  ok(healed.frame.up.join() === '0,1,0' && kept.frame.up.join() === '0,0,1',
+    `W12h góra z pliku (upPref) leczy ramę sesji z górą +Z przy kliku czubka (${healed.frame.up.join(', ')}); KONTROLA: bez upPref góra zostaje ${kept.frame.up.join(', ')}`);
+  // strona: tryb Dziób woła bowFromClick z osią najdłuższą (odmowa przy środku) i setBow z górą z PLIKU (mutant M24 baterii)
+  const stripB = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+  const pageB = stripB(readFileSync(new URL('tools/model-workshop/workshop.js', ROOT), 'utf8'));
+  const pinBow = (pg) => {
+    const i = pg.indexOf('function placeAt('), j = i < 0 ? -1 : pg.indexOf('\n}\n', i);
+    const place = i < 0 ? '' : pg.slice(i, j < 0 ? undefined : j);
+    return /WL\.bowFromClick\(p, \{ longAxis: longAxis\(\) \}\)/.test(place) && /WL\.setBow\(e, p, \{ longAxis: longAxis\(\), upPref: S\.fileEdit\?\.frame\?\.up \?\? null \}\)/.test(place);
+  };
+  ok(pinBow(pageB) && !pinBow(pageB.replace('upPref: S.fileEdit?.frame?.up ?? null', 'upPref: null')),
+    'W12i strona: klik dziobu przez bowFromClick (oś najdłuższa, odmowa przy środku) i setBow z górą z PLIKU; KONTROLA: upPref null odrzucone');
+});
+
+await section('W13  dysza w otworze: środek i promień okręgu z trafień promieni (ujście pierścienia)', async () => {
+  // syntetyczny okrąg w płaszczyźnie ⟂ d (oś X): środek, promień; trafienia promieni z punktu poza środkiem (analitycznie)
+  const ring = (c, R, origin, dirs) => dirs.map((u) => {
+    const o = [origin[1] - c[1], origin[2] - c[2]], v = [u[1], u[2]];
+    const b = o[0] * v[0] + o[1] * v[1], cc = o[0] * o[0] + o[1] * o[1] - R * R, disc = b * b - cc;
+    if (disc < 0) return null;
+    const t = -b + Math.sqrt(disc);
+    return [origin[0], origin[1] + u[1] * t, origin[2] + u[2] * t];
+  }).filter(Boolean);
+  const D = [1, 0, 0];
+  const dirs = WL.openingRayDirs(D);
+  ok(dirs.length === WL.OPENING.RAYS && dirs.every((u) => Math.abs(u[0]) < 1e-12 && Math.abs(Math.hypot(...u) - 1) < 1e-12), `W13a ${dirs.length} kierunków szukania: jednostkowe, prostopadłe do smugi`);
+  const C = [0.4896, 0.0001, 0], R = 0.0527;
+  const origin = [0.4896, -0.0239 + 0.004, -0.0045];   // jak klik właściciela przy dolnej ścianie, krok do wnętrza
+  const res = WL.openingFromHits({ origin, d: D, hits: ring(C, R, origin, dirs) });
+  ok(!!res && Math.hypot(res.centre[1] - C[1], res.centre[2] - C[2]) < 1e-9 && Math.abs(res.r - R) < 1e-9 && res.centre[0] === origin[0],
+    `W13b okrąg (r ${R}) z 16 trafień z punktu 0,024 od osi: środek na osi (błąd ${res ? Math.hypot(res.centre[1] - C[1], res.centre[2] - C[2]).toExponential(1) : '—'}), promień dokładny`);
+  let worst = 0;
+  for (let i = 0; i < 200; i++) {
+    const d = rndUnit(), [u, v] = WL.planeBasis(d), r = rnd(0.01, 0.15);
+    const c = [rnd(-0.3, 0.3), rnd(-0.3, 0.3), rnd(-0.3, 0.3)];
+    const o = [0, 1, 2].map((k) => c[k] + u[k] * r * rnd(-0.6, 0.6) + v[k] * r * rnd(-0.6, 0.6));
+    const hits = WL.openingRayDirs(d).map((w) => {
+      const rel = [0, 1, 2].map((k) => o[k] - c[k]);
+      const pu = rel[0] * u[0] + rel[1] * u[1] + rel[2] * u[2], pv = rel[0] * v[0] + rel[1] * v[1] + rel[2] * v[2];
+      const wu = w[0] * u[0] + w[1] * u[1] + w[2] * u[2], wv = w[0] * v[0] + w[1] * v[1] + w[2] * v[2];
+      const b = pu * wu + pv * wv, cc = pu * pu + pv * pv - r * r;
+      const t = -b + Math.sqrt(b * b - cc);
+      return [0, 1, 2].map((k) => o[k] + w[k] * t);
+    });
+    const f = WL.openingFromHits({ origin: o, d, hits });
+    const err = f ? Math.hypot(...[0, 1, 2].map((k) => f.centre[k] - c[k] - d[k] * ((o[0] - c[0]) * d[0] + (o[1] - c[1]) * d[1] + (o[2] - c[2]) * d[2]))) : 1;
+    worst = Math.max(worst, err, f ? Math.abs(f.r - r) : 1);
+  }
+  ok(worst < 1e-9, `W13c 200 losowych otworów (oś, promień 0,01–0,15, punkt startu do 0,6 r od środka): środek i promień dokładne (max błąd ${worst.toExponential(1)})`);
+  ok(WL.openingFromHits({ origin, d: D, hits: ring(C, R, origin, dirs).slice(0, WL.OPENING.MIN_HITS - 1) }) === null, `W13d za mało trafień (< ${WL.OPENING.MIN_HITS} — płaska rufa, zewnętrzna krawędź) ⇒ brak wyśrodkowania`);
+  const ell = dirs.map((u) => [origin[0], C[1] + 0.06 * u[1], C[2] + 0.012 * u[2]]);
+  ok(WL.openingFromHits({ origin, d: D, hits: ell }) === null, 'W13e przekrój wyraźnie nieokrągły (elipsa 0,06 × 0,012) ⇒ odrzucony (rms)');
+  ok(WL.openingFromHits({ origin, d: D, hits: ring(C, 0.4, origin, dirs) }) === null, 'W13f otwór większy niż R_MAX (0,4 długości statku) ⇒ to nie dysza — odrzucony');
+  // strona: wyśrodkowanie domyślnie WŁĄCZONE (pole stanu + pole w HTML), klik dyszy idzie przez nozzleInOpening i zapisuje środek,
+  // a nozzleInOpening liczy z JEDNEJ matematyki (openingRayDirs + openingFromHits) i idzie do wylotu wzdłuż d (MOUTH_STEPS)
+  const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+  const pageSrc = strip(readFileSync(new URL('tools/model-workshop/workshop.js', ROOT), 'utf8'));
+  const htmlSrc = readFileSync(new URL('tools/model-workshop/index.html', ROOT), 'utf8');
+  const pin = (pg, html) => {
+    const body = (name) => { const i = pg.indexOf(`function ${name}(`); if (i < 0) return ''; const j = pg.indexOf('\n}\n', i); return pg.slice(i, j < 0 ? undefined : j); };
+    const place = body('placeAt'), open = body('nozzleInOpening');
+    return /nozzleCentre:\s*true\b/.test(pg) && /id="nozCentreChk"[^>]*\bchecked\b/.test(html)
+      && /S\.nozzleCentre\s*\?\s*nozzleInOpening\(/.test(place) && /op\s*\?\s*op\.centre\s*:\s*p/.test(place)
+      && /WL\.openingRayDirs\(/.test(open) && /WL\.openingFromHits\(/.test(open) && /MOUTH_STEPS/.test(open);
+  };
+  ok(pin(pageSrc, htmlSrc) && !pin(pageSrc.replace(/nozzleCentre:\s*true\b/, 'nozzleCentre: false'), htmlSrc),
+    'W13g strona: wyśrodkowanie domyślnie włączone, klik dyszy zapisuje środek otworu (nozzleInOpening → op.centre), matematyka z logiki, krok do wylotu; KONTROLA: domyślne „false” odrzucone');
 });
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

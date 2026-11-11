@@ -88,8 +88,14 @@ export const LIVE_CV_FX = {
   MODEL_RIM_GAIN:     0.8,   // obwódka (fresnel) w kolorze strony — swój chłodna biel, wróg rola `alert` motywu
   MODEL_RIM_POWER:    4.0,   // wykładnik obwódki — większy = cieńsza krawędź
   MODEL_LIFT_CEIL:    0.95,  // sufit wypełnienia + obwódki (liniowo); < 1,0 = bez bloomu (próg 1,0), > 1,0 — bloom świadomie
-  MODEL_LIGHT_GAIN:   1.0,   // mnożnik wzmocnienia punktów świetlnych (`lights[]` z pliku hardpointów)
-  MODEL_LIGHT_MIN_PX: 1.5,   // [CSS px] punkt mniejszy na ekranie gaśnie zamiast rosnąć
+  // Finding 684: 2,0 po pomiarze w grze (fregata ≈ 31 / 62 px): przy 1,0 czerwone punkty na szarym kadłubie ledwo czytelne,
+  // przy 2,0 wyraźne (poświata ≈ 10–12 px), przy 3,0 rozlana plama 25–28 px.
+  MODEL_LIGHT_GAIN:   2.0,   // mnożnik wzmocnienia punktów świetlnych (`lights[]` z pliku hardpointów)
+  // Finding 684 (kontrola właściciela 2026-11-11): punkt NIGDY mniejszy niż MIN_PX na ekranie; gaśnie dopiero z rozmiarem STATKU
+  // na ekranie — pełny od FADE_PX px długości statku, zero przy FADE_END_PX (daleki widok taktyczny). Shader: `ShipLightPoints`.
+  MODEL_LIGHT_MIN_PX: 2.0,   // [CSS px] podłoga średnicy punktu na ekranie (dawniej 1,5 — próg gaśnięcia punktu)
+  MODEL_LIGHT_FADE_PX:     10,   // [CSS px] długość statku na ekranie, od której punkty świecą w pełni
+  MODEL_LIGHT_FADE_END_PX:  5,   // [CSS px] długość statku na ekranie, przy której punkty znikają
   // ARC CV-3b (flaga `cvChoreo`) — choreografia w kopercie (renderer `_choreoCluster`, `ChoreographyLogic`): koperta klasy [L],
   // okres wzoru [s] (prędkość kątowa = 2π / okres), sufit skrętu [°/s], pion [L], jasność silnika w walce, przechył. Czytane
   // CO KLATKĘ. Strojenie, bez pinów (wartości domyślne — `CHOREO_TUNING`).
