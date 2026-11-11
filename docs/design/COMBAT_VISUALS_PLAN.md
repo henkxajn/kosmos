@@ -19,7 +19,8 @@
 > 2026-11-11). Owner's decisions 26–27 (§3.2: #678 kept; #681 → CV-3b). CV-3b (choreography inside the envelope, flag `cvChoreo`
 > default ON) ✅ DONE 2026-11-11 (`04f04e2` — §4 CV-3b — delivered; owner's check PASS — #681 both sides turn to their targets,
 > doctrines kite / hold, retreat, body battle; the owner's tuning baked in as defaults: turn caps 180 / 90 / 30 °/s, calm speed
-> 2 L/s). Next: CV-1b (§4 order).**
+> 2 L/s). CV-1b (normalizer CLI, tools only) ✅ DONE 2026-11-11 (`8dcb267`, local commit; owner's check pending, combined with CV-1c — §4 CV-1b —
+> delivered; the six owner models are the real slots, legacy textures 74.8 → 44.8 MB, #682–#683). Next: CV-1c (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -29,10 +30,10 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 682** (this plan files **#612–#681**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 684** (this plan files **#612–#683**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
 > CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
-> stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check).
+> stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check; #682–#683 from CV-1b).
 
 ---
 
@@ -1336,6 +1337,117 @@ without values). Owner's decisions 26–27 (§3.2): #678 kept, #681 → CV-3b. C
 | **Owner looks at** | drops one Meshy GLB in `incoming/`, runs the CLI, reads the report, sees the slot in the game |
 | **From CV-1a** | hardpoints live at `assets/models/ships/hardpoints/<slot>.json` (not `<slot>.hardpoints.json`); a model waiting in `incoming/` has `hardpoints/incoming/<slot>.json` + an entry in `incoming/index.json` — the slot swap PROMOTES it to `hardpoints/<slot>.json` (merge: clicked points survive), updates `source.sha256` / `source.normalizer` and removes the index entry; `.gitignore` already has `/assets/models/ships/incoming/` (add `_archive/`); the six owner models today: bow −X, 9.7–10k tris, battleships ≈ 29k (warn — D-CV-14 (a)); `cv_models_logic_smoke` T2c pins `source.sha256` = the slot GLB — a swap without a hardpoints update turns it red |
 
+#### CV-1b — normalizer CLI ✅ delivered 2026-11-11 (`8dcb267`, local commit — not pushed; tools only, no runtime flag; owner's check PENDING — combined with CV-1c by the owner's protocol change of 2026-11-11)
+
+Built in one session; nothing of the scope moved to a CV-1b2.
+
+**What changed**
+- NEW `tools/ship-models/normalize-ship.mjs` (CLI; modes `<slot>`, `--from <file>` for the `.bat`, `--podglad <slot>` —
+  a candidate in `incoming/` with measured hardpoints + an index entry, previewed by `cvIncoming(1)`, slot untouched —,
+  `--legacy [slot…]`, `--dry`, `--no-1k`, `--help`) and pure `tools/ship-models/lib/`: `geometry.mjs` (bbox, centre, scale,
+  slice counts, bow guess, signed-permutation orientation with det +1, normalization matrix, nozzle from the stern slice),
+  `uv.mjs` (UV coverage, texel centre, REPEAT wrap), `texstats.mjs` (key-colour share through the GAME's `keyColourMask`,
+  hull luma), `textures.mjs` (encoding plan per role / variant), `hardpoints.mjs` (measure, rotate, pick the carried doc,
+  MERGE, `source`, index, JSON format), `slots.mjs` (25 slots from `VESSEL_MODEL_KEYS` + default, slot from a file name),
+  `report.mjs` (Polish report, F10 verdicts ✔ / ⚠ / ℹ / ☐). NEW `tools/ship-models/normalize-ship.bat` (drag a GLB onto
+  it; CRLF via `.gitattributes`; all owner text printed by node in UTF-8), `package.json` script `ship`.
+- `src/data/ShipHardpointsSchema.js` — optional `source.input { file, sha256, verts, tris, rotation }` documented and
+  validated (the only game-code edit; the validator already ignored unknown keys inside `source`, so no runtime change).
+- Pipeline (plan §2.11 order): read → report → bake node transforms (flatten + world matrix into the mesh) → weld / dedup /
+  prune → centre → scale (longest 1.0) → orient (longest axis → X, **bow → −X**: the legacy convention, the code fallback
+  `defaultHardpoints` and the OFF heading formula all assume −X, so a normalized model flies bow-first even without its
+  hardpoints file and with `cvModels` OFF) → textures → archive the old slot (`_archive/`, gitignored) → write
+  `<slot>.glb` + `<slot>@1k.glb` → create or MERGE `hardpoints/<slot>.json` → report (console + `incoming/<slot>.report.txt`).
+  Validation of the hardpoints document runs BEFORE any write (an invalid document writes nothing).
+- **MERGE rule** (`lib/hardpoints.mjs`): a document of the SAME model wins in every model field (`frame`, `nozzles`,
+  `weapons`, `lights`, `keyColour`, `damagePoints`); sources in order: `hardpoints/incoming/<slot>.json` when it describes
+  this input file (sha256; its points are rotated by the normalizer's R), then the slot's own document from a previous
+  normalization of the same model (`source.input`: sha256, or the same vertex and triangle counts = a re-exported texture;
+  the stored `rotation` keeps the output space identical), else a fresh measurement. A document of the slot's OLD model is
+  never merged (its points sit on another hull) — it goes to the archive with the old GLB. Re-normalizing the same input
+  gives byte-identical GLBs (measured: all six 2K and 1K files, sha256 equal across three runs).
+- **Textures — measured before choosing** (contact sheets on the RTX 3070, the game's three r171 + GLTFLoader from the CDN,
+  close-up with grazing light; `kosmos-handover/cv-1b/`): lossy WebP on normal maps keeps 4:2:0 chroma subsampling
+  (X / Y live in chroma) — UV-texel angular error at q100 still mean 1.9–5.2°, p99 13–28°; rendered close-up PSNR 36–42 dB on
+  the 2K files and 30 dB on the legacy 1K files, up to 7 % of ship pixels off by > 12 levels — visible at close range.
+  WebP near-lossless 60: max 2° (2K), rendered close-up 48–53 dB, no pixel off by > 12 — invisible, −38 … −56 % of the PNG.
+  Chosen: **base colour JPEG kept byte for byte** (D-CV-15: no 4:2:0 re-encode of thin cyan; resize or PNG ⇒ lossless WebP);
+  **normal maps WebP near-lossless 60** (2K master and legacy), **lossy q90 only in the 1K variant** (Medium / Low);
+  **metallic-roughness WebP q90** (the Meshy source is already 4:2:0 JPEG); emissive / occlusion untouched unless resized;
+  a re-encode that does not shrink the file is dropped. `EXT_texture_webp` (required) is declared only when a WebP exists;
+  no Draco / meshopt / KTX2. Knobs: `ENCODE` in `lib/textures.mjs` (change only after a contact sheet).
+- **The six owner models are the real slots** (`nonwarp_` / `warp_` `frigate` / `destroyer` / `battleship`): hardpoints carried
+  from `hardpoints/incoming/` (bow, nozzle, mask — CV-1a measurement), `source.normalizer` `normalize-ship@1`, index entries and
+  incoming documents removed (archived); `cvIncoming` stays a dev tool for future candidates (`--podglad`).
+
+| slot | input | 2K | 1K | report (F10) |
+|---|---|---|---|---|
+| nonwarp_frigate | 10.36 MB | 6.74 MB | 1.92 MB | ✔ mesh, tris 9 681, PBR, bow · ⚠ dark hull (luma 87, dark 26.6 %) · ℹ no cyan |
+| warp_frigate | 9.99 MB | 6.48 MB | 1.88 MB | ✔ mesh, tris 9 882, PBR, cyan 0.557 %, bow · ⚠ dark hull (luma 83, dark 48.5 %) |
+| nonwarp_destroyer | 11.32 MB | 7.39 MB | 2.05 MB | ✔ all · cyan 0.002 % · hull 111 / 30.1 % |
+| warp_destroyer | 11.41 MB | 7.41 MB | 2.03 MB | ✔ all · cyan 0.439 % · hull 113 / 28.6 % |
+| nonwarp_battleship | 12.29 MB | 8.22 MB | 2.60 MB | ✔ mesh, PBR, bow · ⚠ tris 28 968 (> 15k, D-CV-14 (a)) · ℹ no cyan |
+| warp_battleship | 12.31 MB | 8.34 MB | 2.68 MB | ✔ mesh, PBR, cyan 0.531 %, bow · ⚠ tris 29 238 |
+
+  Every report also lists ☐ "one nozzle" and ☐ "no text / logos" — the tool cannot measure them and never prints ✔ for them.
+  The 2K masters are above the ≲ 5 MB target (#682): the kept base JPEG alone is 2.8–3.4 MB. Contact sheet raw incoming → slot:
+  mean PSNR 53.7–55.2 dB, close-up 49.3–52.0 dB, ≤ 0.03 % pixels off by > 12; the 1K variant 37–38 dB (close-up 29–32 dB — a
+  lower tier by design).
+- **Legacy pass** (one-off, `--legacy`; geometry and frame untouched, `source.sha256` + `source.normalizer` `legacy-textures@1`
+  updated): normal maps PNG → WebP near-lossless, the three PNG base colours (`cargo3d`, `default`, `research1`) → lossless
+  WebP; 20 files changed, `nonwarp_small_science` unchanged (nothing shrank); **74.79 → 44.84 MB**. Contact sheet (18 unique
+  models, 5 views): mean PSNR 52.0–55.1 dB, close-up 45.4–50.1 dB, ≤ 0.07 % pixels off by > 12. Duplicates flagged, nothing
+  invented: `cargo3d` = `default`, `nonwarp_large_cargo` = `nonwarp_medium_cargo`, `warp_large_science` = the old frigate model
+  (archived); they stay identical after the pass. No `@1k` for legacy files — they already are 1K (CV-2b: missing `@1k` = use
+  the slot file).
+- `.gitignore` +`/assets/models/ships/_archive/`; `.gitattributes` +`*.bat` / `*.cmd` `eol=crlf`;
+  `README_modele_statkow.md` rewritten as the owner's guide (Midjourney → Meshy → drop on the `.bat` → report → game → Workshop).
+
+**Calibration of the pure functions on the 33 models** (27 legacy + 6 owner): bow guess 33 / 33 = the CV-1a files; nozzle
+position 33 / 33 = the CV-1a files (3 % stern slice centre); nozzle radius — no recorded CV-1a rule, the chosen one (half the
+smaller width of the 1 % slice, clamped 0.02–0.12) is within ≈ 0.014 on average (radius = plume thickness only); key-colour %
+on the six owner textures = the CV-1a fixture to the thousandth (0.557 / 0.439 / 0.531 / 0.002 / 0 / 0); UV coverage 39.6–61.7 %
+(= audit Q6). Hull verdict thresholds (mean luma ≥ 100 and dark share ≤ 35 %, dark = luma < 40) flag the legacy outliers named
+by the audit (`warp_medium_science`, `default` / `cargo3d`) and the owner's two frigates (dark two-tone charcoal) — ⚠ is a
+"look at it" for the next model, not a failure.
+
+**Keepers (logic only).** NEW `cv_normalizer_logic_smoke` **56 / 0** (N1 normalization, N2 bow guess on X / Y / Z both signs +
+control, N3 36 orientations det +1, N4 nozzle, N5 merge / pick / rotate / format / `source.input` validation incl. the control
+"the old model's points never land on a new hull", N6 UV, N7 texture stats through the game mask, N8 verdicts (☐ never ✔), N9
+texture plan — no lossy path for base colour, N10 slot names, **N11 round-trip on the real slot files** with an own GLB parser
+(no npm): sha256 = hardpoints, only `EXT_texture_webp`, decodable images, base colour JPEG, no node transform, geometry centred
+with length 1.0 on X, `@1k` with the same geometry; the GAME's rig (`buildShipRig`, three r171) on that geometry with those
+hardpoints: normalized to the class size, bow → canonical +Z, plume behind the stern; nozzle measured on the file = file; 21
+legacy files: geometry untouched (nozzle re-measured = CV-1a), N12 no `Math.random`, determinism, validate-before-write,
+archive-before-write). Fail-first: on HEAD without the tool 0 / 10 (every block degrades); with the tool copied onto HEAD's
+data **51 / 5** — red exactly the schema pin (N5l) and the data pins (N11a / b / e / f), the controls N11c (rig) and N11d (legacy
+geometry) green on both sides. Mutation battery **17 / 17 killed** (bow sign, det fix, scale, nozzle end, merge ignored, incoming
+carried without the file check, old-model doc merged, lights not rotated, lossy base JPEG, lossy base resize, "only if smaller"
+off, stats outside UV, no UV wrap, ☐ → ✔, tris threshold 50k, Downloads-copy name, validate after write).
+`cv_models_logic_smoke` **69 / 0** — **T2d / T4c re-aimed on purpose**: they pinned counts of the CV-1a state (6 index entries,
+≥ 31 files = 27 slots + 6 incoming), and CV-1b by design moved the six models into the slots; the invariants stay (index = files
+in `incoming/`, every file bow → +Z, plume aft). **T2e re-aimed**: the owner's models now live in the slots — the pin covers
+`incoming/` ∪ slots with `normalize-ship@1` and requires a witness (an empty set no longer passes). `cv_models_render_smoke`
+58 / 0. Sweep **386 / 386 OK, 0 FAIL** (28 advisory, as before) · `check-i18n` PASS (no new keys — the tool's text lives outside
+the game's i18n).
+
+**Live validation** (`kosmos-handover/cv-1b/validate_CV1b.mjs` — the real game in headless Chrome on the RTX 3070, GATE-S4,
+1600×1041, owner lines executed literally) **6 / 6**: `cvParade()` without `cvIncoming` — 24 ships nose-first (min cos 1.000),
+plume apex at −0.500; the six warships from the slot files; the game's GLTFLoader decoded the WebP textures (2048 for the new
+slots, 1024 for 19 legacy templates); `cvBattle({warp: 1})` and `cvBattle()` — 20 ships each on the new slots, mask from the slot
+hardpoints; zero exceptions, shader errors, failed GLB / texture loads, zero 404 on models.
+
+**Lessons (process).** (1) An interactive numbered slot list is easy to mis-pick — my own test answer "10" meant
+`nonwarp_frigate`, not `warp_frigate`, and replaced that slot; the archive made the restore exact (sha verified), and the CLI
+now asks for an explicit "t" before touching a slot picked from the list. (2) Do not run a test in the same shell line as an
+unverified patch: a failed patch followed by the test repeated the swap once more. (3) `npm ci` deletes `node_modules/three`
+(the headless stub the keepers need — it is not a dependency) — restored from a copy taken before the install (#683).
+
+**Owner's check list** — `kosmos-handover/cv-1b/CHECKLIST.md` (combined with CV-1c's list in the final report).
+
+**Not in CV-1b (by scope):** Model Workshop — clicked bow / nozzle / turrets / lights and the slider tuning (CV-1c); using
+`@1k` files at runtime (CV-2b presets); replacements for the duplicate slots (owner's new models).
+
 ### CV-1c — Model Workshop (tools; no runtime flag)
 
 | | |
@@ -2598,6 +2710,8 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **679** | ⚪ | **Removing a ship disposed the SHARED template geometry.** The OFF path's `_removeVesselSprite` calls `geometry.dispose()` on every mesh of a `template.clone()` — the clone shares the template geometry, so every removal frees the GPU buffers of every other ship of that slot and forces a re-upload (the #636 hit-glow churn's twin for models) | `ThreeRenderer._removeVesselSprite` (OFF branch) | CV-1a ✅ under `cvModels` (`disposeShipRig` frees only what the rig owns; keeper R7); OFF until CV-Z |
 | **680** | ⚪ | **`entry.enemyTint` carries two meanings.** It marks cloned materials to dispose AND the CTRL labels read it as "is enemy" (colour, identity fog "?" below `contact`) — a canonical entry written with `enemyTint: false` (disposal handled by the rig) leaked enemy names into the CTRL labels during CV-1a development; fixed before the check by keeping the OFF meaning (keeper R8d2, mutant M21) | `ThreeRenderer.getAllVisibleLabels` (`isEnemy = !!entry.enemyTint || !!vessel?.isEnemy`); `_addVesselModelCv` | CV-Z hygiene — split into `entry.isEnemy` + rig-owned disposal |
 | **681** | ✅ | **A ship placed while it carries a synthetic order mission faces the star.** The placement heading reads `liveTargetX ?? targetX ?? 0` from `vessel.mission`; `_issueEngage` (M4 P3 hotfix #2) writes a synthetic mission WITHOUT coordinates, so the fallback `(0, 0)` — the system origin, i.e. the star — becomes the heading, and free-floating combat ships are never rotated afterwards. Both paths, before CV-1a too; measured live: in `cvBattle` the player's ships stand bow to the star (cos to the star +1.00), sterns to the enemy when the battle lies beyond the enemy line. Same for any order whose mission has no coordinates when the sprite is (re)built (system switch, `cvModels` toggle) | `ThreeRenderer._addVesselModelCv` / `_addVesselModel3D` (heading at placement); `MovementOrderSystem._issueEngage` (synthetic mission) | **CV-3b ✅** — owner's decision 2026-11-11 (§3.2-27): facing the target supersedes it — under `cvChoreo` every combatant on both sides turns to its target (or the enemy centroid) from the first rounds (keepers L6, R5a; live table in §4 CV-3b); owner's check PASS |
+| **682** | ⚪ | **The 2K masters of the six owner models are 6.5–8.3 MB, above the ≲ 5 MB target.** The kept base colour JPEG alone is 2.8–3.4 MB (D-CV-15: no re-encode); the target is reachable only with lossy WebP normal maps (≈ 4.4–5.8 MB), and the contact sheet shows them at close range (rendered close-up PSNR 36–42 dB, up to 2 % of ship pixels off by > 12 levels; near-lossless 48–53 dB, none) | `kosmos-handover/cv-1b/normal_sheet*.{png,json}`; `tools/ship-models/lib/textures.mjs` `ENCODE.normal['2k']` | owner's decision — the knob is one constant; the 1K variant (Medium / Low) is already lossy and 1.9–2.7 MB |
+| **683** | ⚪ | **`npm ci` / `npm install` deletes the headless `three` stub** (`node_modules/three`, `0.0.0-headless-stub`): it is not a dependency and `node_modules/` is gitignored, so installing the normalizer's declared dependencies (sharp, glTF-Transform — D-CV-13) removes it and every keeper importing `GameCore` fails until it is restored by hand | CV-1b session: restored from a copy taken before `npm ci`; `CLAUDE.md` (the stub's documented boundary) | hygiene — candidate: track the stub (e.g. a `file:` devDependency on a tracked folder) so a clean install recreates it; out of CV |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
