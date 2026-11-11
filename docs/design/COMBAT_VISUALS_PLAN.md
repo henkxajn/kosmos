@@ -28,7 +28,9 @@
 > frame up and nozzle repaired); re-check PASS (decision 31 — step 1 with the tuning `8225fbc`: `MODEL_LIGHT_GAIN` 1.4, the lights fade
 > from a 20 px ship to 10 px; step 2, the Workshop preview, deferred to the owner's next light re-click); CV-1b + CV-1c pushed. #640 + #675
 > (small step OUTSIDE CV — one message per event) ✅ DONE 2026-11-11 (`c589583` — §4 «#640 + #675 — delivered»; owner's check PASS, steps 1–7;
-> decision 32: the fog leak #687 fixed in the same commit). Next: #663 (MECHANICS, OUTSIDE CV), then CV-2b (§4 order).**
+> decision 32: the fog leak #687 fixed in the same commit). Decision 33: M1 „battles to the end” (MECHANICS, OUTSIDE CV) — read-only
+> diagnosis 2026-11-11 (findings #688–#693), plan §4 «M1 — battles to the end», open questions D-M1-1…5 for the owner. Next: #663
+> (MECHANICS, OUTSIDE CV) or M1 — the owner's order; then CV-2b (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -38,11 +40,11 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 688** (this plan files **#612–#687**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 694** (this plan files **#612–#693**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
 > CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
 > stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check; #682–#683 from CV-1b;
-> #684 from CV-1c; #685–#686 from the combined CV-1b + CV-1c owner's check; #687 from the #640 + #675 step).
+> #684 from CV-1c; #685–#686 from the combined CV-1b + CV-1c owner's check; #687 from the #640 + #675 step; #688–#693 from the M1 diagnosis).
 
 ---
 
@@ -1033,6 +1035,13 @@ makes Live Server reload the page.
     (the CTRL labels' rule, #680) — a ship's name only when the rule allows (intel about the ship ≥ contact), otherwise count / distance
     only; keeper: no enemy name in these lines below the naming level; then commit feat + docs and push. Done in the same feat commit
     `c589583` (§4 «#640 + #675 — delivered»).
+33. **2026-11-11 — M1 „battles to the end” (MECHANICS, outside CV; the owner's explicit decision after a battle he watched — his
+    last ship at ≈ 3 % beat an enemy at 9–12 %):** remove the 20-round time-out — a battle goes on until one side is destroyed or the
+    enemy retreats / disengages; NO stalemate / draw rule in normal fights; to keep battles from dragging — HIGHER ACCURACY; only
+    technical guards the player never sees in a normal fight: end the encounter when no ship of one side can ever damage the other,
+    and a hidden safety cap far above any real battle (≈ 200 rounds). Read-only diagnosis first (battle math, hit rates, battle
+    lengths with today's and the proposed accuracy, guard frequency, the dependency map) → findings #688–#693 and the plan
+    §4 «M1 — battles to the end»; the open questions D-M1-1…5 go to the owner before the code.
 
 ---
 
@@ -1057,6 +1066,8 @@ canonical bow frame.
 … CV-6b2 → CV-1a → CV-3b → CV-1b → CV-1c → **#640 + #675 (outside CV)** → #663 (MECHANICS, outside CV) → CV-2b → …
 
 **2026-11-11:** #640 + #675 delivered (`c589583`, §3.2-32 — with the fog fix #687); next: **#663** (MECHANICS, outside CV) → CV-2b → …
+**2026-11-11 (§3.2-33):** M1 „battles to the end” (MECHANICS, outside CV) planned — §4 «M1»; its place in the order (before or after
+#663) and D-M1-1…5 are the owner's.
 
 **Dependencies on CV-1 and the shims** (CV-2a, CV-3a and CV-3b now run before CV-1a):
 - CV-2a (FX engine, stager) — none: endpoints are drawn positions; muzzle hardpoints arrive with CV-4.
@@ -1747,6 +1758,122 @@ step: one message per event (§3.2-14, -25). Combat mechanics, DSCS math and out
 - ⚠ Keeper lesson: intel records live in the global `gameState`, and vessel ids restart at `v_1` in every headless world — without
   `gameState.reset()` a ship inherits the intel of the previous block's ship with the same id (measured: „Cień” observed at 1.1 AU came
   out `contact`).
+
+### M1 — battles to the end (MECHANICS, outside CV) — plan for ONE session (decision 33; diagnosis 2026-11-11)
+
+**Read-only diagnosis** (probe outside the repo: 420 headless battles — stager mirrored line-ups 2v2 / 5v5 / 10v10 × seeds 1–20,
+DSCS methods wrapped at run time; the dependency map — a read-only search; findings #688–#693).
+
+**Battle math — no bug in the decision rule (#688, #689).** The time-out (`DeepSpaceCombatSystem.js:847-851`) compares the ABSOLUTE
+hull HP of the sides (`_sumHP` `:1483-1491`: Σ max(0, hp), destroyed ships 0, shields not counted; equal → draw) and then wrecks
+every surviving ship of the losing side (`:1105-1114`). The strip shows the side % = Σhp / Σhpstart of the visible ships
+(`CombatStripLogic.js:77-90`, `CombatStrip.js:221`); in mirrored stager battles the start totals are equal, so % and absolute agree.
+The owner's battle is NOT a time-out — reproduced in 2v2 seed 16 (and 20): round 16, the player's destroyer at 5.2/220 HP (2.4 %)
+fires first and destroys the AI destroyer at 18.4/220 (8.4 %), which never fires — side A is always the player
+(`_createEncounter(playerGroup, …, 'player', …)` `:332`) and the sides fire in sequence, A then B (`:714-715`); a ship destroyed in a
+round does not fire back. Example of a real time-out (10v10 seed 1): A 667.7 vs B 865.2 HP (30.5 vs 39.5 %) → B wins and A's three
+survivors (297/350, 166/220, 204/350) are wrecked at round 20; rounds 14–20 of that battle had no shot at all (approach).
+
+**Hit rates (#690)** — formula `:667`: clamp(0.10, 0.95, tracking × `HIT_CHANCE_MULT` 1.5 × tech (player only) × (1 − evasion));
+no distance falloff — range only gates (`:655`). Frigate / destroyer / cruiser (evasion 0.20 / 0.10 / 0.05):
+
+| | laser (0.8) | kinetic (0.6) | missile (0.5) |
+|---|---|---|---|
+| today — AI (measured) | 95 / 95 / 95 % (cap) | 72 / 81 / 85 % (72.5 / 80.8 / 86.5) | 60 / 68 / 71 % (60.4 / 68.6 / 70.3) |
+| today — player with techs (×1.10 medium / long) | 95 / 95 / 95 % | 79 / 89 / 94 % | 66 / 74 / 78 % |
+| **proposed MULT 2.0** — AI (measured) | 95 / 95 / 95 % | 95 / 95 / 95 % (94–95) | 80 / 90 / 95 % (79 / 90 / 95) |
+| proposed MULT 2.0 — player with techs | 95 / 95 / 95 % | 95 / 95 / 95 % | 88 / 95 / 95 % |
+
+Above MULT 2.0 every weapon sits at the cap (MULT 2.5 measured = MULT 2.0). The AI never gets tech multipliers (P5 debt).
+
+**Battle length** — rounds per battle (all encounters of the battle; = seconds watched at `combatRoundMs` 1000; unwatched × 0.11 s):
+
+| variant | 2v2 p50 / p90 / max | 5v5 | 10v10 | winners A/B (2v2 · 5v5 · 10v10) |
+|---|---|---|---|---|
+| today (time-out 20) | 13 / 16 / 16 | 16 / 20 / 20 | 20 / 20 / 20 (all time-out) | 5/15 · 6/14 · 8/12 |
+| no time-out, today's accuracy | 13 / 16 / 16 | 16 / 20 / 22 | 31 / 41 / 47 | 5/15 · 6/14 · 3/17 |
+| **no time-out, MULT 2.0** | 12 / 15 / 16 | 14 / 16 / 21 | 28 / 36 / 41 | 7/13 · 11/9 · 3/17 |
+| MULT 2.0 + damage × 1.33 | 9 / 10 / 11 | 11 / 14 / 21 | 26 / 31 / 32 | 11/9 · 19/1 · 9/11 |
+| MULT 2.0 + reload × 0.6 | 10 / 10 / 11 | 10 / 11 / 12 | 19 / 25 / 31 | 20/0 · 16/4 · 16/4 |
+| MULT 2.0 + damage × 1.33 + reload × 0.6 | 7 / 7 / 9 | 7 / 9 / 10 | 15 / 17 / 19 | 20/0 · 20/0 · 16/4 |
+
+Accuracy alone buys ≈ 10 % in a 10v10; the length comes from the fire rate (cooldowns quantised to rounds: laser every 2, kinetic
+every 3, missile every 5 — many rounds with 0–4 shots) and the approach (10v10: up to 8 consecutive rounds without damage). Raising the
+lethality makes the first shot decisive (#689). AutoRetreatSystem present or absent — identical numbers.
+
+**Guards — measured:** in all 420 battles 0 × "no side can damage the other", 0 × one side unarmed, 0 × the 200-round cap; the
+longest battle 47 rounds (target met: never in normal battles). Situations that would never end without a time-out exist only off
+the stager (#693): both sides orbiting bodies out of range (orbiting ships neither close in, `:563-564`, nor disengage,
+`:1021-1023`), an armed side that cannot close (in transit, retreating, docked), shields that out-regenerate damage (today impossible:
+`shield_basic` regen 0.3 HP per round vs ≥ 3 HP per round from the weakest weapon), and no mid-battle "is anyone armed" check (only at
+the start, `:309-324`).
+
+**Dependency map (summary, `path:line` at `bdca201`):** DSCS — `MAX_ROUNDS` `:61`, read once `:848` (no production importer;
+`cv_strip_smoke` imports it), side-level wreck of living losers `:1105-1114`, `turns` `:1078`, timeline unbounded `:1460-1469`, saved
+encounters keep `currentRound` (`:1574`, `:1613` — the new cap applies after load). Orbital path — `BattleSystem.resolveBattle`
+`MAX_TURNS 30` `:114`, tick-out by HP with a tie going to B `:165` (EAH `:201`, `WarSystem.forceBattle` `:618`, `_fleetArrived` `:773`,
+VCS instant path `:310`) (#692). Retreat — AI auto-retreat `:840-845` ends the encounter in range; `battle:resolved` clears the
+proximity pairs (`ProximitySystem.js:107-131`) and the VCS cooldown (`:93-102`), `startEngagement` never reads the retreat marker, the
+self-heal re-emits (`:265-282`) ⇒ #657. Combat gates — warp `in_combat` (`WarpRouteSystem.js:59`, #607), `dispatchInterstellar`
+`:947`, retreat order `MovementOrderSystem.js:552-555`, doctrine `retreat_at_50` (`FleetSystem.js:751-826`), Director strike /
+recall / retake pools, `FleetPoolSystem` `:390-393`, `StrikeSquadronSystem` `:518-532`, the cluster banner waits for active peers
+(`GameScene.js:4308`, `:4379`, `:4484`). Pace — any active encounter locks the world to the combat grid at 1 d/s
+(`TimeSystem.js:96-98`); `combatRoundMs` 1000 was chosen for a 20-round maximum (`StrikesBackData.js:140-142`) (#691). AI and Balans —
+Director modules never read `turns`; squadron sizing is a static HP ratio (`DirectorOffensive.requiredSquadron` `:324-337`,
+measured on time-out battles [INF]); `GameCore` creates no DSCS — Balans runs have no deep-space battles. UI — strip „R n/20”
+(`CombatStripLogic.ROUND_CAP` `:63-64`, mirror of `MAX_ROUNDS`; `combatStrip.round` 'R{0}/{1}'); CombatHUD „runda {0}”,
+`BattleIntroModal` „Tur: N” (`:289`, hard-coded Polish — #163 family), Dziennik `log.battleLine` „{6} tur.”, `WarOverlay` (tur: N) —
+show `turns`, no cap. Debug — `cvBattle` refuses `battle_in_progress` while a test battle runs (`CvBattleStager.js:343`). Saves —
+battle records carry the full timeline (`DSCS:1072` → `gameState.battles`, pruned to 50; war-booked battles stored twice,
+`WarSystem.js:526`) (#691).
+
+**What M1 changes (one session):**
+1. **End conditions** (`DeepSpaceCombatSystem.js`): delete the time-out branch; `MAX_ROUNDS` → hidden `SAFETY_ROUND_CAP` = 200 — ends
+   the encounter per D-M1-4 (recommended: draw, no side-level wreck of the living) and logs `combat:safetyCap` (in
+   `DebugLog.TRACKED_EVENTS`, same commit). New guard each round after `_checkEndConditions`: the encounter ends as a draw (no wrecks
+   of the living) when NEITHER side has a live ship able to damage the other — (a) no live armed ship; (b) no weapon in range and no
+   approach possible (every armed ship pinned to an orbit, docked, in transit or retreating — the exclusions of
+   `_closeToWeaponRange`); (c) for every target its shield regeneration ≥ the side's maximum damage per round while the shield is up.
+   One side able → the fight goes on (the defenceless side is destroyed or flees). Audit event `combat:noDamagePossible`.
+2. **Accuracy:** `HIT_CHANCE_MULT` 1.5 → **2.0** (table above; floor 0.10 and cap 0.95 unchanged) — the measured useful maximum.
+3. **Length lever (D-M1-1)** — accuracy alone leaves a 10v10 at 28 s p50 / 41 s max watched. Options, measured: (i) nothing more;
+   (ii) watched tempo `combatRoundMs` 1000 → ≈ 650 ms (presentation only, results unchanged: 10v10 ≈ 18 s p50 / 27 s max watched,
+   unwatched unchanged); (iii) reload × 0.6 (10v10 19 / 31 rounds) — the first shot then decides (A/B 16/4); (iv) damage × 1.33
+   (26 / 32). Recommendation: (ii); (iii) / (iv) only together with simultaneous fire (D-M1-3).
+4. **Retreat (D-M1-2; #657, #645):** (a) retreat = flee — the AI auto-retreat no longer ends the encounter; the side gets the retreat
+   order (marker) and the encounter ends when it leaves `COMBAT_DISENGAGE_AU` (the disengage path `_allOutsideOf` `:992-1030`);
+   fleeing ships keep taking fire; no re-engagement in range by construction; (b) keep the instant end + no re-engagement of a
+   retreated ship for N rounds (DSCS dispatcher + the ProximitySystem self-heal). Recommendation: (a) — measure AI losses in the session.
+5. **First shot (D-M1-3, #689):** simultaneous fire — alive state snapshot at the start of the round, both sides fire from it (the
+   ground-combat fix #309) — required with (iii) / (iv), optional otherwise.
+6. **Orbital path (D-M1-5, #692):** `BattleSystem.resolveBattle` — align (no 30-turn tick-out; the same guard and cap; a tie = draw)
+   or leave as is (synchronous, no world slowdown). Recommendation: align.
+7. **UI and text:** strip „R n/20” → „R n” (`ROUND_CAP` and `maxRounds` removed; `combatStrip.round` 'R{0}' PL + EN; `cv_strip_smoke`
+   P8e re-aimed); stale comments (DSCS `:58-60`, `:95`, `:683`, `:803`, `:998`, `:1004`, `:315`; CombatHUD `:4`; AutoRetreat
+   `:112-113`; `StrikesBackData.js:140-142`).
+8. **Records (#691):** measure the record size of the longest battles; keep the per-round timeline of a stored battle bounded (e.g. the
+   last K rounds) if a 47-round 10v10 grows the save noticeably.
+
+**Keepers to re-baseline (dependency map §9):** direct pins — `cv_strip_smoke` P8e (`ROUND_CAP === MAX_ROUNDS`), `announce_once_smoke`
+G1c (`turns === 20`); outcome shapes on battles that time out today — `announce_once_smoke` G1a / G1b / G1d / G2 / G3 / G4a / G4b / G5 /
+C6, `cv_strip_smoke` P4a / b / d / e / f / i, `cv_stage_logic_smoke` L5-0 / L5a / L5b / L5c (thresholds measured on the 20-round
+battle), `cv_fx_results_smoke` (relative asserts survive; runtime grows; `ARRIVAL_ROUNDS` needs ≥ 12 rounds); the accuracy change
+moves EVERY signature — `combat_pace_smoke` `TODAY_SIG`, `cv_renderer_rng_smoke` `PINNED_SIG`, `warp_combat_607_smoke` + trace fixture
+`F607-warp-combat-baseline.json`; hard caps that need the battle to end — `combat_turns_smoke` / `combat_fx_pace_smoke` /
+`combat_hp_bar_smoke` (40 rounds), `combat_marker_life_smoke` (4000 frames) — check the scenes end by kill under the cap.
+NEW `m1_battle_end_smoke`: a 10v10 runs past round 20 to a kill or a retreat; the safety cap (constructed hang → ends at 200 per D-M1-4
++ audit); guard scenarios (both sides unarmed, both orbiting out of range, shields out-regenerating); accuracy values; retreat per
+D-M1-2; results with the presentation ON == OFF (`cv_fx_results` A2 pattern); fail-first on the code before M1.
+
+**Risks:** the world slowdown and the watched length (#691 — 10v10 unwatched 3.4 s p50 / 5.2 s max at 1 d/s, today ≤ 2.2 s; the cap =
+22 s unwatched); the first shot decides once lethality rises (#689); balance — today the round-20 HP rule wrecks the living losers
+(3–6 ships per 10v10), after M1 they keep fighting — AI losses and squadron sizing may need re-measurement; the stager refuses a
+new test battle while one runs; a long peer holds the cluster banner; save size (#691); the Balans harness cannot see any of it
+(no DSCS in `GameCore`).
+
+**Owner's decisions before the code (D-M1-1…5):** 1 the length lever (i–iv) · 2 retreat semantics (a / b) · 3 simultaneous fire ·
+4 what the hidden safety cap does (draw recommended) · 5 the orbital path. Save v101, no migration (encounters in a save keep their
+round count; the cap applies after load).
 
 ### CV-2a — FX engine core, presentation clock, stager (flag `cvFxEngine`)
 
@@ -2976,7 +3103,7 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **654** | ✅ | **"The player always wins" does not reproduce in the fixture — the stager favours the AI.** GATE-S4, live: seed 1 PORAŻKA (losses 7 / 3), seed 2 PORAŻKA (7 / 2), seed 3 ZWYCIĘSTWO (7 / 4), all 20 rounds (time-out by total HP); headless seeds 1–6: the player wins 1 / 6; the player loses 7 of 10 ships in every run. Cause in the stager: side B's weapons are shifted by one position in the cycle (`pickName(weapons, …, i + offset)`, offset 1 for B) ⇒ the player's frigates carry lasers (0.05 AU) and the AI's frigates kinetics (0.15 AU) while the lines start 0.12 AU apart. DSCS asymmetries (mechanics, untouched): side A — always the player — fires first in a round (a B ship killed in A's volley does not fire that round; measured with B first: the player wins 0 / 6, loses 7 in every seed, the AI loses 1–3 instead of 1–4); player-only tech multipliers (`weapon_range_*`, `weapon_tracking_*`); AI-only auto-retreat; "Engage" only for side A (variants: as the stager B,B,A · none A,B,A · both A,B,A for seeds 1–3). The owner's save (not the fixture) likely has player weapon techs — DSCS applies them to the player only | node probe (seeds 1–6, variants, fire-order swap); live timing seeds 1–3; `CvBattleStager.cvBattleLayout`; `DSCS._tickEncounter` (`fireFromSide` A then B), `_resolveWeaponRange` | **✅ CV-3a3** (`0490ea5`; owner's decision (1), §3.2-10): mirrored loadouts — B takes A's per-index loadout (offset 0), "Engage" for side A only; live after: seed 1 PORAŻKA (7 / 4), seed 2 PORAŻKA (7 / 4), seed 3 ZWYCIĘSTWO (6 / 6). The rest is mechanics — the fire order and player-only techs → the MECHANICS candidate (#631) |
 | **655** | ⚪ | **The course shown during the battle does not match the result.** (i) dead ships stay drawn and on the card until `_finalizeBattle` (#615), then 10–13 vanish / explode in one frame; (ii) the time-out (20 rounds) decides by total HP, so the side with fewer living ships can win (seed 3, round 11: the player 6 alive / 54 % HP against the AI 8 / 49 % → the player wins at time-out) — the card's "żywych N / M" looks like a loss; (iii) the time-out loser's survivors are wrecked at the end (side-level wreck), so "3 player ships left" disappear in a defeat | node + live per-round side HP and alive counts; `DSCS._checkEndConditions`, `_finalizeBattle` | **CV-4** (presented HP and kills at the killing impact) and **CV-6b** (the strip shows HP, not only counts); the time-out rule — mechanics (#631) |
 | **656** | ⚪ | **How a ship picks its target in DSCS today** (answer, not a defect). Each weapon off cooldown picks: the "Engage" target (only ships with that MOS order — in the stager side A) when it is alive, on the other side and within THIS weapon's range; otherwise the NEAREST living enemy by logical distance, regardless of range — and if that nearest one is out of the weapon's range, the weapon does not fire (no fallback to another target in range). AI ships have no orders ⇒ always the nearest; no threat, role or doctrine logic. Between rounds a ship with no enemy within its longest weapon closes toward its "Engage" target, else the nearest enemy | `DSCS._pickTarget`, `_tickEncounter`, `_closeToWeaponRange` | none in CV — targeting / doctrines belong to the MECHANICS candidate (#631) |
-| **657** | ⚪ | **A retreating AI ship is re-engaged at once.** After an encounter ends with the AI's retreat, its survivor is still within combat range and a new `combatRangeEnter` starts another encounter (by the #645 description the ProximitySystem self-heal re-emits it for such pairs [INF]) ⇒ a 1-round follow-up encounter with its own banner and Dziennik line (measured: split 2 × 2 → 3 battles, 2 banners; split 4 × 4 live → 7 battles, a merged cluster banner plus one short banner after the cluster ended). Inside a cluster's lifetime it folds into the cluster banner; after the cluster — a separate banner | node and live probes CV-3a2 (`cvBattle({ split })`); `ProximitySystem.js:272-281`; `DSCS._checkEndConditions` (AI auto-retreat) | **announcement absorbed by #675 (`c589583`)**: the re-engagement starts in the same frame as the last `battle:resolved` (gap 0 ms, measured) ⇒ it folds into the same banner and Dziennik line (1v1 seed 3: 2 banners → 1); the 1-round re-engagement itself stays — separate small step **outside CV** together with #645 (no re-engagement of a retreating ship for a short window, or no self-heal for it) |
+| **657** | ⚪ | **A retreating AI ship is re-engaged at once.** After an encounter ends with the AI's retreat, its survivor is still within combat range and a new `combatRangeEnter` starts another encounter (by the #645 description the ProximitySystem self-heal re-emits it for such pairs [INF]) ⇒ a 1-round follow-up encounter with its own banner and Dziennik line (measured: split 2 × 2 → 3 battles, 2 banners; split 4 × 4 live → 7 battles, a merged cluster banner plus one short banner after the cluster ended). Inside a cluster's lifetime it folds into the cluster banner; after the cluster — a separate banner | node and live probes CV-3a2 (`cvBattle({ split })`); `ProximitySystem.js:272-281`; `DSCS._checkEndConditions` (AI auto-retreat) | **announcement absorbed by #675 (`c589583`)**: the re-engagement starts in the same frame as the last `battle:resolved` (gap 0 ms, measured) ⇒ it folds into the same banner and Dziennik line (1v1 seed 3: 2 banners → 1); the 1-round re-engagement itself stays — separate small step **outside CV** together with #645 (no re-engagement of a retreating ship for a short window, or no self-heal for it) · **→ M1 (§4 «M1», D-M1-2)**: without the time-out a retreat that does not free the ship is not a retreat — (a) retreat = flee until out of `COMBAT_DISENGAGE_AU`, or (b) a re-engagement window |
 | **658** | ⚪ | **The Watch dive overflows the frame for ≈ 0.3 s.** During the automatic dive (#648 (b)) the drawn battle exceeds the safe rect while the blend is still low (as few as 6 / 20 ships inside the safe rect, 18 / 20 inside the window, for ≈ 0.3 s), then all 20 are in frame from 0.58 s. Inherent to the semantic-zoom curve: the battle's on-screen size peaks mid-zoom (the fit of the drawn battle exceeds the camera distance between ≈ 0.95 and ≈ 2.6 WU), so no continuous dive keeps every ship in frame | live probe CV-3a2 (dive frames); keeper A7b (the drawn fit stalls at 2.63 WU) | **owner's decision 2026-11-08 (§3.2-12): (a) accept for now; revisit in CV-7** (director camera) |
 | **659** | ⚪ | **The shell group at the ship plane floats above small bodies.** The group stands at y 0.3 (the ship plane, `SHELL_PLANE_Y`) so that a click in it lands on the plane it is drawn on (#646 (b)) and a camera above the orbit plane sees it over the body's limb; at a big body it stands beside the body (gas giant, drawn r 0.59 WU: 0.65 WU sideways, 0.3 up), but at a moon (r 0.015–0.04 WU) or a small rocky body it is ≈ 0.09–0.2 WU sideways and 0.3 WU (≈ 19 L) above the body's plane — it may read as hovering over the body rather than around it. Not seen live (the stager's `atBody: 1` picked a gas giant) | `BattleStageLogic.applyShell` (`P.y = planeY`), `STAGE.SHELL_PLANE_Y`; `RaycasterHelper.SHIP_PLANE_Y` | owner's look (`cvBattle({ atBody: '<moon id>' })`); option — height `min(0.3, body radius + k L)` with the click plane following the group (the #646 trade-off returns) — with CV-6a / CV-7 |
 | **660** | ⚪ | **`cvBattle({ atBody })` — the same seed is not the same battle at another moment.** Orbit slots take their phase and ω jitter from a hash of the vessel id and their angle from the orbit clock (`orbitClockSec` — the sim clock, anchored to real time at the first tick); the stager makes new vessel ids on every call (a module counter) and reads the clock at the call ⇒ the orbiters' logical positions, and with them the DSCS result, differ between calls and sessions. Deep-space stager battles are unaffected (fixed points; seed 1 gives the same signature in the game and headless). Keepers reset the mocked clock and the id counter (`cv_fx_results_smoke` A5: without that, the same body battle without a renderer gave two different signatures) | `OrbitalSpaceSystem.js:148-158, :208`; `SimClock.orbitClockSec`; `CvBattleStager.cvBattle` (`atBody`) | accept — a body battle is for looking, not for comparing results; if needed, orbit phases from the seed (an `assignOrbit` option) — a small stager change |
@@ -3008,6 +3135,12 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **685** | ✅ | **A bow click with a dominant Y moved the frame's "up" — the ship on its side, the mirror top ↔ bottom.** `setBow` snapped the clicked point to its dominant axis: a click on a tower set the bow to ±Y and `frameWithBow` moved up to +Z; the next click on the bow tip kept up +Z (it is perpendicular to −X). The owner's saved `warp_frigate.json` had `frame.up [0, 0, 1]` | `WorkshopLogic.setBow` / `frameWithBow` (CV-1c); the owner's file (`kosmos-handover/cv-1c/owner-original/`) | **`fdb1cd8` ✅** — the bow on the model's longest axis (sign from the clicked half), a mid-ship click (< 0.25 L) refused with a message, up from the FILE (`upPref`, heals a session frame); session v2; keeper W12 (+ control reproducing the owner's sequence); the owner's file repaired in `84abb8c`; owner's re-check PASS 2026-11-11 |
 | **686** | ✅ | **A nozzle click into the engine opening lands on the tunnel wall.** The ray enters the ring and hits the inner wall — the owner's nozzle was 0.07 L inside the hull and 0.024 L off the axis, so the plume started inside the ring, off centre | `workshop.js placeAt` (nozzle mode, CV-1c) | **`fdb1cd8` ✅** — "wyśrodkuj w otworze" (default ON): 16 rays across the plume → circle fit (`openingFromHits`, Kåsa; ≥ 12 hits, 0.006–0.2 L, rms ≤ 15 %) → re-centred twice → marched to the mouth along `d`; 6 simulated clicks + the owner's converge to x 0.488–0.4914, |y|, |z| ≤ 0.0004; a flat stern keeps the clicked point; keeper W13; live A3 / A3b (control); owner's re-check PASS 2026-11-11 (the Workshop step deferred to his next re-click) |
 | **687** | ✅ | **The sensor-contact and contact-lost lines named a ship at intel `rumor`.** Both lines printed `vessel.name` whatever the intel about the ship: a sensor contact happens at the detection range (frigate 1.6 AU × tech) while a ship is identified (`contact`) only within 0.3 AU (`VESSEL_CONTACT_DISTANCE_AU`) or the sensor lock (0.3 AU × tech) — so the first contact named a ship the CTRL label still showed as „?”; a contact lost after the record had degraded to `rumor` (10 years without contact) named it too. Pre-existing (the M4 P1 line in `UIManager`, the M2b line in `GameScene`); kept identical in the #640 batching by the step's fog rule, then fixed by the owner's decision 32 | `UIManager:1691-1710` (before #640); `GameScene` `intel:vesselContactLost`; `IntelSystem.js:412` (rumor from 0.3 AU), `:503-520` (degradation); live: an enemy at 0.95 AU stays `rumor` | **#640 + #675 ✅ (`c589583`, decision 32)** — names only by `VesselReveal.enemyVesselNamed` (the CTRL-label rule, #680); below: distance / last position / count („niezidentyfikowane: N”); `intel:vesselContactLost` carries the quality at the moment of loss; keeper `announce_once_smoke` F1–F5 |
+| **688** | ⚪ | **The round-20 time-out decides by ABSOLUTE hull HP and then destroys the living losers; the strip shows a percentage.** `_sumHP` = Σ max(0, hp) over all ships of a side (destroyed 0, shields not counted; equal → draw); the winner's opponent loses every surviving ship to the side-level wreck. The strip's % = Σhp / Σhpstart of the visible ships, so % and the rule disagree when the start totals differ (reinforcements, persisted damage, unequal fleets); in mirrored stager battles they agree. Not the owner's case — that was a kill (#689). Example: 10v10 seed 1 — A 667.7 vs B 865.2 HP (30.5 / 39.5 %) → A's three survivors (297/350, 166/220, 204/350) wrecked at round 20 | `DeepSpaceCombatSystem.js:847-851`, `:1483-1491`, `:1105-1114`; `CombatStripLogic.js:77-90`; probe (headless, 420 battles) | **M1 (decision 33)** — the time-out goes; the HP rule survives only behind the hidden cap if D-M1-4 says so |
+| **689** | 🟠 | **First-shot advantage: the player always fires first in a round, and a ship destroyed in that round does not fire back.** DSCS fires side A (always the player) and then side B; B's ships killed by A in round N skip their fire in round N (ground combat fixed the same thing with a round-start snapshot, #309). The owner's battle = this: his destroyer at 5.2/220 HP (2.4 %) killed the AI destroyer at 18.4/220 (8.4 %) before it fired (2v2 seed 16, round 16; same in seed 20). Mirrored stager battles, 20 seeds: winners A/B today 5/15 · 6/14 · 8/12 (2v2 · 5v5 · 10v10 — the AI wins most for reasons not diagnosed here); with a higher fire rate (reload × 0.6) 20/0 · 16/4 · 16/4 — once lethality rises the first shot decides | `DeepSpaceCombatSystem.js:332`, `:714-715`; probe logs | **M1 (D-M1-3)** — simultaneous fire is the owner's decision (it changes outcomes) |
+| **690** | ⚪ | **Accuracy is near saturation — it is not what makes battles long.** Lasers hit 95 % (the cap) against every hull; kinetic 72 / 81 / 85 %, missile 60 / 68 / 71 % (frigate / destroyer / cruiser; measured = the formula); the player with techs 79 / 89 / 94 and 66 / 74 / 78 %, the AI never gets tech multipliers; no distance falloff. `HIT_CHANCE_MULT` 2.0 puts kinetic at the cap and missiles at 80 / 90 / 95 %; above 2.0 nothing changes. 10v10 without the time-out: 31 → 28 rounds (p50). The length comes from the fire rate (cooldowns in whole rounds: laser every 2, kinetic every 3, missile every 5) and the approach (up to 8 rounds without damage) | `DeepSpaceCombatSystem.js:637-641`, `:655`, `:667`; `ShipModulesData.js:471-503`; `HullsData.js:175-259`; probe | **M1** — accuracy 2.0 + the owner's choice of a length lever (D-M1-1) |
+| **691** | 🟠 | **Longer battles = a longer world slowdown and bigger saves.** While ANY DSCS encounter is active the world ticks on the combat grid at 1 d/s and the player's speed waits; unwatched rounds 110 ms real, watched `combatRoundMs` 1000 (chosen for a 20-round maximum). Without the time-out a 10v10 holds the world 3.4 s p50 / 5.2 s max unwatched (today ≤ 2.2 s) and plays 31 / 47 s watched (today 20 s); the hidden cap 200 = 22 s unwatched / 200 s watched. Battle records keep the full per-round timeline (pruned to 50 records; a war-booked battle stored twice) — save size grows with rounds × events | `TimeSystem.js:96-98`, `:146-166`; `CombatPaceData.js:11-24`; `StrikesBackData.js:140-142`; `DeepSpaceCombatSystem.js:1072`; `GameState.js:139-155`; `WarSystem.js:526` | **M1** — risk; mitigations: the watched tempo knob (results do not depend on it), bounded timelines in records |
+| **692** | 🟠 | **The orbital battle path has its own 30-turn limit, and its tick-out gives a tie to the defender.** `resolveBattle` (orbital defence, `forceBattle`, `_fleetArrived`, the VCS instant path) stops at 30 turns and picks the side with more HP — `A.hp > B.hp ? 'A' : 'B'`, so equal HP goes to B, never a draw. Independent of DSCS and not mentioned in decision 33 | `BattleSystem.js:114-121`, `:160-165`; `EnemyAttackHandler.js:201`; `WarSystem.js:618`, `:773`; `VesselCombatSystem.js:310` | **M1 (D-M1-5)** — align with M1 or leave as is |
+| **693** | ⚪ | **Without the time-out some encounters never end on their own — the guard's real job.** Ships orbiting a body neither close in nor count for disengage, so two such groups out of range stand forever; an armed side in transit, retreating or docked never moves in; shields could out-regenerate damage (today impossible — `shield_basic` regen 0.3 HP per round vs ≥ 3 HP per round from the weakest weapon); "is anyone armed" is checked only when the encounter starts. In 420 measured stager battles no guard triggered and no battle reached 200 rounds (max 47) | `DeepSpaceCombatSystem.js:309-324`, `:563-564`, `:691-698`, `:746`, `:1021-1023`; probe | **M1** — the guard and the keeper scenarios must construct these cases |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
