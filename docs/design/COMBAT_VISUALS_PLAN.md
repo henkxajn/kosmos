@@ -20,7 +20,10 @@
 > default ON) ✅ DONE 2026-11-11 (`04f04e2` — §4 CV-3b — delivered; owner's check PASS — #681 both sides turn to their targets,
 > doctrines kite / hold, retreat, body battle; the owner's tuning baked in as defaults: turn caps 180 / 90 / 30 °/s, calm speed
 > 2 L/s). CV-1b (normalizer CLI, tools only) ✅ DONE 2026-11-11 (`8dcb267`, local commit; owner's check pending, combined with CV-1c — §4 CV-1b —
-> delivered; the six owner models are the real slots, legacy textures 74.8 → 44.8 MB, #682–#683). Next: CV-1c (§4 order).**
+> delivered; the six owner models are the real slots, legacy textures 74.8 → 44.8 MB, #682–#683). Owner's decisions 28–29 (§3.2:
+> #682 near-lossless kept; #683 fix first). CV-1c (Model Workshop, tools only; item 0 — the `three` stub tracked, #683) ✅ DONE
+> 2026-11-11 (`45c7d20`, local commit; owner's check pending, ONE combined check for CV-1b + CV-1c — §4 CV-1c — delivered). Next: #640 + #675
+> (small step OUTSIDE CV), then #663 (MECHANICS, OUTSIDE CV), then CV-2b (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -30,10 +33,11 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 684** (this plan files **#612–#683**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 685** (this plan files **#612–#684**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
 > CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
-> stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check; #682–#683 from CV-1b).
+> stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check; #682–#683 from CV-1b;
+> #684 from CV-1c).
 
 ---
 
@@ -995,6 +999,14 @@ makes Live Server reload the page.
     check of CV-1a (two corrections — readability lighting, the rest heading — §4 CV-1a) and the re-check PASS.
 27. **2026-11-11 — #681 → CV-3b:** a ship whose sprite is placed while it carries a synthetic order mission (`engage`, no
     coordinates) keeps facing the star until CV-3b turns every combat ship towards its target; no interim fix.
+28. **2026-11-11 — #682 → keep the near-lossless textures:** the 2K masters of the six owner models stay at 6.5–8.3 MB (normal maps
+    WebP near-lossless 60, base colour JPEG byte for byte). Reason: local Steam files — the file size does not reach the player
+    as a download, and GPU memory does not depend on the file size (the decoded textures are the same 2K images either way); lossy
+    normal maps were visible at close range on the contact sheet. The knob (`ENCODE.normal['2k']` in
+    `tools/ship-models/lib/textures.mjs`) stays as shipped in CV-1b.
+29. **2026-11-11 — #683 → fix first (CV-1c item 0):** the `three` stub the headless tests rely on moves out of `node_modules` into a
+    tracked test-fixture path and the tests point at it, so `npm ci` can never delete it; keeper: the sweep passes after a fresh
+    `npm ci`. Done in CV-1c item 0 (§4 CV-1c — delivered).
 
 ---
 
@@ -1455,6 +1467,141 @@ unverified patch: a failed patch followed by the test repeated the swap once mor
 | **Files** | NEW `tools/model-workshop/index.html`, `workshop.js`, pure `WorkshopLogic.js` |
 | **Keepers (logic)** | `WorkshopLogic`: click → hardpoint in normalized model space; serialization is schema-valid; undo stack; slider values ↔ `keyColour` round-trip |
 | **Owner looks at** | clicks bow / nozzle / turrets on his model, tunes the mask live, saves, sees it in the game |
+
+#### CV-1c — Model Workshop ✅ delivered 2026-11-11 (`45c7d20`, local commit — not pushed; tools only, no runtime flag; owner's check PENDING — ONE combined check for CV-1b + CV-1c)
+
+Built in one session; nothing of the scope moved to a CV-1c2.
+
+**Item 0 — #683 (owner's decision 29):** the headless `three` stub is tracked at `src/testing/fixtures/three-stub/`
+(`package.json`, `index.js` — the boundary comment kept: no `TextureLoader` —, `addons/loaders/GLTFLoader.js`) and
+`package.json` → `devDependencies.three = "file:src/testing/fixtures/three-stub"`; the lockfile gains the `link: true` entry (diff:
++11 / −1 lines). Measured on this machine (npm 11.9, node 24.14, Windows): `npm install` creates `node_modules/three` as a junction to
+the tracked folder; `npm ci` run IN PLACE (with the junction present) removes the junction, not the folder's content (sha256 of the
+three stub files before = after), and recreates it; node resolves `three` and `three/addons/…` to the tracked folder (realpath); the
+full sweep after that fresh `npm ci`: **387 / 387 OK, 0 FAIL**. NEW keeper `three_stub_fixture_smoke` **15 / 0** (pointer in
+`package.json`, lockfile in sync, files tracked and not git-ignored — control: `node_modules/three` IS ignored —, resolution to the
+tracked folder, a link not a copy, the proof boundary with a control on the game's real three). Fail-first on a `git worktree` of
+HEAD with the old real-directory stub in `node_modules`: **7 / 8** — red exactly the pins of the fix (S1a, S2a–c, S3a, S4a–c);
+green on both sides the controls S1b / S3c and the unchanged boundary S5a–d; S3b is idle on HEAD (the path did not exist, so
+`check-ignore` answers "not ignored") — named, not counted as a control. `fixtures/README.md` documents the fourth fixture kind
+(a module stub); the normalizer's "npm ci deletes the stub" hint replaced.
+
+**What changed**
+- NEW `tools/model-workshop/index.html` (own importmap — `three` = `../../src/lib/three.module.js`, addons from the same CDN line as
+  the game; dark panel, Polish help with the order bow → nozzle → turrets → lights → save), `tools/model-workshop/workshop.js`,
+  pure `tools/model-workshop/WorkshopLogic.js`, `tools/model-workshop/package.json` (`{ "type": "module" }` — node runs the logic
+  as ESM for the keeper; the browser ignores it). URL (Live Server, default port 5500 — the repo has no `.vscode/settings.json`):
+  **http://127.0.0.1:5500/tools/model-workshop/index.html**.
+- **Click modes** 1 Bow (the clicked direction snapped to the nearest model axis — a click on the tip is never exactly on the axis,
+  a tilted bow would tilt the ship in the game) · 2 Nozzle (point = the ray hit; plume direction "behind the stern" = −bow, or "the
+  clicked surface's normal"; radius slider) · 3 Turrets W1…Wn · 4 Light points (cyan `#7ff4ff` / red `#ff4040` / green `#40ff60` /
+  white `#ffffff`, size slider, default size 0.03 — #684) · 5 Select (pick by screen distance, occluded points skipped, ties → the
+  one nearer the camera; drag along the hull; Del deletes). **MIRROR** on by default for turrets and lights (key M): the twin across
+  the centre plane (normal = up × bow, the `frameQuaternion` convention — for the six owner models z → −z), inserted right after its
+  original (W1 / W2 pairs), "glued" to the hull by a short raycast (≤ 0.05 — the models are not exactly symmetric; the pure mirror
+  stays exact and is what the keeper pins); a point on the plane gets no twin; moving / deleting with MIRROR moves / deletes the
+  pair; an option swaps red ↔ green for the twin (navigation lights). Undo / redo (Ctrl+Z / Ctrl+Y, 200 steps, a no-op change makes
+  no step), clear turrets / lights, revert bow / nozzle / mask / all from the file. Hover ghost (and the twin's) before the click.
+- **Preview = game:** the ship stands in the game's rig (`buildShipRig`, target size 1 — own material clones with the key-colour
+  chunk, light points from a `LightPointPool` with log-depth, the plume cone at the nozzle); `KC_SHARED` set every frame from the
+  game's knobs `LIVE_CV_FX` (imported from `FxEngine.js` — as `ThreeRenderer._tickCvModels`); the pool updated with the game's
+  `MODEL_LIGHT_GAIN` / `MODEL_LIGHT_MIN_PX`; the plume scaled as `_applyExhaust`'s canonical branch; the same image pipeline
+  (logarithmic depth, ACES 1.12, sRGB, `UnrealBloomPass` 0.5 / 0 / 1.0 with the game's mip weights, `OutputPass`). Mask sliders
+  (hue, tolerance, saturation, value, softness, gain + mode) write `setKeyColourParams` on the rig's materials live (no rebuild);
+  under the sliders the share of the base texture that the game's JS mirror `keyColourMask` lights (512² sample). Toggles: view as
+  enemy (`kind: 'enemy'` — tint + red rim), engine, star F / G / K / M (the game's colours and `2.8 × L^0.22`, cool ambient for M / K),
+  "turn as in the game" (the canonical frame; editing keeps the file frame so a new bow does not swing the model under the cursor),
+  markers and labels (bow arrow above the hull, nozzle ring, turret spheres + W labels dimmed when occluded), camera "close" /
+  "battle distance" (the ship ≈ 48 px — light points fade below 1.5 px exactly as in the game).
+- **Save:** "Zapisz do gry" → `docFromEdit` (`validateHardpoints`; an invalid document blocks both buttons and lists the errors)
+  → a confirmation dialog naming the slot ("warp_frigate — fregata (z warp)") and the path → the directory handle (memory →
+  IndexedDB → `showDirectoryPicker`, mode readwrite; accepted only if it is named `hardpoints` and contains `default.json`;
+  `incoming/` for a candidate) → write `<slot>.json` with the shared formatter → read-back check. "Pobierz plik" — the same text as a
+  download (fallback without the File System Access API). The Workshop changes ONLY `frame`, `nozzles`, `weapons` (ids W1…Wn by
+  order), `lights`, `keyColour` and a "Model Workshop YYYY-MM-DD: …" stamp in `notes` (replaced, never appended twice); `schema`,
+  `version`, `slot`, `source` (sha256, normalizer, input) and `damagePoints` stay byte for byte ⇒ a re-normalization of the same
+  model keeps the clicks (`pickCarried` → `mergeHardpoints`).
+- **Session:** the state (slot, edit, undo history ≤ 50 + redo, UI settings, camera, save stamp) lives in sessionStorage — the save
+  itself makes Live Server reload the page. After a reload: the file equals the edit ⇒ "✔ Zapisano … plik wczytany ponownie z dysku"
+  (within 2 min of a save); otherwise the unsaved edits are restored with a banner ("Odrzuć zmiany" reloads the file).
+  `beforeunload` warns while there are unsaved changes (not during a save).
+- **One source, no `.mjs` in the page:** `formatHardpointsJson` moved from `tools/ship-models/lib/hardpoints.mjs` into
+  `src/data/ShipHardpointsSchema.js` (the normalizer re-exports it — same bytes from both tools); the slot list composed in
+  `WorkshopLogic.WORKSHOP_SLOTS` from `VESSEL_MODEL_KEYS` + `default` (= `SHIP_SLOTS`, keeper W11c). Reason: Live Server's static
+  server may serve `.mjs` with a MIME type Chrome refuses for module scripts [INF — the validation harness serves `.mjs` as
+  JavaScript, so this was not measured on Live Server; avoided by construction].
+
+**Found by the live validation and fixed before the commit:** (1) in Lights mode the just-placed light is selected, so a colour
+swatch recoloured it — swatches and the size slider now edit the selected light only in Select mode (in Lights mode they set the
+next points); (2) a recolour to the same colour pushed an empty undo step — `setLightProps` returns the same state when nothing
+changes; (3) the page had no favicon (a 404 in the console).
+
+**Keepers (logic only).** NEW `cv_workshop_logic_smoke` **79 / 0** — W1 click → hardpoint: a ray cast on the game's rig (real three
+r171, template with node transforms, three frames, a moved and rotated wrapper) → `worldToModel(hit, canon.matrixWorld)` = the
+analytic normalized point = `canon.worldToLocal`, frame-independent; KONTROLA — the wrapper's matrix gives another point; 200 random
+matrices round-trip · W2 mirror exact (bit for bit z → −z for the six models; 300 random frames: midpoint on the plane, segment ∥
+normal, |p| = |p'|, involution; KONTROLA — the plane ⟂ bow fails), on-plane point without a twin, twin right after the original,
+nav swap, symmetric rounding keeps the pair exact in the file, move / delete pairs, pairs re-inferred from a file, no-op recolour
+· W3 every hardpoints file on disk → state → document valid, only model fields changed, a document written without clicks equals the
+file; 44 turrets / 133 lights of random clicks valid; a point outside the space ⇒ refusal, never an invalid document; the notes stamp
+replaces · W4 undo / redo · W5 sliders ↔ keyColour both ways (all files; 500 random grid values; clamping) · W6 the saved text →
+the game's `ShipHardpointsCache` → the same document, no fallback; the game's rig: plume at the nozzle, light instances (`aPos`) at
+the points, frame quaternion · W7 merge-safe (`pickCarried` → `slot`, merged fields = the Workshop's, `source` untouched; KONTROLA —
+another model is not merged; an incoming candidate carries) · W8 session · W9 picking · W10 source (no three / DOM / `Math.random`
+in the logic; the page's click function `hullHit` uses `worldToModel` / `dirWorldToModel`, `save` uses `docFromEdit`; no `.mjs`
+imports; the importmap = the game's) · W11 slots. **Mutation battery 21 / 21 killed** (`kosmos-handover/cv-1c/mutation_battery.mjs`
+— mirror normal, factor, inverse matrix ×2, asymmetric rounding, twin order, plane, `source` leak, validation skipped, redo kept,
+clamp, notes appended, occlusion, session variant, bow snap, no-op step, pair inference, slot list, the page's click, W0 ids, nav
+swap; originals restored, sha256 verified); M19 survived the first run — the page pin matched the twin's `worldToModel` call too —
+and the pin was narrowed to the click function's body. Fail-first on HEAD is not meaningful for a new module (every block degrades),
+so the battery stands in (as in CV-1a). Re-run for the formatter move: `cv_normalizer_logic_smoke` 56 / 0, `cv_models_logic_smoke`
+69 / 0, `cv_models_render_smoke` 58 / 0. Sweep **388 / 388 OK, 0 FAIL** (28 advisory, as before) · `check-i18n` PASS (no new keys — the
+tool's text is Polish only, like the normalizer's report).
+
+**Live validation** (`kosmos-handover/cv-1c/validate_CV1c.mjs` — headless Chrome with the GPU, 1600×1041; real mouse and keyboard
+events through CDP; the repo untouched: saves go to an OPFS directory substituted for the folder picker, the server swaps the
+`warp_frigate.json` it serves) **19 / 19**: A1 the page loads warp_frigate (rig, plume, mask 0.44 %) · A2 bow: stern click → +X, bow
+click → −X · A3 nozzle = the ray hit, plume behind the stern · A4 turret with MIRROR → W1 + twin (z → −z, glued ≤ 0.05) · A5 4 lights
+with MIRROR in two clicks (cyan ×2, red ×2), 4 light instances in the rig · A5b Select-mode recolour of a pair, undone · A6 Ctrl+Z /
+Ctrl+Y · A7 drag along the hull, the twin follows · A8 Del + undo · A9 "Zapisz": the dialog names the slot, the file written; a
+wrongly named folder refused · A10 `source` / slot as the file, points = state, the notes stamp · A11 download = the same document ·
+A12 reload with the file unchanged on the server → the edits and history restored with the banner · A13 reload with the saved file
+served → "Zapisano", clean · A15 sliders reach the game material's uniforms, the texture share recomputed · A16 no exceptions /
+shader / load errors (Chrome's own "blocked beforeunload panel without a user gesture" notice excluded — not a page error) · B1 the
+game with the saved file: `KOSMOS.debug.cvBattle({warp: 1})` — 8 warp frigates, each with 4 light points at the file's points and the
+plume at the file's nozzle · B2 the game's hardpoints cache holds the file (not the fallback): 2 turrets, 4 lights · B3 no game
+exceptions / shader errors.
+
+**Owner's check list — ONE combined check for CV-1b + CV-1c** (`kosmos-handover/cv-1c/CHECKLIST.md`; console lines quote-free and
+unindented; ⚠ `cvBattle` / `cvParade` put test ships into the game state — F5 without saving at the end; writing files makes Live
+Server reload every open tab):
+1. Close the game tab. Copy `assets/models/ships/incoming/warp_frigate.glb` (e.g. to the desktop) and drag the copy onto
+   `tools/ship-models/normalize-ship.bat` → the report: "Slot: warp_frigate", "9,99 MB → 6,48 MB (2K) · 1,88 MB (1K)", sections with
+   ✔ / ⚠ / ☐, "zachowane z poprzedniej normalizacji", "Naciśnij dowolny klawisz"; the same model again changes nothing.
+2. Rename the copy to `test.glb` and drag it onto the `.bat` → the slot list and a number prompt; type `10` (= `nonwarp_frigate`) →
+   "Wstawić … do slotu nonwarp_frigate?"; press Enter (= no) → "nie potwierdzono — nic nie zmieniono".
+3. Open the game, load the save, console: `KOSMOS.debug.cvBattle()` → resume time, [ Obserwuj ] on the combat strip → the new frigates,
+   destroyers and battleships on both sides (no `cvIncoming` needed); the frigates (`nonwarp_frigate`) have NO cyan ring at the stern.
+4. After the battle: `KOSMOS.debug.cvBattle({warp: 1})` → your warp models with the glowing cyan ring at the stern.
+5. After the battle: `KOSMOS.debug.cvParade()` → resume: 24 test ships, every one bow-first (also CV-P10), plume behind the stern.
+6. Zoom in on a cargo / colony ship of the parade (e.g. CV-P05) → it looks as before CV-1b. Then F5 without saving.
+7. New tab: **http://127.0.0.1:5500/tools/model-workshop/index.html** → warp_frigate loads (ring glowing, plume at the stern), the
+   Polish help on the left.
+8. Click on the model: 1 Dziób (bow tip) → the yellow arrow, "Dziób: −X"; 2 Dysza (the engine outlet) → the plume from there;
+   3 Wieżyczki — one click on a turret → W1 + W2 (the twin on the other side); 4 Światła — cyan: one click near the bow, red: one
+   click mid-ship → 4 lights in the list; Ctrl+Z then Ctrl+Y.
+9. "Zapisz do gry" → the dialog shows "warp_frigate — fregata (z warp)" → Zapisz → the first time choose the folder
+   `assets/models/ships/hardpoints` and allow editing → the page reloads by itself: "✔ Zapisano warp_frigate.json — plik wczytany
+   ponownie z dysku", the points still there.
+10. Game tab (it reloaded too): load the save, `KOSMOS.debug.cvBattle({warp: 1})` → resume, [ Obserwuj ], zoom in (wheel) on one of
+    your warp frigates → 2 cyan points near the bow and 2 red mid-ship glowing on the hull, the plume from your nozzle; from far away
+    the points fade (by design — #684).
+11. F5 without saving. (`git status` shows `hardpoints/warp_frigate.json` changed — your data; it goes in with the push after your OK,
+    or tell me to drop it if it was only a test.)
+
+**Not in CV-1c (by scope):** turret directions (`d` stays null — CV-4), damage points (`'auto'` — CV-5), the `@1k` files at runtime
+(CV-2b), more than one nozzle (the game reads `nozzles[0]`), stations, browsers without the File System Access API beyond the
+download fallback.
 
 ### CV-2a — FX engine core, presentation clock, stager (flag `cvFxEngine`)
 
@@ -2710,8 +2857,9 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **679** | ⚪ | **Removing a ship disposed the SHARED template geometry.** The OFF path's `_removeVesselSprite` calls `geometry.dispose()` on every mesh of a `template.clone()` — the clone shares the template geometry, so every removal frees the GPU buffers of every other ship of that slot and forces a re-upload (the #636 hit-glow churn's twin for models) | `ThreeRenderer._removeVesselSprite` (OFF branch) | CV-1a ✅ under `cvModels` (`disposeShipRig` frees only what the rig owns; keeper R7); OFF until CV-Z |
 | **680** | ⚪ | **`entry.enemyTint` carries two meanings.** It marks cloned materials to dispose AND the CTRL labels read it as "is enemy" (colour, identity fog "?" below `contact`) — a canonical entry written with `enemyTint: false` (disposal handled by the rig) leaked enemy names into the CTRL labels during CV-1a development; fixed before the check by keeping the OFF meaning (keeper R8d2, mutant M21) | `ThreeRenderer.getAllVisibleLabels` (`isEnemy = !!entry.enemyTint || !!vessel?.isEnemy`); `_addVesselModelCv` | CV-Z hygiene — split into `entry.isEnemy` + rig-owned disposal |
 | **681** | ✅ | **A ship placed while it carries a synthetic order mission faces the star.** The placement heading reads `liveTargetX ?? targetX ?? 0` from `vessel.mission`; `_issueEngage` (M4 P3 hotfix #2) writes a synthetic mission WITHOUT coordinates, so the fallback `(0, 0)` — the system origin, i.e. the star — becomes the heading, and free-floating combat ships are never rotated afterwards. Both paths, before CV-1a too; measured live: in `cvBattle` the player's ships stand bow to the star (cos to the star +1.00), sterns to the enemy when the battle lies beyond the enemy line. Same for any order whose mission has no coordinates when the sprite is (re)built (system switch, `cvModels` toggle) | `ThreeRenderer._addVesselModelCv` / `_addVesselModel3D` (heading at placement); `MovementOrderSystem._issueEngage` (synthetic mission) | **CV-3b ✅** — owner's decision 2026-11-11 (§3.2-27): facing the target supersedes it — under `cvChoreo` every combatant on both sides turns to its target (or the enemy centroid) from the first rounds (keepers L6, R5a; live table in §4 CV-3b); owner's check PASS |
-| **682** | ⚪ | **The 2K masters of the six owner models are 6.5–8.3 MB, above the ≲ 5 MB target.** The kept base colour JPEG alone is 2.8–3.4 MB (D-CV-15: no re-encode); the target is reachable only with lossy WebP normal maps (≈ 4.4–5.8 MB), and the contact sheet shows them at close range (rendered close-up PSNR 36–42 dB, up to 2 % of ship pixels off by > 12 levels; near-lossless 48–53 dB, none) | `kosmos-handover/cv-1b/normal_sheet*.{png,json}`; `tools/ship-models/lib/textures.mjs` `ENCODE.normal['2k']` | owner's decision — the knob is one constant; the 1K variant (Medium / Low) is already lossy and 1.9–2.7 MB |
-| **683** | ⚪ | **`npm ci` / `npm install` deletes the headless `three` stub** (`node_modules/three`, `0.0.0-headless-stub`): it is not a dependency and `node_modules/` is gitignored, so installing the normalizer's declared dependencies (sharp, glTF-Transform — D-CV-13) removes it and every keeper importing `GameCore` fails until it is restored by hand | CV-1b session: restored from a copy taken before `npm ci`; `CLAUDE.md` (the stub's documented boundary) | hygiene — candidate: track the stub (e.g. a `file:` devDependency on a tracked folder) so a clean install recreates it; out of CV |
+| **682** | ✅ | **The 2K masters of the six owner models are 6.5–8.3 MB, above the ≲ 5 MB target.** The kept base colour JPEG alone is 2.8–3.4 MB (D-CV-15: no re-encode); the target is reachable only with lossy WebP normal maps (≈ 4.4–5.8 MB), and the contact sheet shows them at close range (rendered close-up PSNR 36–42 dB, up to 2 % of ship pixels off by > 12 levels; near-lossless 48–53 dB, none) | `kosmos-handover/cv-1b/normal_sheet*.{png,json}`; `tools/ship-models/lib/textures.mjs` `ENCODE.normal['2k']` | **owner 2026-11-11 (§3.2-28): kept** — the near-lossless normal maps stay (local Steam files: the file size never reaches the player as a download, GPU memory does not depend on it); the knob stays as shipped |
+| **683** | ✅ | **`npm ci` / `npm install` deletes the headless `three` stub** (`node_modules/three`, `0.0.0-headless-stub`): it is not a dependency and `node_modules/` is gitignored, so installing the normalizer's declared dependencies (sharp, glTF-Transform — D-CV-13) removes it and every keeper importing `GameCore` fails until it is restored by hand | CV-1b session: restored from a copy taken before `npm ci`; `CLAUDE.md` (the stub's documented boundary) | **CV-1c item 0 ✅ (owner 2026-11-11, §3.2-29)** — the stub tracked at `src/testing/fixtures/three-stub/` + `devDependencies.three = "file:src/testing/fixtures/three-stub"` (npm link, lockfile `link: true`); `npm ci` in place removes the link, keeps the folder (sha256 before = after) and recreates the link; the sweep after a fresh `npm ci` 387 / 387; keeper `three_stub_fixture_smoke` 15 / 0 (fail-first on HEAD with the old real-directory stub 7 / 8) |
+| **684** | ⚪ | **The clicked light points are a close-up detail — at the usual battle zoom they fade.** A light's on-screen diameter = `size` × the ship's on-screen length; the light shader fades a point below `MODEL_LIGHT_MIN_PX` (1.5 px) instead of growing it (CV-1a, by design). Frigates in the owner's battle views measured 4.3–40.9 px long (CV-3a3 reticle probe) ⇒ the schema's fallback size 0.012 is 0.05–0.49 px (alpha ≤ 0.33), the Workshop's default 0.03 is 0.13–1.2 px (alpha ≤ 0.8) — readable only when zoomed in (Watch cinema, wheel). The Workshop's "battle distance" camera (ship ≈ 48 px) shows exactly this | `ShipLightPoints.LIGHT_VERT` (`vAlpha`, `uMinPx`); `LIVE_CV_FX.MODEL_LIGHT_MIN_PX`; `WorkshopLogic.LIGHT_SIZE_DEFAULT`; CV-1c validation step B1 | owner's look in the combined CV-1b + CV-1c check (step 10); options: (a) keep — lights are a close-up detail, the far language is CV-6a's · (b) a larger default in the Workshop (e.g. 0.05) · (c) a per-light floor in px for navigation lights. Recommendation (a) until the owner has seen it |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
