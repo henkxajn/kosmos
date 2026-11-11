@@ -11,10 +11,27 @@
 //                                         `atBody: 'id_ciała'` — wskazane ciało; `mixed: 1` — przy ciele mniejszość statków
 //                                         gracza, wróg wolny (skorupa obraca się w stronę wroga)
 //   ARC CV-3a3 (Finding 654) — uzbrojenie LUSTRZANE: statek B_i ma kadłub i broń statku A_i
+//   cvBattle({warp: 1})                 — ARC CV-1a: statki testowe z ZAPASEM warp (tylko wygląd: resolver bierze model
+//                                         `warp_*` — z `cvIncoming(1)` modele właściciela z pierścieniem rdzenia warp);
+//                                         `warp: 2` — tylko strona A. Walka bez zmian (DSCS nie czyta `warpFuel`)
+//   cvParade()                          — ARC CV-1a: PARADA 24 slotów modeli (12 klas × bez warp / warp) w oglądanym układzie,
+//                                         każdy statek z rozkazem lotu w tym samym kierunku (gra na pauzie — start: wznowienie
+//                                         czasu); `cvParade({dir: 90})` — kierunek w stopniach. Do sprawdzenia „dziobem
+//                                         naprzód” (także `nonwarp_large_science` — Finding 621), smugi w dyszy, świateł
 //   cvBattle({nA: 3, nB: 3, battles: 3}) — ARC CV-6b2: trzy OSOBNE bitwy w oglądanym układzie (osobne klastry, ≥ 1 AU od siebie)
 //                                         — pasek walki z kilkoma liniami; `battles: 4` — trzy linie i „+1”
+//   cvBattle({warp: 1, star: 1})        — ARC CV-1a (kontrola właściciela): NAJPIERW przełącz widok na wygenerowany układ
+//                                         z NAJCIEMNIEJSZĄ gwiazdą (`star: 1`) albo NAJJAŚNIEJSZĄ (`star: 2`), potem starcie tam;
+//                                         `star: 0` / brak — oglądany układ jak dotąd. Do oceny czytelności statków pod
+//                                         barwną gwiazdą (to samo w `cvParade({star: 1})`); odczyt `star` w wyniku
 //   cvStrip(1) / cvStrip(0)             — ARC CV-6b2: flaga `cvStrip` (pasek walki zamiast karty walki) ON / OFF, od następnej klatki
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
+//   cvModels(1) / cvModels(0)           — ARC CV-1a: flaga `cvModels` (statki w ramie kanonicznej z plików hardpointów) ON / OFF;
+//                                         statki aktywnego układu przebudowane od razu
+//   cvIncoming(1) / cvIncoming(0)       — ARC CV-1a: sloty z `hardpoints/incoming/index.json` biorą model z `incoming/` (podgląd
+//                                         modeli właściciela PRZED podmianą slotu — CV-1b); zwraca Promise (await w konsoli)
+//   cvLightTest(1) / cvLightTest(0)     — ARC CV-1a: testowy wzór punktów świetlnych na slotach bez `lights[]` (do CV-1c)
+//   modelInfo()                         — ARC CV-1a: statki w ramie kanonicznej, hardpointy (plik / zapas), pula świateł
 //   fxStats()                           — pomiar 300 klatek: czas klatki p50 / p95, wywołania i trójkąty renderera, pule
 //
 // Scena (dlaczego tak, punkt po punkcie — §1 Q9 / Finding 634):
@@ -35,7 +52,7 @@
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
+import { GAME_CONFIG, STAR_TYPES } from '../config/GameConfig.js';
 import { resolveVesselOrbitalRole } from '../data/OrbitalRolesData.js';   // ARC CV-3a3 — `atBody`: rola orbity jak przy przylocie
 import { orbitClockSec } from '../utils/SimClock.js';                     // ARC CV-3a3 — `atBody`: kąt orbity z zegara orbit
 
@@ -55,6 +72,10 @@ export const CV_BATTLE = Object.freeze({
   BODY_FREE_AU: 0.035,    // [AU] wolni statki gracza (`mixed`) od środka ciała, po stronie wroga
   BODY_ROW_AU: 0.02,      // [AU] odstęp w linii
   BODY_LINE_AU: 0.025,    // [AU] odstęp kolejnych linii (> 5 statków)
+  WARP_TANK: 10,          // [warp_cores] zapas warp statku testowego `warp` (ARC CV-1a — tylko wybór modelu `warp_*`)
+  PARADE_COLS: 6,         // ARC CV-1a — parada: kolumny siatki
+  PARADE_STEP_AU: 0.02,   // [AU] odstęp statków parady
+  PARADE_RUN_AU: 3.0,     // [AU] cel lotu parady od pozycji startowej
   WARNING: '⚠ cvBattle: statki testowe weszły do stanu gry — nie zapisuj gry po teście (F5 bez zapisu wraca do stanu sprzed testu). Autozapis wyłączony do przeładowania strony.',
 });
 
@@ -179,7 +200,57 @@ export function cvBodyOffsetAU(kind, k, n, a0) {
   return { dxAU: ux * r - uy * t, dyAU: uy * r + ux * t };
 }
 
-const isCvVessel = (v) => !!v && (v._cvBattle != null || (typeof v.name === 'string' && /^CV-[AB]\d\d$/.test(v.name)));
+const isCvVessel = (v) => !!v && (v._cvBattle != null || (typeof v.name === 'string' && /^CV-[ABP]\d\d$/.test(v.name)));
+
+/** ARC CV-1a — zapas warp na statku testowym (wyłącznie wybór modelu `warp_*`: resolver czyta `warpFuel.max > 0`). */
+function cvApplyWarp(v, on) {
+  if (on && v?.warpFuel) v.warpFuel.max = Math.max(v.warpFuel.max || 0, CV_BATTLE.WARP_TANK);
+}
+
+// ARC CV-1a — parada: kadłub i moduły, przy których resolver wybiera daną klasę modelu (rola z modułów: habitat → colony,
+// science → science, reszta → cargo; klasy bojowe z kadłuba). Silnik w każdym — parada LECI.
+const PARADE_CLASSES = Object.freeze([
+  ['frigate', 'hull_frigate', 'weapon_laser'], ['destroyer', 'hull_destroyer', 'weapon_laser'], ['battleship', 'hull_cruiser', 'weapon_laser'],
+  ['small_science', 'hull_small', 'science_lab'], ['small_cargo', 'hull_small', 'cargo_small'], ['small_colony', 'hull_small', 'habitat_pod'],
+  ['medium_science', 'hull_medium', 'science_lab'], ['medium_cargo', 'hull_medium', 'cargo_small'], ['medium_colony', 'hull_medium', 'habitat_pod'],
+  ['large_science', 'hull_large', 'science_lab'], ['large_cargo', 'hull_large', 'cargo_small'], ['large_colony', 'hull_large', 'habitat_pod'],
+]);
+
+/** ARC CV-1a — siatka parady: 24 wpisy (12 klas × bez warp / warp) z przesunięciem w AU od środka. */
+export function cvParadeLayout({ cols = CV_BATTLE.PARADE_COLS, stepAU = CV_BATTLE.PARADE_STEP_AU } = {}) {
+  const ships = [];
+  for (const warp of [false, true]) {
+    for (const [cls, hull, role] of PARADE_CLASSES) {
+      const i = ships.length;
+      const col = i % cols, row = Math.floor(i / cols);
+      const rows = Math.ceil((PARADE_CLASSES.length * 2) / cols);
+      ships.push({ i, cls, key: `${warp ? 'warp' : 'nonwarp'}_${cls}`, hull, modules: ['engine_chemical', role], warp,
+        name: `${CV_BATTLE.NAME_PREFIX}P${String(i + 1).padStart(2, '0')}`,
+        dxAU: (col - (cols - 1) / 2) * stepAU, dyAU: (row - (rows - 1) / 2) * stepAU });
+    }
+  }
+  return ships;
+}
+
+/**
+ * ARC CV-1a (kontrola właściciela) — układ do oglądania bitwy pod gwiazdą danej jasności: `star` 1 — klasa o NAJMNIEJSZEJ
+ * jasności (`STAR_TYPES.luminosity`) wśród wygenerowanych układów, 2 — o NAJWIĘKSZEJ; w klasie oglądany układ, gdy pasuje,
+ * inaczej pierwszy wg id. Liczby zamiast nazw — polecenia konsoli bez cudzysłowów.
+ * @param {{ star: number, systems: Array<{id:string, cls:string|null}>, activeId?: string|null }} o
+ * @returns {{ systemId: string, cls: string, classes: string[] }|null}
+ */
+export function cvPickStarSystem({ star, systems = [], activeId = null }) {
+  const want = Number(star);
+  if (want !== 1 && want !== 2) return null;
+  const lum = (c) => STAR_TYPES[c]?.luminosity ?? 1;
+  const known = systems.filter((s) => s && s.id && s.cls);
+  if (!known.length) return null;
+  const classes = [...new Set(known.map((s) => s.cls))].sort((a, b) => lum(a) - lum(b));
+  const cls = want === 1 ? classes[0] : classes[classes.length - 1];
+  const pool = known.filter((s) => s.cls === cls).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const pick = pool.find((s) => s.id === activeId) ?? pool[0];
+  return { systemId: pick.id, cls, classes };
+}
 
 function pickAiEmpire(K) {
   const all = (K.empireRegistry?.listAll?.() ?? []).filter((e) => e?.id && e.id !== 'player');
@@ -191,22 +262,41 @@ function pickAiEmpire(K) {
  * @param {{ getRenderer?: ()=>object|null, getSaveSystem?: ()=>object|null }} [deps]
  */
 export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeRenderer ?? null, getSaveSystem = () => null } = {}) {
+  // ARC CV-1a (kontrola właściciela) — `star` 1 / 2: widok na wygenerowany układ z najciemniejszą / najjaśniejszą gwiazdą
+  // (ta sama droga co chipy układów — `starSystemManager.switchActiveSystem`). Zwraca odczyt albo odmowę.
+  const switchToStar = (K, star) => {
+    if (!star) return { ok: true, info: null };
+    const ss = K.starSystemManager;
+    if (!ss?.getAllSystems || !ss.switchActiveSystem) return { ok: false, reason: 'no_star_system_manager' };
+    const systems = ss.getAllSystems().map((s) => {
+      const st = EntityManager.get?.(s.starEntityId);
+      return { id: s.id ?? s.systemId, cls: st?.spectralType ?? null, name: st?.name ?? null };
+    });
+    const pick = cvPickStarSystem({ star, systems, activeId: K.activeSystemId ?? null });
+    if (!pick) return { ok: false, reason: 'no_system_for_star', star };
+    const switched = pick.systemId !== K.activeSystemId;
+    if (switched && ss.switchActiveSystem(pick.systemId) !== true) return { ok: false, reason: 'switch_failed', systemId: pick.systemId };
+    const name = systems.find((s) => s.id === pick.systemId)?.name ?? null;
+    return { ok: true, info: { system: pick.systemId, name, cls: pick.cls, switched, classes: pick.classes } };
+  };
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
-    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1 } = {}) {
+    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0 } = {}) {
       if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
       const K = window.KOSMOS ?? {};
       const vm = K.vesselManager, dscs = K.deepSpaceCombatSystem, mos = K.movementOrderSystem, ts = K.timeSystem;
       const home = K.homePlanet;
       if (!vm || !dscs || !mos || !ts || !home) return { ok: false, reason: 'no_world' };
       if (getRenderer()?._galaxyActive) return { ok: false, reason: 'galaxy_mode' };
-      const sys = K.activeSystemId ?? 'sys_home';
       const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
 
       // Poprzedni test: w trakcie starcia — odmowa; po starciu — statki zdjęte (rozbiórka bez linii w Dzienniku).
       const old = all.filter(isCvVessel);
       if (old.some((v) => dscs._findActiveEncounterContaining?.(v.id))) return { ok: false, reason: 'battle_in_progress' };
       for (const v of old) vm.destroyVessel?.(v.id, { reason: 'dismantled' });
+      const sw = switchToStar(K, star);
+      if (!sw.ok) return sw;
+      const sys = K.activeSystemId ?? 'sys_home';
 
       const empire = pickAiEmpire(K);
       if (!empire) return { ok: false, reason: 'no_ai_empire' };
@@ -222,6 +312,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         .filter((b) => Number.isFinite(b?.x) && Number.isFinite(b?.y));
       const c = cvBattleCenter({ seed, vessels: others.map((v) => v.position), bodies, auPx: AU });
       const layout = cvBattleLayout({ nA, nB, hulls, weapons });
+      const warpOf = (s) => Number(warp) === 1 || (Number(warp) === 2 && s.side === 'A');   // ARC CV-1a — model `warp_*`
 
       // ARC CV-3a3 (D-CV-4, Finding 626) — bitwa PRZY CIELE: statki gracza na slotach orbit ciała (`OrbitalSpaceSystem.assignOrbit`
       // — sama zmiana `position` nie stawia sprite'a na orbicie), wróg w linii obok; starcie zakłada DSCS tak jak w grze: gdy
@@ -239,6 +330,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         let kFree = 0;
         const made = layout.ships.map((s) => {
           const v = vm.createAndRegister(s.hull, home.id, { name: s.name, modules: s.modules, systemId: sys });
+          cvApplyWarp(v, warpOf(s));
           v.systemId = sys;
           v.status = 'idle';
           v.mission = null;
@@ -280,7 +372,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
         console.warn(CV_BATTLE.WARNING);
         return {
-          ok: members === made.length, encounter: enc.id, system: sys, seed, seedBase: enc.seedBase, atBody: true, mixed: !!mixed,
+          ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase, atBody: true, mixed: !!mixed,
           body: body.id, bodyName: body.name ?? body.id, bodyType: body.type,
           docked: sideA.filter((v) => v.position?.dockedAt === body.id).length,
           enemyPinned: sideB.filter((v) => v.position?.dockedAt === body.id).length,
@@ -305,6 +397,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
             const idx = perSide[s.side] * k + s.index + 1;
             const name = `${CV_BATTLE.NAME_PREFIX}${s.side}${String(idx).padStart(2, '0')}`;
             const v = vm.createAndRegister(s.hull, home.id, { name, modules: s.modules, systemId: sys });
+            cvApplyWarp(v, warpOf(s));
             Object.assign(v.position, { x: ck.x + s.dxAU * AU, y: ck.y + s.dyAU * AU, state: 'orbiting', dockedAt: null });
             v.systemId = sys; v.status = 'idle'; v.mission = null; v.serviceState = 'active';
             if (v.fuel) v.fuel.current = v.fuel.max = 9999;
@@ -334,7 +427,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         }
         console.warn(CV_BATTLE.WARNING);
         return {
-          ok: out.length === nBattles && out.every((b) => b.ok), battles: out, system: sys, seed, members: made.length,
+          ok: out.length === nBattles && out.every((b) => b.ok), battles: out, system: sys, star: sw.info, seed, members: made.length,
           empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvStrip: !!GAME_CONFIG.FEATURES?.cvStrip,
           autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
         };
@@ -342,6 +435,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
 
       const made = layout.ships.map((s) => {
         const v = vm.createAndRegister(s.hull, home.id, { name: s.name, modules: s.modules, systemId: sys });
+        cvApplyWarp(v, warpOf(s));
         Object.assign(v.position, { x: c.x + s.dxAU * AU, y: c.y + s.dyAU * AU, state: 'orbiting', dockedAt: null });
         v.systemId = sys;
         v.status = 'idle';
@@ -376,7 +470,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         const members = made.filter((v) => dscs._findActiveEncounterContaining?.(v.id)).length;
         console.warn(CV_BATTLE.WARNING);
         return {
-          ok: members === made.length && encs.length >= Math.min(2, pairs), encounters: encs.map((e) => e.id), split: true, system: sys, seed,
+          ok: members === made.length && encs.length >= Math.min(2, pairs), encounters: encs.map((e) => e.id), split: true, system: sys, star: sw.info, seed,
           centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear, sideA: sideA.length, sideB: sideB.length, members,
           engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`, empire: empire.name ?? empire.id, paused: !!ts.isPaused,
           cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, cvStage: !!GAME_CONFIG.FEATURES?.cvStage,
@@ -402,7 +496,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
       console.warn(CV_BATTLE.WARNING);
       return {
-        ok: members === made.length, encounter: enc.id, system: sys, seed, seedBase: enc.seedBase,
+        ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase,
         centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear,
         sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
         empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
@@ -411,11 +505,90 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       };
     },
 
+    /**
+     * ARC CV-1a — PARADA 24 slotów modeli (12 klas × bez warp / warp) w pustym punkcie oglądanego układu; każdy statek dostaje
+     * rozkaz lotu w tym samym kierunku (`dir` w stopniach, 0 = +X mapy) bez przyciągania do ciała — po wznowieniu czasu
+     * wszystkie lecą równolegle, dziobem naprzód. Statki testowe jak w `cvBattle` (znacznik, autozapis wyłączony, zdejmowane
+     * przy następnym `cvBattle` / `cvParade`; ⚠ nie zapisuj gry po teście).
+     */
+    cvParade({ dir = 0, seed = 1, star = 0 } = {}) {
+      const K = window.KOSMOS ?? {};
+      const vm = K.vesselManager, mos = K.movementOrderSystem, ts = K.timeSystem, dscs = K.deepSpaceCombatSystem;
+      const home = K.homePlanet;
+      if (!vm || !mos || !ts || !home) return { ok: false, reason: 'no_world' };
+      if (getRenderer()?._galaxyActive) return { ok: false, reason: 'galaxy_mode' };
+      const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
+      const old = all.filter(isCvVessel);
+      if (old.some((v) => dscs?._findActiveEncounterContaining?.(v.id))) return { ok: false, reason: 'battle_in_progress' };
+      for (const v of old) vm.destroyVessel?.(v.id, { reason: 'dismantled' });
+      const sw = switchToStar(K, star);
+      if (!sw.ok) return sw;
+      const sys = K.activeSystemId ?? 'sys_home';
+      if (!ts.isPaused) ts.pause?.();
+      const ss = getSaveSystem();
+      if (ss && '_autosaveInterval' in ss) ss._autosaveInterval = 0;
+      const AU = GAME_CONFIG.AU_TO_PX;
+      const others = (vm.getVesselsInSystem?.(sys) ?? []).filter((v) => !v.isWreck && v.position);
+      const bodies = ['star', 'planet', 'moon', 'planetoid', 'asteroid', 'comet']
+        .flatMap((t) => EntityManager.getByTypeInSystem?.(t, sys) ?? [])
+        .filter((b) => Number.isFinite(b?.x) && Number.isFinite(b?.y));
+      const c = cvBattleCenter({ seed, vessels: others.map((v) => v.position), bodies, auPx: AU });
+      const a = (Number(dir) || 0) * Math.PI / 180;
+      const run = { x: Math.cos(a) * CV_BATTLE.PARADE_RUN_AU * AU, y: Math.sin(a) * CV_BATTLE.PARADE_RUN_AU * AU };
+      const made = [], orders = [];
+      for (const s of cvParadeLayout()) {
+        const v = vm.createAndRegister(s.hull, home.id, { name: s.name, modules: s.modules, systemId: sys });
+        cvApplyWarp(v, s.warp);
+        Object.assign(v.position, { x: c.x + s.dxAU * AU, y: c.y + s.dyAU * AU, state: 'orbiting', dockedAt: null });
+        v.systemId = sys; v.status = 'idle'; v.mission = null; v.serviceState = 'active';
+        if (v.fuel) v.fuel.current = v.fuel.max = 9999;
+        v._cvBattle = 'parade';
+        const r = mos.issueOrder(v.id, { type: 'moveToPoint', targetPoint: { x: v.position.x + run.x, y: v.position.y + run.y }, noBodySnap: true, issuedBy: 'cvParade' });
+        orders.push(r?.ok ? 'ok' : (r?.reason ?? 'refused'));
+        made.push({ name: v.name, key: s.key });
+      }
+      // Sprite'y PO rozkazach — kurs z misji ustawiony od razu, także na pauzie.
+      getRenderer()?._restoreActiveSystemVesselSprites?.();
+      console.warn(CV_BATTLE.WARNING);
+      return { ok: orders.every((o) => o === 'ok'), ships: made.length, orders: orders.filter((o) => o === 'ok').length + '/' + orders.length,
+        refused: [...new Set(orders.filter((o) => o !== 'ok'))], system: sys, star: sw.info, centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))],
+        dir: Number(dir) || 0, paused: !!ts.isPaused, cvModels: !!GAME_CONFIG.FEATURES?.cvModels, warning: CV_BATTLE.WARNING };
+    },
+
     /** Flaga `cvFxEngine`: cvFx(1) — ON, cvFx(0) — OFF, cvFx() — przełącz. Czytana w chwili salwy. */
     cvFx(on) {
       const F = GAME_CONFIG.FEATURES;
       F.cvFxEngine = on === undefined ? !F.cvFxEngine : !!on;
       return { cvFxEngine: F.cvFxEngine };
+    },
+
+    /** ARC CV-1a — flaga `cvModels` (rama kanoniczna): cvModels(1) — ON, cvModels(0) — OFF, cvModels() — przełącz. Czytana przy
+     *  stawianiu statku — statki aktywnego układu przebudowane od razu. */
+    cvModels(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvModels = on === undefined ? !F.cvModels : !!on;
+      const rb = getRenderer()?.cvRebuildVesselSprites?.() ?? null;
+      return { cvModels: F.cvModels, ...(rb ?? { rebuilt: 0 }) };
+    },
+
+    /** ARC CV-1a — modele z `incoming/` dla slotów z indeksu: cvIncoming(1) / cvIncoming(0) / cvIncoming() — przełącz. Promise. */
+    cvIncoming(on) {
+      const r = getRenderer();
+      if (!r?.cvSetIncoming) return { ok: false, reason: 'no_renderer' };
+      return r.cvSetIncoming(on === undefined ? !r._cvIncoming : !!on);
+    },
+
+    /** ARC CV-1a — testowy wzór punktów świetlnych: cvLightTest(1) / cvLightTest(0) / cvLightTest() — przełącz. */
+    cvLightTest(on) {
+      const r = getRenderer();
+      if (!r?.cvSetLightTest) return { ok: false, reason: 'no_renderer' };
+      return r.cvSetLightTest(on === undefined ? !r._cvLightTest : !!on);
+    },
+
+    /** ARC CV-1a — odczyt modeli: statki w ramie kanonicznej, hardpointy (plik / zapas), pula punktów świetlnych. */
+    modelInfo() {
+      const r = getRenderer();
+      return r?.cvModelInfo ? r.cvModelInfo() : { ok: false, reason: 'no_renderer' };
     },
 
     /** ARC CV-3a1 — flaga `cvStage` (scena bitwy): cvStage(1) — ON, cvStage(0) — OFF, cvStage() — przełącz. Czytana co klatkę. */

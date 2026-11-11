@@ -1,0 +1,34 @@
+{
+  "schema": "kosmos-ship-hardpoints",
+  "version": 1,
+  "slot": "warp_frigate",
+  "source": {
+    "file": "incoming/warp_frigate.glb",
+    "sha256": "86d988d0974a55a1be352cb2a047e7a1529cb0ebe9510a177d143338e22d842d",
+    "normalizer": null
+  },
+  "frame": {
+    "bow": [-1, 0, 0],
+    "up": [0, 1, 0]
+  },
+  "nozzles": [
+    {
+      "p": [0.5, 0, 0],
+      "d": [1, 0, 0],
+      "r": 0.046
+    }
+  ],
+  "weapons": [],
+  "lights": [],
+  "keyColour": {
+    "mode": "mask",
+    "hue": 182,
+    "hueTol": 12,
+    "satMin": 0.45,
+    "valMin": 0.55,
+    "soft": 0.06,
+    "gain": 3.5
+  },
+  "damagePoints": "auto",
+  "notes": "CV-1a: model właściciela w incoming/ (przed podmianą slotu, CV-1b). Pomiar 2026-11-10: dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości, dysza = środek bbox przekroju 3 % przy rufie. Maska: pierścień rdzenia warp (174–192°). Wieżyczki i światła klika Workshop (CV-1c)."
+}

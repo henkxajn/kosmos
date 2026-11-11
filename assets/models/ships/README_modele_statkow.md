@@ -11,8 +11,58 @@ assets/models/ships/
 Format: **glTF 2.0 binarny `.glb`** (bez Draco / KTX2 — tak jak istniejące
 `cargo3d.glb`, `research1.glb`, `Ring_Station.glb`). Skala modelu **nie ma
 znaczenia** — gra automatycznie normalizuje rozmiar do klasy statku (przez
-bounding box). Dziób modelu powinien być skierowany wzdłuż osi **+X**
-(jak w obecnych modelach) — wtedy obrót statku w kierunku celu jest poprawny.
+bounding box).
+
+## Kierunek dziobu i hardpointy (ARC COMBAT VISUALS, CV-1a)
+
+> ⚠ Sprostowanie (Finding 621): ten plik mówił dawniej, że dziób ma być wzdłuż
+> **+X** „jak w obecnych modelach". To była nieprawda — **26 z 27 obecnych modeli
+> ma dziób w lokalnym −X**, a wyjątek `nonwarp_large_science` (+X) latał rufą.
+
+**Kierunek dziobu w pliku jest dowolny.** Gra czyta go z pliku hardpointów i obraca
+model jednym kwaternionem do ramy kanonicznej (dziób **+Z**, góra **+Y**) — flaga
+`cvModels`, domyślnie ON.
+
+Pliki hardpointów (`schema: kosmos-ship-hardpoints`, wersja 1 — `src/data/ShipHardpointsSchema.js`):
+
+```
+assets/models/ships/hardpoints/<slot>.json            — model w slocie (24 + default + 2 nieużywane)
+assets/models/ships/hardpoints/incoming/<slot>.json   — model właściciela czekający w incoming/ (przed podmianą slotu)
+assets/models/ships/hardpoints/incoming/index.json    — lista slotów z plikami w incoming/
+```
+
+Współrzędne w **znormalizowanej przestrzeni modelu**: środek prostopadłościanu
+otaczającego w (0, 0, 0), najdłuższy wymiar = 1,0 (tak samo normalizuje gra przy
+stawianiu statku). Pola: `frame` (dziób, góra), `nozzles` (dysza: punkt, kierunek
+smugi za rufą, promień), `weapons` (wieżyczki W1…Wn — CV-4), `lights` (punkty
+świetlne: okna, światła pozycyjne — rysowane zawsze, gdy lista nie jest pusta),
+`keyColour` (emisja z koloru-klucza tekstury: `mode` `mask` / `none`, barwa,
+tolerancja, progi nasycenia i jasności, miękkość, wzmocnienie), `damagePoints`.
+Wartości obecnych plików pochodzą z pomiaru (dziób = koniec o mniejszej liczbie
+wierzchołków w ostatnich 8 % długości, dysza = środek przekroju 3 % przy rufie);
+wieżyczki i światła klika Model Workshop (CV-1c). Brak pliku albo plik niepoprawny
+⇒ wartości zapasowe (dziób −X, dla `nonwarp_large_science` +X) — statek nigdy nie
+czeka na plik i nie leci rufą.
+
+### Standard nowego modelu (rama właściciela F10)
+
+- jedna dysza silnika na rufie; kadłub NIE czarny;
+- **jeden kolor-klucz = jasny cyjan** wyłącznie na oknach / światłach / pierścieniu
+  warp, nigdzie indziej na kadłubie — gra liczy z niego prawdziwą emisję (Meshy nie
+  daje map emisji). Maska ma twarde progi: przy domyślnych (barwa 182° ± 12°,
+  nasycenie > 0,45, jasność > 0,55) nic od barwy 194° w górę nie świeci — niebiesko-
+  szare panele kadłuba (196–216°) zostają ciemne;
+- widoczne wieżyczki na okrętach wojennych; bez napisów i logo;
+- ~10–15 tys. trójkątów, tekstury 2K PBR, GLB.
+
+### Modele z `incoming/` (podgląd przed podmianą slotu)
+
+Plik `<slot>.glb` wrzucony do `assets/models/ships/incoming/` (folder poza git)
+podmienia slot dopiero normalizator (CV-1b). Do tego czasu można go obejrzeć w grze
+z konsoli (bez cudzysłowów): `await KOSMOS.debug.cvIncoming(1)` — sloty z
+`hardpoints/incoming/index.json` biorą model z `incoming/`; `cvIncoming(0)` wraca do
+slotów. Statki testowe: `KOSMOS.debug.cvParade()` (24 sloty w locie) i
+`KOSMOS.debug.cvBattle({warp: 1})` (okręty z wariantem warp).
 
 ## Podział: A = bez warp, B = warp
 

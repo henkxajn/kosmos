@@ -1,0 +1,34 @@
+{
+  "schema": "kosmos-ship-hardpoints",
+  "version": 1,
+  "slot": "warp_battleship",
+  "source": {
+    "file": "warp_battleship.glb",
+    "sha256": "5f67186e8f3f2d2630c69a4c84c4209ee4a219b72a204bca342a1a8940be9ef7",
+    "normalizer": null
+  },
+  "frame": {
+    "bow": [-1, 0, 0],
+    "up": [0, 1, 0]
+  },
+  "nozzles": [
+    {
+      "p": [0.5, -0.031, 0.001],
+      "d": [1, 0, 0],
+      "r": 0.029
+    }
+  ],
+  "weapons": [],
+  "lights": [],
+  "keyColour": {
+    "mode": "none",
+    "hue": 182,
+    "hueTol": 12,
+    "satMin": 0.45,
+    "valMin": 0.55,
+    "soft": 0.06,
+    "gain": 3.5
+  },
+  "damagePoints": "auto",
+  "notes": "CV-1a: wartości z pomiaru (audyt Q6 + 2026-11-10): dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości (27/27), dysza = środek bbox przekroju 3 % przy rufie. Bez maski (model sprzed standardu F10); wieżyczki i światła klika Workshop (CV-1c)."
+}

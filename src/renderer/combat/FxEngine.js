@@ -73,6 +73,22 @@ export const LIVE_CV_FX = {
   // `_stageWatchFit`): 1 — bitwa w widoku na scenie przy KAŻDYM zoomie (domyślnie); 0 — krzywa zoomu semantycznego CV-3a1
   // (skala prawdziwa z daleka) — wyłącznie do porównania z konsoli.
   STAGE_BLEND_FLOOR: 1,
+  // ARC CV-1a (flaga `cvModels`) — statki w ramie kanonicznej (renderer `_addVesselModelCv`, `_applyExhaust`, `_tickCvModels`).
+  // Wszystkie czytane CO KLATKĘ — zmiana w konsoli działa od następnej klatki, bez przebudowy statków. Strojenie, bez pinów.
+  MODEL_PLUME_LEN:    0.8,   // długość smugi silnika w długościach statku (dawniej podłoga 0,03 WU ≈ 1,9 L — Finding 619)
+  MODEL_PLUME_R_MIN:  0.03,  // najmniejszy promień smugi (przestrzeń znormalizowana: długość statku = 1); dysze z pomiaru ≈ 0,02–0,12
+  MODEL_PLUME_R_MUL:  1.0,   // mnożnik promienia dyszy z pliku hardpointów
+  MODEL_KC_GAIN:      1.0,   // mnożnik wzmocnienia maski koloru-klucza (wszystkie statki — wspólny uniform)
+  // Kontrola właściciela CV-1a (2026-11-11) — czytelność pod barwną gwiazdą: sygnałem swój / obcy jest obwódka w kolorze
+  // strony, więc tint ciała wroga jest słabszy (1,0 = siła sprzed kontroli: albedo ku 0xff4466 · 0,55 + emisja 0x880022).
+  MODEL_ENEMY_TINT:   0.45,  // mnożnik CAŁEGO tintu ciała wroga (albedo i emisja; Finding 620)
+  MODEL_WRECK_BURN:   1.0,   // mnożnik żaru wraku (krawędź + poświata — do CV-1a niewidoczny, Finding 620)
+  MODEL_FILL:         0.25,  // wypełnienie neutralne względem kamery (albedo × kolor), niezależne od gwiazdy; słabnie na stronie oświetlonej
+  MODEL_RIM_GAIN:     0.8,   // obwódka (fresnel) w kolorze strony — swój chłodna biel, wróg rola `alert` motywu
+  MODEL_RIM_POWER:    4.0,   // wykładnik obwódki — większy = cieńsza krawędź
+  MODEL_LIFT_CEIL:    0.95,  // sufit wypełnienia + obwódki (liniowo); < 1,0 = bez bloomu (próg 1,0), > 1,0 — bloom świadomie
+  MODEL_LIGHT_GAIN:   1.0,   // mnożnik wzmocnienia punktów świetlnych (`lights[]` z pliku hardpointów)
+  MODEL_LIGHT_MIN_PX: 1.5,   // [CSS px] punkt mniejszy na ekranie gaśnie zamiast rosnąć
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)

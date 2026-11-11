@@ -1,0 +1,11 @@
+{
+  "slots": [
+    "nonwarp_battleship",
+    "nonwarp_destroyer",
+    "nonwarp_frigate",
+    "warp_battleship",
+    "warp_destroyer",
+    "warp_frigate"
+  ],
+  "notes": "CV-1a: sloty z hardpointami dla modeli w assets/models/ships/incoming/ (pliki GLB nie są w git). Czyta wyłącznie KOSMOS.debug.cvIncoming(1). CV-1b: po podmianie slotu wpis znika z listy."
+}

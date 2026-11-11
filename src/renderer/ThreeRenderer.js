@@ -42,6 +42,11 @@ import { STAGE, solveStage, bandEdgesWU, pairKey, encounterClusters, encounterPa
   pickStageField, stagePointLogical, stagePointDrawn, shellBaseAt } from './combat/BattleStageLogic.js';   // ARC CV-3a1 — scena bitwy; CV-3a2 — klik i klastry; CV-3a3 — skorupa
 import { stageBlend, stageBlendFloored, lengthPx } from './combat/SemanticZoomLogic.js';            // ARC CV-3a1 — zoom semantyczny (CV-6b — podłoga, decyzja 20)
 import { motionSegment, motionAt, targetVelocity } from './combat/StageMotionLogic.js';            // ARC CV-6b — ruch sceny ciągły w prędkości
+import { ShipHardpointsCache, slotOfModelPath, yawToward, orbitYaw, bankRoll, INCOMING_DIR, SHIP_MODEL_DIR,
+  REST_YAW_CANONICAL, wreckTiltQuaternion } from './ShipHardpoints.js';   // ARC CV-1a — hardpointy, rama kanoniczna (kurs spoczynkowy i wrak jak OFF)
+import { buildShipRig, disposeShipRig, paintRigMaterials, paintRigRim, lightTestPattern } from './ShipModelRig.js';      // ARC CV-1a — statek w ramie kanonicznej
+import { LightPointPool } from './ShipLightPoints.js';                                                // ARC CV-1a — punkty świetlne `lights[]`
+import { KC_SHARED } from './KeyColourEmission.js';                                                   // ARC CV-1a — wspólne mnożniki maski
 import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
   centroidOf, fitWatchFrameOffset, viewOffsetFrame } from './CombatWatchLogic.js';
@@ -331,6 +336,15 @@ export class ThreeRenderer {
     // ARC CV-2a — ten sam kontrakt dla silnika FX walki: KOSMOS.threeRenderer.cvTuning.BEAM_CORE = 4
     // ⚠ ALIAS LIVE_CV_FX (nie kopia): `FxEngine.update` przepisuje go co klatkę do uniformów — kopia byłaby pokrętłem bez czytelnika.
     this.cvTuning = LIVE_CV_FX;
+    // ARC CV-1a (flaga `cvModels`) — hardpointy modeli (pamięć na slot; brak pliku ⇒ wartości zapasowe, nigdy oczekiwanie),
+    // pula punktów świetlnych (leniwie, przy pierwszym statku ze światłami), przełączniki deweloperskie (konsola).
+    this._shipHardpoints = new ShipHardpointsCache({
+      fetchJson: (url) => fetch(url, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)),
+    });
+    this._shipLightPool = null;
+    this._cvIncoming = false;        // KOSMOS.debug.cvIncoming(1) — modele z `incoming/` dla slotów z indeksu (podgląd przed CV-1b)
+    this._cvIncomingSlots = null;    // Set slotów z `hardpoints/incoming/index.json`
+    this._cvLightTest = false;       // KOSMOS.debug.cvLightTest(1) — testowy wzór punktów świetlnych (do CV-1c nikt ich nie kliknął)
     this._sunCoronaU     = null;  // uniformy ŻYWEJ korony (null przy fladze OFF)
     this._sunStreamerPhase = 0;   // [rad] AKUMULOWANA faza dryfu smug (D-V2u)
     this._sunBreathPhase   = 0;   // [rad] AKUMULOWANA faza oddechu korony
@@ -1409,7 +1423,16 @@ export class ThreeRenderer {
       // Wizualne — wypalony czarny z ledwo czerwoną poświatą. Wypiera rdzawy
       // odcień który za bardzo upodabniał wrak do naturalnego koloru cargo3d.glb.
       const wreckCol = new THREE.Color(0x1a1a1a);
-      if (entry.isModel3D) {
+      // ARC CV-1a — statek w ramie kanonicznej: materiały są już WŁASNYMI klonami statku (Finding 624) — wygląd wraku na nich,
+      // bez ponownego klonowania (dawna ścieżka klonowała drugi raz i nie zwalniała klonów wroga); żar idzie uniformem maski
+      // (Finding 620 — wreszcie widoczny), smuga i punkty świetlne gasną.
+      if (entry.canonical && entry.rig) {
+        paintRigMaterials(THREE, entry.rig.materials, 'wreck', { burnHot: !!GAME_CONFIG.FEATURES?.fcCombatFx });
+        if (entry.rig.exhaust) entry.rig.exhaust.visible = false;
+        if (entry.rig.lights) { this._shipLightPool?.release(entry.rig.lights); entry.rig.lights = null; }
+        this._cvTiltWreck(entry.sprite);   // pochylenie jak ścieżka OFF (przechył wokół dziobu był innym obrazem)
+        entry.enemyTint = true;   // jak ścieżka OFF — etykiety CTRL (kolor wraku); zwalnianie rozstrzyga `canonical`
+      } else if (entry.isModel3D) {
         entry.sprite.traverse(child => {
           if (!child.isMesh || !child.material) return;
           const mat = child.material.clone();
@@ -4231,6 +4254,7 @@ export class ThreeRenderer {
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
         this._tickCvFx();                // ARC CV-2a — zegar prezentacji + silnik FX walki (flaga OFF i nic w locie — nic)
+        this._tickCvModels();            // ARC CV-1a — pokrętła modeli do uniformów maski i puli świateł (flaga OFF bez puli — nic)
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
         this._tickEngagementMarkers(performance.now());
@@ -4702,13 +4726,27 @@ export class ThreeRenderer {
     // (poprzedni load 404) — od razu DEFAULT, bez ponownego nieudanego fetcha.
     const resolved = vesselModelPath(vessel);
     const modelPath = this._missingModelPaths.has(resolved) ? VESSEL_MODEL_DEFAULT : resolved;
-    this._addVesselModel3D(vessel, modelPath);
+    // ARC CV-1a — przełącznik deweloperski `KOSMOS.debug.cvIncoming(1)` (tylko z flagą `cvModels`): slot z indeksu
+    // `hardpoints/incoming/index.json` bierze model z `incoming/` (podgląd modelu właściciela PRZED podmianą slotu — CV-1b).
+    const incoming = GAME_CONFIG.FEATURES?.cvModels ? this._cvIncomingPathFor(modelPath) : null;
+    this._addVesselModel3D(vessel, incoming ?? modelPath);
+  }
+
+  /** ARC CV-1a — ścieżka modelu z `incoming/` dla slotu z indeksu (przełącznik `cvIncoming` włączony), inaczej null. */
+  _cvIncomingPathFor(modelPath) {
+    if (!this._cvIncoming || !this._cvIncomingSlots) return null;
+    const s = slotOfModelPath(modelPath);
+    if (!s || s.variant !== 'slot' || !this._cvIncomingSlots.has(s.slot)) return null;
+    const p = INCOMING_DIR + s.slot + '.glb';
+    return this._missingModelPaths.has(p) ? null : p;
   }
 
   /**
    * Dodaj model 3D statku (GLB) na mapie.
    */
   _addVesselModel3D(vessel, modelPath) {
+    // ARC CV-1a — flaga `cvModels` (czytana przy stawianiu statku): rama kanoniczna z pliku hardpointów. OFF — niżej, jak dziś.
+    if (GAME_CONFIG.FEATURES?.cvModels) { this._addVesselModelCv(vessel, modelPath); return; }
     const isEnemy = isEnemyVessel(vessel);
     const color = isEnemy ? 0xff4466 : 0x44cc66;  // crimson dla wroga, cargo-green dla gracza
 
@@ -4877,6 +4915,10 @@ export class ThreeRenderer {
       // Flag `isWreck` + `initAngle` pozwalają _calcVisualOrbitFromCache użyć
       // wolnej orbity i wysokiej warstwy cmentarzyska.
       if (isWreck && vessel.position?.dockedAt) {
+        // ARC CV-1a (Finding 625) — `entry` był tu POZA ZAKRESEM (zadeklarowany w bloku wyżej) ⇒ ReferenceError połykany przez
+        // `.catch` ładowania jako „GLB load failed (retry)”: wrak stał, ale bez pamięci orbity i z fałszywym ostrzeżeniem w
+        // konsoli. Naprawa także na ścieżce OFF — flaga nie ma prawa przywracać defektu (precedens V-260 / D-V2z).
+        const entry = this._vessels.get(vessel.id);
         entry.isWreck = true;
         const bodyId = vessel.position.dockedAt;
         let bodyR = 0.06;
@@ -4933,6 +4975,215 @@ export class ThreeRenderer {
             });
         }, 400);
       });
+  }
+
+  /**
+   * ARC CV-1a (flaga `cvModels`) — statek w RAMIE KANONICZNEJ (`ShipModelRig`): model obrócony kwaternionem ramy z pliku
+   * hardpointów (dziób → +Z, D-CV-11), smuga w dyszy z pliku (Finding 619), WŁASNE klony materiałów z maską koloru-klucza
+   * (Finding 624; tint wroga i żar wraku uniformami — Finding 620), punkty świetlne `lights[]`. Wrapper, pozycja, widoczność,
+   * wywiad, fokus i pamięć orbity wraku — jak ścieżka OFF (`_addVesselModel3D`). Hardpointy wczytywane RÓWNOLEGLE z GLB;
+   * brak pliku ⇒ wartości zapasowe, bez czekania. Błąd STAWIANIA nie wpada w łańcuch zapasowy ładowania (dawniej błąd kodu
+   * oznaczał poprawny model jako brakujący — Finding 625).
+   */
+  _addVesselModelCv(vessel, modelPath) {
+    const isEnemy = isEnemyVessel(vessel);
+    const color = isEnemy ? 0xff4466 : 0x44cc66;
+    const px = S(vessel.position?.x ?? 0);
+    const pz = S(vessel.position?.y ?? 0);
+    const slotInfo = slotOfModelPath(modelPath) ?? { slot: 'default', variant: 'slot' };
+
+    const placeModel = ([template, hardpoints]) => {
+      if (this._vessels.has(vessel.id)) return;
+      const isWreck = !!vessel.isWreck;
+      const key = `${slotInfo.variant}/${slotInfo.slot}`;
+      const hp = this._cvLightTest ? this._cvLightTestDoc(key, template, hardpoints) : hardpoints;
+      const rig = buildShipRig({
+        THREE, template, hardpoints: hp, targetSize: vesselTargetSize(vessel),
+        kind: isWreck ? 'wreck' : (isEnemy ? 'enemy' : 'own'),
+        lightPool: hp.lights?.length ? this._cvLightPool() : null, lightKey: key + (this._cvLightTest ? '#test' : ''),
+        exhaust: GAME_CONFIG.FEATURES?.fcCombatFx && !isWreck ? { gradient: exhaustGradientColors({ isEnemy }), hdr: FX_HDR_EXHAUST } : null,
+        burnHot: !!GAME_CONFIG.FEATURES?.fcCombatFx,
+        enemyRimHex: this._hud3dHex?.('alert') ?? null,   // obwódka wroga w roli `alert` motywu (zmiana motywu — `_tickCvModels`)
+      });
+      const wrapper = rig.root;
+      wrapper.userData = { kosmosType: 'vessel', vesselId: vessel.id };
+      wrapper.position.set(px, 0.3, pz);
+      // Kurs spoczynkowy (kontrola właściciela CV-1a): bez znanego kierunku dziób w świecie −X — jak ścieżka OFF (model z dziobem
+      // −X przy kursie 0); kurs 0 ramy kanonicznej to dziób +Z, czyli stojący wróg w bitwie obracał się o 90° (burtą).
+      wrapper.rotation.y = REST_YAW_CANONICAL;
+      // Kurs dziobem ku celowi — w ramie kanonicznej bez dawnej poprawki „+ π/2” (dziób w lokalnym +Z). ⚠ Misja zastępcza rozkazu
+      // („Zaangażuj” — bez współrzędnych) daje cel (0, 0), czyli gwiazdę — tak samo na ścieżce OFF i przed CV-1a (Finding 681, CV-3b).
+      if (vessel.mission) {
+        const m = vessel.mission;
+        const isReturn = m.phase === 'returning';
+        const tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+        const ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+        const dx = tx - (vessel.position?.x ?? 0);
+        const dy = ty - (vessel.position?.y ?? 0);
+        if (dx !== 0 || dy !== 0) wrapper.rotation.y = yawToward(dx, dy, true);
+      }
+      if (isWreck) this._cvTiltWreck(wrapper);
+      this.scene.add(wrapper);
+      if (isWreck) {
+        wrapper.visible = true;
+      } else if (isEnemy && !GAME_CONFIG.FEATURES.m4EnemyGhosts) {
+        wrapper.visible = window.KOSMOS?.observatorySystem?.isVesselDetected?.(vessel.id) ?? false;
+      }
+      const entry = {
+        sprite: wrapper, color, isModel3D: true, canonical: true, rig, slot: slotInfo.slot, slotVariant: slotInfo.variant,
+        // ⚠ `enemyTint` znaczy tu to samo co na ścieżce OFF (wróg albo wrak): czytają go etykiety CTRL (`getAllVisibleLabels` —
+        // kolor i mgła tożsamości „?”). Zwalnianie materiałów rozstrzyga `entry.canonical` (rig), nie to pole.
+        enemyTint: isEnemy || isWreck,
+        isWreck, exhaust: rig.exhaust, _exhaustPhase: rendererRandom() * Math.PI * 2,
+      };
+      this._vessels.set(vessel.id, entry);
+      if (isEnemy && !isWreck && GAME_CONFIG.FEATURES.m4EnemyGhosts) this._applyVesselIntelVisibility(vessel, entry);
+      this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
+      if (isWreck && vessel.position?.dockedAt) {
+        const bodyId = vessel.position.dockedAt;
+        let bodyR = 0.06;
+        const pE = this._planets.get(bodyId);
+        if (pE) {
+          const ent = this._entityByUUID.get(pE.mesh.uuid);
+          bodyR = ent ? this._getEntityRadius(ent) : 0.1;
+        } else if (this._moons.has(bodyId)) bodyR = 0.03;
+        else if (this._planetoids.has(bodyId)) bodyR = 0.02;
+        entry._orbiting = { bodyId, orbitR: Math.max(0.5, bodyR * 6.0), isWreck: true, initAngle: rendererRandom() * Math.PI * 2 };
+      } else if (isWreck && vessel.wreckLocation && vessel.position.dockedAt == null) {
+        const wx = isNaN(vessel.wreckLocation.x) ? 0 : vessel.wreckLocation.x;
+        const wy = isNaN(vessel.wreckLocation.y) ? 0 : vessel.wreckLocation.y;
+        wrapper.position.set(S(wx), 0.45, S(wy));
+      }
+    };
+    const place = (res) => {
+      try { placeModel(res); } catch (e) { console.error(`[ThreeRenderer] cvModels: błąd stawiania statku ${vessel.id} (${modelPath})`, e); }
+    };
+    const load = (path) => {
+      const s = slotOfModelPath(path) ?? { slot: 'default', variant: 'slot' };
+      return Promise.all([this._loadShipModel(path), this._shipHardpoints.load(s.slot, s.variant)]);
+    };
+
+    load(modelPath).then(place).catch((err) => {
+      // Model z `incoming/` niedostępny (plik usunięty po CV-1b) — od razu model slotu, bez 404 przy następnych statkach.
+      if (slotInfo.variant === 'incoming') {
+        this._missingModelPaths.add(modelPath);
+        console.warn(`[ThreeRenderer] cvIncoming: brak ${modelPath} — model slotu`, err);
+        this._addVesselModelCv(vessel, SHIP_MODEL_DIR + slotInfo.slot + '.glb');
+        return;
+      }
+      console.warn(`[ThreeRenderer] GLB load failed (retry za 400ms): ${modelPath}`, err);
+      setTimeout(() => {
+        this._loadShipModel(modelPath).then(() => load(modelPath).then(place)).catch((err2) => {
+          this._missingModelPaths.add(modelPath);
+          if (modelPath !== VESSEL_MODEL_DEFAULT) {
+            console.warn(`[ThreeRenderer] Brak modelu ${modelPath} — fallback na DEFAULT (${VESSEL_MODEL_DEFAULT})`);
+            load(VESSEL_MODEL_DEFAULT).then(place).catch((err3) => {
+              console.error(`[ThreeRenderer] DEFAULT GLB też nie wczytany — sprite dla ${vessel.name}`, err3);
+              this._addVesselSpriteFallback(vessel);
+            });
+          } else {
+            console.error(`[ThreeRenderer] DEFAULT GLB nie wczytany — sprite dla ${vessel.name}`, err2);
+            this._addVesselSpriteFallback(vessel);
+          }
+        });
+      }, 400);
+    });
+  }
+
+  /**
+   * ARC CV-1a — losowe pochylenie wraku (przy stawianiu i przy zamianie żywego statku we wrak) RÓWNOWAŻNE ścieżce OFF: te same
+   * losowania w tej samej kolejności (z, potem x), ten sam obraz w świecie (`wreckTiltQuaternion` — Euler OFF na modelu
+   * z dziobem −X zamiast przechyłu wokół dziobu). Kurs wrappera (obrót Y) zostaje.
+   */
+  _cvTiltWreck(wrapper) {
+    const rz = (rendererRandom() - 0.5) * 0.6;   // ±0,3 rad ≈ ±17° (jak ścieżka OFF)
+    const rx = (rendererRandom() - 0.5) * 0.4;
+    const q = wreckTiltQuaternion(wrapper.rotation.y, rx, rz);
+    wrapper.quaternion.set(q[0], q[1], q[2], q[3]);
+  }
+
+  /** ARC CV-1a — pula punktów świetlnych (leniwie; chunki log-depth jak reszta sceny). */
+  _cvLightPool() {
+    if (!this._shipLightPool) this._shipLightPool = new LightPointPool({ THREE, logDepth: logDepthOn() });
+    return this._shipLightPool;
+  }
+
+  /**
+   * ARC CV-1a — `KOSMOS.debug.cvLightTest(1)`: dokument z TESTOWYM wzorem punktów świetlnych dla slotu, który ich nie ma
+   * (do Workshopu CV-1c nikt ich nie kliknął) — punkty NA kadłubie (wierzchołki siatki: czubek dziobu, burty w połowie
+   * długości, grzbiet, dwa przy rufie). Plik z własnymi `lights[]` zostaje bez zmian. Pamięć na slot (stała tożsamość listy
+   * ⇒ jedna geometria puli na slot).
+   */
+  _cvLightTestDoc(key, template, hp) {
+    if (Array.isArray(hp.lights) && hp.lights.length > 0) return hp;
+    this._cvLightTestDocs = this._cvLightTestDocs ?? new Map();
+    const have = this._cvLightTestDocs.get(key);
+    if (have && have.base === hp) return have.doc;
+    const doc = { ...hp, lights: lightTestPattern(THREE, template, hp.frame) };
+    this._cvLightTestDocs.set(key, { base: hp, doc });
+    return doc;
+  }
+
+  /** ARC CV-1a — przebuduj sprite'y statków aktywnego układu (przełączniki `cvModels`, `cvIncoming`, `cvLightTest`). */
+  cvRebuildVesselSprites() {
+    const ids = [...this._vessels.keys()];
+    for (const id of ids) this._removeVesselSprite(id);
+    this._restoreActiveSystemVesselSprites();
+    return { rebuilt: ids.length };
+  }
+
+  /** ARC CV-1a — `KOSMOS.debug.cvIncoming(1|0)`: modele z `incoming/` dla slotów z indeksu (podgląd przed CV-1b). */
+  async cvSetIncoming(on) {
+    this._cvIncoming = !!on;
+    if (this._cvIncoming && !this._cvIncomingSlots) this._cvIncomingSlots = await this._shipHardpoints.loadIncomingIndex();
+    const rb = this.cvRebuildVesselSprites();
+    return { cvIncoming: this._cvIncoming, slots: [...(this._cvIncomingSlots ?? [])], cvModels: !!GAME_CONFIG.FEATURES?.cvModels, ...rb };
+  }
+
+  /** ARC CV-1a — `KOSMOS.debug.cvLightTest(1|0)`: testowy wzór punktów świetlnych na slotach bez `lights[]`. */
+  cvSetLightTest(on) {
+    this._cvLightTest = !!on;
+    const rb = this.cvRebuildVesselSprites();
+    return { cvLightTest: this._cvLightTest, cvModels: !!GAME_CONFIG.FEATURES?.cvModels, ...rb };
+  }
+
+  /** ARC CV-1a — `KOSMOS.debug.modelInfo()`: statki w ramie kanonicznej, hardpointy (plik / zapas), pula świateł. */
+  cvModelInfo() {
+    const ships = [];
+    for (const [id, e] of this._vessels) {
+      ships.push({ id, canonical: !!e.canonical, slot: e.slot ?? null, variant: e.slotVariant ?? null,
+        lights: e.rig?.lights ? e.rig.lights.geometry?.instanceCount ?? 0 : 0, exhaust: !!e.exhaust, wreck: !!e.isWreck });
+    }
+    return {
+      cvModels: !!GAME_CONFIG.FEATURES?.cvModels, cvIncoming: this._cvIncoming, cvLightTest: this._cvLightTest,
+      canonical: ships.filter((s) => s.canonical).length, legacy: ships.filter((s) => !s.canonical).length,
+      hardpoints: this._shipHardpoints.stats(), lightPool: this._shipLightPool?.stats() ?? null, ships,
+    };
+  }
+
+  // ARC CV-1a — raz na klatkę: pokrętła modeli (`cvTuning.MODEL_*`) do wspólnych uniformów maski (wzmocnienie, tint, żar,
+  // światło czytelności: wypełnienie, obwódka, sufit) i puli punktów świetlnych (rozmiar piksela, wzmocnienie, podłoga); po
+  // zmianie motywu — obwódka wrogów w nowej roli `alert`. Flaga OFF i brak puli — nic (ścieżka OFF co do bitu).
+  _tickCvModels() {
+    if (!GAME_CONFIG.FEATURES?.cvModels && !this._shipLightPool) return;
+    const T = this.cvTuning;
+    KC_SHARED.uKcGainMul.value = T.MODEL_KC_GAIN ?? 1;
+    KC_SHARED.uKcTintMul.value = T.MODEL_ENEMY_TINT ?? 1;
+    KC_SHARED.uKcBurnMul.value = T.MODEL_WRECK_BURN ?? 1;
+    KC_SHARED.uKcFillMul.value = T.MODEL_FILL ?? 0;
+    KC_SHARED.uKcRimMul.value = T.MODEL_RIM_GAIN ?? 0;
+    KC_SHARED.uKcRimPow.value = T.MODEL_RIM_POWER ?? 4;
+    KC_SHARED.uKcLiftCeil.value = T.MODEL_LIFT_CEIL ?? 0.95;
+    const ep = themeEpoch();
+    if (this._cvRimEpoch !== ep) {
+      this._cvRimEpoch = ep;
+      const alert = this._hud3dHex('alert');
+      for (const [, e] of this._vessels) {
+        if (e.canonical && e.rig && !e.isWreck) paintRigRim(THREE, e.rig.materials, e.enemyTint ? 'enemy' : 'own', alert);
+      }
+    }
+    this._shipLightPool?.update({ fovDeg: this.camera?.fov ?? 55, viewportH: window.innerHeight || 1,
+      gain: T.MODEL_LIGHT_GAIN ?? 1, minPx: T.MODEL_LIGHT_MIN_PX ?? 1.5 });
   }
 
   // Jeden load per modelPath (deduplikacja). Zwraca Promise<gltf.scene>.
@@ -5070,7 +5321,12 @@ export class ThreeRenderer {
 
     this.scene.remove(entry.sprite);
 
-    if (entry.isModel3D) {
+    if (entry.canonical) {
+      // ARC CV-1a — rig posiada WŁASNE klony materiałów, smugę i punkty świetlne (wracają do puli); geometria szablonu jest
+      // WSPÓLNA dla wszystkich statków slotu — bez `dispose` (dawne zwalnianie na klonie wymuszało ponowne wgranie bufora).
+      disposeShipRig(entry.rig, this._shipLightPool);
+      entry.exhaust = null;
+    } else if (entry.isModel3D) {
       // Model 3D — dispose geometrii klonów (materiały współdzielone z templatem,
       // chyba że to wrogi statek, gdzie każdy mesh dostał sklonowany materiał z tintem).
       const disposeMats = !!entry.enemyTint;
@@ -5149,7 +5405,8 @@ export class ThreeRenderer {
       this._setSpriteBase(id, entry, pos.x, pos.y, pos.z);   // ARC CV-3a3 — uczestnik sceny przy ciele: baza do znacznika, sprite rysowany
       // Żywe statki: obrót w kierunku ruchu orbity. Wraki/stacje: bez rotacji.
       if (entry.isModel3D && !entry.isWreck && !orb.anchored) {
-        entry.sprite.rotation.y = pos.theta + Math.PI;
+        // ARC CV-1a (Finding 622) — rama kanoniczna: dziób ZGODNIE z ruchem orbity (dawne `θ + π`, ścieżka OFF bez zmian).
+        entry.sprite.rotation.y = entry.canonical ? orbitYaw(pos.theta, orb.omega, true) : pos.theta + Math.PI;
       }
     }
   }
@@ -5506,12 +5763,14 @@ export class ThreeRenderer {
         // Model 3D — obróć dziobem w kierunku celu (+ Slice 6 banking roll w skręcie)
         if (entry.isModel3D) {
           if (dx !== 0 || dy !== 0) {
-            const yaw = Math.atan2(dx, dy) + Math.PI / 2;
+            // ARC CV-1a — rama kanoniczna (`entry.canonical`): dziób w lokalnym +Z ⇒ bez „+ π/2”; obrót Z wrappera jest
+            // tam PRAWDZIWYM przechyłem wokół osi dziobu (przy dziobie w −X był pochyleniem nosa), więc znak — w stronę skrętu.
+            const yaw = entry.canonical ? yawToward(dx, dy, true) : Math.atan2(dx, dy) + Math.PI / 2;
             if (GAME_CONFIG.FEATURES?.fcMovementFx && entry._prevYaw != null) {
               let dYaw = yaw - entry._prevYaw;
               while (dYaw >  Math.PI) dYaw -= 2 * Math.PI;
               while (dYaw < -Math.PI) dYaw += 2 * Math.PI;
-              const targetRoll = Math.max(-0.5, Math.min(0.5, dYaw * 12));  // przechył ∝ zmiana kursu
+              const targetRoll = entry.canonical ? bankRoll(dYaw, true) : Math.max(-0.5, Math.min(0.5, dYaw * 12));  // przechył ∝ zmiana kursu
               entry.sprite.rotation.z += (targetRoll - entry.sprite.rotation.z) * 0.15;  // lerp do 0 gdy prosto
             }
             entry._prevYaw = yaw;
@@ -6554,6 +6813,15 @@ export class ThreeRenderer {
     // Lekki flicker (throb silnika) — desync per statek przez _exhaustPhase.
     const flick = 0.8 + 0.2 * Math.sin(performance.now() * 0.02 + (entry._exhaustPhase ?? 0));
     if (cone.material) cone.material.opacity = 0.35 * intensity * flick;  // subtelne (było 0.5)
+    // ARC CV-1a (Finding 619) — rama kanoniczna: smuga jednostkowa z czubkiem w dyszy z pliku hardpointów — długość i promień
+    // z pokręteł `cvTuning.MODEL_PLUME_*` CO KLATKĘ (dawniej podłogi 0,03 × 0,024 WU — 1,9 L — wygrywały zawsze), migotanie
+    // zmienia DŁUGOŚĆ smugi (dawne `scale.x` po obrocie π/2 zmieniało jej grubość).
+    if (entry.canonical) {
+      const T = this.cvTuning;
+      const rad = Math.max(entry.rig?.nozzleR ?? 0.04, T.MODEL_PLUME_R_MIN ?? 0.03) * (T.MODEL_PLUME_R_MUL ?? 1);
+      cone.scale.set(rad, (T.MODEL_PLUME_LEN ?? 0.8) * intensity * (0.85 + 0.3 * flick), rad);
+      return;
+    }
     cone.scale.x = intensity * (0.85 + 0.3 * flick);
   }
 

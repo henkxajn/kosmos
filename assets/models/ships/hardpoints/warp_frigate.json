@@ -1,0 +1,34 @@
+{
+  "schema": "kosmos-ship-hardpoints",
+  "version": 1,
+  "slot": "warp_frigate",
+  "source": {
+    "file": "warp_frigate.glb",
+    "sha256": "32ea37a363d1d40910ba593d32468885452a08b5e06c48feb8709f162ca4d5ad",
+    "normalizer": null
+  },
+  "frame": {
+    "bow": [-1, 0, 0],
+    "up": [0, 1, 0]
+  },
+  "nozzles": [
+    {
+      "p": [0.5, -0.026, 0.003],
+      "d": [1, 0, 0],
+      "r": 0.047
+    }
+  ],
+  "weapons": [],
+  "lights": [],
+  "keyColour": {
+    "mode": "none",
+    "hue": 182,
+    "hueTol": 12,
+    "satMin": 0.45,
+    "valMin": 0.55,
+    "soft": 0.06,
+    "gain": 3.5
+  },
+  "damagePoints": "auto",
+  "notes": "CV-1a: wartości z pomiaru (audyt Q6 + 2026-11-10): dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości (27/27), dysza = środek bbox przekroju 3 % przy rufie. Bez maski (model sprzed standardu F10); wieżyczki i światła klika Workshop (CV-1c)."
+}

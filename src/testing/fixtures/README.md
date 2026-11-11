@@ -91,3 +91,22 @@ wymaga świadomej edycji z uzasadnieniem w metryczce.
 traces/T4-ship-panel-t3-baseline.json   — panel statku T3 (`drawVesselPanel`) → `ship_panel_hud_smoke` H1–H3
 traces/T4-fleet-panels-baseline.json    — rysunek `FleetCommandPanel` / `FleetGroupPanel` → `fleet_panel_hud_smoke` F1–F3, F17
 ```
+
+## `models/` — kolory TEKSTUR modeli (nie zapisy gry, nie ślady)
+
+> Powołane 2026-11-10 (ARC COMBAT VISUALS, CV-1a). Trzeci rodzaj artefaktu: **pomiar tekstur modeli 3D**, których plików
+> nie ma w git (modele właściciela w `assets/models/ships/incoming/` — 10–13 MB każdy). Keeper maski koloru-klucza musi
+> działać na PRAWDZIWYCH kolorach, a nie na siatce syntetycznej — fixture niesie wyłącznie to, czego potrzebuje.
+
+```
+models/<KROK>-<nazwa>.json.gz   — dane (gzip)
+models/<KROK>-<nazwa>.md        — metryczka (obowiązkowa: źródła z sha256, dekoder i jego wersja, zakres tekseli, zapis)
+```
+
+Reguły: (1) dekoder = ten sam, przez który idzie tekstura gry (Chrome, `createImageBitmap` bez konwersji przestrzeni barw),
+nie dekoder własny; (2) metryczka podaje sha256 każdego źródła — podmiana modelu = nowy fixture; (3) fixture niesie pole
+`measured`, które keeper porównuje, więc stary fixture nie udaje nowego modelu.
+
+```
+models/CV1a-incoming-key-colour.json.gz — kolory tekstur bazowych 6 modeli właściciela → `cv_models_logic_smoke` T9
+```

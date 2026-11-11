@@ -33,3 +33,7 @@ tools/balance-tester/reports/
 
 # BALANS 1.0 Phase 2 — POP telemetry generated output (JSON + HTML report, regenerowalne per run)
 src/testing/reports/balans/
+
+# ARC COMBAT VISUALS CV-1a — modele właściciela czekające na podmianę slotu (CV-1b); ich hardpointy SĄ w git
+# (assets/models/ships/hardpoints/incoming/), same pliki GLB (10–13 MB każdy) — nie.
+/assets/models/ships/incoming/

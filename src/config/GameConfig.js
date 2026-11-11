@@ -547,6 +547,15 @@ export const GAME_CONFIG = {
     //   pierścienia starcia i bez białego błysku trafienia (3D paski HP zostają do CV-6a). OFF = dzisiejsza karta co do bitu.
     //   Wyłączenie: KOSMOS.debug.cvStrip(0).
     cvStrip: true,
+    // `cvModels` (CV-1a) — statki w RAMIE KANONICZNEJ z plików hardpointów (`assets/models/ships/hardpoints/<slot>.json`):
+    //   dziób każdego modelu → +Z jednym kwaternionem na slot (`nonwarp_large_science` przestaje lecieć rufą — Finding 621),
+    //   kurs na orbicie zgodny z ruchem (Finding 622), smuga w dyszy z pliku (Finding 619), klony materiałów dla KAŻDEGO statku
+    //   (szarość utrzymania tylko na swoim — Finding 624), emisja z koloru-klucza tekstury + tint wroga i żar wraku jako uniformy
+    //   (Finding 620), punkty świetlne `lights[]` (rysowane, gdy są — niezależnie od trybu maski). Po kontroli właściciela
+    //   (2026-11-11): światło czytelności (wypełnienie neutralne + obwódka w kolorze strony, pokrętła `cvTuning.MODEL_*`) i kurs
+    //   spoczynkowy jak na ścieżce OFF (wróg bez misji nie staje burtą). Czytana przy STAWIANIU statku;
+    //   KOSMOS.debug.cvModels(0) / cvModels(1) przełącza i przebudowuje statki aktywnego układu. OFF = dzisiejsza ścieżka.
+    cvModels: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

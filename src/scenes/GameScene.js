@@ -598,6 +598,8 @@ export class GameScene {
       // ARC CV-2a — KOSMOS.debug.cvBattle() (10 na 10 w oglądanym układzie, gra na pauzie, ziarno stałe), cvFx(1) / cvFx(0)
       // (flaga silnika FX z pulami), fxStats() (czas klatki p50 / p95, wywołania renderera, pule) — COMBAT_VISUALS_PLAN.md §4 CV-2a.
       // ARC CV-3a1 — cvStage(1) / cvStage(0) (scena bitwy), stageInfo() (klastry, stopień sceny, odstępy par w L) — §4 CV-3a1.
+      // ARC CV-1a — cvModels(1) / cvModels(0) (rama kanoniczna), cvIncoming(1) / cvIncoming(0) (modele z `incoming/`),
+      // cvLightTest(1) / cvLightTest(0) (testowy wzór punktów świetlnych), modelInfo() — §4 CV-1a.
       ...cvBattleDebugHelpers({ getRenderer: () => this.threeRenderer, getSaveSystem: () => this.saveSystem }),
       // KOSMOS.debug.sunInfo()      — stan warstwy Sun 2.0 dla live gate'u (S1).
       // KOSMOS.debug.sunInfo(0.693) — to samo, ale z ZMIERZONĄ średnią mapy emission
