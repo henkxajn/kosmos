@@ -28,6 +28,9 @@
 //      `VesselCombatSystem._applyOutcome` przy pacie nie rozbija nikogo, KONTROLA remis przez zniszczenie — rozbija obie strony
 //   E9 pasek walki: linia „R n” (PL i EN), bez pola limitu; źródło bez `ROUND_CAP`; `EnemyAttackHandler` ma gałąź patu
 //   E10 audyt: trzy nowe zdarzenia w `DebugLog.TRACKED_EVENTS`
+//   E11 stager `random` (Finding 699, kontrola właściciela M1): każda strona osobno losuje kadłub i broń główną z ziarna —
+//      floty inne niż lustro, deterministyczne, pozycje bez zmian, jawne `hulls` / `weapons` wygrywają; przez prawdziwy
+//      `cvBattle` statki w świecie = szyk, odczyt `fleets` = świat; KONTROLE — bez `random` szyk i odczyt co do bitu jak dotąd
 //
 // ⚠ Fail-first: `SAFETY_ROUND_CAP`, `isStalemate`, `rebaseTransitFromHere` powstają w tym kroku — import przestrzeni nazw, piny
 //   DEGRADUJĄ (czerwone), suita się nie przerywa; każdy blok łapie wyjątek.
@@ -52,7 +55,7 @@ import { AutoRetreatSystem }     from '../../systems/AutoRetreatSystem.js';
 import * as BS                   from '../../systems/BattleSystem.js';
 import * as SL                   from '../../ui/CombatStripLogic.js';
 import { setNextVesselId }       from '../../entities/Vessel.js';
-import { cvBattleDebugHelpers }  from '../../debug/CvBattleStager.js';
+import { cvBattleDebugHelpers, cvBattleLayout } from '../../debug/CvBattleStager.js';
 import { setLocale, t }          from '../../i18n/i18n.js';
 
 const { DeepSpaceCombatSystem } = DSCSM;
@@ -518,6 +521,52 @@ guard('E10', () => {
   const src = strip(read('src/core/DebugLog.js'));
   const list = src.slice(src.indexOf('const TRACKED_EVENTS'), src.indexOf('];', src.indexOf('const TRACKED_EVENTS')));
   assert(['combat:noDamagePossible', 'combat:safetyCap', 'combat:retreatStarted'].every(e => list.includes(`'${e}'`)), 'E10 trzy nowe zdarzenia M1 w TRACKED_EVENTS');
+});
+
+// ═══ E11 — Finding 699: stager `random` — floty nielustrzane ═══════════════════════════════════════════════════════
+header('E11 — stager `random` (Finding 699): każda strona losuje kadłuby i broń z ziarna');
+guard('E11', () => {
+  const sig = (l) => JSON.stringify(l.ships.map(s => [s.side, s.index, s.hull, s.modules, s.dxAU, s.dyAU]).concat([l.trigger]));
+  const pos = (l) => JSON.stringify(l.ships.map(s => [s.side, s.index, s.dxAU, s.dyAU]).concat([l.trigger]));
+  const sideOf = (l, side) => l.ships.filter(s => s.side === side);
+  const mirrorPairs = (l) => { const B = sideOf(l, 'B'); return sideOf(l, 'A').filter((a, i) => a.hull === B[i]?.hull && a.modules.join() === B[i]?.modules.join()).length; };
+  const fleetsOf = (l) => ({ A: sideOf(l, 'A').map(s => `${s.hullName}/${s.modules[1].replace('weapon_', '')}`),
+    B: sideOf(l, 'B').map(s => `${s.hullName}/${s.modules[1].replace('weapon_', '')}`) });
+  // KONTROLA — bez `random` szyk co do bitu jak dotąd: ziarno nic nie zmienia, strona B = lustro strony A
+  const base = cvBattleLayout({ nA: 3, nB: 3 });
+  assert(sig(base) === sig(cvBattleLayout({ nA: 3, nB: 3, random: 0, seed: 9 })) && mirrorPairs(base) === 3,
+    'E11a KONTROLA bez `random` — szyk niezależny od ziarna, B_i = lustro A_i (3/3)');
+  const r4 = cvBattleLayout({ nA: 3, nB: 3, random: 1, seed: 4 });
+  assert(sig(r4) !== sig(base) && pos(r4) === pos(base), 'E11b `random: 1` — floty inne niż lustro; pozycje i para wyzwalająca te same');
+  assert(sig(r4) === sig(cvBattleLayout({ nA: 3, nB: 3, random: 1, seed: 4 })) && sig(r4) !== sig(cvBattleLayout({ nA: 3, nB: 3, random: 1, seed: 5 })),
+    'E11c determinizm — to samo ziarno: te same floty; inne ziarno: inne');
+  let unmirrored = 0;
+  for (let s = 1; s <= 10; s++) if (mirrorPairs(cvBattleLayout({ nA: 3, nB: 3, random: 1, seed: s })) < 3) unmirrored++;
+  assert(unmirrored >= 9, `E11d strony losują osobno — ziarna 1–10: ${unmirrored}/10 z parą nielustrzaną`);
+  // jawne `hulls` / `weapons` wygrywają z losowaniem; drugi wymiar dalej losowany (świadek — różnice między ziarnami)
+  const lasers = [], frigs = [];
+  for (let s = 1; s <= 10; s++) {
+    lasers.push(cvBattleLayout({ nA: 3, nB: 3, random: 1, seed: s, weapons: 'laser' }));
+    frigs.push(cvBattleLayout({ nA: 3, nB: 3, random: 1, seed: s, hulls: 'frigate' }));
+  }
+  const guns = (l) => l.ships.flatMap(s => s.modules.filter(m => m.startsWith('weapon_')));
+  assert(lasers.every(l => guns(l).every(m => m === 'weapon_laser')) && new Set(lasers.map(l => l.ships.map(s => s.hull).join())).size > 1,
+    'E11e jawne `weapons: laser` — sama broń laserowa, kadłuby dalej losowane (różne między ziarnami)');
+  assert(frigs.every(l => l.ships.every(s => s.hull === 'hull_frigate')) && new Set(frigs.map(l => guns(l).join())).size > 1,
+    'E11f jawne `hulls: frigate` — same fregaty, broń dalej losowana (różna między ziarnami)');
+  // przez prawdziwy `cvBattle`: statki w świecie mają wylosowane kadłuby i broń, odczyt `fleets` = świat
+  reseed('m1-battle-end'); world();
+  const st = helpers().cvBattle({ seed: 4, nA: 3, nB: 3, random: 1, engage: 0 });
+  const HULL = { hull_frigate: 'frigate', hull_destroyer: 'destroyer', hull_cruiser: 'battleship' };
+  const inWorld = { A: [], B: [] };
+  for (const v of vm.getAllVessels().filter(x => /^CV-[AB]\d\d$/.test(x.name ?? '')).sort((a, b) => a.name.localeCompare(b.name))) {
+    inWorld[v.name[3]].push(`${HULL[v.shipId]}/${(v.modules ?? []).find(m => m.startsWith('weapon_'))?.replace('weapon_', '')}`);
+  }
+  assert(st?.ok && st.random === 1 && JSON.stringify(st.fleets) === JSON.stringify(inWorld) && JSON.stringify(inWorld) === JSON.stringify(fleetsOf(r4)),
+    `E11g \`cvBattle({random: 1})\` — statki w świecie = szyk z ziarna, odczyt \`fleets\` = świat (${JSON.stringify(st?.fleets ?? null)})`);
+  reseed('m1-battle-end'); world();
+  const st0 = helpers().cvBattle({ seed: 4, nA: 3, nB: 3, engage: 0 });
+  assert(st0?.ok && !('fleets' in st0) && !('random' in st0), 'E11h KONTROLA bez `random` — odczyt `cvBattle` bez nowych pól');
 });
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

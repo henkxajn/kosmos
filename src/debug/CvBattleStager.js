@@ -33,6 +33,10 @@
 //                                         biją najbliższego wroga); `engage: 2` — pary lustrzane po OBU stronach (B_i → A_i);
 //                                         domyślnie 1 — „Zaangażuj” tylko strona A, jak w grze (§3.2-10). Przy 1 strona A rozkłada
 //                                         ogień na swoje pary, a AI skupia go na najbliższym — dlatego wygrywa częściej (Finding 694)
+//   cvBattle({nA: 3, nB: 3, random: 1}) — Finding 699: floty NIELUSTRZANE — każda strona osobno losuje kadłub i broń główną
+//                                         każdego statku z ziarna (to samo `seed` = te same floty i ta sama bitwa); jawne `hulls` /
+//                                         `weapons` wygrywają z losowaniem; skład w wyniku (`fleets`). Nazwa nie `mix` — `mixed`
+//                                         to już opcja bitwy przy ciele (`atBody`), a `'mixed'` — domyślny cykl kadłubów i broni
 //   battleInfo()                        — M1: aktywne starcia (runda, żywi, uciekający) i ostatnia rozstrzygnięta bitwa DSCS: rundy,
 //                                         zwycięzca, odwrót, powód końca (`endReason`), straty i WRAKI uczestników — `wrakiTylkoPrzy0HP:
 //                                         true` znaczy, że na wrak poszły wyłącznie okręty zestrzelone (wraki == straty)
@@ -75,6 +79,7 @@ import { resolveVesselOrbitalRole } from '../data/OrbitalRolesData.js';   // ARC
 import { orbitClockSec } from '../utils/SimClock.js';                     // ARC CV-3a3 — `atBody`: kąt orbity z zegara orbit
 import gameState from '../core/GameState.js';                                // M1 — `battleInfo()`: rekordy bitew
 import { resolveBattle, isStalemate } from '../systems/BattleSystem.js';     // M1 — `m1OrbitalCheck()`: ścieżka orbitalna (czysta)
+import { mixSeed } from '../utils/SeedMath.js';                              // Finding 699 — `random`: ziarno strumienia flot
 
 export const CV_BATTLE = Object.freeze({
   MAX_PER_SIDE: 10,
@@ -135,21 +140,27 @@ function weaponModules(hullName, primary, fixed) {
  *   kadłub i broń statku strony A o tym samym indeksie (dawniej broń strony B przesunięta o jedną pozycję w cyklu —
  *   fregaty gracza z laserem 0,05 AU przeciw fregatom AI z kinetykiem 0,15 AU przy liniach 0,12 AU od siebie). Asymetrie
  *   DSCS (strona A strzela pierwsza, techy tylko gracza) to mechanika — nietknięte.
- * @param {{ nA?: number, nB?: number, hulls?: string|string[], weapons?: string|string[] }} [opts]
+ * Finding 699 — `random`: floty NIELUSTRZANE. Kadłub i broń główna każdego statku z JEDNEGO strumienia ziarna, losowane po
+ *   kolei (cała strona A, potem B) — strony dostają różne floty, to samo ziarno daje te same. Losowanie zastępuje wyłącznie
+ *   cykl domyślny (`'mixed'`): jawne `hulls` / `weapons` wygrywają. Bez `random` szyk co do bitu jak dotąd.
+ * @param {{ nA?: number, nB?: number, hulls?: string|string[], weapons?: string|string[], random?: number, seed?: number }} [opts]
  * @returns {{ ships: Array<{side:'A'|'B', index:number, name:string, hull:string, hullName:string, modules:string[], dxAU:number, dyAU:number}>,
  *             trigger: { a: number, b: number } }}  trigger — indeksy (w `ships`) pary ze środka frontu
  */
-export function cvBattleLayout({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed' } = {}) {
+export function cvBattleLayout({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', random = 0, seed = 1 } = {}) {
   const clampN = (n) => Math.max(1, Math.min(CV_BATTLE.MAX_PER_SIDE, Math.floor(Number(n) || 0)));
   const fixedWeapon = typeof weapons === 'string' && !!WEAPON_KEYS[weapons];
+  const roll = Number(random) ? cvRollStream(seed) : null;
+  const rollHull = !!roll && hulls === 'mixed';
+  const rollWeapon = !!roll && weapons === 'mixed';
   const ships = [];
   const trigger = { a: -1, b: -1 };
   for (const [side, n, sign, offset] of [['A', clampN(nA), -1, 0], ['B', clampN(nB), 1, 0]]) {
     let best = -1, bestDy = Infinity;
     for (let i = 0; i < n; i++) {
-      const hullName = pickName(hulls, HULL_CYCLE, HULL_KEYS, i);
+      const hullName = rollHull ? HULL_CYCLE[Math.floor(roll() * HULL_CYCLE.length)] : pickName(hulls, HULL_CYCLE, HULL_KEYS, i);
       const hullKey = hullName === 'cruiser' ? 'battleship' : hullName;
-      const primary = pickName(weapons, WEAPON_CYCLE, WEAPON_KEYS, i + offset);
+      const primary = rollWeapon ? WEAPON_CYCLE[Math.floor(roll() * WEAPON_CYCLE.length)] : pickName(weapons, WEAPON_CYCLE, WEAPON_KEYS, i + offset);
       const line = Math.floor(i / CV_BATTLE.PER_LINE);
       const k = i % CV_BATTLE.PER_LINE;
       const inLine = Math.min(CV_BATTLE.PER_LINE, n - line * CV_BATTLE.PER_LINE);
@@ -163,6 +174,26 @@ export function cvBattleLayout({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'm
     trigger[side === 'A' ? 'a' : 'b'] = best;
   }
   return { ships, trigger };
+}
+
+/** Finding 699 — strumień losowań flot `random`: mulberry32 z rozproszonego ziarna, rozgrzany (pierwsze rzuty są najsłabsze). */
+function cvRollStream(seed) {
+  let s = mixSeed(cvSeedBase(seed) ^ 0x699f1e) | 0;
+  const next = () => {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  next(); next(); next();
+  return next;
+}
+
+/** Finding 699 — skład flot do odczytu w konsoli: `kadłub/broń główna` każdego statku, strona po stronie. */
+function cvFleetsOf(layout) {
+  const out = { A: [], B: [] };
+  for (const s of layout?.ships ?? []) out[s.side]?.push(`${s.hullName}/${String(s.modules?.[1] ?? '').replace('weapon_', '')}`);
+  return out;
 }
 
 /** Ziarno starcia DSCS (`seedBase`) z ziarna konsoli — liczba całkowita w [0, 2³¹). */
@@ -343,7 +374,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
   };
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
-    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0, doctrine = null, engage = 1 } = {}) {
+    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0, doctrine = null, engage = 1, random = 0 } = {}) {
       if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
       const doc = cvDoctrineOf(doctrine);   // ARC CV-3b — doktryna strony A (null — bez floty)
       if (doc === undefined) return { ok: false, reason: 'unknown_doctrine', doctrine, known: Object.keys(CV_DOCTRINES) };
@@ -376,7 +407,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         .flatMap((t) => EntityManager.getByTypeInSystem?.(t, sys) ?? [])
         .filter((b) => Number.isFinite(b?.x) && Number.isFinite(b?.y));
       const c = cvBattleCenter({ seed, vessels: others.map((v) => v.position), bodies, auPx: AU });
-      const layout = cvBattleLayout({ nA, nB, hulls, weapons });
+      const layout = cvBattleLayout({ nA, nB, hulls, weapons, random, seed });
+      const rolled = Number(random) ? { random: 1, fleets: cvFleetsOf(layout) } : {};   // Finding 699 — skład w odczycie
       const warpOf = (s) => Number(warp) === 1 || (Number(warp) === 2 && s.side === 'A');   // ARC CV-1a — model `warp_*`
 
       // ARC CV-3a3 (D-CV-4, Finding 626) — bitwa PRZY CIELE: statki gracza na slotach orbit ciała (`OrbitalSpaceSystem.assignOrbit`
@@ -438,7 +470,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
         console.warn(CV_BATTLE.WARNING);
         return {
-          ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase, atBody: true, mixed: !!mixed,
+          ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase, atBody: true, mixed: !!mixed, ...rolled,
           body: body.id, bodyName: body.name ?? body.id, bodyType: body.type,
           docked: sideA.filter((v) => v.position?.dockedAt === body.id).length,
           enemyPinned: sideB.filter((v) => v.position?.dockedAt === body.id).length,
@@ -460,7 +492,10 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         let made = [];
         for (let k = 0; k < nBattles; k++) {
           const ck = k === 0 ? c : cvBattleCenter({ seed: seed + k, vessels: placed, bodies, auPx: AU });
-          const ships = layout.ships.map((s) => {
+          // Finding 699 — przy `random` floty bitwy k z ziarna bitwy (seed + k); szyk (strony, pozycje, para wyzwalająca) ten
+          // sam co w `layout`, losowanie zmienia tylko kadłuby i broń — dlatego reszta pętli czyta strony z `layout`
+          const lay = Number(random) ? cvBattleLayout({ nA, nB, hulls, weapons, random, seed: seed + k }) : layout;
+          const ships = lay.ships.map((s) => {
             const idx = perSide[s.side] * k + s.index + 1;
             const name = `${CV_BATTLE.NAME_PREFIX}${s.side}${String(idx).padStart(2, '0')}`;
             const v = vm.createAndRegister(s.hull, home.id, { name, modules: s.modules, systemId: sys });
@@ -490,11 +525,13 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
           enc.seedBase = cvSeedBase(seed + k);
           cvIssueEngage(K, sA, sB, { doctrine: doc, seed, engage });   // ARC CV-3b — doktryna strony A
           out.push({ ok: ships.every((v) => enc.vesselStates.has(v.id)), encounter: enc.id,
-            centerAU: [Number((ck.x / AU).toFixed(3)), Number((ck.y / AU).toFixed(3))], clear: !!ck.clear });
+            centerAU: [Number((ck.x / AU).toFixed(3)), Number((ck.y / AU).toFixed(3))], clear: !!ck.clear,
+            ...(Number(random) ? { fleets: cvFleetsOf(lay) } : {}) });
         }
         console.warn(CV_BATTLE.WARNING);
         return {
           ok: out.length === nBattles && out.every((b) => b.ok), battles: out, system: sys, star: sw.info, seed, members: made.length,
+          ...(Number(random) ? { random: 1 } : {}),
           empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvStrip: !!GAME_CONFIG.FEATURES?.cvStrip,
           autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
         };
@@ -537,7 +574,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         const members = made.filter((v) => dscs._findActiveEncounterContaining?.(v.id)).length;
         console.warn(CV_BATTLE.WARNING);
         return {
-          ok: members === made.length && encs.length >= Math.min(2, pairs), encounters: encs.map((e) => e.id), split: true, system: sys, star: sw.info, seed,
+          ok: members === made.length && encs.length >= Math.min(2, pairs), encounters: encs.map((e) => e.id), split: true, system: sys, star: sw.info, seed, ...rolled,
           centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear, sideA: sideA.length, sideB: sideB.length, members,
           engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`, empire: empire.name ?? empire.id, paused: !!ts.isPaused,
           cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, cvStage: !!GAME_CONFIG.FEATURES?.cvStage,
@@ -564,7 +601,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
       console.warn(CV_BATTLE.WARNING);
       return {
-        ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase,
+        ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase, ...rolled,
         centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear,
         sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
         doctrine: doc, doctrineRejected: eng.rejected, engage: Number(engage),
