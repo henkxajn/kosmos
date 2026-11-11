@@ -16,7 +16,10 @@
 > designed; #675 → a grace window, scheduled with #640 outside CV). CV-1a (hardpoints, canonical frame bow +Z, key-colour
 > emission, light points; flag `cvModels` default ON) ✅ DONE 2026-11-11 (`53cd49b` — §4 CV-1a — delivered; owner's check: two
 > corrections — readability lighting (fill + side-colour rim) and the rest heading (the enemy stood broadside) — re-check PASS
-> 2026-11-11). Owner's decisions 26–27 (§3.2: #678 kept; #681 → CV-3b). Next: CV-3b (§4 order).**
+> 2026-11-11). Owner's decisions 26–27 (§3.2: #678 kept; #681 → CV-3b). CV-3b (choreography inside the envelope, flag `cvChoreo`
+> default ON) ✅ DONE 2026-11-11 (`04f04e2` — §4 CV-3b — delivered; owner's check PASS — #681 both sides turn to their targets,
+> doctrines kite / hold, retreat, body battle; the owner's tuning baked in as defaults: turn caps 180 / 90 / 30 °/s, calm speed
+> 2 L/s). Next: CV-1b (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -1963,6 +1966,292 @@ battle; `KOSMOS.threeRenderer._enemyAlertMarkers.size` → `0`; the enemies keep
 | **Owner looks at** | frigates strafe, destroyers arc, battleships turn broadside; ships face targets, engines lit, vertical spread; kite backs off, hold stays steady, retreating ships turn away |
 | **From CV-1a (no bow shim)** | every ship placed under `cvModels` is an `entry.canonical` rig: `wrapper → canon (frame quaternion, class scale) → model`; the bow is wrapper-local **+Z** for every slot, so facing a target is `wrapper.lookAt(target)` / yaw `atan2(dx, dz)` (helpers `yawToward`, `orbitYaw`, `bankRoll` in `ShipHardpoints.js`); the plume is `entry.exhaust` (apex at the file's nozzle — `_applyExhaust` canonical branch, lit by `exhaustIntensityRaw` today only in transit — "engines lit in combat" changes that call); free-floating combat ships are still never rotated and a sprite recreated mid-battle still gets yaw 0 (#622 combat part); `legacyBowSign` is NOT needed and must not be written; from the CV-1a owner's check: a ship with no known heading rests at `REST_YAW_CANONICAL` (world −X = the OFF picture — keeper R12 pins ON == OFF), a sprite placed while its ship carries a synthetic order mission (`engage`, no coordinates) faces the system origin — the star (#681) — CV-3b's facing replaces both; the rim / fill readability light and the enemy tint are uniforms on the ship's own materials (`paintRigRim`, `setKeyColourBody`) |
 
+#### CV-3b — choreography ✅ delivered 2026-11-11 (`04f04e2`; flag `cvChoreo` default ON; owner's check PASS 2026-11-11 — the owner's tuning baked in as defaults, below)
+
+Built in one session; nothing of the scope moved to a CV-3b2.
+
+**Measured while building** (headless: the stager's 10v10 and random configurations through the real `solveStage`; live:
+the real game in headless Chrome on the RTX 3070, GATE-S4 fixture, 1600×1041, `cvBattle()` 10v10 at cinema zoom):
+- The stage's apparent band edges are 3.64 / 8.32 / 14.01 L. The envelope pattern alone (no projection) moves pairs across
+  apparent bands: 101 124 band changes in 2.39 M pair checks (21 random 10v10 configurations × 10 s). D-CV-6 cannot be met by
+  the envelope alone, so every frame needs a pair projection (signed condition §3.1-2).
+- A first projection (6 cold Gauss–Seidel passes) fell back to halving in dense clusters, which is a visible jump. With a warm
+  start (× 0.9 per frame), SOR 1.5, a tolerance of 10⁻⁴ L, early exit and up to 32 passes, the keeper set needs 0 halvings and
+  0 zeros. ⚠ The verification needs the same tolerance on the floor (`d < floor − 2·tol`). Without it, numerically converged
+  pairs counted as culprits and were halved.
+- Live, the first ~5 s of a battle (approach into weapon range, pairs crossing bands) move the anchors 1.2–4.1 L/s median,
+  up to 7 L/s. The projection then dragged the offsets at up to 7 L/s, a jitter on top of the formation change. Fix — the calm
+  rule: the pattern amplitude is multiplied by 1 / (1 + (v / `CHOREO_CALM_V`)²), where v is the smoothed anchor speed. The
+  factor is smoothed as well: an instantaneous factor stepped the offset 0.096 L in one frame, the smoothed one 0.032 L.
+- Live, a target switch started the frame rotation at the full 90 °/s cap, so the offset velocity jumped by |o|·ω — up to
+  1.65 L/s at a round boundary. Fix: the motion frame follows the capped direction with a first-order lag (`FRAME_TAU_MS`
+  150 ms), and the posture weights pass through two smoothing stages of τ/2 each. The velocity is now continuous (keeper L12:
+  1.12 → 0.12 L/s per frame).
+- Live, the calm factor lagged behind a fast anchor acceleration. Offsets of ~0.26 L were still on when the anchors reached
+  5–7 L/s, and the projection broke them in single frames at up to 3.9 L/s. Fix: the renderer feeds the calm rule the peak
+  anchor speed from the round's motion plan over the next `CHOREO_CALM_AHEAD` (300 ms). The plan is known from the solve, so
+  the dance calms before the formation moves. Residual single-frame kinks are ≤ 3.2 L/s, at offsets ≤ 0.11 L, during the
+  approach.
+
+**What changed**
+- NEW `src/renderer/combat/ChoreographyLogic.js` (pure, zero imports — the keepers execute it under node):
+  - `CHOREO_TUNING` — 14 live knobs (`cvTuning.CHOREO_*`, read every frame):
+    - envelope per class: frigate 1.0 / destroyer 0.7 / battleship 0.4 L
+    - period per class: 7.5 / 12 / 20 s
+    - turn cap per class: 180 / 90 / 30 °/s (the owner's tuning; built at 120 / 60 / 20)
+    - vertical cap 0.6 L, plume gain, bank, calm speed 2 L/s (the owner's tuning; built at 0.8), calm look-ahead 300 ms
+  - Class profiles (`CHOREO_CLASS`). Per-ship phases, first-pass direction and a ±10 % period spread come from
+    `choreoSeed(encounterId, vesselId)` (FNV-1a + murmur3), so ships of one class never dance in unison.
+    - frigate — lateral passes of 0.72 E with a figure-8 in the vertical (twice the lateral frequency), a 0.30 E dip into
+      the pass, and the bow crabbed 16° into the pass
+    - destroyer — an ellipse with slower, wider arcs
+    - battleship — a small, slow drift that presents its broadside. The side is chosen once and switched only past a
+      0.6 rad hysteresis.
+  - The pattern runs on an arc around the threat point, in a motion frame turned toward the target, so the motion itself
+    keeps the attacker → target gap.
+  - Postures (`CHOREO_POSTURE`, D-CV-7 — placement only, never a fake distance). `postureOf` order: disabled › retreat ›
+    hold › kite › engage.
+    - engage — dips into the pass
+    - kite — amplitude 0.85, radial bias AWAY from the target
+    - hold — amplitude 0.22, no lateral passes, only breathing in the vertical
+    - retreat — bow away from the threat, full thrust
+    - disabled — a ship killed during the battle; its offset and engine fade out
+  - `pickFacingTarget` picks, in order: the target of the ship's own last-round shot › the remembered target › its engage
+    order's target › the nearest live enemy (id tie-break). With no live enemy it aims at the enemy centroid.
+  - `pairInterval` + `constrainChoreo` enforce the D-CV-6 band invariant every frame:
+    - every pair's drawn distance stays inside the apparent band of its anchor distance (edges G(range)), with a 0.02 L
+      margin
+    - the interval narrows to the anchor distance itself as the anchors approach a band edge (`CROSS_K` 4), so a pair whose
+      anchors cross bands stays continuous
+    - no pair comes closer than the 1.5 L collision floor
+    - each ship stays inside its envelope and the vertical cap, and outside the body shell in body battles
+    - the solver is a projected Gauss–Seidel with a warm start; afterwards EVERY pair is checked against the true edges
+    - a pair still outside gets both offsets halved (up to 6 times), then zeroed. Zero means the anchor, which is in the
+      anchor's band by construction.
+  - `stepChoreoFacing` drives yaw and pitch with a critically damped spring (ω_n = 2.5 × the turn cap), with the rate clamped
+    at the class cap. Roll comes from the yaw rate and the lateral acceleration (canonical rule: a left turn rolls left).
+  - `stepChoreoEngine` sets the engine level from the choreographed speed (the larger of the pattern and anchor speeds), the
+    class idle level and the turn rate. Retreat is full thrust, disabled is off; the result is multiplied by
+    `CHOREO_PLUME_GAIN`.
+- `ThreeRenderer` — choreography rides on the CV-6b motion timeline:
+  - `_choreoCluster` runs per encounter cluster every frame:
+    - states are created on the fly
+    - posture is read-only, from the `fleetSystem` doctrine, the retreat marker and the engage order's `preferMaxRange`
+    - anchor speed = the current speed plus the round's plan ahead
+    - the projection keeps a warm start per cluster
+    - in a pause the previous offsets are reused bit for bit
+  - The drawn target is anchor + offset. `m.tgt` stays the anchor, so the stage's continuity across cluster changes is
+    untouched; `_setSpriteBase` keeps the offset.
+  - `_choreoPose` faces every canonical rig toward its target and drives the engine. The first step starts from the
+    sprite's own heading, so the turn-in is visible (#681).
+  - `_choreoOrient`:
+    - free-floaters get the wrapper yaw from choreography and pitch / roll through `canon`, and they keep the battle heading
+      after the stage (#622)
+    - writer-owned headings (in flight with a mission, body orbiters, wrecks) are slerped toward the choreography pose
+  - Choreography fades in and out over `JOIN_MS` with the stage weight. `_choreoEnd` returns `canon` to the frame
+    quaternion and the plume to `_applyExhaust`.
+  - The Watch pivot ignores choreography offsets, so the camera does not dance.
+  - `stageInfo()` gains four columns:
+    - `choreo` — ships · mean / max offset
+    - `postawy` — postures
+    - `dziob` — bow error median / max (battleships measured from broadside)
+    - `rzut` — pairs corrected this frame, and fallbacks
+  - #677: the combat plume flickers on the presentation clock (`_choreoExhaust`). `_applyExhaust` takes the transit plume's
+    flicker phase from the presentation clock while the stage runs it (`cvStage`), so a pause freezes every plume. Without
+    the stage it uses real time, as before.
+- `FxEngine.LIVE_CV_FX` += `CHOREO_TUNING`.
+- `GameConfig.FEATURES.cvChoreo: true` — read every frame; OFF is the CV-6b picture, and the ships return to their anchors
+  over 0.5 s.
+- `CvBattleStager`:
+  - `cvBattle({doctrine: /kite/.source})` puts side A in a test fleet with that doctrine (`engage` / `kite` / `hold` /
+    `retreat`). `hold` rejects engage orders exactly as the game does.
+  - `cvRetreat(n)` issues the game's `retreat` order to the n-th live side-A ship in a battle.
+  - `cvChoreo(1|0)` turns the flag on / off.
+  - Test fleets are disbanded together with their ships, in `cvParade` as well.
+
+**Keepers (logic + the band invariant).**
+
+NEW `cv_choreo_logic_smoke` **35 / 0**:
+- (e) determinism; (d) a frozen clock gives a frozen pose, bit for bit
+- the envelope per class: 18 000 steps, max 0.853 E
+- **the band invariant over sampled time**, on 21 random 10v10 configurations plus the stager's formation, 10 s at 60 fps:
+  - 2.39 M pair checks: 0 band changes, 0 pairs under the floor, mis-banded pairs with choreography == without (0)
+  - D-CV-6 windows of shooter → target pairs: 0 / 118 800 out
+  - 0 halvings, 0 zeros
+  - WITNESS — the same motion without the projection: 102 561 band changes
+- continuity: max step 0.0235 L per frame
+- #681 — stern-first ships turn in: frigate 174° → 10.7°, destroyer 174° → 3.9°, battleship 85° → 0.0° from broadside; the
+  turn rate reaches but never exceeds the cap (180 / 90 / 30 °/s)
+- postures, target order, no `Math.random` (source and execution)
+- calm rule (L11, at a fixed `CHOREO_CALM_V` 0.8 L/s — the pin measures the mechanism, the default is tuning)
+- a target or posture switch without a velocity jump (L12): frame turn 0.12 L/s, posture 0.07 L/s per frame; WITNESS — the
+  capped-only frame jumps 1.12 L/s
+
+NEW `cv_choreo_render_smoke` **29 / 0** on the REAL renderer methods (three r171, canonical rigs, a 10v10 battle 2.5 AU
+from the star, side A facing the star as in #681):
+- every frame, every pair stays in its band: 243 200 checks, 0 changes; WITNESS without the projection: 6 366 changes
+- envelope; continuity: max 0.06 L per frame; 380 boundary checks, 0 stops
+- pause freezes everything
+- #681 (stable targets): after 7 s every combatant is within 30° of its target (battleships within 20° of broadside); side A
+  started at 179°; KONTROLA with the flag OFF: still stern-on
+- engines lit; KONTROLA with the flag OFF: dark
+- zero writes to the vessel state; determinism
+- end of battle: `canon` = frame, plume returned, state removed; free ships keep the battle heading
+- the flag going OFF mid-battle and back ON is smooth
+- postures through the real glue: hold amplitude; retreat bow away + full thrust
+- the flag OFF from the start leaves everything untouched
+- the Watch pivot ignores offsets
+- R14 (#677): the transit plume freezes; KONTROLA without the stage: it flickers
+- R15 (#622): a sprite rebuilt mid-battle carries the choreography heading after one frame (173.7° → 0.000°)
+
+Other keepers:
+- `cv_fx_results_smoke` **41 / 0**. Results are identical ON == OFF == no renderer WITH choreography (A1f witness: 1 230
+  choreographed frames, max 0.80 L; A2 / A5 identical).
+- The stage keepers (`cv_stage_temporal` / `render` / `shell`) set `cvChoreo = false` in setup, because they pin the stage
+  layer.
+- `cv_renderer_rng_smoke` is green.
+
+**Fail-first** on a HEAD tree with the final keepers:
+- logic 0 / 12 — the module does not exist, so every block degrades red
+- render 11 / 11:
+  - red: R0, the R1 block, R1c, R5a, R8b, R10b, R11a, R11, R13, R14a, R15
+  - green on HEAD only because nothing moves without choreography: R4a / R4b, R8a, R9a / R9b, R10a
+  - green on both sides as controls: R5b, R5c, R6b, R12, R14b
+- results 39 / 2: A1a (missing methods) and A1f
+
+**Mutation battery** (`kosmos-handover/cv-3b/mutation_battery.py`, 21 mutants, each in a scratch copy): **17 / 21 killed**.
+The four survivors are explained:
+- M2 — the envelope clamp inside the pattern. It is redundant by design: the class profiles never reach E, and
+  `constrainChoreo` clamps every ship to its envelope again.
+- M13 — recomputing in a pause instead of reusing the offsets. Since the frame fix, `stepChoreoOffset` does not touch the
+  frame at dt = 0 and the warm projection starts at its own solution, so the recompute is bit-identical. The reuse remains
+  as defence in depth.
+- M16 — 6 projection passes instead of 32. The warm start converges in 6 on the keeper set; 32 is headroom, and early exit
+  makes it free.
+- M17 — the arc shape. It is deliberately unpinned (F11: no pins on drawing).
+
+M18 (frame without the second stage), M19 (single-stage posture weights) and M20 (#677 reverted) are killed.
+
+Sweep **385 / 385 OK, 0 FAIL** (28 advisory, pre-existing; the two new keepers included). `check-i18n` PASS (pl = en = 3380, no new strings — console
+tools only).
+
+**Live validation at the shipped defaults** (after the owner's tuning) — `kosmos-handover/cv-3b/probe_live.mjs` **13 / 13**
+and `probe_knobs.mjs` 5 / 5. The real game ran in headless Chrome on the RTX 3070: GATE-S4 fixture, 1600×1041, the owner's
+models via `cvIncoming(1)`, every console line of the owner's list executed literally.
+- Frame dt p50 16.7 ms / p95 16.9 ms; 0.90 solves / s; zero console or shader errors.
+- Close-up speeds (cinema, frigate 40 px), live ships after the first 2.5 s:
+  - drawn, p50 — 0.30–0.37 L/s for every class (formation + dance)
+  - choreography alone [L/s]:
+
+    | class | p50 | p95 | p99 | max |
+    |---|---|---|---|---|
+    | frigate | 0.46 | 0.85 | 1.20 | 5.6 |
+    | destroyer | 0.19 | 0.46 | 0.67 | 1.40 |
+    | battleship | 0.06 | 0.22 | 0.37 | 2.2 |
+
+  - The maxima are single-frame kinks of the projection while the formation itself moves 3–7 L/s.
+  - Frames above 1.5 L/s: frigates 0.67 %, battleships 0.04 %, destroyers 0.
+  - At the built default `CHOREO_CALM_V` 0.8 the frigate max was 3.2 L/s; the owner's 2 L/s keeps more dance during the
+    approach and pays for it here.
+- Bow angular speed max:
+  - frigate 177 °/s (cap 180)
+  - destroyer 75 °/s (cap 90)
+  - battleship 34 °/s (cap 30 on yaw, plus pitch)
+- Turn-in (#681) — live combatants within threshold (30°; battleships 20° from broadside):
+
+  | sample | 1 s | 2 s | 3 s | 5 s | 7 s | 9 s |
+  |---|---|---|---|---|---|---|
+  | all | 9 / 18 | 13 / 18 | 16 / 17 | 16 / 16 | 15 / 15 | 15 / 15 |
+  | side A | 2 / 8 | 5 / 8 | 7 / 7 | 6 / 6 | 6 / 6 | 6 / 6 |
+
+  - Battleship broadside: median 2.4 s, max 3.1 s. Destroyers: ≤ 1.7 s.
+  - At the built defaults (120 / 60 / 20 °/s), 3 s gave 12 / 17 (side A 4 / 7), and battleships took 3.2 / 3.7 s.
+  - OFF in the same session: side A 0 / 6–8 at every sample.
+- Stutter vs CV-6b (cinema), round boundaries:
+  - stops: 0 % (CV-6b after: 1 %)
+  - speed ratio, median: 0.86 (CV-6b: 0.77)
+  - velocity jump, p95 / max: 0.47 / 1.17 L/s over all frames; 0.25 / 1.03 L/s on regular frames only (|dt − 16.7| ≤ 1.5 ms;
+    the choreography share there is p95 0.08 / max 0.89)
+  - OFF in the same session, regular frames: 0.47 / 0.68 L/s
+  - The all-frame maxima land on frames that took 13–14 ms while the formation moved 5–7 L/s — a finite-difference artefact
+    of the probe.
+- L8 (the envelope knob, live, in the kite battle) — `CHOREO_ENV_FRIGATE = 0.1` keeps every live frigate offset ≤ 0.1 L from
+  the next frame.
+- `probe_knobs.mjs` (destroyers in steady state, at the built defaults):
+  - `CHOREO_ENV_DESTROYER = 0.2` → max offset 0.41 → 0.16 L
+  - `CHOREO_PERIOD_DESTROYER = 4` → offset speed p50 0.17 → 0.55 L/s
+  - `CHOREO_PLUME_GAIN = 0.5` → plume length 0.48 → 0.25
+  - `CHOREO_TURN_BATTLESHIP = 40` → accepted
+
+**Owner's check list** (game tab of the owner; console lines quote-free; ⚠ `cvBattle` puts test ships into the game state —
+do not save afterwards, F5 without saving):
+1. `await KOSMOS.debug.cvIncoming(1)` → `slots` lists 6. Then `KOSMOS.debug.cvBattle()` → resume time → [ Obserwuj ] on the
+   combat strip.
+   - **#681**: both sides turn to face each other in the first rounds. Your side starts with its sterns to the enemy — watch
+     it turn.
+   - Within ~5 s every live ship faces its target; battleships present their broadside (~3.5 s).
+   - `KOSMOS.debug.stageInfo()` → `dziob` ≈ 10° / 35° (median / max), `postawy` engage, `rzut` 0 par.
+2. Class behaviours:
+   - frigates: quick sideways passes with a figure-8 up and down
+   - destroyers: slower, wider arcs
+   - battleships: a slow drift, broadside on
+   - every ship moves in 3D (some above the plane, some below), and nothing circles fast at close range
+   - during the approach and right after kills the dance is quieter, because the formation itself is moving
+   - a ship destroyed mid-battle stops moving and its engine goes dark
+3. Engines lit in combat: every live ship's plume is on. Frigates' plumes are brighter and longer in the passes; battleships'
+   are dimmer.
+4. Pause: every position, bow and plume freezes — nothing moves or flickers, including plumes of ships outside the battle.
+   Resume continues smoothly.
+5. Let the battle end and confirm the banner. Then:
+   - `KOSMOS.debug.cvBattle({doctrine: /kite/.source})` → resume → your ships' dance leans away from the enemy (kite)
+   - after it ends: `KOSMOS.debug.cvBattle({doctrine: /hold/.source})` → the result shows `doctrineRejected 10`; your side
+     barely moves (a slow vertical breathing only) and the enemy comes to you
+6. During a battle: `KOSMOS.debug.cvRetreat(1)` → the ship named in `vessel` turns its bow away from the threat and burns at
+   full thrust (the longest plume on your side) as it leaves.
+7. `KOSMOS.debug.cvChoreo(0)` → within 0.5 s every ship glides back to its anchor and the plumes go out (the CV-6b picture);
+   `KOSMOS.debug.cvChoreo(1)` → the dance returns smoothly. For the old picture from the very start: `KOSMOS.debug.cvChoreo(0)`
+   then a new `KOSMOS.debug.cvBattle()` — your side stays stern-on to the enemy.
+8. No stutter: watch several round boundaries in cinema — no stop, no jerk, no shiver of the formation. F5 without saving.
+
+Knobs are live, with no rebuild:
+- `KOSMOS.threeRenderer.cvTuning.CHOREO_PERIOD_FRIGATE = 5`
+- `KOSMOS.threeRenderer.cvTuning.CHOREO_ENV_DESTROYER = 0.3`
+- `KOSMOS.threeRenderer.cvTuning.CHOREO_TURN_BATTLESHIP = 40`
+- `KOSMOS.threeRenderer.cvTuning.CHOREO_VERT = 0.3`
+- `KOSMOS.threeRenderer.cvTuning.CHOREO_PLUME_GAIN = 0.5`
+- `KOSMOS.threeRenderer.cvTuning.CHOREO_CALM_V = 2` — more dance during the approach
+
+**Not in CV-3b / limitations:**
+- Facing needs `cvModels` ON (canonical rigs); with `cvModels` OFF only the offsets and the engines run.
+- Battleships present their broadside — that is their "facing" (#681 for that class).
+- The dance is subdued while the formation itself moves (approach, kills); `CHOREO_CALM_V` lets more of it through.
+- Knob changes rescale the pattern at once.
+- Ships killed mid-battle stop dancing and their engine goes dark; the wreck look stays in CV-5.
+- Body battles: the shell sphere is respected and writer-owned orbit headings are slerped — looked at by the owner, OK.
+
+**Owner's check — PASS 2026-11-11.**
+- #681 — both sides turn to their targets from the first rounds.
+- Doctrines kite and hold, the retreat and a body battle are OK.
+- The turn-in felt a bit slow but acceptable. The owner's tuning is baked in as the defaults:
+  - `CHOREO_TURN_FRIGATE` 180, `CHOREO_TURN_DESTROYER` 90, `CHOREO_TURN_BATTLESHIP` 30 °/s
+  - `CHOREO_CALM_V` 2 L/s
+  - `CHOREO_CLASS.turnRef` — the reference for banking and the engine's turn term — stays at 120 / 60 / 20, the picture the
+    owner watched.
+- Keepers after baking:
+  - L11 pins the calm mechanism at a fixed `CHOREO_CALM_V` 0.8, because the default is tuning (F11).
+  - R5 now runs on stable targets. In the shared scenario side B retargets every synthetic round (~1 s). At the faster
+    defaults the 7 s sample caught one battleship 0.75 s into a ~40° retarget (21.9° > 20°) — retargeting lag, not the
+    turn-in. With stable targets battleships hold broadside within 1.1°, frigates and destroyers within 14.8°. Target
+    switching stays pinned by L9 (order) and L12 (no velocity jump).
+
+**Findings:**
+- #622 ✅ (combat part) — free-floaters face their targets and keep the heading after the battle; a sprite rebuilt
+  mid-battle takes its heading from choreography on the next frame (R15).
+- #677 ✅ — combat plumes, and under `cvStage` transit plumes too, flicker on the presentation clock (R14).
+- #681 ✅ — every combatant on both sides turns to its target, or to the enemy centroid, from the first rounds (R5a, L6, the
+  live table).
+- No new findings; the next free number is 682.
+
 ### CV-4 — weapon language and the ledger (flag `cvWeapons`; split 4a / 4b if needed)
 
 | | |
@@ -2248,7 +2537,7 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **619** | ⚪ | **Floors fix effect sizes**: explosion `Math.max(0.2, …)` ⇒ fireball 5 L, ring 25 L; exhaust floors ⇒ every plume 0.03 × 0.024 WU (1.9 L); the flicker scales plume thickness, not length | `ThreeRenderer.js:6498, :4716-4717, :4740, :6478-6492` | CV-1a (exhaust) ✅ under `cvModels` — the plume is a unit cone with its apex at the hardpoints nozzle, length / radius from `cvTuning.MODEL_PLUME_*` every frame, the flicker changes the LENGTH (live: apex at −0.500 ship length on all 24 parade slots); the OFF path keeps the floors until CV-Z / CV-5 (explosion) — under `cvStage` the fireball floor is lifted as a stop-gap (CV-3a3, #653 (d): peak = hull × 1.5) |
 | **620** | ✅ | **Enemy tint and wreck glow are invisible on 24 of 27 models** — `emissiveColor` multiplies an emissive map that is black on all six warships (max 12–29/255); a wreck rebuilt after load / system switch gets `0x110000` | `three.module.js:348`; `ThreeRenderer.js:4782, :4791, :1387-1388`; §1 Q6 Table B | **CV-1a ✅** under `cvModels` — tint and burn ride the key-colour chunk as uniforms ADDED after the emissive map (tint modulated by texture luminance; burn = fresnel⁴ edge + 3 % glow), visible on every model; a wreck built after load gets the burn at once; the wreck switch paints the ship's own clones. Final burn-out look → CV-5 |
 | **621** | ✅ | **`nonwarp_large_science` flies stern-first**: 26/27 models have the bow at local −X, this one +X; the README says +X (wrong); the heading comment says +X (wrong); the exhaust code is right | silhouettes in the audit scratchpad; `README_modele_statkow.md:14-15`; `ThreeRenderer.js:4706-4707, :4715, :4759-4760` | **CV-1a ✅** — the hardpoints frame (`frame.bow` per slot, `nonwarp_large_science` +X) rotates every model to bow +Z; live: CV-P10 flies nose-first (cos 1.000), plume at the stern; README rewritten |
-| **622** | ⚪ | **Heading defects**: orbit heading `θ + π` turns the bow against the orbital motion (maths verified, not seen live); combat free-floaters are never rotated; a sprite recreated mid-battle gets yaw 0 | `ThreeRenderer.js:5107-5110, :6677-6711, :1761-1770, :4751-4761`; `OrbitalSpaceSystem.js:158, :211-213` | CV-1a ✅ (orbit, under `cvModels`: `orbitYaw` along the orbital motion; keeper T5c on the derivative of the `OrbitalSpaceSystem` formula, T5k shows the old `θ + π` pointing against it) / CV-3b (combat free-floaters, mid-battle yaw 0) |
+| **622** | ✅ | **Heading defects**: orbit heading `θ + π` turns the bow against the orbital motion (maths verified, not seen live); combat free-floaters are never rotated; a sprite recreated mid-battle gets yaw 0 | `ThreeRenderer.js:5107-5110, :6677-6711, :1761-1770, :4751-4761`; `OrbitalSpaceSystem.js:158, :211-213` | CV-1a ✅ (orbit, under `cvModels`: `orbitYaw` along the orbital motion; keeper T5c on the derivative of the `OrbitalSpaceSystem` formula, T5k shows the old `θ + π` pointing against it) / CV-3b ✅ (combat free-floaters face their targets under `cvChoreo` and keep the battle heading after the stage; a sprite rebuilt mid-battle takes its heading from choreography on the next frame — keeper R15) |
 | **623** | ⚪ | **Duplicate GLBs** load and upload twice and look identical in different roles (`default = cargo3d`, `nonwarp_large_cargo = nonwarp_medium_cargo`, `warp_frigate = warp_large_science`); `cargo3d.glb` and `research1.glb` have no code reference | SHA-256 (audit); `VesselModelResolver.js` | owner's new models; CV-Z hygiene |
 | **624** | ✅ | **Material sharing**: player ships use the template materials ⇒ the maintenance tint greys every player ship of the same file [INF]; the wreck handler replaces enemy clones without disposing them [INF] | `ThreeRenderer.js:4767-4794, :5492-5528, :1381, :1397` | **CV-1a ✅** under `cvModels` — every ship gets its own material clones (textures shared), so the maintenance grey stays on its ship (live: CV-A01 grey, CV-A04 — same model — untouched); the wreck switch reuses the clones (no leak); the OFF path keeps sharing until CV-Z |
 | **625** | ✅ | **Swallowed ReferenceError**: `entry` declared in a block at `:4828`, used at `:4837 / :4849` for wrecks with `dockedAt` ⇒ throws inside the GLB `.then`, caught as "GLB load failed (retry)" | `ThreeRenderer.js:4828-4868` (verified by reading) | **CV-1a ✅** on BOTH paths (`const entry = this._vessels.get(vessel.id)`; precedent V-260 / D-V2z); keeper R10 red on HEAD ("GLB load failed" ×1), green after; under `cvModels` a placement error no longer enters the load-fallback chain |
@@ -2304,11 +2593,11 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **674** | ⚪ | **Far zoom after decision 20: a 10v10 is a knot of a few pixels.** With the stage held at every zoom the drawn battle keeps its stage size, which at the whole-system view (camera 85 WU) is a knot of ≈ 3.5 px; the HUD stack "⚠ ×N" carries it, while the FX engine's pixel floors (`MIN_PX` 3, `TRACER_CORE` 4 — the owner's tuning) make beams and sparks as wide as the knot itself [INF — not looked at live] | render harness at 85 WU (R17 setup); `LIVE_CV_FX.MIN_PX` / `TRACER_CORE` | CV-6a — the tactical layer's far language (icons, bands, fire lines) is meant for exactly this view |
 | **675** | ⚪ | **A mop-up encounter re-tells the battle.** The banner and (under `cvStrip`) the Dziennik announce a cluster at its LAST `battle:resolved`; when survivors of the same battle engage again (a duel ran out at 20 rounds and the ships freed by the other duels, still in range, engage the last enemy), DSCS opens a NEW encounter in the same frame, after the announcement — a second cluster in time, so a second banner (pause), battle line and skirmish line. Live split 4v4: 5 encounters → 2 announcements (the four duels — 20 rounds, 3 enemy losses; then the mop-up — 1 round, 1 loss); the strip shows it as one battle (the expansion follows the same ships). Proposal: hold the cluster's announcement a short grace on presentation time and fold an encounter that starts within it with ships of the cluster — it changes the CV-3a2 banner timing ⇒ the owner's decision | `BattleClusterLogic.clusterGroupStep`; `GameScene._clusterBattleBanners` / `_narrateBattleCluster`; `DeepSpaceCombatSystem` (encounter start after `_finalizeBattle`); `validate.json` step 4 | **owner's decision 2026-11-10 (§3.2-25): yes to a grace window ≈ 1–2 rounds — not now; scheduled with #640 in the small step outside CV (one message per event)** |
 | **676** | ✅ | **The combat card never took part in `isOverUI`.** The wheel, a camera drag and map hover went through the card (only its clicks were caught); the strip is in `isOverUI` like every other panel, so the camera does not move under it — a deliberate difference; the card on the OFF path keeps the old behaviour | `UIManager.isOverUI` (no `combatHud` test); `CombatHUD.handleClick` | **accepted as designed (owner 2026-11-10, §3.2-24)** — the strip blocks like every panel; the card's OFF path keeps the old behaviour until CV-Z removes the card |
-| **677** | ⚪ | **The engine-plume flicker runs on real time.** `_applyExhaust` takes the flicker phase from `performance.now()`, so a plume in transit keeps throbbing through a pause (rule 4: pause freezes everything). Pre-existing on both paths; harmless until engines are lit in combat | `ThreeRenderer._applyExhaust` (`flick = 0.8 + 0.2·sin(performance.now()·0.02 + phase)`) | CV-3b (engines lit in combat — move the phase to the presentation clock) |
+| **677** | ✅ | **The engine-plume flicker runs on real time.** `_applyExhaust` takes the flicker phase from `performance.now()`, so a plume in transit keeps throbbing through a pause (rule 4: pause freezes everything). Pre-existing on both paths; harmless until engines are lit in combat | `ThreeRenderer._applyExhaust` (`flick = 0.8 + 0.2·sin(performance.now()·0.02 + phase)`) | CV-3b ✅ (combat plumes flicker on the presentation clock — `_choreoExhaust`; under `cvStage` `_applyExhaust` takes the transit plume's phase from the presentation clock too — keeper R14; without the stage real time as before) |
 | **678** | ✅ | **"The only cyan is the warp ring" holds approximately.** Measured on the owner's textures (per-texel 3D localisation): warp_battleship 100 % of the lit texels on the stern ring; warp_destroyer ≈ 94 % ring + small spots mid-aft (x 0.09–0.29); warp_frigate ≈ 77 % ring + small symmetric spots (stern-corner pads, mid-ship x 0.05–0.15, near the bow x ≈ −0.39). Under F10 cyan = lights, so the mask lights them by design | `cv_models_logic_smoke` T9 fixture; contact sheet in the CV-1a scratchpad | **kept** — owner's decision 2026-11-11 (§3.2-26): the spots light as small lights, per F10 |
 | **679** | ⚪ | **Removing a ship disposed the SHARED template geometry.** The OFF path's `_removeVesselSprite` calls `geometry.dispose()` on every mesh of a `template.clone()` — the clone shares the template geometry, so every removal frees the GPU buffers of every other ship of that slot and forces a re-upload (the #636 hit-glow churn's twin for models) | `ThreeRenderer._removeVesselSprite` (OFF branch) | CV-1a ✅ under `cvModels` (`disposeShipRig` frees only what the rig owns; keeper R7); OFF until CV-Z |
 | **680** | ⚪ | **`entry.enemyTint` carries two meanings.** It marks cloned materials to dispose AND the CTRL labels read it as "is enemy" (colour, identity fog "?" below `contact`) — a canonical entry written with `enemyTint: false` (disposal handled by the rig) leaked enemy names into the CTRL labels during CV-1a development; fixed before the check by keeping the OFF meaning (keeper R8d2, mutant M21) | `ThreeRenderer.getAllVisibleLabels` (`isEnemy = !!entry.enemyTint || !!vessel?.isEnemy`); `_addVesselModelCv` | CV-Z hygiene — split into `entry.isEnemy` + rig-owned disposal |
-| **681** | ⚪ | **A ship placed while it carries a synthetic order mission faces the star.** The placement heading reads `liveTargetX ?? targetX ?? 0` from `vessel.mission`; `_issueEngage` (M4 P3 hotfix #2) writes a synthetic mission WITHOUT coordinates, so the fallback `(0, 0)` — the system origin, i.e. the star — becomes the heading, and free-floating combat ships are never rotated afterwards. Both paths, before CV-1a too; measured live: in `cvBattle` the player's ships stand bow to the star (cos to the star +1.00), sterns to the enemy when the battle lies beyond the enemy line. Same for any order whose mission has no coordinates when the sprite is (re)built (system switch, `cvModels` toggle) | `ThreeRenderer._addVesselModelCv` / `_addVesselModel3D` (heading at placement); `MovementOrderSystem._issueEngage` (synthetic mission) | **CV-3b** — owner's decision 2026-11-11 (§3.2-27): facing the target supersedes it; unchanged until then |
+| **681** | ✅ | **A ship placed while it carries a synthetic order mission faces the star.** The placement heading reads `liveTargetX ?? targetX ?? 0` from `vessel.mission`; `_issueEngage` (M4 P3 hotfix #2) writes a synthetic mission WITHOUT coordinates, so the fallback `(0, 0)` — the system origin, i.e. the star — becomes the heading, and free-floating combat ships are never rotated afterwards. Both paths, before CV-1a too; measured live: in `cvBattle` the player's ships stand bow to the star (cos to the star +1.00), sterns to the enemy when the battle lies beyond the enemy line. Same for any order whose mission has no coordinates when the sprite is (re)built (system switch, `cvModels` toggle) | `ThreeRenderer._addVesselModelCv` / `_addVesselModel3D` (heading at placement); `MovementOrderSystem._issueEngage` (synthetic mission) | **CV-3b ✅** — owner's decision 2026-11-11 (§3.2-27): facing the target supersedes it — under `cvChoreo` every combatant on both sides turns to its target (or the enemy centroid) from the first rounds (keepers L6, R5a; live table in §4 CV-3b); owner's check PASS |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
