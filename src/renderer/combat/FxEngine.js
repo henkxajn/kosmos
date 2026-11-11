@@ -88,14 +88,16 @@ export const LIVE_CV_FX = {
   MODEL_RIM_GAIN:     0.8,   // obwódka (fresnel) w kolorze strony — swój chłodna biel, wróg rola `alert` motywu
   MODEL_RIM_POWER:    4.0,   // wykładnik obwódki — większy = cieńsza krawędź
   MODEL_LIFT_CEIL:    0.95,  // sufit wypełnienia + obwódki (liniowo); < 1,0 = bez bloomu (próg 1,0), > 1,0 — bloom świadomie
-  // Finding 684: 2,0 po pomiarze w grze (fregata ≈ 31 / 62 px): przy 1,0 czerwone punkty na szarym kadłubie ledwo czytelne,
-  // przy 2,0 wyraźne (poświata ≈ 10–12 px), przy 3,0 rozlana plama 25–28 px.
-  MODEL_LIGHT_GAIN:   2.0,   // mnożnik wzmocnienia punktów świetlnych (`lights[]` z pliku hardpointów)
-  // Finding 684 (kontrola właściciela 2026-11-11): punkt NIGDY mniejszy niż MIN_PX na ekranie; gaśnie dopiero z rozmiarem STATKU
-  // na ekranie — pełny od FADE_PX px długości statku, zero przy FADE_END_PX (daleki widok taktyczny). Shader: `ShipLightPoints`.
+  // Finding 684: pomiar w grze (fregata ≈ 31 / 62 px): przy 1,0 czerwone punkty na szarym kadłubie ledwo czytelne, przy 2,0 wyraźne
+  // (poświata ≈ 10–12 px), przy 3,0 rozlana plama 25–28 px; ponowna kontrola właściciela (2026-11-11): przy 2,0 światło dziobu za mocne
+  // ⇒ 1,4 (w jego pliku dwa cyjanowe punkty dziobu nakładają się i sumują — skutek #685, kliknie je ponownie).
+  MODEL_LIGHT_GAIN:   1.4,   // mnożnik wzmocnienia punktów świetlnych (`lights[]` z pliku hardpointów)
+  // Finding 684 (kontrola właściciela 2026-11-11): punkt NIGDY mniejszy niż MIN_PX na ekranie; gaśnie wyłącznie z rozmiarem STATKU
+  // na ekranie — pełny od FADE_PX px długości statku, zero przy FADE_END_PX (daleki widok). Shader: `ShipLightPoints`. Ponowna
+  // kontrola właściciela (2026-11-11): przy oddalaniu światła nie gasły ⇒ 20 → 10 px (było 10 → 5).
   MODEL_LIGHT_MIN_PX: 2.0,   // [CSS px] podłoga średnicy punktu na ekranie (dawniej 1,5 — próg gaśnięcia punktu)
-  MODEL_LIGHT_FADE_PX:     10,   // [CSS px] długość statku na ekranie, od której punkty świecą w pełni
-  MODEL_LIGHT_FADE_END_PX:  5,   // [CSS px] długość statku na ekranie, przy której punkty znikają
+  MODEL_LIGHT_FADE_PX:     20,   // [CSS px] długość statku na ekranie, poniżej której punkty zaczynają gasnąć
+  MODEL_LIGHT_FADE_END_PX: 10,   // [CSS px] długość statku na ekranie, przy której punkty znikają
   // ARC CV-3b (flaga `cvChoreo`) — choreografia w kopercie (renderer `_choreoCluster`, `ChoreographyLogic`): koperta klasy [L],
   // okres wzoru [s] (prędkość kątowa = 2π / okres), sufit skrętu [°/s], pion [L], jasność silnika w walce, przechył. Czytane
   // CO KLATKĘ. Strojenie, bez pinów (wartości domyślne — `CHOREO_TUNING`).

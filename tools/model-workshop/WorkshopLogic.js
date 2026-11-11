@@ -29,8 +29,9 @@ export const HISTORY_CAP = 200;
 export const SESSION_HISTORY_KEEP = 50; // ile kroków cofania trafia do sessionStorage (rozmiar)
 export const NOZZLE_R_RANGE = Object.freeze([0.01, 0.15]);
 export const LIGHT_SIZE_RANGE = Object.freeze([0.005, 0.08]);
-// Domyślny rozmiar punktu klikanego w Workshopie (średnica, × długość statku). Większy od zapasu schematu (0,012): w bitwie fregata
-// ma na ekranie ok. 20–60 px, a punkt mniejszy niż `MODEL_LIGHT_MIN_PX` (1,5 px) gaśnie — 0,03 widać z bliska i w kinie.
+// Domyślny rozmiar punktu klikanego w Workshopie (średnica, × długość statku). Większy od zapasu schematu (0,012): z bliska punkt
+// rośnie z kadłubem; w bitwie (fregata ok. 20–60 px) rysujemy go co najmniej `MODEL_LIGHT_MIN_PX` (2 px), a gaśnie dopiero z rozmiarem
+// statku (`MODEL_LIGHT_FADE_PX` → `MODEL_LIGHT_FADE_END_PX`, Finding 684).
 export const LIGHT_SIZE_DEFAULT = 0.03;
 // Kolory punktów świetlnych (sRGB '#rrggbb'): cyjan klucza (= LIGHT_DEFAULTS.colour), czerwony / zielony (światła pozycyjne), biały —
 // te same co testowy wzór `lightTestPattern` (CV-1a).

@@ -6,11 +6,14 @@
 // fregacie 40 px (1,2 px) miał krycie 0,8, na 20 px — 0,4; (2) profil blasku w małym punkcie: przy 2 px środki pikseli leżą
 // w r ≈ 0,7, gdzie profil daje ~1 % jasności środka — sonda GPU: szczyt 2 / 255 przy kolorze 1,0. Poprawka: podłoga średnicy
 // `uMinPx` (domyślnie 2 px) z PEŁNYM kryciem, gaśnięcie WYŁĄCZNIE z rozmiarem STATKU na ekranie (`uFadeHi` → `uFadeLo`, domyślnie
-// 10 → 5 px), mały punkt (≤ 3 px) jako pełny dysk; po poprawce sonda GPU: szczyt 255 / 255 (`kosmos-handover/cv-1c/probe_glsl_lights.mjs`).
+// 20 → 10 px — ponowna kontrola właściciela 2026-11-11, wcześniej 10 → 5), mały punkt (≤ 3 px) jako pełny dysk; po poprawce sonda GPU:
+// szczyt 255 / 255 (`kosmos-handover/cv-1c/probe_glsl_lights.mjs`). Progi L1e / L1f czytają WARTOŚCI DOMYŚLNE (`LIVE_LIGHTS_DEFAULTS`)
+// — strojenie pokręteł nie wymaga zmian w keeperze, dopóki kino (fregata 40–50 px) leży powyżej progu pełnego świecenia.
 //
 // CO PINUJE:
 //   L1 lustro JS shadera (`lightPointScreen`): narysowana średnica NIGDY poniżej podłogi; krycie = 1, gdy statek ≥ próg pełnego
-//      świecenia, 0 przy progu zgaszenia i niżej, niemalejące z rozmiarem statku; NIE zależy od rozmiaru samego punktu.
+//      świecenia, 0 przy progu zgaszenia i niżej, niemalejące z rozmiarem statku; NIE zależy od rozmiaru samego punktu; przy wartościach
+//      domyślnych kino (40–50 px) świeci w pełni, a przy oddalaniu (L1g) krycie maleje do zera — światła nie zostają stałymi kropkami.
 //      KONTROLA: dawny wzór (krycie = rozmiar punktu / próg) gasi punkt 0,03 na fregacie 40 px — warunek L1 go odrzuca.
 //   L2 shader = lustro: człony `shipPx = s / pxW`, `smoothstep(uFadeLo, …, shipPx)`, `max(size, uMinPx * pxW)`, `vPx` i dysk małego
 //      punktu w tekście GLSL (bez komentarzy). L3 pula: `update` wpisuje próg pełnego świecenia i zgaszenia do WSPÓLNYCH uniformów
@@ -53,14 +56,21 @@ await section('L1  lustro shadera: podłoga średnicy i gaśnięcie tylko z rozm
   ok(fullBad === 0, `L1b statek ≥ próg pełnego świecenia ⇒ krycie 1 — rozmiar punktu nie ma znaczenia (złe: ${fullBad})`);
   ok(offBad === 0 && monoBad === 0, `L1c statek ≤ próg zgaszenia ⇒ krycie 0; krycie niemalejące z rozmiarem statku (złe: ${offBad} / ${monoBad})`);
   ok(indepBad === 0, `L1d krycie nie zależy od rozmiaru samego punktu (punkt 4× mniejszy — to samo krycie; złe: ${indepBad})`);
-  // kino: fregata 40–50 px, punkt 0,03 (właściciel) — narysowany ≥ 2 px, pełne krycie
-  const cine = [40, 45, 50].map((px) => { const shipLen = 0.016, depth = shipLen / (px * pxToWorld); return LP.lightPointScreen({ size: 0.03, shipLen, depth, pxToWorld, minPx: 2, fadePx: 10, fadeEndPx: 5 }); });
-  ok(cine.every((a) => a.drawnPx >= 2 && a.alpha === 1 && a.sizePx < 2), `L1e kino (fregata 40 / 45 / 50 px): punkt 0,03 ma ${cine.map((a) => a.sizePx.toFixed(2)).join(' / ')} px — rysowany jako 2 px z pełnym kryciem`);
-  // KONTROLA: dawny wzór gaśnięcia — krycie = (rozmiar punktu / próg), próg 1,5 px
+  // kino: fregata 40–50 px, punkt 0,03 (właściciel) — narysowany ≥ podłogi, pełne krycie (wartości domyślne pokręteł)
+  const D = LP.LIVE_LIGHTS_DEFAULTS;
+  const at = (px, size = 0.03) => { const shipLen = 0.016, depth = shipLen / (px * pxToWorld); return LP.lightPointScreen({ size, shipLen, depth, pxToWorld, minPx: D.minPx, fadePx: D.fadePx, fadeEndPx: D.fadeEndPx }); };
+  const cine = [40, 45, 50].map((px) => at(px));
+  ok(cine.every((a) => a.drawnPx >= D.minPx && a.alpha === 1 && a.sizePx < D.minPx),
+    `L1e kino (fregata 40 / 45 / 50 px, domyślne: podłoga ${D.minPx} px, gaśnięcie ${D.fadePx} → ${D.fadeEndPx} px): punkt 0,03 ma ${cine.map((a) => a.sizePx.toFixed(2)).join(' / ')} px — rysowany jako ${D.minPx} px z pełnym kryciem`);
+  // oddalanie (domyślne): w połowie przedziału gaśnięcia krycie pośrednie, na progu zgaszenia i niżej — zero
+  const half = at((D.fadePx + D.fadeEndPx) / 2), gone = at(D.fadeEndPx), far = at(D.fadeEndPx * 0.6);
+  ok(half.alpha > 0.3 && half.alpha < 0.7 && gone.alpha < 1e-9 && far.alpha === 0,
+    `L1g oddalanie (domyślne): fregata ${(D.fadePx + D.fadeEndPx) / 2} px — krycie ${half.alpha.toFixed(2)}, ${D.fadeEndPx} px i mniej — ${gone.alpha.toFixed(2)} / ${far.alpha.toFixed(2)} (światła gasną, nie zostają jako stałe kropki)`);
+  // KONTROLA: dawny wzór gaśnięcia — krycie = (rozmiar punktu / próg), próg 1,5 px; fregata nieco powyżej progu pełnego świecenia
   const old = (a) => Math.min(1, Math.max(0, a.sizePx / 1.5));
-  const mid = LP.lightPointScreen({ size: 0.03, shipLen: 0.016, depth: 0.016 / (20 * pxToWorld), pxToWorld, minPx: 2, fadePx: 10, fadeEndPx: 5 });
+  const midPx = D.fadePx * 1.2, mid = at(midPx);
   ok(old(cine[0]) < 0.85 && old(mid) < 0.5 && mid.alpha === 1,
-    `L1f KONTROLA: dawny wzór dawał krycie ${cine.map((a) => old(a).toFixed(2)).join(' / ')} w kinie i ${old(mid).toFixed(2)} przy fregacie 20 px (nowy: ${mid.alpha}) — L1b go odrzuca`);
+    `L1f KONTROLA: dawny wzór dawał krycie ${cine.map((a) => old(a).toFixed(2)).join(' / ')} w kinie i ${old(mid).toFixed(2)} przy fregacie ${midPx} px (nowy: ${mid.alpha}) — L1b go odrzuca`);
 });
 
 await section('L2  shader = lustro (tekst GLSL bez komentarzy)', async () => {

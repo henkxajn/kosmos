@@ -94,7 +94,7 @@ const QUAD = [-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0];
 const QUAD_INDEX = [0, 1, 2, 2, 1, 3];
 
 // Wartości pierwszej klatki — renderer i Workshop przepisują je co klatkę z `LIVE_CV_FX` (`MODEL_LIGHT_*`).
-export const LIVE_LIGHTS_DEFAULTS = Object.freeze({ gain: 2.0, minPx: 2.0, fadePx: 10, fadeEndPx: 5 });
+export const LIVE_LIGHTS_DEFAULTS = Object.freeze({ gain: 1.4, minPx: 2.0, fadePx: 20, fadeEndPx: 10 });
 
 /**
  * Lustro shadera w JS (keeper): rozmiar punktu i krycie na ekranie. Podłoga: narysowany punkt ≥ `minPx`; krycie zależy WYŁĄCZNIE

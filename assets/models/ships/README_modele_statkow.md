@@ -42,7 +42,7 @@ Kolejność (pomoc jest też na stronie):
 5. **4 Światła** — wybierz kolor (cyjan / czerwony / zielony / biały) i rozmiar, klikaj okna i światła pozycyjne. LUSTRO jak
    wyżej (bliźniak po drugiej BURCIE); opcja „lustro zamienia czerwony ↔ zielony" — dla świateł pozycyjnych. Przycisk
    **„Odległość jak w bitwie"** pokazuje statek tak mały jak w bitwie (ok. 48 px). Punkt nigdy nie jest mniejszy niż 2 px
-   na ekranie; światła gasną dopiero, gdy cały statek ma mniej niż ok. 10 px (daleki widok). Punkt na grzbiecie albo pod
+   na ekranie; światła zaczynają gasnąć, gdy cały statek ma mniej niż ok. 20 px, i znikają przy ok. 10 px (daleki widok). Punkt na grzbiecie albo pod
    kadłubem widać tylko z tej strony — światła widoczne z każdej strony stawiaj na burtach.
 6. **Maska** (suwaki) — tylko modele z cyjanem na teksturze (pierścień warp); pod suwakami: ile procent tekstury świeci.
 7. **Zapisz do gry** — okno pokaże nazwę slotu i ścieżkę pliku; za pierwszym razem wskaż folder
