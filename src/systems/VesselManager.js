@@ -2974,6 +2974,47 @@ export class VesselManager {
   }
 
   /**
+   * M1 „bitwy do końca” (decyzja 3) — PRZEPLANOWANIE LOTU OD BIEŻĄCEJ POZYCJI, w miejscu (ta sama misja, ten sam rozkaz, bez
+   * zdarzeń). Wołane przez `DeepSpaceCombatSystem._advanceFleeing` / `_finalizeBattle`, gdy lot uciekającego biegł w starciu
+   * na zegarze starcia (przesunięta oś czasu misji): bez przeplanowania statek doleciałby do punktu przewidzianego na
+   * PIERWOTNĄ chwilę przylotu wcześniej niż ciało, a przylot przeskoczyłby do żywej pozycji ciała. Cel-CIAŁO — chwila
+   * i punkt z czasu przechwycenia od teraz (`_interceptBody`, jak `_resumeMissionAfterOrder`), cel-PUNKT — trasa od tu do
+   * zapamiętanego punktu. Tylko lot w stronę celu (`in_transit`, nie powrót).
+   * @param {object} vessel
+   * @returns {boolean} czy przeplanowano
+   */
+  rebaseTransitFromHere(vessel) {
+    const m = vessel?.mission;
+    if (!m || vessel.isWreck || vessel.position?.state !== 'in_transit' || m.phase === 'returning') return false;
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const sx = vessel.position.x;
+    const sy = vessel.position.y;
+    const speedAU = Math.max(0.01, vessel.speedAU ?? 1.0);
+    const sysId = vessel.systemId ?? 'sys_home';
+    const destEntity = m.targetId ? this._findEntity(m.targetId) : null;
+    let tx, ty, route, arrivalYear;
+    const intercept = destEntity ? (this._interceptBody?.(m.targetId, sx, sy, speedAU, { systemId: sysId }) ?? null) : null;
+    if (intercept) {
+      ({ arrivalYear, x: tx, y: ty, route } = intercept);
+    } else {
+      if (!Number.isFinite(m.targetX) || !Number.isFinite(m.targetY)) return false;
+      tx = m.targetX;
+      ty = m.targetY;
+      route = this._calcRoute(sx, sy, tx, ty, sysId);
+      arrivalYear = gameYear + (route.totalDist / AU_TO_PX) / speedAU;
+    }
+    m.startX      = sx;
+    m.startY      = sy;
+    m.targetX     = tx;
+    m.targetY     = ty;
+    m.waypoints   = route?.waypoints ?? [];
+    m.departYear  = gameYear;
+    m.arrivalYear = arrivalYear;
+    if (vessel.movementOrder?.targetPoint) vessel.movementOrder.targetPoint = { x: tx, y: ty };
+    return true;
+  }
+
+  /**
    * M1 Targeting — wylicz velocity (AU/civYear) z delty pozycji.
    *
    * Jednostka: AU/civYear. VesselManager._tick dostaje civDeltaYears z TimeSystem

@@ -7,15 +7,23 @@
 //   fleetA, fleetB — { strength, hp, shieldHP, armor, weapons[], evasion, techMult, morale }
 //   context — { casusBelli, location, seed }
 //
-// Algorytm (10-30 tur):
-//   1. Każda flota strzela w przeciwnika per tura.
+// Algorytm (M1 „bitwy do końca” — bez limitu tur):
+//   1. Każda flota strzela w przeciwnika per tura (jednocześnie).
 //   2. Damage: baza z weapons × tracking × (1 - evasion) × techMult.
 //   3. Absorb: najpierw shield (regeneruje się), potem armor, potem hp.
 //   4. Straty proporcjonalne do hp/starting_hp.
 //   5. Koniec gdy jedna flota spadnie ≤ 20% hp (retreat) lub ≤ 0 (destroyed).
+//   6. M1 (decyzja właściciela 6, Finding 692) — dawny limit 30 tur zdjęty razem z rozstrzygnięciem „więcej HP wygrywa,
+//      a przy równych HP wygrywa B” (obrońca). Ten sam strażnik co w `DeepSpaceCombatSystem`: gdy żadna strona nie może już
+//      zadać obrażeń drugiej (brak broni, która może trafić, albo tarcza, której regeneracja przewyższa największe obrażenia
+//      na turę) — koniec REMISEM bez strat; ukryty bezpiecznik `COMBAT_SAFETY_ROUND_CAP` tur — też remis. Konsumenci
+//      (`EnemyAttackHandler`, `VesselCombatSystem`) rozpoznają taki remis przez `isStalemate(result)` i NIE niszczą nikogo.
 //
 // Wyjście:
-//   { winner: 'A'|'B'|'draw', lossesA, lossesB, turns, retreated: 'A'|'B'|null, timeline[] }
+//   { winner: 'A'|'B'|'draw', lossesA, lossesB, turns, retreated: 'A'|'B'|null, timeline[],
+//     endReason: 'destroyed'|'retreat'|'no_damage_possible'|'safety_cap' }
+
+import { COMBAT_SAFETY_ROUND_CAP } from '../data/CombatPaceData.js';
 
 // ── Mulberry32 PRNG (seeded) ──────────────────────────────────────────────────
 function mulberry32(seed) {
@@ -85,6 +93,36 @@ function resolveVolley(attacker, defender, rng) {
 }
 
 /**
+ * M1 (decyzja właściciela 6) — STRAŻNIK ścieżki orbitalnej: czy `att` może jeszcze kiedykolwiek zadać obrażenia `def`.
+ * Trafienie zadaje zawsze ≥ 1 (pancerz nie zatrzymuje go całkiem — `resolveVolley`), więc wystarczy broń, która MOŻE trafić
+ * (tracking × (1 − evasion) > 0) — chyba że tarcza obrońcy jest nie do przebicia: regeneracja na turę ≥ największe obrażenia
+ * napastnika na turę i tarcza w chwili ostrzału (po regeneracji) ≥ te obrażenia — wtedy nigdy nie opada.
+ */
+function canDamage(att, def) {
+  let maxDmg = 0;
+  for (const w of att.weapons ?? []) {
+    const tracking = Math.max(0, Math.min(1, w.tracking ?? 0.7));
+    if (tracking * (1 - def.evasion) <= 0) continue;
+    const effectiveArmor = Math.max(0, def.armor - (w.armorPierce ?? 0));
+    maxDmg += Math.max(1, (w.damage ?? 0) * att.techMult * att.morale - effectiveArmor * 0.4);
+  }
+  if (maxDmg <= 0) return false;
+  const shieldAtFire = Math.min(def.shieldHPMax, def.shieldHP + def.shieldRegen);
+  if (def.shieldRegen >= maxDmg && shieldAtFire >= maxDmg) return false;
+  return true;
+}
+
+/**
+ * M1 — wynik `resolveBattle` (i rekord bitwy DSCS) jest PATEM: remis strażnika („nikt nie może zadać obrażeń”) albo
+ * ukrytego bezpiecznika rund. Konsumenci NIE niszczą wtedy nikogo (decyzja właściciela 5: remis bez wraków żywych).
+ * @param {object} result
+ * @returns {boolean}
+ */
+export function isStalemate(result) {
+  return result?.endReason === 'no_damage_possible' || result?.endReason === 'safety_cap';
+}
+
+/**
  * Zaaplikuj damage do defendera — najpierw shield, potem hp.
  * Zwraca obiekt breakdown do timeline.
  */
@@ -111,14 +149,17 @@ export function resolveBattle(fleetA, fleetB, context = {}) {
   const A = normalizeFleet(fleetA, 'A');
   const B = normalizeFleet(fleetB, 'B');
 
-  const MAX_TURNS = 30;
   const RETREAT_HP_PCT = 0.2; // flota retreatuje przy HP ≤ 20%
   const timeline = [];
 
   let turn = 0;
   let retreated = null;
+  let endReason = null;
 
-  while (turn < MAX_TURNS) {
+  // M1 — bez limitu tur. Pętla kończy się odwrotem, zniszczeniem, strażnikiem albo bezpiecznikiem (patrz nagłówek).
+  for (;;) {
+    if (!canDamage(A, B) && !canDamage(B, A)) { endReason = 'no_damage_possible'; break; }
+    if (turn >= COMBAT_SAFETY_ROUND_CAP) { endReason = 'safety_cap'; break; }
     turn++;
 
     // Regeneracja tarcz
@@ -147,10 +188,10 @@ export function resolveBattle(fleetA, fleetB, context = {}) {
     const bPct = B.hp / B.hpStart;
 
     // Retreat — ta z mniejszą procentową HP jeśli < 20%
-    if (aPct <= RETREAT_HP_PCT && bPct > aPct) { retreated = 'A'; break; }
-    if (bPct <= RETREAT_HP_PCT && aPct > bPct) { retreated = 'B'; break; }
+    if (aPct <= RETREAT_HP_PCT && bPct > aPct) { retreated = 'A'; endReason = 'retreat'; break; }
+    if (bPct <= RETREAT_HP_PCT && aPct > bPct) { retreated = 'B'; endReason = 'retreat'; break; }
     // Destroyed — 0 HP
-    if (A.hp <= 0 || B.hp <= 0) break;
+    if (A.hp <= 0 || B.hp <= 0) { endReason = 'destroyed'; break; }
   }
 
   const lossesA = Math.round(A.hpStart - A.hp);
@@ -162,7 +203,9 @@ export function resolveBattle(fleetA, fleetB, context = {}) {
   else if (A.hp <= 0 && B.hp <= 0) winner = 'draw';
   else if (A.hp <= 0)         winner = 'B';
   else if (B.hp <= 0)         winner = 'A';
-  else                        winner = A.hp > B.hp ? 'A' : 'B'; // tick-out — więcej HP wygrywa
+  // M1 (Finding 692) — tu stało „tick-out: A.hp > B.hp ? 'A' : 'B'” (po 30 turach, przy równych HP wygrywał obrońca B).
+  // Dziś ta gałąź oznacza wyłącznie strażnika albo bezpiecznik — remis bez strat (`isStalemate`).
+  else                        winner = 'draw';
 
   return {
     winner,
@@ -170,6 +213,7 @@ export function resolveBattle(fleetA, fleetB, context = {}) {
     lossesA,
     lossesB,
     turns: turn,
+    endReason,
     finalHPA: Math.max(0, Math.round(A.hp)),
     finalHPB: Math.max(0, Math.round(B.hp)),
     timeline,

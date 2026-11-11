@@ -29,8 +29,18 @@
 //                                         przez `FleetSystem.applyDoctrine` jak w grze (kite — `preferMaxRange`, hold — bez rozkazów).
 //                                         Postać `/kite/.source` — polecenie konsoli bez cudzysłowów. Postawa w choreografii: tylko
 //                                         ustawienie i styl ruchu (D-CV-7 — doktryna nie udaje odległości, Finding 631)
+//   cvBattle({nA: 2, nB: 2, engage: 0}) — M1: bitwa NAPRAWDĘ lustrzana — bez rozkazów „Zaangażuj” po obu stronach (obie strony
+//                                         biją najbliższego wroga); `engage: 2` — pary lustrzane po OBU stronach (B_i → A_i);
+//                                         domyślnie 1 — „Zaangażuj” tylko strona A, jak w grze (§3.2-10). Przy 1 strona A rozkłada
+//                                         ogień na swoje pary, a AI skupia go na najbliższym — dlatego wygrywa częściej (Finding 694)
+//   battleInfo()                        — M1: aktywne starcia (runda, żywi, uciekający) i ostatnia rozstrzygnięta bitwa DSCS: rundy,
+//                                         zwycięzca, odwrót, powód końca (`endReason`), straty i WRAKI uczestników — `wrakiTylkoPrzy0HP:
+//                                         true` znaczy, że na wrak poszły wyłącznie okręty zestrzelone (wraki == straty)
+//   m1OrbitalCheck()                    — M1: czysta próba ścieżki orbitalnej (`resolveBattle`, bez stanu gry): floty tankowe (> 30 tur),
+//                                         bezbronni (pat bez tur), tarcza nie do przebicia (pat), równe floty (bez wygranej obrońcy)
 //   cvRetreat(1)                        — ARC CV-3b: rozkaz „Wycofaj się z bitwy” dla statku nr 1 strony A (żywego, w starciu) — ten sam
-//                                         rozkaz co PPM; choreografia obraca go od zagrożenia i zapala pełny ciąg
+//                                         rozkaz co PPM; choreografia obraca go od zagrożenia i zapala pełny ciąg; M1 — PRAWDZIWY lot
+//                                         na zegarze starcia (~0,03 AU na rundę), starcie kończy się, gdy strona wyjdzie poza 0,5 AU
 //   cvChoreo(1) / cvChoreo(0)           — ARC CV-3b: flaga `cvChoreo` (choreografia na scenie bitwy) ON / OFF; przejście 0,5 s
 //   cvStrip(1) / cvStrip(0)             — ARC CV-6b2: flaga `cvStrip` (pasek walki zamiast karty walki) ON / OFF, od następnej klatki
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
@@ -63,6 +73,8 @@ import EntityManager from '../core/EntityManager.js';
 import { GAME_CONFIG, STAR_TYPES } from '../config/GameConfig.js';
 import { resolveVesselOrbitalRole } from '../data/OrbitalRolesData.js';   // ARC CV-3a3 — `atBody`: rola orbity jak przy przylocie
 import { orbitClockSec } from '../utils/SimClock.js';                     // ARC CV-3a3 — `atBody`: kąt orbity z zegara orbit
+import gameState from '../core/GameState.js';                                // M1 — `battleInfo()`: rekordy bitew
+import { resolveBattle, isStalemate } from '../systems/BattleSystem.js';     // M1 — `m1OrbitalCheck()`: ścieżka orbitalna (czysta)
 
 export const CV_BATTLE = Object.freeze({
   MAX_PER_SIDE: 10,
@@ -279,8 +291,12 @@ export function cvDoctrineOf(spec) {
  * kite — `preferMaxRange`, hold — rozkaz odrzucony, bez rozkazu).
  * @returns {{ issued: object[], rejected: number, fleet: string|null }}
  */
-function cvIssueEngage(K, ships, foes, { doctrine = null, seed = 1 } = {}) {
+function cvIssueEngage(K, ships, foes, { doctrine = null, seed = 1, engage = 1 } = {}) {
   const mos = K.movementOrderSystem, fs = K.fleetSystem;
+  // M1 — `engage` 0: bez rozkazów po obu stronach (obie strony biją najbliższego — bitwa naprawdę lustrzana); 2: pary lustrzane
+  // po OBU stronach (B_i → A_i); 1 (domyślnie, decyzja §3.2-10): „Zaangażuj” tylko strona A, jak w grze.
+  if (Number(engage) === 0) return { issued: [], rejected: 0, fleet: null };
+  if (Number(engage) === 2) foes.forEach((f, i) => mos.issueOrder(f.id, { type: 'engage', targetEntityId: ships[i % ships.length].id, issuedBy: 'cvBattle' }));
   let fleet = null;
   if (doctrine && fs?.createFleet) {
     fleet = fs.createFleet(`CV-${doctrine}`, { doctrine });
@@ -327,7 +343,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
   };
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
-    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0, doctrine = null } = {}) {
+    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0, doctrine = null, engage = 1 } = {}) {
       if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
       const doc = cvDoctrineOf(doctrine);   // ARC CV-3b — doktryna strony A (null — bez floty)
       if (doc === undefined) return { ok: false, reason: 'unknown_doctrine', doctrine, known: Object.keys(CV_DOCTRINES) };
@@ -417,7 +433,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         }
         enc.seedBase = cvSeedBase(seed);
         const free = sideA.filter((v) => v.position?.dockedAt == null);
-        const eng = cvIssueEngage(K, free, sideB, { doctrine: doc, seed });   // ARC CV-3b — doktryna strony A
+        const eng = cvIssueEngage(K, free, sideB, { doctrine: doc, seed, engage });   // ARC CV-3b — doktryna strony A
         const orders = eng.issued;
         const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
         console.warn(CV_BATTLE.WARNING);
@@ -472,7 +488,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
             EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: foes[0].id, sameFaction: false, distanceAU: 0.1 });
           }
           enc.seedBase = cvSeedBase(seed + k);
-          cvIssueEngage(K, sA, sB, { doctrine: doc, seed });   // ARC CV-3b — doktryna strony A
+          cvIssueEngage(K, sA, sB, { doctrine: doc, seed, engage });   // ARC CV-3b — doktryna strony A
           out.push({ ok: ships.every((v) => enc.vesselStates.has(v.id)), encounter: enc.id,
             centerAU: [Number((ck.x / AU).toFixed(3)), Number((ck.y / AU).toFixed(3))], clear: !!ck.clear });
         }
@@ -509,7 +525,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       // łączą: kilka starć w jednym miejscu. Ziarno starcia k = ziarno + k (ta sama bitwa przy tym samym ziarnie).
       if (split) {
         const pairs = Math.min(sideA.length, sideB.length);
-        const orders = cvIssueEngage(K, sideA, sideB, { doctrine: doc, seed }).issued;   // ARC CV-3b — doktryna strony A
+        const orders = cvIssueEngage(K, sideA, sideB, { doctrine: doc, seed, engage }).issued;   // ARC CV-3b — doktryna strony A
         const encs = [];
         for (let i = 0; i < Math.max(sideA.length, sideB.length); i++) {
           const a = sideA[Math.min(i, sideA.length - 1)], b = sideB[Math.min(i, sideB.length - 1)];
@@ -543,7 +559,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: f.id, sameFaction: false, distanceAU: 0.1 });
       }
       enc.seedBase = cvSeedBase(seed);
-      const eng = cvIssueEngage(K, sideA, sideB, { doctrine: doc, seed });   // ARC CV-3b — doktryna strony A
+      const eng = cvIssueEngage(K, sideA, sideB, { doctrine: doc, seed, engage });   // ARC CV-3b — doktryna strony A
       const orders = eng.issued;
       const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
       console.warn(CV_BATTLE.WARNING);
@@ -551,7 +567,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase,
         centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear,
         sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
-        doctrine: doc, doctrineRejected: eng.rejected,
+        doctrine: doc, doctrineRejected: eng.rejected, engage: Number(engage),
         empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
         cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo,
         autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
@@ -674,6 +690,48 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       if (!v) return { ok: false, reason: 'no_ship', alive: mine.map((x) => x.name) };
       const r = mos.issueOrder(v.id, { type: 'retreat', issuedBy: 'cvRetreat' });
       return { ok: !!r?.ok, vessel: v.name, id: v.id, reason: r?.reason ?? null };
+    },
+
+    /**
+     * M1 — odczyt bitew (bez cudzysłowów): aktywne starcia i ostatnia rozstrzygnięta bitwa DSCS. `wrakiTylkoPrzy0HP` — liczba wraków
+     * wśród uczestników równa stratom obu stron (okręt ginie wyłącznie przy 0 HP; dawniej time-out rozbijał żywych przegranych).
+     */
+    battleInfo() {
+      const K = window.KOSMOS ?? {};
+      const dscs = K.deepSpaceCombatSystem, vm = K.vesselManager;
+      const fleeing = (v) => v?.movementOrder?._retreatFromCombat === true || v?.movementOrder?.retreatFromBattleId != null;
+      const active = (dscs?.listActive?.() ?? []).map((e) => {
+        const side = (sd) => [...(sd?.vesselIds ?? []), ...(sd?.joinedVesselIds ?? [])];
+        const alive = (ids) => ids.filter((id) => (e.vesselStates?.get?.(id)?.hp ?? 0) > 0);
+        const a = alive(side(e.sideA)), b = alive(side(e.sideB));
+        return { starcie: e.id, runda: e.currentRound, zywiA: a.length, zywiB: b.length,
+          uciekaA: a.filter((id) => fleeing(vm?.getVessel?.(id))).length, uciekaB: b.filter((id) => fleeing(vm?.getVessel?.(id))).length,
+          odwrotAI: e.sideB?.retreating === true || e.sideA?.retreating === true };
+      });
+      const ds = Object.values(gameState.get?.('battles') ?? {}).filter((b) => String(b?.id ?? '').startsWith('battle_ds_'));
+      const b = ds[ds.length - 1] ?? null;
+      let last = null;
+      if (b) {
+        const ids = [...(b.participantA?.vesselIds ?? []), ...(b.participantB?.vesselIds ?? [])];
+        const known = ids.map((id) => vm?.getVessel?.(id)).filter(Boolean);
+        const wraki = known.filter((v) => v.isWreck).length;
+        last = { bitwa: b.id, rundy: b.turns ?? null, zwyciezca: b.winner ?? 'remis', odwrot: b.retreated ?? null, koniec: b.endReason ?? null,
+          stratyA: b.lossesA, stratyB: b.lossesB, wraki, wrakiTylkoPrzy0HP: known.length === ids.length ? wraki === (b.lossesA ?? 0) + (b.lossesB ?? 0) : null };
+      }
+      return { aktywne: active, ostatnia: last };
+    },
+
+    /** M1 — czysta próba ścieżki orbitalnej (`BattleSystem.resolveBattle`, bez stanu gry): bez limitu 30 tur, pat bez wraków, bez wygranej obrońcy. */
+    m1OrbitalCheck() {
+      const fleet = (hp, weapons, extra = {}) => ({ hp, shieldHP: 0, armor: 0, evasion: 0.1, techMult: 1, morale: 1, weapons, ...extra });
+      const row = (r) => ({ tury: r.turns, zwyciezca: r.winner, odwrot: r.retreated, koniec: r.endReason, pat: isStalemate(r) });
+      const gun = [{ damage: 2, tracking: 0.7 }];
+      return {
+        tankowe: row(resolveBattle(fleet(150, gun), fleet(150, gun), { seed: 7 })),
+        bezbronni: row(resolveBattle(fleet(100, []), fleet(100, []), { seed: 1 })),
+        tarcza: row(resolveBattle(fleet(100, gun), fleet(100, [], { shieldHP: 100, shieldRegen: 50 }), { seed: 1 })),
+        rowne: row(resolveBattle(fleet(120, [{ damage: 8, tracking: 0.7 }]), fleet(120, [{ damage: 8, tracking: 0.7 }]), { seed: 5 })),
+      };
     },
 
     /** ARC CV-6b2 — flaga `cvStrip` (pasek walki zamiast karty): cvStrip(1) — ON, cvStrip(0) — OFF, cvStrip() — przełącz. Czytana co klatkę. */

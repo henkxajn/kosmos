@@ -3400,7 +3400,7 @@ export default {
   'combat.hudMiss':         'miss',
   'combat.hudShield':       'shield',
   // ARC CV-6b2 — combat strip (flag `cvStrip`) replacing the combat card
-  'combatStrip.round':      'R{0}/{1}',
+  'combatStrip.round':      'R{0}',
   'combatStrip.more':       '+{0}',
   'combatStrip.log':        'RECENT FIRE',
   'combatStrip.logRound':   'R{0}',
@@ -3792,6 +3792,7 @@ export default {
   'log.el.orbitalShotDown':      "💥 {0} enemy vessels shot down over {1}",
   'log.el.orbitalShotDown1':     "💥 Enemy vessel \"{0}\" shot down over {1}",
   'log.el.orbitalDraw':          "💥 Battle over {0} — a draw. Both fleets destroyed ({1} hostile).",
+  'log.el.orbitalStalemate':     "💥 Battle over {0} — stalemate, no decision. Both fleets survive ({1} hostile).",
   'log.el.shipyardBuilding':     "⚓ Shipyard: building — {0}",
   'log.el.shipReady':            "✅ Vessel ready: {0} {1}",
   'log.el.shipyardFailed':       "⚠ Shipyard: {0}",

@@ -22,3 +22,9 @@ export const COMBAT_GRID_MAX_FRAMES = 8;
 /** CP4 — starcie w układzie, którego gracz nie ogląda: dzisiejsze tempo, ms czasu realnego na rundę (= reguła rund).
  *  Starcie oglądane — klucz strojenia `combatRoundMs` (`StrikesBackData`, CP2). */
 export const COMBAT_UNWATCHED_ROUND_MS = COMBAT_ROUND_RULE_MS;
+
+/** M1 „bitwy do końca” (decyzja 33, decyzja właściciela 5 z 2026-11-11) — UKRYTY bezpiecznik długości starcia w rundach
+ *  (turach ścieżki orbitalnej). Bitwa nie ma już limitu rund; bezpiecznik łapie wyłącznie starcie, którego strażnik
+ *  „nikt nie może zadać obrażeń” nie rozpoznał — i kończy je REMISEM BEZ wraków żywych. W zwykłej walce niewidoczny
+ *  (najdłuższa zmierzona bitwa stagera: 47 rund). Konsumenci: `DeepSpaceCombatSystem` (rundy), `BattleSystem` (tury). */
+export const COMBAT_SAFETY_ROUND_CAP = 200;

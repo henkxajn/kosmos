@@ -139,7 +139,9 @@ export const SB_TUNING = Object.freeze({
   /**
    * POLISH P1 (CP2) — TEMPO starcia w przestrzeni: ile ms CZASU REALNEGO trwa jedna runda starcia, które gracz ogląda
    * (starcie w innym układzie — dzisiejsze 110 ms, CP4). Wynik starcia od tej wartości nie zależy (CP1: świat w starciu
-   * tyka siatką 16 ms przy 1 d/s, runda co 110 ms zegara starcia); 16 rund ≈ 15 s, 20 rund ≈ 19 s przy 1000 ms.
+   * tyka siatką 16 ms przy 1 d/s, runda co 110 ms zegara starcia); 16 rund ≈ 15 s, 20 rund ≈ 19 s przy 1000 ms. M1 (decyzja 33):
+   * bitwa nie ma już limitu 20 rund — 10 na 10 stagera trwa ~26–51 rund (≈ 26–51 s oglądane, ×0,11 s nieoglądane); wartość
+   * zostaje 1000 (decyzja właściciela 2026-11-11: najpierw zobaczyć bitwy bez limitu).
    * Domyślnie 1000 — decyzja właściciela 2026-11-08 (ARC CV, kontrola na żywo stagerem `cvBattle` przy 400 / 800 / 1000:
    * 400 i 800 za szybko); dawniej 400 (CP2). Tabela zapisuje wyłącznie wartości zmienione — zapis bez wpisu czyta 1000.
    * Konsument: `TimeSystem.combatRoundMs` → siatka starcia (`TimeSystem._updateCombatGrid`).

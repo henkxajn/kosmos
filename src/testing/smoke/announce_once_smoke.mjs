@@ -14,10 +14,11 @@
 //   C7 okno zbierania: przed upływem `WINDOW_MS` czasu prezentacji linii nie ma, po — jest; pauza zatrzymuje okno; 0 — od razu
 //   C8 partia, gdy okno już jest otwarte: czeka i wychodzi po zamknięciu — nigdy dwa okna naraz, pauza raz, wznowienie raz;
 //      przelot pierwszego kontaktu (decyzja 5) — bez okna
-//   G1 split 4v4 (ziarno 1): JEDEN baner, JEDNA linia bitwy, JEDNA linia potyczki (dobicie dołącza); KONTROLA okno 0 — po dwie
+//   G1 split 4v4 (ziarno 2 — od M1): JEDEN baner, JEDNA linia bitwy, JEDNA linia potyczki (dobicie dołącza); KONTROLA okno 0 — po dwie
 //   G2 zwykłe 10 na 10: baner i linia bitwy dokładnie po oknie łaski (czas prezentacji od ostatniego `battle:resolved`)
 //   G3 pauza zatrzymuje okno łaski (5 s w pauzie — nic; po wznowieniu — reszta okna)
-//   G4 #657: 1 na 1 (ziarno 3) — odwrót AI kończy starcie, ponowne zwarcie w tej samej klatce ⇒ JEDEN baner; KONTROLA okno 0 — dwa
+//   G4 #657 po M1: 1 na 1 (ziarno 3) — odwrót AI to lot w trakcie starcia, bez ponownego zwarcia ⇒ JEDNO starcie, jeden baner
+//      z oknem i bez (dawniej odwrót kończył starcie, a ponowne zwarcie w tej samej klatce dawało drugie)
 //   G5 wyniki starć z oknem i bez — identyczne (okno nie dotyka walki)
 //   G6 źródło: pętla gry woła `_tickAnnouncements` PO `timeSystem.update`; `vessel:engaged` → `_joinBattleGrace`; baner i narrator
 //      dostają okno; `ObservatorySystem` emituje partię raz, poza pętlą; `UIManager` nie pisze już linii kontaktu na parę;
@@ -641,26 +642,31 @@ block('F5 — jedna reguła nazwy w źródle: każda bramka nazwy na ścieżce k
 });
 
 // ═══ G — okno łaski ══════════════════════════════════════════════════════════════════════════════════════════════
-function runBattle(opts, { graceRounds = null } = {}) {
+function runBattle(opts, { graceRounds = null, onWorld = null } = {}) {
   const keep = BC.CLUSTER_GRACE?.ROUNDS;
   if (graceRounds != null && BC.CLUSTER_GRACE) BC.CLUSTER_GRACE.ROUNDS = graceRounds;
   try {
     reseed('announce-once'); world({ observatory: 0 });
+    onWorld?.();   // M1 (G4) — słuchacze po `world()` (ten czyści szynę zdarzeń)
     const st = helpers()?.cvBattle(opts);
     playOut();
     return { st, banners: gs.shown, battle: linesMatching(ENEMY_LINE.battle), skirmish: linesMatching(ENEMY_LINE.skirmish), W: { ...W } };
   } finally { if (BC.CLUSTER_GRACE) BC.CLUSTER_GRACE.ROUNDS = keep; }
 }
 
-block('G1 — split 4v4 (ziarno 1): jeden baner, jedna linia bitwy, jedna potyczki; KONTROLA okno 0 — po dwie (#675)', () => {
-  const ON = runBattle({ seed: 1, nA: 4, nB: 4, split: true });
-  const OFF = runBattle({ seed: 1, nA: 4, nB: 4, split: true }, { graceRounds: 0 });
+// ⚠ PRZECELOWANIE M1 „bitwy do końca” (decyzja 33, 2026-11-11): w split 4v4 ziarno 1 dobiciem było ponowne zwarcie #657 po odwrocie
+//   AI — M1 je usuwa z założenia (odwrót to lot, uciekający nie wraca od razu). Dobicie zgodne z M1 daje ziarno 2: ocalali dwóch
+//   skończonych pojedynków zwierają się w chwili końca (1 runda) — to samo pytanie #675, inna scena. Liczby G1c nagrane na M1.
+const G_SPLIT = { seed: 2, nA: 4, nB: 4, split: true };
+block('G1 — split 4v4 (ziarno 2): jeden baner, jedna linia bitwy, jedna potyczki; KONTROLA okno 0 — po dwie (#675)', () => {
+  const ON = runBattle(G_SPLIT);
+  const OFF = runBattle(G_SPLIT, { graceRounds: 0 });
   assert(ON.st?.ok === true && ON.W.battles.length === 5 && ON.W.encs === 5,
     `G1a świadek: DSCS — ${ON.W.encs} starć, ${ON.W.battles.length} rozstrzygnięć (4 pojedynki + dobicie)`);
   assert(ON.banners.length === 1 && ON.battle.length === 1 && ON.skirmish.length === 1,
     `G1b z oknem: ${ON.banners.length} baner, ${ON.battle.length} linia bitwy, ${ON.skirmish.length} potyczki`);
   const m = ON.banners[0]?.b?.result;
-  assert(m?.lossesA === 0 && m?.lossesB === 4 && m?.turns === 20 && ON.banners[0]?.b?.clusterSize === 5 && ON.battle[0]?.text.includes('0/4'),
+  assert(m?.lossesA === 3 && m?.lossesB === 4 && m?.turns === 16 && ON.banners[0]?.b?.clusterSize === 5 && ON.battle[0]?.text.includes('3/4'),
     `G1c wynik scalony z dobiciem: straty ${m?.lossesA}/${m?.lossesB}, tury ${m?.turns}, starć ${ON.banners[0]?.b?.clusterSize}`);
   assert(OFF.banners.length === 2 && OFF.battle.length === 2 && OFF.skirmish.length === 2,
     `G1d KONTROLA okno 0: ${OFF.banners.length} banery, ${OFF.battle.length} linie bitwy, ${OFF.skirmish.length} potyczki (dzisiejsze #675)`);
@@ -698,19 +704,23 @@ block('G3 — pauza zatrzymuje okno łaski', () => {
     `G3 4,8 s w pauzie — banerów ${shownPaused}, zegar prezentacji stoi (+${presPaused} ms); po wznowieniu baner po ${n2 * 16} ms (okno ${G} ms)`);
 });
 
-block('G4 — #657: 1 na 1 (ziarno 3), odwrót AI i ponowne zwarcie w tej samej klatce — jeden baner; KONTROLA okno 0 — dwa', () => {
-  const ON = runBattle({ seed: 3, nA: 1, nB: 1 });
+// ⚠ PRZECELOWANIE M1 (decyzja 33, 2026-11-11): dawniej odwrót AI KOŃCZYŁ starcie w zasięgu broni, a ponowne zwarcie w tej samej
+//   klatce dawało drugie starcie (#657) — okno łaski składało je w jeden baner. M1: odwrót to lot pod ogniem, uciekający nie wraca
+//   od razu ⇒ JEDNO starcie (tu oba okręty giną w 9. rundzie), jeden baner z oknem i bez. Pin pyta o brak ponownego zwarcia.
+block('G4 — #657 po M1: 1 na 1 (ziarno 3) — odwrót AI w trakcie starcia, bez ponownego zwarcia: jedno starcie, jeden baner z oknem i bez', () => {
+  let retreatStarted = 0;
+  const ON = runBattle({ seed: 3, nA: 1, nB: 1 }, { onWorld: () => EventBus.on('combat:retreatStarted', () => { retreatStarted++; }) });
+  const seenOn = retreatStarted;
   const OFF = runBattle({ seed: 3, nA: 1, nB: 1 }, { graceRounds: 0 });
-  const retreat = ON.W.results[0]?.[4];
-  assert(ON.W.battles.length === 2 && retreat === 'B' && ON.W.encs === 2,
-    `G4a świadek: ${ON.W.encs} starcia — pierwsze kończy odwrót strony B (${retreat}), drugie to ponowne zwarcie (#657)`);
-  assert(ON.banners.length === 1 && ON.battle.length === 1 && OFF.banners.length === 2 && OFF.battle.length === 2,
-    `G4b z oknem: ${ON.banners.length} baner / ${ON.battle.length} linia; KONTROLA okno 0: ${OFF.banners.length} / ${OFF.battle.length}`);
+  assert(ON.W.battles.length === 1 && ON.W.encs === 1 && seenOn >= 1,
+    `G4a świadek: ${ON.W.encs} starcie, rozkaz odwrotu AI w trakcie starcia (combat:retreatStarted ${seenOn}) — bez ponownego zwarcia`);
+  assert(ON.banners.length === 1 && ON.battle.length === 1 && OFF.banners.length === 1 && OFF.battle.length === 1,
+    `G4b z oknem: ${ON.banners.length} baner / ${ON.battle.length} linia; okno 0: ${OFF.banners.length} / ${OFF.battle.length} (nie ma czego składać)`);
 });
 
 block('G5 — wyniki starć z oknem łaski i bez — identyczne', () => {
-  const a = runBattle({ seed: 1, nA: 4, nB: 4, split: true });
-  const b = runBattle({ seed: 1, nA: 4, nB: 4, split: true }, { graceRounds: 0 });
+  const a = runBattle(G_SPLIT);   // M1 — scena G1 (ziarno 2)
+  const b = runBattle(G_SPLIT, { graceRounds: 0 });
   assert(JSON.stringify(a.W.results) === JSON.stringify(b.W.results) && a.W.results.length === 5,
     `G5 ${a.W.results.length} wyników, ta sama sygnatura (zwycięzca, straty, tury, odwrót): ${JSON.stringify(a.W.results)}`);
 });

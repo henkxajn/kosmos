@@ -28,7 +28,7 @@
 //   P7 obsługa paska (logika stref): „Obserwuj” emituje, ▾ / ▴ rozwija jedną bitwę, Esc zwija (raz), kółko przewija rozwinięcie
 //      i jest pochłonięte nad paskiem, klik w pasek pochłonięty, poza nim — nie; 5 bitew → 3 linie i „+N”; kursor „rączki”
 //   P8 źródło: pierścień starcia i biały błysk trafienia pod flagą — nie, paski HP 3D zostają (CV-6a); Esc w kaskadzie `GameScene`;
-//      i18n PL + EN; `ROUND_CAP` == `DeepSpaceCombatSystem.MAX_ROUNDS`
+//      i18n PL + EN; (M1) linia rundy „R n” bez limitu — brak `ROUND_CAP` / `maxRounds` (dawniej lustro `MAX_ROUNDS`)
 //
 // ⚠ Fail-first: moduły `CombatStrip`, `CombatStripLogic`, `CombatNarration` powstają w tym kroku — importy dynamiczne w try/catch,
 //   każdy blok łapie wyjątek: piny DEGRADUJĄ (czerwone), suita się nie przerywa.
@@ -46,7 +46,7 @@ import { VesselManager }         from '../../systems/VesselManager.js';
 import { MovementOrderSystem }   from '../../systems/MovementOrderSystem.js';
 import { ProximitySystem }       from '../../systems/ProximitySystem.js';
 import { VesselCombatSystem }    from '../../systems/VesselCombatSystem.js';
-import { DeepSpaceCombatSystem, MAX_ROUNDS } from '../../systems/DeepSpaceCombatSystem.js';
+import { DeepSpaceCombatSystem } from '../../systems/DeepSpaceCombatSystem.js';
 import { EnemyAttackHandler }    from '../../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem }    from '../../systems/OrbitalSpaceSystem.js';
 import { WarSystem }             from '../../systems/WarSystem.js';
@@ -358,7 +358,11 @@ function runNarration(flagOn, { graceRounds = null } = {}) {
   // słuchacz dołączenia `GameScene` (#675; routing pinowany źródłem w `announce_once_smoke` G6b)
   EventBus.on('vessel:engaged', ({ encounterId, sideA, sideB }) => gs._joinBattleGrace?.({ encounterId, vesselIds: [...(sideA ?? []), ...(sideB ?? [])] }));
   onFrame = (now) => gs._tickAnnouncements?.(now);
-  const st = helpers()?.cvBattle({ seed: 1, nA: 4, nB: 4, split: true });
+  // ⚠ PRZECELOWANIE M1 „bitwy do końca” (decyzja 33, 2026-11-11): ziarno 1 → 2. W ziarnie 1 dobiciem (P4i) było ponowne zwarcie #657
+  //   po odwrocie AI — M1 je usuwa (odwrót to lot, uciekający nie wraca od razu). W ziarnie 2 ocalali dwóch skończonych pojedynków
+  //   zwierają się w chwili końca — to samo pytanie #675 (5 starć: 4 pojedynki + dobicie; z oknem 1 bitwa, okno 0 — 2), ta sama
+  //   scena co `announce_once_smoke` G1.
+  const st = helpers()?.cvBattle({ seed: 2, nA: 4, nB: 4, split: true });
   ts.play();
   // Bez starcia (np. świat niekompletny) — bez pętli: suita ma się skończyć i pokazać czerwone piny, nie wisieć.
   if (dscs.listActive().length) for (let n = 0; n < 60000; n++) { frame(16); if (!dscs.listActive().length) break; }
@@ -673,7 +677,10 @@ block('P8 — źródło: pierścień i biały błysk pod flagą — nie, paski H
     'combatStrip.watchHint', 'combatStrip.expand', 'combatStrip.collapse', 'menu.battleAutoFocus'];
   const has = (src, k) => new RegExp(`'${k.replace('.', '\\.')}':`).test(src);
   assert(keys.every((k) => has(pl, k) && has(en, k)), `P8d i18n: ${keys.length} kluczy w PL i EN`);
-  assert(SL.ROUND_CAP === MAX_ROUNDS, `P8e \`ROUND_CAP\` (${SL.ROUND_CAP}) == \`DeepSpaceCombatSystem.MAX_ROUNDS\` (${MAX_ROUNDS})`);
+  // ⚠ PRZECELOWANIE M1 (decyzja 33, 2026-11-11): starcie nie ma już limitu rund — dawne P8e pinowało lustro `ROUND_CAP` ==
+  //   `MAX_ROUNDS` (20, „R n/20”). Teraz: moduł bez limitu, klucz rundy z samą rundą (PL i EN „R{0}”).
+  assert(!('ROUND_CAP' in SL) && /'combatStrip\.round':\s*'R\{0\}',/.test(pl) && /'combatStrip\.round':\s*'R\{0\}',/.test(en),
+    'P8e (M1) bez limitu rund: brak `ROUND_CAP`, klucz `combatStrip.round` = „R{0}” w PL i EN');
 });
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

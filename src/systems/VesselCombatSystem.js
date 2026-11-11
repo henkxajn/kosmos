@@ -35,7 +35,7 @@ import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import gameState from '../core/GameState.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
-import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
+import { resolveBattle, playerVesselsToBattleUnit, isStalemate } from './BattleSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { COMBAT_ENGAGEMENT_AU, pairKey } from './ProximitySystem.js';
@@ -321,7 +321,9 @@ export class VesselCombatSystem {
     const { winner, retreated } = result;
 
     // Wreck strony przegrywającej (nie-retreated).
-    if (!retreated) {
+    // M1 (decyzja właściciela 5 i 6) — PAT (strażnik „nikt nie może zadać obrażeń” albo bezpiecznik tur, `isStalemate`) to remis
+    // BEZ wraków: dawniej po 30 turach wygrywało więcej HP, a przegrana grupa szła na wrak cała (Finding 692).
+    if (!retreated && !isStalemate(result)) {
       if (winner === 'A')       this._wreckGroup(sideB, mid, year);
       else if (winner === 'B')  this._wreckGroup(sideA, mid, year);
       else                       { this._wreckGroup(sideA, mid, year); this._wreckGroup(sideB, mid, year); }

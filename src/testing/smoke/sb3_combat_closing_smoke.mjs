@@ -111,11 +111,17 @@ header('T1  trzy fregaty z laserem, `engage` na strażnika NA ORBICIE z 0,25 AU:
   const e = enc();
   for (const f of frigs) if (f !== frigs[1]) dscs._joinEncounter(e, f.id);
   const g0 = posOf(guard);
-  let guardMoved = false, rounds = 0;
+  let guardMoved = false, rounds = 0, guardFled = false;
+  // ⚠ PRZECELOWANIE M1 (decyzja 33, 2026-11-11): od M1 odwrót AI przy niskim HP to PRAWDZIWY LOT w trakcie starcia — strażnik
+  //   z rozkazem odwrotu legalnie schodzi z orbity (to nie jest zbliżenie SB49). Pin pyta dalej o zbliżenie: ruch liczy się
+  //   wyłącznie, dopóki strażnik nie ucieka (znacznik odwrotu na rozkazie).
+  const fleeing = (v) => v?.movementOrder?._retreatFromCombat === true || v?.movementOrder?.retreatFromBattleId != null;
   for (let i = 0; i < 20 && e?.isActive; i++) {
     round(); rounds++;
+    if (fleeing(guard)) { guardFled = true; continue; }
     if (e.isActive && (!samePos(posOf(guard), g0) || guard.position.dockedAt !== 'p_cap')) guardMoved = true;
   }
+  if (guardFled) console.log('     (M1) strażnik przy niskim HP dostał rozkaz odwrotu — od tej chwili jego ruch to ucieczka, nie zbliżenie');
   const fs = frigs.flatMap(f => shotsBy(e, f.id));
   const gs = shotsBy(e, guard.id);
   console.log(`     rund ${rounds}; strzały fregat ${fs.length} (najbliżej ${fs.length ? Math.min(...fs.map(x => x.distanceAU)).toFixed(4) : '—'} AU, najdalej ${fs.length ? Math.max(...fs.map(x => x.distanceAU)).toFixed(4) : '—'} AU), strażnika ${gs.length}`);

@@ -87,7 +87,12 @@ const START_AU = 0.30;                                   // start fregat od stra
 // ── Sygnatura DZIŚ — nagrana TYM keeperem (`node combat_pace_smoke.mjs --record`) na kodzie sprzed P1 (`1af65fc`,
 //    2026-10-17): 60 FPS, 1 d/s, bez pauzy; 1. starcie 17 rund, 1760 ms realnych. Format bitwy: [rundy, strzały,
 //    trafienia, zwycięzca, odwrót, straty A, straty B]; wraki — nazwy. Zmiana sceny wymaga ponownego nagrania na `1af65fc`.
-const TODAY_SIG = { battles: [[17, 31, 27, 'A', 'B', 1, 0], [1, 2, 2, 'A', null, 0, 1]], wrecks: ['Fregata2', 'Straznik'] };
+// ⚠ M1 „bitwy do końca” (decyzja 33, 2026-11-11) — ŚWIADOME PONOWNE NAGRANIE na kodzie M1 (ta sama scena, ten sam keeper
+//    `--record`). Mechanika się zmieniła, nie tempo: odwrót AI jest prawdziwym lotem (dawniej koniec starcia w 17. rundzie
+//    z `retreated: 'B'` i jednorundowe ponowne zwarcie #657 — dziś strażnik ucieka pod ogniem fregat i ginie w 23. rundzie,
+//    jedno starcie) i ogień jest jednoczesny (strata drugiej fregaty). Dawna sygnatura: [[17, 31, 27, 'A', 'B', 1, 0],
+//    [1, 2, 2, 'A', null, 0, 1]], wraki ['Fregata2', 'Straznik']. Pytanie keepera (tempo nie zmienia wyniku — T2–T7) bez zmian.
+const TODAY_SIG = { battles: [[23, 38, 31, 'A', null, 2, 1]], wrecks: ['Fregata0', 'Fregata2', 'Straznik'] };
 
 // ── zegar realny = zegar wirtualny (ms); pętla klatek jak `GameScene` (rAF → `TimeSystem.update(deltaMs)`) ──────────
 const clock = { now: 1e7 };

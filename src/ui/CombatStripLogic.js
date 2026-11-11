@@ -60,8 +60,8 @@ export function tuneCombatStrip(patch = {}) {
 }
 export function resetCombatStrip() { Object.assign(COMBAT_STRIP, COMBAT_STRIP_DEFAULTS); return { ...COMBAT_STRIP }; }
 
-/** Najwięcej rund starcia — LUSTRO `DeepSpaceCombatSystem.MAX_ROUNDS` (moduł UI nie importuje systemu; keeper pinuje równość). */
-export const ROUND_CAP = 20;
+// M1 „bitwy do końca” (decyzja 33) — starcie nie ma limitu rund, więc pasek pokazuje samą rundę („R n”). Dawniej tu stało
+// `ROUND_CAP = 20` (lustro `DeepSpaceCombatSystem.MAX_ROUNDS`) i pole `maxRounds` w linii bitwy („R n/20”).
 
 const byIdAsc = (a, b) => (String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0);
 const sideKeyOfPlayer = (e) => (e?.sideA?.ownerEmpireId === 'player' ? 'sideA' : e?.sideB?.ownerEmpireId === 'player' ? 'sideB' : null);
@@ -97,14 +97,14 @@ function sideStats(members, { isEnemy, inPlayerEngagement, quality, nameOf, clas
  * @param {object[]} encounters — aktywne starcia (`DSCS.listActive()`)
  * @param {{ getPos:(id:string)=>({x:number,y:number}|null), radius:number, activeSystemId?:string|null,
  *           quality?:(id:string)=>string, labelFor?:(owner:string|null, count:number)=>string,
- *           nameOf?:(id:string)=>string, classOf?:(id:string)=>string|null, maxRounds?:number }} env
+ *           nameOf?:(id:string)=>string, classOf?:(id:string)=>string|null }} env
  * @returns {object[]}
  */
 export function stripBattles(encounters, env = {}) {
   const list = (encounters ?? []).filter((e) => e && e.id != null && e.isActive !== false);
   if (!list.length) return [];
   const { getPos = () => null, radius = 0, activeSystemId = null, quality = () => 'unknown', labelFor = null,
-    nameOf = null, classOf = null, maxRounds = ROUND_CAP } = env;
+    nameOf = null, classOf = null } = env;
   const byId = new Map(list.map((e) => [String(e.id), e]));
   const clusters = (radius > 0 && typeof getPos === 'function') ? encounterClusters(list, getPos, radius) : [];
   const covered = new Set(clusters.flatMap((c) => c.encounterIds));
@@ -140,7 +140,6 @@ export function stripBattles(encounters, env = {}) {
       inView: isEngagementInView({ encounterSystemId: primary.location?.systemId, activeSystemId }),
       player: playerIn,
       round: Math.max(0, ...encs.map((e) => Number(e.currentRound) || 0)),
-      maxRounds: Number.isFinite(maxRounds) && maxRounds > 0 ? maxRounds : ROUND_CAP,
       own: { ...ownSide, owner: ownOwner, label: label(ownOwner, ownSide), role: playerIn ? 'primary' : 'foreign' },
       enemy: { ...foeSide, owner: foeOwner, label: label(foeOwner, foeSide), role: 'alert' },
       encounters: encs,

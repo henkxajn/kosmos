@@ -189,7 +189,11 @@ const GY0 = 100.00002;
 const START_AU = 0.30;
 // Sygnatura NAGRANA tym keeperem (`node cv_renderer_rng_smoke.mjs --record`) na kodzie CV-0b — FX OFF.
 // Format bitwy: [rundy, strzały, trafienia, zwycięzca, odwrót, straty A, straty B]; wraki — nazwy.
-const PINNED_SIG = { battles: [[17, 31, 27, 'A', 'B', 1, 0], [1, 2, 2, 'A', null, 0, 1]], wrecks: ['Fregata2', 'Straznik'] };
+// ⚠ M1 „bitwy do końca” (decyzja 33, 2026-11-11) — ŚWIADOME PONOWNE NAGRANIE na kodzie M1 (ta sama scena, `--record`): odwrót AI
+//   to prawdziwy lot pod ogniem (strażnik ginie w 23. rundzie, jedno starcie zamiast odwrotu w 17. i ponownego zwarcia #657),
+//   ogień jednoczesny. Dawna: [[17, 31, 27, 'A', 'B', 1, 0], [1, 2, 2, 'A', null, 0, 1]], wraki ['Fregata2', 'Straznik'].
+//   Pytanie keepera (warstwa wizualna nie zjada losowań gry — FX ON == OFF, T6b–T6e) bez zmian.
+const PINNED_SIG = { battles: [[23, 38, 31, 'A', null, 2, 1]], wrecks: ['Fregata0', 'Straznik', 'Fregata2'] };
 
 const clock = { now: 1e7 };
 performance.now = () => clock.now;

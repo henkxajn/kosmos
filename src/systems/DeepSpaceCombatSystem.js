@@ -47,18 +47,21 @@ import { SHIP_MODULES } from '../data/ShipModulesData.js';
 // nietknięty dla bramek wydawania rozkazów — uzasadnienie w SystemScope.
 import { isSameSystemStrict, systemIdOf } from '../utils/SystemScope.js';
 // POLISH P1 (CP1) — reguła rund i zegar starcia (siatka `TimeSystem`).
-import { COMBAT_ROUND_RULE_MS } from '../data/CombatPaceData.js';
-import { combatClockMs } from '../utils/SimClock.js';
+import { COMBAT_ROUND_RULE_MS, COMBAT_SAFETY_ROUND_CAP } from '../data/CombatPaceData.js';
+import { combatClockMs, orbitClockSec } from '../utils/SimClock.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
 // Bufor team-up gather wokół midpoint spotkania (kopia z VCS).
 const TEAMUP_BUFFER_FACTOR = 1.5;
 
-// Limit rund per encounter — safety cap + time-out. Obniżone 30→20 (2026-07-26):
-// przy ×DAMAGE_MULT większość starć kończy się zabiciem grubo przed cap, a niższy
-// limit skraca patowe remisy.
-export const MAX_ROUNDS = 20;
+// M1 „bitwy do końca” (decyzja 33, decyzje właściciela 1–5 z 2026-11-11) — STARCIE NIE MA LIMITU RUND. Dawniej `MAX_ROUNDS`
+// = 20: po 20. rundzie wygrywała strona z większą BEZWZGLĘDNĄ sumą HP kadłubów, a ŻYWE okręty przegranej szły na wrak
+// (Finding 688; 10 na 10 stagera — średnio 3,8 żywych okrętów na wrak w KAŻDEJ bitwie). Teraz okręt ginie wyłącznie przy
+// 0 HP, a starcie kończy się, gdy jedna strona zostanie zniszczona albo ucieknie (prawdziwy lot poza `COMBAT_DISENGAGE_AU`,
+// `_advanceFleeing`), albo jednym z dwóch strażników technicznych, niewidocznych w zwykłej walce: żadna strona nie może już
+// zadać obrażeń drugiej (`_deadlocked`) albo ukryty bezpiecznik `SAFETY_ROUND_CAP` rund. Oba kończą REMISEM BEZ wraków żywych.
+export const SAFETY_ROUND_CAP = COMBAT_SAFETY_ROUND_CAP;
 
 // Próg retreat: gdy aggregate HP strony spadnie ≤ tej frakcji startowej
 // (z reinforcement) → strona retreat. P3-4 logika.
@@ -92,7 +95,7 @@ export const HIT_CHANCE_MULT = 1.5;
 
 // Śmiertelność (druga przyczyna „walka trwa cholernie długo"): bazowe obrażenia (5/8/12) vs HP
 // kadłubów (120-350) sprawiały, że bitwa NIGDY nie kończyła się zabiciem — zawsze time-out po
-// MAX_ROUNDS. ×3 → starcia rozstrzygają się przez zniszczenie w kilku-kilkunastu rundach.
+// limicie rund (dawny `MAX_ROUNDS`, zdjęty w M1). ×3 → starcia rozstrzygają się przez zniszczenie.
 // DSCS-local (nie dotyka orbital BattleSystem, który czyta surowe mod.stats.damage).
 export const DAMAGE_MULT = 3.0;
 
@@ -172,13 +175,25 @@ export class DeepSpaceCombatSystem {
     // Oba w tym samym encounter — nic do roboty (już walczą). Engagement aktywny.
     if (existing1 && existing1 === existing2) return true;
 
+    // M1 (decyzja 3, Finding 657) — STATEK, KTÓRY ODSZEDŁ Z BITWY, NIE WRACA DO NIEJ OD RAZU. Uciekający (znacznik odwrotu
+    // na rozkazie — „Wycofaj się z bitwy” gracza, doktryna `retreat_at_50`, odwrót AI) nie zaczyna nowego starcia i nie
+    // dołącza do cudzego, dopóki leci do schronienia (znacznik żyje do końca rozkazu odwrotu). Dawniej starcie zakończone
+    // odwrotem AI w zasięgu broni zaczynało się od nowa w tej samej klatce: `battle:resolved` czyścił parę w
+    // `ProximitySystem` i cooldown VCS, a samoleczenie pary emitowało `combatRangeEnter` od razu (split 2 × 2 — 3 bitwy,
+    // 2 banery). Bramka stoi TU, bo to jedyne wejście, które widzi wszystkich trzech producentów zdarzenia (jak bramka układu
+    // wyżej); członek TRWAJĄCEGO starcia uciekając zostaje jego członkiem (gałąź wyżej — w nim go widać i trafiają go).
+    const fleeing1 = _isRetreatingFromCombat(v1);
+    const fleeing2 = _isRetreatingFromCombat(v2);
+
     // Jeden w encounter, drugi nie — drugi dołącza jako reinforcement.
     if (existing1 && !existing2) {
+      if (fleeing2) { if (trace) console.log('[DSCS] reject handleCRE: joiner is fleeing', { v2Id }); return false; }
       this._joinEncounter(existing1, v2Id);
       // _joinEncounter może odrzucić (docked/etc) — sprawdź czy v2 faktycznie dołączył.
       return existing1.vesselStates.has(v2Id);
     }
     if (existing2 && !existing1) {
+      if (fleeing1) { if (trace) console.log('[DSCS] reject handleCRE: joiner is fleeing', { v1Id }); return false; }
       this._joinEncounter(existing2, v1Id);
       return existing2.vesselStates.has(v1Id);
     }
@@ -186,6 +201,11 @@ export class DeepSpaceCombatSystem {
     // Oba w różnych encounterach — w P3 nie łączymy encounter'ów (edge case).
     // Pierwszy wygrywa: drugi vessel nie dołącza. P5 może to rozwiązać.
     if (existing1 && existing2) return false;
+
+    if (fleeing1 || fleeing2) {
+      if (trace) console.log('[DSCS] reject handleCRE: fleeing vessel — no new engagement', { v1Id, v2Id, fleeing1, fleeing2 });
+      return false;
+    }
 
     // Żaden w combat — startuj nowy encounter.
     const enc = this.startEngagement(v1Id, v2Id);
@@ -248,6 +268,8 @@ export class DeepSpaceCombatSystem {
         // niżej porównuje właśnie surowe `x/y`, więc kwalifikował obcych z pełną pewnością siebie.
         // Odniesieniem jest `v1` — statek WYZWALAJĄCY, ten sam, którego układ stempluje starcie.
         if (!isSameSystemStrict(v, v1)) continue;
+        // M1 (decyzja 3) — uciekający nie jest zbierany do nowego starcia (ta sama reguła co bramka w dyspozytorze).
+        if (_isRetreatingFromCombat(v)) continue;
         const dx = v.position.x - mid.x;
         const dy = v.position.y - mid.y;
         if (Math.hypot(dx, dy) <= bufferPx) nearby.push(v);
@@ -308,7 +330,7 @@ export class DeepSpaceCombatSystem {
 
     // ── Bezbronni się nie biją ──────────────────────────────────────────
     // Gdy ŻADNA strona nie ma uzbrojonego statku, nie startuj walki — byłby
-    // bezsensowny 30-rundowy remis (0 dmg) z modalem i auto-slow. Wykrycie idzie
+    // bezsensowny remis (0 dmg) z modalem i auto-slow. Wykrycie idzie
     // osobno przez proximity → IntelSystem (kontakt), więc statki i tak się
     // "widzą" na mapie; po prostu nie ma walki. (Uzbrojony vs bezbronny = walka
     // rusza normalnie — uzbrojony może strzelać do bezbronnego.)
@@ -321,6 +343,23 @@ export class DeepSpaceCombatSystem {
         bestGroup:   bestGroup.map(v => v.id),
       });
       return null;
+    }
+
+    // M1 (decyzja 5) — strażnik „nikt nie może zadać obrażeń” także NA STARCIE (uogólnienie bramki „bezbronni się nie biją”
+    // wyżej). Starcie, w którym po zamrożeniu stron żaden uzbrojony nie ma celu w zasięgu i nie może podejść (np. strażnik
+    // przypięty do orbity ciała wobec bezbronnego poza zasięgiem), skończyłoby się remisem w pierwszej rundzie — a potem
+    // `ProximitySystem` (samoleczenie pary) zacząłby je od nowa: pętla jednorundowych starć z banerami. Odmowa jest cicha
+    // (jak bramka wyżej); para wraca, gdy geometria się zmieni.
+    {
+      const pin = this._findDominantDockedAt(playerGroup);
+      const frozenA = !!GAME_CONFIG.FEATURES?.m4PlayerCombatMissionPause;
+      if (this._deadlocked(this._prospectiveCombatants(playerGroup, pin, frozenA),
+        this._prospectiveCombatants(bestGroup, pin, true), 'player', bestEmpireId)) {
+        if (trace) console.log('[DSCS] reject startEng: no damage possible after freeze', {
+          playerGroup: playerGroup.map(v => v.id), bestGroup: bestGroup.map(v => v.id), pin,
+        });
+        return null;
+      }
     }
 
     if (trace) console.log('[DSCS] startEng OK — creating encounter', {
@@ -525,6 +564,7 @@ export class DeepSpaceCombatSystem {
       ) {
         encounter._lastRoundMs += ROUND_INTERVAL_MS;
         this._closeToWeaponRange(encounter);   // SB49 (Finding 421) — przed KAŻDĄ rundą, na zegarze starcia
+        this._advanceFleeing(encounter);       // M1 (decyzja 3) — ucieczka na tym samym zegarze (pozycja po interpolacji VM)
         this._tickEncounter(encounter, CIV_PER_ROUND);
         roundsThisTick++;
       }
@@ -626,10 +666,19 @@ export class DeepSpaceCombatSystem {
     const sideAVids = [...encounter.sideA.vesselIds, ...encounter.sideA.joinedVesselIds];
     const sideBVids = [...encounter.sideB.vesselIds, ...encounter.sideB.joinedVesselIds];
 
+    // M1 (decyzja 4, Finding 689) — OGIEŃ JEDNOCZESNY. Strzelają WSZYSCY żywi z POCZĄTKU rundy (migawka niżej), także okręt
+    // zniszczony w tej samej rundzie salwą drugiej strony. Dawniej strona A (zawsze gracz — `_createEncounter(playerGroup, …)`)
+    // strzelała pierwsza, a okręt B zestrzelony w jej salwie nie odpowiadał: w bitwie właściciela niszczyciel gracza z 2,4 %
+    // HP zabił niszczyciel AI z 8,4 %, zanim ten wystrzelił (2v2 ziarno 16, runda 16). Lustro poprawki walki naziemnej
+    // (Finding 309, `CombatSystem._runBattleRound`): kolejność losowań bez zmian (salwa A, potem B), cel wybierany z bieżącego
+    // stanu — kolejny strzelec TEJ SAMEJ strony widzi trafienia poprzedników i nie strzela w trupa, po obu stronach tak samo.
+    const aliveAtStart = new Set();
+    for (const [vid, s] of encounter.vesselStates) if (s && s.hp > 0) aliveAtStart.add(vid);
+
     const fireFromSide = (attackerVids, defenderVids, attackerOwner) => {
       for (const aid of attackerVids) {
         const aState = encounter.vesselStates.get(aid);
-        if (!aState || aState.hp <= 0) continue;
+        if (!aState || !aliveAtStart.has(aid)) continue;
         const aVessel = this._vm?._vessels?.get(aid);
         if (!aVessel) continue;
 
@@ -680,7 +729,7 @@ export class DeepSpaceCombatSystem {
 
           // Apply damage: shield absorb → armor reduce → hp.
           // ×DAMAGE_MULT (fix „walka trwa cholernie długo") — starcia rozstrzygają się
-          // przez zniszczenie w kilku-kilkunastu rundach, nie przez time-out po MAX_ROUNDS.
+          // przez zniszczenie, nie przez time-out (limit rund zdjęty w M1).
           let damage = weapon.damage * DAMAGE_MULT;
           let blockedByShield = 0;
           if (tState.shieldHP > 0) {
@@ -779,35 +828,273 @@ export class DeepSpaceCombatSystem {
       }
     }
     if (aOut && bOut) {
-      this._finalizeBattle(encounter, null, null);
+      this._finalizeBattle(encounter, null, null, 'disengage');
       return;
     } else if (aOut) {
-      this._finalizeBattle(encounter, 'B', 'A');
+      this._finalizeBattle(encounter, 'B', 'A', 'disengage');
       return;
     } else if (bOut) {
-      this._finalizeBattle(encounter, 'A', 'B');
+      this._finalizeBattle(encounter, 'A', 'B', 'disengage');
       return;
     }
 
     const endResult = this._checkEndConditions(encounter);
-    if (endResult) this._finalizeBattle(encounter, endResult.winner, endResult.retreated);
+    if (endResult) { this._finalizeBattle(encounter, endResult.winner, endResult.retreated, 'destroyed'); return; }
+
+    // M1 (decyzja 3) — odwrót AI przy niskim HP to PRAWDZIWY LOT: strona dostaje rozkazy odwrotu, starcie trwa, a kończy się
+    // dopiero, gdy jej żywi wyjdą poza `COMBAT_DISENGAGE_AU` (gałąź `_allOutsideOf` wyżej). Po drodze można do nich strzelać.
+    const fleeKey = this._aiRetreatSide(encounter);
+    if (fleeKey) this._orderSideRetreat(encounter, fleeKey);
+
+    // M1 (decyzja 5) — strażnik „nikt nie może zadać obrażeń”: remis BEZ wraków żywych.
+    const combA = this._combatantsOf(encounter, sideAVids);
+    const combB = this._combatantsOf(encounter, sideBVids);
+    if (this._deadlocked(combA, combB, encounter.sideA.ownerEmpireId, encounter.sideB.ownerEmpireId)) {
+      EventBus.emit('combat:noDamagePossible', {
+        encounterId: encounter.id, round: encounter.currentRound, systemId: encounter.location.systemId,
+        aliveA: combA.length, aliveB: combB.length,
+      });
+      this._finalizeBattle(encounter, null, null, 'no_damage_possible');
+      return;
+    }
+
+    // M1 (decyzja 5) — ukryty bezpiecznik długości: remis BEZ wraków żywych.
+    if (encounter.currentRound >= SAFETY_ROUND_CAP) {
+      EventBus.emit('combat:safetyCap', {
+        encounterId: encounter.id, round: encounter.currentRound, systemId: encounter.location.systemId,
+        aliveA: combA.length, aliveB: combB.length,
+      });
+      this._finalizeBattle(encounter, null, null, 'safety_cap');
+    }
   }
 
   /**
-   * Sprawdź czy encounter się kończy.
+   * M1 (decyzja 3) — strona AI, która przekroczyła próg odwrotu w tej rundzie, albo `null`. Reguła bez zmian od M4 P3 polish
+   * (2026-05-18): HP strony ≤ `RETREAT_THRESHOLD` × HP startowe (z posiłkami) ORAZ < połowy procentu przeciwnika. Gracz nie ma
+   * auto-odwrotu (decyduje sam: „Wycofaj się z bitwy”, doktryna `retreat_at_50`). Strona już uciekająca — pomijana (rozkazy raz).
+   * @private
+   * @returns {'A'|'B'|null}
+   */
+  _aiRetreatSide(encounter) {
+    const hpStartA = this._sideAggregateHpStart(encounter, 'A');
+    const hpStartB = this._sideAggregateHpStart(encounter, 'B');
+    const pctA = hpStartA > 0 ? this._sumHP(encounter, 'A') / hpStartA : 1.0;
+    const pctB = hpStartB > 0 ? this._sumHP(encounter, 'B') / hpStartB : 1.0;
+    const aiA = encounter.sideA.ownerEmpireId !== 'player' && !encounter.sideA.retreating;
+    const aiB = encounter.sideB.ownerEmpireId !== 'player' && !encounter.sideB.retreating;
+    if (aiA && pctA <= RETREAT_THRESHOLD && pctA < pctB * 0.5) return 'A';
+    if (aiB && pctB <= RETREAT_THRESHOLD && pctB < pctA * 0.5) return 'B';
+    return null;
+  }
+
+  /**
+   * M1 (decyzja 3) — rozkazy odwrotu dla żywych okrętów strony (raz na stronę: znacznik `side.retreating`, w zapisie razem ze
+   * stroną). Rozkaz wydaje `AutoRetreatSystem._issueRetreatOrder` — ta sama droga co dawny odwrót PO bitwie (cel z
+   * `resolveShelterOrderSpec`, znacznik `retreatFromBattleId` = id przyszłego rekordu bitwy, Dziennik „wycofuje się do …”);
+   * zmienia się wyłącznie chwila: w trakcie starcia, nie po nim. Bez `AutoRetreatSystem` (keepery headless) — rozkaz wprost
+   * przez MOS, bez linii Dziennika. Okręt, któremu nie znaleziono schronienia, zostaje i walczy dalej.
+   * @private
+   * @returns {number} ile okrętów dostało rozkaz
+   */
+  _orderSideRetreat(encounter, key) {
+    const side = key === 'A' ? encounter.sideA : encounter.sideB;
+    side.retreating = true;
+    const battleId = encounter.id.replace(/^encounter_/, 'battle_ds_');
+    const point = encounter.location.point;
+    const ar = window.KOSMOS?.autoRetreatSystem;
+    const mos = window.KOSMOS?.movementOrderSystem;
+    let alive = 0, ordered = 0;
+    for (const vid of [...side.vesselIds, ...side.joinedVesselIds]) {
+      const st = encounter.vesselStates.get(vid);
+      if (!st || st.hp <= 0) continue;
+      const v = this._vm?._vessels?.get(vid);
+      if (!v || v.isWreck) continue;
+      alive++;
+      if (_isRetreatingFromCombat(v)) { ordered++; continue; }
+      let ok = false;
+      if (ar?._issueRetreatOrder) {
+        ok = ar._issueRetreatOrder(v, battleId, point) != null;
+      } else if (mos?.resolveShelterOrderSpec && mos.issueOrder) {
+        const plan = mos.resolveShelterOrderSpec(v, { avoidPoint: point, issuedBy: 'auto_retreat' });
+        const res = plan?.ok ? mos.issueOrder(v.id, plan.spec) : null;
+        if (res?.ok) { mos.markAsRetreat?.(v, battleId); ok = true; }
+      }
+      if (ok) ordered++;
+    }
+    EventBus.emit('combat:retreatStarted', {
+      encounterId: encounter.id, battleId, side: key, ownerEmpireId: side.ownerEmpireId,
+      round: encounter.currentRound, alive, ordered,
+    });
+    return ordered;
+  }
+
+  /**
+   * M1 (decyzja 3) — PRAWDZIWA UCIECZKA NA ZEGARZE STARCIA. Uciekający członek starcia (znacznik odwrotu na rozkazie — wszyscy
+   * trzej producenci: „Wycofaj się z bitwy” gracza, doktryna `retreat_at_50`, odwrót AI) leci SWOIM rozkazem ruchu, ale
+   * w trakcie starcia jego lot biegnie na ZEGARZE STARCIA: co rundę `speedAU × CLOSE_STEP_YEARS` wzdłuż własnej trasy — ta
+   * sama baza co zbliżanie (SB49), więc uciekający i ścigający mają jedno tempo. Bez tego lot szedł czasem GRY, a świat
+   * w starciu tyka 1 d/s: ~0,0006 AU na rundę (zmierzone sondą M1), czyli wyjście poza `COMBAT_DISENGAGE_AU` trwałoby ponad
+   * 800 rund — ucieczki nie było, a dawny limit 20 rund kończył bitwę przed nią.
+   * Mechanizm: przesunięcie osi czasu misji `move_to_point` (`departYear` i `arrivalYear` o krok) — interpolacja
+   * `VesselManager._updatePositions` niesie statek dalej po JEGO trasie (omija gwiazdę jak zwykle); DSCS nie pisze `x/y`.
+   * Poza `COMBAT_DISENGAGE_AU` od punktu starcia statek uciekł: przyspieszanie stop i lot przeplanowany od bieżącej pozycji
+   * (`VesselManager.rebaseTransitFromHere` — przechwycenie ciała-schronienia od nowa; inaczej przylot przeskoczyłby o drogę,
+   * którą ciało przebywa w przesuniętym czasie). Uciekający strzela i można do niego strzelać.
+   * @private
+   * @returns {number} ile lotów przyspieszono w tej rundzie
+   */
+  _advanceFleeing(encounter) {
+    const vm = this._vm;
+    const gy = this._year();
+    const mid = encounter.location.point;
+    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
+    let n = 0;
+    for (const [id, st] of encounter.vesselStates) {
+      if (!st || st.hp <= 0) continue;
+      const v = vm?._vessels?.get(id);
+      if (!v?.position || v.isWreck || !_isRetreatingFromCombat(v)) continue;
+      const m = v.mission;
+      if (v.position.state !== 'in_transit' || m?.type !== 'move_to_point') continue;
+      if (!Number.isFinite(m.departYear) || !Number.isFinite(m.arrivalYear)) continue;
+      const out = Math.hypot(v.position.x - mid.x, v.position.y - mid.y) > disengagePx;
+      // Poza zasięgiem starcia albo krok doprowadziłby go do celu teraz — koniec przyspieszania, lot przeplanowany od tu.
+      if (out || m.arrivalYear - CLOSE_STEP_YEARS <= gy) {
+        if (st.fleeCompressedYears > 0) { vm.rebaseTransitFromHere?.(v); st.fleeCompressedYears = 0; }
+        continue;
+      }
+      m.departYear -= CLOSE_STEP_YEARS;
+      m.arrivalYear -= CLOSE_STEP_YEARS;
+      st.fleeCompressedYears = (st.fleeCompressedYears ?? 0) + CLOSE_STEP_YEARS;
+      n++;
+    }
+    return n;
+  }
+
+  /**
+   * M1 (decyzja 5) — uczestnicy strony do strażnika: żywi, z pozycją, z odpowiedzią „może podejść” (lustro wykluczeń
+   * `_closeToWeaponRange`: wolny w przestrzeni, nie uciekający) i „porusza się” (lot w toku albo ruch prowadzony rozkazem —
+   * lista `VesselManager._updatePositions`, `isOrderControlled`).
+   * @private
+   */
+  _combatantsOf(encounter, vids) {
+    const out = [];
+    for (const id of vids) {
+      const st = encounter.vesselStates.get(id);
+      if (!st || st.hp <= 0) continue;
+      const v = this._vm?._vessels?.get(id);
+      if (!v?.position || v.isWreck) continue;
+      const p = v.position;
+      const xy = (p.dockedAt != null && p.state !== 'in_transit') ? this._pinnedXY(v, p.dockedAt) : { x: p.x, y: p.y };
+      out.push({
+        id, st, x: xy.x, y: xy.y,
+        approach: !_isRetreatingFromCombat(v) && p.state === 'orbiting' && p.dockedAt == null,
+        moving: p.state === 'in_transit' || _isOrderMoved(v),
+      });
+    }
+    return out;
+  }
+
+  /**
+   * M1 — pozycja statku przypiętego do ciała TAK, JAK USTAWI GO `VesselManager._updatePositions` (gałąź „orbitujące bez misji”):
+   * slot orbity, gdy statek ma orbitę w `OrbitalSpaceSystem`, inaczej środek ciała (tak stoi wróg przypięty do kolonii gracza).
+   * Strażnik czyta ją zamiast surowego `x/y`, bo przypięcie w chwili startu starcia przestawia statek dopiero w `_updatePositions`
+   * — PO pierwszej rundzie; bez tego 1. runda widziałaby wroga w starym miejscu (do 0,315 AU) i strażnik dawałby fałszywy pat,
+   * a samoleczenie pary w `ProximitySystem` — pętlę jednorundowych starć. `× 10` / `÷ 10` — skala świata (jak w VM).
+   * @private
+   */
+  _pinnedXY(v, bodyId) {
+    const body = this._vm?._findEntity?.(bodyId);
+    if (!Number.isFinite(body?.x) || !Number.isFinite(body?.y)) return { x: v.position.x, y: v.position.y };
+    const oss = window.KOSMOS?.orbitalSpaceSystem;
+    if (oss?.getOrbit?.(v.id)) {
+      const pos = oss.getPosition?.(v.id, { x: body.x / 10, z: body.y / 10 }, orbitClockSec());
+      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.z)) return { x: pos.x * 10, y: pos.z * 10 };
+    }
+    return { x: body.x, y: body.y };
+  }
+
+  /**
+   * M1 (decyzja 5) — uczestnicy PRZYSZŁEGO starcia do strażnika na starcie (`startEngagement`), w stanie PO zamrożeniu, które
+   * zrobi `_createEncounter`: wróg zawsze (`orbiting`, przypięty do dominującego ciała gracza w tym samym układzie, inaczej
+   * dotychczasowe `dockedAt`), gracz — przy `m4PlayerCombatMissionPause` tak samo, bez flagi zostaje w swoim stanie.
+   * @private
+   */
+  _prospectiveCombatants(vessels, pin, frozen) {
+    const out = [];
+    for (const v of vessels) {
+      if (!v?.position || v.isWreck) continue;
+      const p = v.position;
+      const state = frozen ? 'orbiting' : p.state;
+      const docked = frozen ? this._postFreezeDockedAt(v, pin) : (p.dockedAt ?? null);
+      // Przypięty do ciała stanie tam, gdzie postawi go `VesselManager` (`_pinnedXY`: slot orbity albo środek ciała — tak stoi wróg
+      // przypięty do kolonii gracza). Bez tego atak na broniony orbitujący szyk liczyłby odległość sprzed zamrożenia (do 0,315 AU)
+      // i strażnik odmawiałby starcia, które po zamrożeniu jest w zasięgu.
+      const { x, y } = (docked != null && state !== 'in_transit') ? this._pinnedXY(v, docked) : { x: p.x, y: p.y };
+      out.push({
+        id: v.id, st: this._buildVesselState(v), x, y,
+        approach: !_isRetreatingFromCombat(v) && state === 'orbiting' && docked == null,
+        moving: state === 'in_transit' || _isOrderMoved(v),
+      });
+    }
+    return out;
+  }
+
+  /** `dockedAt` statku po `_freezeAsStationary(v, pin)` — ta sama reguła (przypięcie tylko do ciała z tego samego układu). @private */
+  _postFreezeDockedAt(v, pin) {
+    if (pin) {
+      const body = this._vm?._findEntity?.(pin);
+      if (body && isSameSystemStrict(body, v)) return pin;
+    }
+    return v.position?.dockedAt ?? null;
+  }
+
+  /**
+   * M1 (decyzja 5) — STRAŻNIK „NIKT NIE MOŻE ZADAĆ OBRAŻEŃ”. Prawda, gdy ŻADNA strona nie może już (teraz ani później)
+   * zadać obrażeń drugiej, a nikt się nie porusza (lot w toku i ruch rozkazem mogą zmienić geometrię — wtedy czekamy).
+   * Strona może zadać obrażenia, gdy ma żywy uzbrojony okręt, który ma żywy cel w zasięgu swojej broni albo może podejść,
+   * a cel nie siedzi za tarczą nie do przebicia (regeneracja na rundę ≥ największe obrażenia strony na rundę i tarcza teraz
+   * ≥ te obrażenia — wtedy tarcza nigdy nie opada). Jedna strona zdolna — walka trwa (bezbronna ginie albo ucieka).
+   * W zwykłej walce niewidoczny (420 bitew stagera: 0 razy); łapie starcia, których dawniej kończył dopiero limit 20 rund:
+   * obie strony na orbitach ciał poza zasięgiem, uzbrojony przypięty do ciała wobec bezbronnego poza zasięgiem, tarcze.
+   * @param {object[]} A, B — uczestnicy (`_combatantsOf` / `_prospectiveCombatants`)
+   * @private
+   */
+  _deadlocked(A, B, ownerA, ownerB) {
+    if (A.some((c) => c.moving) || B.some((c) => c.moving)) return false;
+    return !this._sideCanDamage(A, B, ownerA) && !this._sideCanDamage(B, A, ownerB);
+  }
+
+  /** @private */
+  _sideCanDamage(mine, foes, owner) {
+    const armed = mine.filter((c) => c.st?.weapons?.length > 0);
+    if (!armed.length || !foes.length) return false;
+    let maxDmg = 0;   // największe obrażenia strony na rundę (każda broń trafia)
+    for (const c of armed) for (const w of c.st.weapons) maxDmg += (w.damage ?? 0) * DAMAGE_MULT;
+    for (const f of foes) {
+      const regen = (f.st?.shieldRegen ?? 0) * CIV_PER_ROUND;
+      if ((f.st?.shieldHP ?? 0) >= maxDmg && regen >= maxDmg) continue;   // tarcza nie do przebicia
+      for (const c of armed) {
+        if (c.approach) return true;
+        const range = Math.max(...c.st.weapons.map((w) => this._resolveWeaponRange(w, owner)));
+        if (Math.hypot(f.x - c.x, f.y - c.y) / AU_TO_PX <= range) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Sprawdź czy encounter się kończy ZNISZCZENIEM strony (M1 — jedyny warunek rozstrzygający poza ucieczką):
+   *   - obie strony bez żywych → remis (`winner` null, wzajemne zniszczenie)
    *   - sideA all hp ≤ 0 → winner='B', retreated=null (kill)
    *   - sideB all hp ≤ 0 → winner='A', retreated=null (kill)
-   *   - sideA aggregate hp ≤ RETREAT_THRESHOLD × sideAggregateHpStart AND
-   *     niższe % niż sideB → retreat='A', winner='B'
-   *   - sideB analogicznie → retreat='B', winner='A'
-   *   - currentRound ≥ MAX_ROUNDS → time-out, highest aggregate HP wins
    *
-   * Aggregate hpStart liczone dynamicznie (zawiera reinforcement joinedVesselIds)
-   * — większa strona z reinforcement ma więcej buffera przed retreat (gameplay
-   * positive: gracz chce żeby reinforcement pomagał).
+   * ⚠ M1 (decyzje 1 i 3) — ZDJĘTE dwie gałęzie: (1) TIME-OUT po 20 rundach z wygraną większej bezwzględnej sumy HP (i wrakiem
+   * żywych przegranych w `_finalizeBattle`, Finding 688); (2) natychmiastowy koniec przy odwrocie AI — odwrót jest teraz
+   * prawdziwym lotem (`_aiRetreatSide` → `_orderSideRetreat` → `_advanceFleeing`), a starcie kończy gałąź `_allOutsideOf`
+   * w `_tickEncounter`, gdy uciekający są poza `COMBAT_DISENGAGE_AU`.
    *
    * @private
-   * @returns {{winner: 'A'|'B'|null, retreated: 'A'|'B'|null}|null}
+   * @returns {{winner: 'A'|'B'|null, retreated: null}|null}
    */
   _checkEndConditions(encounter) {
     const sideAVids = [...encounter.sideA.vesselIds, ...encounter.sideA.joinedVesselIds];
@@ -816,40 +1103,9 @@ export class DeepSpaceCombatSystem {
     const aliveA = sideAVids.filter(vid => (encounter.vesselStates.get(vid)?.hp ?? 0) > 0).length;
     const aliveB = sideBVids.filter(vid => (encounter.vesselStates.get(vid)?.hp ?? 0) > 0).length;
 
-    // Hard kill conditions (priorytet — bez retreat option).
     if (aliveA === 0 && aliveB === 0) return { winner: null, retreated: null };
     if (aliveA === 0)                  return { winner: 'B',  retreated: null };
     if (aliveB === 0)                  return { winner: 'A',  retreated: null };
-
-    // Retreat threshold — M4 P3 polish 2026-05-18 (drugi playtest):
-    // ENEMY AI auto-retreat: `pctEnemy ≤ 0.2 AND pctEnemy < pctPlayer × 0.5`
-    //   (low HP + clearly losing the damage exchange).
-    // PLAYER: NIE ma auto-retreat. Gracz wydaje rozkaz manualnie (retreat order)
-    //   lub implicitly przez moveToPoint poza combat range (obsługiwane w
-    //   _handleCombatRangeExit). To gracz decyduje czy uciekać.
-    const hpStartA = this._sideAggregateHpStart(encounter, 'A');
-    const hpStartB = this._sideAggregateHpStart(encounter, 'B');
-    const hpA = this._sumHP(encounter, 'A');
-    const hpB = this._sumHP(encounter, 'B');
-    const pctA = hpStartA > 0 ? hpA / hpStartA : 1.0;
-    const pctB = hpStartB > 0 ? hpB / hpStartB : 1.0;
-
-    const sideAIsPlayer = encounter.sideA.ownerEmpireId === 'player';
-    const sideBIsPlayer = encounter.sideB.ownerEmpireId === 'player';
-
-    if (!sideAIsPlayer && pctA <= RETREAT_THRESHOLD && pctA < pctB * 0.5) {
-      return { winner: 'B', retreated: 'A' };
-    }
-    if (!sideBIsPlayer && pctB <= RETREAT_THRESHOLD && pctB < pctA * 0.5) {
-      return { winner: 'A', retreated: 'B' };
-    }
-
-    // Time-out.
-    if (encounter.currentRound >= MAX_ROUNDS) {
-      const winner = hpA > hpB ? 'A' : hpB > hpA ? 'B' : null;
-      return { winner, retreated: null };
-    }
-
     return null;
   }
 
@@ -931,9 +1187,10 @@ export class DeepSpaceCombatSystem {
    *
    * Player implicit retreat: po cancel engage + moveToPoint poza COMBAT_DISENGAGE_AU
    *   → trafia w gałąź "tylko sideA poza" → retreated='A' (player loss).
-   * Enemy stationary AI nigdy nie wychodzi z midpoint (mission=null), więc enemy
-   *   retreat możliwy tylko przez auto-retreat w _checkEndConditions (HP comparison)
-   *   albo gdy AI dostanie order do ucieczki (M5+).
+   *   ⚠ M1: zwykły rozkaz ruchu w trakcie starcia leci czasem GRY (~0,0006 AU na rundę), więc ta droga praktycznie nie
+   *   wychodzi poza 0,5 AU; na zegarze starcia leci wyłącznie rozkaz ODWROTU (`_advanceFleeing`).
+   * Enemy stationary AI nigdy nie wychodzi z midpoint (mission=null); M1 — przy niskim HP dostaje rozkazy odwrotu
+   *   (`_orderSideRetreat`) i ucieka prawdziwym lotem, a starcie kończy się, gdy wyjdzie poza COMBAT_DISENGAGE_AU.
    *
    * @private
    */
@@ -955,13 +1212,13 @@ export class DeepSpaceCombatSystem {
 
     if (aOut && bOut) {
       // Mutual disengagement → draw
-      this._finalizeBattle(enc, null, null);
+      this._finalizeBattle(enc, null, null, 'disengage');
     } else if (aOut) {
       // sideA uciekło → retreated='A', winner='B'
-      this._finalizeBattle(enc, 'B', 'A');
+      this._finalizeBattle(enc, 'B', 'A', 'disengage');
     } else if (bOut) {
       // sideB uciekło → retreated='B', winner='A'
-      this._finalizeBattle(enc, 'A', 'B');
+      this._finalizeBattle(enc, 'A', 'B', 'disengage');
     }
     // Else: jakieś vessele dalej w combat range → encounter trwa
   }
@@ -995,14 +1252,15 @@ export class DeepSpaceCombatSystem {
     // nie uciekają. Orbita ciała niebieskiego wokół słońca może je oddalić
     // od statycznego midpointu / frozen enemy, ale to mechanika orbitalna,
     // nie ruch wycofania. Walka kończy się normalnie przez kill (HP=0) lub
-    // time-out (MAX_ROUNDS). Symetrycznie wykluczamy state='docked' (vessel
+    // strażnika (M1: dawny time-out zdjęty). Symetrycznie wykluczamy state='docked' (vessel
     // siedzi w hangarze).
     // ⚠ D-FDd (slice RETREAT_TARGET) — WYJĄTEK OD GUARDU WYŻEJ. Guard z 2026-05-21 mówi
     // „zadokowany ≠ uciekający" i to zostaje prawdą dla OBROŃCY. Ale po naprawie F-D udany odwrót
     // KOŃCZY SIĘ orbitą ciała (`dockedAt = bodyId`), więc bez tego wyjątku uciekinier wypadałby
     // z liczenia: `aliveCount` schodziłoby do zera, `_allOutsideOf` zwracałoby `false`, bitwa
-    // dojeżdżałaby do MAX_ROUNDS z `retreated = null` — i robiła side-level wrak ŻYWYCH
-    // przegranych. Czyli udany odwrót byłby groźniejszy od nieudanego.
+    // dojeżdżała do dawnego limitu rund z `retreated = null` — i robiła side-level wrak ŻYWYCH
+    // przegranych. Czyli udany odwrót byłby groźniejszy od nieudanego. (M1 zdjął limit i ten wrak —
+    // wyjątek zostaje: bez niego udany odwrót zostawiałby starcie bez końca.)
     // Wyjątek NIE zakłada, że uciekinier jest daleko — dopuszcza go tylko do TESTU ODLEGŁOŚCI
     // niżej. Ciało bliżej niż clearance dalej policzy się jako „w środku".
     // ⚠ Wyścig jest realny i zmierzony: przy 1 r/s statek pokonuje ~1,85 AU na jedną rundę
@@ -1034,21 +1292,24 @@ export class DeepSpaceCombatSystem {
   /**
    * Zakończ encounter z winner/retreated. Pełna semantyka P3-2:
    *   - Build BattleRecord (id, year, location, winner, retreated,
-   *     participantA/B, timeline, lossesA/B, finalHPA/B, seed)
+   *     participantA/B, timeline, lossesA/B, finalHPA/B, seed, endReason)
    *   - Per-vessel wreck pass (always): wszystkie vesselStates z hp ≤ 0 → wreck
    *     przez EnemyAttackHandler._turnIntoWreck(v, midpoint, year)
-   *   - Side-level wreck żywych przegranych (tylko gdy retreated == null):
-   *     żywi vessele z sideX (losing side) → wreck
-   *   - Retreat outcome (retreated == 'A'|'B'): żywi pozostają — AutoRetreatSystem
-   *     nasłuchuje battle:resolved i wydaje moveToPoint do friendly planety
+   *   - ⚠ M1 (decyzja 1) — side-level wreck żywych przegranych USUNIĘTY: okręt ginie wyłącznie przy 0 HP. Dawniej po
+   *     time-oucie żywe okręty strony z mniejszą bezwzględną sumą HP szły na wrak (Finding 688).
+   *   - Retreat outcome (retreated == 'A'|'B'): żywi pozostają i lecą dalej swoimi rozkazami odwrotu (M1: wydanymi w trakcie
+   *     starcia); AutoRetreatSystem na battle:resolved dokłada rozkaz tylko statkom bez znacznika ucieczki
+   *   - Loty uciekających przyspieszone na zegarze starcia (`_advanceFleeing`) — przeplanowane od bieżącej pozycji
    *   - gameState.set('battles.<id>', battleRec) + emit battle:resolved
    *   - encounter.isActive = false (cleanup w next _tick)
    *
    * @param {EncounterState} encounter
    * @param {'A'|'B'|null} winner — null = draw
    * @param {'A'|'B'|null} retreated — który ucieka (żywi pozostają)
+   * @param {'destroyed'|'disengage'|'no_damage_possible'|'safety_cap'|'forced'|null} [endReason] — M1: dlaczego starcie się
+   *   skończyło (w rekordzie bitwy; strażnik i bezpiecznik to remis bez wraków żywych)
    */
-  _finalizeBattle(encounter, winner, retreated) {
+  _finalizeBattle(encounter, winner, retreated, endReason = null) {
     if (!encounter.isActive) return;
 
     const year = this._year();
@@ -1076,6 +1337,9 @@ export class DeepSpaceCombatSystem {
       // „Tur: N”), Dziennik (`GameScene` — „N tur”) i listę bitew wojny (`WarSystem.recordBattle` → `WarOverlay`);
       // dawniej brak pola ⇒ wszędzie „0”. Stare rekordy bez pola — czytelnicy `?? 0` (zapis v101 bez migracji).
       turns:         encounter.currentRound,
+      // M1 — dlaczego starcie się skończyło: zniszczenie strony, wyjście poza zasięg (ucieczka), strażnik „nikt nie może
+      // zadać obrażeń”, ukryty bezpiecznik rund albo wymuszenie (narzędzia). Stare rekordy bez pola — czytelnicy `?? null`.
+      endReason,
       finalHPA,
       finalHPB,
       participantA: {
@@ -1102,18 +1366,19 @@ export class DeepSpaceCombatSystem {
       }
     }
 
-    // Side-level wreck żywych przegranych (tylko brak retreat).
-    if (retreated == null && winner != null) {
-      const losingSide = winner === 'A' ? encounter.sideB : encounter.sideA;
-      for (const vid of [...losingSide.vesselIds, ...losingSide.joinedVesselIds]) {
-        const state = encounter.vesselStates.get(vid);
-        if (!state || state.hp <= 0) continue;
-        const vessel = this._vm?._vessels?.get(vid);
-        if (vessel && !vessel.isWreck) this._wreckOne(vessel, mid, year);
-      }
+    // ⚠ M1 (decyzja 1) — TU STAŁ side-level wreck żywych przegranych („tylko brak retreat”, czyli po time-oucie po 20
+    // rundach: strona z mniejszą bezwzględną sumą HP traciła WSZYSTKIE żywe okręty). Usunięty razem z time-outem — okręt
+    // ginie wyłącznie przy 0 HP (pętla wyżej). Strażnik i bezpiecznik kończą remisem (`winner` null) — bez wraków żywych.
+    // Retreat: żywi vessele retreatującej strony pozostają i lecą swoimi rozkazami odwrotu (M1: wydanymi w trakcie starcia).
+
+    // M1 (decyzja 3) — lot przyspieszony na zegarze starcia, który trwał do końca starcia (np. ostatni wróg zginął, gdy
+    // uciekający był jeszcze w zasięgu): przeplanowany od bieżącej pozycji, żeby przylot nie przeskoczył (`_advanceFleeing`).
+    for (const [vid, state] of encounter.vesselStates) {
+      if (!(state?.fleeCompressedYears > 0)) continue;
+      const vessel = this._vm?._vessels?.get(vid);
+      if (vessel && !vessel.isWreck && state.hp > 0) this._vm?.rebaseTransitFromHere?.(vessel);
+      state.fleeCompressedYears = 0;
     }
-    // Retreat: żywi vessele retreatującej strony pozostają — AutoRetreatSystem
-    // nasłuchuje battle:resolved i wydaje moveToPoint do najbliższej friendly planety.
 
     // Persist combat damage na żywych ocalałych (NIE wrakach).
     // Skanujemy WSZYSTKIE strony — retreat zachowuje swoich żywych, no-retreat
@@ -1522,7 +1787,7 @@ export class DeepSpaceCombatSystem {
   forceFinalize(encounterId, winner = null, retreated = null) {
     const enc = this._activeEncounters.get(encounterId);
     if (!enc) return null;
-    this._finalizeBattle(enc, winner, retreated);
+    this._finalizeBattle(enc, winner, retreated, 'forced');
     return enc;
   }
 
@@ -1622,9 +1887,17 @@ export class DeepSpaceCombatSystem {
 
 // ── Module helpers (kopia z VesselCombatSystem dla symetrii) ───────────
 
-// Znacznik odwrotu z bitwy — JEDNO źródło dla `_allOutsideOf` (D-FDd) i zbliżenia przed rundą (SB49).
+// Znacznik odwrotu z bitwy — JEDNO źródło dla `_allOutsideOf` (D-FDd), zbliżenia przed rundą (SB49) i M1: ucieczki na
+// zegarze starcia (`_advanceFleeing`), strażnika (`_combatantsOf`) i bramki „uciekający nie wraca od razu” (dyspozytor).
 function _isRetreatingFromCombat(v) {
   return v?.movementOrder?._retreatFromCombat === true || v?.movementOrder?.retreatFromBattleId != null;
+}
+
+// M1 — ruch prowadzony rozkazem (MOS pisze pozycję co tik): lustro listy `isOrderControlled` w `VesselManager._updatePositions`.
+function _isOrderMoved(v) {
+  const mo = v?.movementOrder;
+  return mo?.status === 'active' &&
+    (mo.type === 'pursue' || mo.type === 'intercept' || mo.type === 'engage' || mo.type === 'patrol' || mo.type === 'escort');
 }
 
 function _inCombatState(v) {

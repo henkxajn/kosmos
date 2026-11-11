@@ -1,7 +1,7 @@
 // CombatHUD — live progress active deep-space encounter (M4 P3 polish).
 //
 // Auto-show gdy DSCS._activeEncounters.size > 0 → renderuje compact panel
-// per encounter: sideA HP bar, sideB HP bar, round X / MAX, dystans, log walki,
+// per encounter: sideA HP bar, sideB HP bar, runda X (M1: bez limitu rund), dystans, log walki,
 // vessel details (hull + bronie). Auto-hide gdy brak active encounters.
 //
 // Pozycja: top-center (pod TopBar + bufor na pasek zasobów). Per-encounter:

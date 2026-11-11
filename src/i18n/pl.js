@@ -3403,7 +3403,7 @@ export default {
   'combat.hudMiss':         'pudlo',
   'combat.hudShield':       'tarcza',
   // ARC CV-6b2 — pasek walki (flaga `cvStrip`) zamiast karty walki
-  'combatStrip.round':      'R{0}/{1}',
+  'combatStrip.round':      'R{0}',
   'combatStrip.more':       '+{0}',
   'combatStrip.log':        'OSTATNIE STRZAŁY',
   'combatStrip.logRound':   'R{0}',
@@ -3797,6 +3797,7 @@ export default {
   'log.el.orbitalShotDown':      "💥 {0} — wrogie statki zestrzelone nad {1}",
   'log.el.orbitalShotDown1':     "💥 Wrogi statek „{0}\" zestrzelony nad {1}",
   'log.el.orbitalDraw':          "💥 Bitwa nad {0} — remis. Obie floty zniszczone ({1} wrogich).",
+  'log.el.orbitalStalemate':     "💥 Bitwa nad {0} — pat, bez rozstrzygnięcia. Obie floty ocalały ({1} wrogich).",
   'log.el.shipyardBuilding':     "⚓ Stocznia: budowa — {0}",
   'log.el.shipReady':            "✅ Statek gotowy: {0} {1}",
   'log.el.shipyardFailed':       "⚠ Stocznia: {0}",

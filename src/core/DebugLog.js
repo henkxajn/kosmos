@@ -46,6 +46,12 @@ const TRACKED_EVENTS = [
   'war:peaceSigned',
   'battle:starting',
   'battle:resolved',
+  // M1 „bitwy do końca” (decyzja 33) — dwa strażniki techniczne kończące starcie REMISEM BEZ wraków żywych (żadna strona nie
+  // może zadać obrażeń; ukryty bezpiecznik 200 rund) i początek PRAWDZIWEJ ucieczki AI (rozkazy odwrotu w trakcie starcia).
+  // Reguła W3: nowe zakończenie i nowa decyzja AI dołączają do audytu w tym samym commicie — inaczej gate mierzy ciszę.
+  'combat:noDamagePossible',
+  'combat:safetyCap',
+  'combat:retreatStarted',
   'invasion:launched',
   'invasion:troopsLanded',
   // ⚠ W3-6b — ODMOWA DESANTU jest tu tak samo ważna jak sam desant, i jej brak kosztował

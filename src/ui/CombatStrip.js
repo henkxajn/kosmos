@@ -224,7 +224,7 @@ export class CombatStrip {
         loc: this._systemName(r.systemId, K),
         own: { counts: counts(r.own), pct: r.own.hidden > 0 ? '' : pct(r.own), role: r.own.role, hidden: r.own.hidden > 0, frac: r.own.pct },
         foe: { counts: counts(r.enemy), pct: r.enemy.hidden > 0 ? '' : pct(r.enemy), role: r.enemy.role, hidden: r.enemy.hidden > 0, frac: r.enemy.pct },
-        round: t('combatStrip.round', r.round, r.maxRounds),
+        round: t('combatStrip.round', r.round),   // M1 — bez limitu rund: „R n”
       };
     };
     const lines = visible.map((r) => ({ row: r, ...lineOf(r) }));

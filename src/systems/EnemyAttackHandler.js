@@ -16,7 +16,7 @@ import { t } from '../i18n/i18n.js';
 import EntityManager from '../core/EntityManager.js';
 // ⚠ Import `gameState` USUNIĘTY w W1-4: po przepięciu na `recordBattle` ten plik nie pisze
 // już nic do stanu gry bezpośrednio — całe księgowanie należy do WarSystem (P3).
-import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
+import { resolveBattle, playerVesselsToBattleUnit, isStalemate } from './BattleSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel, isInService } from '../entities/Vessel.js';
@@ -288,8 +288,24 @@ export class EnemyAttackHandler {
         severity: 'info',
         entityRef: systemId,
       });
+    } else if (isStalemate(result)) {
+      // M1 (decyzja właściciela 5 i 6) — PAT: żadna strona nie mogła zadać obrażeń (strażnik) albo ukryty bezpiecznik tur.
+      // Remis BEZ wraków żywych: wrogowie zostają na orbicie jak po wygranej (bez rozbicia floty gracza), Dziennik mówi „pat”.
+      // Dawniej po 30 turach rozstrzygało „więcej HP wygrywa” (przy równych — obrońca), a przegrany tracił WSZYSTKO (Finding 692).
+      for (const v of allEnemies) {
+        v.position.state = 'orbiting';
+        v.position.dockedAt = planetId;
+        v.status = 'idle';
+        v.mission = null;
+      }
+      evtLog?.push({
+        text: t('log.el.orbitalStalemate', this._systemLabel(systemId), allEnemies.length),
+        channel: 'combat',
+        severity: 'warn',
+        entityRef: systemId,
+      });
     } else {
-      // Draw — oboje tracą
+      // Draw — oboje tracą (wzajemne zniszczenie w tej samej turze)
       for (const v of allEnemies) this._turnIntoWreck(v, planetId, year);
       this._wreckPlayerVesselsInSystem(systemId, year);
       evtLog?.push({

@@ -84,6 +84,11 @@ export class AutoRetreatSystem {
     for (const vId of vesselIds) {
       const v = this._vm?.getVessel?.(vId) ?? this._vm?._vessels?.get?.(vId);
       if (!v || v.isWreck) continue;
+      // M1 (decyzja 3) — odwrót AI jest PRAWDZIWYM LOTEM: rozkaz dostał JUŻ w trakcie starcia
+      // (`DeepSpaceCombatSystem._orderSideRetreat` woła `_issueRetreatOrder` z tym samym `battleId`), a starcie kończy się
+      // dopiero, gdy uciekający wyjdą poza zasięg. Drugi rozkaz zastąpiłby lecący (preempcja) i dał drugą linię Dziennika.
+      // Rozkaz dostaje tu wyłącznie okręt bez znacznika ucieczki (np. odmowa schronienia w trakcie starcia).
+      if (v.movementOrder?._retreatFromCombat === true || v.movementOrder?.retreatFromBattleId != null) continue;
       this._issueRetreatOrder(v, battleId, battlePoint);
     }
   }
@@ -110,7 +115,7 @@ export class AutoRetreatSystem {
       // ⚠ D-FDe — BRAK CELU NIE ZABIJA. Tu stał `_turnIntoWreck` (+ inline fallback); statek
       // ginął za GEOMETRIĘ układu, a nie za przegraną bitwę. Zostaje sama odmowa Z POWODEM:
       // kadłub żyje, gracz może wydać rozkaz ręcznie, a jeśli ma zginąć — zginie normalną drogą
-      // (kill po HP=0 albo side-level wrak przy time-oucie DSCS).
+      // (kill po HP=0; side-level wrak przy time-oucie DSCS zniknął w M1).
       EventBus.emit('vessel:autoRetreatFailed', {
         vesselId: vessel.id, battleId, reason: plan?.reason ?? 'no_shelter_in_system',
       });

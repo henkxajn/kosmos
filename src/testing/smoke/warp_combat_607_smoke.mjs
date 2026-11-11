@@ -211,12 +211,31 @@ if (RECORD) {
   logOut(`nagrano ${FIXTURE}`);
   process.exit(0);
 }
+// ⚠ PRZECELOWANIE M1 „bitwy do końca” (decyzja 33, 2026-11-11): dwa ślady AI zmieniła MECHANIKA M1, nie bramka 607 — odwrót AI
+//   jest prawdziwym lotem w trakcie starcia (rozkaz odwrotu przy niskim HP wydaje DSCS, lot na zegarze starcia, ogień jednoczesny).
+//   `ai_retreat_in_encounter` i `ai_lost_battle` porównujemy więc z nagraniem z drzewa M1 (`--record-m1`, osobny plik); pozostałe
+//   sześć — z `eca9a3b` jak dotąd (pytanie 607: „bramka gracza nie dotyka AI” odpowiadają te sześć i T7).
+const M1_RETRACED = ['ai_retreat_in_encounter', 'ai_lost_battle'];
+const FIXTURE_M1 = join(SRC, 'testing', 'fixtures', 'traces', 'M1-warp-combat-ai-retreat-baseline.json');
+if (process.argv.includes('--record-m1')) {
+  mkdirSync(dirname(FIXTURE_M1), { recursive: true });
+  writeFileSync(FIXTURE_M1, JSON.stringify({ step: 'M1', recordedFrom: process.env.M1_BASELINE_COMMIT ?? 'unknown', flightTicks: FLIGHT,
+    traces: Object.fromEntries(M1_RETRACED.map((n) => [n, recorded[n]])) }));
+  logOut(`nagrano ${FIXTURE_M1}`);
+  process.exit(0);
+}
 
 section('T0 — ślad AI i kontroli gracza jak na eca9a3b');
 let BASE = null;
 try { BASE = JSON.parse(readFileSync(FIXTURE, 'utf8')); } catch { BASE = null; }
 assert(BASE?.recordedFrom === 'eca9a3b', 'T0 nagranie z eca9a3b istnieje');
-for (const name of Object.keys(TRACES)) assert(BASE?.traces?.[name] != null && recorded[name] === BASE.traces[name], `T0 ślad ${name} === nagranie`);
+let BASE_M1 = null;
+try { BASE_M1 = JSON.parse(readFileSync(FIXTURE_M1, 'utf8')); } catch { BASE_M1 = null; }
+assert(BASE_M1?.step === 'M1', 'T0 nagranie M1 (dwa ślady odwrotu AI) istnieje');
+for (const name of Object.keys(TRACES)) {
+  const ref = M1_RETRACED.includes(name) ? BASE_M1?.traces?.[name] : BASE?.traces?.[name];
+  assert(ref != null && recorded[name] === ref, `T0 ślad ${name} === nagranie${M1_RETRACED.includes(name) ? ' (M1)' : ''}`);
+}
 {
   const arrivals = (rec) => rec.events.filter((e) => e.name === 'interstellar:arrived').length;
   const ai = JSON.parse(recorded.ai_warp_in_encounter), aiLast = ai.samples.at(-1)[0].split('|');
@@ -227,8 +246,12 @@ for (const name of Object.keys(TRACES)) assert(BASE?.traces?.[name] != null && r
   assert(recall.enc && recall.r && arrivals(recall) === 1, `T0 KONTROLA: powrót AI ze starcia dolatuje (przyloty ${arrivals(recall)})`);
   const retreat = JSON.parse(recorded.ai_retreat_in_encounter);
   assert(retreat.enc && retreat.o && retreat.type !== null, `T0 KONTROLA: odwrót AI w starciu przyjęty (${retreat.type})`);
-  const lost = JSON.parse(recorded.ai_lost_battle), issued = lost.events.filter((e) => e.name === 'vessel:autoRetreatIssued').length;
-  assert(lost.ended && issued === 1, `T0 KONTROLA: przegrana AI kończy się odwrotem (${issued})`);
+  // M1 — przegrana AI dostaje rozkaz odwrotu W TRAKCIE starcia (DSCS; tu bez `window.KOSMOS.autoRetreatSystem` — rozkaz wprost przez
+  //   MOS: `vessel:orderIssued` typu moveToPoint dla R6), starcie się kończy. Uprząż woła rundy wprost (`_tickEncounter`, bez lotu na
+  //   zegarze starcia), więc uciekający nie odlatuje i ginie — dawniej odwrót KOŃCZYŁ starcie, a rozkaz dawał `AutoRetreatSystem` po nim.
+  const lost = JSON.parse(recorded.ai_lost_battle);
+  const issued = lost.events.filter((e) => e.name === 'vessel:orderIssued' && e.ship === 'R6' && e.order === 'moveToPoint').length;
+  assert(lost.ended && issued === 1, `T0 KONTROLA: przegrana AI dostaje rozkaz odwrotu w trakcie starcia, starcie się kończy (${issued})`);
   const wreck = JSON.parse(recorded.ai_wrecked_mid_flight);
   assert(wreck.r && wreck.midFlight === 'warp_transit' && wreck.ended && wreck.wreck, 'T0 KONTROLA: AI ginie w locie');
   assert(wreck.stamp === 'sys_home', `T0 Finding 609: wrak AI z lotu ma stempel sys_home, nie układ wylotu B (${wreck.stamp})`);
@@ -516,6 +539,10 @@ const relayCombat = (W) => EventBus.on('vessel:combatRangeEnter', ({ vesselAId, 
   assert(read?.canOrder?.reason === 'in_combat' && read?.encounter === battle?.encounter, `T11 probe603(): starcie i powód w odczycie (${read?.canOrder?.reason})`);
   const refused = h.probe603Warp?.(1);
   assert(refused?.ok === false && refused?.reason === 'in_combat' && refused?.unchanged === true, `T11 probe603Warp(1): odmowa, co do bitu (${refused?.reason})`);
+  // ⚠ PRZECELOWANIE M1 (decyzja 33): rajder stoi 0,1 AU od fregaty z laserem (0,05 AU), a uprząż woła rundy wprost (`_tickEncounter`,
+  //   bez zbliżenia). Dawniej „statek wygrywa” dawał TIME-OUT po 20 rundach: więcej HP wygrywało i żywy rajder z 1 HP szedł na wrak.
+  //   Bez time-outu fregata musi go dosięgnąć — w grze robi to zbliżenie przed rundą; tu stawiamy ją w zasięgu.
+  if (raider && a) { a.position.x = raider.position.x - 0.04 * AU; a.position.y = raider.position.y; }
   assert(W.rounds(enc) === true && !a.isWreck, 'T11 KONTROLA: statek wygrywa');
   W.sel.vessel = null;   // Esc na mapie zdejmuje zaznaczenie
   const sent = h.probe603Warp?.(1);

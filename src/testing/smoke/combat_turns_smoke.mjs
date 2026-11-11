@@ -128,7 +128,8 @@ header('T5  źródło: Dziennik, lista bitew wojny, DSCS');
   const wo = strip(readFileSync(new URL('../../ui/WarOverlay.js', import.meta.url), 'utf8'));
   assert(/warOverlay\.battleLosses', b\.lossesA, b\.lossesB, b\.turns\)/.test(wo), 'T5b lista bitew wojny (`WarOverlay`) czyta `b.turns`');
   const ds = strip(readFileSync(new URL('../../systems/DeepSpaceCombatSystem.js', import.meta.url), 'utf8'));
-  const f = ds.indexOf('  _finalizeBattle(encounter, winner, retreated) {'); const fb = f < 0 ? '' : ds.slice(f, ds.indexOf('\n  }\n', f));
+  // M1 (decyzja 33) — sygnatura dostała parametr `endReason`; lokalizacja po prefiksie (intencja pinu bez zmian).
+  const f = ds.indexOf('  _finalizeBattle(encounter, winner, retreated'); const fb = f < 0 ? '' : ds.slice(f, ds.indexOf('\n  }\n', f));
   assert(/turns:\s*encounter\.currentRound,/.test(fb) && !/performance\.now|Date\.now|_nowMs/.test(ds), 'T5c DSCS: pole w `_finalizeBattle`, plik bez czasu realnego');
 }
 
