@@ -2116,7 +2116,11 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ZOSTAJE OTWARTE (Finding 158): `BattleIntroModal` ma zahardkodowany polski i nagłówki kolumn
      „AGRESOR/OBROŃCA", podczas gdy strony A/B nie są rolami wojny.
 
-156. 🟠 **Jedna bitwa DSCS-w-wojnie zostawia DWA rekordy w `gameState.battles`, o niepowiązanych id.**
+156. ✅ **Jedna bitwa DSCS-w-wojnie zostawia DWA rekordy w `gameState.battles`, o niepowiązanych id.**
+     **✅ ZAMKNIĘTY 2026-11-11 — krok #663, dodatek 3 (przycięcie zapisu; `COMBAT_VISUALS_PLAN.md` §4 «#663 — delivered»):**
+     `_classifyBattle` przekazuje `battleId` producenta, a `recordBattle` dopisuje `warId` do ISTNIEJĄCEGO rekordu i jego id do
+     `war.battles` zamiast pisać drugi (wywołania wprost — EAH — bez zmian). `battle_announce_once_smoke` T6 odwrócony świadomie
+     (pinował dwa rekordy) — teraz jeden rekord + `warId`. Stare zapisy z duplikatami wczytują się bez zmian.
      DSCS pisze swój (`battle_ds_*`, `:1067`), a `recordBattle` nadaje WŁASNE id
      (`battle_<rok>_<warId>_<n>`) i zapisuje drugi rekord tej samej walki; `war.battles[]` zna tylko
      ten drugi, a `vessel.lastBattleId` — ten pierwszy. Oba rozwiązują się przez `getBattleRecord`,
