@@ -22,7 +22,10 @@
 > 2 L/s). CV-1b (normalizer CLI, tools only) ✅ DONE 2026-11-11 (`8dcb267`, local commit; owner's check pending, combined with CV-1c — §4 CV-1b —
 > delivered; the six owner models are the real slots, legacy textures 74.8 → 44.8 MB, #682–#683). Owner's decisions 28–29 (§3.2:
 > #682 near-lossless kept; #683 fix first). CV-1c (Model Workshop, tools only; item 0 — the `three` stub tracked, #683) ✅ DONE
-> 2026-11-11 (`45c7d20`, local commit; owner's check pending, ONE combined check for CV-1b + CV-1c — §4 CV-1c — delivered). Next: #640 + #675
+> 2026-11-11 (`45c7d20`, local commit — §4 CV-1c — delivered). Owner's combined check CV-1b + CV-1c 2026-11-11: steps 1–11 PASS except
+> two findings (decision 30) — fixed as extra local commits `fdb1cd8` (the plume starts at the clicked nozzle: #685 bow click, #686
+> nozzle in the opening; the lights read at cinema distance: #684 floor 2 px, fade with the ship's size, gain 2.0) + `84abb8c` (the
+> owner's warp_frigate hardpoints, frame up and nozzle repaired); 3-step re-check pending; push only after the owner's OK. Next: #640 + #675
 > (small step OUTSIDE CV), then #663 (MECHANICS, OUTSIDE CV), then CV-2b (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
@@ -33,11 +36,11 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 685** (this plan files **#612–#684**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 687** (this plan files **#612–#686**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
 > CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
 > stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check; #682–#683 from CV-1b;
-> #684 from CV-1c).
+> #684 from CV-1c; #685–#686 from the combined CV-1b + CV-1c owner's check).
 
 ---
 
@@ -1007,6 +1010,15 @@ makes Live Server reload the page.
 29. **2026-11-11 — #683 → fix first (CV-1c item 0):** the `three` stub the headless tests rely on moves out of `node_modules` into a
     tracked test-fixture path and the tests point at it, so `npm ci` can never delete it; keeper: the sweep passes after a fresh
     `npm ci`. Done in CV-1c item 0 (§4 CV-1c — delivered).
+30. **2026-11-11 — the combined owner's check CV-1b + CV-1c: steps 1–11 PASS except two findings, fixed BEFORE the push as extra
+    local commits:** (1) the engine plume did not come out of the nozzle the owner clicked — diagnose with numbers (Workshop vs game
+    transform chain, plume origin and direction, the @1k variant, the old `box.min.x` path) and fix it in both the Workshop and the
+    game; keeper: plume origin == the nozzle hardpoint in world space for a non-default nozzle; (2) the lights are hard to see —
+    implement #684: on-screen light size ≥ ≈ 2 px, fade only when the ship is below ≈ 10 px, brighter defaults so the four lights read
+    at cinema distance (frigate ≈ 40–50 px); live knobs, no pins; keeper: size never below the floor while the ship is above the fade
+    threshold. The owner's `hardpoints/warp_frigate.json` is owner data and goes in with the push. Then a 3-step re-check (the
+    close-up battle, the Workshop preview, F5 without saving); push `8dcb267`, `488f52e`, `45c7d20`, `cdec1a3` + the fixes + the
+    hardpoints file only after his OK. Done: `fdb1cd8` + `84abb8c` (§4 CV-1c — owner's combined check and fixes; Findings 684–686).
 
 ---
 
@@ -1468,7 +1480,7 @@ unverified patch: a failed patch followed by the test repeated the swap once mor
 | **Keepers (logic)** | `WorkshopLogic`: click → hardpoint in normalized model space; serialization is schema-valid; undo stack; slider values ↔ `keyColour` round-trip |
 | **Owner looks at** | clicks bow / nozzle / turrets on his model, tunes the mask live, saves, sees it in the game |
 
-#### CV-1c — Model Workshop ✅ delivered 2026-11-11 (`45c7d20`, local commit — not pushed; tools only, no runtime flag; owner's check PENDING — ONE combined check for CV-1b + CV-1c)
+#### CV-1c — Model Workshop ✅ delivered 2026-11-11 (`45c7d20`, local commit — not pushed; tools only, no runtime flag; owner's combined check CV-1b + CV-1c 2026-11-11 — steps 1–11 PASS except two findings, fixed in `fdb1cd8` + `84abb8c`; 3-step re-check PENDING)
 
 Built in one session; nothing of the scope moved to a CV-1c2.
 
@@ -1598,6 +1610,72 @@ Server reload every open tab):
     the points fade (by design — #684).
 11. F5 without saving. (`git status` shows `hardpoints/warp_frigate.json` changed — your data; it goes in with the push after your OK,
     or tell me to drop it if it was only a test.)
+
+**Owner's combined check CV-1b + CV-1c (2026-11-11) and the fixes** (`fdb1cd8` code + keepers, `84abb8c` the owner's file; local
+commits, not pushed — decision 30). Steps 1–11 PASS except two findings:
+
+1. **"The plume does not come out of the nozzle I clicked."** Measured in the game (`cvBattle({warp: 1})`, the owner's saved file,
+   2K GLB loaded): the plume's apex IS the file's nozzle point — 0 L error, cos 1 between the cone axis and the nozzle direction;
+   the chain normalized model → canon (frame quaternion × class scale) → choreography → world is exact (`_applyExhaust` /
+   `_choreoExhaust` only scale the unit cone, apex at its local origin); the `@1k` variant is not read at runtime and the old
+   `box.min.x` path has no effect on the canonical rig. The defect was in the DATA the Workshop wrote — two Workshop defects:
+   - **#685** — the bow click snapped the clicked point to its dominant axis: a click with a dominant Y (a tower) set the bow to
+     ±Y and `frameWithBow` moved "up" to +Z; the next click on the bow tip kept up +Z (perpendicular to −X) ⇒ the owner's file
+     had `frame.up [0, 0, 1]`: the ship flew on its side in the game (the stern ring seen from an unexpected side) and the mirror
+     plane became top ↔ bottom (his turret and light twins sit on the dorsal and ventral centreline). Fix: the bow lies on the
+     model's LONGEST axis (`longestAxisOf` of the normalized bbox; the sign from the clicked half), a click nearer the middle than
+     0.25 L is refused with "To środek statku — kliknij czubek dziobu", and "up" comes from the FILE (`upPref`) — it never jumps,
+     and a session frame with up +Z heals on the next bow click. Session format v1 → v2 (an old session with the bad frame is
+     dropped; the file wins).
+   - **#686** — the nozzle click on the ring outlet: the ray entered the opening and hit the tunnel wall — the owner's nozzle was
+     `[0.4296, −0.0239, −0.0045]`: 0.07 L inside the hull and 0.024 L off the axis ⇒ the plume started inside the ring, off
+     centre. Fix — **"wyśrodkuj w otworze"** (checkbox, default ON): from the clicked point (a step out along `d` and inward along
+     the wall normal) 16 rays in the plane across `d` hit the walls → algebraic circle fit (Kåsa) → centre and radius
+     (`openingFromHits`: ≥ 12 hits, radius 0.006–0.2 L, rms ≤ 15 % of r), re-centred twice, then marched along `d` to the MOUTH
+     (step 0.004 L, up to 40 steps, ends after 4 consecutive sections without an opening — a single gappy section does not stop it)
+     — the nozzle is the centre of the last section, `r` its radius. Six simulated clicks and the owner's own converge to
+     x 0.488–0.4914, |y|, |z| ≤ 0.0004, r 0.0519–0.0538; a click on a flat stern (too few hits) keeps the clicked point.
+   - The owner's file (`84abb8c`): turrets W1 / W2 and the four lights kept exactly as clicked; `frame.up` restored to `[0, 1, 0]`
+     and the nozzle set to the outlet centre `[0.4896, 0.0001, 0]`, r 0.0527 (the original is in
+     `kosmos-handover/cv-1c/owner-original/`). His pairs stay top / bottom (they were mirrored by the old plane) — seen from above
+     the bottom points are under the hull.
+2. **"The lights are hard to see" (#684).** Measured: at cinema distance (frigate 31–45 px) a point of size 0.03 is 0.9–1.4 px;
+   the shader tied the point's alpha to its OWN size (`alpha = sizePx / 1.5` ⇒ ≈ 0.6–0.9), and the glow profile sampled at a
+   2 px point gave almost nothing (GPU probe: peak 2 / 255 at colour 1.0 — the pixel centres sit at r ≈ 0.7 of the disc).
+   Fix (`ShipLightPoints`, all live knobs in `LIVE_CV_FX`, no pins on values): the drawn diameter is never below
+   `MODEL_LIGHT_MIN_PX` **2.0** px; the alpha depends ONLY on the ship's on-screen length — full from `MODEL_LIGHT_FADE_PX` **10** px,
+   zero at `MODEL_LIGHT_FADE_END_PX` **5** px (smoothstep) — so from far away the lights vanish instead of growing into blobs; points
+   ≤ 3 px are drawn as a full disc (glow profile from 8 px, continuous in between); `MODEL_LIGHT_GAIN` 1.0 → **2.0** (game
+   measurement at 31 / 62 px: 1.0 — the red points on the grey hull barely readable; 2.0 — clear, glow ≈ 10–12 px; 3.0 — a blob of
+   25–28 px). The default point size 0.03 stays (at cinema distance the floor rules). The game (`_tickCvModels`) and the Workshop
+   (`tick`) pass the same four knobs; JS mirror `lightPointScreen` for the keeper. GPU probe after the fix: peak 255 / 255 at the
+   2 px floor, half brightness at a 7.5 px ship, zero at ≤ 5 px.
+
+**Keepers:** NEW `cv_light_visibility_smoke` 16 / 0 (L1 the mirror on 4 000 random shots — never below the floor, full alpha at
+≥ 10 px regardless of the point's size, zero at ≤ 5 px, monotone; cinema 40 / 45 / 50 px drawn 2 px with alpha 1; control: the old
+formula 0.80 / 0.90 / 1.00 · L2 shader text · L3 shared uniforms · L4 knobs reach the renderer and the Workshop; fail-first on `HEAD`
+0 / 9 — the sections degrade, `lightPointScreen` does not exist) · NEW `cv_plume_origin_smoke` 10 / 0 (apex − nozzle in world ≤ 1e-9 L
+for 4 frames × 3 non-default nozzles × 6 headings / choreography / scales; scaling does not move the apex; the cone's apex at its
+origin; `_applyExhaust` / `_choreoExhaust` / the Workshop loop never write the cone's position or rotation — with a control; passes on
+`HEAD` too — the transform was never the defect, it is a regression guard) · `cv_workshop_logic_smoke` 81 → 95 / 0 (W12 bow: longest
+axis, refusal, the owner's sequence reproduced, 500 random clicks, upPref heals a +Z frame, the page wiring; control: the old rule
+gives up +Z and a Y mirror · W13 opening: exact centre / radius on 200 random openings, refusals for too few hits / an ellipse / too
+large a hole, the page centres by default — with a control; fail-first on `HEAD` 79 / 2) · re-aimed consciously (owner data in the
+slot): `cv_models_logic_smoke` T2e (owner models may carry Workshop points — schema-valid) and `cv_normalizer_logic_smoke` N11f (a
+nozzle set in the Workshop — notes stamp "Model Workshop <date>:" — must lie in the stern half of the model; the other slots by
+equality with a witness; control: the same nozzle flipped to the bow or outside is refused). Mutation battery
+(`kosmos-handover/cv-1c/mutation_battery.mjs`, per-mutant keeper) **40 / 40 killed**, files restored by sha256. GLSL probe
+(`probe_glsl_lights.mjs`) 8 / 8 with failing controls. **Live validation on the real engine 30 / 30**
+(`validate_CV1c.mjs`, GPU, 1600 × 1041): part A the Workshop from the HEAD slot file — A2b a mid-ship bow click refused, frame
+unchanged; A3 a click into the ring → nozzle `[0.4915, −0.0001, −0.0012]` r 0.0533 (raw hit `[0.4475, −0.0150, −0.0206]`); A3b
+control — without centring the nozzle is the raw hit; parts B / C the game: plume apex == nozzle in world (error 0, cos 1) for every
+warp frigate of the battle, both with the validator's saved file and with the owner's file; C3 cinema framing 45 px — uniforms
+2 / 10 / 5 / 2, every light drawn 2 px with alpha 1, all 4 lights above the background on the screenshot; part D the Workshop with the
+owner's file — 2 turrets, 4 lights, the centred nozzle, plume apex == nozzle. Lights ON vs OFF screenshot difference
+(`probe_lights_onoff.mjs`): from above at an angle 3 of the 4 lights add contrast (+0.45…+0.56; the bottom red is under the hull,
++0.02), from below at an angle all 4 (+0.60…+0.62). Sweep **390 / 390**, `check-i18n` PASS (pl = en = 3380).
+
+**Re-check (3 steps, owner)** — `kosmos-handover/cv-1c/RECHECK.md`.
 
 **Not in CV-1c (by scope):** turret directions (`d` stays null — CV-4), damage points (`'auto'` — CV-5), the `@1k` files at runtime
 (CV-2b), more than one nozzle (the game reads `nozzles[0]`), stations, browsers without the File System Access API beyond the
@@ -2859,7 +2937,9 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **681** | ✅ | **A ship placed while it carries a synthetic order mission faces the star.** The placement heading reads `liveTargetX ?? targetX ?? 0` from `vessel.mission`; `_issueEngage` (M4 P3 hotfix #2) writes a synthetic mission WITHOUT coordinates, so the fallback `(0, 0)` — the system origin, i.e. the star — becomes the heading, and free-floating combat ships are never rotated afterwards. Both paths, before CV-1a too; measured live: in `cvBattle` the player's ships stand bow to the star (cos to the star +1.00), sterns to the enemy when the battle lies beyond the enemy line. Same for any order whose mission has no coordinates when the sprite is (re)built (system switch, `cvModels` toggle) | `ThreeRenderer._addVesselModelCv` / `_addVesselModel3D` (heading at placement); `MovementOrderSystem._issueEngage` (synthetic mission) | **CV-3b ✅** — owner's decision 2026-11-11 (§3.2-27): facing the target supersedes it — under `cvChoreo` every combatant on both sides turns to its target (or the enemy centroid) from the first rounds (keepers L6, R5a; live table in §4 CV-3b); owner's check PASS |
 | **682** | ✅ | **The 2K masters of the six owner models are 6.5–8.3 MB, above the ≲ 5 MB target.** The kept base colour JPEG alone is 2.8–3.4 MB (D-CV-15: no re-encode); the target is reachable only with lossy WebP normal maps (≈ 4.4–5.8 MB), and the contact sheet shows them at close range (rendered close-up PSNR 36–42 dB, up to 2 % of ship pixels off by > 12 levels; near-lossless 48–53 dB, none) | `kosmos-handover/cv-1b/normal_sheet*.{png,json}`; `tools/ship-models/lib/textures.mjs` `ENCODE.normal['2k']` | **owner 2026-11-11 (§3.2-28): kept** — the near-lossless normal maps stay (local Steam files: the file size never reaches the player as a download, GPU memory does not depend on it); the knob stays as shipped |
 | **683** | ✅ | **`npm ci` / `npm install` deletes the headless `three` stub** (`node_modules/three`, `0.0.0-headless-stub`): it is not a dependency and `node_modules/` is gitignored, so installing the normalizer's declared dependencies (sharp, glTF-Transform — D-CV-13) removes it and every keeper importing `GameCore` fails until it is restored by hand | CV-1b session: restored from a copy taken before `npm ci`; `CLAUDE.md` (the stub's documented boundary) | **CV-1c item 0 ✅ (owner 2026-11-11, §3.2-29)** — the stub tracked at `src/testing/fixtures/three-stub/` + `devDependencies.three = "file:src/testing/fixtures/three-stub"` (npm link, lockfile `link: true`); `npm ci` in place removes the link, keeps the folder (sha256 before = after) and recreates the link; the sweep after a fresh `npm ci` 387 / 387; keeper `three_stub_fixture_smoke` 15 / 0 (fail-first on HEAD with the old real-directory stub 7 / 8) |
-| **684** | ⚪ | **The clicked light points are a close-up detail — at the usual battle zoom they fade.** A light's on-screen diameter = `size` × the ship's on-screen length; the light shader fades a point below `MODEL_LIGHT_MIN_PX` (1.5 px) instead of growing it (CV-1a, by design). Frigates in the owner's battle views measured 4.3–40.9 px long (CV-3a3 reticle probe) ⇒ the schema's fallback size 0.012 is 0.05–0.49 px (alpha ≤ 0.33), the Workshop's default 0.03 is 0.13–1.2 px (alpha ≤ 0.8) — readable only when zoomed in (Watch cinema, wheel). The Workshop's "battle distance" camera (ship ≈ 48 px) shows exactly this | `ShipLightPoints.LIGHT_VERT` (`vAlpha`, `uMinPx`); `LIVE_CV_FX.MODEL_LIGHT_MIN_PX`; `WorkshopLogic.LIGHT_SIZE_DEFAULT`; CV-1c validation step B1 | owner's look in the combined CV-1b + CV-1c check (step 10); options: (a) keep — lights are a close-up detail, the far language is CV-6a's · (b) a larger default in the Workshop (e.g. 0.05) · (c) a per-light floor in px for navigation lights. Recommendation (a) until the owner has seen it |
+| **684** | ✅ | **The clicked light points are a close-up detail — at the usual battle zoom they fade.** A light's on-screen diameter = `size` × the ship's on-screen length; the light shader faded a point below `MODEL_LIGHT_MIN_PX` (1.5 px) instead of growing it, and the alpha followed the point's OWN size. Owner's combined check (2026-11-11): "lights hard to see" | `ShipLightPoints.LIGHT_VERT` / `LIGHT_FRAG`; `LIVE_CV_FX.MODEL_LIGHT_*`; GPU probe: a 2 px point peaked at 2 / 255 (glow profile sampled at r ≈ 0.7) | **`fdb1cd8` ✅ (decision 30)** — floor `MODEL_LIGHT_MIN_PX` 2 px; alpha only from the ship's on-screen length (full from `MODEL_LIGHT_FADE_PX` 10, zero at `MODEL_LIGHT_FADE_END_PX` 5); points ≤ 3 px as a full disc; `MODEL_LIGHT_GAIN` 2.0; live knobs, no pins on values; keeper `cv_light_visibility_smoke` 16 / 0; in the game at 45 px every light drawn 2 px with alpha 1 |
+| **685** | ✅ | **A bow click with a dominant Y moved the frame's "up" — the ship on its side, the mirror top ↔ bottom.** `setBow` snapped the clicked point to its dominant axis: a click on a tower set the bow to ±Y and `frameWithBow` moved up to +Z; the next click on the bow tip kept up +Z (it is perpendicular to −X). The owner's saved `warp_frigate.json` had `frame.up [0, 0, 1]` | `WorkshopLogic.setBow` / `frameWithBow` (CV-1c); the owner's file (`kosmos-handover/cv-1c/owner-original/`) | **`fdb1cd8` ✅** — the bow on the model's longest axis (sign from the clicked half), a mid-ship click (< 0.25 L) refused with a message, up from the FILE (`upPref`, heals a session frame); session v2; keeper W12 (+ control reproducing the owner's sequence); the owner's file repaired in `84abb8c` |
+| **686** | ✅ | **A nozzle click into the engine opening lands on the tunnel wall.** The ray enters the ring and hits the inner wall — the owner's nozzle was 0.07 L inside the hull and 0.024 L off the axis, so the plume started inside the ring, off centre | `workshop.js placeAt` (nozzle mode, CV-1c) | **`fdb1cd8` ✅** — "wyśrodkuj w otworze" (default ON): 16 rays across the plume → circle fit (`openingFromHits`, Kåsa; ≥ 12 hits, 0.006–0.2 L, rms ≤ 15 %) → re-centred twice → marched to the mouth along `d`; 6 simulated clicks + the owner's converge to x 0.488–0.4914, |y|, |z| ≤ 0.0004; a flat stern keeps the clicked point; keeper W13; live A3 / A3b (control) |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
