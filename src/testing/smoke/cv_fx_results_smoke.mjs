@@ -60,7 +60,7 @@ import { EnemyAttackHandler }    from '../../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem }    from '../../systems/OrbitalSpaceSystem.js';
 import * as FXC                  from '../../config/CombatFxConfig.js';
 import * as FX                   from '../../utils/VesselFxLogic.js';
-import { vesselTargetSize, VESSEL_TARGET_SIZE } from '../../renderer/VesselModelResolver.js';
+import { vesselTargetSize, vesselSizeClass, VESSEL_TARGET_SIZE } from '../../renderer/VesselModelResolver.js';
 import { isEnemyVessel, setNextVesselId } from '../../entities/Vessel.js';
 import { rendererRandom, reseedRendererRandom } from '../../renderer/RendererRng.js';
 import { readFileSync }          from 'node:fs';
@@ -74,6 +74,7 @@ const RECALL = await tryImport('../../systems/director/DirectorRecall.js');
 const STAGEL = await tryImport('../../renderer/combat/BattleStageLogic.js');   // CV-3a1 — scena bitwy
 const SZOOM  = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
 const SMOT = await tryImport('../../renderer/combat/StageMotionLogic.js');   // ARC CV-6b — ruch sceny ciągły w prędkości
+const CHOREO = await tryImport('../../renderer/combat/ChoreographyLogic.js');   // ARC CV-3b — choreografia w kopercie
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -112,10 +113,14 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'vesselTargetSize', 'HIT_GLOW', 'hitGlowWorldSize', 'ThreeRenderer', 'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION', 'rendererRandom',
   'FxEngine', 'logDepthOn', 'STAGE', 'solveStage', 'pairKey', 'clusterEncounters', 'bandEdgesWU', 'stageBlend', 'stageBlendFloored', 'motionSegment', 'motionAt', 'targetVelocity', 'lengthPx', 'VESSEL_TARGET_SIZE',
   'WORLD_SCALE', '_STAGE_V', 'encounterClusters', 'encounterParticipants',   // CV-3a2 — klastry z pozycji logicznych
-  'shellBaseAt'];                                                              // CV-3a3 — skorupa przy ciele
+  'shellBaseAt',                                                               // CV-3a3 — skorupa przy ciele
+  // ARC CV-3b — choreografia (tryb ON: flaga `cvChoreo` razem z `cvStage`)
+  'createChoreo', 'choreoSeed', 'choreoClassOf', 'choreoEnvelope', 'postureOf', 'pickFacingTarget', 'stepChoreoOffset', 'constrainChoreo',
+  'stepChoreoFacing', 'stepChoreoEngine', 'vesselSizeClass', 'apparentEdges', 'exhaustIntensityRaw', '_CHQ_A', '_CHQ_C', '_CHQ_D', '_CHV', 'quatFromYawPitchRoll'];
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
   '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
-  '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend'];
+  '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
+  '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease', '_choreoEnd', '_choreoExhaust', '_applyExhaust'];
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -125,7 +130,10 @@ function makeMethod(name) {
     vesselTargetSize, FX.HIT_GLOW, FX.hitGlowWorldSize, TR_STATIC, FX.EXPLOSION_RING_COLOR, FX_HDR_EXPLOSION, rendererRandom,
     ENGINE?.FxEngine ?? null, () => true, STAGEL?.STAGE, STAGEL?.solveStage, STAGEL?.pairKey, STAGEL?.clusterEncounters, STAGEL?.bandEdgesWU,
     SZOOM?.stageBlend, SZOOM?.stageBlendFloored, SMOT?.motionSegment, SMOT?.motionAt, SMOT?.targetVelocity, SZOOM?.lengthPx, VESSEL_TARGET_SIZE, WORLD_SCALE, new THREE.Vector3(),
-    STAGEL?.encounterClusters, STAGEL?.encounterParticipants, STAGEL?.shellBaseAt);
+    STAGEL?.encounterClusters, STAGEL?.encounterParticipants, STAGEL?.shellBaseAt,
+    CHOREO?.createChoreo, CHOREO?.choreoSeed, CHOREO?.choreoClassOf, CHOREO?.choreoEnvelope, CHOREO?.postureOf, CHOREO?.pickFacingTarget,
+    CHOREO?.stepChoreoOffset, CHOREO?.constrainChoreo, CHOREO?.stepChoreoFacing, CHOREO?.stepChoreoEngine, vesselSizeClass, STAGEL?.apparentEdges,
+    FX.exhaustIntensityRaw, new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Vector3(), CHOREO?.quatFromYawPitchRoll);
 }
 
 /** Atrapa renderera: prawdziwe metody FX, sprite'y = Object3D za pozycjami logicznymi, zegar prezentacji z CV-2a. */
@@ -136,6 +144,7 @@ function fakeRenderer() {
     // CV-3a1 — stan sceny (jak konstruktor renderera)
     _stageMarks: new Map(), _stageState: new Map(), _stageClock: CLOCK ? new CLOCK.PresentationClock() : null, _stageFrame: null,
     _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _galaxyFlight: false, _frameNo: 0, stagedFrames: 0, stageMaxK: 0, shellFrames: 0,
+    choreoFrames: 0, choreoMaxL: 0, cvTuning: ENGINE?.LIVE_CV_FX ?? {},   // ARC CV-3b — świadek: tryb ON naprawdę choreografował
     // CV-3a3 — rysowane ciało (skorupa): środek z encji, promień jak `computeBodyRadius` skalistej planety bez masy
     getBodyWorldInfo: (id) => { const b = EntityManager.get(id); return b ? { x: S(b.x), y: 0, z: S(b.y), r: 0.062 } : null; } };
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
@@ -162,6 +171,10 @@ function fakeRenderer() {
     R._tickBattleStage?.();
     if (R._stageMarks.size) { R.stagedFrames++; for (const m of R._stageMarks.values()) R.stageMaxK = Math.max(R.stageMaxK, m.k); }
     if (R._stageFrame?.list?.some?.((c) => c.shell)) R.shellFrames++;
+    // ARC CV-3b — klatki z choreografią (przesunięcie od kotwicy) i największe przesunięcie [L]
+    let ch = 0;
+    for (const m of R._stageMarks.values()) if (m.choreo) { ch++; R.choreoMaxL = Math.max(R.choreoMaxL, Math.hypot(m.choreo.x, m.choreo.y, m.choreo.z) / VESSEL_TARGET_SIZE.frigate); }
+    if (ch) R.choreoFrames++;
     R._tickCvFx?.();
   };
   return R;
@@ -262,6 +275,7 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
 function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null } = {}) {
   const flag = GAME_CONFIG.FEATURES.cvFxEngine;
   const stageFlag = GAME_CONFIG.FEATURES.cvStage;
+  const choreoFlag = GAME_CONFIG.FEATURES.cvChoreo;
   reseed('cv2a-battle'); reseedRendererRandom();
   let R = null, st = null, outsider = null, recallList = null, recallNoEnc = null, ctlAi = null;
   const arrivals = [];
@@ -271,6 +285,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     if (mode !== 'none') {
       GAME_CONFIG.FEATURES.cvFxEngine = mode === 'on';
       GAME_CONFIG.FEATURES.cvStage = mode === 'on';   // CV-3a1 — scena bitwy w trybie ON, dzisiejszy rysunek w OFF
+      GAME_CONFIG.FEATURES.cvChoreo = mode === 'on';  // CV-3b — choreografia na scenie w trybie ON
       window.innerWidth = 1600; window.innerHeight = 1041;
       R = fakeRenderer();
       EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
@@ -302,6 +317,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
   });
   GAME_CONFIG.FEATURES.cvFxEngine = flag;
   GAME_CONFIG.FEATURES.cvStage = stageFlag;
+  GAME_CONFIG.FEATURES.cvChoreo = choreoFlag;
   return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name };
 }
 
@@ -412,6 +428,9 @@ const ON  = runBattle({ mode: 'on', seed: 1 });
   console.log(`     CV-3a1 scena: ON — klatek ze sceną ${ON.R?.stagedFrames}, stopień maks. ${ON.R?.stageMaxK?.toFixed?.(3)}; OFF — klatek ${OFF.R?.stagedFrames}`);
   assert((ON.R?.stagedFrames ?? 0) > 100 && (ON.R?.stageMaxK ?? 0) > 0.99 && OFF.R?.stagedFrames === 0,
     'A1e CV-3a1: tryb ON rysował scenę bitwy (pełny stopień przy kamerze 0,4 j.), tryb OFF — bez sceny');
+  console.log(`     CV-3b choreografia: ON — klatek z przesunięciem ${ON.R?.choreoFrames}, największe ${ON.R?.choreoMaxL?.toFixed?.(3)} L; OFF — klatek ${OFF.R?.choreoFrames}`);
+  assert((ON.R?.choreoFrames ?? 0) > 100 && (ON.R?.choreoMaxL ?? 0) > 0.05 && OFF.R?.choreoFrames === 0,
+    'A1f CV-3b: tryb ON choreografował statki sceny (przesunięcia w kopercie), tryb OFF — bez choreografii (A2 obejmuje więc i tę warstwę)');
 }
 
 header('A2 — (a) wynik starcia ON == OFF == bez renderera');

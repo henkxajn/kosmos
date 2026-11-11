@@ -24,6 +24,14 @@
 //                                         z NAJCIEMNIEJSZĄ gwiazdą (`star: 1`) albo NAJJAŚNIEJSZĄ (`star: 2`), potem starcie tam;
 //                                         `star: 0` / brak — oglądany układ jak dotąd. Do oceny czytelności statków pod
 //                                         barwną gwiazdą (to samo w `cvParade({star: 1})`); odczyt `star` w wyniku
+//   cvBattle({doctrine: /kite/.source}) — ARC CV-3b: strona A (gracz) we flocie z doktryną — `engage` / `kite` / `hold` / `retreat`
+//                                         (albo pełne nazwy `engage_in_range`, `hold_position`, `retreat_at_50`); rozkazy „Zaangażuj”
+//                                         przez `FleetSystem.applyDoctrine` jak w grze (kite — `preferMaxRange`, hold — bez rozkazów).
+//                                         Postać `/kite/.source` — polecenie konsoli bez cudzysłowów. Postawa w choreografii: tylko
+//                                         ustawienie i styl ruchu (D-CV-7 — doktryna nie udaje odległości, Finding 631)
+//   cvRetreat(1)                        — ARC CV-3b: rozkaz „Wycofaj się z bitwy” dla statku nr 1 strony A (żywego, w starciu) — ten sam
+//                                         rozkaz co PPM; choreografia obraca go od zagrożenia i zapala pełny ciąg
+//   cvChoreo(1) / cvChoreo(0)           — ARC CV-3b: flaga `cvChoreo` (choreografia na scenie bitwy) ON / OFF; przejście 0,5 s
 //   cvStrip(1) / cvStrip(0)             — ARC CV-6b2: flaga `cvStrip` (pasek walki zamiast karty walki) ON / OFF, od następnej klatki
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
 //   cvModels(1) / cvModels(0)           — ARC CV-1a: flaga `cvModels` (statki w ramie kanonicznej z plików hardpointów) ON / OFF;
@@ -252,6 +260,44 @@ export function cvPickStarSystem({ star, systems = [], activeId = null }) {
   return { systemId: pick.id, cls, classes };
 }
 
+// ARC CV-3b — doktryna strony A w `cvBattle({doctrine})`: krótkie i pełne nazwy (polecenie bez cudzysłowów: `/kite/.source`).
+const CV_DOCTRINES = Object.freeze({
+  engage: 'engage_in_range', engage_in_range: 'engage_in_range', kite: 'kite',
+  hold: 'hold_position', hold_position: 'hold_position', retreat: 'retreat_at_50', retreat_at_50: 'retreat_at_50',
+});
+
+/** ARC CV-3b — nazwa doktryny ze specyfikacji konsoli (null — bez floty, jak dotąd; undefined — nieznana). */
+export function cvDoctrineOf(spec) {
+  if (spec == null || spec === false || spec === 0 || spec === '') return null;
+  const k = String(spec).trim().toLowerCase();
+  return CV_DOCTRINES[k];
+}
+
+/**
+ * ARC CV-3b — rozkazy „Zaangażuj” strony A: bez doktryny wprost (jak dotąd); z doktryną — flota testowa z tą doktryną
+ * (znacznik `_cvBattle`, zdejmowana przy następnym teście) i spec przez `FleetSystem.applyDoctrine` (jak rozkaz floty w grze:
+ * kite — `preferMaxRange`, hold — rozkaz odrzucony, bez rozkazu).
+ * @returns {{ issued: object[], rejected: number, fleet: string|null }}
+ */
+function cvIssueEngage(K, ships, foes, { doctrine = null, seed = 1 } = {}) {
+  const mos = K.movementOrderSystem, fs = K.fleetSystem;
+  let fleet = null;
+  if (doctrine && fs?.createFleet) {
+    fleet = fs.createFleet(`CV-${doctrine}`, { doctrine });
+    fleet._cvBattle = seed;
+    for (const v of ships) fs.addMember?.(fleet.id, v.id);
+  }
+  const issued = [];
+  let rejected = 0;
+  ships.forEach((v, i) => {
+    let spec = { type: 'engage', targetEntityId: foes[i % foes.length].id, issuedBy: 'cvBattle' };
+    if (fleet) spec = fs.applyDoctrine(fleet, spec);
+    if (spec?._rejected) { rejected++; return; }
+    issued.push(mos.issueOrder(v.id, spec));
+  });
+  return { issued, rejected, fleet: fleet?.id ?? null };
+}
+
 function pickAiEmpire(K) {
   const all = (K.empireRegistry?.listAll?.() ?? []).filter((e) => e?.id && e.id !== 'player');
   return all.find((e) => K.directorProduction?.capitalOf?.(e.id)) ?? all[0] ?? null;
@@ -281,8 +327,10 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
   };
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
-    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0 } = {}) {
+    cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0, doctrine = null } = {}) {
       if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
+      const doc = cvDoctrineOf(doctrine);   // ARC CV-3b — doktryna strony A (null — bez floty)
+      if (doc === undefined) return { ok: false, reason: 'unknown_doctrine', doctrine, known: Object.keys(CV_DOCTRINES) };
       const K = window.KOSMOS ?? {};
       const vm = K.vesselManager, dscs = K.deepSpaceCombatSystem, mos = K.movementOrderSystem, ts = K.timeSystem;
       const home = K.homePlanet;
@@ -293,6 +341,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       // Poprzedni test: w trakcie starcia — odmowa; po starciu — statki zdjęte (rozbiórka bez linii w Dzienniku).
       const old = all.filter(isCvVessel);
       if (old.some((v) => dscs._findActiveEncounterContaining?.(v.id))) return { ok: false, reason: 'battle_in_progress' };
+      for (const f of K.fleetSystem?.listFleets?.() ?? []) if (f?._cvBattle != null) K.fleetSystem.disbandFleet(f.id, 'manual');   // ARC CV-3b
       for (const v of old) vm.destroyVessel?.(v.id, { reason: 'dismantled' });
       const sw = switchToStar(K, star);
       if (!sw.ok) return sw;
@@ -368,7 +417,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         }
         enc.seedBase = cvSeedBase(seed);
         const free = sideA.filter((v) => v.position?.dockedAt == null);
-        const orders = free.map((v, i) => mos.issueOrder(v.id, { type: 'engage', targetEntityId: sideB[i % sideB.length].id, issuedBy: 'cvBattle' }));
+        const eng = cvIssueEngage(K, free, sideB, { doctrine: doc, seed });   // ARC CV-3b — doktryna strony A
+        const orders = eng.issued;
         const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
         console.warn(CV_BATTLE.WARNING);
         return {
@@ -377,8 +427,9 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
           docked: sideA.filter((v) => v.position?.dockedAt === body.id).length,
           enemyPinned: sideB.filter((v) => v.position?.dockedAt === body.id).length,
           sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
+          doctrine: doc, doctrineRejected: eng.rejected,
           empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
-          cvStage: !!GAME_CONFIG.FEATURES?.cvStage, autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
+          cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo, autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
         };
       }
 
@@ -421,7 +472,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
             EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: foes[0].id, sameFaction: false, distanceAU: 0.1 });
           }
           enc.seedBase = cvSeedBase(seed + k);
-          sA.forEach((v, i) => mos.issueOrder(v.id, { type: 'engage', targetEntityId: sB[i % sB.length].id, issuedBy: 'cvBattle' }));
+          cvIssueEngage(K, sA, sB, { doctrine: doc, seed });   // ARC CV-3b — doktryna strony A
           out.push({ ok: ships.every((v) => enc.vesselStates.has(v.id)), encounter: enc.id,
             centerAU: [Number((ck.x / AU).toFixed(3)), Number((ck.y / AU).toFixed(3))], clear: !!ck.clear });
         }
@@ -458,7 +509,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       // łączą: kilka starć w jednym miejscu. Ziarno starcia k = ziarno + k (ta sama bitwa przy tym samym ziarnie).
       if (split) {
         const pairs = Math.min(sideA.length, sideB.length);
-        const orders = sideA.map((v, i) => mos.issueOrder(v.id, { type: 'engage', targetEntityId: sideB[i % sideB.length].id, issuedBy: 'cvBattle' }));
+        const orders = cvIssueEngage(K, sideA, sideB, { doctrine: doc, seed }).issued;   // ARC CV-3b — doktryna strony A
         const encs = [];
         for (let i = 0; i < Math.max(sideA.length, sideB.length); i++) {
           const a = sideA[Math.min(i, sideA.length - 1)], b = sideB[Math.min(i, sideB.length - 1)];
@@ -492,15 +543,17 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         EventBus.emit('vessel:combatRangeEnter', { vesselAId: v.id, vesselBId: f.id, sameFaction: false, distanceAU: 0.1 });
       }
       enc.seedBase = cvSeedBase(seed);
-      const orders = sideA.map((v, i) => mos.issueOrder(v.id, { type: 'engage', targetEntityId: sideB[i % sideB.length].id, issuedBy: 'cvBattle' }));
+      const eng = cvIssueEngage(K, sideA, sideB, { doctrine: doc, seed });   // ARC CV-3b — doktryna strony A
+      const orders = eng.issued;
       const members = made.filter((v) => enc.vesselStates.has(v.id)).length;
       console.warn(CV_BATTLE.WARNING);
       return {
         ok: members === made.length, encounter: enc.id, system: sys, star: sw.info, seed, seedBase: enc.seedBase,
         centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear,
         sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
+        doctrine: doc, doctrineRejected: eng.rejected,
         empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
-        cvStage: !!GAME_CONFIG.FEATURES?.cvStage,
+        cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo,
         autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
       };
     },
@@ -520,6 +573,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
       const old = all.filter(isCvVessel);
       if (old.some((v) => dscs?._findActiveEncounterContaining?.(v.id))) return { ok: false, reason: 'battle_in_progress' };
+      for (const f of K.fleetSystem?.listFleets?.() ?? []) if (f?._cvBattle != null) K.fleetSystem.disbandFleet(f.id, 'manual');   // ARC CV-3b
       for (const v of old) vm.destroyVessel?.(v.id, { reason: 'dismantled' });
       const sw = switchToStar(K, star);
       if (!sw.ok) return sw;
@@ -596,6 +650,30 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const F = GAME_CONFIG.FEATURES;
       F.cvStage = on === undefined ? !F.cvStage : !!on;
       return { cvStage: F.cvStage };
+    },
+
+    /** ARC CV-3b — flaga `cvChoreo` (choreografia): cvChoreo(1) — ON, cvChoreo(0) — OFF, cvChoreo() — przełącz. Czytana co klatkę
+     *  (przesunięcia i kurs wchodzą / schodzą w 0,5 s czasu prezentacji). */
+    cvChoreo(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvChoreo = on === undefined ? !F.cvChoreo : !!on;
+      return { cvChoreo: F.cvChoreo };
+    },
+
+    /** ARC CV-3b — „Wycofaj się z bitwy” (ten sam rozkaz co PPM) dla statku nr `n` (od 1) żywej strony A testu w aktywnym starciu. */
+    cvRetreat(n = 1) {
+      const K = window.KOSMOS ?? {};
+      const vm = K.vesselManager, mos = K.movementOrderSystem, dscs = K.deepSpaceCombatSystem;
+      if (!vm || !mos || !dscs) return { ok: false, reason: 'no_world' };
+      const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
+      const mine = all.filter((v) => isCvVessel(v) && !v.isEnemy && !v.isWreck)
+        .filter((v) => { const enc = dscs._findActiveEncounterContaining?.(v.id); return !!enc && (enc.vesselStates?.get?.(v.id)?.hp ?? 0) > 0; })
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      const k = Math.max(1, Math.floor(Number(n) || 1));
+      const v = mine[k - 1];
+      if (!v) return { ok: false, reason: 'no_ship', alive: mine.map((x) => x.name) };
+      const r = mos.issueOrder(v.id, { type: 'retreat', issuedBy: 'cvRetreat' });
+      return { ok: !!r?.ok, vessel: v.name, id: v.id, reason: r?.reason ?? null };
     },
 
     /** ARC CV-6b2 — flaga `cvStrip` (pasek walki zamiast karty): cvStrip(1) — ON, cvStrip(0) — OFF, cvStrip() — przełącz. Czytana co klatkę. */

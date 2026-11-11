@@ -182,6 +182,10 @@ block('R1 — flaga OFF: zero znaczników, sprite\'y nietknięte co do bitu', ()
 
 // ═══ R2 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
 GAME_CONFIG.FEATURES.cvStage = true;
+// ARC CV-3b — ten keeper pinuje warstwę SCENY (CV-3a / CV-6b) przy choreografii WYŁĄCZONEJ: choreografia to osobna warstwa
+//   za flagą `cvChoreo` (przesunięcia w kopercie, kurs, silnik), pinowana z tymi samymi niezmiennikami sceny (pasma, ciągłość,
+//   pauza, zero zapisów) w `cv_choreo_render_smoke` / `cv_choreo_logic_smoke`.
+GAME_CONFIG.FEATURES.cvChoreo = false;
 block('R2 — flaga ON, kamera blisko: rysowane = scena, każda para w swoim paśmie; (b) pozycje logiczne nietknięte', () => {
   const { R, cc, vessels } = world();
   placeCamera(R, cc, 0.4);

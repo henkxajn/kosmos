@@ -384,6 +384,10 @@ const stageCentre = (R) => {
 const drawn = (R, id) => R._vessels.get(id).sprite.position;
 const FLAG0 = GAME_CONFIG.FEATURES.cvStage;
 GAME_CONFIG.FEATURES.cvStage = true;
+// ARC CV-3b — ten keeper pinuje warstwę SCENY (CV-3a / CV-6b) przy choreografii WYŁĄCZONEJ: choreografia to osobna warstwa
+//   za flagą `cvChoreo` (przesunięcia w kopercie, kurs, silnik), pinowana z tymi samymi niezmiennikami sceny (pasma, ciągłość,
+//   pauza, zero zapisów) w `cv_choreo_render_smoke` / `cv_choreo_logic_smoke`.
+GAME_CONFIG.FEATURES.cvChoreo = false;
 
 // ═══ R1 / R2 ══════════════════════════════════════════════════════════════════════════════════════════════════════
 block('R1 / R2 — renderer: obie strony przy ciele (skorupa, kierunek, pasma, zoom bez przelotu przez ciało)', () => {

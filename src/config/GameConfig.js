@@ -556,6 +556,13 @@ export const GAME_CONFIG = {
     //   spoczynkowy jak na ścieżce OFF (wróg bez misji nie staje burtą). Czytana przy STAWIANIU statku;
     //   KOSMOS.debug.cvModels(0) / cvModels(1) przełącza i przebudowuje statki aktywnego układu. OFF = dzisiejsza ścieżka.
     cvModels: true,
+    // `cvChoreo` (CV-3b) — CHOREOGRAFIA statków na scenie bitwy (`src/renderer/combat/ChoreographyLogic.js`): przesunięcie w kopercie
+    //   klasy (fregata przeloty 1 L, niszczyciel łuki 0,7 L, pancernik zwrot burtą 0,4 L; pion — scena 3D), dziób ku celowi albo
+    //   środkowi przeciwnika (Finding 681 — obie strony od pierwszych rund; pancernik burtą) ze skrętem ograniczonym i przechyłem,
+    //   silnik zapalony w walce, postawa z doktryny (D-CV-7 — tylko ustawienie, nigdy udawana odległość). Niezmiennik D-CV-6:
+    //   żadna para nie zmienia pasma odległości na scenie (rzut par). Deterministyczna (ziarno: id starcia + id statku), zegar
+    //   prezentacji (pauza = pauza). Wyłącznie rysunek. Wyłączenie: KOSMOS.debug.cvChoreo(0) (statki wracają do kotwic w 0,5 s).
+    cvChoreo: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

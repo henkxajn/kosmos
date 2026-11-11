@@ -178,6 +178,10 @@ const drawnOf = (R) => new Map([...R._vessels].map(([id, e]) => [id, { x: e.spri
 const maxStep = (a, b) => { let m = 0; for (const [id, p] of a) { const q = b.get(id); if (q) m = Math.max(m, Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z)); } return m; };
 const FLAG0 = GAME_CONFIG.FEATURES.cvStage;
 GAME_CONFIG.FEATURES.cvStage = true;
+// ARC CV-3b — ten keeper pinuje warstwę SCENY (CV-3a / CV-6b) przy choreografii WYŁĄCZONEJ: choreografia to osobna warstwa
+//   za flagą `cvChoreo` (przesunięcia w kopercie, kurs, silnik), pinowana z tymi samymi niezmiennikami sceny (pasma, ciągłość,
+//   pauza, zero zapisów) w `cv_choreo_render_smoke` / `cv_choreo_logic_smoke`.
+GAME_CONFIG.FEATURES.cvChoreo = false;
 
 // ═══ T1 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
 block('T1 — (654) stager: uzbrojenie lustrzane', () => {
