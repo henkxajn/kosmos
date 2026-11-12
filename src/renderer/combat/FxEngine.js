@@ -26,16 +26,54 @@
 // ⚠ Gorąca ścieżka (`spawnShot`, `update`, metody puli) bez `new` — pilnuje tego keeper (licznik konstrukcji THREE
 //   i tablic typowanych w oknie 100 salw).
 
-import { buildFxShaders } from './FxShaders.js';
+import { buildFxShaders, BOLT_SEGMENTS } from './FxShaders.js';
 import { weaponColor, FX_SHIELD_COLOR } from '../../config/CombatFxConfig.js';
 import { HIT_GLOW } from '../../utils/VesselFxLogic.js';
 import { CHOREO_TUNING } from './ChoreographyLogic.js';   // ARC CV-3b — pokrętła choreografii (jedno źródło wartości domyślnych)
 import { LIVE_LIGHT_POOL } from './LightPool.js';          // ARC CV-2b — pokrętła puli świateł (jedno źródło wartości domyślnych)
 import { LIVE_CUE } from './CombatCueBus.js';              // ARC CV-2b — pokrętła szyny sygnałów walki
+import { LEDGER_TUNING } from './CombatLedgerLogic.js';    // ARC CV-4a — pokrętła harmonogramu salw (rejestr)
 
 /** Pojemności pul (instancje). Pamięć: 13 / 11 liczb float na instancję — razem ok. 0,5 MB. Iskry ×2 względem szczytu
- *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4). */
-export const FX_POOL_CAPACITY = Object.freeze({ beam: 1024, tracer: 1024, spark: 8192 });
+ *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4).
+ *  ARC CV-4a — pule języka broni (flaga `cvWeapons`): wiązki laserów z wieżyczek, pociski w locie (kinetyk, rakieta) i punkty
+ *  świetlne z ruchem (iskry trafień, żar, błysk wylotu, ładowanie). Najgorsza runda 10 na 10: 100 strzałów × (iskry ≤ 15 + 3)
+ *  ≈ 1 800 punktów na rundę, życie ≤ 0,5 R — pojemność z zapasem ×4 przy najkrótszym tempie strojenia. */
+export const FX_POOL_CAPACITY = Object.freeze({ beam: 1024, tracer: 1024, spark: 8192, wbeam: 1024, bolt: 1024, mote: 8192 });
+
+/**
+ * ARC CV-4a — pokrętła rysunku języka broni (flaga `cvWeapons`) — na żywo (`KOSMOS.threeRenderer.cvTuning.WPN_*`, alias w
+ * `LIVE_CV_FX`): szerokość i blask wiązki, długość ogona pocisku, łuk i głowa rakiety, iskry (liczba, prędkość, rozmiar,
+ * życie), żar trafienia, błysk wylotu, ładowanie lasera, pudło, wieżyczki, przechył wraku. Bez pinów na wartościach (F11).
+ */
+export const LIVE_WPN_FX = {
+  WPN_BEAM_WIDTH:     0.0012,  // [WU] połowa szerokości wiązki lasera z wieżyczki
+  WPN_BEAM_MIN_PX:    2.5,     // [CSS px] najmniejsza pełna szerokość wiązki na ekranie
+  WPN_BEAM_CORE:      3.4,     // wzmocnienie HDR rdzenia wiązki (próg bloomu = 1,0)
+  WPN_BOLT_WIDTH:     0.0009,  // [WU] połowa szerokości pocisku (rakieta × WPN_MISSILE_WIDTH_MUL)
+  WPN_BOLT_MIN_PX:    2.5,     // [CSS px] najmniejsza pełna szerokość pocisku na ekranie
+  WPN_BOLT_CORE:      4.0,     // wzmocnienie HDR rdzenia pocisku
+  WPN_MISSILE_WIDTH_MUL: 1.25, // rakieta szersza od pocisku kinetycznego
+  WPN_TRACER_LEN:     0.08,    // [R] ogon pocisku kinetycznego (czas — długość rośnie z prędkością)
+  WPN_KIN_HEAD:       1.2,     // wzmocnienie głowy pocisku kinetycznego
+  WPN_MISSILE_TRAIL:  0.18,    // [R] ogon rakiety (czas; pomiar na żywo: 0,3 R — ogon na 1/3–2/3 toru, rakiety czytały się jak lasery)
+  WPN_MISSILE_ARC:    0.3,     // odchylenie punktu kontrolnego toru rakiety × długość toru
+  WPN_MISSILE_HEAD:   2.5,     // wzmocnienie głowy rakiety
+  WPN_MOTE_CORE:      2.6,     // wzmocnienie HDR rdzenia punktów (iskry, żar, błysk wylotu, ładowanie)
+  WPN_SPARKS:         10,      // iskier na trafienie kadłuba przy budżecie High (Medium / Low — proporcjonalnie do budżetu cząstek)
+  WPN_SPARK_SPEED:    3.0,     // [L / R] prędkość iskier
+  WPN_SPARK_SIZE:     0.18,    // [L] rozmiar iskry
+  WPN_SPARK_LIFE:     0.35,    // [R] życie iskry
+  WPN_GLOW_K:         0.8,     // żar trafienia × rozmiar celu
+  WPN_GLOW_LIFE:      0.5,     // [R] życie żaru
+  WPN_MUZZLE_K:       0.55,    // błysk wylotu × rozmiar strzelca
+  WPN_MUZZLE_LIFE:    0.1,     // [R] życie błysku wylotu
+  WPN_CHARGE_K:       0.6,     // ładowanie lasera × rozmiar strzelca (rośnie do ×1,8)
+  WPN_MISS_OFFSET:    0.9,     // pudło mija cel o × rozmiar celu (nie mniej niż pół długości fregaty)
+  WPN_MISS_OVERSHOOT: 0.6,     // i leci dalej za cel o × odstęp strzelec → cel
+  WPN_TURRET_TIE:     0.12,    // wieżyczki o namiarach różnych o mniej (cosinus) — równe, strzelają po kolei
+  WPN_KILL_TILT_MS:   300,     // [ms] przechył wraku narasta w chwili zniszczenia
+};
 
 /** Rodzaje iskier (atrybut `aKind`). */
 export const SPARK_KIND = Object.freeze({ flash: 0, ring: 1, glow: 2 });
@@ -111,6 +149,10 @@ export const LIVE_CV_FX = {
   // (`CombatCueBus`: najwyżej sygnałów na klatkę, okno scalania). Czytane co klatkę / przy błysku. Strojenie, bez pinów.
   ...LIVE_LIGHT_POOL,
   ...LIVE_CUE,
+  // ARC CV-4a (flaga `cvWeapons`) — harmonogram salw (`CombatLedgerLogic`: okno salw, ładowanie, loty, margines zniszczenia,
+  // opóźnienie) i rysunek języka broni (`LIVE_WPN_FX`). Harmonogram czytany przy każdej rundzie, rysunek — co klatkę / przy strzale.
+  ...LEDGER_TUNING,
+  ...LIVE_WPN_FX,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)
@@ -124,14 +166,20 @@ const STREAK_CORNERS = [0, -1, 0, 1, -1, 0, 0, 1, 0, 1, 1, 0];
 const SPARK_CORNERS = [-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0];
 const QUAD_INDEX = [0, 1, 2, 2, 1, 3];
 
+// ARC CV-4a — pasek pocisku (BOLT): BOLT_SEGMENTS odcinków wzdłuż x ∈ [0, 1] (ogon → głowa), y = ±1 w poprzek.
+const BOLT_CORNERS = [];
+const BOLT_INDEX = [];
+for (let s = 0; s <= BOLT_SEGMENTS; s++) BOLT_CORNERS.push(s / BOLT_SEGMENTS, -1, 0, s / BOLT_SEGMENTS, 1, 0);
+for (let s = 0; s < BOLT_SEGMENTS; s++) { const a = 2 * s; BOLT_INDEX.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+
 /** Jedna pula instancji: tablice atrybutów, liczba aktywnych, zwalnianie przez zamianę z ostatnim. */
 class FxPool {
-  constructor(THREE, { name, capacity, corners, fields, material, parent }) {
+  constructor(THREE, { name, capacity, corners, fields, material, parent, index = QUAD_INDEX }) {
     this.name = name;
     this.capacity = capacity;
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(corners), 3));
-    geo.setIndex(QUAD_INDEX);
+    geo.setIndex(index);
     this.fieldList = [];
     this.f = {};
     for (const [key, size] of fields) {
@@ -243,17 +291,56 @@ class FxPool {
   }
 }
 
+/**
+ * ARC CV-4a — pula języka broni: do tego, co ma `FxPool`, dwa końce śledzone co klatkę z PRZESUNIĘCIEM (tryb 1 — przesunięcie
+ * w świecie od środka statku, tryb 2 — punkt w przestrzeni modelu statku: wieżyczka, obraca się ze statkiem), każdy do chwili
+ * `until` (pocisk: start śledzi wieżyczkę do wystrzału, koniec — cel do trafienia), i przesunięcie punktu kontrolnego toru
+ * od środka odcinka (rakieta). Tablice zbudowane RAZ.
+ */
+class WpnPool extends FxPool {
+  constructor(THREE, opts) {
+    super(THREE, opts);
+    const c = this.capacity;
+    this.idA = new Array(c).fill(null); this.mA = new Uint8Array(c); this.oA = new Float32Array(c * 3); this.untilA = new Float64Array(c);
+    this.idB = new Array(c).fill(null); this.mB = new Uint8Array(c); this.oB = new Float32Array(c * 3); this.untilB = new Float64Array(c);
+    this.ctrl = new Float32Array(c * 3);
+  }
+
+  free(slot) {
+    const last = this.n - 1;
+    if (slot !== last) {
+      this.idA[slot] = this.idA[last]; this.mA[slot] = this.mA[last]; this.untilA[slot] = this.untilA[last];
+      this.idB[slot] = this.idB[last]; this.mB[slot] = this.mB[last]; this.untilB[slot] = this.untilB[last];
+      this.oA.copyWithin(slot * 3, last * 3, last * 3 + 3);
+      this.oB.copyWithin(slot * 3, last * 3, last * 3 + 3);
+      this.ctrl.copyWithin(slot * 3, last * 3, last * 3 + 3);
+    }
+    this.idA[last] = null; this.idB[last] = null; this.mA[last] = 0; this.mB[last] = 0;
+    super.free(slot);
+  }
+
+  /** Koniec A albo B (`end` 0 / 1): id statku (null — punkt stały), tryb, przesunięcie, śledzenie do chwili `until`. */
+  setFollow(slot, end, id, mode, ox, oy, oz, until) {
+    const o = slot * 3;
+    if (end === 0) { this.idA[slot] = id ?? null; this.mA[slot] = id != null ? mode : 0; this.oA[o] = ox; this.oA[o + 1] = oy; this.oA[o + 2] = oz; this.untilA[slot] = until; }
+    else { this.idB[slot] = id ?? null; this.mB[slot] = id != null ? mode : 0; this.oB[o] = ox; this.oB[o + 1] = oy; this.oB[o + 2] = oz; this.untilB[slot] = until; }
+  }
+}
+
 export class FxEngine {
   /**
    * @param {{ THREE: object, parent?: object, logDepth?: boolean, resolve?: (id:string)=>({x:number,y:number,z:number}|null),
    *           nowMs?: number, capacity?: { beam?: number, tracer?: number, spark?: number }, tuning?: object }} opts
    *   resolve — pozycja RYSOWANEGO statku (sprite widoczny) albo null: końce wiązek i iskry idą za nią co klatkę.
    */
-  constructor({ THREE, parent = null, logDepth = true, resolve = null, nowMs = 0, capacity = {}, tuning = LIVE_CV_FX } = {}) {
+  constructor({ THREE, parent = null, logDepth = true, resolve = null, resolveLocal = null, nowMs = 0, capacity = {}, tuning = LIVE_CV_FX } = {}) {
     if (!THREE?.InstancedBufferGeometry) throw new Error('[FxEngine] wymagany THREE (r171) z InstancedBufferGeometry');
     this.THREE = THREE;
     this.tuning = tuning;
     this._resolve = typeof resolve === 'function' ? resolve : null;
+    // ARC CV-4a — punkt w przestrzeni modelu statku → świat (wieżyczka): (id, x, y, z, out) → boolean (false — statek niewidoczny)
+    this._resolveLocal = typeof resolveLocal === 'function' ? resolveLocal : null;
+    this._tmpP = { x: 0, y: 0, z: 0 };
     this.nowMs = Number.isFinite(nowMs) ? nowMs : 0;
     this._epoch = this.nowMs;
     this.root = new THREE.Group();
@@ -282,13 +369,31 @@ export class FxEngine {
     this.beams = new FxPool(THREE, { name: 'beam', capacity: cap.beam, corners: STREAK_CORNERS, fields: STREAK_FIELDS, material: streakMat(0), parent: this.root });
     this.tracers = new FxPool(THREE, { name: 'tracer', capacity: cap.tracer, corners: STREAK_CORNERS, fields: STREAK_FIELDS, material: streakMat(1), parent: this.root });
     this.sparks = new FxPool(THREE, { name: 'spark', capacity: cap.spark, corners: SPARK_CORNERS, fields: SPARK_FIELDS, material: sparkMat, parent: this.root });
-    this.pools = [this.beams, this.tracers, this.sparks];
+    // ARC CV-4a — pule języka broni (flaga `cvWeapons`). Wiązka z wieżyczki: ten sam program STREAK (ten sam tekst — jeden
+    // program), własne pokrętła i śledzenie z przesunięciem; pocisk w locie: BOLT; punkty z ruchem: MOTE. Pule puste nie rysują się.
+    this.wbeams = new WpnPool(THREE, { name: 'wbeam', capacity: cap.wbeam, corners: STREAK_CORNERS, fields: STREAK_FIELDS, material: streakMat(0), parent: this.root });
+    const boltMat = new THREE.ShaderMaterial({
+      ...common,
+      uniforms: { uTime: { value: 0 }, uWidth: { value: 0.001 }, uMinPx: { value: 2 }, uPxToWorld: { value: 0.001 }, uCore: { value: 4 } },
+      vertexShader: src.bolt.vertexShader, fragmentShader: src.bolt.fragmentShader,
+    });
+    const BOLT_FIELDS = [['aStart', 3], ['aCtrl', 3], ['aEnd', 3], ['aColor', 3], ['aTime', 4], ['aStyle', 4]];
+    this.bolts = new WpnPool(THREE, { name: 'bolt', capacity: cap.bolt, corners: BOLT_CORNERS, index: BOLT_INDEX, fields: BOLT_FIELDS, material: boltMat, parent: this.root });
+    const moteMat = new THREE.ShaderMaterial({
+      ...common,
+      uniforms: { uTime: { value: 0 }, uPxToWorld: { value: 0.001 }, uCore: { value: 2.6 } },
+      vertexShader: src.mote.vertexShader, fragmentShader: src.mote.fragmentShader,
+    });
+    const MOTE_FIELDS = [['aPos', 3], ['aVel', 3], ['aColor', 3], ['aParams', 4], ['aShape', 4]];
+    this.motes = new WpnPool(THREE, { name: 'mote', capacity: cap.mote, corners: SPARK_CORNERS, fields: MOTE_FIELDS, material: moteMat, parent: this.root });
+    this.pools = [this.beams, this.tracers, this.sparks, this.wbeams, this.bolts, this.motes];
     this._streakPools = [this.beams, this.tracers];
     this.shots = 0;   // strzały przyjęte (każdy dostaje smugę albo wiązkę — nigdy nie przepada)
+    this.wpnShots = 0;   // ARC CV-4a — strzały języka broni (wiązka albo pocisk)
   }
 
   /** Liczba żywych efektów we wszystkich pulach. */
-  activeCount() { return this.beams.n + this.tracers.n + this.sparks.n; }
+  activeCount() { return this.beams.n + this.tracers.n + this.sparks.n + this.wbeams.n + this.bolts.n + this.motes.n; }
 
   hasActive() { return this.activeCount() > 0; }
 
@@ -338,6 +443,129 @@ export class FxEngine {
     pool.followA[s] = followId ?? null;
   }
 
+  // ── ARC CV-4a — język broni (flaga `cvWeapons`): czasy BEZWZGLĘDNE zegara prezentacji z rejestru salw ───────────────────
+  // Końce śledzone: `aId`/`bId` (null — punkt stały), tryb 1 — przesunięcie w świecie od środka statku, tryb 2 — punkt
+  // w przestrzeni modelu (wieżyczka), śledzenie do `aUntil`/`bUntil` [ms prezentacji]. Bez konstrukcji obiektów — sam zapis liczb.
+
+  /** Kolor szesnastkowy → składowe liniowe (wspólny obiekt `_color`). */
+  _rgb(hex) { this._color.setHex(hex); return this._color; }
+
+  _epochFor(t0) { if (this.activeCount() === 0) this._epoch = Math.min(this.nowMs, t0); }
+
+  /**
+   * Wiązka lasera z wieżyczki: [t0, t0 + life], start za wieżyczką, koniec za punktem trafienia na celu (albo stały — pudło).
+   * @param {{ t0:number, life:number, ax:number, ay:number, az:number, bx:number, by:number, bz:number, color:number, alpha:number,
+   *           aId?:string|null, aMode?:number, aox?:number, aoy?:number, aoz?:number,
+   *           bId?:string|null, bMode?:number, box?:number, boy?:number, boz?:number }} p
+   */
+  spawnBeam(p) {
+    this._epochFor(p.t0);
+    const pool = this.wbeams;
+    const s = pool.alloc();
+    pool.set3('aStart', s, p.ax, p.ay, p.az);
+    pool.set3('aEnd', s, p.bx, p.by, p.bz);
+    const c = this._rgb(p.color);
+    pool.set3('aColor', s, c.r, c.g, c.b);
+    pool.set4('aParams', s, p.alpha, p.t0 - this._epoch, Math.max(1, p.life), 1);
+    pool.death[s] = p.t0 + Math.max(1, p.life);
+    const end = p.t0 + Math.max(1, p.life);
+    pool.setFollow(s, 0, p.aId ?? null, p.aMode ?? 1, p.aox ?? 0, p.aoy ?? 0, p.aoz ?? 0, end);
+    pool.setFollow(s, 1, p.bId ?? null, p.bMode ?? 1, p.box ?? 0, p.boy ?? 0, p.boz ?? 0, end);
+    this.wpnShots++;
+    return s;
+  }
+
+  /**
+   * Pocisk w locie (kinetyk, rakieta): głowa od startu (t0) do końca toru w czasie `flight`, ogon `trail` ms za nią; tor —
+   * krzywa Béziera przez punkt kontrolny = środek odcinka + (cx, cy, cz). Start śledzi wieżyczkę do wystrzału, koniec — cel
+   * do trafienia (pudło: punkt za celem, śledzony z przesunięciem). `miss` — leci za cel i gaśnie w drugiej części lotu.
+   * @param {{ t0:number, flight:number, trail:number, ax:number, ay:number, az:number, bx:number, by:number, bz:number,
+   *           cx?:number, cy?:number, cz?:number, color:number, alpha:number, widthMul?:number, head?:number, miss?:boolean,
+   *           aId?:string|null, aMode?:number, aox?:number, aoy?:number, aoz?:number,
+   *           bId?:string|null, bMode?:number, box?:number, boy?:number, boz?:number }} p
+   */
+  spawnBolt(p) {
+    this._epochFor(p.t0);
+    const pool = this.bolts;
+    const s = pool.alloc();
+    const cx = p.cx ?? 0, cy = p.cy ?? 0, cz = p.cz ?? 0;
+    pool.set3('aStart', s, p.ax, p.ay, p.az);
+    pool.set3('aEnd', s, p.bx, p.by, p.bz);
+    pool.set3('aCtrl', s, (p.ax + p.bx) * 0.5 + cx, (p.ay + p.by) * 0.5 + cy, (p.az + p.bz) * 0.5 + cz);
+    const o = s * 3;
+    pool.ctrl[o] = cx; pool.ctrl[o + 1] = cy; pool.ctrl[o + 2] = cz;
+    const c = this._rgb(p.color);
+    pool.set3('aColor', s, c.r, c.g, c.b);
+    const fl = Math.max(1, p.flight);
+    pool.set4('aTime', s, p.t0 - this._epoch, fl, Math.max(0, p.trail), p.miss ? 1 : 0);
+    pool.set4('aStyle', s, p.alpha, p.widthMul ?? 1, p.head ?? 1, 0);
+    pool.death[s] = p.t0 + fl;
+    pool.setFollow(s, 0, p.aId ?? null, p.aMode ?? 1, p.aox ?? 0, p.aoy ?? 0, p.aoz ?? 0, p.t0);
+    pool.setFollow(s, 1, p.bId ?? null, p.bMode ?? 1, p.box ?? 0, p.boy ?? 0, p.boz ?? 0, p.t0 + fl);
+    this.wpnShots++;
+    return s;
+  }
+
+  /**
+   * Punkt świetlny z ruchem: iskra (kind 0), poświata (1), ładowanie (2). Pozycja śledzi statek (`id`, tryb, przesunięcie) przez
+   * całe życie; prędkość [WU/ms] dodaje ruch od tej pozycji.
+   * @param {{ t0:number, life:number, x:number, y:number, z:number, vx?:number, vy?:number, vz?:number, color:number, alpha:number,
+   *           size:number, kind:number, grow?:number, minPx?:number, maxPx?:number,
+   *           id?:string|null, mode?:number, ox?:number, oy?:number, oz?:number }} p
+   */
+  spawnMote(p) {
+    this._epochFor(p.t0);
+    const pool = this.motes;
+    const s = pool.alloc();
+    pool.set3('aPos', s, p.x, p.y, p.z);
+    pool.set3('aVel', s, p.vx ?? 0, p.vy ?? 0, p.vz ?? 0);
+    const c = this._rgb(p.color);
+    pool.set3('aColor', s, c.r, c.g, c.b);
+    const life = Math.max(1, p.life);
+    pool.set4('aParams', s, p.alpha, p.t0 - this._epoch, life, p.size);
+    pool.set4('aShape', s, p.kind, p.grow ?? 1, p.minPx ?? 1, p.maxPx ?? 64);
+    pool.death[s] = p.t0 + life;
+    pool.setFollow(s, 0, p.id ?? null, p.mode ?? 1, p.ox ?? 0, p.oy ?? 0, p.oz ?? 0, p.t0 + life);
+    return s;
+  }
+
+  /** Pozycja końca śledzonego (tryb 1 / 2) → `out`; false — statek niewidoczny (koniec zostaje, gdzie był). */
+  _wpnEnd(id, mode, arr, o, out) {
+    if (mode === 2) return !!this._resolveLocal && this._resolveLocal(id, arr[o], arr[o + 1], arr[o + 2], out);
+    const p = this._resolve ? this._resolve(id) : null;
+    if (!p) return false;
+    out.x = p.x + arr[o]; out.y = p.y + arr[o + 1]; out.z = p.z + arr[o + 2];
+    return true;
+  }
+
+  /** Końce wiązek, pocisków i punktów języka broni za statkami (do chwili `until` każdego końca); punkt kontrolny toru za środkiem. */
+  _followWpn(now) {
+    const q = this._tmpP;
+    const wb = this.wbeams;
+    for (let i = 0; i < wb.n; i++) {
+      const o = i * 3;
+      if (wb.idA[i] != null && now <= wb.untilA[i] && this._wpnEnd(wb.idA[i], wb.mA[i], wb.oA, o, q)) { wb.set3('aStart', i, q.x, q.y, q.z); wb.dirty = true; }
+      if (wb.idB[i] != null && now <= wb.untilB[i] && this._wpnEnd(wb.idB[i], wb.mB[i], wb.oB, o, q)) { wb.set3('aEnd', i, q.x, q.y, q.z); wb.dirty = true; }
+    }
+    const bo = this.bolts;
+    const fs = bo.f.aStart.array, fe = bo.f.aEnd.array;
+    for (let i = 0; i < bo.n; i++) {
+      const o = i * 3;
+      let moved = false;
+      if (bo.idA[i] != null && now <= bo.untilA[i] && this._wpnEnd(bo.idA[i], bo.mA[i], bo.oA, o, q)) { bo.set3('aStart', i, q.x, q.y, q.z); moved = true; }
+      if (bo.idB[i] != null && now <= bo.untilB[i] && this._wpnEnd(bo.idB[i], bo.mB[i], bo.oB, o, q)) { bo.set3('aEnd', i, q.x, q.y, q.z); moved = true; }
+      if (moved) {
+        bo.set3('aCtrl', i, (fs[o] + fe[o]) * 0.5 + bo.ctrl[o], (fs[o + 1] + fe[o + 1]) * 0.5 + bo.ctrl[o + 1], (fs[o + 2] + fe[o + 2]) * 0.5 + bo.ctrl[o + 2]);
+        bo.dirty = true;
+      }
+    }
+    const mo = this.motes;
+    for (let i = 0; i < mo.n; i++) {
+      if (mo.idA[i] == null || now > mo.untilA[i]) continue;
+      if (this._wpnEnd(mo.idA[i], mo.mA[i], mo.oA, i * 3, q)) { mo.set3('aPos', i, q.x, q.y, q.z); mo.dirty = true; }
+    }
+  }
+
   /**
    * Raz na klatkę pętli renderu.
    * @param {{ nowMs:number, camera?:{fov:number}, viewportH?:number, visible?:boolean, stage?:boolean }} frame
@@ -363,6 +591,14 @@ export class FxEngine {
     su.uMinPx.value.set(T.FLASH_MIN_PX, T.RING_MIN_PX, T.GLOW_MIN_PX);
     su.uMaxPx.value.set(T.FLASH_MAX_PX, T.RING_MAX_PX, T.GLOW_MAX_PX);
     su.uGrow.value.set(st ? T.STAGE_FLASH_GROW : T.FLASH_GROW, st ? T.STAGE_RING_GROW : T.RING_GROW, 1);
+    // ARC CV-4a — pule języka broni: śledzenie końców (gdy coś w nich jest) i pokrętła `WPN_*` co klatkę.
+    if ((this.wbeams.n + this.bolts.n + this.motes.n) > 0 && (this._resolve || this._resolveLocal)) this._followWpn(now);
+    const wu = this.wbeams.material.uniforms, ou = this.bolts.material.uniforms, mu = this.motes.material.uniforms;
+    wu.uTime.value = tRel; wu.uPxToWorld.value = pxToWorld; wu.uWidth.value = T.WPN_BEAM_WIDTH ?? T.BEAM_WIDTH;
+    wu.uMinPx.value = T.WPN_BEAM_MIN_PX ?? T.MIN_PX; wu.uCore.value = T.WPN_BEAM_CORE ?? T.BEAM_CORE;
+    ou.uTime.value = tRel; ou.uPxToWorld.value = pxToWorld; ou.uWidth.value = T.WPN_BOLT_WIDTH ?? T.TRACER_WIDTH;
+    ou.uMinPx.value = T.WPN_BOLT_MIN_PX ?? T.MIN_PX; ou.uCore.value = T.WPN_BOLT_CORE ?? T.TRACER_CORE;
+    mu.uTime.value = tRel; mu.uPxToWorld.value = pxToWorld; mu.uCore.value = T.WPN_MOTE_CORE ?? T.FLASH_CORE;
     for (let i = 0; i < this.pools.length; i++) this.pools[i].upload();
     this.root.visible = visible !== false;
   }
@@ -390,14 +626,16 @@ export class FxEngine {
   /** Stan pul do `KOSMOS.debug.fxStats()`. */
   stats() {
     return {
-      pools: { beam: this.beams.stats(), tracer: this.tracers.stats(), spark: this.sparks.stats() },
-      active: this.activeCount(), shots: this.shots, presMs: this.nowMs, epochMs: this._epoch,
+      pools: { beam: this.beams.stats(), tracer: this.tracers.stats(), spark: this.sparks.stats(),
+        wbeam: this.wbeams.stats(), bolt: this.bolts.stats(), mote: this.motes.stats() },   // ARC CV-4a — pule języka broni
+      active: this.activeCount(), shots: this.shots, wpnShots: this.wpnShots, presMs: this.nowMs, epochMs: this._epoch,
     };
   }
 
   dispose() {
     for (const p of this.pools) { p.dispose(); }
     this.beams.material.dispose(); this.tracers.material.dispose(); this.sparks.material.dispose();
+    this.wbeams.material.dispose(); this.bolts.material.dispose(); this.motes.material.dispose();
     this.root.parent?.remove(this.root);
   }
 }

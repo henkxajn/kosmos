@@ -72,14 +72,16 @@ const idsOf = (side) => [...(side?.vesselIds ?? []), ...(side?.joinedVesselIds ?
  * Strona bitwy w pasku: okręty (widoczne i ukryte mgłą) i sumy z WIDOCZNYCH.
  * @param {Array<{id:string, enc:object}>} members
  */
-function sideStats(members, { isEnemy, inPlayerEngagement, quality, nameOf, classOf }) {
+function sideStats(members, { isEnemy, inPlayerEngagement, quality, nameOf, classOf, presented = null }) {
   const ships = [];
   let alive = 0, total = 0, hp = 0, hpStart = 0, hidden = 0;
   for (const { id, enc } of members) {
     const st = enc?.vesselStates?.get?.(id) ?? null;
     const visible = isEndpointVisibleInCombat({ isEnemy, quality: quality(id), inPlayerEngagement });
-    const h = Math.max(0, Number(st?.hp) || 0), h0 = Math.max(0, Number(st?.hpStart) || 0);
-    const sh = Math.max(0, Number(st?.shieldHP) || 0), sh0 = Math.max(0, Number(st?.shieldHPStart) || 0);
+    // ARC CV-4a (flaga `cvWeapons`, Finding 614) — HP / osłona POKAZYWANE (rejestr salw: spadają w chwili trafienia); bez rejestru — stan logiczny.
+    const pr = presented && st ? presented(id, st) : null;
+    const h = Math.max(0, Number(pr ? pr.hp : st?.hp) || 0), h0 = Math.max(0, Number(st?.hpStart) || 0);
+    const sh = Math.max(0, Number(pr ? pr.shield : st?.shieldHP) || 0), sh0 = Math.max(0, Number(st?.shieldHPStart) || 0);
     const isAlive = h > 0;
     ships.push({ id, visible, alive: isAlive, hp: h, hpStart: h0, shield: sh, shieldStart: sh0,
       name: visible ? (nameOf?.(id) ?? id) : null, cls: visible ? (classOf?.(id) ?? null) : null });
@@ -97,14 +99,16 @@ function sideStats(members, { isEnemy, inPlayerEngagement, quality, nameOf, clas
  * @param {object[]} encounters — aktywne starcia (`DSCS.listActive()`)
  * @param {{ getPos:(id:string)=>({x:number,y:number}|null), radius:number, activeSystemId?:string|null,
  *           quality?:(id:string)=>string, labelFor?:(owner:string|null, count:number)=>string,
- *           nameOf?:(id:string)=>string, classOf?:(id:string)=>string|null }} env
+ *           nameOf?:(id:string)=>string, classOf?:(id:string)=>string|null,
+ *           presented?:(id:string, st:object)=>({hp:number, shield:number}|null) }} env
+ *   presented — ARC CV-4a: HP / osłona pokazywane (rejestr salw renderera, flaga `cvWeapons`); brak / null — stan logiczny
  * @returns {object[]}
  */
 export function stripBattles(encounters, env = {}) {
   const list = (encounters ?? []).filter((e) => e && e.id != null && e.isActive !== false);
   if (!list.length) return [];
   const { getPos = () => null, radius = 0, activeSystemId = null, quality = () => 'unknown', labelFor = null,
-    nameOf = null, classOf = null } = env;
+    nameOf = null, classOf = null, presented = null } = env;
   const byId = new Map(list.map((e) => [String(e.id), e]));
   const clusters = (radius > 0 && typeof getPos === 'function') ? encounterClusters(list, getPos, radius) : [];
   const covered = new Set(clusters.flatMap((c) => c.encounterIds));
@@ -126,7 +130,7 @@ export function stripBattles(encounters, env = {}) {
       for (const id of idsOf(e[pk])) if (!seen.has(id)) { seen.add(id); own.push({ id, enc: e }); }
       for (const id of idsOf(e[ok])) if (!seen.has(id)) { seen.add(id); foe.push({ id, enc: e }); }
     }
-    const common = { inPlayerEngagement, quality, nameOf, classOf };
+    const common = { inPlayerEngagement, quality, nameOf, classOf, presented };
     // Własna strona (gracz) zawsze widoczna; w bitwie bez gracza (dziś DSCS jej nie zakłada) obie strony przez bramkę wywiadu.
     const ownSide = sideStats(own, { ...common, isEnemy: !playerIn });
     const foeSide = sideStats(foe, { ...common, isEnemy: true });
@@ -163,13 +167,18 @@ export function stripWatchPayload(row) {
  * okrętów ukrytych mgłą — „?”.
  * @param {object} row — z `stripBattles`
  * @param {{ n?:number, nameOf?:(id:string)=>string, weaponOf?:(moduleId:string)=>string, roundLabel?:(r:number)=>string,
- *           miss?:string, shield?:string }} o
+ *           miss?:string, shield?:string, shown?:(encounterId:string, round:number, index:number)=>boolean }} o
+ *   shown — ARC CV-4a: zdarzenie już pokazane (rejestr salw, flaga `cvWeapons`); brak — każde
  * @returns {Array<{ text:string, side:'own'|'enemy' }>}
  */
 export function stripLog(row, { n = COMBAT_STRIP.DETAIL_LOG_LINES, nameOf = (id) => id, weaponOf = (m) => m,
-  roundLabel = (r) => `R${r}`, miss = 'miss', shield = 'shield' } = {}) {
+  roundLabel = (r) => `R${r}`, miss = 'miss', shield = 'shield', shown = null } = {}) {
   if (!row?.encounters?.length || !(n > 0)) return [];
   const merged = row.encounters.length === 1 ? row.encounters[0] : mergeEncounterView(row.encounters);
+  // ARC CV-4a (flaga `cvWeapons`, Finding 614) — linia zdarzenia dopiero po jego TRAFIENIU w prezentacji (rejestr salw); obiekt rundy
+  // → starcie (widok scalony trzyma te same obiekty rund), indeks zdarzenia = indeks w `round.events` = indeks w ładunku FX.
+  const encOfRound = typeof shown === 'function' ? new Map() : null;
+  if (encOfRound) for (const e of row.encounters) for (const r of e?.timeline ?? []) encOfRound.set(r, e.id);
   const ownIds = new Set(row.own.ships.map((s) => s.id));
   const vis = new Map([...row.own.ships, ...row.enemy.ships].map((s) => [s.id, s.visible]));
   const nm = (id) => (vis.get(id) === false ? '?' : (nameOf(id) ?? String(id)));
@@ -180,6 +189,7 @@ export function stripLog(row, { n = COMBAT_STRIP.DETAIL_LOG_LINES, nameOf = (id)
     const evs = r?.events ?? [];
     for (let j = evs.length - 1; j >= 0 && out.length < n; j--) {
       const ev = evs[j];
+      if (encOfRound && !shown(encOfRound.get(r), r.round, j)) continue;
       const dmg = Math.round(Number(ev.damage) || 0), blk = Math.round(Number(ev.blockedByShield) || 0);
       const info = !ev.hit ? miss
         : (blk > 0 && dmg === 0) ? `${shield} ${blk}`

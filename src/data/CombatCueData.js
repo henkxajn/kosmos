@@ -6,9 +6,10 @@
 //
 // Rodzaje (`kind`) i drugi klucz:
 //   fire / impact / shieldHit — po BRONI (`weapon`: laser / kinetic / missile; kategoria modułu short / medium / long);
-//   explosion / destroyed     — po ROZMIARZE (`size`: small / medium / large; klasa kadłuba).
+//   explosion / destroyed / kill — po ROZMIARZE (`size`: small / medium / large; klasa kadłuba).
 // Dziś silnik emituje fire, impact, shieldHit (każda salwa) i destroyed (wybuch wraku); `explosion` (wybuchy pocisków,
-// eksplozje wtórne) dojdzie z CV-4 / CV-5 — komórki są już w tabeli.
+// eksplozje wtórne) dojdzie z CV-5 — komórki są już w tabeli. ARC CV-4a (flaga `cvWeapons`): fire / impact / shieldHit
+// w chwilach z REJESTRU SALW (strzał, trafienie), do tego `kill` — zniszczenie w chwili trafienia zabijającego (po rozmiarze).
 
 export const COMBAT_CUE_SOUNDS = Object.freeze({
   fire:      Object.freeze({ laser: null, kinetic: null, missile: null }),
@@ -16,6 +17,8 @@ export const COMBAT_CUE_SOUNDS = Object.freeze({
   shieldHit: Object.freeze({ laser: null, kinetic: null, missile: null }),
   explosion: Object.freeze({ small: null, medium: null, large: null }),
   destroyed: Object.freeze({ small: null, medium: null, large: null }),
+  // ARC CV-4a — zniszczenie okrętu w chwili TRAFIENIA ZABIJAJĄCEGO (rejestr salw, flaga `cvWeapons`; po rozmiarze kadłuba).
+  kill:      Object.freeze({ small: null, medium: null, large: null }),
 });
 
 /** Rodzaje sygnałów (kolejność = kolejność tabeli). */

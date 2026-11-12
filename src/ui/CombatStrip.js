@@ -180,6 +180,9 @@ export class CombatStrip {
       labelFor: (owner) => (owner === 'player' ? t('battle.player')
         : (K.empireRegistry?.get?.(owner)?.name ?? t('battle.unknownForce'))),
       nameOf: (id) => { const v = vessel(id); return v?.name ?? v?.shipId ?? id; },
+      // ARC CV-4a (flaga `cvWeapons`, Finding 614) — HP / osłona pokazywane z rejestru salw renderera (spadają w chwili trafienia)
+      presented: GAME_CONFIG.FEATURES?.cvWeapons && K.threeRenderer?.cvPresentedState
+        ? (id, st) => K.threeRenderer.cvPresentedState(id, st) : null,
       classOf: (id) => {
         const v = vessel(id); const hullId = v?.hullId ?? v?.shipId ?? '';
         const hull = HULLS?.[hullId];
@@ -247,6 +250,9 @@ export class CombatStrip {
       nameOf: (id) => [...exp.own.ships, ...exp.enemy.ships].find((s) => s.id === id)?.name ?? id,
       weaponOf: (m) => { const mod = SHIP_MODULES?.[m]; return mod ? getName(mod) : String(m ?? '').replace(/^weapon_/, ''); },
       roundLabel: (n) => t('combatStrip.logRound', n), miss: t('combatStrip.miss'), shield: t('combatStrip.shield'),
+      // ARC CV-4a (flaga `cvWeapons`) — linia zdarzenia dopiero po jego trafieniu w prezentacji (rejestr salw renderera)
+      shown: GAME_CONFIG.FEATURES?.cvWeapons && K?.threeRenderer?.cvEventShown
+        ? (encId, round, j) => K.threeRenderer.cvEventShown(encId, round, j) : null,
     }) : [];
     const detailH = exp ? stripDetailHeight({ ownN: exp.own.ships.length, enemyN: exp.enemy.ships.length, logN: log.length }) : 0;
     const L = stripLayout({ W, H, insets, lines: visible.length, overflow: overflow > 0, naturalW: fixedW + locW0, detailH, banner });

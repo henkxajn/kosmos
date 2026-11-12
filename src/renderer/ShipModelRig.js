@@ -176,7 +176,15 @@ export function buildShipRig({ THREE, template, hardpoints, targetSize, kind = '
     if (lights) canon.add(lights);
   }
 
-  return { root, canon, model, materials, exhaust: cone, lights, nozzleR: nz?.r ?? 0.04, frameQuat: q, slot: hp.slot };
+  // ARC CV-4a — wieżyczki (`weapons[].p` w przestrzeni modelu; strzały języka broni wychodzą z nich) i dziób modelu (zapasowe
+  // punkty strzału na kadłubie dla slotów bez wieżyczek). Same dane — bez obiektów THREE.
+  const weapons = Array.isArray(hp.weapons)
+    ? hp.weapons.filter((w) => Array.isArray(w?.p) && w.p.length === 3 && w.p.every(Number.isFinite)).map((w) => ({ id: w.id ?? null, p: [w.p[0], w.p[1], w.p[2]] }))
+    : [];
+  const fb = Array.isArray(hp.frame?.bow) ? hp.frame.bow : [-1, 0, 0];
+  const fbl = Math.hypot(fb[0], fb[1], fb[2]) || 1;
+  return { root, canon, model, materials, exhaust: cone, lights, nozzleR: nz?.r ?? 0.04, frameQuat: q, slot: hp.slot,
+    weapons, frameBow: [fb[0] / fbl, fb[1] / fbl, fb[2] / fbl] };
 }
 
 /**

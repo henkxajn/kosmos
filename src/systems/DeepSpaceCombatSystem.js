@@ -773,17 +773,44 @@ export class DeepSpaceCombatSystem {
         const p = vm?._vessels?.get(id)?.position;
         return (p && Number.isFinite(p.x) && Number.isFinite(p.y)) ? { x: p.x, y: p.y } : null;
       };
+      // ARC CV-4a (D-CV-8) — pola WYŁĄCZNIE dla prezentacji (rejestr salw renderera: HP i zniszczenie w chwili TRAFIENIA):
+      // stan PO każdym zdarzeniu liczony WSTECZ od stanu z chwili emisji (po całym ogniu rundy, przed regeneracją osłon) —
+      // ostatnie zdarzenie w cel niesie dokładnie bieżący stan. Liczone na kopiach liczb: `round.events`, `vesselStates`,
+      // zapis (`serialize`) i rekord bitwy bez zmian bajt w bajt (keeper `cv_weapons_ledger_smoke` W0).
+      const sideAIds = new Set(sideAVids);
+      const fxAfter = new Array(round.events.length);
+      const runHp = new Map(), runSh = new Map();
+      for (let i = round.events.length - 1; i >= 0; i--) {
+        const ev = round.events[i];
+        if (!runHp.has(ev.target)) {
+          const st = encounter.vesselStates.get(ev.target);
+          runHp.set(ev.target, st?.hp ?? 0);
+          runSh.set(ev.target, st?.shieldHP ?? 0);
+        }
+        const hpAfter = runHp.get(ev.target), shieldAfter = runSh.get(ev.target);
+        const dmg = ev.hit ? (ev.damage ?? 0) : 0;
+        const hpBefore = hpAfter + dmg;
+        fxAfter[i] = { dmg, hpAfter, shieldAfter, killed: ev.hit === true && hpBefore > 0 && hpAfter <= 0 };
+        runHp.set(ev.target, hpBefore);
+        runSh.set(ev.target, shieldAfter + (ev.hit ? (ev.blockedByShield ?? 0) : 0));
+      }
       EventBus.emit('combat:roundFx', {
         encounterId: encounter.id,
         // POLISH P2a (CP7, Finding 453) — układ starcia: renderer rysuje salwę WYŁĄCZNIE w oglądanym układzie
         // (`isEngagementInView`); pozycje niżej są lokalne dla układu, więc bez tego pola nie da się ich przypisać.
         systemId:    encounter.location.systemId,
         midpoint:    { x: encounter.location.point.x, y: encounter.location.point.y },
-        events: round.events.map(ev => ({
+        round:       encounter.currentRound,   // ARC CV-4a (D-CV-8) — numer rundy (rejestr salw: każde zdarzenie dokładnie raz)
+        seed:        encounter.seedBase,       // ARC CV-4a — ziarno starcia (kolejność salw i wariacje wizualne — ta sama bitwa = ten sam obraz)
+        events: round.events.map((ev, i) => ({
           attacker: ev.attacker, target: ev.target,
           category: SHIP_MODULES[ev.weapon]?.stats?.category ?? null,
           hit: ev.hit, blockedByShield: ev.blockedByShield,
           aPos: snap(ev.attacker), tPos: snap(ev.target),
+          // ARC CV-4a (D-CV-8): moduł broni, strona strzelca, obrażenia kadłuba netto, HP i osłona celu PO zdarzeniu,
+          // zdarzenie zabijające (pierwsze, po którym HP celu ≤ 0).
+          weapon: ev.weapon, side: sideAIds.has(ev.attacker) ? 'A' : 'B',
+          dmg: fxAfter[i].dmg, hpAfter: fxAfter[i].hpAfter, shieldAfter: fxAfter[i].shieldAfter, killed: fxAfter[i].killed,
         })),
       });
     }

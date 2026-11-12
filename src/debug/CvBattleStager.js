@@ -59,6 +59,12 @@
 //   gfx() / gfx(2) / gfx(1) / gfx(0)    — ARC CV-2b: odczyt presetu / High / Medium / Low (zapis na maszynie, jak ☰ „Grafika”)
 //   cvLightFlash()                      — ARC CV-2b: błysk światła puli w środku oglądanej bitwy (High 4 / Medium 2 / Low 0 świateł)
 //   cueStats() / cueStats(0)            — ARC CV-2b: sygnały walki odebrane przez słuchacza `AudioSystem` / wyzerowanie licznika
+//   cvWeapons(1) / cvWeapons(0)         — ARC CV-4a: flaga `cvWeapons` (język broni + rejestr salw: HP i zniszczenie w chwili trafienia,
+//                                         strzały z wieżyczek) ON / OFF, od następnej salwy (OFF — salwy CV-2a)
+//   ledgerInfo()                        — ARC CV-4a: rejestr salw — per starcie liczniki od jego początku (`wTymStarciu`) i ostatnie
+//                                         rundy (zdarzenia, opóźnienie startu i rozpiętość trafień w R, zniszczenia, strzały po
+//                                         zniszczeniu), HP pokazywane vs logiczne uczestników, liczniki od wczytania strony
+//                                         (`odZaladowaniaStrony` — sumy wszystkich starć, F5 zeruje), `legenda` (co liczy każdy licznik)
 //
 // Scena (dlaczego tak, punkt po punkcie — §1 Q9 / Finding 634):
 //   · układ = OGLĄDANY (`activeSystemId`) — `teleportVessel` nigdy nie ustawiał `systemId`, a starcie w innym układzie nie
@@ -681,6 +687,20 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const r = getRenderer();
       r?._applyGfx?.('flag');
       return { cvPresets: F.cvPresets, ...(r?.cvGfxInfo?.() ?? {}) };
+    },
+
+    /** ARC CV-4a — flaga `cvWeapons` (język broni + rejestr salw): cvWeapons(1) — ON, cvWeapons(0) — OFF (salwy CV-2a), cvWeapons() —
+     *  przełącz. Czytana w chwili salwy i co klatkę. */
+    cvWeapons(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvWeapons = on === undefined ? !F.cvWeapons : !!on;
+      return { cvWeapons: F.cvWeapons, cvFxEngine: !!F.cvFxEngine };
+    },
+
+    /** ARC CV-4a — rejestr salw: liczniki per starcie i od wczytania strony, ostatnie rundy, HP pokazywane vs logiczne (`ThreeRenderer.cvLedgerInfo`). */
+    ledgerInfo() {
+      const r = getRenderer();
+      return r?.cvLedgerInfo ? r.cvLedgerInfo() : { ok: false, reason: 'no_renderer' };
     },
 
     /** ARC CV-2b — preset jakości: gfx() — odczyt (poziom, gęstość pikseli, bloom, światła, tekstury, budżety, dławienie, pamięć

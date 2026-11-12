@@ -22,7 +22,8 @@ export const TEXTURE_ORDER = Object.freeze(['1k', '2k']);
 
 /**
  * Tabela §2.10. `pixelRatio` — reguła (gęstość = min(dpr × dprMul, cap) albo stała `fixed`); High = dzisiejszy wzór renderera
- * (`min(dpr × 1,5, 2)` — supersampling).
+ * (`min(dpr × 1,5, 2)` — supersampling). `notAbove` — poziom, od którego gęstość nie może być większa (Finding 703: Low =
+ * min(1,0, Medium) — przy DPR < 1 stała 1,0 dawała Low OSTRZEJSZY od Medium, który rysuje natywnie).
  */
 export const GFX_PRESETS = Object.freeze({
   high: Object.freeze({
@@ -34,7 +35,7 @@ export const GFX_PRESETS = Object.freeze({
     smoke: true, embers: false, damageSmoke: 'fire', shieldRipples: 4, textures: '1k',
   }),
   low: Object.freeze({
-    pixelRatio: Object.freeze({ fixed: 1.0 }), bloom: false, particles: 2000, lights: 0, debris: 0,
+    pixelRatio: Object.freeze({ fixed: 1.0, notAbove: 'medium' }), bloom: false, particles: 2000, lights: 0, debris: 0,
     smoke: false, embers: false, damageSmoke: 'off', shieldRipples: 1, textures: '1k',
   }),
 });
@@ -56,7 +57,8 @@ export const THROTTLE_ORDER = Object.freeze(['smoke', 'embers', 'debris', 'damag
  */
 export function presetPixelRatio(level, dpr) {
   const p = (GFX_PRESETS[level] ?? GFX_PRESETS.high).pixelRatio;
-  if (Number.isFinite(p.fixed)) return p.fixed;
   const d = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
-  return Math.min(d * p.dprMul, p.cap);
+  const r = Number.isFinite(p.fixed) ? p.fixed : Math.min(d * p.dprMul, p.cap);
+  // Finding 703 — niższy preset nigdy ostrzejszy od wyższego (Low ≤ Medium ≤ High przy każdym DPR).
+  return p.notAbove && p.notAbove !== level ? Math.min(r, presetPixelRatio(p.notAbove, d)) : r;
 }

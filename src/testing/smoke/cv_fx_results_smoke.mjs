@@ -43,6 +43,10 @@
 //   A6 (CV-2b, flaga `cvPresets`) — sygnały walki: tryb ON z szyną `combatfx:cue` (salwy, trafienia, wybuchy wraków) i słuchaczem
 //      `AudioSystem` podpiętym po `EventBus.clear()` świata == ON bez flagi == bez renderera (sygnatura, ślad, losowania, sloty);
 //      świadek — sygnały naprawdę płynęły i słuchacz odebrał każdy
+//   A7 (CV-4a, flaga `cvWeapons`) — język broni i rejestr salw: tryb ON z rejestrem (harmonogram, HP pokazywane, zniszczenie w chwili
+//      trafienia, eksplozje z rejestru) == ON bez flagi (salwy CV-2a) == bez renderera (sygnatura, ślad, losowania, sloty); świadek —
+//      strzały poszły pulami języka broni, rejestr pokazał zniszczenia, salwa CV-2a ustąpiła. Pozostałe tryby ON pinują ścieżkę CV-2a
+//      (`cvWeapons` OFF jawnie — flaga domyślnie ON od CV-4a)
 //
 // ⚠ Fail-first: moduły CV-2a (stager, silnik, zegar) powstają w tym kroku — import dynamiczny w try/catch, piny DEGRADUJĄ
 //   (czerwone), suita się nie przerywa. A2 jest STRAŻNIKIEM (wynik nie zależał od FX także przed CV-2a, od CV-0b).
@@ -79,6 +83,9 @@ const SZOOM  = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
 const SMOT = await tryImport('../../renderer/combat/StageMotionLogic.js');   // ARC CV-6b — ruch sceny ciągły w prędkości
 const CHOREO = await tryImport('../../renderer/combat/ChoreographyLogic.js');   // ARC CV-3b — choreografia w kopercie
 const CUEBUS = await tryImport('../../renderer/combat/CombatCueBus.js');        // ARC CV-2b — szyna sygnałów walki (A6)
+const LEDGER = await tryImport('../../renderer/combat/CombatLedgerLogic.js');   // ARC CV-4a — rejestr salw (A7)
+const RIG    = await tryImport('../../renderer/ShipModelRig.js');               // ARC CV-4a — wygląd wraku w chwili zniszczenia (A7)
+const HPTS   = await tryImport('../../renderer/ShipHardpoints.js');
 const AUDIOM = await tryImport('../../systems/AudioSystem.js');                 // ARC CV-2b — słuchacz sygnałów (A6)
 // ARC CV-2b — jedna instancja jak w `main.js` (przed pierwszym `EventBus.clear()` — subskrypcje konstruktora i tak giną, jak w grze);
 // w trybie A6 `attach()` po starcie świata (jak `GameScene.start`).
@@ -126,12 +133,16 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'createChoreo', 'choreoSeed', 'choreoClassOf', 'choreoEnvelope', 'postureOf', 'pickFacingTarget', 'stepChoreoOffset', 'constrainChoreo',
   'stepChoreoFacing', 'stepChoreoEngine', 'vesselSizeClass', 'apparentEdges', 'exhaustIntensityRaw', '_CHQ_A', '_CHQ_C', '_CHQ_D', '_CHV', 'quatFromYawPitchRoll',
   // ARC CV-2b — szyna sygnałów walki (tryb A6: flaga `cvPresets`)
-  'CombatCueBus', 'cueWeaponOfCategory', 'cueSizeOfClass', 'screenPan', 'EventBus'];
+  'CombatCueBus', 'cueWeaponOfCategory', 'cueSizeOfClass', 'screenPan', 'EventBus',
+  // ARC CV-4a — język broni i rejestr salw (tryb A7: flaga `cvWeapons`)
+  'CombatLedger', 'pickTurret', 'ledgerRng', 'paintRigMaterials', 'wreckTiltQuaternion'];
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
   '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
   '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
   '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease', '_choreoEnd', '_choreoExhaust', '_applyExhaust',
-  '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues'];   // ARC CV-2b — sygnały walki (A6)
+  '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues',   // ARC CV-2b — sygnały walki (A6)
+  '_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvWpnPresentKill', '_cvWpnKillLook',
+  '_cvWpnWreckGate', 'cvPresentedState', 'cvEventShown', '_spawnExplosion'];   // ARC CV-4a — język broni i rejestr salw (A7)
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -145,7 +156,8 @@ function makeMethod(name) {
     CHOREO?.createChoreo, CHOREO?.choreoSeed, CHOREO?.choreoClassOf, CHOREO?.choreoEnvelope, CHOREO?.postureOf, CHOREO?.pickFacingTarget,
     CHOREO?.stepChoreoOffset, CHOREO?.constrainChoreo, CHOREO?.stepChoreoFacing, CHOREO?.stepChoreoEngine, vesselSizeClass, STAGEL?.apparentEdges,
     FX.exhaustIntensityRaw, new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Vector3(), CHOREO?.quatFromYawPitchRoll,
-    CUEBUS?.CombatCueBus, CUEBUS?.cueWeaponOfCategory, CUEBUS?.cueSizeOfClass, CUEBUS?.screenPan, EventBus);
+    CUEBUS?.CombatCueBus, CUEBUS?.cueWeaponOfCategory, CUEBUS?.cueSizeOfClass, CUEBUS?.screenPan, EventBus,
+    LEDGER?.CombatLedger, LEDGER?.pickTurret, LEDGER?.ledgerRng, RIG?.paintRigMaterials, HPTS?.wreckTiltQuaternion);
 }
 
 /** Atrapa renderera: prawdziwe metody FX, sprite'y = Object3D za pozycjami logicznymi, zegar prezentacji z CV-2a. */
@@ -157,6 +169,8 @@ function fakeRenderer() {
     _stageMarks: new Map(), _stageState: new Map(), _stageClock: CLOCK ? new CLOCK.PresentationClock() : null, _stageFrame: null,
     _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _galaxyFlight: false, _frameNo: 0, stagedFrames: 0, stageMaxK: 0, shellFrames: 0,
     choreoFrames: 0, choreoMaxL: 0, cvTuning: ENGINE?.LIVE_CV_FX ?? {},   // ARC CV-3b — świadek: tryb ON naprawdę choreografował
+    _cvLedger: null, _cvWpnTurretTurn: new Map(), _shipLightPool: null, _gfx: null,   // ARC CV-4a — rejestr salw (A7)
+    _cvWpnStats: { rounds: 0, shots: 0, hidden: 0, killsShown: 0, wreckDeduped: 0, wreckDeferred: 0, wreckUnknown: 0 },
     // CV-3a3 — rysowane ciało (skorupa): środek z encji, promień jak `computeBodyRadius` skalistej planety bez masy
     getBodyWorldInfo: (id) => { const b = EntityManager.get(id); return b ? { x: S(b.x), y: 0, z: S(b.y), r: 0.062 } : null; } };
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
@@ -284,10 +298,12 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  * Starcie ze stagera, rozegrane do końca. mode: 'none' (bez renderera) · 'off' (renderer, flaga OFF) · 'on' (flaga ON);
  * `control` — słuchacz salwy losujący z `Math.random` (KONTROLA przyrządu).
  */
-function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false } = {}) {
+function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false, weapons = false } = {}) {
   const flag = GAME_CONFIG.FEATURES.cvFxEngine;
   const presetsFlag = GAME_CONFIG.FEATURES.cvPresets;   // ARC CV-2b — A6: sygnały walki tylko w trybie `presets`
   GAME_CONFIG.FEATURES.cvPresets = presets === true;
+  const weaponsFlag = GAME_CONFIG.FEATURES.cvWeapons;   // ARC CV-4a — A7: język broni tylko w trybie `weapons` (reszta pinuje salwy CV-2a)
+  GAME_CONFIG.FEATURES.cvWeapons = weapons === true;
   const stageFlag = GAME_CONFIG.FEATURES.cvStage;
   const choreoFlag = GAME_CONFIG.FEATURES.cvChoreo;
   reseed('cv2a-battle'); reseedRendererRandom();
@@ -303,6 +319,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
       window.innerWidth = 1600; window.innerHeight = 1041;
       R = fakeRenderer();
       EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
+      if (weapons) EventBus.on('combat:roundFx', (p) => R._cvWpnRoundFx(p));   // ARC CV-4a — drugi słuchacz renderera (pełny ładunek)
       // ARC CV-2b (A6) — wybuch wraku → sygnał „destroyed” (jak słuchacz `vessel:wrecked` renderera) i słuchacz `AudioSystem` po
       // `EventBus.clear()` świata (jak `GameScene.start`). Bez flagi `cvPresets` — szyna nie powstaje (metody i tak w atrapie).
       if (presets) {
@@ -340,6 +357,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
   GAME_CONFIG.FEATURES.cvStage = stageFlag;
   GAME_CONFIG.FEATURES.cvChoreo = choreoFlag;
   GAME_CONFIG.FEATURES.cvPresets = presetsFlag;
+  GAME_CONFIG.FEATURES.cvWeapons = weaponsFlag;
   const audio = presets ? (AUDIO_SYS?.cueStats?.() ?? null) : null;
   return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name, audio };
 }
@@ -520,6 +538,22 @@ const PRS = runBattle({ mode: 'on', seed: 1, presets: true });
     `A6b sygnatura i ślad każdej rundy identyczne ON + cvPresets == ON == bez renderera ${JSON.stringify(PRS.sig.battles)}`);
   assert(NONE.draws.length > 0 && same(PRS.draws, NONE.draws) && same(PRS.slots, NONE.slots),
     `A6c sekwencja losowań gry (${PRS.draws.length}) i sloty orbit identyczne — szyna sygnałów i słuchacz nie dotykają strumienia gry`);
+}
+
+header('A7 — (CV-4a) język broni i rejestr salw: wynik ON z rejestrem == ON bez flagi (salwy CV-2a) == bez renderera');
+const WPN = runBattle({ mode: 'on', seed: 1, weapons: true });
+{
+  const es = WPN.R?._fxEngine?.stats?.();
+  const ls = WPN.R?._cvLedger?.stats ?? null;
+  console.log(`     ON + cvWeapons: strzały języka broni ${es?.wpnShots ?? 0} (wiązki ${es?.pools?.wbeam?.spawned ?? 0}, pociski ${es?.pools?.bolt?.spawned ?? 0}, punkty ${es?.pools?.mote?.spawned ?? 0}), `
+    + `salwy CV-2a ${es?.shots ?? 0}; rejestr: rund ${ls?.rounds ?? 0}, zdarzeń ${ls?.events ?? 0}, zniszczeń pokazanych ${WPN.R?._cvWpnStats?.killsShown ?? 0}, strzały po zniszczeniu ${ls?.violations ?? '?'}`);
+  assert(!!es && es.wpnShots >= 50 && es.pools.wbeam.spawned > 0 && es.pools.bolt.spawned > 0 && es.pools.mote.spawned > 0 && es.shots === 0
+    && (WPN.R?._cvWpnStats?.killsShown ?? 0) >= 1 && ls?.violations === 0 && WPN.R.missing.length === 0,
+    'A7a świadek: strzały pulami języka broni (wiązki, pociski, punkty), salwa CV-2a ustąpiła, rejestr pokazał zniszczenia (bez strzału po zniszczeniu)');
+  assert(same(WPN.sig, NONE.sig) && same(WPN.trace, NONE.trace) && same(WPN.sig, ON.sig) && same(WPN.trace, ON.trace),
+    `A7b sygnatura i ślad każdej rundy identyczne ON + cvWeapons == ON == bez renderera ${JSON.stringify(WPN.sig.battles)}`);
+  assert(NONE.draws.length > 0 && same(WPN.draws, NONE.draws) && same(WPN.slots, NONE.slots),
+    `A7c sekwencja losowań gry (${WPN.draws.length}) i sloty orbit identyczne — rejestr i język broni nie dotykają strumienia gry`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

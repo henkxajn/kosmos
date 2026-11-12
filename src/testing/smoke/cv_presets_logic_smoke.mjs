@@ -79,7 +79,7 @@ guard('T1', () => {
     for (const k of ['bloom', 'smoke', 'embers']) if (Number(lo[k]) > Number(hi[k])) bad.push(k);
     if (ORD(P.DAMAGE_SMOKE_ORDER, lo.damageSmoke) > ORD(P.DAMAGE_SMOKE_ORDER, hi.damageSmoke)) bad.push('damageSmoke');
     if (ORD(P.TEXTURE_ORDER, lo.textures) > ORD(P.TEXTURE_ORDER, hi.textures)) bad.push('textures');
-    for (const dpr of [1, 1.25, 1.5, 2, 3]) {
+    for (const dpr of [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2, 3]) {   // Finding 703 — także DPR < 1 (powiększenie przeglądarki < 100 %)
       if (!(P.presetPixelRatio(LEVELS[i - 1], dpr) <= P.presetPixelRatio(LEVELS[i], dpr))) bad.push(`pixelRatio @${dpr}`);
     }
   }
@@ -88,7 +88,13 @@ guard('T1', () => {
   assert([1, 1.25, 1.5, 2, 3].every((d) => P.presetPixelRatio('high', d) === today(d)),
     'T1c High = dzisiejszy wzór renderera min(dpr × 1,5, 2) (flaga ON na mocnej karcie nie zmienia ostrości)');
   assert(P.presetPixelRatio('medium', 1.25) === 1.25 && P.presetPixelRatio('medium', 2) === 1.5 && P.presetPixelRatio('low', 2) === 1,
-    'T1d Medium = min(dpr, 1,5), Low = 1,0 (tabela §2.10)');
+    'T1d Medium = min(dpr, 1,5), Low = min(1,0, Medium) (tabela §2.10)');
+  // Finding 703 (kontrola właściciela 2026-11-12, okno DPR 0,9): Low (stałe 1,0) był ostrzejszy od Medium (natywne 0,9).
+  const d703 = [0.9, 1.0, 1.25, 2.0].map((dpr) => ({ dpr, low: P.presetPixelRatio('low', dpr), medium: P.presetPixelRatio('medium', dpr), high: P.presetPixelRatio('high', dpr) }));
+  console.log('     ' + d703.map((r) => `DPR ${r.dpr}: ${r.low} / ${r.medium} / ${r.high}`).join(' · '));
+  assert(d703.every((r) => r.low <= r.medium && r.medium <= r.high), 'T1h Low ≤ Medium ≤ High przy DPR 0,9 / 1,0 / 1,25 / 2,0 (Finding 703)');
+  assert(d703.map((r) => r.low).join() === '0.9,1,1,1' && d703.map((r) => r.medium).join() === '0.9,1,1.25,1.5',
+    'T1i Low = min(1,0, Medium): 0,9 przy DPR 0,9 (= Medium natywne), 1,0 przy DPR 1,0 / 1,25 / 2,0; Medium bez zmian');
   assert(tbl.high.lights === 4 && tbl.medium.lights === 2 && tbl.low.lights === 0 && P.LIGHT_POOL_MAX === 4,
     'T1e światła puli 4 / 2 / 0 (D-CV-18), pojemność puli = 4');
   assert(tbl.high.textures === '2k' && tbl.medium.textures === '1k' && tbl.low.textures === '1k' && tbl.low.bloom === false && tbl.medium.bloom === true,
@@ -379,8 +385,11 @@ guard('T8', () => {
   const tbl = CUEDATA.COMBAT_CUE_SOUNDS;
   const cells = [];
   for (const k of CUEDATA.CUE_KINDS) for (const sub of (CUEDATA.CUE_WEAPON_KINDS.includes(k) ? CUEDATA.CUE_WEAPONS : CUEDATA.CUE_SIZES)) cells.push([k, sub]);
-  assert(cells.length === 15 && cells.every(([k, sub]) => sub in tbl[k] && CUEDATA.cueSoundId({ kind: k, weapon: sub, size: sub }) === null),
-    `T8i tabela sygnałów: ${cells.length} komórek (fire / impact / shieldHit × broń, explosion / destroyed × rozmiar), każda dziś → null`);
+  // ARC CV-4a — przecelowane ŚWIADOMIE: tabela dostała wiersz `kill` (zniszczenie w chwili trafienia zabijającego, po rozmiarze) —
+  // 15 → 18 komórek; reszta pinu bez zmian (każda komórka w tabeli, każda dziś → null).
+  assert(cells.length === 18 && cells.filter(([k]) => k === 'kill').length === 3
+    && cells.every(([k, sub]) => sub in tbl[k] && CUEDATA.cueSoundId({ kind: k, weapon: sub, size: sub }) === null),
+    `T8i tabela sygnałów: ${cells.length} komórek (fire / impact / shieldHit × broń, explosion / destroyed / kill × rozmiar), każda dziś → null`);
   const TR = strip(read('src/renderer/ThreeRenderer.js'));
   const emittedKinds = [...new Set([...TR.matchAll(/cues\.schedule\([^,]+,\s*'([a-zA-Z]+)'/g)].map((m) => m[1]).concat(/'shieldHit' : 'impact'/.test(TR) ? ['shieldHit', 'impact'] : []))];
   const weapons = ['short', 'medium', 'long', null, 'zzz'].map((c) => B.cueWeaponOfCategory(c));
@@ -559,6 +568,10 @@ guard('T10 ustawienia', () => {
 });
 guard('T10 salwa', () => {
   const flag = GAME_CONFIG.FEATURES.cvPresets, flagFx = GAME_CONFIG.FEATURES.cvFxEngine;
+  // ARC CV-4a — T10 pinuje sygnały na salwie CV-2a (`_cvFxRoundFx`); od CV-4a flaga `cvWeapons` (domyślnie ON) oddaje salwę językowi broni
+  // (keeper `cv_weapons_ledger_smoke` C1 pinuje sygnały w chwilach rejestru) — tu jawnie OFF.
+  const flagWpn = GAME_CONFIG.FEATURES.cvWeapons;
+  GAME_CONFIG.FEATURES.cvWeapons = false;
   const run = (presets, { pausedFrames = 0, galaxy = false } = {}) => {
     GAME_CONFIG.FEATURES.cvPresets = presets;
     GAME_CONFIG.FEATURES.cvFxEngine = true;
@@ -641,7 +654,7 @@ guard('T10 salwa', () => {
     for (let i = 0; i < 3; i++) { clock.now += 16; W._tickCvFx(); }
     assert(gotW.length === 1 && gotW[0].kind === 'destroyed' && gotW[0].size === 'large' && gotW[0].vesselId === 'cr1' && gotW[0].encounterId === 'battle_ds_1'
       && W._fxEngine === null, 'T10t wrak → jeden „destroyed” (rozmiar z klasy kadłuba: krążownik → large), także przy `cvFxEngine` OFF (silnik nie powstaje)');
-  } finally { GAME_CONFIG.FEATURES.cvPresets = flag; GAME_CONFIG.FEATURES.cvFxEngine = flagFx; EventBus.clear(); }
+  } finally { GAME_CONFIG.FEATURES.cvPresets = flag; GAME_CONFIG.FEATURES.cvFxEngine = flagFx; GAME_CONFIG.FEATURES.cvWeapons = flagWpn; EventBus.clear(); }
 });
 
 // ── T11 — źródło ────────────────────────────────────────────────────────────────────────────────────────────────────

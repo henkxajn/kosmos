@@ -53,6 +53,7 @@ import { initialGfxLevel, normalizeGfxLevel, nextGfxLevelInCycle, readRendererSt
   QualityThrottle, LIVE_GFX_THROTTLE } from './combat/QualityPreset.js';                             // ARC CV-2b — wykrycie, zapis, dławienie
 import { CombatLightPool } from './combat/LightPool.js';                                              // ARC CV-2b — stała pula świateł (D-CV-18)
 import { CombatCueBus, cueWeaponOfCategory, cueSizeOfClass, screenPan } from './combat/CombatCueBus.js';   // ARC CV-2b — szyna sygnałów walki (F8)
+import { CombatLedger, pickTurret, ledgerRng, LEDGER_INFO_LEGEND } from './combat/CombatLedgerLogic.js';   // ARC CV-4a — rejestr salw (język broni, flaga cvWeapons)
 import { KC_SHARED } from './KeyColourEmission.js';                                                   // ARC CV-1a — wspólne mnożniki maski
 import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
@@ -501,6 +502,11 @@ export class ThreeRenderer {
     // i silnik FX walki z pulami (leniwie, przy pierwszej salwie pod flagą `cvFxEngine`); pomiar `KOSMOS.debug.fxStats()`.
     this._presClock            = new PresentationClock();
     this._fxEngine             = null;
+    // ARC CV-4a (flaga `cvWeapons`) — rejestr salw (leniwie, przy pierwszej rundzie pod flagą): harmonogram strzałów w czasie
+    // prezentacji, HP / osłona pokazywane, zniszczenie w chwili trafienia zabijającego; licznik kolejki wieżyczek na statek.
+    this._cvLedger             = null;
+    this._cvWpnTurretTurn      = new Map();
+    this._cvWpnStats           = { rounds: 0, shots: 0, hidden: 0, killsShown: 0, wreckDeduped: 0, wreckDeferred: 0, wreckUnknown: 0 };
     this._fxStatsRun           = null;
     this._fxStatsLast          = null;
     this._selectedVesselId     = null;       // mirror UIManager (ui:selectionChanged)
@@ -1569,9 +1575,15 @@ export class ThreeRenderer {
     EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {
       const entry = this._vessels.get(vesselId);
       if (!entry) return;
+      // ARC CV-4a (flaga `cvWeapons`) — zniszczenie pokazane już w chwili trafienia zabijającego (rejestr salw): bez drugiej
+      // eksplozji i sygnału; trafienie zabijające jeszcze w locie — eksplozja i wygląd wraku w jego chwili (`_cvWpnPresentKill`).
+      // Bramka pyta rejestr TAKŻE przy fladze OFF (kontrola właściciela 2026-11-12): `cvWeapons(0)` w trakcie bitwy zostawiał
+      // zniszczenia pokazane przy trafieniu, a koniec bitwy dawał im drugą eksplozję. Bez rejestru (sesja tylko OFF) — `null`,
+      // dzisiejsza ścieżka co do bitu.
+      const cvKill = this._cvWpnWreckGate?.(vesselId, entry) ?? null;
       // Eksplozja w miejscu zniszczenia — PRZED zamianą na wrak (pozycja jeszcze
       // żywa). Gated fcCombatFx. Kula ognia + pierścień uderzeniowy (_spawnExplosion).
-      if (GAME_CONFIG.FEATURES?.fcCombatFx) {
+      if (GAME_CONFIG.FEATURES?.fcCombatFx && !cvKill?.skipBoom) {
         this._spawnExplosion(entry.sprite.position, vesselTargetSize(vessel));
         if (GAME_CONFIG.FEATURES?.cvPresets) this._cueDestroyed(vesselId, vessel, entry);   // ARC CV-2b — sygnał „zniszczony”
       }
@@ -1608,10 +1620,12 @@ export class ThreeRenderer {
       // bez ponownego klonowania (dawna ścieżka klonowała drugi raz i nie zwalniała klonów wroga); żar idzie uniformem maski
       // (Finding 620 — wreszcie widoczny), smuga i punkty świetlne gasną.
       if (entry.canonical && entry.rig) {
-        paintRigMaterials(THREE, entry.rig.materials, 'wreck', { burnHot: !!GAME_CONFIG.FEATURES?.fcCombatFx });
-        if (entry.rig.exhaust) entry.rig.exhaust.visible = false;
-        if (entry.rig.lights) { this._shipLightPool?.release(entry.rig.lights); entry.rig.lights = null; }
-        this._cvTiltWreck(entry.sprite);   // pochylenie jak ścieżka OFF (przechył wokół dziobu był innym obrazem)
+        if (!cvKill?.skipLook) {   // ARC CV-4a — wygląd wraku już (albo dopiero) w chwili trafienia zabijającego
+          paintRigMaterials(THREE, entry.rig.materials, 'wreck', { burnHot: !!GAME_CONFIG.FEATURES?.fcCombatFx });
+          if (entry.rig.exhaust) entry.rig.exhaust.visible = false;
+          if (entry.rig.lights) { this._shipLightPool?.release(entry.rig.lights); entry.rig.lights = null; }
+          this._cvTiltWreck(entry.sprite);   // pochylenie jak ścieżka OFF (przechył wokół dziobu był innym obrazem)
+        }
         entry.enemyTint = true;   // jak ścieżka OFF — etykiety CTRL (kolor wraku); zwalnianie rozstrzyga `canonical`
       } else if (entry.isModel3D) {
         entry.sprite.traverse(child => {
@@ -1771,6 +1785,9 @@ export class ThreeRenderer {
 
     // Fleet Command Console (Slice 1) — smugi walki na żywej mapie (FX-only).
     EventBus.on('combat:roundFx', safe((p) => this._onCombatRoundFx(p)));
+    // ARC CV-4a (flaga `cvWeapons`) — język broni i rejestr salw: osobny słuchacz z PEŁNYM ładunkiem (numer rundy, ziarno starcia);
+    // salwa CV-2a (`_cvFxRoundFx`) pod tą flagą ustępuje, więc strzał rysuje się raz.
+    EventBus.on('combat:roundFx', safe((p) => this._cvWpnRoundFx(p)));
 
     // Fix#3 — bitwy orbitalne/abstrakcyjne (EnemyAttackHandler/WarSystem, „stare zasady",
     // statki niefizycznie blisko) NIE mają combat:roundFx. Syntezujemy „imitację" walki
@@ -5175,13 +5192,16 @@ export class ThreeRenderer {
     const placeModel = ([template, hardpoints]) => {
       if (this._vessels.has(vessel.id)) return;
       const isWreck = !!vessel.isWreck;
+      // ARC CV-4a (flaga `cvWeapons`) — okręt, którego zniszczenie rejestr salw już pokazał, przebudowany w trakcie bitwy (np. zmiana
+      // presetu tekstur): od razu wygląd wraku, bez smugi i świateł (wrakiem w logice zostanie dopiero na końcu bitwy).
+      const killedLook = !isWreck && !!GAME_CONFIG.FEATURES?.cvWeapons && this._cvLedger?.killState?.(vessel.id) === 'shown';
       const key = `${slotInfo.variant}/${slotInfo.slot}`;
       const hp = this._cvLightTest ? this._cvLightTestDoc(key, template, hardpoints) : hardpoints;
       const rig = buildShipRig({
         THREE, template, hardpoints: hp, targetSize: vesselTargetSize(vessel),
-        kind: isWreck ? 'wreck' : (isEnemy ? 'enemy' : 'own'),
+        kind: isWreck || killedLook ? 'wreck' : (isEnemy ? 'enemy' : 'own'),
         lightPool: hp.lights?.length ? this._cvLightPool() : null, lightKey: key + (this._cvLightTest ? '#test' : ''),
-        exhaust: GAME_CONFIG.FEATURES?.fcCombatFx && !isWreck ? { gradient: exhaustGradientColors({ isEnemy }), hdr: FX_HDR_EXHAUST } : null,
+        exhaust: GAME_CONFIG.FEATURES?.fcCombatFx && !isWreck && !killedLook ? { gradient: exhaustGradientColors({ isEnemy }), hdr: FX_HDR_EXHAUST } : null,
         burnHot: !!GAME_CONFIG.FEATURES?.fcCombatFx,
         enemyRimHex: this._hud3dHex?.('alert') ?? null,   // obwódka wroga w roli `alert` motywu (zmiana motywu — `_tickCvModels`)
       });
@@ -5218,6 +5238,7 @@ export class ThreeRenderer {
         isWreck, exhaust: rig.exhaust, _exhaustPhase: rendererRandom() * Math.PI * 2,
       };
       this._vessels.set(vessel.id, entry);
+      if (killedLook) { entry.cvKilled = true; this._cvWpnKillLook(vessel.id, entry); }   // ARC CV-4a — przechył i zgaszenie jak w chwili zniszczenia
       if (isEnemy && !isWreck && GAME_CONFIG.FEATURES.m4EnemyGhosts) this._applyVesselIntelVisibility(vessel, entry);
       this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
       if (isWreck && vessel.position?.dockedAt) {
@@ -7002,7 +7023,7 @@ export class ThreeRenderer {
     if (!GAME_CONFIG.FEATURES?.fcCombatFx) { cone.visible = false; return; }
     const intensity = exhaustIntensityRaw({
       state:   vessel?.position?.state,
-      isWreck: !!(vessel?.isWreck || entry.isWreck),
+      isWreck: !!(vessel?.isWreck || entry.isWreck || entry.cvKilled),   // ARC CV-4a — zniszczenie pokazane: smuga zgaszona
     });
     if (intensity <= 0) { cone.visible = false; return; }
     cone.visible = true;
@@ -7097,6 +7118,7 @@ export class ThreeRenderer {
   // pocisku z rdzeniem HDR i podłogą szerokości na ekranie, błysk / pierścień osłony / błysk na modelu jako iskry z pul;
   // wiek efektu z zegara prezentacji (pauza zatrzymuje wszystko). Pudło — jak dziś: słabsza smuga do celu, bez błysku.
   _cvFxRoundFx(events, pace) {
+    if (GAME_CONFIG.FEATURES?.cvWeapons) return;   // ARC CV-4a — salwę rysuje język broni (`_cvWpnRoundFx`, rejestr salw)
     const eng = this._ensureFxEngine();
     const vm = window.KOSMOS?.vesselManager;
     // ARC CV-2b (flaga `cvPresets`, F8) — sygnały walki w chwili, w której efekt pojawi się na ekranie (strzał po rozrzucie salwy,
@@ -7175,6 +7197,315 @@ export class ThreeRenderer {
     this._cueBus.flush(this._presClock.nowMs, this._cueEmit, o);
   }
 
+  // ── ARC CV-4a — język broni i rejestr salw (flaga `cvWeapons`; plan §2.4, D-CV-8, D-CV-9; Findingi 614, 615, 637, 655 (i)) ──
+  // Runda oglądanego starcia → rejestr (`CombatLedger.addRound`: harmonogram w czasie prezentacji) → efekty w pulach silnika
+  // z czasami z rejestru (ładowanie lasera → wiązka; błysk wylotu → pocisk → iskry; start rakiety → tor łukiem; pudło leci za
+  // cel), strzał z wieżyczki pliku hardpointów; sygnały walki w chwilach rejestru. HP pokazywane i zniszczenie — `_cvWpnTick`.
+  // Bramka mgły wojny jak w CV-2a (`_combatEndpointWorld`): niewidoczny koniec — bez efektu i bez sygnału (rejestr i tak liczy
+  // HP pokazywane). Wymaga silnika FX (`cvFxEngine`); flaga OFF — salwa CV-2a co do bitu.
+  _cvWpnRoundFx(payload) {
+    const F = GAME_CONFIG.FEATURES;
+    if (!F?.fcCombatFx || !F?.cvFxEngine || !F?.cvWeapons) return;
+    if (!isEngagementInView({ encounterSystemId: payload?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
+    const events = payload?.events ?? [];
+    if (!events.length || payload.encounterId == null || !Number.isFinite(payload.round)) return;
+    const eng = this._ensureFxEngine();
+    const led = this._cvLedger ?? (this._cvLedger = new CombatLedger({ tuning: this.cvTuning }));
+    const R = window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000;
+    const L = VESSEL_TARGET_SIZE.frigate;
+    const gapL = (ev) => {
+      const a = this._vessels.get(ev.attacker)?.sprite, t = this._vessels.get(ev.target)?.sprite;
+      return a?.visible && t?.visible ? a.position.distanceTo(t.position) / L : NaN;
+    };
+    const rec = led.addRound({ encounterId: payload.encounterId, round: payload.round, seed: payload.seed ?? 0, events,
+      nowMs: this._presClock.nowMs, roundMs: R, gapL });
+    if (!rec) return;
+    this._cvWpnStats.rounds++;
+    const cues = F.cvPresets ? (this._ensureCueBus?.() ?? null) : null;
+    for (const x of rec.entries) this._cvWpnSpawn(eng, x, events[x.index], rec, cues, led);
+  }
+
+  // Jeden wpis rejestru → efekty (czasy bezwzględne zegara prezentacji). Końce śledzone: wieżyczka (tryb 2 — punkt modelu, obraca
+  // się ze statkiem) albo przesunięcie w świecie (tryb 1); punkt trafienia — na kadłubie od strony strzelca, pudło — obok celu i dalej.
+  _cvWpnSpawn(eng, x, ev, rec, cues, led) {
+    const aw = this._combatEndpointWorld(x.attacker, ev?.aPos);
+    const tw = this._combatEndpointWorld(x.target, ev?.tPos);
+    if (!aw || !tw) { this._cvWpnStats.hidden++; return; }   // mgła wojny — brak efektu i sygnału (brak przecieku)
+    const T = this.cvTuning;
+    const R = rec.R;
+    const L = VESSEL_TARGET_SIZE.frigate;
+    const vm = window.KOSMOS?.vesselManager;
+    const av = vm?.getVessel?.(x.attacker), tv = vm?.getVessel?.(x.target);
+    const aSize = av ? vesselTargetSize(av) : L, tSize = tv ? vesselTargetSize(tv) : L;
+    const color = fxWeaponColor(x.category);
+    const mz = this._cvWpnMuzzle(x.attacker, aw, tw, aSize);
+    const mx = mz.x, my = mz.y, mzz = mz.z, mMode = mz.mode, mox = mz.ox, moy = mz.oy, moz = mz.oz;
+    // kierunek strzelec → cel, oś prostopadła z ziarna (pudło, łuk rakiety)
+    let dx = tw.x - mx, dy = (tw.y ?? 0.3) - my, dz = tw.z - mzz;
+    const dl = Math.hypot(dx, dy, dz) || 1e-6;
+    dx /= dl; dy /= dl; dz /= dl;
+    const upX = Math.abs(dy) > 0.9 ? 1 : 0, upY = Math.abs(dy) > 0.9 ? 0 : 1;
+    let p1x = dy * 0 - dz * upY, p1y = dz * upX - dx * 0, p1z = dx * upY - dy * upX;   // d × up
+    const p1l = Math.hypot(p1x, p1y, p1z) || 1;
+    p1x /= p1l; p1y /= p1l; p1z /= p1l;
+    const p2x = dy * p1z - dz * p1y, p2y = dz * p1x - dx * p1z, p2z = dx * p1y - dy * p1x;   // d × p1
+    const ang = x.u2 * Math.PI * 2;
+    const px = p1x * Math.cos(ang) + p2x * Math.sin(ang), py = p1y * Math.cos(ang) + p2y * Math.sin(ang), pz = p1z * Math.cos(ang) + p2z * Math.sin(ang);
+    // punkt końcowy względem środka celu (tryb 1): trafienie — kadłub od strony strzelca; pudło — obok celu i dalej za nim
+    let ox, oy, oz;
+    if (x.hit) { const k = -0.35 * tSize; ox = dx * k; oy = dy * k; oz = dz * k; }
+    else {
+      const off = Math.max(0.5 * L, (T.WPN_MISS_OFFSET ?? 0.9) * tSize), over = Math.max(0, T.WPN_MISS_OVERSHOOT ?? 0.6) * dl;
+      ox = px * off + dx * over; oy = py * off + dy * over; oz = pz * off + dz * over;
+    }
+    const tyy = tw.y ?? 0.3;
+    const bx = tw.x + ox, by = tyy + oy, bz = tw.z + oz;
+    const alpha = x.hit ? 0.95 : 0.55;
+    if (x.kind === 'laser') {
+      eng.spawnMote({ t0: x.chargeAt, life: Math.max(1, x.fireAt - x.chargeAt), x: mx, y: my, z: mzz, color, alpha: 0.95,
+        size: (T.WPN_CHARGE_K ?? 0.6) * aSize, kind: 2, grow: 1.8, minPx: 3, maxPx: 28, id: x.attacker, mode: mMode, ox: mox, oy: moy, oz: moz });
+      eng.spawnBeam({ t0: x.fireAt, life: Math.max(1, x.beamEnd - x.fireAt), ax: mx, ay: my, az: mzz, bx, by, bz, color, alpha,
+        aId: x.attacker, aMode: mMode, aox: mox, aoy: moy, aoz: moz, bId: x.target, bMode: 1, box: ox, boy: oy, boz: oz });
+    } else {
+      const missile = x.kind === 'missile';
+      eng.spawnMote({ t0: x.fireAt, life: Math.max(1, (missile ? 0.08 : (T.WPN_MUZZLE_LIFE ?? 0.1)) * R), x: mx, y: my, z: mzz,
+        color: missile ? 0xffb070 : color, alpha: 1, size: (T.WPN_MUZZLE_K ?? 0.55) * aSize * (missile ? 0.7 : 1), kind: 1, grow: 1.6,
+        minPx: 3, maxPx: 26, id: x.attacker, mode: mMode, ox: mox, oy: moy, oz: moz });
+      const arc = missile ? Math.max(0, T.WPN_MISSILE_ARC ?? 0.3) * dl : 0;
+      const ux = px, uy = py + 0.6, uz = pz;   // łuk rakiety: w bok z ziarna i w górę
+      const ul = Math.hypot(ux, uy, uz) || 1;
+      const flight = x.hit ? x.flight : x.flight * (1 + Math.max(0, T.WPN_MISS_OVERSHOOT ?? 0.6));
+      eng.spawnBolt({ t0: x.fireAt, flight, trail: Math.max(1, (missile ? (T.WPN_MISSILE_TRAIL ?? 0.18) : (T.WPN_TRACER_LEN ?? 0.08)) * R),
+        ax: mx, ay: my, az: mzz, bx, by, bz, cx: ux / ul * arc, cy: uy / ul * arc, cz: uz / ul * arc, color, alpha,
+        widthMul: missile ? (T.WPN_MISSILE_WIDTH_MUL ?? 1.25) : 1, head: missile ? (T.WPN_MISSILE_HEAD ?? 2.5) : (T.WPN_KIN_HEAD ?? 1.2),
+        miss: !x.hit, aId: x.attacker, aMode: mMode, aox: mox, aoy: moy, aoz: moz, bId: x.target, bMode: 1, box: ox, boy: oy, boz: oz });
+    }
+    if (x.hit) this._cvWpnImpact(eng, x, bx, by, bz, ox, oy, oz, -dx, -dy, -dz, tSize, R);
+    this._cvWpnStats.shots++;
+    if (cues) {
+      const weapon = cueWeaponOfCategory(x.category);
+      cues.schedule(x.fireAt, 'fire', weapon, av ? cueSizeOfClass(vesselSizeClass(av)) : null, mx, my, mzz, x.encounterId, x.attacker);
+      if (x.hit) cues.schedule(x.impactAt, x.blocked > 0 ? 'shieldHit' : 'impact', weapon, tv ? cueSizeOfClass(vesselSizeClass(tv)) : null,
+        bx, by, bz, x.encounterId, x.target);
+      if (x.killed) {
+        const kAt = led.killAt(x.target);
+        if (Number.isFinite(kAt)) cues.schedule(kAt, 'kill', null, tv ? cueSizeOfClass(vesselSizeClass(tv)) : null, tw.x, tyy, tw.z, x.encounterId, x.target);
+      }
+    }
+  }
+
+  // Trafienie: kadłub (obrażenia > 0) — iskry od kadłuba, żar, biały błysk; same osłony — cyjanowe iskry i poświata (bańka osłony
+  // z falą — CV-4b). Liczba iskier z budżetu cząstek presetu (CV-2b). Kierunki iskier z ziarna wpisu (bez losowania gry).
+  _cvWpnImpact(eng, x, bx, by, bz, ox, oy, oz, nx, ny, nz, tSize, R) {
+    const T = this.cvTuning;
+    const L = VESSEL_TARGET_SIZE.frigate;
+    const t0 = x.impactAt;
+    const missile = x.kind === 'missile';
+    const hull = x.dmg > 0;
+    const budget = GAME_CONFIG.FEATURES?.cvPresets ? (this._gfx?.eff?.particles ?? 16000) : 16000;
+    const base = Math.max(0, T.WPN_SPARKS ?? 10) * (missile ? 1.5 : 1) * (hull ? 1 : 0.5);
+    const n = base > 0 ? Math.max(1, Math.round(base * Math.min(1, budget / 16000))) : 0;
+    const rnd = ledgerRng(x.seed);
+    const speed = Math.max(0, T.WPN_SPARK_SPEED ?? 3) * L / Math.max(1, R);
+    const sparkCol = hull ? 0xffd8a0 : FX_SHIELD_COLOR;
+    for (let i = 0; i < n; i++) {
+      let vx = nx + (rnd() * 2 - 1) * 0.9, vy = ny + (rnd() * 2 - 1) * 0.9, vz = nz + (rnd() * 2 - 1) * 0.9;
+      const vl = Math.hypot(vx, vy, vz) || 1;
+      const sp = speed * (0.5 + 0.7 * rnd()) / vl;
+      eng.spawnMote({ t0, life: Math.max(1, (T.WPN_SPARK_LIFE ?? 0.35) * R * (0.6 + 0.4 * rnd())), x: bx, y: by, z: bz,
+        vx: vx * sp, vy: vy * sp, vz: vz * sp, color: sparkCol, alpha: 1, size: (T.WPN_SPARK_SIZE ?? 0.18) * L, kind: 0, grow: 0.5,
+        minPx: 1.5, maxPx: 6, id: x.target, mode: 1, ox, oy, oz });
+    }
+    if (hull) {
+      eng.spawnMote({ t0, life: Math.max(1, (T.WPN_GLOW_LIFE ?? 0.5) * R), x: bx, y: by, z: bz, color: 0xff6a20, alpha: 0.9,
+        size: (T.WPN_GLOW_K ?? 0.8) * tSize * (missile ? 1.4 : 1), kind: 1, grow: 1.3, minPx: 3, maxPx: 48, id: x.target, mode: 1, ox, oy, oz });
+      eng.spawnMote({ t0, life: Math.max(1, 0.08 * R), x: bx, y: by, z: bz, color: 0xffffff, alpha: 1, size: 0.5 * tSize * (missile ? 1.5 : 1),
+        kind: 1, grow: 1.6, minPx: 4, maxPx: 32, id: x.target, mode: 1, ox, oy, oz });
+    } else {
+      eng.spawnMote({ t0, life: Math.max(1, 0.2 * R), x: bx, y: by, z: bz, color: FX_SHIELD_COLOR, alpha: 0.8, size: 0.6 * tSize,
+        kind: 1, grow: 1.4, minPx: 3, maxPx: 36, id: x.target, mode: 1, ox, oy, oz });
+    }
+  }
+
+  // Punkt w przestrzeni modelu statku → świat (wieżyczki śledzone co klatkę): rama kanoniczna — przez `canon` (kwaternion ramy
+  // z choreografią, skala = rozmiar statku) i wrapper; inny rysunek — przesunięcie obrócone kwaternionem sprite'a.
+  _cvWpnResolveLocal(id, lx, ly, lz, out) {
+    const e = this._vessels.get(id);
+    if (!e?.sprite?.visible) return false;
+    const v = this._cvWpnV ?? (this._cvWpnV = new THREE.Vector3());
+    if (e.canonical && e.rig?.canon) {
+      const s = e.rig.canon.scale.x;
+      v.set(lx * s, ly * s, lz * s).applyQuaternion(e.rig.canon.quaternion).applyQuaternion(e.sprite.quaternion).add(e.sprite.position);
+    } else {
+      v.set(lx, ly, lz).applyQuaternion(e.sprite.quaternion).add(e.sprite.position);
+    }
+    out.x = v.x; out.y = v.y; out.z = v.z;
+    return true;
+  }
+
+  // Wylot strzału: wieżyczka z najlepszym namiarem na cel (`weapons[]` z pliku hardpointów; równe — po kolei), inaczej punkt na
+  // kadłubie ku celowi z przewagą dziobu (sloty bez wieżyczek). Zwraca wspólny obiekt (skopiuj przed kolejnym wywołaniem).
+  _cvWpnMuzzle(id, aw, tw, size) {
+    const out = this._cvWpnMz ?? (this._cvWpnMz = { x: 0, y: 0, z: 0, mode: 1, ox: 0, oy: 0, oz: 0, turret: -1 });
+    const e = this._vessels.get(id);
+    const tl = this._cvWpnTL ?? (this._cvWpnTL = []);
+    const turrets = e?.canonical ? e.rig?.weapons : null;
+    if (turrets?.length && e.sprite?.visible) {
+      tl.length = 0;
+      for (let i = 0; i < turrets.length; i++) {
+        const q = this._cvWpnTW?.[i] ?? ((this._cvWpnTW ??= [])[i] = { x: 0, y: 0, z: 0 });
+        const p = turrets[i].p;
+        this._cvWpnResolveLocal(id, p[0], p[1], p[2], q);
+        tl.push(q);
+      }
+      const turn = this._cvWpnTurretTurn.get(id) ?? 0;
+      const k = pickTurret({ turrets: tl, center: e.sprite.position, target: tw, counter: turn, tieCos: this.cvTuning.WPN_TURRET_TIE ?? 0.12 });
+      this._cvWpnTurretTurn.set(id, turn + 1);
+      const p = turrets[k].p;
+      out.mode = 2; out.ox = p[0]; out.oy = p[1]; out.oz = p[2]; out.turret = k;
+      out.x = tl[k].x; out.y = tl[k].y; out.z = tl[k].z;
+      return out;
+    }
+    out.turret = -1;
+    const v = this._cvWpnV ?? (this._cvWpnV = new THREE.Vector3());
+    if (e?.canonical && e.rig?.canon && e.sprite?.visible) {
+      // kierunek na cel w przestrzeni modelu → punkt na kadłubie: wzdłuż dziobu do 0,42, w bok 0,10 (model: najdłuższa oś = 1)
+      const qi = this._cvWpnQ ?? (this._cvWpnQ = new THREE.Quaternion());
+      v.set(tw.x - e.sprite.position.x, (tw.y ?? 0.3) - e.sprite.position.y, tw.z - e.sprite.position.z);
+      qi.copy(e.sprite.quaternion).invert(); v.applyQuaternion(qi);
+      qi.copy(e.rig.canon.quaternion).invert(); v.applyQuaternion(qi);
+      v.normalize();
+      const b = e.rig.frameBow ?? [-1, 0, 0];
+      const along = v.x * b[0] + v.y * b[1] + v.z * b[2];
+      const lx = v.x - b[0] * along, ly = v.y - b[1] * along, lz = v.z - b[2] * along;
+      const k = 0.42 * Math.max(0.25, along);
+      out.mode = 2; out.ox = b[0] * k + lx * 0.1; out.oy = b[1] * k + ly * 0.1; out.oz = b[2] * k + lz * 0.1;
+      this._cvWpnResolveLocal(id, out.ox, out.oy, out.oz, out);
+      return out;
+    }
+    // inny rysunek (sprite, model bez ramy): przesunięcie w świecie ku celowi
+    let dx = tw.x - aw.x, dy = (tw.y ?? 0.3) - (aw.y ?? 0.3), dz = tw.z - aw.z;
+    const dl = Math.hypot(dx, dy, dz) || 1;
+    const k = 0.35 * (size || VESSEL_TARGET_SIZE.frigate) / dl;
+    out.mode = 1; out.ox = dx * k; out.oy = dy * k; out.oz = dz * k;
+    out.x = aw.x + out.ox; out.y = (aw.y ?? 0.3) + out.oy; out.z = aw.z + out.oz;
+    return out;
+  }
+
+  // Raz na klatkę (z `_tickCvFx`): rejestr do chwili prezentacji — trafienia (HP pokazywane schodzi samo, `presented`),
+  // zniszczenia w swojej chwili (`_cvWpnPresentKill`); sprzątanie co ~2 s.
+  _cvWpnTick() {
+    const led = this._cvLedger;
+    const now = this._presClock.nowMs;
+    const { kills } = led.advance(now);
+    for (const id of kills) this._cvWpnPresentKill(id);
+    if (!(this._cvWpnPruneAt > now - 2000)) {
+      this._cvWpnPruneAt = now;
+      led.prune(now, new Set((window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []).map((e) => e.id)));
+    }
+  }
+
+  // Zniszczenie w chwili trafienia zabijającego (D-CV-9, Findingi 615 / 655 (i)): dzisiejsza eksplozja (łata do CV-5), wygląd wraku
+  // (materiały, smuga i światła gasną, przechył), sygnały „kill” (zaplanowany przy rundzie) i „destroyed” (z eksplozją). Okręt
+  // przestaje strzelać z konstrukcji rejestru, choreografia przechodzi w postawę „wyłączony” (`aliveOf`). Późny `vessel:wrecked`
+  // (koniec bitwy) — bez drugiego pokazu (`_cvWpnWreckGate`). Dokładnie raz na okręt — pilnuje tego flaga `entry.cvKilled`.
+  _cvWpnPresentKill(id) {
+    const e = this._vessels.get(id);
+    if (!e || e.cvKilled) return;
+    e.cvKilled = true;
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null;
+    if (e.sprite?.visible && GAME_CONFIG.FEATURES?.fcCombatFx) {
+      this._spawnExplosion(e.sprite.position, v ? vesselTargetSize(v) : VESSEL_TARGET_SIZE.frigate);
+      if (GAME_CONFIG.FEATURES?.cvPresets) this._cueDestroyed(id, v, e);
+    }
+    this._cvWpnKillLook(id, e);
+    this._cvWpnStats.killsShown++;
+  }
+
+  // Wygląd wraku w chwili zniszczenia — rama kanoniczna (ten sam rysunek co zamiana we wrak przy `vessel:wrecked`); przechył: statek
+  // z choreografią — narasta w `_choreoOrient` przez `WPN_KILL_TILT_MS` (choreografia pisze kurs co klatkę), bez — od razu jak OFF.
+  // Inny rysunek (model bez ramy, sprite) — wygląd zostaje dla `vessel:wrecked` (eksplozja i gaśnięcie już teraz).
+  _cvWpnKillLook(id, e) {
+    if (!(e.canonical && e.rig)) return;
+    paintRigMaterials(THREE, e.rig.materials, 'wreck', { burnHot: !!GAME_CONFIG.FEATURES?.fcCombatFx });
+    if (e.rig.exhaust) e.rig.exhaust.visible = false;
+    if (e.rig.lights) { this._shipLightPool?.release(e.rig.lights); e.rig.lights = null; }
+    const rz = (rendererRandom() - 0.5) * 0.6;   // ±0,3 rad — jak `_cvTiltWreck`
+    const rx = (rendererRandom() - 0.5) * 0.4;
+    e.cvKillTilt = { rx, rz, at: this._presClock.nowMs };
+    if (!this._stageMarks?.get?.(id)?.ch) {
+      const q = wreckTiltQuaternion(e.sprite.rotation.y, rx, rz);
+      e.sprite.quaternion.set(q[0], q[1], q[2], q[3]);
+    }
+    e.cvWreckLook = true;
+  }
+
+  // `vessel:wrecked`, gdy rejestr istnieje (także po `cvWeapons(0)` w trakcie bitwy): zniszczenie już pokazane — bez drugiej
+  // eksplozji i sygnału, wygląd zostaje; zaplanowane, jeszcze nie pokazane (trafienie zabijające w locie, gdy logika kończy bitwę)
+  // — eksplozja i wygląd (rama kanoniczna) w chwili trafienia; okręt nieznany rejestrowi (bitwa poza widokiem, bez salwy, salwy po
+  // przełączeniu na OFF) — dzisiejsza zamiana, odnotowana jako pokazana (jeden pokaz).
+  _cvWpnWreckGate(vesselId, entry) {
+    const led = this._cvLedger;
+    if (!led || !entry) return null;
+    const st = led.killState(vesselId);
+    if (entry.cvKilled || st === 'shown') { this._cvWpnStats.wreckDeduped++; return { skipBoom: true, skipLook: !!entry.cvWreckLook }; }
+    if (st === 'pending') { entry.cvWreckPending = true; this._cvWpnStats.wreckDeferred++; return { skipBoom: true, skipLook: !!(entry.canonical && entry.rig) }; }
+    led.markKillShown(vesselId, this._presClock?.nowMs ?? 0);
+    entry.cvKilled = true;
+    this._cvWpnStats.wreckUnknown++;
+    return null;
+  }
+
+  /**
+   * ARC CV-4a — HP / osłona POKAZYWANE uczestnika (pasek walki, paski 3D): stan logiczny + obrażenia trafień jeszcze nie pokazanych.
+   * Flaga OFF albo brak rejestru — null (czytelnik zostaje przy stanie logicznym).
+   */
+  cvPresentedState(vesselId, st) {
+    if (!GAME_CONFIG.FEATURES?.cvWeapons || !this._cvLedger || !st) return null;
+    const pr = this._cvLedger.presented(vesselId, st.hp, st.shieldHP, st.hpStart, st.shieldHPStart);
+    return { hp: pr.hp, shield: pr.shield, pending: pr.pending, killed: this._vessels.get(vesselId)?.cvKilled === true };
+  }
+
+  /** ARC CV-4a — czy zdarzenie rundy (starcie, runda, indeks) zostało już pokazane (log paska walki pod flagą). */
+  cvEventShown(encounterId, round, index) {
+    if (!GAME_CONFIG.FEATURES?.cvWeapons || !this._cvLedger) return true;
+    return this._cvLedger.isEventShown(encounterId, round, index);
+  }
+
+  /**
+   * ARC CV-4a — `KOSMOS.debug.ledgerInfo()`: rejestr salw — per starcie liczniki od jego początku (`wTymStarciu`) i ostatnie rundy
+   * (zdarzenia, opóźnienie startu i rozpiętość trafień w R, zniszczenia), kontrola HP pokazywane vs logiczne uczestników aktywnych
+   * starć, liczniki od wczytania strony (`odZaladowaniaStrony` — sumy wszystkich starć), `legenda`.
+   */
+  cvLedgerInfo({ rounds = 6 } = {}) {
+    const led = this._cvLedger;
+    const r2 = (x) => (Number.isFinite(x) ? Number(x.toFixed(2)) : null);
+    if (!led) return { cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons, ledger: null, odZaladowaniaStrony: { renderer: { ...this._cvWpnStats } }, legenda: LEDGER_INFO_LEGEND };
+    const now = this._presClock.nowMs;
+    const vm = window.KOSMOS?.vesselManager;
+    const nameOf = (id) => vm?.getVessel?.(id)?.name ?? id;
+    const active = new Set((window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []).map((e) => e.id));
+    const encs = led.encounterIds().map((id) => ({
+      starcie: id, aktywne: active.has(id), wTymStarciu: led.encounterStats(id),
+      rundy: led.roundsOf(id).sort((a, b) => a.round - b.round).slice(-rounds).map((r) => ({
+        runda: r.round, zdarzen: r.entries.length, trafien: r.entries.filter((x) => x.hit).length,
+        opoznienieR: r2((r.startMs - r.arriveMs) / r.roundMs), rozpietoscR: r2((r.lastImpactAt - r.startMs) / r.R), tempoR: r2(r.R / r.roundMs),
+        pokazane: r.entries.filter((x) => x.impacted).length, zniszczenia: r.entries.filter((x) => x.killed).map((x) => nameOf(x.target)),
+        strzalyPoZniszczeniu: r.stats.violations, poza_kolejnoscia: r.stats.outOfOrder,
+      })),
+    }));
+    const hp = [];
+    for (const enc of window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []) {
+      for (const [id, s] of enc.vesselStates ?? []) {
+        const pr = led.presented(id, s.hp, s.shieldHP, s.hpStart, s.shieldHPStart);
+        hp.push({ statek: nameOf(id), hpLogika: r2(Math.max(0, s.hp)), hpPokazane: r2(pr.hp), czeka: pr.pending, zniszczenie: led.killState(id) ?? '—' });
+      }
+    }
+    const zgodne = hp.filter((h) => h.czeka === 0).every((h) => h.hpLogika === h.hpPokazane);
+    return { cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons, presMs: Math.round(now), starcia: encs, hp, hpBezCzekajacychZgodne: zgodne,
+      odZaladowaniaStrony: { rejestr: { ...led.stats, czekajace: led.pendingCount() }, renderer: { ...this._cvWpnStats } }, legenda: LEDGER_INFO_LEGEND };
+  }
+
   // Silnik budowany RAZ (pule = rozgrzewka); potem zero obiektów THREE na strzał. Końce wiązek i iskry idą za sprite'ami
   // statków (widocznymi) — jak dzisiejsze `_followTracerEnds` / `_followFxTarget`.
   _ensureFxEngine() {
@@ -7187,6 +7518,8 @@ export class ThreeRenderer {
     this._fxEngine = new FxEngine({
       THREE, parent: this._fxGroup, logDepth: logDepthOn(), nowMs: this._presClock.nowMs,
       resolve: (id) => { const e = this._vessels.get(id); return e?.sprite?.visible ? e.sprite.position : null; },
+      // ARC CV-4a — punkt w przestrzeni modelu (wieżyczka) → świat, co klatkę (statek obraca się z choreografią)
+      resolveLocal: (id, x, y, z, out) => this._cvWpnResolveLocal(id, x, y, z, out),
     });
     return this._fxEngine;
   }
@@ -7200,6 +7533,7 @@ export class ThreeRenderer {
     this._presClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0 });
     this._fxEngine?.update({ nowMs: this._presClock.nowMs, camera: this.camera, viewportH: window.innerHeight || 1,
       visible: !this._galaxyActive, stage: !!GAME_CONFIG.FEATURES?.cvStage });   // ARC CV-3a3 (653 (b)(c)) — łata sceny bitwy
+    if (this._cvLedger) this._cvWpnTick?.();   // ARC CV-4a — rejestr salw: trafienia (HP pokazywane), zniszczenia w swojej chwili
     if (this._cueBus) this._flushCues();   // ARC CV-2b — sygnały walki, których czas nadszedł (zegar prezentacji)
   }
 
@@ -7214,7 +7548,7 @@ export class ThreeRenderer {
     const info = this.renderer.info;
     this._fxStatsRun = { frames: n, n: 0, prev: null, cur: null, t0: 0, start: performance.now(), autoReset: info.autoReset,
       frameMs: new Float64Array(n), loopMs: new Float64Array(n), calls: new Float64Array(n), tris: new Float64Array(n),
-      peak: { beam: 0, tracer: 0, spark: 0, legacy: 0 },
+      peak: { beam: 0, tracer: 0, spark: 0, legacy: 0, wbeam: 0, bolt: 0, mote: 0 },   // ARC CV-4a — pule języka broni
       // CV-2a (diagnoza 7) — długie klatki: co zaszło MIĘDZY dwiema klatkami (zdarzenia gry, nowe programy cieniowania,
       // przesłane geometrie / tekstury). Odstęp klatki i zbiera to, co działo się po początku klatki i − 1.
       events: new Map(), offs: [], labels: new Array(n), atMs: new Float64Array(n), curLabel: '', mem: null,
@@ -7292,6 +7626,9 @@ export class ThreeRenderer {
         r.peak.beam = Math.max(r.peak.beam, st.pools.beam.active);
         r.peak.tracer = Math.max(r.peak.tracer, st.pools.tracer.active);
         r.peak.spark = Math.max(r.peak.spark, st.pools.spark.active);
+        r.peak.wbeam = Math.max(r.peak.wbeam, st.pools.wbeam?.active ?? 0);   // ARC CV-4a
+        r.peak.bolt = Math.max(r.peak.bolt, st.pools.bolt?.active ?? 0);
+        r.peak.mote = Math.max(r.peak.mote, st.pools.mote?.active ?? 0);
       }
       r.peak.legacy = Math.max(r.peak.legacy, this._activeEffects.length);
       const sf = this._stageFrame;
@@ -7332,7 +7669,9 @@ export class ThreeRenderer {
     console.log(`[fxStats] ${rep.frames} klatek: klatka p50 ${rep.frameMsP50} ms / p95 ${rep.frameMsP95} ms / śr. ${rep.frameMsMean} ms `
       + `/ maks. ${rep.frameMsMax} ms (${rep.fps} kl./s, klatek > 50 ms: ${rep.longFrames}), JS pętli p50 ${rep.loopMsP50} / p95 ${rep.loopMsP95} ms, `
       + `wywołania śr. ${rep.callsAvg} (maks. ${rep.callsMax}), trójkąty śr. ${rep.trisAvg}, szczyt pul: wiązki ${r.peak.beam}, `
-      + `smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}; przerwy okna (ukryte / bez fokusu): ${r.windowGaps}; `
+      + `smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}`
+      + (r.peak.wbeam + r.peak.bolt + r.peak.mote > 0 ? ` (język broni: wiązki ${r.peak.wbeam}, pociski ${r.peak.bolt}, punkty ${r.peak.mote})` : '')
+      + `; przerwy okna (ukryte / bez fokusu): ${r.windowGaps}; `
       + `scena: klatki ${r.stage.framesStaged}, skala awaryjna ${r.stage.framesFallback}, klastry maks. ${r.stage.clustersMax}, złe pasma maks. ${r.stage.misbandedMax}, `
       + `rozwiązania prowadnicy ${r.stage.solves} (${rep.stage.solvesPerSec}/s)`
       + (rep.gfx.cvPresets ? `; grafika ${rep.gfx.level} (gęstość ${r2(rep.pixelRatio)}, bloom ${rep.gfx.bloom ? 'tak' : 'nie'}, światła ${rep.gfx.lights}, `
@@ -7876,7 +8215,13 @@ export class ThreeRenderer {
       const evs = enc?.timeline?.[enc.timeline.length - 1]?.events;
       if (evs) for (const ev of evs) if (ev && ev.attacker != null && ev.target != null) lastTgt.set(ev.attacker, ev.target);
     }
-    const aliveOf = (id) => { const hp = encOf.get(id)?.vesselStates?.get?.(id)?.hp; return !(Number.isFinite(hp) && hp <= 0); };
+    // ARC CV-4a (flaga `cvWeapons`) — „żywy” do POKAZANEGO zniszczenia (rejestr salw): okręt zabity w logice, którego trafienie
+    // zabijające jeszcze leci, dalej tańczy i celuje; od chwili trafienia — postawa „wyłączony” (silnik gaśnie, bez skrętu).
+    const wpnLed = GAME_CONFIG.FEATURES?.cvWeapons ? this._cvLedger : null;
+    const aliveOf = (id) => {
+      if (wpnLed) { if (this._vessels.get(id)?.cvKilled) return false; if (wpnLed.killState(id) === 'pending') return true; }
+      const hp = encOf.get(id)?.vesselStates?.get?.(id)?.hp; return !(Number.isFinite(hp) && hp <= 0);
+    };
     const bySide = new Map();
     for (const q of pts) {
       const a = anchors.get(q.id);
@@ -7982,8 +8327,8 @@ export class ThreeRenderer {
       const lvl = stepChoreoEngine(ch, { dtMs: dt, posture: ch.posture, L }, T);
       ch.engineOut = lvl;
       const v = vm?.getVessel?.(id);
-      const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!(v?.isWreck || e.isWreck) });
-      this._choreoExhaust(e, raw + (lvl - raw) * (m.cw ?? 1));
+      const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!(v?.isWreck || e.isWreck || e.cvKilled) });
+      this._choreoExhaust(e, e.cvKilled ? 0 : raw + (lvl - raw) * (m.cw ?? 1));   // ARC CV-4a — zniszczony: silnik gaśnie od razu
     }
     if (info?.choreo && errs.length) {
       errs.sort((a, b) => a - b);
@@ -8014,6 +8359,15 @@ export class ThreeRenderer {
       if (w >= 1) _CHQ_D.copy(_CHQ_C); else _CHQ_D.slerp(_CHQ_C, w);
       _CHQ_A.copy(wrapper.quaternion).invert().multiply(_CHQ_D);
     }
+    // ARC CV-4a — przechył wraku w chwili zniszczenia (rejestr salw): pochylenie i przechył w ramie statku, narasta przez
+    // `WPN_KILL_TILT_MS` na zegarze prezentacji (choreografia pisze kurs co klatkę, więc przechył jedzie tutaj).
+    const kt = e.cvKillTilt;
+    if (kt) {
+      const kw = Math.max(0, Math.min(1, (this._presClock.nowMs - kt.at) / Math.max(1, this.cvTuning?.WPN_KILL_TILT_MS ?? 300)));
+      const d = quatFromYawPitchRoll(0, kt.rz * kw, kt.rx * kw);
+      const kq = this._cvKillQ ?? (this._cvKillQ = new THREE.Quaternion());
+      _CHQ_A.multiply(kq.set(d[0], d[1], d[2], d[3]));
+    }
     canon.quaternion.set(fq[0], fq[1], fq[2], fq[3]).premultiply(_CHQ_A);
   }
 
@@ -8035,12 +8389,20 @@ export class ThreeRenderer {
     const w = Math.max(0, Math.min(1, (m.cw ?? 1) * m.w));
     if (e.canonical && e.rig?.canon && e.rig.frameQuat && ch.q) this._choreoOrient(id, e, m, w);
     const v = window.KOSMOS?.vesselManager?.getVessel?.(id);
-    const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!(v?.isWreck || e.isWreck) });
-    this._choreoExhaust(e, raw + ((ch.engineOut ?? 0) - raw) * w);
+    const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!(v?.isWreck || e.isWreck || e.cvKilled) });
+    this._choreoExhaust(e, e.cvKilled ? 0 : raw + ((ch.engineOut ?? 0) - raw) * w);
   }
 
   /** ARC CV-3b — koniec choreografii statku: `canon` z powrotem na kwaternion ramy, smuga z powrotem do `_applyExhaust`. */
   _choreoEnd(id, e, m) {
+    // ARC CV-4a — przechył wraku z chwili zniszczenia (`cvKillTilt`, nakładany dotąd w `_choreoOrient`) zostaje we wrapperze: obraz
+    // tuż przed końcem (wrapper · przechył · rama) == obraz po nim — wrak nie prostuje się po bitwie.
+    if (e?.cvKillTilt && e.sprite) {
+      const d = quatFromYawPitchRoll(0, e.cvKillTilt.rz, e.cvKillTilt.rx);
+      const kq = this._cvKillQ ?? (this._cvKillQ = new THREE.Quaternion());
+      e.sprite.quaternion.multiply(kq.set(d[0], d[1], d[2], d[3]));
+      e.cvKillTilt = null;
+    }
     if (e?.rig?.canon && e.rig.frameQuat) { const fq = e.rig.frameQuat; e.rig.canon.quaternion.set(fq[0], fq[1], fq[2], fq[3]); }
     if (e) {
       e._choreoExhaust = false;
@@ -8317,6 +8679,11 @@ export class ThreeRenderer {
     const plan = planCombatHpBars({ encounters: list, activeSystemId: window.KOSMOS?.activeSystemId });
     const vm = window.KOSMOS?.vesselManager;
     const keep = new Set();
+    // ARC CV-4a (flaga `cvWeapons`, Finding 614) — HP POKAZYWANE z rejestru salw (spada w chwili trafienia); zniszczenie pokazane —
+    // pasek znika razem z wyglądem wraku.
+    const led = GAME_CONFIG.FEATURES?.cvWeapons ? this._cvLedger : null;
+    const stOf = led ? new Map() : null;
+    if (stOf) for (const enc of list) for (const [id, st] of enc.vesselStates ?? []) stOf.set(id, st);
     this.camera.updateMatrixWorld();
     const H = window.innerHeight || 1;
     const tanHalf = Math.tan(this.camera.fov * Math.PI / 360);
@@ -8327,6 +8694,12 @@ export class ThreeRenderer {
       const entry = this._vessels.get(b.vesselId);
       const v = vm?.getVessel?.(b.vesselId);
       if (!entry?.sprite?.visible || !v || v.isWreck) continue;
+      if (led && entry.cvKilled) continue;
+      let frac = b.frac;
+      if (led) {
+        const st = stOf.get(b.vesselId);
+        if (st) { const pr = led.presented(b.vesselId, st.hp, st.shieldHP, st.hpStart, st.shieldHPStart); frac = st.hpStart > 0 ? Math.max(0, Math.min(1, pr.hp / st.hpStart)) : 0; }
+      }
       const p = entry.sprite.position;
       const depth = this._viewDepth(p);
       if (!(depth > 0)) continue;
@@ -8343,9 +8716,9 @@ export class ThreeRenderer {
       bar.bg.visible = true;
       const half = (HP_BAR.W_PX / 2) * wpp;
       bar.fill.position.set(cx - right.x * half, cy - right.y * half, cz - right.z * half);
-      bar.fill.scale.set(Math.max(1e-6, HP_BAR.W_PX * b.frac * wpp), HP_BAR.H_PX * wpp, 1);
-      bar.fill.visible = b.frac > 0;
-      bar.frac = b.frac;
+      bar.fill.scale.set(Math.max(1e-6, HP_BAR.W_PX * frac * wpp), HP_BAR.H_PX * wpp, 1);
+      bar.fill.visible = frac > 0;
+      bar.frac = frac;
     }
     for (const id of [...this._hpBars.keys()]) if (!keep.has(id)) this._disposeHpBar(id);
   }

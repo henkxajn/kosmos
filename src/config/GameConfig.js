@@ -572,6 +572,15 @@ export const GAME_CONFIG = {
     //   działa od następnej klatki). OFF = dzisiejsza ścieżka: gęstość min(dpr × 1,5, 2), bloom, tekstury 2K, bez puli świateł,
     //   bez sygnałów, bez wiersza ☰. Wyłączenie: KOSMOS.debug.cvPresets(0).
     cvPresets: true,
+    // `cvWeapons` (CV-4a) — JĘZYK BRONI i REJESTR SALW (`src/renderer/combat/CombatLedgerLogic.js`): każda runda oglądanego
+    //   starcia dostaje harmonogram w czasie prezentacji (salwy obu stron przeplecione — ogień jednoczesny M1; laser: ładowanie
+    //   → wiązka, kinetyk: błysk wylotu → pocisk → iskry, rakieta: start → tor łukiem; pudło leci dalej za cel), strzały
+    //   z wieżyczek pliku hardpointów (`weapons[]`), HP i osłona POKAZYWANE spadają w chwili TRAFIENIA (paski 3D, pasek walki —
+    //   Finding 614), zniszczenie w chwili trafienia zabijającego (okręt przestaje strzelać, gaśnie, wygląd wraku, eksplozja —
+    //   Findingi 615 / 655 (i); późny `vessel:wrecked` bez drugiego pokazu), sygnały walki w chwilach rejestru (+ `kill`).
+    //   Wymaga `cvFxEngine` (pule silnika FX). Wyłącznie rysunek — logika (DSCS) nietknięta, poza polami ładunku FX (D-CV-8).
+    //   Czytana w chwili salwy i co klatkę. OFF = ścieżka CV-2a co do bitu. Wyłączenie: KOSMOS.debug.cvWeapons(0).
+    cvWeapons: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
