@@ -612,6 +612,8 @@ export class GameScene {
       // ARC CV-3a1 — cvStage(1) / cvStage(0) (scena bitwy), stageInfo() (klastry, stopień sceny, odstępy par w L) — §4 CV-3a1.
       // ARC CV-1a — cvModels(1) / cvModels(0) (rama kanoniczna), cvIncoming(1) / cvIncoming(0) (modele z `incoming/`),
       // cvLightTest(1) / cvLightTest(0) (testowy wzór punktów świetlnych), modelInfo() — §4 CV-1a.
+      // ARC CV-5 — cvDamage(1) / cvDamage(0) (wybuchy warstwowe, stany uszkodzeń, płonące wraki), cvExplode(/battleship/.source)
+      // (wybuch statku testowego danej klasy w kadrze), damageInfo() — §4 CV-5; zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE.
       ...cvBattleDebugHelpers({ getRenderer: () => this.threeRenderer, getSaveSystem: () => this.saveSystem }),
       // Finding 663 — KOSMOS.debug.rendezvousPlace(0.8) (zaznaczony statek 0,8 AU za najbliższą planetą; drugi argument 1 — przed),
       // rendezvousInfo() (wynik „Lecisz do planety” dla ciał układu) — src/debug/RendezvousDebug.js.

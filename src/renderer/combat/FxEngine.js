@@ -33,13 +33,18 @@ import { CHOREO_TUNING } from './ChoreographyLogic.js';   // ARC CV-3b — pokr�
 import { LIVE_LIGHT_POOL } from './LightPool.js';          // ARC CV-2b — pokrętła puli świateł (jedno źródło wartości domyślnych)
 import { LIVE_CUE } from './CombatCueBus.js';              // ARC CV-2b — pokrętła szyny sygnałów walki
 import { LEDGER_TUNING } from './CombatLedgerLogic.js';    // ARC CV-4a — pokrętła harmonogramu salw (rejestr)
+import { EXP_TUNING } from './ExplosionLogic.js';          // ARC CV-5 — pokrętła wybuchów, wraków i stanów uszkodzeń
 
 /** Pojemności pul (instancje). Pamięć: 13 / 11 liczb float na instancję — razem ok. 0,5 MB. Iskry ×2 względem szczytu
  *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4).
  *  ARC CV-4a — pule języka broni (flaga `cvWeapons`): wiązki laserów z wieżyczek, pociski w locie (kinetyk, rakieta) i punkty
  *  świetlne z ruchem (iskry trafień, żar, błysk wylotu, ładowanie). Najgorsza runda 10 na 10: 100 strzałów × (iskry ≤ 15 + 3)
  *  ≈ 1 800 punktów na rundę, życie ≤ 0,5 R — pojemność z zapasem ×4 przy najkrótszym tempie strojenia. */
-export const FX_POOL_CAPACITY = Object.freeze({ beam: 1024, tracer: 1024, spark: 8192, wbeam: 1024, bolt: 1024, mote: 8192 });
+export const FX_POOL_CAPACITY = Object.freeze({ beam: 1024, tracer: 1024, spark: 8192, wbeam: 1024, bolt: 1024, mote: 8192,
+  // ARC CV-5 — pule uszkodzeń (flaga `cvDamage`): dym (kłęby wybuchów, stanów uszkodzeń i wraków), wybuchy / płomienie / fala /
+  // iskry żaru, odłamki. Najgorszy przypadek 10 na 10: 20 okrętów × 3 punkty uszkodzeń (dym co ~170 ms żyje ~2 s, płomień co
+  // ~110 ms żyje ~0,4 s) ≈ 700 + 550 cząstek naraz, do tego kilka wybuchów (pancernik ≈ 130 cząstek, 24 odłamki) — zapas ×3.
+  smoke: 4096, blast: 6144, debris: 1024 });
 
 /**
  * ARC CV-4a — pokrętła rysunku języka broni (flaga `cvWeapons`) — na żywo (`KOSMOS.threeRenderer.cvTuning.WPN_*`, alias w
@@ -153,6 +158,9 @@ export const LIVE_CV_FX = {
   // opóźnienie) i rysunek języka broni (`LIVE_WPN_FX`). Harmonogram czytany przy każdej rundzie, rysunek — co klatkę / przy strzale.
   ...LEDGER_TUNING,
   ...LIVE_WPN_FX,
+  // ARC CV-5 (flaga `cvDamage`) — wybuchy warstwowe, stany uszkodzeń, płonące wraki (`ExplosionLogic`: `EXP_*`, `WRECK_*`, `DMG_*`,
+  // `FX_TIME_SCALE` — zwolnione tempo efektów, wyłącznie prezentacja). Czytane przy każdym wybuchu i co klatkę. Strojenie, bez pinów.
+  ...EXP_TUNING,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)
@@ -174,12 +182,19 @@ for (let s = 0; s < BOLT_SEGMENTS; s++) { const a = 2 * s; BOLT_INDEX.push(a, a 
 
 /** Jedna pula instancji: tablice atrybutów, liczba aktywnych, zwalnianie przez zamianę z ostatnim. */
 class FxPool {
-  constructor(THREE, { name, capacity, corners, fields, material, parent, index = QUAD_INDEX }) {
+  constructor(THREE, { name, capacity, corners, fields, material, parent, index = QUAD_INDEX, baseGeometry = null }) {
     this.name = name;
     this.capacity = capacity;
     const geo = new THREE.InstancedBufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(corners), 3));
-    geo.setIndex(index);
+    if (baseGeometry) {   // ARC CV-5 — geometria bazowa z normalnymi (bryłka odłamka) zamiast narożników quada
+      geo.setAttribute('position', baseGeometry.getAttribute('position'));
+      const nrm = baseGeometry.getAttribute('normal');
+      if (nrm) geo.setAttribute('normal', nrm);
+      if (baseGeometry.index) geo.setIndex(baseGeometry.index);
+    } else {
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(corners), 3));
+      geo.setIndex(index);
+    }
     this.fieldList = [];
     this.f = {};
     for (const [key, size] of fields) {
@@ -327,6 +342,25 @@ class WpnPool extends FxPool {
   }
 }
 
+/**
+ * ARC CV-5 — bryłka odłamka: ośmiościan z wierzchołkami przesuniętymi deterministycznie (skrót z położenia — ten sam wierzchołek
+ * w każdej ścianie dostaje to samo przesunięcie, bryła zostaje zamknięta), płaskie normalne. Budowana RAZ przy silniku.
+ */
+function buildDebrisGeometry(THREE) {
+  const g = new THREE.OctahedronGeometry(1, 0);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    let h = Math.imul(Math.round(x * 7 + 11) * 73856093 ^ Math.round(y * 7 + 13) * 19349663 ^ Math.round(z * 7 + 17) * 83492791, 0x9e3779b1) >>> 0;
+    const u = (h & 0xffff) / 65535;
+    h = Math.imul(h ^ (h >>> 13), 0x85ebca6b) >>> 0;
+    const v = (h & 0xffff) / 65535;
+    pos.setXYZ(i, x * (0.62 + 0.55 * u), y * (0.55 + 0.6 * v), z * (0.6 + 0.5 * ((u + v) % 1)));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 export class FxEngine {
   /**
    * @param {{ THREE: object, parent?: object, logDepth?: boolean, resolve?: (id:string)=>({x:number,y:number,z:number}|null),
@@ -388,6 +422,33 @@ export class FxEngine {
     this.motes = new WpnPool(THREE, { name: 'mote', capacity: cap.mote, corners: SPARK_CORNERS, fields: MOTE_FIELDS, material: moteMat, parent: this.root });
     this.pools = [this.beams, this.tracers, this.sparks, this.wbeams, this.bolts, this.motes];
     this._streakPools = [this.beams, this.tracers];
+    // ARC CV-5 — pule uszkodzeń (flaga `cvDamage`): dym (rysowany PIERWSZY — `renderOrder` 3), wybuchy / płomienie / fala / żar
+    // (`renderOrder` 4) — jeden program BLAST z mieszaniem premultiplied (gorące dodaje światło, dym zasłania); odłamki — instancje
+    // bryłki, nieprzezroczyste. Zegar efektów uszkodzeń osobny (`dmgNowMs` — zegar prezentacji × `FX_TIME_SCALE`; pauza = pauza).
+    const blastMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+      uniforms: { uTime: { value: 0 }, uPxToWorld: { value: 0.001 }, uFlashCore: { value: 2.6 }, uFireCore: { value: 2.4 }, uFlameCore: { value: 1.3 }, uRingCore: { value: 1.1 } },
+      vertexShader: src.blast.vertexShader, fragmentShader: src.blast.fragmentShader,
+    });
+    const BLAST_FIELDS = [['aPos', 3], ['aVel', 3], ['aColor', 3], ['aParams', 4], ['aShape', 4], ['aAxis', 3]];
+    this.smokes = new WpnPool(THREE, { name: 'smoke', capacity: cap.smoke, corners: SPARK_CORNERS, fields: BLAST_FIELDS, material: blastMat, parent: this.root });
+    this.blasts = new WpnPool(THREE, { name: 'blast', capacity: cap.blast, corners: SPARK_CORNERS, fields: BLAST_FIELDS, material: blastMat, parent: this.root });
+    this.smokes.mesh.renderOrder = 3;
+    this.blasts.mesh.renderOrder = 4;
+    this._debrisGeo = buildDebrisGeometry(THREE);
+    const debrisMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uCore: { value: 2.5 } },
+      vertexShader: src.debris.vertexShader, fragmentShader: src.debris.fragmentShader,
+    });
+    const DEBRIS_FIELDS = [['aP0', 3], ['aVel', 3], ['aAxis', 4], ['aParams', 4], ['aStretch', 3], ['aColor', 3]];
+    this.debris = new FxPool(THREE, { name: 'debris', capacity: cap.debris, fields: DEBRIS_FIELDS, material: debrisMat, parent: this.root,
+      baseGeometry: this._debrisGeo });
+    this.dmgPools = [this.smokes, this.blasts, this.debris];
+    this.dmgNowMs = this.nowMs;
+    this._dmgEpoch = this.dmgNowMs;
+    this.dmgSpawned = 0;   // ARC CV-5 — cząstki uszkodzeń przyjęte (wybuchy, dym, płomienie, odłamki)
     this.shots = 0;   // strzały przyjęte (każdy dostaje smugę albo wiązkę — nigdy nie przepada)
     this.wpnShots = 0;   // ARC CV-4a — strzały języka broni (wiązka albo pocisk)
   }
@@ -395,7 +456,10 @@ export class FxEngine {
   /** Liczba żywych efektów we wszystkich pulach. */
   activeCount() { return this.beams.n + this.tracers.n + this.sparks.n + this.wbeams.n + this.bolts.n + this.motes.n; }
 
-  hasActive() { return this.activeCount() > 0; }
+  /** ARC CV-5 — liczba żywych efektów uszkodzeń (dym, wybuchy, odłamki; osobny zegar i epoka). */
+  dmgActive() { return this.smokes.n + this.blasts.n + this.debris.n; }
+
+  hasActive() { return this.activeCount() + this.dmgActive() > 0; }
 
   /**
    * Jeden strzał salwy (dzisiejsze tempo `combatFxPace`). Punkty `a` / `t` — świat (pozycje RYSOWANYCH statków).
@@ -529,6 +593,104 @@ export class FxEngine {
     return s;
   }
 
+  // ── ARC CV-5 — wybuchy, dym, płomienie, odłamki (flaga `cvDamage`): czasy BEZWZGLĘDNE zegara efektów uszkodzeń ─────────────
+  _dmgEpochFor(t0) { if (this.dmgActive() === 0) this._dmgEpoch = Math.min(this.dmgNowMs, t0); }
+
+  /**
+   * Cząstka programu BLAST: rodzaj (`kind` 0 błysk · 1 smuga anamorficzna · 2 płat kuli ognia · 3 iskra żaru · 4 płomień · 5 fala
+   * uderzeniowa · 6 dym wybuchu · 7 dym uszkodzeń — dym trafia do puli dymu, rysowanej pierwszej). Pozycja może śledzić statek
+   * (`id`, tryb 1 — przesunięcie w świecie, 2 — punkt modelu) do chwili `until` (płomień na kadłubie — przez całe życie).
+   * @param {{ t0:number, life:number, kind:number, x:number, y:number, z:number, vx?:number, vy?:number, vz?:number, size:number,
+   *           color?:number, alpha?:number, minPx?:number, seed01?:number, aspect?:number, axis?:number[],
+   *           id?:string|null, mode?:number, ox?:number, oy?:number, oz?:number, until?:number }} p
+   */
+  spawnBlast(p) {
+    this._dmgEpochFor(p.t0);
+    const pool = p.kind >= 5.5 ? this.smokes : this.blasts;
+    const s = pool.alloc();
+    pool.set3('aPos', s, p.x, p.y, p.z);
+    pool.set3('aVel', s, p.vx ?? 0, p.vy ?? 0, p.vz ?? 0);
+    const c = this._rgb(p.color ?? 0xffffff);
+    pool.set3('aColor', s, c.r, c.g, c.b);
+    const life = Math.max(1, p.life);
+    pool.set4('aParams', s, p.alpha ?? 1, p.t0 - this._dmgEpoch, life, Math.max(0, p.size));
+    pool.set4('aShape', s, p.kind, p.minPx ?? 0, p.seed01 ?? 0, p.aspect ?? 1);
+    const ax = p.axis;
+    pool.set3('aAxis', s, ax ? ax[0] : 0, ax ? ax[1] : 1, ax ? ax[2] : 0);
+    pool.death[s] = p.t0 + life;
+    pool.setFollow(s, 0, p.id ?? null, p.mode ?? 1, p.ox ?? 0, p.oy ?? 0, p.oz ?? 0, p.until ?? p.t0);
+    this.dmgSpawned++;
+    return s;
+  }
+
+  /**
+   * Odłamek kadłuba: start w punkcie świata, prędkość [WU/ms], oś i prędkość obrotu [rad/ms], rozmiar, rozciągnięcie, jasność, barwa.
+   * @param {{ t0:number, life:number, x:number, y:number, z:number, vx:number, vy:number, vz:number, ax:number, ay:number, az:number,
+   *           spin:number, size:number, sx?:number, sy?:number, sz?:number, shade?:number, color?:number }} p
+   */
+  spawnDebris(p) {
+    this._dmgEpochFor(p.t0);
+    const pool = this.debris;
+    const s = pool.alloc();
+    pool.set3('aP0', s, p.x, p.y, p.z);
+    pool.set3('aVel', s, p.vx, p.vy, p.vz);
+    pool.set4('aAxis', s, p.ax, p.ay, p.az, p.spin);
+    const life = Math.max(1, p.life);
+    pool.set4('aParams', s, p.t0 - this._dmgEpoch, life, Math.max(0, p.size), p.shade ?? 1);
+    pool.set3('aStretch', s, p.sx ?? 1, p.sy ?? 1, p.sz ?? 1);
+    const c = this._rgb(p.color ?? 0x6a6f78);
+    pool.set3('aColor', s, c.r, c.g, c.b);
+    pool.death[s] = p.t0 + life;
+    this.dmgSpawned++;
+    return s;
+  }
+
+  /** Pozycje cząstek uszkodzeń za statkami (do chwili `until`; płomień na kadłubie — przez całe życie). */
+  _followDmg(now) {
+    const q = this._tmpP;
+    const a = this.smokes, b = this.blasts;
+    for (let k = 0; k < 2; k++) {
+      const pool = k === 0 ? a : b;
+      for (let i = 0; i < pool.n; i++) {
+        if (pool.idA[i] == null || now > pool.untilA[i]) continue;
+        if (this._wpnEnd(pool.idA[i], pool.mA[i], pool.oA, i * 3, q)) { pool.set3('aPos', i, q.x, q.y, q.z); pool.dirty = true; }
+      }
+    }
+  }
+
+  /**
+   * ARC CV-5 (Finding 644) — ROZGRZEWKA: programy wszystkich pul i bufory atrybutów (pełna pojemność) przesłane przed pierwszą
+   * salwą i pierwszym wybuchem — jedno rysowanie korzenia silnika (pule chwilowo widoczne, 0 instancji) do celu 1 × 1 px. Bez tego
+   * pierwszy strzał i pierwszy wybuch płaciły kompilację programu i przesłanie buforów w klatce gry.
+   * @returns {{ ok:boolean, ms:number, programs?:number }}
+   */
+  prewarm(renderer, camera) {
+    if (!renderer?.render || !camera) return { ok: false, ms: 0 };
+    const THREE = this.THREE;
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const all = [...this.pools, ...this.dmgPools];
+    const vis = all.map((p) => p.mesh.visible);
+    const rootVis = this.root.visible;
+    let rt = null;
+    const prevRt = renderer.getRenderTarget?.() ?? null;
+    try {
+      rt = new THREE.WebGLRenderTarget(1, 1);
+      for (const p of all) { p.geometry.instanceCount = 0; p.mesh.visible = true; }
+      this.root.visible = true;
+      renderer.setRenderTarget(rt);
+      renderer.render(this.root, camera);
+    } catch (err) {
+      return { ok: false, ms: 0, error: String(err?.message ?? err) };
+    } finally {
+      renderer.setRenderTarget(prevRt);
+      all.forEach((p, i) => { p.mesh.visible = vis[i]; p.geometry.instanceCount = p.n; });
+      this.root.visible = rootVis;
+      rt?.dispose?.();
+    }
+    const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+    return { ok: true, ms, programs: renderer.info?.programs?.length ?? null };
+  }
+
   /** Pozycja końca śledzonego (tryb 1 / 2) → `out`; false — statek niewidoczny (koniec zostaje, gdzie był). */
   _wpnEnd(id, mode, arr, o, out) {
     if (mode === 2) return !!this._resolveLocal && this._resolveLocal(id, arr[o], arr[o + 1], arr[o + 2], out);
@@ -572,7 +734,7 @@ export class FxEngine {
    *   nowMs — czas ZEGARA PREZENTACJI (stoi w pauzie); viewportH — wysokość widoku w CSS px; stage — scena bitwy (flaga
    *   `cvStage`, ARC CV-3a3): błysk i pierścień osłony z pokręteł `STAGE_*` (bez sceny — dzisiejsze, co do bitu).
    */
-  update({ nowMs, camera = null, viewportH = 1, visible = true, stage = false } = {}) {
+  update({ nowMs, dmgNowMs = undefined, camera = null, viewportH = 1, visible = true, stage = false } = {}) {
     if (Number.isFinite(nowMs)) this.nowMs = nowMs;
     const now = this.nowMs;
     for (let i = 0; i < this.pools.length; i++) this.pools[i].retire(now);
@@ -600,6 +762,19 @@ export class FxEngine {
     ou.uMinPx.value = T.WPN_BOLT_MIN_PX ?? T.MIN_PX; ou.uCore.value = T.WPN_BOLT_CORE ?? T.TRACER_CORE;
     mu.uTime.value = tRel; mu.uPxToWorld.value = pxToWorld; mu.uCore.value = T.WPN_MOTE_CORE ?? T.FLASH_CORE;
     for (let i = 0; i < this.pools.length; i++) this.pools[i].upload();
+    // ARC CV-5 — pule uszkodzeń na zegarze efektów uszkodzeń (zwolnione tempo `FX_TIME_SCALE`, pauza = pauza)
+    if (Number.isFinite(dmgNowMs)) this.dmgNowMs = dmgNowMs;
+    const dn = this.dmgNowMs;
+    for (let i = 0; i < this.dmgPools.length; i++) this.dmgPools[i].retire(dn);
+    if (this.dmgActive() === 0) this._dmgEpoch = dn;
+    if ((this.smokes.n + this.blasts.n) > 0 && (this._resolve || this._resolveLocal)) this._followDmg(dn);
+    const tD = dn - this._dmgEpoch;
+    const xu = this.blasts.material.uniforms, du = this.debris.material.uniforms;
+    xu.uTime.value = tD; xu.uPxToWorld.value = pxToWorld;
+    xu.uFlashCore.value = T.EXP_FLASH_CORE ?? 2.6; xu.uFireCore.value = T.EXP_FIREBALL_CORE ?? 2.4; xu.uRingCore.value = T.EXP_RING_CORE ?? 1.1;
+    xu.uFlameCore.value = T.DMG_FLAME_CORE ?? 1.3;
+    du.uTime.value = tD; du.uCore.value = T.EXP_DEBRIS_HOT ?? 1.4;
+    for (let i = 0; i < this.dmgPools.length; i++) this.dmgPools[i].upload();
     this.root.visible = visible !== false;
   }
 
@@ -627,15 +802,19 @@ export class FxEngine {
   stats() {
     return {
       pools: { beam: this.beams.stats(), tracer: this.tracers.stats(), spark: this.sparks.stats(),
-        wbeam: this.wbeams.stats(), bolt: this.bolts.stats(), mote: this.motes.stats() },   // ARC CV-4a — pule języka broni
-      active: this.activeCount(), shots: this.shots, wpnShots: this.wpnShots, presMs: this.nowMs, epochMs: this._epoch,
+        wbeam: this.wbeams.stats(), bolt: this.bolts.stats(), mote: this.motes.stats(),   // ARC CV-4a — pule języka broni
+        smoke: this.smokes.stats(), blast: this.blasts.stats(), debris: this.debris.stats() },   // ARC CV-5 — pule uszkodzeń
+      active: this.activeCount(), dmgActive: this.dmgActive(), shots: this.shots, wpnShots: this.wpnShots, dmgSpawned: this.dmgSpawned,
+      presMs: this.nowMs, epochMs: this._epoch, dmgMs: this.dmgNowMs,
     };
   }
 
   dispose() {
     for (const p of this.pools) { p.dispose(); }
+    for (const p of this.dmgPools) { p.dispose(); }
     this.beams.material.dispose(); this.tracers.material.dispose(); this.sparks.material.dispose();
     this.wbeams.material.dispose(); this.bolts.material.dispose(); this.motes.material.dispose();
+    this.blasts.material.dispose(); this.debris.material.dispose(); this._debrisGeo.dispose();
     this.root.parent?.remove(this.root);
   }
 }

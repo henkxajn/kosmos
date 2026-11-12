@@ -65,6 +65,13 @@
 //                                         rundy (zdarzenia, opóźnienie startu i rozpiętość trafień w R, zniszczenia, strzały po
 //                                         zniszczeniu), HP pokazywane vs logiczne uczestników, liczniki od wczytania strony
 //                                         (`odZaladowaniaStrony` — sumy wszystkich starć, F5 zeruje), `legenda` (co liczy każdy licznik)
+//   cvDamage(1) / cvDamage(0)           — ARC CV-5: flaga `cvDamage` (wybuchy warstwowe, stany uszkodzeń, płonące wraki, dryf wraków)
+//                                         ON / OFF; OFF — łata CV-3a3 / CV-4a (kula ognia, czerwony żar całego kadłuba)
+//   cvExplode(/battleship/.source)      — ARC CV-5: wybuch statku testowego danej klasy (`frigate` / `destroyer` / `battleship`),
+//                                         najbliższego celowi kamery — tylko prezentacja (logika go nie zna; F5 bez zapisu); w pauzie
+//                                         stoi, zwolnione tempo: `KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE = 0.25`
+//   damageInfo()                        — ARC CV-5: wybuchy (klasy, wtórne, światła), emitery stanów uszkodzeń, wraki (żar, zbieżność),
+//                                         zegar efektów, pule
 //
 // Scena (dlaczego tak, punkt po punkcie — §1 Q9 / Finding 634):
 //   · układ = OGLĄDANY (`activeSystemId`) — `teleportVessel` nigdy nie ustawiał `systemId`, a starcie w innym układzie nie
@@ -90,6 +97,8 @@ import { orbitClockSec } from '../utils/SimClock.js';                     // ARC
 import gameState from '../core/GameState.js';                                // M1 — `battleInfo()`: rekordy bitew
 import { resolveBattle, isStalemate } from '../systems/BattleSystem.js';     // M1 — `m1OrbitalCheck()`: ścieżka orbitalna (czysta)
 import { mixSeed } from '../utils/SeedMath.js';                              // Finding 699 — `random`: ziarno strumienia flot
+import { vesselSizeClass } from '../renderer/VesselModelResolver.js';        // ARC CV-5 — `cvExplode`: klasa kadłuba
+import { explosionClassOf } from '../renderer/combat/ExplosionLogic.js';     // ARC CV-5 — `cvExplode`: klasa wybuchu
 
 export const CV_BATTLE = Object.freeze({
   MAX_PER_SIDE: 10,
@@ -701,6 +710,46 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
     ledgerInfo() {
       const r = getRenderer();
       return r?.cvLedgerInfo ? r.cvLedgerInfo() : { ok: false, reason: 'no_renderer' };
+    },
+
+    /** ARC CV-5 — flaga `cvDamage` (wybuchy warstwowe, stany uszkodzeń, płonące wraki): cvDamage(1) — ON, cvDamage(0) — OFF (łata CV-3a3 /
+     *  CV-4a), cvDamage() — przełącz. Czytana przy każdym zniszczeniu i co klatkę. */
+    cvDamage(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvDamage = on === undefined ? !F.cvDamage : !!on;
+      return { cvDamage: F.cvDamage, cvFxEngine: !!F.cvFxEngine, fcCombatFx: !!F.fcCombatFx };
+    },
+
+    /**
+     * ARC CV-5 — wybuch statku TESTOWEGO (parada `cvParade` / bitwa `cvBattle`) danej klasy, najbliższego celowi kamery: cvExplode(/battleship/.source)
+     * (bez cudzysłowów — `.source` daje napis), cvExplode() — dowolny. Tylko prezentacja (wybuch i wygląd wraku); statek parady dostaje stop
+     * rozkazu ruchu, żeby wrak został w kadrze. Zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE = 0.25 (pauza zatrzymuje).
+     */
+    cvExplode(cls = null) {
+      const r = getRenderer();
+      const K = window.KOSMOS ?? {};
+      const vm = K.vesselManager;
+      if (!r?.cvExplodeVessel || !vm) return { ok: false, reason: 'no_renderer' };
+      let re = null;
+      try { re = cls == null || cls === '' ? null : new RegExp(String(cls), 'i'); } catch { return { ok: false, reason: 'bad_pattern' }; }
+      const sys = K.activeSystemId ?? 'sys_home';
+      const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
+      const cand = all.filter((v) => isCvVessel(v) && v.systemId === sys && !v.isWreck)
+        .filter((v) => { const e = r._vessels?.get?.(v.id); return !!e?.sprite?.visible && !e.cvKilled; })
+        .filter((v) => { if (!re) return true; const sc = vesselSizeClass(v); return re.test(explosionClassOf(sc)) || re.test(sc) || re.test(v.shipId ?? ''); });
+      if (!cand.length) return { ok: false, reason: 'no_ship', hint: 'KOSMOS.debug.cvParade() albo KOSMOS.debug.cvBattle() najpierw' };
+      const tgt = r._cameraController?._target ?? null;
+      const d2 = (v) => { const p = r._vessels.get(v.id).sprite.position; return tgt ? (p.x - tgt.x) ** 2 + (p.y - tgt.y) ** 2 + (p.z - tgt.z) ** 2 : 0; };
+      cand.sort((a, b) => d2(a) - d2(b));
+      const v = cand[0];
+      if (v._cvBattle === 'parade') K.movementOrderSystem?.cancelOrder?.(v.id, 'cvExplode');
+      return r.cvExplodeVessel(v.id);
+    },
+
+    /** ARC CV-5 — odczyt: wybuchy, sekwencje w toku, wraki (żar, zbieżność), stany uszkodzeń, pule, rozgrzewka (`ThreeRenderer.cvDamageInfo`). */
+    damageInfo() {
+      const r = getRenderer();
+      return r?.cvDamageInfo ? r.cvDamageInfo() : { ok: false, reason: 'no_renderer' };
     },
 
     /** ARC CV-2b — preset jakości: gfx() — odczyt (poziom, gęstość pikseli, bloom, światła, tekstury, budżety, dławienie, pamięć

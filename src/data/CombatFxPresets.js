@@ -8,6 +8,13 @@
 // liczby dla kroków, które te efekty dodadzą (CV-4b, CV-5) — dziś nikt ich nie zużywa.
 // ⚠ Strzałów preset NIE dotyka (§2.10: „shots are never dropped”) — pule wiązek, smug i iskier trafień `FxEngine` mają
 //   stałą pojemność niezależną od presetu i od dławienia; degradują wyłącznie efekty drugorzędne.
+//
+// ARC CV-5 (pozycja 0 — Finding 704, decyzja właściciela 41; reguła „wyższy preset nigdy nie wygląda gorzej od niższego”):
+//   · High rysuje w rozdzielczości NATYWNEJ + SMAA (bez nadpróbkowania 1,5× i dwuliniowego zmniejszenia kanwy przez przeglądarkę,
+//     które zmiękczało detal przy DPR ≥ 1,25), Medium — natywnie bez wygładzania, Low — min(1,0, natywna) (Finding 703);
+//   · bloom liczony w pikselach CSS × gęstość Medium (`bloomInputSize`), niezależnie od gęstości presetu — przy nadpróbkowaniu
+//     High poświata była 1,2–1,4 × węższa i do 30 % słabsza niż na Medium (mipy `UnrealBloomPass` szły za buforem rysowania).
+//   CV-5 zużywa też budżety efektów drugorzędnych (odłamki, dym, żar, dym uszkodzeń, cząstki) — `ExplosionLogic.js`.
 
 /** Poziomy rosnąco — kolejność jest kontraktem (keeper: każdy budżet Low ≤ Medium ≤ High). */
 export const GFX_LEVELS = Object.freeze(['low', 'medium', 'high']);
@@ -19,23 +26,25 @@ export const GFX_STORAGE_KEY = 'kosmos_gfx_quality';
 export const DAMAGE_SMOKE_ORDER = Object.freeze(['off', 'fire', 'on']);
 /** Tekstury statków: rosnąco. */
 export const TEXTURE_ORDER = Object.freeze(['1k', '2k']);
+/** Wygładzanie krawędzi: rosnąco (ARC CV-5, decyzja 41 — SMAA wyłącznie na High). */
+export const AA_ORDER = Object.freeze(['none', 'smaa']);
 
 /**
- * Tabela §2.10. `pixelRatio` — reguła (gęstość = min(dpr × dprMul, cap) albo stała `fixed`); High = dzisiejszy wzór renderera
- * (`min(dpr × 1,5, 2)` — supersampling). `notAbove` — poziom, od którego gęstość nie może być większa (Finding 703: Low =
- * min(1,0, Medium) — przy DPR < 1 stała 1,0 dawała Low OSTRZEJSZY od Medium, który rysuje natywnie).
+ * Tabela §2.10. `pixelRatio` — reguła (gęstość = min(dpr × dprMul, cap) albo stała `fixed`). `notAbove` — poziom, od którego
+ * gęstość nie może być większa (Finding 703: Low = min(1,0, Medium) — przy DPR < 1 stała 1,0 dawała Low OSTRZEJSZY od Medium,
+ * który rysuje natywnie). ARC CV-5 (decyzja 41): High = natywna (dawniej `min(dpr × 1,5, 2)` — nadpróbkowanie) + `aa: 'smaa'`.
  */
 export const GFX_PRESETS = Object.freeze({
   high: Object.freeze({
-    pixelRatio: Object.freeze({ dprMul: 1.5, cap: 2 }), bloom: true, particles: 16000, lights: 4, debris: 24,
+    pixelRatio: Object.freeze({ dprMul: 1.0, cap: 2 }), aa: 'smaa', bloom: true, particles: 16000, lights: 4, debris: 24,
     smoke: true, embers: true, damageSmoke: 'on', shieldRipples: 8, textures: '2k',
   }),
   medium: Object.freeze({
-    pixelRatio: Object.freeze({ dprMul: 1.0, cap: 1.5 }), bloom: true, particles: 6000, lights: 2, debris: 12,
+    pixelRatio: Object.freeze({ dprMul: 1.0, cap: 1.5 }), aa: 'none', bloom: true, particles: 6000, lights: 2, debris: 12,
     smoke: true, embers: false, damageSmoke: 'fire', shieldRipples: 4, textures: '1k',
   }),
   low: Object.freeze({
-    pixelRatio: Object.freeze({ fixed: 1.0, notAbove: 'medium' }), bloom: false, particles: 2000, lights: 0, debris: 0,
+    pixelRatio: Object.freeze({ fixed: 1.0, notAbove: 'medium' }), aa: 'none', bloom: false, particles: 2000, lights: 0, debris: 0,
     smoke: false, embers: false, damageSmoke: 'off', shieldRipples: 1, textures: '1k',
   }),
 });
@@ -61,4 +70,25 @@ export function presetPixelRatio(level, dpr) {
   const r = Number.isFinite(p.fixed) ? p.fixed : Math.min(d * p.dprMul, p.cap);
   // Finding 703 — niższy preset nigdy ostrzejszy od wyższego (Low ≤ Medium ≤ High przy każdym DPR).
   return p.notAbove && p.notAbove !== level ? Math.min(r, presetPixelRatio(p.notAbove, d)) : r;
+}
+
+/** ARC CV-5 (Finding 704) — gęstość ODNIESIENIA bloomu: gęstość Medium (min(dpr, 1,5)) — ta sama dla każdego presetu danego DPR. */
+export function bloomPixelRatio(dpr) {
+  return presetPixelRatio('medium', dpr);
+}
+
+/**
+ * ARC CV-5 (pozycja 0 — Finding 704) — rozmiar WEJŚCIA mipów bloomu (`UnrealBloomPass.setSize(w, h)` — mip 0 = połowa).
+ * `cssPx` (presety włączone): rozmiar CSS × gęstość odniesienia (`bloomPixelRatio`) — poświata w pikselach CSS, ta sama przy
+ * każdym presecie (High natywny, Medium, nawet przy DPR 2, gdzie High rysuje gęściej od Medium). Bez `cssPx` (flaga `cvPresets`
+ * OFF): rozmiar bufora rysowania (CSS × gęstość renderera) — dzisiejsze zachowanie co do bitu.
+ * @param {{ cssW:number, cssH:number, dpr:number, pixelRatio:number, cssPx?:boolean }} o
+ * @returns {{ w:number, h:number, scale:number }}
+ */
+export function bloomInputSize({ cssW, cssH, dpr, pixelRatio, cssPx = true } = {}) {
+  const pr = Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1;
+  const scale = cssPx ? bloomPixelRatio(dpr) : pr;
+  const w = Math.max(1, (Number(cssW) || 1) * scale);
+  const h = Math.max(1, (Number(cssH) || 1) * scale);
+  return { w, h, scale };
 }

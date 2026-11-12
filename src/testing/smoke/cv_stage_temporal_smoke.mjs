@@ -32,6 +32,10 @@
 //   T10 (CV-6b) zniszczenie w trakcie starcia nie przesuwa osi kadru („Obserwuj”, auto-fokus); KONTROLA: oś z samych żywych
 //   T11 (CV-6b) scena wolnej bitwy nie zależy od ruchu płynnego logiki (inny ruch płynny — te same pozycje rysowane);
 //      ŚWIADEK: pozycje bazowe różne
+//   T12 (CV-5, Finding 706) przebudowa sprite'ów w ZATRZYMANEJ bitwie (zmiana presetu — modele wstają asynchronicznie, kilka
+//      klatek bez sprite'ów): pozycje rysowane po przebudowie co do bitu jak przed, prowadnica bez nowego rozwiązania, wszyscy
+//      na scenie; KONTROLA: ta sama przebudowa bez wpisów oczekiwania (`_stageKeep`) — znaczniki i stan prowadnicy kasowane,
+//      statki w skali prawdziwej (objaw sprzed poprawki)
 //
 // ⚠ Fail-first: metody i pokrętła CV-3a3 powstają w tym kroku — brak = pin czerwony, suita się nie przerywa (każdy blok łapie
 //   wyjątek, importy dynamiczne).
@@ -89,7 +93,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION'];
 const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
   '_stageWatchFit', '_stageFields', 'stageLogicalOf', 'stageWorldOf', '_placeFreeVessel', '_tickCombatGlide', '_syncEnemyAlertMarkers',
-  '_spawnExplosion'];
+  '_spawnExplosion', '_stageKept'];   // ARC CV-5 (Finding 706) — `_stageKept` (brak przed poprawką — pin T12 czerwony, suita idzie dalej)
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -498,6 +502,43 @@ block('T11 — CV-6b: scena wolnej bitwy nie zależy od ruchu płynnego logiki',
   console.log(`     ruch płynny przesunięty o 0,05 j.: pozycje bazowe różnią się min. ${db.toFixed(4)} j., rysowane maks. ${dd.toExponential(2)} j.`);
   assert(dd < 1e-9, `T11a SEDNO: rysowane pozycje identyczne mimo innego ruchu płynnego (różnica maks. ${dd.toExponential(2)} j.)`);
   assert(db > 0.04, `T11b ŚWIADEK: pozycje bazowe różnią się o ${db.toFixed(4)} j. (próba nie jest jałowa)`);
+});
+
+// ═══ T12 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+block('T12 — (CV-5, Finding 706) przebudowa sprite\'ów w zatrzymanej bitwie: scena i prowadnica bez zmian', () => {
+  const run = (keep) => {
+    const w = world();
+    const { R } = w;
+    placeCamera(R, 0.4);
+    for (let r = 0; r < 3; r++) { round(w); for (let i = 0; i < 70; i++) frame(R); }
+    w.ts.isPaused = true;
+    for (let i = 0; i < 5; i++) frame(R);
+    const before = drawnOf(R);
+    const cid = [...R._stageState.keys()][0];
+    const solves0 = R._stageState.get(cid)?.solves ?? -1;
+    // przebudowa jak `cvRebuildVesselSprites`: wpisy oczekiwania, sprite'y usunięte, 6 klatek bez modeli, nowe sprite'y w pozycji logicznej
+    const ids = [...R._vessels.keys()];
+    if (keep) { R._stageKeep = new Map(ids.map((id) => [id, clock.now + 10000])); } else R._stageKeep = null;
+    R._vessels.clear();
+    for (let i = 0; i < 6; i++) frame(R);
+    for (const id of ids) {
+      const v = w.vessels.get(id);
+      const sp = new THREE.Object3D(); sp.visible = true;
+      sp.position.set(S(v.position.x), 0.3, S(v.position.y));
+      const e = { sprite: sp, glide: null };
+      R._vessels.set(id, e);
+      R._placeFreeVessel?.(id, e, v.position.x, v.position.y);
+    }
+    for (let i = 0; i < 6; i++) frame(R);
+    return { d: maxStep(before, drawnOf(R)) / L, solves0, solves1: R._stageState.get(cid)?.solves ?? -1,
+      staged: [...R._stageMarks.values()].filter((m) => m.k > 0.99 && m.w > 0.99).length, n: ids.length };
+  };
+  const a = run(true), c = run(false);
+  console.log(`     z oczekiwaniem: przesunięcie maks. ${a.d.toExponential(2)} L, rozwiązania ${a.solves0} → ${a.solves1}, na scenie ${a.staged}/${a.n}` +
+    ` · KONTROLA bez: ${c.d.toFixed(2)} L, rozwiązania ${c.solves0} → ${c.solves1}, na scenie ${c.staged}/${c.n}`);
+  assert(a.n === 20 && a.d < 1e-9 && a.staged === 20, `T12a SEDNO: po przebudowie w pauzie pozycje rysowane co do bitu jak przed (maks. ${a.d.toExponential(2)} L), 20/20 na scenie`);
+  assert(a.solves0 > 0 && a.solves1 === a.solves0, `T12b prowadnica bez nowego rozwiązania (stan klastra przeżył przerwę bez sprite'ów: ${a.solves0} → ${a.solves1})`);
+  assert(c.d > 1 && c.staged < 20, `T12c KONTROLA: bez wpisów oczekiwania statki wypadają ze sceny w zatrzymanej bitwie (przesunięcie ${c.d.toFixed(2)} L, na scenie ${c.staged}/20)`);
 });
 
 GAME_CONFIG.FEATURES.cvStage = FLAG0;

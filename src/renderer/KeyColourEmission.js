@@ -30,15 +30,26 @@
 // ⚠ Granica: `Material.copy` NIE kopiuje `onBeforeCompile` ani `customProgramCacheKey` (instancyjnych), a uniformy żyją
 //   w WeakMapie, nie w `userData` (`copy` robi `JSON.parse(JSON.stringify(userData))`) — klon materiału z maską jest
 //   zwykłym materiałem bez maski, nigdy materiałem z kluczem programu maski bez jej uniformów.
+//
+// ARC CV-5 (flaga `cvDamage`; Findingi 620, 702) — WYPALANIE WRAKU: zamiast czerwonej poświaty CAŁEGO kadłuba (krawędź fresnel⁴ +
+// 3 % — przy małym statku na ekranie czerwieniała cała sylwetka i bloomowała) — świecące SZWY (pasy szumu 3D w przestrzeni modelu,
+// z przewagą ciemnych rowków tekstury) i krawędzie, stygnące na zegarze efektów (`uKcHeat` od renderera: 1 → żar resztkowy w 10–20 s)
+// do przypalonego kadłuba z kilkoma migającymi iskrami (`uKcEmber`, `uKcTime`). Tryb wybiera uniform `uKcBurnMode` materiału:
+// 0 — wygląd CV-1a co do wyrażeń (flaga OFF), 1 — wypalanie. Szum potrzebuje położenia w przestrzeni modelu — druga wstawka do
+// szablonu WIERZCHOŁKA (`vKcObj`, kotwice `common` i `begin_vertex`). Jeden program dla wszystkich statków (klucz v3).
 
 // Szerokość rampy barwy na jednostkę `soft` [°]: soft 0,06 ⇒ 6° — pełna maska do hueTol − 6°, zero od hueTol.
 export const KC_HUE_SOFT_DEG = 100;
-export const KC_PROGRAM_KEY = 'kosmos-cv1a-keycolour-v2';
+export const KC_PROGRAM_KEY = 'kosmos-cv5-keycolour-v3';   // ARC CV-5 — wypalanie wraku (wstawka wierzchołka)
 
 const ANCHOR_PARS = '#include <emissivemap_pars_fragment>';
 const ANCHOR_MAIN = '#include <emissivemap_fragment>';
 const ANCHOR_LIFT = '#include <opaque_fragment>';
 const MARK = 'uKcGainMul';   // token obecny wyłącznie we wstawce (wykrywa podwójną transformację)
+// ARC CV-5 — wstawka WIERZCHOŁKA: położenie w przestrzeni modelu dla szumu szwów wraku
+const ANCHOR_V_COMMON = '#include <common>';
+const ANCHOR_V_BEGIN = '#include <begin_vertex>';
+const MARK_V = 'vKcObj';
 
 export const KC_PARS_GLSL = `
 uniform float uKcHue;
@@ -60,6 +71,27 @@ uniform float uKcRimPow;
 uniform vec3 uKcFillCol;
 uniform float uKcFillMul;
 uniform float uKcLiftCeil;
+uniform float uKcBurnMode;
+uniform float uKcHeat;
+uniform vec3 uKcEmber;
+uniform float uKcObjScale;
+uniform float uKcSeamFreq;
+uniform float uKcTime;
+varying vec3 vKcObj;
+float kcHash3(vec3 p) {
+  p = fract(p * 0.3183099 + vec3(0.11, 0.17, 0.13));
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float kcNoise3(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(kcHash3(i), kcHash3(i + vec3(1.0, 0.0, 0.0)), f.x),
+                 mix(kcHash3(i + vec3(0.0, 1.0, 0.0)), kcHash3(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+             mix(mix(kcHash3(i + vec3(0.0, 0.0, 1.0)), kcHash3(i + vec3(1.0, 0.0, 1.0)), f.x),
+                 mix(kcHash3(i + vec3(0.0, 1.0, 1.0)), kcHash3(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+}
 float kcStep(float e0, float e1, float x) {
   float t = clamp((x - e0) / max(e1 - e0, 1e-5), 0.0, 1.0);
   return t * t * (3.0 - 2.0 * t);
@@ -93,6 +125,9 @@ float kcMask(vec3 c) {
 // liniowa (sRGB zdekodowane przy próbkowaniu) — `kcToSrgb` wraca do przestrzeni, w której mierzono progi.
 // Tint ciała wroga mnoży `diffuseColor` TU — przed oświetleniem (`lights_physical_fragment` czyta go dalej). Wypełnienie
 // i obwódka tylko się LICZĄ (`kcFill`, `kcRimL` — zmienne w zasięgu `main`); dodaje je druga wstawka, po oświetleniu.
+// ARC CV-5 — wrak w trybie 1 jest MATOWY (`roughnessFactor` ≥ 0,94, `metalnessFactor` ≤ 0,04 — wstawka stoi PRZED
+// `lights_physical_fragment`, który je czyta): mapa szorstkości MNOŻY `roughness`, więc gładkie panele zostawały gładkie mimo
+// 1,0 z malowania wraku, a odblask gwiazdy pod kątem ślizgowym świecił na biało ponad progiem bloomu. Tryb 0 (CV-1a) nietknięty.
 export const KC_MAIN_GLSL = `
 vec3 kcFill = vec3(0.0);
 vec3 kcRimL = vec3(0.0);
@@ -103,6 +138,10 @@ vec3 kcRimL = vec3(0.0);
   vec3 kcTex = diffuseColor.rgb;
 #endif
   diffuseColor.rgb *= mix(vec3(1.0), uKcBody, clamp(uKcBodyAmt * uKcTintMul, 0.0, 1.0));
+  if (uKcBurnMode > 0.5) {
+    roughnessFactor = max(roughnessFactor, 0.94);
+    metalnessFactor = min(metalnessFactor, 0.04);
+  }
   if (uKcGain > 0.0) {
     totalEmissiveRadiance += kcTex * (kcMask(kcToSrgb(kcTex)) * uKcGain * uKcGainMul);
   }
@@ -113,10 +152,23 @@ vec3 kcRimL = vec3(0.0);
   if (uKcRim.r + uKcRim.g + uKcRim.b > 0.0) {
     kcRimL = uKcRim * (uKcRimMul * pow(1.0 - kcNV, max(uKcRimPow, 0.5)));
   }
-  if (uKcBurn.r + uKcBurn.g + uKcBurn.b > 0.0) {
+  if (uKcBurn.r + uKcBurn.g + uKcBurn.b + uKcEmber.r + uKcEmber.g + uKcEmber.b > 0.0) {
     float kcRim = 1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0);
-    float kcR2 = kcRim * kcRim;
-    totalEmissiveRadiance += uKcBurn * (uKcBurnMul * (0.03 + 0.97 * kcR2 * kcR2));
+    if (uKcBurnMode < 0.5) {
+      float kcR2 = kcRim * kcRim;
+      totalEmissiveRadiance += uKcBurn * (uKcBurnMul * (0.03 + 0.97 * kcR2 * kcR2));
+    } else {
+      vec3 kcP = vKcObj * (uKcObjScale * uKcSeamFreq);
+      float kcN = kcNoise3(kcP) * 0.65 + kcNoise3(kcP * 2.37 + vec3(5.1, 1.7, 3.3)) * 0.35;
+      float kcW = mix(0.008, 0.034, clamp(uKcHeat, 0.0, 1.0));
+      float kcSeam = 1.0 - kcStep(0.0, kcW, abs(kcN - 0.5));
+      float kcDark = 1.0 - kcStep(0.05, 0.5, kcL);
+      float kcShape = kcSeam * (0.45 + 0.55 * kcDark) + 0.3 * clamp(uKcHeat, 0.0, 1.0) * kcRim * kcRim * kcRim;
+      totalEmissiveRadiance += uKcBurn * (uKcBurnMul * kcShape);
+      float kcE = kcNoise3(kcP * 4.7 + vec3(17.0, 3.0, 9.0));
+      float kcSpot = kcStep(0.9, 0.965, kcE) * (0.5 + 0.5 * sin(uKcTime * 0.007 + kcE * 60.0));
+      totalEmissiveRadiance += uKcEmber * (uKcBurnMul * kcSpot);
+    }
   }
 }
 `;
@@ -131,6 +183,21 @@ export const KC_LIFT_GLSL = `
   outgoingLight = max(outgoingLight, min(outgoingLight + kcAdd, vec3(uKcLiftCeil)));
 }
 `;
+
+/**
+ * ARC CV-5 — wstawka do szablonu WIERZCHOŁKA (`meshphysical_vert`, three r171): położenie w przestrzeni modelu (`vKcObj`) dla szumu
+ * szwów wypalanego wraku. Kotwica, której NIE MA — wyjątek (jak we fragmencie).
+ */
+export function injectKeyColourVertex(vertSrc) {
+  if (typeof vertSrc !== 'string') throw new Error('[KeyColourEmission] oczekiwano tekstu shadera wierzchołka');
+  if (vertSrc.includes('varying vec3 ' + MARK_V)) throw new Error('[KeyColourEmission] wierzchołek JUŻ ma wstawkę (podwójna transformacja)');
+  for (const a of [ANCHOR_V_COMMON, ANCHOR_V_BEGIN]) {
+    if (!vertSrc.includes(a)) throw new Error(`[KeyColourEmission] brak kotwicy wierzchołka „${a}"`);
+  }
+  return vertSrc
+    .replace(ANCHOR_V_COMMON, ANCHOR_V_COMMON + '\nvarying vec3 ' + MARK_V + ';')
+    .replace(ANCHOR_V_BEGIN, ANCHOR_V_BEGIN + '\n' + MARK_V + ' = position;');
+}
 
 /**
  * Wstawka do szablonu fragmentu MeshStandardMaterial (`meshphysical_frag`, three r171). Kotwica, której NIE MA, jest
@@ -213,6 +280,9 @@ export const KC_SHARED = Object.freeze({
   uKcRimMul: { value: 0 },
   uKcRimPow: { value: 4.0 },
   uKcLiftCeil: { value: 0.95 },
+  // ARC CV-5 — wypalanie wraku: gęstość szwów (`WRECK_SEAM_FREQ`) i czas migania iskier (zegar efektów uszkodzeń, ms)
+  uKcSeamFreq: { value: 9.0 },
+  uKcTime: { value: 0 },
 });
 
 const UNIFORMS = new WeakMap();   // material → uniformy (NIE userData — patrz nagłówek)
@@ -222,6 +292,7 @@ function onBeforeCompileKc(shader) {
   if (!u) return;
   Object.assign(shader.uniforms, u);
   shader.fragmentShader = injectKeyColour(shader.fragmentShader);
+  if (typeof shader.vertexShader === 'string') shader.vertexShader = injectKeyColourVertex(shader.vertexShader);   // ARC CV-5
 }
 function programKeyKc() { return KC_PROGRAM_KEY; }
 
@@ -244,6 +315,10 @@ export function applyKeyColour(material, kc) {
       uKcGainMul: KC_SHARED.uKcGainMul, uKcTintMul: KC_SHARED.uKcTintMul, uKcBurnMul: KC_SHARED.uKcBurnMul,
       uKcFillMul: KC_SHARED.uKcFillMul, uKcFillCol: KC_SHARED.uKcFillCol, uKcRimMul: KC_SHARED.uKcRimMul,
       uKcRimPow: KC_SHARED.uKcRimPow, uKcLiftCeil: KC_SHARED.uKcLiftCeil,
+      // ARC CV-5 — wypalanie wraku: tryb (0 — wygląd CV-1a, 1 — szwy stygnące), żar, iskry, skala przestrzeni modelu (WŁASNE obiekty
+      // materiału); gęstość szwów i czas — wspólne (`KC_SHARED`)
+      uKcBurnMode: { value: 0 }, uKcHeat: { value: 1 }, uKcEmber: { value: { x: 0, y: 0, z: 0 } }, uKcObjScale: { value: 1 },
+      uKcSeamFreq: KC_SHARED.uKcSeamFreq, uKcTime: KC_SHARED.uKcTime,
     };
     UNIFORMS.set(material, u);
     material.onBeforeCompile = onBeforeCompileKc;
@@ -301,4 +376,26 @@ export function setKeyColourRim(material, r, g, b) {
 export function setKeyColourGain(material, gain) {
   const u = keyColourUniformsOf(material);
   if (u) u.uKcGain.value = Math.max(0, Number(gain) || 0);
+}
+
+/**
+ * ARC CV-5 — wypalanie wraku (flaga `cvDamage`): tryb 1, żar [0, 1] (szerokość szwów i krawędzi), barwa szwów × wzmocnienie
+ * (LINIOWE rgb, HDR) i iskry zimnego kadłuba (LINIOWE rgb). Tryb 0 — wygląd CV-1a (`setKeyColourBurn`), iskry zgaszone.
+ * @param {object} material
+ * @param {{ mode?:number, heat?:number, burn?:number[], ember?:number[] }} st
+ */
+export function setKeyColourWreckState(material, { mode = 1, heat = 1, burn = null, ember = null } = {}) {
+  const u = keyColourUniformsOf(material);
+  if (!u) return;
+  u.uKcBurnMode.value = mode;
+  u.uKcHeat.value = Math.max(0, Math.min(1, Number(heat) || 0));
+  if (burn) { u.uKcBurn.value.x = burn[0]; u.uKcBurn.value.y = burn[1]; u.uKcBurn.value.z = burn[2]; }
+  const e = ember ?? [0, 0, 0];
+  u.uKcEmber.value.x = e[0]; u.uKcEmber.value.y = e[1]; u.uKcEmber.value.z = e[2];
+}
+
+/** ARC CV-5 — skala położenia wierzchołka do przestrzeni modelu (długość statku = 1) — gęstość szwów niezależna od jednostek pliku. */
+export function setKeyColourObjScale(material, scale) {
+  const u = keyColourUniformsOf(material);
+  if (u) u.uKcObjScale.value = Number.isFinite(scale) && scale > 0 ? scale : 1;
 }

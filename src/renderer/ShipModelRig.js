@@ -22,7 +22,9 @@
 // ⚠ Three.js WSTRZYKIWANY (`THREE`) — moduł wykonuje się pod node na prawdziwym Three.js r171 (keeper `cv_models_render_smoke`).
 
 import { frameQuaternion } from './ShipHardpoints.js';
-import { applyKeyColour, setKeyColourGain, setKeyColourTint, setKeyColourBurn, setKeyColourBody, setKeyColourRim } from './KeyColourEmission.js';
+import { applyKeyColour, setKeyColourGain, setKeyColourTint, setKeyColourBurn, setKeyColourBody, setKeyColourRim,
+  setKeyColourWreckState, setKeyColourObjScale } from './KeyColourEmission.js';
+import { damagePointsFromVertices, explosionSeed } from './combat/ExplosionLogic.js';   // ARC CV-5 — punkty uszkodzeń kadłuba
 
 // Pokrętła (długość / promień smugi, mnożniki maski, tintu, żaru, światła czytelności, świateł) żyją w `cvTuning`
 // (`LIVE_CV_FX`, klucze `MODEL_*`) — czyta je renderer CO KLATKĘ; ten moduł buduje tylko strukturę.
@@ -95,9 +97,42 @@ export function paintRigMaterials(THREE, materials, kind, { burnHot = true, enem
       setKeyColourBody(mat, 1, 1, 1, 0);
       const b = burnHot ? linear(THREE, P.WRECK_BURN).map((x) => x * P.WRECK_BURN_GAIN) : linear(THREE, P.WRECK_BURN_DIM);
       setKeyColourBurn(mat, b[0], b[1], b[2]);
+      setKeyColourWreckState(mat, { mode: 0, heat: 1 });   // ARC CV-5 — wygląd CV-1a (wypalanie włącza renderer pod flagą `cvDamage`)
     }
   }
   paintRigRim(THREE, materials, kind, enemyRimHex);
+}
+
+const _dmgPtsCache = new WeakMap();   // szablon → { key, pts } (skan wierzchołków raz na szablon i ramę)
+
+/**
+ * ARC CV-5 — trzy punkty uszkodzeń kadłuba (przód / środek / tył) w ZNORMALIZOWANEJ przestrzeni modelu: z pliku hardpointów
+ * (`damagePoints` — tablica punktów) albo `"auto"` — wierzchołki siatki szablonu (`damagePointsFromVertices`, deterministycznie
+ * z ziarna slotu). Pożary, dym uszkodzeń i wybuchy wtórne pancernika siedzą w tych punktach.
+ * @returns {number[][]}
+ */
+export function rigDamagePoints(THREE, template, hp) {
+  const list = Array.isArray(hp?.damagePoints) ? hp.damagePoints.filter((p) => Array.isArray(p) && p.length === 3 && p.every(Number.isFinite)) : [];
+  if (list.length) return [0, 1, 2].map((i) => list[i % list.length].slice(0, 3));
+  const key = `${hp?.slot ?? ''}|${JSON.stringify(hp?.frame ?? null)}`;
+  const have = _dmgPtsCache.get(template);
+  if (have && have.key === key) return have.pts;
+  const { c, m } = templateBounds(THREE, template);
+  const v = new THREE.Vector3();
+  const verts = [];
+  template.updateMatrixWorld(true);
+  template.traverse((o) => {
+    const pos = o.isMesh ? o.geometry?.attributes?.position : null;
+    if (!pos) return;
+    const step = Math.max(1, Math.floor(pos.count / 6000));   // ≤ ~6000 wierzchołków na siatkę — punkty uszkodzeń nie potrzebują więcej
+    for (let i = 0; i < pos.count; i += step) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      verts.push((v.x - c[0]) / m, (v.y - c[1]) / m, (v.z - c[2]) / m);
+    }
+  });
+  const pts = damagePointsFromVertices(verts, hp?.frame, explosionSeed('dmg', hp?.slot ?? 'slot'));
+  _dmgPtsCache.set(template, { key, pts });
+  return pts;
 }
 
 /**
@@ -126,13 +161,19 @@ export function buildShipRig({ THREE, template, hardpoints, targetSize, kind = '
   canon.add(model);
 
   // Klony materiałów + maska (Finding 624) — tekstury współdzielone, obiekt materiału własny.
+  // ARC CV-5 — skala położenia wierzchołka do przestrzeni modelu (szwy wypalanego wraku): skala węzła w szablonie / najdłuższy wymiar.
+  const meshScale = [];
+  template.updateMatrixWorld(true);
+  template.traverse((o) => { if (o.isMesh) meshScale.push(o.matrixWorld.getMaxScaleOnAxis()); });
+  let mi = 0;
   const materials = [];
   model.traverse((child) => {
     if (!child.isMesh) return;
+    const objScale = (meshScale[mi++] ?? 1) / m;
     child.castShadow = false;
     child.receiveShadow = false;
     if (!child.material) return;
-    const one = (src) => { const mat = src.clone(); applyKeyColour(mat, hp.keyColour); materials.push(mat); return mat; };
+    const one = (src) => { const mat = src.clone(); applyKeyColour(mat, hp.keyColour); setKeyColourObjScale(mat, objScale); materials.push(mat); return mat; };
     child.material = Array.isArray(child.material) ? child.material.map(one) : one(child.material);
   });
   paintRigMaterials(THREE, materials, kind, { burnHot, enemyRimHex });
@@ -183,8 +224,11 @@ export function buildShipRig({ THREE, template, hardpoints, targetSize, kind = '
     : [];
   const fb = Array.isArray(hp.frame?.bow) ? hp.frame.bow : [-1, 0, 0];
   const fbl = Math.hypot(fb[0], fb[1], fb[2]) || 1;
+  // ARC CV-5 — punkty uszkodzeń (pożary, dym, wybuchy wtórne) i dysza (iskry krztuszącego się silnika) — same dane.
+  const damagePoints = rigDamagePoints(THREE, template, hp);
+  const nozzle = nz && Array.isArray(nz.p) && Array.isArray(nz.d) ? { p: [nz.p[0], nz.p[1], nz.p[2]], d: [nz.d[0], nz.d[1], nz.d[2]] } : null;
   return { root, canon, model, materials, exhaust: cone, lights, nozzleR: nz?.r ?? 0.04, frameQuat: q, slot: hp.slot,
-    weapons, frameBow: [fb[0] / fbl, fb[1] / fbl, fb[2] / fbl] };
+    weapons, frameBow: [fb[0] / fbl, fb[1] / fbl, fb[2] / fbl], damagePoints, nozzle };
 }
 
 /**

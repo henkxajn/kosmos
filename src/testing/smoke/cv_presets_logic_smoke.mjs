@@ -32,6 +32,12 @@
 //       salwa ON — sygnały fire / impact / shieldHit z czasem prezentacji i id starcia, OFF — żadnych, ten sam silnik
 //   T11 źródło: wiersz ☰ „Grafika” tylko z flagą, klucze PL + EN, zero `Math.random` w modułach CV-2b, gorąca ścieżka puli
 //       i szyny bez `new`; wariant 1K z danych (stempel normalizatora); kanwa HUD nie schodzi poniżej natywnej gęstości (Low)
+//   ARC CV-5 (pozycja 0 — Finding 704, decyzja 41): T1c / T10c / T10f PRZECELOWANE ŚWIADOMIE — High rysuje w rozdzielczości
+//       NATYWNEJ + SMAA (dawniej nadpróbkowanie min(dpr × 1,5, 2)); T1j wygładzanie w tabeli (SMAA tylko High, kolejność);
+//       T1k rozmiar mipów bloomu w px CSS — ten sam przy każdym presecie danego DPR (KONTROLA: rozmiar bufora przy DPR 2 różni
+//       High od Medium), bez presetów = rozmiar bufora (dzisiejszy); T10 — SMAA tworzony RAZ, włączony tylko na High, OFF bez
+//       SMAA, rozmiar bloomu z funkcji; T12 — Finding 706: znacznik sceny przebudowywanego statku przeżywa brak sprite'a (przebudowa
+//       w zatrzymanej bitwie), nowy sprite wchodzi z tym samym stopniem wejścia; KONTROLA — bez przebudowy znacznik znika jak dziś
 // ⚠ Nowe moduły CV-2b importowane dynamicznie w try/catch — przy fail-first piny DEGRADUJĄ (czerwone), suita się nie przerywa.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -79,14 +85,16 @@ guard('T1', () => {
     for (const k of ['bloom', 'smoke', 'embers']) if (Number(lo[k]) > Number(hi[k])) bad.push(k);
     if (ORD(P.DAMAGE_SMOKE_ORDER, lo.damageSmoke) > ORD(P.DAMAGE_SMOKE_ORDER, hi.damageSmoke)) bad.push('damageSmoke');
     if (ORD(P.TEXTURE_ORDER, lo.textures) > ORD(P.TEXTURE_ORDER, hi.textures)) bad.push('textures');
+    if (P.AA_ORDER && ORD(P.AA_ORDER, lo.aa) > ORD(P.AA_ORDER, hi.aa)) bad.push('aa');   // ARC CV-5 — wygładzanie (decyzja 41)
     for (const dpr of [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2, 3]) {   // Finding 703 — także DPR < 1 (powiększenie przeglądarki < 100 %)
       if (!(P.presetPixelRatio(LEVELS[i - 1], dpr) <= P.presetPixelRatio(LEVELS[i], dpr))) bad.push(`pixelRatio @${dpr}`);
     }
   }
   assert(bad.length === 0, `T1b każdy budżet Low ≤ Medium ≤ High${bad.length ? ' — ' + bad.join('; ') : ''}`);
-  const today = (dpr) => Math.min(dpr * 1.5, 2);
-  assert([1, 1.25, 1.5, 2, 3].every((d) => P.presetPixelRatio('high', d) === today(d)),
-    'T1c High = dzisiejszy wzór renderera min(dpr × 1,5, 2) (flaga ON na mocnej karcie nie zmienia ostrości)');
+  // ARC CV-5 (decyzja 41) — PRZECELOWANE ŚWIADOMIE: High = natywna gęstość + SMAA (było: nadpróbkowanie min(dpr × 1,5, 2)).
+  const native = (dpr) => Math.min(dpr, 2);
+  assert([0.9, 1, 1.25, 1.5, 2, 3].every((d) => P.presetPixelRatio('high', d) === native(d)),
+    'T1c High = rozdzielczość NATYWNA min(dpr, 2) — bez nadpróbkowania (decyzja 41; dawniej min(dpr × 1,5, 2))');
   assert(P.presetPixelRatio('medium', 1.25) === 1.25 && P.presetPixelRatio('medium', 2) === 1.5 && P.presetPixelRatio('low', 2) === 1,
     'T1d Medium = min(dpr, 1,5), Low = min(1,0, Medium) (tabela §2.10)');
   // Finding 703 (kontrola właściciela 2026-11-12, okno DPR 0,9): Low (stałe 1,0) był ostrzejszy od Medium (natywne 0,9).
@@ -100,6 +108,19 @@ guard('T1', () => {
   assert(tbl.high.textures === '2k' && tbl.medium.textures === '1k' && tbl.low.textures === '1k' && tbl.low.bloom === false && tbl.medium.bloom === true,
     'T1f tekstury 2K / 1K / 1K, bloom wyłącznie bez Low');
   assert(P.GFX_STORAGE_KEY === 'kosmos_gfx_quality', 'T1g klucz zapisu na maszynie `kosmos_gfx_quality` (D-CV-17)');
+  assert(tbl.high.aa === 'smaa' && tbl.medium.aa === 'none' && tbl.low.aa === 'none' && JSON.stringify(P.AA_ORDER) === '["none","smaa"]',
+    'T1j (CV-5, decyzja 41) wygładzanie: SMAA wyłącznie na High, Medium i Low bez — kolejność none < smaa');
+  // T1k — Finding 704: rozmiar wejścia mipów bloomu w px CSS × gęstość odniesienia (Medium) — ten sam przy każdym presecie
+  const B = P.bloomInputSize;
+  const rows = [0.9, 1.25, 2.0].map((dpr) => ({ dpr, w: LEVELS.map((lv) => B({ cssW: 1600, cssH: 1041, dpr, pixelRatio: P.presetPixelRatio(lv, dpr), cssPx: true }).w) }));
+  console.log('     bloom (px CSS): ' + rows.map((r) => `DPR ${r.dpr}: ${r.w.join(' / ')}`).join(' · '));
+  assert(rows.every((r) => r.w.every((x) => x === r.w[0]) && Math.abs(r.w[0] - 1600 * Math.min(r.dpr, 1.5)) < 1e-9),
+    'T1k mipy bloomu: ten sam rozmiar dla Low / Medium / High przy DPR 0,9 / 1,25 / 2,0 = CSS × min(DPR, 1,5) (poświata w px CSS)');
+  const bufHi = B({ cssW: 1600, cssH: 1041, dpr: 2, pixelRatio: P.presetPixelRatio('high', 2), cssPx: false }).w;
+  const bufMed = B({ cssW: 1600, cssH: 1041, dpr: 2, pixelRatio: P.presetPixelRatio('medium', 2), cssPx: false }).w;
+  assert(bufHi === 3200 && bufMed === 2400, `T1l KONTROLA: rozmiar BUFORA (bez presetów) przy DPR 2 różni High (${bufHi}) od Medium (${bufMed}) — reguła CSS nie jest tożsamościowo równa`);
+  assert(B({ cssW: 1600, cssH: 1041, dpr: 1.25, pixelRatio: 1.875, cssPx: false }).w === 1600 * 1.875,
+    'T1m bez presetów (`cvPresets` OFF) — rozmiar bufora rysowania co do bitu (dzisiejsze 1600 × 1,875)');
 });
 
 // ── T2 — ustawienia zastosowane ─────────────────────────────────────────────────────────────────────────────────────
@@ -468,17 +489,22 @@ function methodOf(name) {
 const NAMES = ['THREE', 'GAME_CONFIG', 'window', 'performance', 'EventBus', 'CombatLightPool', 'LIGHT_POOL_MAX', 'resolveGfxSettings',
   'normalizeGfxLevel', 'nextGfxLevelInCycle', 'writeStoredGfxLevel', 'initialGfxLevel', 'readRendererString', 'QualityThrottle',
   'LIVE_GFX_THROTTLE', 'CombatCueBus', 'cueWeaponOfCategory', 'cueSizeOfClass', 'screenPan', 'vesselSizeClass', 'vesselTargetSize',
-  'FxEngine', 'logDepthOn'];
+  'FxEngine', 'logDepthOn', 'SMAAPass', 'bloomInputSize'];
+// ARC CV-5 — atrapa `SMAAPass` (prawdziwy z CDN nie importuje się pod node): licznik konstrukcji, rozmiar z composera.
+class FakeSMAAPass { constructor(w, h) { FakeSMAAPass.made++; this.enabled = true; this.size = [w, h]; } setSize(w, h) { this.size = [w, h]; } }
+FakeSMAAPass.made = 0;
 const make = (name) => {
   const m = methodOf(name);
   if (!m) return null;
   return new Function(...NAMES, `return function (${m.params}) {\n${m.body}\n};`)(THREE, GAME_CONFIG, globalThis.window, globalThis.performance,
     EventBus, LP?.CombatLightPool, PRESETS?.LIGHT_POOL_MAX, QP?.resolveGfxSettings, QP?.normalizeGfxLevel, QP?.nextGfxLevelInCycle,
     QP?.writeStoredGfxLevel, QP?.initialGfxLevel, QP?.readRendererString, QP?.QualityThrottle, QP?.LIVE_GFX_THROTTLE, BUS?.CombatCueBus,
-    BUS?.cueWeaponOfCategory, BUS?.cueSizeOfClass, BUS?.screenPan, vesselSizeClass, vesselTargetSize, ENGINE?.FxEngine, () => true);
+    BUS?.cueWeaponOfCategory, BUS?.cueSizeOfClass, BUS?.screenPan, vesselSizeClass, vesselTargetSize, ENGINE?.FxEngine, () => true,
+    FakeSMAAPass, PRESETS?.bloomInputSize);
 };
 const GFX_METHODS = ['_initGfxState', '_applyGfx', '_setRendererPixelRatio', 'applyGfxPreset', '_tickGfx', 'cvGfxInfo', 'cvShipTextureMemory',
-  '_cvFxRoundFx', '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues', '_tickCvFx', '_ensureFxEngine'];
+  '_cvFxRoundFx', '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues', '_tickCvFx', '_ensureFxEngine',
+  '_syncSmaa', '_syncBloomSize', '_bloomInputSize'];   // ARC CV-5 (pozycja 0) — SMAA i bloom w px CSS
 const clock = { now: 1e6 };
 const realPerfNow = performance.now.bind(performance);
 performance.now = () => clock.now;
@@ -486,13 +512,15 @@ const RTX = 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5
 function fakeRenderer({ dpr = 1.25, rendererString = RTX } = {}) {
   window.devicePixelRatio = dpr;
   window.innerHeight = 1041; window.innerWidth = 1600;
-  const calls = { setPR: [], composerPR: [], rebuild: 0, wake: 0 };
+  const calls = { setPR: [], composerPR: [], rebuild: 0, wake: 0, addPass: 0, bloomSize: [] };
   const gl = { getExtension: (n) => (n === 'WEBGL_debug_renderer_info' ? { UNMASKED_RENDERER_WEBGL: 37446 } : null), getParameter: () => rendererString, RENDERER: 7937 };
   const camera = new THREE.PerspectiveCamera(55, 1600 / 1041, 0.001, 5000);
   camera.position.set(0, 0.5, 1); camera.lookAt(0, 0.3, 0); camera.updateMatrixWorld(true);
   const R = {
     renderer: { setPixelRatio: (v) => calls.setPR.push(v), getContext: () => gl, info: { memory: { textures: 0 } } },
-    _composer: { setPixelRatio: (v) => calls.composerPR.push(v) }, _bloomPass: { enabled: true }, scene: new THREE.Scene(), camera,
+    _composer: { setPixelRatio: (v) => { calls.composerPR.push(v); R._composer._pixelRatio = v; }, addPass: (p) => { calls.addPass++; p.setSize(1600 * R._composer._pixelRatio, 1041 * R._composer._pixelRatio); },
+      _pixelRatio: Math.min(dpr * 1.5, 2), _width: 1600, _height: 1041 },
+    _bloomPass: { enabled: true, setSize: (w, h) => calls.bloomSize.push([w, h]) }, scene: new THREE.Scene(), camera,
     cvTuning: ENGINE?.LIVE_CV_FX ?? {}, _pixelRatio: Math.min(dpr * 1.5, 2), _fxLightPool: null, _cueBus: null, _gfxApplied: null,
     _presClock: CLOCK ? new CLOCK.PresentationClock() : null, _vessels: new Map(), _stageFrame: null, _fxEngine: null, _fxGroup: null,
     _galaxyActive: false, _galaxyFlight: false, _sky: null, _galaxyPlate: null, missing: [],
@@ -522,19 +550,24 @@ guard('T10 ustawienia', () => {
     const on = fakeRenderer();
     on.R._applyGfx('init');
     const pool = on.R._fxLightPool;
-    assert(on.R._gfx.level === 'high' && on.R._gfx.source === 'detected' && on.calls.setPR.length === 0 && !!pool && pool.count === 4
-      && pool.lights.every((L) => L.visible && L.intensity === 0) && on.R._bloomPass.enabled === true,
-      'T10c flaga ON na RTX: wykryty High — gęstość bez zmiany (= dzisiejsza), pula zbudowana, 4 światła widoczne z jasnością 0, bloom');
+    // ARC CV-5 (decyzja 41) — PRZECELOWANE ŚWIADOMIE: High = gęstość natywna 1,25 (było: bez zmiany = 1,875) + SMAA (pass tworzony raz).
+    assert(on.R._gfx.level === 'high' && on.R._gfx.source === 'detected' && on.calls.setPR.join() === '1.25' && !!pool && pool.count === 4
+      && pool.lights.every((L) => L.visible && L.intensity === 0) && on.R._bloomPass.enabled === true
+      && on.calls.addPass === 1 && on.R._smaaPass?.enabled === true && on.R._gfxApplied.aa === 'smaa',
+      'T10c flaga ON na RTX: wykryty High — gęstość NATYWNA 1,25 + SMAA (pass dołożony do composera raz), pula zbudowana, 4 światła z jasnością 0, bloom');
     const m = on.R.applyGfxPreset(1);
     assert(m.ok && on.calls.setPR.join() === '1.25' && on.calls.composerPR.join() === '1.25' && on.R._fxLightPool === pool && pool.count === 2
-      && on.R._bloomPass.enabled === true && on.calls.rebuild === 1 && localStorage.getItem(lsKey) === 'medium' && on.calls.wake === 1,
-      'T10d Medium: gęstość 1,25 (renderer + composer), 2 światła (ta sama pula), bloom, tekstury 1K — przebudowa statków RAZ, zapis „medium”');
+      && on.R._bloomPass.enabled === true && on.calls.rebuild === 1 && localStorage.getItem(lsKey) === 'medium' && on.calls.wake === 1
+      && on.R._smaaPass?.enabled === false && on.calls.addPass === 1,
+      'T10d Medium: gęstość 1,25 (renderer + composer), 2 światła (ta sama pula), bloom, tekstury 1K, SMAA wyłączony — przebudowa statków RAZ, zapis „medium”');
     const l = on.R.applyGfxPreset(0);
     assert(l.ok && on.calls.setPR.join() === '1.25,1' && on.R._bloomPass.enabled === false && pool.count === 0 && on.calls.rebuild === 1
       && on.R._fxLightPool === pool, 'T10e Low: gęstość 1, bloom wyłączony, 0 świateł, tekstury nadal 1K — bez drugiej przebudowy');
     const h = on.R.applyGfxPreset(2);
-    assert(h.ok && on.calls.setPR.join() === '1.25,1,1.875' && on.R._bloomPass.enabled === true && pool.count === 4 && on.calls.rebuild === 2,
-      'T10f High: gęstość 1,875, bloom, 4 światła, tekstury 2K — przebudowa');
+    // ARC CV-5 (decyzja 41) — PRZECELOWANE ŚWIADOMIE: High = 1,25 (natywna) + SMAA (było: 1,875).
+    assert(h.ok && on.calls.setPR.join() === '1.25,1,1.25' && on.R._bloomPass.enabled === true && pool.count === 4 && on.calls.rebuild === 2
+      && on.R._smaaPass?.enabled === true && on.calls.addPass === 1 && FakeSMAAPass.made === 1,
+      'T10f High: gęstość natywna 1,25, SMAA ten sam pass (stworzony raz), bloom, 4 światła, tekstury 2K — przebudowa');
     assert(on.R.applyGfxPreset('ultra').ok === false && on.R._gfx.level === 'high', 'T10g poziom niepoprawny — odmowa, preset bez zmian');
     on.R.applyGfxPreset(0);
     on.R._ensureCueBus();
@@ -542,7 +575,7 @@ guard('T10 ustawienia', () => {
     GAME_CONFIG.FEATURES.cvPresets = false;
     on.R._tickGfx();
     assert(on.R._gfxApplied.on === false && on.R._pixelRatio === 1.875 && on.R._bloomPass.enabled === true && pool.count === 0
-      && on.R._cueBus.n === 0 && on.calls.rebuild === 4,
+      && on.R._cueBus.n === 0 && on.calls.rebuild === 4 && on.R._smaaPass?.enabled === false && on.R._bloomCssPx === false,
       'T10h flaga przełączona w konsoli (OFF): dzisiejsza gęstość i bloom wracają, 0 świateł, szyna sygnałów wyczyszczona, tekstury 2K (przebudowa)');
     GAME_CONFIG.FEATURES.cvPresets = true;
     on.R._tickGfx();
@@ -564,6 +597,15 @@ guard('T10 ustawienia', () => {
     off2.R._applyGfx('init');
     for (let i = 0; i < 80; i++) { clock.now += 30; off2.R._tickGfx(); }
     assert(off2.R._gfx.throttle.samples === 0 && off2.R._fxLightPool === null, 'T10l flaga OFF: pętla nie próbkuje czasu klatki i nie buduje puli');
+    // ARC CV-5 (Finding 704) — prawdziwa `_bloomInputSize`: presety — CSS × min(DPR, 1,5) niezależnie od gęstości composera; bez — bufor
+    off2.R._composer._pixelRatio = 1.875;
+    const offSize = off2.R._bloomInputSize(1600 * 1.875, 1041 * 1.875);
+    off2.R._bloomCssPx = true;
+    const onSize = off2.R._bloomInputSize(1600 * 1.875, 1041 * 1.875);
+    off2.R._composer._pixelRatio = 1.25;
+    const onSize2 = off2.R._bloomInputSize(1600 * 1.25, 1041 * 1.25);
+    assert(Math.abs(offSize.w - 3000) < 1e-9 && Math.abs(onSize.w - 2000) < 1e-9 && Math.abs(onSize2.w - 2000) < 1e-9,
+      `T10u \`_bloomInputSize\`: bez presetów — bufor (${offSize.w}), z presetami — px CSS × 1,25 przy gęstości 1,875 i 1,25 (${onSize.w} / ${onSize2.w})`);
   } finally { GAME_CONFIG.FEATURES.cvPresets = flag; localStorage.removeItem(lsKey); }
 });
 guard('T10 salwa', () => {
@@ -702,6 +744,43 @@ guard('T11 kontrola', () => {
   const synthetic = '\n  update(nowMs) {\n    const now = this.nowMs;\n  }\n';
   const mutated = synthetic.replace('const now = this.nowMs;', 'const now = this.nowMs; const _v = new THREE.Vector3();');
   assert(!/\bnew\s+[A-Z]/.test(synthetic) && /\bnew\s+[A-Z]/.test(mutated), 'T11e KONTROLA: kopia metody z konstrukcją Vector3 — pin T11d ją wykrywa');
+});
+
+// ── T12 — Finding 706: przebudowa sprite'ów w ZATRZYMANEJ bitwie nie zrzuca statków ze sceny ──────────────────────────
+header('T12 — (CV-5, Finding 706) znacznik sceny przeżywa przebudowę sprite\'a; KONTROLA — bez przebudowy znika jak dziś');
+guard('T12', () => {
+  const mk = (name) => { const m = methodOf(name); return m ? new Function('performance', 'STAGE_REBUILD_KEEP_MS', `return function (${m.params}) {\n${m.body}\n};`)(globalThis.performance, 10000) : null; };
+  const rebuild = mk('cvRebuildVesselSprites'), unstage = mk('_unstageVessels'), kept = mk('_stageKept');
+  assert(!!rebuild && !!unstage && !!kept, 'T12a metody `cvRebuildVesselSprites`, `_unstageVessels`, `_stageKept` wyciągnięte ze źródła');
+  const R = { _vessels: new Map(), _stageMarks: new Map(), _stageKeep: null, removed: 0,
+    _removeVesselSprite(id) { this._vessels.delete(id); this.removed++; }, _restoreActiveSystemVesselSprites() {} };
+  R.cvRebuildVesselSprites = rebuild; R._unstageVessels = unstage; R._stageKept = kept;
+  const sp = new THREE.Object3D(); sp.position.set(1, 0.3, 2);
+  R._vessels.set('v1', { sprite: sp });
+  const mark = { w: 1, k: 1, base: { x: 0.5, y: 0.3, z: 2 }, drawn: { x: 1, y: 0.3, z: 2 } };
+  R._stageMarks.set('v1', mark);
+  R.cvRebuildVesselSprites();            // sprite usunięty, nowy jeszcze się ładuje (GLB asynchronicznie)
+  R._unstageVessels();
+  R._unstageVessels();
+  const survived = R._stageMarks.get('v1') === mark;
+  const sp2 = new THREE.Object3D(); sp2.position.set(0.5, 0.3, 2);   // nowy sprite na pozycji bez sceny
+  R._vessels.set('v1', { sprite: sp2 });
+  R._unstageVessels();
+  assert(survived && R._stageMarks.get('v1') === mark && mark.w === 1 && sp2.position.x === 0.5,
+    'T12b przebudowa: znacznik (stopień wejścia w scenę 1) przeżywa przerwę bez sprite\'a; nowy sprite dostaje ten sam znacznik — scena od razu, nie od zera na zatrzymanym zegarze');
+  // wygaśnięcie: przerwa dłuższa niż czas oczekiwania — znacznik znika (bez wycieku)
+  R._vessels.delete('v1');
+  R._stageKeep.set('v1', clock.now - 1);
+  R._unstageVessels();
+  assert(!R._stageMarks.has('v1') && !R._stageKeep.has('v1'), 'T12c przerwa dłuższa niż 10 s — znacznik i wpis oczekiwania znikają');
+  // KONTROLA: bez przebudowy (zwykłe zniknięcie sprite'a) — znacznik znika od razu, jak przed CV-5
+  const R2 = { _vessels: new Map(), _stageMarks: new Map([['v2', { w: 1, k: 1, base: { x: 0, y: 0, z: 0 }, drawn: { x: 0, y: 0, z: 0 } }]]), _stageKeep: null };
+  R2._unstageVessels = unstage; R2._stageKept = kept;
+  R2._unstageVessels();
+  assert(!R2._stageMarks.has('v2'), 'T12d KONTROLA: sprite znika bez przebudowy — znacznik usunięty od razu (zachowanie sprzed CV-5)');
+  const TB = TRSRC.slice(TRSRC.indexOf('\n  _tickBattleStage('), TRSRC.indexOf('\n  getVesselStageBlend('));
+  assert(/if \(!e\?\.sprite\) \{ if \(!this\._stageKept\?\.\(id\)\) this\._stageMarks\.delete\(id\); continue; \}/.test(TB),
+    'T12e wyjście ze sceny (`_tickBattleStage`) też pyta `_stageKept` przed usunięciem znacznika (druga ścieżka usuwania)');
 });
 
 performance.now = realPerfNow;

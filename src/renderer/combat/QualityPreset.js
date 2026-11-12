@@ -138,7 +138,7 @@ export function resolveGfxSettings(level, { dpr = 1, throttle = 0 } = {}) {
   const lv = normalizeGfxLevel(level) ?? 'high';
   const p = GFX_PRESETS[lv];
   const s = {
-    level: lv, pixelRatio: presetPixelRatio(lv, dpr), bloom: p.bloom, particles: p.particles, lights: p.lights,
+    level: lv, pixelRatio: presetPixelRatio(lv, dpr), aa: p.aa ?? 'none', bloom: p.bloom, particles: p.particles, lights: p.lights,
     debris: p.debris, smoke: p.smoke, embers: p.embers, damageSmoke: p.damageSmoke, shieldRipples: p.shieldRipples,
     textures: p.textures, throttle: 0, throttled: [],
   };

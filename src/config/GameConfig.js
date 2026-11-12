@@ -581,6 +581,17 @@ export const GAME_CONFIG = {
     //   Wymaga `cvFxEngine` (pule silnika FX). Wyłącznie rysunek — logika (DSCS) nietknięta, poza polami ładunku FX (D-CV-8).
     //   Czytana w chwili salwy i co klatkę. OFF = ścieżka CV-2a co do bitu. Wyłączenie: KOSMOS.debug.cvWeapons(0).
     cvWeapons: true,
+    // `cvDamage` (CV-5) — WYBUCHY, STANY USZKODZEŃ, PŁONĄCE WRAKI (`src/renderer/combat/ExplosionLogic.js`): śmierć okrętu w chwili
+    //   trafienia zabijającego jako wybuch WARSTWOWY w pulach silnika FX (błysk HDR i smuga anamorficzna, płaty kuli ognia z turbulencją
+    //   — biel → żółć → pomarańcz → czerwień → dym, fala uderzeniowa w płaszczyźnie statku, odłamki kadłuba, żar, dym, światło z puli
+    //   oświetlające sąsiadów), rozmiar z długości rysowanej kadłuba (Finding 619), klasa decyduje o sekwencji (fregata — jeden ostry
+    //   wybuch, niszczyciel — wtórny + główny, pancernik — 2–3 wtórne wzdłuż kadłuba, potem największy); stany uszkodzeń z HP
+    //   POKAZYWANEGO (dym ≤ 75 %, ogień ≤ 50 %, krztuszący się silnik ≤ 25 %); wrak bez czerwieni całego kadłuba — szwy stygnące 10–20 s,
+    //   1–2 pożary gasnące, dryf i obrót w kopercie, zbieżność do pozycji logicznej po bitwie (Finding 627); rozgrzewka programów FX przy
+    //   starcie (Finding 644). Budżety z presetu (`cvPresets`); strzałów nie dotyka. Wymaga `cvFxEngine`. Wyłącznie rysunek — wynik bitwy
+    //   nietknięty. Zwolnione tempo (prezentacja): KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE. OFF = łata CV-3a3 / CV-4a co do bitu.
+    //   Wyłączenie: KOSMOS.debug.cvDamage(0).
+    cvDamage: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
