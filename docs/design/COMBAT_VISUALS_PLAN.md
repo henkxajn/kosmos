@@ -40,7 +40,10 @@
 > duplicate (Finding 156 ✅); the horizon defaults kept. CV-2b (quality presets High / Medium / Low, a fixed light pool, the combat
 > cue bus + the AudioSystem attach; flag `cvPresets` default ON) ✅ DONE 2026-11-12 (`74b1b93` — §4 CV-2b — delivered), committed
 > locally, not pushed — owner check pending — combined gate with CV-4a; decision 38: the HUD pixel ratio floored at native on Low,
-> kept as built. Next: CV-4a (§4 order).**
+> kept as built. CV-4a ✅ DONE 2026-11-12 (`fe232ac`; the combined owner's check CV-2b + CV-4a PASS, both pushed — decisions
+> 39–41). CV-5 ✅ DONE 2026-11-12 (`03c5c35`) and CV-4b ✅ DONE 2026-11-12 (`c831e9d`; shields and armour, item 0 — Finding 707):
+> the owner's combined check CV-5 + CV-4b PASS 2026-11-12 (A1–A6, B1–B6), both pushed — decisions 42–43. Decision 44: the owner's
+> notes → a NEW step CV-3c before CV-6a (§4 «CV-3c»). Next: CV-3c (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -50,12 +53,13 @@
 > at `95f7ab7`; **[INF]** = inference from source, not run in the game.
 > Units: **WU** = Three.js world unit (1 AU = 11 WU); **L** = one frigate length = `VESSEL_TARGET_SIZE.frigate` 0.016 WU;
 > **R** = `combatRoundMs` (real milliseconds per watched round, default 1000 since 2026-11-08 — §3.2; 400 before).
-> **Next free finding number: 702** (this plan files **#612–#701**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
+> **Next free finding number: 709** (this plan files **#612–#708**; #637 from CV-2a; #638–#645 from the CV-2a owner's check;
 > #646 from the CV-3a split; #647–#649 from CV-3a1; #650–#658 from the CV-3a2 diagnosis of the CV-3a1 look; #659–#661 from
 > CV-3a3; #662–#667 from the CV-3a3 owner's check; #668 from validating the owner's decision on #662; #669–#674 from CV-6b's
 > stutter measurement and item 0; #675–#676 from CV-6b2; #677–#680 from CV-1a; #681 from the CV-1a owner's check; #682–#683 from CV-1b;
 > #684 from CV-1c; #685–#686 from the combined CV-1b + CV-1c owner's check; #687 from the #640 + #675 step; #688–#693 from the M1 diagnosis;
-> #694–#698 from M1; #699–#700 from the M1 owner's check; #701 from the #663 step).
+> #694–#698 from M1; #699–#700 from the M1 owner's check; #701 from the #663 step; #702 from CV-4a; #703–#706 from the combined
+> CV-2b + CV-4a owner's check; #707 from CV-5; #708 from CV-4b).
 
 ---
 
@@ -1144,6 +1148,17 @@ makes Live Server reload the page.
     **#707** (live destroyer / battleship hulls glare white toward the star — the CV-1a roughness mechanism) → fixed as **item 0
     of CV-4b**; (b) a wreck after a preset switch is cooled at once — **accepted as built**; (c) the `EXP_DEBRIS_SIZE` /
     `EXP_DEBRIS_HOT` / `EXP_RING_*` tuning → **the owner decides at the combined check**.
+43. **2026-11-12 — the combined owner's check CV-5 + CV-4b PASS (A1–A6, B1–B6); CV-4b committed (`c831e9d`), CV-5 + CV-4b pushed.**
+    The CV-4b judgement calls 1–9 (§4 «CV-4b — delivered») accepted as built — `MODEL_SPEC_CAP` 0.7 / `MODEL_ROUGH_MIN` 0.4 stay the
+    defaults; #708 (shields collapse at the first hit) → a future MECHANICS arc; decision 42 (c): `EXP_DEBRIS_SIZE` default 0.045 →
+    **0.03** (in the CV-4b commit), `EXP_DEBRIS_HOT` / `EXP_RING_*` unchanged.
+44. **2026-11-12 — the owner's notes for the next step → NEW step CV-3c before CV-6a (recorded only, no code in that session).**
+    (1) watched pace −15 %: `combatRoundMs` 1000 → 1150; (2) more spacing on the stage; (3) choreography 2.0 — ships fly along their
+    heading and circle / make passes, turrets aim; no lateral „slider” motion; (4) engine cones → a cyan nozzle glow; (5) wrecks stay
+    where each ship died and keep drifting — the LOGICAL wreck location = the ship's own position (today `DeepSpaceCombatSystem._wreckOne`
+    puts every wreck at the battle's midpoint) — an owner-approved mechanics touch, an exception to F1 scoped to the wreck location;
+    (6) fireball radius +25 %; (7) irregular debris shapes; (8) missiles — check against the CV-4a design; (9) the heat glow vs
+    `FX_TIME_SCALE`. New order: … CV-4b → **CV-3c** → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z.
 
 ---
 
@@ -1179,6 +1194,9 @@ next unchanged: **#663** (MECHANICS, outside CV) → CV-2b → …
 combined gate with CV-4a; next: **CV-4a** → …
 **2026-11-12 (§3.2-39 … -41):** CV-4a delivered (`fe232ac`), the combined owner's check CV-2b + CV-4a PASS, both pushed; order change:
 **CV-5** (item 0 — Finding 704) → CV-4b → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z.
+**2026-11-12 (§3.2-42):** CV-5 committed (`03c5c35`) — the owner's check combined with CV-4b.
+**2026-11-12 (§3.2-43, -44):** CV-4b delivered (`c831e9d`, §4 «CV-4b — delivered»); the combined owner's check CV-5 + CV-4b PASS, both
+pushed; the owner's notes → NEW step **CV-3c** (§4 «CV-3c»). Order: … CV-4b → **CV-3c** → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z.
 
 **Dependencies on CV-1 and the shims** (CV-2a, CV-3a and CV-3b now run before CV-1a):
 - CV-2a (FX engine, stager) — none: endpoints are drawn positions; muzzle hardpoints arrive with CV-4.
@@ -3364,6 +3382,100 @@ all PASS; cues per 10v10 `fire` 210 / `impact` 105 / `shieldHit` 65 / `kill` 14 
 material keeps the model's roughness / metalness maps, `roughness` / `metalness` only multiply them; CV-5 fixed the same mechanism
 for wrecks only — burn mode 1). The CV-4b session also merges `kosmos-handover/cv-5/CHECKLIST.md` into the combined owner check.
 
+#### CV-4b — ✅ delivered 2026-11-12 (`c831e9d`; flag `cvShields` default ON; the owner's combined check with CV-5 PASS 2026-11-12 — decision 43; pushed with CV-5; checklist `kosmos-handover/cv-4b/CHECKLIST.md`)
+
+One session, no CV-4b2 split: item 0 and scope (1)–(7) all in. New `src/renderer/combat/ShieldLogic.js`,
+`src/renderer/combat/ShieldBubbles.js`, `src/testing/smoke/cv_shields_logic_smoke.mjs`; edits in `KeyColourEmission`, `ShipModelRig`,
+`ThreeRenderer`, `FxEngine`, `CombatFxPresets`, `QualityPreset`, `CombatCueData`, `CombatCueBus`, `GameConfig`, `CvBattleStager`,
+`GameScene` (comments), `tools/model-workshop/workshop.js` and three re-aimed keepers.
+
+**Item 0 — Finding 707 ✅ (decision 42 (a)).** Two terms in the key-colour chunk (canonical path, `cvModels`), uniforms only, still one
+program (key `kosmos-cv4b-keycolour-v4`):
+- a roughness floor after the body tint — `roughnessFactor = max(roughnessFactor, uKcRoughMin)` (the roughness MAP multiplies
+  `roughness`, so smooth panels gave GGX lobes far above the bloom threshold);
+- a soft knee on the DIRECT specular (a new anchor before `aomap_fragment`): the brightest channel of `reflectedLight.directSpecular`
+  → `cap · (1 − e^(−L / cap))`, hue kept — a luminance knee let saturated red pass (measured: M residual 1.21); JS mirror `kcSpecKnee`.
+  Environment / indirect light untouched.
+
+Live knobs `cvTuning.MODEL_ROUGH_MIN` 0.4 / `MODEL_SPEC_CAP` 0.7 (chosen from a sweep, `kosmos-handover/cv-4b/707/probe_707_sweep.json`);
+0 / 0 = the CV-1a expression — the 0 / 0 control reproduces the pre-change numbers exactly; the Model Workshop writes the same knobs;
+`cvModels` OFF untouched (the chunk lives on the canonical path only). **Measured** (`707/probe_707.mjs`: the 24-slot parade, every ship
+close up from 24 directions, simulated star classes, max luminance of hull pixels in the linear HDR buffer): F **449.166 → 1.244**
+(pixels over 1.0: 0.153 % → 0.008 %), G 331.702 → 0.978, K 146.082 → 0.948, M 55.995 → 0.848; paired shots `707/control_*.png` /
+`707/after_*.png`, `contact_sheet_707.png` — the metal still reads as metal (a coloured highlight, not plastic).
+
+**(1)–(3) Shield bubble.** NEW `src/renderer/combat/ShieldLogic.js` (pure, zero imports — `SHIELD_TUNING` spread into `LIVE_CV_FX`,
+`ShieldStates`, geometry, pools) + NEW `src/renderer/combat/ShieldBubbles.js` (a fixed pool of 24 bubble meshes — one shared icosphere,
+one shader text ⇒ one program, log-depth chunks, additive, `depthWrite` off, the back face × `SHD_BACK` 0.35; prewarmed with the FX
+engine, 60–90 ms once). The bubble is an ellipsoid fitted to the DRAWN hull bounds (`ShipModelRig` now returns `half` — the template's
+half-extents in model units): axes = half × `SHD_FIT` 1.22 + `SHD_PAD` 0.12, the shortest axis ≥ `SHD_MIN_RATIO` 0.36 of the longest;
+its transform copied from the ship's sprite every frame (stage + choreography already applied); the legacy model path (`cvModels` OFF) —
+a sphere of 0.55 × the target size. Look: a thin fresnel rim (`SHD_RIM` 2.0, power 6), Worley cells lit by the ripple front (`SHD_CELL`
+6.5, gain 0.55); invisible at rest — alpha only near hits, fading over `SHD_FADE_MS` 650 ms. Ripples: a uniform array (`uRip[8]` direction
++ age, `uRipAmp[8]`), the count from the preset (`shieldRipples` High 8 / Medium 4 / Low 1 — the first consumer of that CV-2b budget),
+the oldest slot reused (`allocRipple`); a ring front (`SHD_RIPPLE_SPEED` 2.6, width `SHD_RIPPLE_WIDTH` 0.085 rad) + a hot spot at the
+impact + a soft glow; the amplitude from the blocked share of the hit and the shield fraction (`rippleAmp`).
+
+**Shield state — the look from the PRESENTED shield, the collapse from the payload.** The ledger's presented shield already holds the
+round's regen from the round's arrival (CV-4a call 5), so it never reaches 0 — the collapse comes from the D-CV-8 payload field
+`shieldAfter` (pre-regen, per event): at the round's arrival `ShieldStates.planRound` walks the round's hits in impact order and stamps
+`x.shd = { onBubble, collapse, hull }` (an old payload without the field never collapses). At the impact time (ledger): a ripple while
+the bubble holds; the collapsing hit — the whole bubble flashes (`SHD_COLLAPSE_FLASH` 1.8), grows a little (`SHD_COLLAPSE_GROW` 0.14)
+and shatters into cells dying at different moments over `SHD_COLLAPSE_MS` 900 ms; the overflow lands on the hull `SHD_HULL_DELAY`
+0.035 R later (sparks, heat, scorch). The look by the presented fraction (`shieldLook`): strong — crisp; ≤ `SHD_WEAK_FRAC` 0.35 — dimmer,
+flickering at `SHD_FLICKER_HZ` 11. Regen at the round's arrival = a faint shimmer band (`SHD_SHIMMER_MS` 650, gain 0.28) — only on a real
+increase (≥ `SHD_REGEN_MIN_FRAC` 0.2 % of max) and never right before a planned collapse; a down bubble re-forms when the presented
+shield reaches `SHD_REUP_FRAC` 25 % of max (shimmer gain `SHD_REFORM_GAIN` 0.8). Ships without a shield module — no state, no bubble.
+
+**(4) Endpoints.** While the shield holds, the beam / tracer / missile ends ON the bubble — the point on the ellipsoid towards the shooter,
+in model space (end mode 2, follows the ship); after the collapse — on the hull (`hullPoint`: the hull ellipsoid × `SHD_HULL_K` 0.92, an
+analytic approximation, no mesh raycast). Hits on the bubble spawn no sparks — the CV-4a cyan stop-gap sparks are gone under the flag;
+the flat shield ring (`SHIELD_RING_ENABLED`) is never drawn under the flag (#653 (b) final). `cvShields` OFF = the CV-4a drawing bit for
+bit (endpoint and cyan sparks — keeper L9a).
+
+**(5) Armour scorch (High only).** In the key-colour chunk (canonical path): `uKcScorch[6]` (centre + radius in the mesh's geometry space —
+per material the inverse of (model × mesh) from the rig, `scorchXf`), `uKcScorchHeat[6]`, a count; a noise-edged dark patch (`SCORCH_DARK`
+0.72), rougher and less metallic, with a hot rim (`SCORCH_GLOW` 2.2) cooling over `SCORCH_COOL_MS` 1.8 s; radius `SCORCH_R` 0.085 (model
+units). A fixed pool of 6 per ship (the oldest reused); persists for the session and into the wreck, re-applied on a rig rebuild; Medium
+/ Low — none (`scorch` in the preset table, High only; switching to Medium / Low removes them). No throttle step (a uniform loop).
+
+**(6) Cue `shieldDown`** at the collapsing impact (`CombatCueData` row, null for every size — no sounds yet; emit order after
+`explosion`, before `impact`); `shieldHit` / `impact` as in CV-4a.
+
+**(7) Debug.** `KOSMOS.debug.cvShields(0|1)`; `KOSMOS.debug.cvShieldHit(/battleship/.source)` (the nearest test ship of that class to the
+camera target, not in a battle; a ship without a shield module gets a virtual 35; each call takes 42 % of max ⇒ the third collapses,
+the next ones hit the hull — presentation only); `KOSMOS.debug.shieldInfo()` (per ship: bubble up / down, fraction, ripples, collapses,
+regens, re-forms, scorches; counters since the page load; the pool); knobs `cvTuning.SHD_*` / `SCORCH_*` / `MODEL_ROUGH_MIN` /
+`MODEL_SPEC_CAP` live; the effects clock = presentation step × `FX_TIME_SCALE` (pause freezes). **Flag** `cvShields` (default ON;
+requires `cvWeapons` + `cvFxEngine` + `fcCombatFx`). Visual code uses no `Math.random` (keeper L11).
+
+**Measured (RTX 3070, 1600×1041, DPR 1.25, watched 10v10, seed 1):** High frame p50 / p95 16.7 / 16.8 ms, longest real frame 21 ms (the
+`fxStats` max 66.9 ms = the probe's screenshot frames, labelled «brak fokusu»), JS loop 1.7 / 2.1 ms, 125 calls; Low 16.7 / 16.8 / 18.5 ms,
+1.6 / 2.0 ms, 107 calls. One battle: 170 hits planned, 12 on a bubble = 12 collapses (#708), 23 regen shimmers, 3 re-forms, 168 hull hits;
+Low — one ripple per bubble, no scorch; zero console / shader errors.
+**Keepers:** NEW `cv_shields_logic_smoke` 47 / 0 (L1–L11: the state follows the presented shield; exactly one collapse per drop to 0;
+the shimmer only on a real increase; the endpoint on the bubble while the shield holds, on the hull after; ripple slots ≤ the preset count,
+the oldest reused; the scorch pool bounded and High only; no shield → no bubble; `shieldDown` at the collapse time; OFF = CV-4a bit for bit;
+no `Math.random`; fail-first on `1f9869f` 0 / 12 — sections degrade without the modules); `cv_fx_results_smoke` A9 53 / 0 (ON + `cvShields`
+== ON + `cvDamage` == without the renderer: signature, every round's trace, game draws, orbit slots; A1–A8 run with `cvShields` OFF
+explicitly; fail-first 49 / 4); `cv_damage_logic_smoke` D13e re-aimed deliberately (the chunk now writes the roughness floor and two scorch
+terms) 54 / 0 (fail-first 53 / 1); `cv_presets_logic_smoke` T8i 18 → 21 cells + T1b `scorch` 98 / 0 (fail-first 97 / 1). Kept green:
+`cv_weapons_ledger` 74 (K4–K6), `cv_renderer_rng` 62, `m1_battle_end` 56, `cv_models_logic` 69, `cv_models_render` 58, `cv_fx_engine` 40,
+`cv_workshop_logic` 95, every CV keeper; sweep **398 / 398**; `check-i18n` PASS (pl = en = 3404, no new keys). Contact sheets
+`kosmos-handover/cv-4b/contact_sheet_shields.png`, `contact_sheet_707.png`; the combined checklist (part A = CV-5, part B = CV-4b)
+validated line by line on the live engine (`validate_CV4b.mjs`, 35 / 35).
+
+**The owner's calls — accepted as built (decision 43):** (1) #707 — a direct-specular knee + a roughness floor instead of flattening the map;
+F keeps a pin-point glint (1.24 at 0.008 % of hull pixels) at grazing angles — `MODEL_SPEC_CAP` lower if it has to go entirely; (2) the
+collapse from the payload's `shieldAfter`, the look from the presented shield; (3) regen = a shimmer, no flash on a re-form; the re-form
+threshold 25 % of max; (4) the bubble shape — the drawn hull × 1.22 + 0.12, the shortest axis ≥ 0.36; the legacy path — a sphere, no
+scorch; (5) the hull point is analytic (the hull ellipsoid × 0.92) — sparks / scorch may sit slightly off a concave hull; (6) scorch —
+6 per ship, High only, for the session (not saved), removed on a switch to Medium / Low and not restored on the switch back; (7) a hit fully
+absorbed by the bubble spawns no hull sparks — only the ripple; (8) the debug virtual shield 35 with 42 % per hit; (9) #708 — in battles
+the bubble mostly shows the collapse (mechanics, F1 — not changed).
+- ✅ **707**, ✅ **653 (b)**; NEW ⚪ **708** (→ a future MECHANICS arc, decision 43); next free **709**. Decision 42 (c) in the same
+  commit: `EXP_DEBRIS_SIZE` default 0.045 → 0.03.
+
 ### CV-5 — damage states, explosions, lights, wrecks (flag `cvDamage`)
 
 **Item 0 (decision 40, Finding 704 — rule: a higher preset never looks worse than a lower one):** the bloom sized in CSS pixels,
@@ -3377,7 +3489,7 @@ supersampling), Medium = native without AA, Low = min(1.0, native).
 | **Keepers (logic)** | exactly one kill presentation per vessel across `roundFx` kill + `vessel:wrecked`; damage-state function ordered smoke ⊂ fire ⊂ sputter; light pool never over its count; wreck drift deterministic and bounded; pause freezes |
 | **Owner looks at** | a battleship dies: smoke → fire → sputter → layered explosion lighting its neighbours → a burning wreck drifting and cooling |
 
-#### CV-5 — ✅ delivered 2026-11-12 (`03c5c35`, committed locally, not pushed; flag `cvDamage` default ON; owner check pending — combined gate with CV-4b, decision 42; checklist `kosmos-handover/cv-5/CHECKLIST.md` — the CV-4b session merges it)
+#### CV-5 — ✅ delivered 2026-11-12 (`03c5c35`; flag `cvDamage` default ON; the owner's combined check with CV-4b PASS 2026-11-12 — decisions 42–43; pushed with CV-4b; checklist merged into `kosmos-handover/cv-4b/CHECKLIST.md` part A)
 
 One session, no CV-5b split: item 0 and scope parts (1)–(3) all in.
 
@@ -3439,9 +3551,19 @@ K4–K6 kept; `cv_renderer_rng` 62, `m1_battle_end` 56, `cv_weapons_ledger` 74, 
 checklist validated line by line on the live engine (`validate_CV5.mjs`, 17 / 17).
 - NEW: ⚪ **707** (live hulls glow white near the star — the CV-1a material keeps the roughness / metalness maps) → **CV-4b item 0**
   (decision 42 (a)); next free **708**. Decision 42 (b): a wreck after a preset switch cooled at once — accepted as built; (c): the
-  `EXP_DEBRIS_SIZE` / `EXP_DEBRIS_HOT` / `EXP_RING_*` tuning — the owner decides at the combined check. Not a finding: on the live `fxStats` run one pool light showed up in the Low window — the last explosion of the
+  `EXP_DEBRIS_SIZE` / `EXP_DEBRIS_HOT` / `EXP_RING_*` tuning — the owner decides at the combined check (decision 43: `EXP_DEBRIS_SIZE` 0.03, the rest unchanged). Not a finding: on the live `fxStats` run one pool light showed up in the Low window — the last explosion of the
   Medium battle waits under the outcome banner's pause and lights when the banner is dismissed, before the switch to Low (the
   pool refuses every flash at count 0 — keeper D5).
+
+### CV-3c — the battle look 2.0 (the owner's notes, decision 44; before CV-6a)
+
+Planned 2026-11-12 from the owner's combined check CV-5 + CV-4b — recorded only, no code yet. Scope = decision 44 (1)–(9).
+
+| | |
+|---|---|
+| **Files** | watched pace: the tuning key `combatRoundMs` 1000 → 1150 (results do not depend on the pace — `cv_fx_results_smoke` A4) · more spacing on the stage (`BattleStageLogic` knobs) · choreography 2.0 (`ChoreographyLogic`: heading-led flight — circles and passes along the heading, turrets aim at the target; no lateral „slider” motion; the band invariant D-CV-6 kept) · engine cones → a cyan nozzle glow · wrecks: `DeepSpaceCombatSystem._wreckOne` puts the logical wreck at the ship's own position instead of the battle's midpoint (owner-approved mechanics touch, decision 44 (5)); the presentation drift continues from there · `ExplosionLogic`: fireball radius +25 %, irregular debris shapes · missiles checked against the CV-4a design (§2.4) · the heat glow on the effects clock (`FX_TIME_SCALE`) |
+| **Keepers (logic)** | results identical ON / OFF except the wreck location (signature and every round's trace; the wreck point = the ship's last logical position — a keeper pinning the midpoint is re-aimed deliberately, with the reason); the pace change leaves the outcome unchanged; choreography: no pair changes its band, the motion follows the heading (no sideways slide), deterministic, pause freezes |
+| **Owner looks at** | a watched 10v10 at the new pace — ships fly and turn along their heading, turrets track, nozzles glow cyan, wrecks drift from where each ship died, bigger fireballs with irregular debris |
 
 ### CV-6a — tactical layer and semantic zoom (flag `cvTactical`)
 
@@ -3743,7 +3865,7 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **650** | ⚪ | **Battle time: 19 s measured, ~10 s seen by the owner.** In the GATE-S4 fixture at `combatRoundMs` 1000 every stager 10v10 runs the full 20 rounds (time-out): first salvo 0.16 s after unpausing (round 1 fires at the first grid tick), banner in the same frame as `battle:resolved` — first salvo → banner 18.98 / 19.07 / 19.07 s (seeds 1–3), = 19 rounds × 1000 ms; headless the same 20 rounds. The owner's ~10 s is ≈ 500 ms per round or a ≈ 10-round battle — candidates: a `combatRoundMs` value stored in the owner's save (the tuning table persists in the save; setting the default removes the entry, any other value stays until `sbReset`), or a battle that ends early (the banner's "Tur: N" shows the round count; player weapon techs make DSCS battles shorter — #654) | live probe CV-3a2 (timing seeds 1–3); `TimeSystem._updateCombatGrid`; `StrikesBackTuning` | owner checks `KOSMOS.timeSystem.combatRoundMs()` and the "Tur" on the banner; no code step |
 | **651** | ⚪ | **`stageInfo` reads like a missing band, but it is a missile-only round.** It reports the LAST round's shots grouped by WEAPON; weapons fire on cooldowns (laser every 2nd round, kinetic every 3rd, missile every 5th), so a round with only missiles shows "laser —, kinetyk —"; and the bands are DISTANCE bands — the stager lines start 0.12 AU apart and close in, so missiles fire at kinetic-band distances: the owner's "rakiety 7.0–10.4 L (0.122–0.182 AU)" is exactly round 6 of seed 1 (missiles only, 0.122–0.182 AU), drawn on the law (G 7.2 / 8.3 / 9.6 L at 0.122 / 0.150 / 0.182 AU), zero mis-banded pairs. The windows 3–4 / 7–9 / 12–15 L are windows for PAIRS at those distances, not for weapons | node probe (per-round shots by weapon); `ThreeRenderer.stageInfo`; DSCS cooldowns | small instrument fix — `stageInfo` by distance band over the last N rounds (with the CV-3b look) |
 | **652** | ✅ | **Close up the ships "swim": the motion is the stage solver, not the logic.** The stage re-solves on 232 of 240 frames (the key holds the base positions, which change every frame while ships glide and the MOS engage order kites) and each warm-started solve moves ships by several L: at 1/3 zoom (0.93 WU, blend 0.72) drawn motion 6.4 L/s against 0.4 L/s of the logical base (17×); at the cinema frame after the gathering 200–600 px/s against 4–190 px/s; no global rotation (−0.1 / +1.8 °/s) — the ships move RELATIVE to each other (the pair relaxation drifts along its many valid solutions; priority pairs change every round and get the full pull). Not missing choreography: CV-3b's envelope (E ≤ 1 L, mostly tangential, D-CV-6) would be invisible on top of 5–15 L/s of solver motion | live probe CV-3a2 (frame samples: drawn / base / logical, 4 s at cinema, 3 s at 1/3; decomposition drawn = base + stage offset) | **✅ CV-3a3** (`0490ea5`; moved from CV-3b by §3.2-13): one solve per round on the LOGICAL positions (the glide end), the drawn offsets eased linearly over one round from the target displayed in the previous frame; a warm-started shell stage without pull passes — live drawn relative speed at cinema 14.08 → 0.66 L/s mean (logic 2.05), a body battle 0.17 (logic 0.40); keepers `cv_stage_temporal_smoke` T2–T6, `cv_stage_shell_smoke` P5 |
-| **653** | ⚪ | **The circles and rings the owner does not want — four effects.** (a) red reticles on every enemy all battle long = the enemy alert markers (`_syncEnemyAlertMarkers`, 3D sprite #cc4433, pulsing, every enemy with intel ≥ rumor; 10 in a 10v10); (b) cyan rings at hits = the FX engine shield ring (`FxEngine` spark kind 1, `FX_SHIELD_COLOR` 0x66ccff, grows ×1 → ×3 over 1.2 R ≈ 1.2 s, alpha 0.8); (c) bright yellow / beige blobs at hits = the impact flash (spark kind 0, weapon colour — laser cyan, kinetic amber 0xFFD060, missile red 0xFF6060 — with a white core, ×1 → ×3 over 1.2 R, 6–48 px) plus the model glow (kind 2, white); (d) at the end 13 big pale-yellow discs = the wreck explosion fireballs (`_spawnExplosion`: additive HDR sphere of radius ≥ 0.08 WU = 5 L, 600 ms; colour ≈ #ffff96 measured) in ONE frame, because kills only materialise in `_finalizeBattle` (#615); the flat ring is already gone (#641). No HUD-canvas arcs during the battle (patched `arc`: 0) | live probe CV-3a2 (scene inventory + screenshots at hits and at the end; `FxEngine.js:265-271`, `FxShaders.js` spark, `ThreeRenderer._spawnExplosion`, `_syncEnemyAlertMarkers`) | **owner's decision 2026-11-08 (§3.2-11): stop-gaps under `cvStage` until CV-4 / CV-5 / CV-6a — done in CV-3a3** (`0490ea5`): (a) the 3D reticle fades with the ship's stage weight (gone from 0.25); (b)(c) flash 1.2 × model, growth ×1.5 / shield ring 1.8 × model, ×1.25; (d) fireball peak = hull × 1.5, no floor. Final looks: (a) **CV-6a** (the tactical layer owns enemy marking), (b) **CV-4b** (shield ripple on the hull), (c) **CV-4a ✅** under `cvWeapons` (the impact blob and model glow replaced by sparks off the hull + a heat glow; shield-only hits — small cyan sparks until CV-4b), (d) **CV-5** (layered explosion at the killing impact — CV-4a already plays today's stop-gap fireball at that moment) |
+| **653** | ⚪ | **The circles and rings the owner does not want — four effects.** (a) red reticles on every enemy all battle long = the enemy alert markers (`_syncEnemyAlertMarkers`, 3D sprite #cc4433, pulsing, every enemy with intel ≥ rumor; 10 in a 10v10); (b) cyan rings at hits = the FX engine shield ring (`FxEngine` spark kind 1, `FX_SHIELD_COLOR` 0x66ccff, grows ×1 → ×3 over 1.2 R ≈ 1.2 s, alpha 0.8); (c) bright yellow / beige blobs at hits = the impact flash (spark kind 0, weapon colour — laser cyan, kinetic amber 0xFFD060, missile red 0xFF6060 — with a white core, ×1 → ×3 over 1.2 R, 6–48 px) plus the model glow (kind 2, white); (d) at the end 13 big pale-yellow discs = the wreck explosion fireballs (`_spawnExplosion`: additive HDR sphere of radius ≥ 0.08 WU = 5 L, 600 ms; colour ≈ #ffff96 measured) in ONE frame, because kills only materialise in `_finalizeBattle` (#615); the flat ring is already gone (#641). No HUD-canvas arcs during the battle (patched `arc`: 0) | live probe CV-3a2 (scene inventory + screenshots at hits and at the end; `FxEngine.js:265-271`, `FxShaders.js` spark, `ThreeRenderer._spawnExplosion`, `_syncEnemyAlertMarkers`) | **owner's decision 2026-11-08 (§3.2-11): stop-gaps under `cvStage` until CV-4 / CV-5 / CV-6a — done in CV-3a3** (`0490ea5`): (a) the 3D reticle fades with the ship's stage weight (gone from 0.25); (b)(c) flash 1.2 × model, growth ×1.5 / shield ring 1.8 × model, ×1.25; (d) fireball peak = hull × 1.5, no floor. Final looks: (a) **CV-6a** (the tactical layer owns enemy marking), (b) **CV-4b ✅** (`c831e9d` — the flat ring replaced by the shield bubble ripple under `cvShields`; the CV-4a cyan sparks gone for hits on the bubble), (c) **CV-4a ✅** under `cvWeapons` (the impact blob and model glow replaced by sparks off the hull + a heat glow; shield-only hits — small cyan sparks until CV-4b), (d) **CV-5** (layered explosion at the killing impact — CV-4a already plays today's stop-gap fireball at that moment) |
 | **654** | ✅ | **"The player always wins" does not reproduce in the fixture — the stager favours the AI.** GATE-S4, live: seed 1 PORAŻKA (losses 7 / 3), seed 2 PORAŻKA (7 / 2), seed 3 ZWYCIĘSTWO (7 / 4), all 20 rounds (time-out by total HP); headless seeds 1–6: the player wins 1 / 6; the player loses 7 of 10 ships in every run. Cause in the stager: side B's weapons are shifted by one position in the cycle (`pickName(weapons, …, i + offset)`, offset 1 for B) ⇒ the player's frigates carry lasers (0.05 AU) and the AI's frigates kinetics (0.15 AU) while the lines start 0.12 AU apart. DSCS asymmetries (mechanics, untouched): side A — always the player — fires first in a round (a B ship killed in A's volley does not fire that round; measured with B first: the player wins 0 / 6, loses 7 in every seed, the AI loses 1–3 instead of 1–4); player-only tech multipliers (`weapon_range_*`, `weapon_tracking_*`); AI-only auto-retreat; "Engage" only for side A (variants: as the stager B,B,A · none A,B,A · both A,B,A for seeds 1–3). The owner's save (not the fixture) likely has player weapon techs — DSCS applies them to the player only | node probe (seeds 1–6, variants, fire-order swap); live timing seeds 1–3; `CvBattleStager.cvBattleLayout`; `DSCS._tickEncounter` (`fireFromSide` A then B), `_resolveWeaponRange` | **✅ CV-3a3** (`0490ea5`; owner's decision (1), §3.2-10): mirrored loadouts — B takes A's per-index loadout (offset 0), "Engage" for side A only; live after: seed 1 PORAŻKA (7 / 4), seed 2 PORAŻKA (7 / 4), seed 3 ZWYCIĘSTWO (6 / 6). The rest is mechanics — the fire order and player-only techs → the MECHANICS candidate (#631) |
 | **655** | ⚪ | **The course shown during the battle does not match the result.** (i) dead ships stay drawn and on the card until `_finalizeBattle` (#615), then 10–13 vanish / explode in one frame; (ii) the time-out (20 rounds) decides by total HP, so the side with fewer living ships can win (seed 3, round 11: the player 6 alive / 54 % HP against the AI 8 / 49 % → the player wins at time-out) — the card's "żywych N / M" looks like a loss; (iii) the time-out loser's survivors are wrecked at the end (side-level wreck), so "3 player ships left" disappear in a defeat | node + live per-round side HP and alive counts; `DSCS._checkEndConditions`, `_finalizeBattle` | (i) **CV-4a ✅** under `cvWeapons` (presented HP and kills at the killing impact); **CV-6b** (the strip shows HP, not only counts); (ii) / (iii) the time-out rule — gone with M1 (`e739c28`) |
 | **656** | ⚪ | **How a ship picks its target in DSCS today** (answer, not a defect). Each weapon off cooldown picks: the "Engage" target (only ships with that MOS order — in the stager side A) when it is alive, on the other side and within THIS weapon's range; otherwise the NEAREST living enemy by logical distance, regardless of range — and if that nearest one is out of the weapon's range, the weapon does not fire (no fallback to another target in range). AI ships have no orders ⇒ always the nearest; no threat, role or doctrine logic. Between rounds a ship with no enemy within its longest weapon closes toward its "Engage" target, else the nearest enemy | `DSCS._pickTarget`, `_tickEncounter`, `_closeToWeaponRange` | none in CV — targeting / doctrines belong to the MECHANICS candidate (#631) |
@@ -3798,7 +3920,8 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **704** | ✅ | **Medium looks better than High (owner).** Measured read-only on the live engine at DPR 0.9 and 1.25 (`kosmos-handover/cv-4a/704/README.md`): the bloom is sized in DRAWING-BUFFER pixels (the `UnrealBloomPass` mips follow the composer pixel ratio) ⇒ on High the glow is 1.2–1.4 × narrower and up to 30 % weaker (PSF of a 12 px flash, DPR 0.9: r50 / r90 10.8 / 32.3 vs 12.8 / 39.3 CSS px, glow 12 px out +30 % on Medium); High's 1.5× supersampling with the browser's bilinear downscale softens fine detail at DPR ≥ 1.25 (fine-stripe contrast 0.597 vs 0.741) but sharpens it at DPR 0.9 (0.479 vs 0.309). Cleared: FX widths and points (CSS-px floors, equal coverage), 2K vs 1K textures (identical detail at the same pixel ratio), the HUD canvas (equal edge gradients) | `ThreeRenderer` composer + `UnrealBloomPass` (`_setRendererPixelRatio` → `composer.setPixelRatio`); probes `probe_704.mjs`, `psf_704.mjs` | **CV-5 item 0** (decision 40): the bloom in CSS px (mips from the CSS size × min(DPR, 1.5), independent of the preset's supersampling; keeper + live PSF High = Medium ± 5 %); anti-aliasing per decision 41 — High = native + SMAA (no supersampling), Medium = native without AA, Low = min(1.0, native) · **CV-5 item 0 ✅** — bloom input in CSS px × min(DPR, 1.5) for every preset (`bloomInputSize`) + decision 41 (High native + SMAA); live PSF of the 12 px flash High vs Medium within ±5 % at DPR 0.9 / 1.25 / 2.0 (worst r50 −4.6 % at 0.9), control with buffer-pixel mips at DPR 2.0: r90 −21 %, energy −15 % (`kosmos-handover/cv-5/psf_cv5_analysis.json`) |
 | **705** | ✅ | **A second kill presentation through the lever.** `cvWeapons(0)` during a battle: a ship shown destroyed at its killing hit exploded again when the battle ended — the `vessel:wrecked` handler consulted the ledger only with the flag ON | `ThreeRenderer` `vessel:wrecked` handler, `_cvWpnWreckGate`; `kosmos-handover/cv-4a/probe_kills.mjs` (B3) | **fixed in the CV-4a commit** — the gate consults the ledger whatever the flag (no ledger in an OFF-only session — today's path bit for bit); keeper K4–K6 |
 | **706** | ✅ | **A preset switch in a PAUSED battle can leave the ships off the stage.** A texture rebuild (High ↔ Medium / Low) while the game is paused: the rebuilt sprites get a fresh stage mark and the stage entry runs on the presentation clock, which stands — the ships stay at their logical (true-scale) positions until the game resumes (B1 frame: 20 / 20 ships, frigates 7–11 px instead of ≈ 43 px, 4 / 4 runs; the close-up frame 0 / 4); in a running battle it is a blink | `ThreeRenderer.cvRebuildVesselSprites` → `_tickBattleStage` / `_stagePlace`; `kosmos-handover/cv-4a/704/probe_704.mjs` | **record only** — owner's call (carry the stage mark over a rebuild, or place a rebuilt participant at its target at once) · **CV-5 ✅** — stage marks kept through the async rebuild (`_stageKeep` / `_stageKept`) AND the cluster stage state kept with the kept ids in the solve key (without the second the ships still moved 1–3.4 L); live 0 L, solves unchanged; keepers `cv_stage_temporal` T12 (control 70.8 L), `cv_presets_logic` T12 |
-| **707** | ⚪ | **Live hulls glow white near the star.** The CV-1a material keeps the model's roughness / metalness MAPS (`roughness` and `metalness` only multiply them), so smooth metal panels give star specular highlights far above the bloom threshold — up close a white bloom patch on the star-facing side of some destroyer / battleship models (seen on the CV-5 contact sheets on live enemy ships, frame before any damage). Not CV-5: the wreck fix (matte in burn mode 1) shows the mechanism | `kosmos-handover/cv-5/sheet/diag_0_alive.png`, `diag_4_nobloom.png`; `KeyColourEmission` KC_MAIN (roughness / metalness writes only in mode 1) | **CV-4b item 0** (decision 42 (a)) |
+| **707** | ✅ | **Live hulls glow white near the star.** The CV-1a material keeps the model's roughness / metalness MAPS (`roughness` and `metalness` only multiply them), so smooth metal panels give star specular highlights far above the bloom threshold — up close a white bloom patch on the star-facing side of some destroyer / battleship models (seen on the CV-5 contact sheets on live enemy ships, frame before any damage). Not CV-5: the wreck fix (matte in burn mode 1) shows the mechanism | `kosmos-handover/cv-5/sheet/diag_0_alive.png`, `diag_4_nobloom.png`; `KeyColourEmission` KC_MAIN (roughness / metalness writes only in mode 1) | **CV-4b item 0** (decision 42 (a)) — ✅ **`c831e9d` 2026-11-12** (the owner's combined check PASS — decision 43): a roughness floor `max(roughness, MODEL_ROUGH_MIN 0.4)` + a soft knee on the DIRECT specular (brightest channel, `MODEL_SPEC_CAP 0.7`) in the key-colour chunk; max hull luminance F 449.166 → 1.244, G 331.702 → 0.978, K 146.082 → 0.948, M 55.995 → 0.848; 0 / 0 = the CV-1a expression (control reproduces the pre-change numbers); `cvModels` OFF untouched (`kosmos-handover/cv-4b/707/`) |
+| **708** | ⚪ | **Shields collapse at the first hit — the bubble rarely holds in a battle.** The shield modules give 15 (small) / 35 (large) HP with a regen of 1 / 3 per round, a hit deals 15 / 24 / 36 (laser / kinetic / missile × `DAMAGE_MULT` 3) ⇒ a shield blocks one hit, at most two, and collapses; it re-forms (≥ 25 % of max) only after 3–4 rounds. Measured: watched 10v10 seed 1 — 12 of 12 hits on a bubble collapsed it; the validator's session — 62 hits on a bubble, 60 collapses. The bubble's 'strong' and 'weak — flickering' looks are seen mainly through `cvShieldHit`; a battle shows mostly the collapse | `kosmos-handover/cv-4b/probe_cv4b_battle.json`, `validate_CV4b_run.txt` (B3); `ShipModulesData` (shield modules), `DeepSpaceCombatSystem.DAMAGE_MULT` | recorded — not CV (F1, mechanics untouched); **decision 43: → a future MECHANICS arc** (with #700) |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
