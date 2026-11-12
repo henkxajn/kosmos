@@ -42,6 +42,23 @@ export function slotOfModelPath(modelPath) {
   return { slot: m[1].toLowerCase(), variant };
 }
 
+/**
+ * ARC CV-2b — czy slot ma wariant tekstur 1K (`<slot>@1k.glb` — presety Medium / Low). Normalizator CV-1b zapisuje go ZAWSZE
+ * i stempluje `source.normalizer` = `normalize-ship@…`; stare modele (`legacy-textures@…`, brak pliku) — bez wariantu, zostają
+ * przy 2K. Reguła z danych, bez listy slotów w kodzie i bez żądań 404: ponowna normalizacja starego modelu włącza 1K sama.
+ * @param {object|null} doc — dokument hardpointów slotu
+ */
+export function has1kVariant(doc) {
+  return /^normalize-ship@/.test(String(doc?.source?.normalizer ?? ''));
+}
+
+/** ARC CV-2b — ścieżka wariantu 1K modelu slotu: `…/warp_frigate.glb` → `…/warp_frigate@1k.glb` (`incoming/` — bez wariantu: null). */
+export function modelPath1k(modelPath) {
+  const s = slotOfModelPath(modelPath);
+  if (!s || s.variant !== 'slot') return null;
+  return modelPath.replace(/\.glb$/i, '@1k.glb');
+}
+
 /** URL pliku hardpointów dla slotu i wariantu. */
 export function hardpointsUrl(slot, variant = 'slot') {
   return HARDPOINTS_DIR + (variant === 'incoming' ? 'incoming/' : '') + slot + '.json';

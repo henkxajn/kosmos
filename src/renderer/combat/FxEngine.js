@@ -30,6 +30,8 @@ import { buildFxShaders } from './FxShaders.js';
 import { weaponColor, FX_SHIELD_COLOR } from '../../config/CombatFxConfig.js';
 import { HIT_GLOW } from '../../utils/VesselFxLogic.js';
 import { CHOREO_TUNING } from './ChoreographyLogic.js';   // ARC CV-3b — pokrętła choreografii (jedno źródło wartości domyślnych)
+import { LIVE_LIGHT_POOL } from './LightPool.js';          // ARC CV-2b — pokrętła puli świateł (jedno źródło wartości domyślnych)
+import { LIVE_CUE } from './CombatCueBus.js';              // ARC CV-2b — pokrętła szyny sygnałów walki
 
 /** Pojemności pul (instancje). Pamięć: 13 / 11 liczb float na instancję — razem ok. 0,5 MB. Iskry ×2 względem szczytu
  *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4). */
@@ -105,6 +107,10 @@ export const LIVE_CV_FX = {
   // okres wzoru [s] (prędkość kątowa = 2π / okres), sufit skrętu [°/s], pion [L], jasność silnika w walce, przechył. Czytane
   // CO KLATKĘ. Strojenie, bez pinów (wartości domyślne — `CHOREO_TUNING`).
   ...CHOREO_TUNING,
+  // ARC CV-2b (flaga `cvPresets`) — pula świateł efektów (`LightPool`: jasność, zasięg, obwiednia błysku) i szyna sygnałów walki
+  // (`CombatCueBus`: najwyżej sygnałów na klatkę, okno scalania). Czytane co klatkę / przy błysku. Strojenie, bez pinów.
+  ...LIVE_LIGHT_POOL,
+  ...LIVE_CUE,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)

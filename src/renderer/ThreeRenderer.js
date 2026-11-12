@@ -45,9 +45,14 @@ import { motionSegment, motionAt, targetVelocity } from './combat/StageMotionLog
 import { createChoreo, choreoSeed, choreoClassOf, choreoEnvelope, postureOf, pickFacingTarget, stepChoreoOffset, constrainChoreo,
   stepChoreoFacing, stepChoreoEngine, quatFromYawPitchRoll } from './combat/ChoreographyLogic.js';   // ARC CV-3b — choreografia w kopercie
 import { ShipHardpointsCache, slotOfModelPath, yawToward, orbitYaw, bankRoll, INCOMING_DIR, SHIP_MODEL_DIR,
-  REST_YAW_CANONICAL, wreckTiltQuaternion } from './ShipHardpoints.js';   // ARC CV-1a — hardpointy, rama kanoniczna (kurs spoczynkowy i wrak jak OFF)
+  REST_YAW_CANONICAL, wreckTiltQuaternion, has1kVariant, modelPath1k } from './ShipHardpoints.js';   // ARC CV-1a — hardpointy, rama kanoniczna (kurs spoczynkowy i wrak jak OFF); CV-2b — wariant 1K
 import { buildShipRig, disposeShipRig, paintRigMaterials, paintRigRim, lightTestPattern } from './ShipModelRig.js';      // ARC CV-1a — statek w ramie kanonicznej
 import { LightPointPool } from './ShipLightPoints.js';                                                // ARC CV-1a — punkty świetlne `lights[]`
+import { LIGHT_POOL_MAX } from '../data/CombatFxPresets.js';                                          // ARC CV-2b — presety jakości (tabela §2.10)
+import { initialGfxLevel, normalizeGfxLevel, nextGfxLevelInCycle, readRendererString, resolveGfxSettings, writeStoredGfxLevel,
+  QualityThrottle, LIVE_GFX_THROTTLE } from './combat/QualityPreset.js';                             // ARC CV-2b — wykrycie, zapis, dławienie
+import { CombatLightPool } from './combat/LightPool.js';                                              // ARC CV-2b — stała pula świateł (D-CV-18)
+import { CombatCueBus, cueWeaponOfCategory, cueSizeOfClass, screenPan } from './combat/CombatCueBus.js';   // ARC CV-2b — szyna sygnałów walki (F8)
 import { KC_SHARED } from './KeyColourEmission.js';                                                   // ARC CV-1a — wspólne mnożniki maski
 import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
@@ -556,6 +561,7 @@ export class ThreeRenderer {
     this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
     this._shipModelPromises  = new Map(); // modelPath → Promise — deduplikacja równoległych load
     this._missingModelPaths  = new Set(); // modelPath → brak pliku (route prosto do DEFAULT)
+    this._shipTexVariant     = new WeakMap(); // ARC CV-2b — szablon modelu → '1k' (wariant `<slot>@1k.glb`); brak wpisu = 2K
     this._gltfLoader = new GLTFLoader();
     // Preload — ładuj templaty GLB z wyprzedzeniem, żeby statki dostały model od razu.
     // Deduplikacja przez promise cache: równoczesne wywołania dla tego samego pliku
@@ -679,10 +685,179 @@ export class ThreeRenderer {
     // ── Czas (do animacji gwiazdy) ────────────────────────────
     this._clock = new THREE.Clock();
 
+    // ARC CV-2b (flaga `cvPresets`, D-CV-17 / D-CV-18) — preset jakości: zapisany NA MASZYNIE albo wykryty z napisu renderera
+    // WebGL; zastosowany PRZED zbudowaniem tła (niebo bierze gęstość pikseli presetu) — gęstość pikseli, bloom, pula świateł
+    // zbudowana RAZ (w spoczynku jasność 0), tekstury statków przy stawianiu. Flaga OFF — nic się nie zmienia (dzisiejsza
+    // gęstość i bloom, bez puli). Szyna sygnałów walki (`_cueBus`) — leniwie, przy pierwszej salwie pod flagą. Pokrętła
+    // dławienia: KOSMOS.threeRenderer.gfxThrottleTuning.
+    this.gfxThrottleTuning = LIVE_GFX_THROTTLE;
+    this._fxLightPool      = null;
+    this._cueBus           = null;
+    this._gfxApplied       = null;
+    this._gfx              = this._initGfxState();
+    this._applyGfx('init');
+
     this._buildBackground();
     this._buildLights();
     this._setupEventBus();
     this._startLoop();
+  }
+
+  // ── ARC CV-2b — presety jakości grafiki walki (flaga `cvPresets`; plan §2.10, D-CV-17 / D-CV-18) ─────────────────────────
+  // Poziom startowy: zapisany na tej maszynie (localStorage `kosmos_gfx_quality`, try / catch) albo wykryty z napisu renderera.
+  _initGfxState() {
+    let rendererString = '';
+    try { rendererString = readRendererString(this.renderer.getContext()); } catch { rendererString = ''; }
+    const init = initialGfxLevel({ rendererString });
+    return { level: init.level, source: init.source, rendererString, throttle: new QualityThrottle(LIVE_GFX_THROTTLE),
+      lastFrameT: null, base: null, eff: null };
+  }
+
+  // Zastosuj stan: flaga ON — preset (gęstość pikseli, bloom, liczba świateł puli, wariant tekstur statków); flaga OFF —
+  // dzisiejsze ustawienia (gęstość min(dpr × 1,5, 2), bloom, bez świateł puli, tekstury 2K). Zmienia WYŁĄCZNIE to, co się
+  // różni od stanu renderera (gęstość ustawiana tylko przy zmianie — przypisanie rozmiaru kanwy ją czyści); zmiana wariantu
+  // tekstur przebudowuje statki aktywnego układu (`cvRebuildVesselSprites`).
+  _applyGfx(reason = 'apply') {
+    const on = !!GAME_CONFIG.FEATURES?.cvPresets;
+    const g = this._gfx;
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const prev = this._gfxApplied;
+    let pr, bloom, lights, textures;
+    if (on) {
+      g.base = resolveGfxSettings(g.level, { dpr });
+      g.eff = resolveGfxSettings(g.level, { dpr, throttle: g.throttle.level });
+      ({ pixelRatio: pr, bloom, lights, textures } = g.eff);
+      if (!this._fxLightPool && this.scene) {
+        this._fxLightPool = new CombatLightPool({ THREE, parent: this.scene, capacity: LIGHT_POOL_MAX, tuning: this.cvTuning });
+      }
+    } else {
+      pr = Math.min(dpr * 1.5, 2); bloom = true; lights = 0; textures = '2k';
+      g.base = null; g.eff = null;
+      g.throttle.reset();
+      this._cueBus?.clear();
+    }
+    if (pr !== this._pixelRatio) this._setRendererPixelRatio(pr);
+    if (this._bloomPass && this._bloomPass.enabled !== bloom) this._bloomPass.enabled = bloom;
+    this._fxLightPool?.setCount(lights);
+    this._gfxApplied = { on, level: on ? g.level : null, pixelRatio: pr, bloom, lights, textures, reason };
+    if (prev && prev.textures !== textures) this.cvRebuildVesselSprites();
+    if (prev) window.KOSMOS?.hudLayer?.wake?.();   // kanwa HUD bierze gęstość renderera (`hudPixelRatio`)
+    return this._gfxApplied;
+  }
+
+  // Gęstość pikseli: renderer, composer (bufory bloomu), punkty w pikselach urządzenia (niebo, płyta galaktyki).
+  _setRendererPixelRatio(pr) {
+    this._pixelRatio = pr;
+    this.renderer.setPixelRatio(pr);
+    this._composer?.setPixelRatio?.(pr);
+    const sky = this._sky?.points?.material?.uniforms?.uPx;
+    if (sky) sky.value = pr;
+    const plate = this._galaxyPlate?.material?.uniforms?.uPx;
+    if (plate) plate.value = pr;
+  }
+
+  /** Poziom presetu (☰ „Grafika”) albo `null`, gdy flaga `cvPresets` jest wyłączona. */
+  get gfxLevel() { return GAME_CONFIG.FEATURES?.cvPresets ? this._gfx.level : null; }
+
+  /**
+   * ARC CV-2b — ustaw preset (☰ „Grafika”, `KOSMOS.debug.gfx(0|1|2)`): zapis na maszynie (try / catch), zastosowanie od razu.
+   * @param {string|number} level — 'low' | 'medium' | 'high' albo 0 / 1 / 2
+   */
+  applyGfxPreset(level, { persist = true } = {}) {
+    const lv = normalizeGfxLevel(level);
+    if (!lv) return { ok: false, reason: 'bad_level', level };
+    this._gfx.level = lv;
+    this._gfx.source = 'set';
+    this._gfx.throttle.reset();
+    const saved = persist ? writeStoredGfxLevel(lv) : false;
+    this._applyGfx('preset');
+    return { ok: true, saved, ...this.cvGfxInfo() };
+  }
+
+  /** ☰ „Grafika”: High → Medium → Low → High. */
+  cycleGfxPreset() { return this.applyGfxPreset(nextGfxLevelInCycle(this._gfx.level)); }
+
+  // Raz na klatkę (po `_tickCvFx`): przełączenie flagi w konsoli — ponowne zastosowanie; dławienie automatyczne (czas klatki
+  // w walce) i obwiednia świateł puli na zegarze prezentacji. Flaga OFF — tylko porównanie flagi.
+  _tickGfx() {
+    const on = !!GAME_CONFIG.FEATURES?.cvPresets;
+    if (on !== (this._gfxApplied?.on === true)) this._applyGfx('flag');
+    const g = this._gfx;
+    if (!on) { g.lastFrameT = null; return; }
+    const now = performance.now();
+    const dt = g.lastFrameT == null ? 0 : now - g.lastFrameT;
+    g.lastFrameT = now;
+    const inCombat = (this._stageFrame?.clusters ?? 0) > 0 || !!this._fxEngine?.hasActive();
+    if (g.throttle.step(dt, { inCombat, base: g.base })) {
+      // Dławienie zmienia WYŁĄCZNIE budżety efektów drugorzędnych (dla CV-4b / CV-5) — gęstość, bloom, światła i tekstury zostają.
+      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+      g.eff = resolveGfxSettings(g.level, { dpr, throttle: g.throttle.level });
+    }
+    this._fxLightPool?.update(this._presClock.nowMs, { visible: !this._galaxyActive && !this._galaxyFlight });
+  }
+
+  /** ARC CV-2b — `KOSMOS.debug.gfx()`: preset, źródło, napis renderera, zastosowane ustawienia, budżety, dławienie, pula, sygnały. */
+  cvGfxInfo() {
+    const g = this._gfx, e = g.eff;
+    return {
+      cvPresets: !!GAME_CONFIG.FEATURES?.cvPresets, level: g.level, source: g.source, renderer: g.rendererString,
+      pixelRatio: this._pixelRatio, bloom: this._bloomPass ? this._bloomPass.enabled !== false : false,
+      lights: this._fxLightPool?.count ?? 0, textures: this._gfxApplied?.textures ?? '2k',
+      budgets: e ? { particles: e.particles, debris: e.debris, smoke: e.smoke, embers: e.embers, damageSmoke: e.damageSmoke,
+        shieldRipples: e.shieldRipples, throttled: [...e.throttled] } : null,
+      throttle: g.throttle.stats(), lightPool: this._fxLightPool?.stats() ?? null, cues: this._cueBus?.stats() ?? null,
+      shipTextures: this.cvShipTextureMemory(),
+    };
+  }
+
+  /**
+   * ARC CV-2b — pamięć tekstur statków aktywnego układu (unikalne tekstury materiałów, szer. × wys. × 4 B, mipmapy × 4/3) i warianty
+   * modeli (1K / 2K). Oszacowanie — dekodowany obraz na GPU, niezależnie od rozmiaru pliku.
+   */
+  cvShipTextureMemory() {
+    const seen = new Set();
+    let bytes = 0, maxW = 0;
+    const variants = { '1k': 0, '2k': 0 };
+    const KEYS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'alphaMap'];
+    for (const [, e] of this._vessels) {
+      if (e.texVariant) variants[e.texVariant] = (variants[e.texVariant] ?? 0) + 1;
+      e.sprite?.traverse?.((o) => {
+        const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+        for (const m of mats) for (const k of KEYS) {
+          const tx = m[k];
+          if (!tx || seen.has(tx)) continue;
+          seen.add(tx);
+          const w = tx.image?.width ?? 0, h = tx.image?.height ?? 0;
+          if (w > maxW) maxW = w;
+          bytes += w * h * 4 * (tx.generateMipmaps !== false ? 4 / 3 : 1);
+        }
+      });
+    }
+    return { textures: seen.size, mb: Number((bytes / (1024 * 1024)).toFixed(1)), maxSize: maxW, variants,
+      gpuTextures: this.renderer?.info?.memory?.textures ?? null };
+  }
+
+  /**
+   * ARC CV-2b — `KOSMOS.debug.cvLightFlash()`: błysk światła puli w środku oglądanej bitwy (albo w celu kamery) — instrument puli
+   * (High i Medium: kadłuby wokół rozjaśniają się na ~0,6 s; Low: odmowa — 0 świateł). Zegar prezentacji: w pauzie błysk stoi.
+   */
+  cvLightFlash() {
+    if (!GAME_CONFIG.FEATURES?.cvPresets) return { ok: false, reason: 'cvPresets_off' };
+    const pool = this._fxLightPool;
+    if (!pool) return { ok: false, reason: 'no_pool' };
+    let x = 0, y = 0.3, z = 0, n = 0;
+    for (const id of this._stageParticipants ?? []) {
+      const e = this._vessels.get(id);
+      if (!e?.sprite?.visible) continue;
+      x += e.sprite.position.x; y += e.sprite.position.y; z += e.sprite.position.z; n++;
+    }
+    if (n > 0) { x /= n; y /= n; z /= n; }
+    else {
+      const tgt = this._cameraController?._target ?? null;
+      if (tgt && Number.isFinite(tgt.x)) { x = tgt.x; y = tgt.y; z = tgt.z; }
+    }
+    const slot = pool.flash(x, y, z, 0xffd8a0, this._presClock.nowMs);
+    return { ok: slot >= 0, slot, at: [Number(x.toFixed(3)), Number(y.toFixed(3)), Number(z.toFixed(3))], ships: n, pool: pool.stats() };
   }
 
   // ── Tło: niebo z katalogu galaktyki (NIEBO, D-GX-4) ───────────────────────────────────────────────────────────
@@ -1398,6 +1573,7 @@ export class ThreeRenderer {
       // żywa). Gated fcCombatFx. Kula ognia + pierścień uderzeniowy (_spawnExplosion).
       if (GAME_CONFIG.FEATURES?.fcCombatFx) {
         this._spawnExplosion(entry.sprite.position, vesselTargetSize(vessel));
+        if (GAME_CONFIG.FEATURES?.cvPresets) this._cueDestroyed(vesselId, vessel, entry);   // ARC CV-2b — sygnał „zniszczony”
       }
       entry.isWreck = true;
       entry.sprite.visible = true;
@@ -4258,6 +4434,7 @@ export class ThreeRenderer {
         this._updateActiveEffects(performance.now());
         this._tickCvFx();                // ARC CV-2a — zegar prezentacji + silnik FX walki (flaga OFF i nic w locie — nic)
         this._tickCvModels();            // ARC CV-1a — pokrętła modeli do uniformów maski i puli świateł (flaga OFF bez puli — nic)
+        this._tickGfx();                 // ARC CV-2b — preset jakości: dławienie w walce, obwiednia świateł puli (flaga OFF — tylko porównanie)
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
         this._tickEngagementMarkers(performance.now());
@@ -5034,6 +5211,7 @@ export class ThreeRenderer {
       }
       const entry = {
         sprite: wrapper, color, isModel3D: true, canonical: true, rig, slot: slotInfo.slot, slotVariant: slotInfo.variant,
+        texVariant: this._shipTexVariant?.get?.(template) ?? '2k',   // ARC CV-2b — tekstury modelu (1K — presety Medium / Low)
         // ⚠ `enemyTint` znaczy tu to samo co na ścieżce OFF (wróg albo wrak): czytają go etykiety CTRL (`getAllVisibleLabels` —
         // kolor i mgła tożsamości „?”). Zwalnianie materiałów rozstrzyga `entry.canonical` (rig), nie to pole.
         enemyTint: isEnemy || isWreck,
@@ -5063,7 +5241,10 @@ export class ThreeRenderer {
     };
     const load = (path) => {
       const s = slotOfModelPath(path) ?? { slot: 'default', variant: 'slot' };
-      return Promise.all([this._loadShipModel(path), this._shipHardpoints.load(s.slot, s.variant)]);
+      // ARC CV-2b (flaga `cvPresets`) — tekstury 1K (presety Medium / Low): najpierw hardpointy slotu (z pamięci po pierwszym
+      // statku), bo to one mówią, czy wariant `<slot>@1k.glb` istnieje (`has1kVariant`); bez wariantu — model 2K jak dziś.
+      if (!this._gfxWants1k?.() || s.variant !== 'slot') return Promise.all([this._loadShipModel(path), this._shipHardpoints.load(s.slot, s.variant)]);
+      return this._shipHardpoints.load(s.slot, s.variant).then((hp) => this._loadShipModelVariant(path, hp).then((tpl) => [tpl, hp]));
     };
 
     load(modelPath).then(place).catch((err) => {
@@ -5187,6 +5368,21 @@ export class ThreeRenderer {
     }
     this._shipLightPool?.update({ fovDeg: this.camera?.fov ?? 55, viewportH: window.innerHeight || 1,
       gain: T.MODEL_LIGHT_GAIN, minPx: T.MODEL_LIGHT_MIN_PX, fadePx: T.MODEL_LIGHT_FADE_PX, fadeEndPx: T.MODEL_LIGHT_FADE_END_PX });
+  }
+
+  // ARC CV-2b — czy statki dostają tekstury 1K (flaga `cvPresets` i preset Medium / Low).
+  _gfxWants1k() { return !!GAME_CONFIG.FEATURES?.cvPresets && this._gfxApplied?.textures === '1k'; }
+
+  // ARC CV-2b — model w wariancie 1K, gdy slot go ma (`has1kVariant` — stempel normalizatora); błąd wczytania wariantu ⇒ model 2K
+  // (ścieżka 1K zapamiętana jako brakująca — bez ponownych żądań). Szablon oznaczony wariantem (`_shipTexVariant`).
+  _loadShipModelVariant(path, hp) {
+    const p1k = has1kVariant(hp) ? modelPath1k(path) : null;
+    if (!p1k || this._missingModelPaths.has(p1k)) return this._loadShipModel(path);
+    return this._loadShipModel(p1k).then((tpl) => { this._shipTexVariant.set(tpl, '1k'); return tpl; }, (err) => {
+      this._missingModelPaths.add(p1k);
+      console.warn(`[ThreeRenderer] cvPresets: brak wariantu 1K ${p1k} — model 2K`, err);
+      return this._loadShipModel(path);
+    });
   }
 
   // Jeden load per modelPath (deduplikacja). Zwraca Promise<gltf.scene>.
@@ -6903,6 +7099,10 @@ export class ThreeRenderer {
   _cvFxRoundFx(events, pace) {
     const eng = this._ensureFxEngine();
     const vm = window.KOSMOS?.vesselManager;
+    // ARC CV-2b (flaga `cvPresets`, F8) — sygnały walki w chwili, w której efekt pojawi się na ekranie (strzał po rozrzucie salwy,
+    // trafienie po opóźnieniu błysku); tylko strzały, które się rysują (ta sama bramka mgły wojny).
+    const cues = GAME_CONFIG.FEATURES?.cvPresets ? this._ensureCueBus?.() ?? null : null;
+    const encId = cues ? this._cueEncounterId(events) : null;
     let stagger = 0;
     for (const ev of events) {
       const aw = this._combatEndpointWorld(ev.attacker, ev.aPos);
@@ -6912,7 +7112,67 @@ export class ThreeRenderer {
       const tv = vm?.getVessel?.(ev.target);
       eng.spawnShot({ a: aw, t: tw, category: ev.category, hit: ev.hit, blockedByShield: ev.blockedByShield, delayMs, pace,
         attackerId: ev.attacker, targetId: ev.target, targetSize: tv ? vesselTargetSize(tv) : 0 });
+      if (cues) this._cueShot(cues, ev, aw, tw, delayMs, pace, encId, tv);
     }
+  }
+
+  // ── ARC CV-2b — szyna sygnałów walki (flaga `cvPresets`; plan §2.9, F8, D-CV-19) ─────────────────────────────────────────
+  // Szyna leniwie, przy pierwszej salwie / pierwszym wraku pod flagą; funkcje rzutu i wysyłki zbudowane RAZ (bez alokacji THREE
+  // w klatce). Pozycja sygnału = pozycja RYSOWANA statku w chwili wysyłki (scena bitwy), panorama z przestrzeni kamery.
+  _ensureCueBus() {
+    if (this._cueBus) return this._cueBus;
+    this._cueBus = new CombatCueBus({ tuning: this.cvTuning });
+    const v = new THREE.Vector3();
+    this._cueFlushOpts = {
+      visible: true,
+      resolvePos: (id) => { const e = this._vessels.get(id); return e?.sprite?.visible ? e.sprite.position : null; },
+      project: (x, y, z, out) => {
+        const cam = this.camera;
+        if (!cam) return;
+        v.set(x, y, z).applyMatrix4(cam.matrixWorldInverse);
+        out.pan = screenPan(v.x, v.z, Math.tan((cam.fov * Math.PI / 180) / 2) * (cam.aspect || 1));
+        const cp = cam.position;
+        out.dist = Math.hypot(x - cp.x, y - cp.y, z - cp.z);
+      },
+    };
+    this._cueEmit = (cue) => EventBus.emit('combatfx:cue', cue);
+    return this._cueBus;
+  }
+
+  // Id starcia salwy (`roundFx` go nie niesie do metod salwy): starcie, w którym jest strzelec pierwszego zdarzenia.
+  _cueEncounterId(events) {
+    const id = events?.[0]?.attacker;
+    if (id == null) return null;
+    return window.KOSMOS?.deepSpaceCombatSystem?._findActiveEncounterContaining?.(id)?.id ?? null;
+  }
+
+  // Strzał → „fire” (strzelec, po rozrzucie salwy); trafienie → „shieldHit” (osłona przyjęła część) albo „impact” (cel, po
+  // opóźnieniu błysku). Czas = zegar prezentacji (ten sam, na którym silnik FX rysuje strzał).
+  _cueShot(cues, ev, aw, tw, delayMs, pace, encId, tv) {
+    const now = this._presClock?.nowMs ?? 0;
+    const weapon = cueWeaponOfCategory(ev.category);
+    const av = window.KOSMOS?.vesselManager?.getVessel?.(ev.attacker);
+    cues.schedule(now + delayMs, 'fire', weapon, av ? cueSizeOfClass(vesselSizeClass(av)) : null,
+      aw.x, aw.y ?? 0.3, aw.z, encId, ev.attacker ?? null);
+    if (!ev.hit) return;
+    cues.schedule(now + delayMs + (pace?.flashDelayMs ?? 0), ev.blockedByShield > 0 ? 'shieldHit' : 'impact', weapon,
+      tv ? cueSizeOfClass(vesselSizeClass(tv)) : null, tw.x, tw.y ?? 0.3, tw.z, encId, ev.target ?? null);
+  }
+
+  // Wybuch wraku → „destroyed” (rozmiar z klasy kadłuba), od razu — razem z kulą ognia `_spawnExplosion`.
+  _cueDestroyed(vesselId, vessel, entry) {
+    const p = entry?.sprite?.position;
+    if (!p) return;
+    const cues = this._ensureCueBus();
+    cues.schedule(this._presClock?.nowMs ?? 0, 'destroyed', null, cueSizeOfClass(vesselSizeClass(vessel)), p.x, p.y, p.z,
+      vessel?.lastBattleId ?? null, vesselId ?? null);
+  }
+
+  // Raz na klatkę z `_tickCvFx`: sygnały, których czas nadszedł → `combatfx:cue` (tryb galaktyki — przepadają).
+  _flushCues() {
+    const o = this._cueFlushOpts;
+    o.visible = !this._galaxyActive && !this._galaxyFlight;
+    this._cueBus.flush(this._presClock.nowMs, this._cueEmit, o);
   }
 
   // Silnik budowany RAZ (pule = rozgrzewka); potem zero obiektów THREE na strzał. Końce wiązek i iskry idą za sprite'ami
@@ -6934,11 +7194,13 @@ export class ThreeRenderer {
   // Raz na klatkę: zegar prezentacji (krok klatki czasu realnego tylko, gdy gra biegnie — pauza = pauza, po wznowieniu bez
   // nadrabiania) i silnik. Flaga OFF i nic w locie — wyjście (dzisiejsza pętla co do bitu). Tryb galaktyki — efekty ukryte.
   _tickCvFx() {
-    if (!GAME_CONFIG.FEATURES?.cvFxEngine && !this._fxEngine?.hasActive()) return;
+    // ARC CV-2b — także, gdy czekają sygnały walki (`_cueBus`; wrak przy fladze `cvFxEngine` OFF).
+    if (!GAME_CONFIG.FEATURES?.cvFxEngine && !this._fxEngine?.hasActive() && !(this._cueBus?.pending() > 0)) return;
     const ts = window.KOSMOS?.timeSystem;
     this._presClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0 });
     this._fxEngine?.update({ nowMs: this._presClock.nowMs, camera: this.camera, viewportH: window.innerHeight || 1,
       visible: !this._galaxyActive, stage: !!GAME_CONFIG.FEATURES?.cvStage });   // ARC CV-3a3 (653 (b)(c)) — łata sceny bitwy
+    if (this._cueBus) this._flushCues();   // ARC CV-2b — sygnały walki, których czas nadszedł (zegar prezentacji)
   }
 
   // ARC CV-2a — KOSMOS.debug.fxStats(): pomiar N klatek pętli renderu — czas klatki (odstęp między klatkami: to widzi
@@ -7058,6 +7320,13 @@ export class ThreeRenderer {
       peakActive: r.peak, pools: this._fxEngine?.stats()?.pools ?? null, longest,
       windowGaps: r.windowGaps, stage: { ...r.stage, solvesPerSec: r2(r.stage.solves / Math.max(1e-9, Array.from(r.frameMs).reduce((a, b) => a + b, 0) / 1000)) },
       cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, cvStage: !!GAME_CONFIG.FEATURES?.cvStage, pixelRatio: this._pixelRatio,
+      // ARC CV-2b — preset jakości: poziom, bloom, światła puli, tekstury, stan dławienia (poziom i zdjęte efekty), sygnały walki.
+      gfx: {
+        cvPresets: !!GAME_CONFIG.FEATURES?.cvPresets, level: this._gfx?.level ?? null,
+        bloom: this._bloomPass ? this._bloomPass.enabled !== false : false, lights: this._fxLightPool?.count ?? 0,
+        textures: this._gfxApplied?.textures ?? '2k', throttle: this._gfx?.throttle?.stats() ?? null,
+        lightPool: this._fxLightPool?.stats() ?? null, cues: this._cueBus?.stats() ?? null,
+      },
     };
     this._fxStatsLast = rep;
     console.log(`[fxStats] ${rep.frames} klatek: klatka p50 ${rep.frameMsP50} ms / p95 ${rep.frameMsP95} ms / śr. ${rep.frameMsMean} ms `
@@ -7065,7 +7334,10 @@ export class ThreeRenderer {
       + `wywołania śr. ${rep.callsAvg} (maks. ${rep.callsMax}), trójkąty śr. ${rep.trisAvg}, szczyt pul: wiązki ${r.peak.beam}, `
       + `smugi ${r.peak.tracer}, iskry ${r.peak.spark}, stare FX ${r.peak.legacy}; przerwy okna (ukryte / bez fokusu): ${r.windowGaps}; `
       + `scena: klatki ${r.stage.framesStaged}, skala awaryjna ${r.stage.framesFallback}, klastry maks. ${r.stage.clustersMax}, złe pasma maks. ${r.stage.misbandedMax}, `
-      + `rozwiązania prowadnicy ${r.stage.solves} (${rep.stage.solvesPerSec}/s)`);
+      + `rozwiązania prowadnicy ${r.stage.solves} (${rep.stage.solvesPerSec}/s)`
+      + (rep.gfx.cvPresets ? `; grafika ${rep.gfx.level} (gęstość ${r2(rep.pixelRatio)}, bloom ${rep.gfx.bloom ? 'tak' : 'nie'}, światła ${rep.gfx.lights}, `
+        + `tekstury ${rep.gfx.textures}), dławienie: poziom ${rep.gfx.throttle?.level ?? 0}${rep.gfx.throttle?.dropped?.length ? ' — ' + rep.gfx.throttle.dropped.join(', ') : ''}, `
+        + `sygnały wysłane ${rep.gfx.cues?.emitted ?? 0}` : ''));
     console.table(longest);
     if (rep.pools) console.table(rep.pools);
   }

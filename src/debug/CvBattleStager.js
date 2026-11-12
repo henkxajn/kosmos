@@ -55,6 +55,10 @@
 //   cvLightTest(1) / cvLightTest(0)     — ARC CV-1a: testowy wzór punktów świetlnych na slotach bez `lights[]` (do CV-1c)
 //   modelInfo()                         — ARC CV-1a: statki w ramie kanonicznej, hardpointy (plik / zapas), pula świateł
 //   fxStats()                           — pomiar 300 klatek: czas klatki p50 / p95, wywołania i trójkąty renderera, pule
+//   cvPresets(1) / cvPresets(0)         — ARC CV-2b: flaga `cvPresets` (presety jakości + sygnały walki) ON / OFF, od następnej klatki
+//   gfx() / gfx(2) / gfx(1) / gfx(0)    — ARC CV-2b: odczyt presetu / High / Medium / Low (zapis na maszynie, jak ☰ „Grafika”)
+//   cvLightFlash()                      — ARC CV-2b: błysk światła puli w środku oglądanej bitwy (High 4 / Medium 2 / Low 0 świateł)
+//   cueStats() / cueStats(0)            — ARC CV-2b: sygnały walki odebrane przez słuchacza `AudioSystem` / wyzerowanie licznika
 //
 // Scena (dlaczego tak, punkt po punkcie — §1 Q9 / Finding 634):
 //   · układ = OGLĄDANY (`activeSystemId`) — `teleportVessel` nigdy nie ustawiał `systemId`, a starcie w innym układzie nie
@@ -667,6 +671,38 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const F = GAME_CONFIG.FEATURES;
       F.cvFxEngine = on === undefined ? !F.cvFxEngine : !!on;
       return { cvFxEngine: F.cvFxEngine };
+    },
+
+    /** ARC CV-2b — flaga `cvPresets` (presety jakości + sygnały walki): cvPresets(1) — ON, cvPresets(0) — OFF (dzisiejsza gęstość,
+     *  bloom, tekstury 2K, bez świateł puli i sygnałów), cvPresets() — przełącz. Renderer stosuje zmianę od następnej klatki. */
+    cvPresets(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvPresets = on === undefined ? !F.cvPresets : !!on;
+      const r = getRenderer();
+      r?._applyGfx?.('flag');
+      return { cvPresets: F.cvPresets, ...(r?.cvGfxInfo?.() ?? {}) };
+    },
+
+    /** ARC CV-2b — preset jakości: gfx() — odczyt (poziom, gęstość pikseli, bloom, światła, tekstury, budżety, dławienie, pamięć
+     *  tekstur statków); gfx(2) — High, gfx(1) — Medium, gfx(0) — Low (zapis na maszynie, jak ☰ „Grafika”). */
+    gfx(level) {
+      const r = getRenderer();
+      if (!r?.cvGfxInfo) return { ok: false, reason: 'no_renderer' };
+      return level === undefined ? r.cvGfxInfo() : r.applyGfxPreset(level);
+    },
+
+    /** ARC CV-2b — błysk światła puli w środku oglądanej bitwy (instrument puli: High 4 / Medium 2 / Low 0 świateł). */
+    cvLightFlash() {
+      const r = getRenderer();
+      return r?.cvLightFlash ? r.cvLightFlash() : { ok: false, reason: 'no_renderer' };
+    },
+
+    /** ARC CV-2b — sygnały walki: cueStats() — odczyt słuchacza `AudioSystem` (odebrane, scalone, per rodzaj) i szyny renderera;
+     *  cueStats(0) — wyzeruj licznik słuchacza przed pomiarem. */
+    cueStats(reset) {
+      const a = window.KOSMOS?.audioSystem;
+      const listener = reset === 0 ? (a?.resetCueStats?.() ?? null) : (a?.cueStats?.() ?? null);
+      return { listener, bus: getRenderer()?._cueBus?.stats?.() ?? null, cvPresets: !!GAME_CONFIG.FEATURES?.cvPresets };
     },
 
     /** ARC CV-1a — flaga `cvModels` (rama kanoniczna): cvModels(1) — ON, cvModels(0) — OFF, cvModels() — przełącz. Czytana przy

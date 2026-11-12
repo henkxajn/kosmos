@@ -563,6 +563,15 @@ export const GAME_CONFIG = {
     //   żadna para nie zmienia pasma odległości na scenie (rzut par). Deterministyczna (ziarno: id starcia + id statku), zegar
     //   prezentacji (pauza = pauza). Wyłącznie rysunek. Wyłączenie: KOSMOS.debug.cvChoreo(0) (statki wracają do kotwic w 0,5 s).
     cvChoreo: true,
+    // `cvPresets` (CV-2b) — PRESETY JAKOŚCI High / Medium / Low (`src/data/CombatFxPresets.js`, `QualityPreset.js`): gęstość
+    //   pikseli renderera, bloom, stała pula świateł efektów (4 / 2 / 0 — w spoczynku jasność 0, D-CV-18), tekstury statków 2K / 1K
+    //   (`<slot>@1k.glb`; sloty bez wariantu 1K zostają przy 2K), budżety efektów drugorzędnych dla CV-4b / CV-5 i dławienie
+    //   automatyczne (czas klatki > 20 ms przez 2 s w walce — wyłącznie efekty drugorzędne, strzały nigdy). Preset NA MASZYNIE
+    //   (localStorage `kosmos_gfx_quality`), domyślny z napisu renderera WebGL, ☰ „Grafika”. Do tego szyna sygnałów walki
+    //   `combatfx:cue` (`CombatCueBus`; słuchacz `AudioSystem` bez dźwięku — D-CV-19 (a)). Czytana CO KLATKĘ (zmiana w konsoli
+    //   działa od następnej klatki). OFF = dzisiejsza ścieżka: gęstość min(dpr × 1,5, 2), bloom, tekstury 2K, bez puli świateł,
+    //   bez sygnałów, bez wiersza ☰. Wyłączenie: KOSMOS.debug.cvPresets(0).
+    cvPresets: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

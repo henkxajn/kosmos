@@ -40,6 +40,9 @@
 //   A5 (CV-3a3, D-CV-4) bitwa PRZY CIELE (`cvBattle({ atBody })` — gracz na orbitach, wróg przypięty przez DSCS): ON (scena
 //      ze skorupą) == OFF == bez renderera — sygnatura, ślad każdej rundy, sekwencja losowań gry, sloty orbit; świadek — tryb ON
 //      rysował skorupę
+//   A6 (CV-2b, flaga `cvPresets`) — sygnały walki: tryb ON z szyną `combatfx:cue` (salwy, trafienia, wybuchy wraków) i słuchaczem
+//      `AudioSystem` podpiętym po `EventBus.clear()` świata == ON bez flagi == bez renderera (sygnatura, ślad, losowania, sloty);
+//      świadek — sygnały naprawdę płynęły i słuchacz odebrał każdy
 //
 // ⚠ Fail-first: moduły CV-2a (stager, silnik, zegar) powstają w tym kroku — import dynamiczny w try/catch, piny DEGRADUJĄ
 //   (czerwone), suita się nie przerywa. A2 jest STRAŻNIKIEM (wynik nie zależał od FX także przed CV-2a, od CV-0b).
@@ -75,6 +78,11 @@ const STAGEL = await tryImport('../../renderer/combat/BattleStageLogic.js');   /
 const SZOOM  = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
 const SMOT = await tryImport('../../renderer/combat/StageMotionLogic.js');   // ARC CV-6b — ruch sceny ciągły w prędkości
 const CHOREO = await tryImport('../../renderer/combat/ChoreographyLogic.js');   // ARC CV-3b — choreografia w kopercie
+const CUEBUS = await tryImport('../../renderer/combat/CombatCueBus.js');        // ARC CV-2b — szyna sygnałów walki (A6)
+const AUDIOM = await tryImport('../../systems/AudioSystem.js');                 // ARC CV-2b — słuchacz sygnałów (A6)
+// ARC CV-2b — jedna instancja jak w `main.js` (przed pierwszym `EventBus.clear()` — subskrypcje konstruktora i tak giną, jak w grze);
+// w trybie A6 `attach()` po starcie świata (jak `GameScene.start`).
+const AUDIO_SYS = AUDIOM ? new AUDIOM.AudioSystem() : null;
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -116,11 +124,14 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'shellBaseAt',                                                               // CV-3a3 — skorupa przy ciele
   // ARC CV-3b — choreografia (tryb ON: flaga `cvChoreo` razem z `cvStage`)
   'createChoreo', 'choreoSeed', 'choreoClassOf', 'choreoEnvelope', 'postureOf', 'pickFacingTarget', 'stepChoreoOffset', 'constrainChoreo',
-  'stepChoreoFacing', 'stepChoreoEngine', 'vesselSizeClass', 'apparentEdges', 'exhaustIntensityRaw', '_CHQ_A', '_CHQ_C', '_CHQ_D', '_CHV', 'quatFromYawPitchRoll'];
+  'stepChoreoFacing', 'stepChoreoEngine', 'vesselSizeClass', 'apparentEdges', 'exhaustIntensityRaw', '_CHQ_A', '_CHQ_C', '_CHQ_D', '_CHV', 'quatFromYawPitchRoll',
+  // ARC CV-2b — szyna sygnałów walki (tryb A6: flaga `cvPresets`)
+  'CombatCueBus', 'cueWeaponOfCategory', 'cueSizeOfClass', 'screenPan', 'EventBus'];
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
   '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
   '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
-  '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease', '_choreoEnd', '_choreoExhaust', '_applyExhaust'];
+  '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease', '_choreoEnd', '_choreoExhaust', '_applyExhaust',
+  '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues'];   // ARC CV-2b — sygnały walki (A6)
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -133,7 +144,8 @@ function makeMethod(name) {
     STAGEL?.encounterClusters, STAGEL?.encounterParticipants, STAGEL?.shellBaseAt,
     CHOREO?.createChoreo, CHOREO?.choreoSeed, CHOREO?.choreoClassOf, CHOREO?.choreoEnvelope, CHOREO?.postureOf, CHOREO?.pickFacingTarget,
     CHOREO?.stepChoreoOffset, CHOREO?.constrainChoreo, CHOREO?.stepChoreoFacing, CHOREO?.stepChoreoEngine, vesselSizeClass, STAGEL?.apparentEdges,
-    FX.exhaustIntensityRaw, new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Vector3(), CHOREO?.quatFromYawPitchRoll);
+    FX.exhaustIntensityRaw, new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Vector3(), CHOREO?.quatFromYawPitchRoll,
+    CUEBUS?.CombatCueBus, CUEBUS?.cueWeaponOfCategory, CUEBUS?.cueSizeOfClass, CUEBUS?.screenPan, EventBus);
 }
 
 /** Atrapa renderera: prawdziwe metody FX, sprite'y = Object3D za pozycjami logicznymi, zegar prezentacji z CV-2a. */
@@ -272,8 +284,10 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  * Starcie ze stagera, rozegrane do końca. mode: 'none' (bez renderera) · 'off' (renderer, flaga OFF) · 'on' (flaga ON);
  * `control` — słuchacz salwy losujący z `Math.random` (KONTROLA przyrządu).
  */
-function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null } = {}) {
+function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false } = {}) {
   const flag = GAME_CONFIG.FEATURES.cvFxEngine;
+  const presetsFlag = GAME_CONFIG.FEATURES.cvPresets;   // ARC CV-2b — A6: sygnały walki tylko w trybie `presets`
+  GAME_CONFIG.FEATURES.cvPresets = presets === true;
   const stageFlag = GAME_CONFIG.FEATURES.cvStage;
   const choreoFlag = GAME_CONFIG.FEATURES.cvChoreo;
   reseed('cv2a-battle'); reseedRendererRandom();
@@ -289,6 +303,13 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
       window.innerWidth = 1600; window.innerHeight = 1041;
       R = fakeRenderer();
       EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
+      // ARC CV-2b (A6) — wybuch wraku → sygnał „destroyed” (jak słuchacz `vessel:wrecked` renderera) i słuchacz `AudioSystem` po
+      // `EventBus.clear()` świata (jak `GameScene.start`). Bez flagi `cvPresets` — szyna nie powstaje (metody i tak w atrapie).
+      if (presets) {
+        EventBus.on('vessel:wrecked', ({ vesselId, vessel }) => R._cueDestroyed?.(vesselId, vessel, R._vessels.get(vesselId)));
+        AUDIO_SYS?.resetCueStats?.();
+        AUDIO_SYS?.attach?.();
+      }
     }
     if (control) EventBus.on('combat:roundFx', () => { Math.random(); Math.random(); Math.random(); });
     outsider = ship({ xAU: 3, yAU: 0, name: 'Postronny', modules: ['weapon_laser', 'engine_ion'], dockedAt: 'p_rock' });
@@ -318,7 +339,9 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
   GAME_CONFIG.FEATURES.cvFxEngine = flag;
   GAME_CONFIG.FEATURES.cvStage = stageFlag;
   GAME_CONFIG.FEATURES.cvChoreo = choreoFlag;
-  return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name };
+  GAME_CONFIG.FEATURES.cvPresets = presetsFlag;
+  const audio = presets ? (AUDIO_SYS?.cueStats?.() ?? null) : null;
+  return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name, audio };
 }
 
 /** Odczyt sceny tuż po `cvBattle` (pauza, przed pierwszym tikiem). */
@@ -482,6 +505,21 @@ const BON = runBattle({ mode: 'on', seed: 1, atBody: 'p_home' });
   assert(BN.draws.length > 0 && same(BON.draws, BOF.draws) && same(BOF.draws, BN.draws) && same(BON.slots, BOF.slots) && same(BOF.slots, BN.slots),
     `A5b sekwencja losowań gry (${BN.draws.length}) i sloty orbit identyczne`);
   assert((BON.R?.shellFrames ?? 0) > 100 && BOF.R?.shellFrames === 0, `A5c świadek: tryb ON rysował skorupę (${BON.R?.shellFrames} klatek), OFF — nie`);
+}
+
+header('A6 — (CV-2b) sygnały walki: wynik ON z szyną `combatfx:cue` i słuchaczem AudioSystem == ON bez flagi == bez renderera');
+const PRS = runBattle({ mode: 'on', seed: 1, presets: true });
+{
+  const cs = PRS.R?._cueBus?.stats?.() ?? null;
+  console.log(`     ON + cvPresets: sygnały wysłane ${cs?.emitted ?? 0} (scalone ${cs?.merged ?? 0}; per rodzaj ${JSON.stringify(cs?.byKind ?? {})}), `
+    + `słuchacz AudioSystem: wywołań ${PRS.audio?.received ?? 0}, sygnałów ${PRS.audio?.cues ?? 0}; ON bez flagi — szyna ${ON.R?._cueBus ? 'jest' : 'brak'}`);
+  assert(!!cs && cs.emitted >= 20 && cs.byKind.fire > 0 && cs.byKind.impact + cs.byKind.shieldHit > 0 && cs.byKind.destroyed > 0
+    && PRS.audio?.received === cs.emitted && !ON.R?._cueBus && PRS.sig.battles[0]?.[5] + PRS.sig.battles[0]?.[6] === cs.byKind.destroyed,
+    'A6a świadek: tryb `cvPresets` naprawdę wysyłał sygnały (fire, trafienia, „destroyed” = straty obu stron) i słuchacz AudioSystem odebrał każdy; bez flagi szyna nie powstaje');
+  assert(same(PRS.sig, NONE.sig) && same(PRS.trace, NONE.trace) && same(PRS.sig, ON.sig) && same(PRS.trace, ON.trace),
+    `A6b sygnatura i ślad każdej rundy identyczne ON + cvPresets == ON == bez renderera ${JSON.stringify(PRS.sig.battles)}`);
+  assert(NONE.draws.length > 0 && same(PRS.draws, NONE.draws) && same(PRS.slots, NONE.slots),
+    `A6c sekwencja losowań gry (${PRS.draws.length}) i sloty orbit identyczne — szyna sygnałów i słuchacz nie dotykają strumienia gry`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

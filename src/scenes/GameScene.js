@@ -292,6 +292,10 @@ export class GameScene {
 
     this.lifeSystem        = new LifeSystem(star);
     this.audioSystem       = window.KOSMOS.audioSystem || new AudioSystem();
+    // ARC CV-2b (D-CV-19 (a), §3.1-5) — słuchacz sygnałów walki `combatfx:cue` PO `EventBus.clear()` z początku start():
+    // instancja z main.js subskrybowała przy ładowaniu modułów, czyszczenie szyny ją odcięło. Wyłącznie ten słuchacz (bez
+    // dźwięku); ☰ muzyka / efekty zostają martwe do osobnej poprawki (Finding 613).
+    this.audioSystem.attach?.();
     this.diskPhaseSystem   = new DiskPhaseSystem(this.timeSystem);
     this.saveSystem        = new SaveSystem(star, this.timeSystem);
 

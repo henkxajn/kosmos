@@ -16,6 +16,7 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 import { buildSaveFileName, downloadSave, pickSaveFile, markPendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
 // ARKUSZ HUD paczka B (B-3) — ☰ „Radar” i chip [R] czytają i piszą ten sam stan (`uiPrefs.hudLayers.radar`).
 import { readHudLayers, setHudLayer } from './HudLayerChipsLogic.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';   // ARC CV-2b — flaga `cvPresets` (wiersz ☰ „Grafika”)
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -53,6 +54,13 @@ const C = {
   get red()    { return THEME.danger; },
   get dim()    { return THEME.textDim; },
 };
+
+// ARC CV-2b — etykieta poziomu presetu jakości (☰ „Grafika”); klucze dosłowne — `check-i18n` je widzi.
+function gfxLevelLabel(level) {
+  if (level === 'low') return t('menu.gfxLow');
+  if (level === 'medium') return t('menu.gfxMedium');
+  return t('menu.gfxHigh');
+}
 
 function _shortYear(y) {
   if (y >= 1e9)  return (y / 1e9).toFixed(1) + 'G';
@@ -317,6 +325,12 @@ export class BottomBar {
         this._toggleFleetMapLabels();
         this._updateDomMenu();
         break;
+      case 'gfx':
+        // ARC CV-2b (D-CV-17) — preset jakości: High → Medium → Low → High, zapis NA MASZYNIE (localStorage), zastosowanie od razu
+        // (ostrość, bloom, światła efektów; tekstury statków — przebudowa statków aktywnego układu).
+        window.KOSMOS?.threeRenderer?.cycleGfxPreset?.();
+        this._updateDomMenu();
+        break;
       case 'battleAutoFocus':
         // ARC CV-6b2 (Finding 630, decyzja właściciela §3.2-23) — auto-fokus kamery na starcie z udziałem gracza (`ThreeRenderer`,
         // `vessel:engaged`); brak klucza ≠ false (domyślnie ON), stan w uiPrefs = w zapisie gry, bez migracji.
@@ -458,6 +472,8 @@ export class BottomBar {
     const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
     const randomEventsOn = window.KOSMOS?.uiPrefs?.randomEventsEnabled !== false;
     const autoFocusOn = window.KOSMOS?.uiPrefs?.battleAutoFocus !== false;   // ARC CV-6b2 (#630) — domyślnie ON
+    // ARC CV-2b — ☰ „Grafika” wyłącznie z flagą `cvPresets` (OFF — menu jak dziś); poziom z renderera (zapis na maszynie).
+    const gfxLevel = GAME_CONFIG.FEATURES?.cvPresets ? (window.KOSMOS?.threeRenderer?.gfxLevel ?? null) : null;
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
@@ -470,6 +486,7 @@ export class BottomBar {
       { id: 'fleetLabels', label: t('menu.fleetLabels'), value: fleetLblOn ? t('menu.on') : t('menu.off'), valueOn: fleetLblOn },
       { id: 'randomEvents', label: t('menu.randomEvents'), value: randomEventsOn ? t('menu.on') : t('menu.off'), valueOn: randomEventsOn },
       { id: 'battleAutoFocus', label: t('menu.battleAutoFocus'), value: autoFocusOn ? t('menu.on') : t('menu.off'), valueOn: autoFocusOn },
+      ...(gfxLevel ? [{ id: 'gfx', label: t('menu.gfx'), value: gfxLevelLabel(gfxLevel), valueOn: gfxLevel !== 'low' }] : []),
       { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
       { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },
     ];

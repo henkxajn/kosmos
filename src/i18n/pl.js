@@ -644,6 +644,10 @@ export default {
   'menu.fleetLabels': 'Plakietki floty',
   'menu.randomEvents': 'Zdarzenia losowe',
   'menu.battleAutoFocus': 'Auto-fokus bitwy',   // ARC CV-6b2 (#630) — kamera sama leci do starcia z udziałem gracza
+  'menu.gfx':       'Grafika',   // ARC CV-2b (D-CV-17) — preset jakości grafiki: ostrość, bloom, światła efektów, tekstury statków
+  'menu.gfxHigh':   'Wysoka',
+  'menu.gfxMedium': 'Średnia',
+  'menu.gfxLow':    'Niska',
   // Vessel — komunikaty walidacji portu kosmicznego (Bug 2)
   'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
   'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',

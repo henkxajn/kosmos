@@ -643,6 +643,10 @@ export default {
   'menu.fleetLabels': 'Fleet plaques',
   'menu.randomEvents': 'Random events',
   'menu.battleAutoFocus': 'Battle auto-focus',   // ARC CV-6b2 (#630) — the camera flies to a battle the player is in
+  'menu.gfx':       'Graphics',   // ARC CV-2b (D-CV-17) — graphics quality preset: sharpness, bloom, effect lights, ship textures
+  'menu.gfxHigh':   'High',
+  'menu.gfxMedium': 'Medium',
+  'menu.gfxLow':    'Low',
   // Vessel — spaceport validation messages (Bug 2)
   'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
   'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',

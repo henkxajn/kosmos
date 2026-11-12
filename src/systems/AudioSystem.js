@@ -13,6 +13,7 @@
 // Subskrybuje eventy przez EventBus — niezależny jak inne systemy
 
 import EventBus from '../core/EventBus.js';
+import { cueSoundId } from '../data/CombatCueData.js';   // ARC CV-2b (D-CV-19 (a)) — sygnał walki → id dźwięku (dziś pusto)
 
 // ── Definicje ścieżek muzycznych ──────────────────────────────
 const MUSIC_TRACKS = {
@@ -47,6 +48,14 @@ export class AudioSystem {
     this._musicPlaying = false; // czy gra
     this._currentTrackId = null; // aktualnie grający trackId
     this._musicPausedByGame = false; // czy wyciszony przez pauzę gry
+
+    // ARC CV-2b (D-CV-19 (a), §3.1-5) — słuchacz szyny sygnałów walki `combatfx:cue`: dziś BEZ dźwięku (tabela
+    // `CombatCueData` pusta), tylko licznik odebranych sygnałów (dowód, że słuchacz żyje — `cueStats()`). Wpięty przez
+    // `attach()`: tu i ponownie z `GameScene.start()` PO `EventBus.clear()` (inaczej czyszczenie szyny odcina słuchacza).
+    // ⚠ Pozostałe subskrypcje konstruktora (☰ muzyka / efekty, kolizje…) nadal giną przy `EventBus.clear()` — Finding 613,
+    //   osobna poprawka poza CV.
+    this._cueStats = { received: 0, cues: 0, resolved: 0, byKind: {}, last: null };
+    this._onCombatCueBound = (cue) => this._onCombatCue(cue);
 
     // Zamknij AudioContext przy zamykaniu strony
     window.addEventListener('beforeunload', () => {
@@ -98,6 +107,47 @@ export class AudioSystem {
         this._musicGain.gain.exponentialRampToValueAtTime(this._musicVolume, now + MUSIC_FADE_IN);
       }
     });
+
+    this.attach();   // ARC CV-2b — słuchacz sygnałów walki (ponownie z GameScene po EventBus.clear())
+  }
+
+  // ── ARC CV-2b — szyna sygnałów walki (D-CV-19 (a)) ──────────────
+  // Wpina WYŁĄCZNIE słuchacza `combatfx:cue` (bez słyszalnej zmiany). Idempotentne: zdejmuje poprzednią subskrypcję tej
+  // samej funkcji, więc dwa wywołania bez czyszczenia szyny dają dokładnie jedną subskrypcję. Woła: konstruktor i
+  // `GameScene.start()` PO `EventBus.clear()`.
+  attach() {
+    EventBus.off('combatfx:cue', this._onCombatCueBound);
+    EventBus.on('combatfx:cue', this._onCombatCueBound);
+    return this;
+  }
+
+  // Sygnał walki (`CombatCueBus`): dziś tylko licznik; id dźwięku z tabeli — `null` ⇒ nic nie gra.
+  _onCombatCue(cue) {
+    const s = this._cueStats;
+    s.received++;
+    const n = Number.isFinite(cue?.count) && cue.count > 0 ? cue.count : 1;
+    s.cues += n;
+    const k = typeof cue?.kind === 'string' ? cue.kind : '?';
+    s.byKind[k] = (s.byKind[k] ?? 0) + n;
+    s.last = cue ?? null;
+    const id = cueSoundId(cue);
+    if (!id) return;
+    s.resolved++;
+    // Odtwarzanie dźwięku sygnału — osobny krok (po wypełnieniu tabeli `COMBAT_CUE_SOUNDS`).
+  }
+
+  /** ARC CV-2b — odczyt słuchacza sygnałów walki (`KOSMOS.audioSystem.cueStats()`): wywołania, scalone sygnały, per rodzaj. */
+  cueStats() {
+    const s = this._cueStats;
+    return { received: s.received, cues: s.cues, resolved: s.resolved, byKind: { ...s.byKind },
+      last: s.last ? { kind: s.last.kind, weapon: s.last.weapon, size: s.last.size, count: s.last.count,
+        pan: Number((s.last.pan ?? 0).toFixed(2)), dist: Number((s.last.dist ?? 0).toFixed(3)) } : null };
+  }
+
+  /** ARC CV-2b — wyzeruj licznik słuchacza (przed pomiarem). */
+  resetCueStats() {
+    this._cueStats = { received: 0, cues: 0, resolved: 0, byKind: {}, last: null };
+    return this.cueStats();
   }
 
   // ── Lazy init AudioContext ────────────────────────────────────

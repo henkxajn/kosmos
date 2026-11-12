@@ -71,12 +71,16 @@ export function hudGate(K) {
   return { shown: true, reason: null };
 }
 
-/** Gęstość bufora kanwy HUD = gęstość renderera 3D (zapas: wzór renderera — DPR × 1,5, najwyżej 2). */
+/**
+ * Gęstość bufora kanwy HUD = gęstość renderera 3D (zapas: wzór renderera — DPR × 1,5, najwyżej 2). ARC CV-2b — presety Medium /
+ * Low (flaga `cvPresets`) potrafią zejść z gęstością renderera PONIŻEJ natywnej (Low: 1,0 przy DPR 1,25); tekst i etykiety HUD
+ * nie schodzą poniżej natywnej (najwyżej 2) — czytelność na każdym presecie. Przy dzisiejszej gęstości (≥ natywnej) bez zmian.
+ */
 export function hudPixelRatio(K) {
   const tr = K?.threeRenderer;
   const pr = tr?.renderer?.getPixelRatio?.() ?? tr?._pixelRatio;
-  if (pr > 0) return pr;
   const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  if (pr > 0) return Math.max(pr, Math.min(dpr, 2));
   return Math.min(dpr * 1.5, 2);
 }
 
