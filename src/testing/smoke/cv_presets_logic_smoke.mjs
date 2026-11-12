@@ -82,7 +82,7 @@ guard('T1', () => {
   for (let i = 1; i < LEVELS.length; i++) {
     const lo = tbl[LEVELS[i - 1]], hi = tbl[LEVELS[i]];
     for (const k of num) if (!(lo[k] <= hi[k])) bad.push(`${k} ${LEVELS[i - 1]} ${lo[k]} > ${LEVELS[i]} ${hi[k]}`);
-    for (const k of ['bloom', 'smoke', 'embers']) if (Number(lo[k]) > Number(hi[k])) bad.push(k);
+    for (const k of ['bloom', 'smoke', 'embers', 'scorch']) if (Number(lo[k]) > Number(hi[k])) bad.push(k);   // ARC CV-4b — osmalenia (High)
     if (ORD(P.DAMAGE_SMOKE_ORDER, lo.damageSmoke) > ORD(P.DAMAGE_SMOKE_ORDER, hi.damageSmoke)) bad.push('damageSmoke');
     if (ORD(P.TEXTURE_ORDER, lo.textures) > ORD(P.TEXTURE_ORDER, hi.textures)) bad.push('textures');
     if (P.AA_ORDER && ORD(P.AA_ORDER, lo.aa) > ORD(P.AA_ORDER, hi.aa)) bad.push('aa');   // ARC CV-5 — wygładzanie (decyzja 41)
@@ -408,9 +408,10 @@ guard('T8', () => {
   for (const k of CUEDATA.CUE_KINDS) for (const sub of (CUEDATA.CUE_WEAPON_KINDS.includes(k) ? CUEDATA.CUE_WEAPONS : CUEDATA.CUE_SIZES)) cells.push([k, sub]);
   // ARC CV-4a — przecelowane ŚWIADOMIE: tabela dostała wiersz `kill` (zniszczenie w chwili trafienia zabijającego, po rozmiarze) —
   // 15 → 18 komórek; reszta pinu bez zmian (każda komórka w tabeli, każda dziś → null).
-  assert(cells.length === 18 && cells.filter(([k]) => k === 'kill').length === 3
+  // ARC CV-4b — przecelowane ŚWIADOMIE: wiersz `shieldDown` (rozpad osłony, po rozmiarze) — 18 → 21 komórek; reszta pinu bez zmian.
+  assert(cells.length === 21 && cells.filter(([k]) => k === 'kill').length === 3 && cells.filter(([k]) => k === 'shieldDown').length === 3
     && cells.every(([k, sub]) => sub in tbl[k] && CUEDATA.cueSoundId({ kind: k, weapon: sub, size: sub }) === null),
-    `T8i tabela sygnałów: ${cells.length} komórek (fire / impact / shieldHit × broń, explosion / destroyed / kill × rozmiar), każda dziś → null`);
+    `T8i tabela sygnałów: ${cells.length} komórek (fire / impact / shieldHit × broń, explosion / destroyed / kill / shieldDown × rozmiar), każda dziś → null`);
   const TR = strip(read('src/renderer/ThreeRenderer.js'));
   const emittedKinds = [...new Set([...TR.matchAll(/cues\.schedule\([^,]+,\s*'([a-zA-Z]+)'/g)].map((m) => m[1]).concat(/'shieldHit' : 'impact'/.test(TR) ? ['shieldHit', 'impact'] : []))];
   const weapons = ['short', 'medium', 'long', null, 'zzz'].map((c) => B.cueWeaponOfCategory(c));

@@ -140,7 +140,7 @@ export function resolveGfxSettings(level, { dpr = 1, throttle = 0 } = {}) {
   const s = {
     level: lv, pixelRatio: presetPixelRatio(lv, dpr), aa: p.aa ?? 'none', bloom: p.bloom, particles: p.particles, lights: p.lights,
     debris: p.debris, smoke: p.smoke, embers: p.embers, damageSmoke: p.damageSmoke, shieldRipples: p.shieldRipples,
-    textures: p.textures, throttle: 0, throttled: [],
+    scorch: p.scorch === true, textures: p.textures, throttle: 0, throttled: [],   // ARC CV-4b — osmalenia (High)
   };
   const k = Math.max(0, Math.min(THROTTLE_ORDER.length, Math.floor(Number(throttle) || 0)));
   for (let i = 0; i < k; i++) {

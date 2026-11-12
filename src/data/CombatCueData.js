@@ -6,10 +6,11 @@
 //
 // Rodzaje (`kind`) i drugi klucz:
 //   fire / impact / shieldHit — po BRONI (`weapon`: laser / kinetic / missile; kategoria modułu short / medium / long);
-//   explosion / destroyed / kill — po ROZMIARZE (`size`: small / medium / large; klasa kadłuba).
+//   explosion / destroyed / kill / shieldDown — po ROZMIARZE (`size`: small / medium / large; klasa kadłuba).
 // Dziś silnik emituje fire, impact, shieldHit (każda salwa) i destroyed (wybuch wraku); `explosion` (wybuchy pocisków,
 // eksplozje wtórne) dojdzie z CV-5 — komórki są już w tabeli. ARC CV-4a (flaga `cvWeapons`): fire / impact / shieldHit
 // w chwilach z REJESTRU SALW (strzał, trafienie), do tego `kill` — zniszczenie w chwili trafienia zabijającego (po rozmiarze).
+// ARC CV-4b (flaga `cvShields`): `shieldDown` — rozpad osłony w chwili trafienia, które zbija ją do zera (po rozmiarze).
 
 export const COMBAT_CUE_SOUNDS = Object.freeze({
   fire:      Object.freeze({ laser: null, kinetic: null, missile: null }),
@@ -19,6 +20,8 @@ export const COMBAT_CUE_SOUNDS = Object.freeze({
   destroyed: Object.freeze({ small: null, medium: null, large: null }),
   // ARC CV-4a — zniszczenie okrętu w chwili TRAFIENIA ZABIJAJĄCEGO (rejestr salw, flaga `cvWeapons`; po rozmiarze kadłuba).
   kill:      Object.freeze({ small: null, medium: null, large: null }),
+  // ARC CV-4b — rozpad osłony (trafienie zbijające osłonę do zera, flaga `cvShields`; po rozmiarze kadłuba).
+  shieldDown: Object.freeze({ small: null, medium: null, large: null }),
 });
 
 /** Rodzaje sygnałów (kolejność = kolejność tabeli). */

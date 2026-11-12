@@ -15,6 +15,8 @@
 //   · bloom liczony w pikselach CSS × gęstość Medium (`bloomInputSize`), niezależnie od gęstości presetu — przy nadpróbkowaniu
 //     High poświata była 1,2–1,4 × węższa i do 30 % słabsza niż na Medium (mipy `UnrealBloomPass` szły za buforem rysowania).
 //   CV-5 zużywa też budżety efektów drugorzędnych (odłamki, dym, żar, dym uszkodzeń, cząstki) — `ExplosionLogic.js`.
+// ARC CV-4b (flaga `cvShields`): `shieldRipples` — fale na bańkę osłony (High 8 / Medium 4 / Low 1; `ShieldLogic.allocRipple`),
+//   `scorch` — osmalenia kadłuba w punktach trafień (wyłącznie High, §2.4; `ShieldLogic.scorchEnabled`). Bez dławienia (koszt pomijalny).
 
 /** Poziomy rosnąco — kolejność jest kontraktem (keeper: każdy budżet Low ≤ Medium ≤ High). */
 export const GFX_LEVELS = Object.freeze(['low', 'medium', 'high']);
@@ -37,15 +39,15 @@ export const AA_ORDER = Object.freeze(['none', 'smaa']);
 export const GFX_PRESETS = Object.freeze({
   high: Object.freeze({
     pixelRatio: Object.freeze({ dprMul: 1.0, cap: 2 }), aa: 'smaa', bloom: true, particles: 16000, lights: 4, debris: 24,
-    smoke: true, embers: true, damageSmoke: 'on', shieldRipples: 8, textures: '2k',
+    smoke: true, embers: true, damageSmoke: 'on', shieldRipples: 8, scorch: true, textures: '2k',
   }),
   medium: Object.freeze({
     pixelRatio: Object.freeze({ dprMul: 1.0, cap: 1.5 }), aa: 'none', bloom: true, particles: 6000, lights: 2, debris: 12,
-    smoke: true, embers: false, damageSmoke: 'fire', shieldRipples: 4, textures: '1k',
+    smoke: true, embers: false, damageSmoke: 'fire', shieldRipples: 4, scorch: false, textures: '1k',
   }),
   low: Object.freeze({
     pixelRatio: Object.freeze({ fixed: 1.0, notAbove: 'medium' }), aa: 'none', bloom: false, particles: 2000, lights: 0, debris: 0,
-    smoke: false, embers: false, damageSmoke: 'off', shieldRipples: 1, textures: '1k',
+    smoke: false, embers: false, damageSmoke: 'off', shieldRipples: 1, scorch: false, textures: '1k',
   }),
 });
 

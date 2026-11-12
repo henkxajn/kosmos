@@ -70,6 +70,12 @@
 //   cvExplode(/battleship/.source)      — ARC CV-5: wybuch statku testowego danej klasy (`frigate` / `destroyer` / `battleship`),
 //                                         najbliższego celowi kamery — tylko prezentacja (logika go nie zna; F5 bez zapisu); w pauzie
 //                                         stoi, zwolnione tempo: `KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE = 0.25`
+//   cvShields(1) / cvShields(0)         — ARC CV-4b: flaga `cvShields` (bańka osłony z falą w punkcie trafienia, siła z osłony pokazywanej,
+//                                         rozpad na gasnące komórki, regeneracja — słaba fala; osmalenia kadłuba na High); OFF = rysunek CV-4a / CV-5
+//   cvShieldHit(/battleship/.source)    — ARC CV-4b: trafienie w osłonę statku TESTOWEGO danej klasy najbliższego celowi kamery (parada / bitwa
+//                                         po końcu) — każde wywołanie zabiera ~42 % osłony, trzecie ją rozbija, kolejne trafiają kadłub (iskry,
+//                                         żar, osmalenie na High); tylko prezentacja. Zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE
+//   shieldInfo()                        — ARC CV-4b: osłony (bańka trzyma / opadła, siła, fale, rozpady, regeneracje), pula baniek, osmalenia
 //   damageInfo()                        — ARC CV-5: wybuchy (klasy, wtórne, światła), emitery stanów uszkodzeń, wraki (żar, zbieżność),
 //                                         zegar efektów, pule
 //
@@ -99,6 +105,7 @@ import { resolveBattle, isStalemate } from '../systems/BattleSystem.js';     // 
 import { mixSeed } from '../utils/SeedMath.js';                              // Finding 699 — `random`: ziarno strumienia flot
 import { vesselSizeClass } from '../renderer/VesselModelResolver.js';        // ARC CV-5 — `cvExplode`: klasa kadłuba
 import { explosionClassOf } from '../renderer/combat/ExplosionLogic.js';     // ARC CV-5 — `cvExplode`: klasa wybuchu
+import { SHIP_MODULES } from '../data/ShipModulesData.js';                   // ARC CV-4b — `cvShieldHit`: osłona statku z modułów
 
 export const CV_BATTLE = Object.freeze({
   MAX_PER_SIDE: 10,
@@ -750,6 +757,49 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
     damageInfo() {
       const r = getRenderer();
       return r?.cvDamageInfo ? r.cvDamageInfo() : { ok: false, reason: 'no_renderer' };
+    },
+
+    /** ARC CV-4b — flaga `cvShields` (bańki osłon, fale, rozpad, regeneracja; osmalenia na High): cvShields(1) — ON, cvShields(0) — OFF
+     *  (rysunek CV-4a / CV-5), cvShields() — przełącz. Czytana w chwili salwy i co klatkę. */
+    cvShields(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvShields = on === undefined ? !F.cvShields : !!on;
+      return { cvShields: F.cvShields, cvWeapons: !!F.cvWeapons, cvFxEngine: !!F.cvFxEngine };
+    },
+
+    /**
+     * ARC CV-4b — trafienie w osłonę statku TESTOWEGO (parada `cvParade` / bitwa `cvBattle` po końcu) danej klasy, najbliższego celowi kamery:
+     * cvShieldHit(/battleship/.source) (bez cudzysłowów), cvShieldHit() — dowolny. Każde wywołanie zabiera ~42 % osłony (osłona z modułów
+     * statku; bez modułu osłony — wirtualna 35), trzecie ją rozbija (rozpad, sygnał `shieldDown`), kolejne trafiają kadłub (iskry, żar,
+     * osmalenie na High). Tylko prezentacja; statek parady dostaje stop rozkazu ruchu. Zwolnione tempo: cvTuning.FX_TIME_SCALE = 0.25.
+     */
+    cvShieldHit(cls = null) {
+      const r = getRenderer();
+      const K = window.KOSMOS ?? {};
+      const vm = K.vesselManager;
+      if (!r?.cvShieldHitVessel || !vm) return { ok: false, reason: 'no_renderer' };
+      let re = null;
+      try { re = cls == null || cls === '' ? null : new RegExp(String(cls), 'i'); } catch { return { ok: false, reason: 'bad_pattern' }; }
+      const sys = K.activeSystemId ?? 'sys_home';
+      const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
+      const dscs = K.deepSpaceCombatSystem;
+      const cand = all.filter((v) => isCvVessel(v) && v.systemId === sys && !v.isWreck && !dscs?._findActiveEncounterContaining?.(v.id))
+        .filter((v) => { const e = r._vessels?.get?.(v.id); return !!e?.sprite?.visible && !e.cvKilled; })
+        .filter((v) => { if (!re) return true; const sc = vesselSizeClass(v); return re.test(explosionClassOf(sc)) || re.test(sc) || re.test(v.shipId ?? ''); });
+      if (!cand.length) return { ok: false, reason: 'no_ship', hint: 'KOSMOS.debug.cvParade() najpierw (albo bitwa po końcu)' };
+      const tgt = r._cameraController?._target ?? null;
+      const d2 = (v) => { const p = r._vessels.get(v.id).sprite.position; return tgt ? (p.x - tgt.x) ** 2 + (p.y - tgt.y) ** 2 + (p.z - tgt.z) ** 2 : 0; };
+      cand.sort((a, b) => d2(a) - d2(b));
+      const v = cand[0];
+      if (v._cvBattle === 'parade') K.movementOrderSystem?.cancelOrder?.(v.id, 'cvShieldHit');
+      const maxHint = (v.modules ?? []).reduce((a, m) => a + (Number(SHIP_MODULES[m]?.stats?.shieldHP) || 0), 0);
+      return r.cvShieldHitVessel(v.id, { maxHint });
+    },
+
+    /** ARC CV-4b — odczyt osłon: bańka trzyma / opadła, siła, fale, rozpady, regeneracje, pula baniek, osmalenia (`ThreeRenderer.cvShieldInfo`). */
+    shieldInfo() {
+      const r = getRenderer();
+      return r?.cvShieldInfo ? r.cvShieldInfo() : { ok: false, reason: 'no_renderer' };
     },
 
     /** ARC CV-2b — preset jakości: gfx() — odczyt (poziom, gęstość pikseli, bloom, światła, tekstury, budżety, dławienie, pamięć

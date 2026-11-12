@@ -592,6 +592,18 @@ export const GAME_CONFIG = {
     //   nietknięty. Zwolnione tempo (prezentacja): KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE. OFF = łata CV-3a3 / CV-4a co do bitu.
     //   Wyłączenie: KOSMOS.debug.cvDamage(0).
     cvDamage: true,
+    // `cvShields` (CV-4b) — OSŁONY I PANCERZ (`src/renderer/combat/ShieldLogic.js`, `ShieldBubbles.js`): bańka osłony — elipsoida
+    //   dopasowana do rysowanego kadłuba (idzie za sceną i choreografią), NIEWIDOCZNA do trafienia; przy trafieniu fala rozchodzi się
+    //   od punktu, w którym strzał naprawdę spotyka bańkę (koniec wiązki / pocisku na bańce, dopóki osłona trzyma), fresnel krawędzi
+    //   i komórki rozbłyskują i gasną w ~0,65 s; siła z osłony POKAZYWANEJ (rejestr salw CV-4a): silna — fala ostra i jasna, słaba —
+    //   migotanie; trafienie, które zbija osłonę do zera — rozpad (błysk, bańka pęka na gasnące komórki; sygnał `shieldDown`), potem
+    //   strzały lądują na kadłubie (iskry i żar CV-4a — punkt na poszyciu, pod bańką); regeneracja w chwili nadejścia rundy — słaba
+    //   fala; statek bez osłony — bez bańki; łata cyjanowych iskier przy trafieniu w osłonę (CV-4a) i płaski pierścień osłony (#653 (b))
+    //   nie rysują się. Osmalenia kadłuba w punktach trafień — wyłącznie High (pula na statek, żar świeżej plamy stygnie; zostają na
+    //   wraku). Fale na bańkę z presetu (High 8 / Medium 4 / Low 1). Wymaga `cvWeapons` (rejestr salw) i `cvFxEngine`. Wyłącznie rysunek —
+    //   wynik bitwy nietknięty. Zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE. OFF = rysunek CV-4a / CV-5 co do bitu.
+    //   Wyłączenie: KOSMOS.debug.cvShields(0).
+    cvShields: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

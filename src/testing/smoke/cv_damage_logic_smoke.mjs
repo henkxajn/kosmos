@@ -505,14 +505,21 @@ guard('D13', () => {
   m.onBeforeCompile(sh);
   assert(sh.vertexShader.includes('vKcObj = position;') && sh.uniforms.uKcBurnMode && sh.uniforms.uKcTime === KC.KC_SHARED.uKcTime && m.customProgramCacheKey() === KC.KC_PROGRAM_KEY,
     'D13d `onBeforeCompile`: wstawka wierzchołka, uniformy trybu i czas wspólny, jeden klucz programu');
-  // D13e — matowy wypalony kadłub WYŁĄCZNIE w trybie 1 (tryb 0 / CV-1a i statki żywe — szorstkość i metaliczność nietknięte)
+  // D13e — matowy wypalony kadłub WYŁĄCZNIE w trybie 1 (tryb 0 / CV-1a i statki żywe — szorstkość i metaliczność nietknięte przez wypalanie).
+  // ARC CV-4b — PRZECELOWANE ŚWIADOMIE (decyzja 42 (a), Finding 707): dwa nowe zapisy poza bramką wypalania — podłoga szorstkości ŻYWYCH kadłubów
+  // `max(roughnessFactor, uKcRoughMin)` (wspólne pokrętło `MODEL_ROUGH_MIN`; 0 — szorstkość z mapy jak CV-1a) i osmalenia pod `uKcScorchN > 0,5`
+  // (statek bez plam — gałąź pominięta). Wypalanie zostaje przy swoich 2 zapisach pod `uKcBurnMode > 0,5`; reszta pinu bez zmian.
   const G = KC.KC_MAIN_GLSL;
   const gate = G.match(/if \(uKcBurnMode > 0\.5\) \{([^}]*)\}/);
   const writes = (G.match(/(roughnessFactor|metalnessFactor)\s*=/g) ?? []).length;
-  assert(!!gate && /roughnessFactor = max\(roughnessFactor,/.test(gate[1]) && /metalnessFactor = min\(metalnessFactor,/.test(gate[1]) && writes === 2
+  const floorW = (G.match(/roughnessFactor = max\(roughnessFactor, uKcRoughMin\);/g) ?? []).length;
+  const scorchBlock = G.match(/if \(uKcScorchN > 0\.5\) \{([\s\S]*?)\n  \}\n  if \(uKcBurnMode > 0\.5\)/);
+  const scorchW = scorchBlock ? (scorchBlock[1].match(/(roughnessFactor|metalnessFactor)\s*=/g) ?? []).length : -1;
+  assert(!!gate && /roughnessFactor = max\(roughnessFactor,/.test(gate[1]) && /metalnessFactor = min\(metalnessFactor,/.test(gate[1])
+    && floorW === 1 && scorchW === 2 && writes === 2 + floorW + scorchW
     && sh.fragmentShader.indexOf('roughnessFactor = max') > sh.fragmentShader.indexOf('#include <metalnessmap_fragment>')
     && sh.fragmentShader.indexOf('roughnessFactor = max') < sh.fragmentShader.indexOf('#include <lights_physical_fragment>'),
-    'D13e szorstkość i metaliczność zmieniane tylko pod `uKcBurnMode > 0,5` (2 zapisy, po mapach, przed oświetleniem) — tryb 0 bez zmian');
+    `D13e szorstkość i metaliczność: wypalanie — 2 zapisy pod \`uKcBurnMode > 0,5\`; poza nim wyłącznie podłoga 707 (\`uKcRoughMin\`, ${floorW}) i osmalenia pod \`uKcScorchN\` (${scorchW}); po mapach, przed oświetleniem (razem ${writes})`);
 });
 
 // ── D14 ────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -44,7 +44,7 @@ export const EXP_TUNING = {
   EXP_RING_CORE:        0.6,
   EXP_DEBRIS_SPEED:     2.4,    // [Ls / s] prędkość odłamków
   EXP_DEBRIS_MS:        2200,   // życie odłamka (× 0,7–1,3)
-  EXP_DEBRIS_SIZE:      0.045,  // [Ls] rozmiar odłamka (promień bryłki przed rozciągnięciem)
+  EXP_DEBRIS_SIZE:      0.03,   // [Ls] rozmiar odłamka (promień bryłki przed rozciągnięciem); decyzja 42 (c) — 0,045 → 0,03 (kontrola łączna CV-5 + CV-4b)
   EXP_DEBRIS_HOT:       1.4,    // żar krawędzi odłamka na starcie (HDR), stygnie w pierwszych ~20 % życia
   EXP_EMBERS:           26,     // iskier żaru na wybuch główny przy budżecie High (Medium / Low — preset bez żaru)
   EXP_EMBER_SPEED:      3.2,    // [Ls / s]

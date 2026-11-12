@@ -5,7 +5,7 @@
 // `CombatCueData` pusta).
 //
 // Kształt sygnału: `{ kind, weapon, size, count, pos: {x, y, z}, pan, dist, encounterId, vesselId, t }` — `kind` ∈ fire /
-// impact / shieldHit / explosion / destroyed / kill (ARC CV-4a), `weapon` ∈ laser / kinetic / missile (rodzaje strzałów), `size` ∈ small /
+// impact / shieldHit / explosion / destroyed / kill (ARC CV-4a) / shieldDown (ARC CV-4b), `weapon` ∈ laser / kinetic / missile (rodzaje strzałów), `size` ∈ small /
 // medium / large, `pos` — pozycja RYSOWANA (scena bitwy), `pan` ∈ [−1, 1] z położenia na ekranie, `dist` — odległość od
 // kamery [WU], `count` — ile sygnałów scalono, `t` — czas prezentacji [ms].
 //
@@ -48,11 +48,12 @@ export function screenPan(viewX, viewZ, tanHalfHFov) {
   return p < -1 ? -1 : p > 1 ? 1 : (Number.isFinite(p) ? p : 0);
 }
 
-// Indeks klucza (rodzaj × broń / rozmiar) — liczba 0…14, bez sklejania napisów w gorącej ścieżce.
+// Indeks klucza (rodzaj × broń / rozmiar) — liczba 0…3·(liczba rodzajów)−1, bez sklejania napisów w gorącej ścieżce.
 const KIND_INDEX = Object.freeze(Object.fromEntries(CUE_KINDS.map((k, i) => [k, i])));
 const SUB_COUNT = 3;
 // ARC CV-4a — `kill` (zniszczenie w chwili trafienia zabijającego) pierwszy: bez niego w kolejności akumulator nigdy by nie wysłał.
-const EMIT_ORDER = Object.freeze(['kill', 'destroyed', 'explosion', 'impact', 'shieldHit', 'fire'].map((k) => KIND_INDEX[k]));
+// ARC CV-4b — `shieldDown` (rozpad osłony) po wybuchach, przed trafieniami — j.w.: rodzaj spoza listy nie wychodzi nigdy.
+const EMIT_ORDER = Object.freeze(['kill', 'destroyed', 'explosion', 'shieldDown', 'impact', 'shieldHit', 'fire'].map((k) => KIND_INDEX[k]));
 
 export function cueKeyIndex(kind, weapon, size) {
   const ki = KIND_INDEX[kind];

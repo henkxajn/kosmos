@@ -54,8 +54,10 @@ import { initialGfxLevel, normalizeGfxLevel, nextGfxLevelInCycle, readRendererSt
   QualityThrottle, LIVE_GFX_THROTTLE } from './combat/QualityPreset.js';                             // ARC CV-2b — wykrycie, zapis, dławienie
 import { CombatLightPool } from './combat/LightPool.js';                                              // ARC CV-2b — stała pula świateł (D-CV-18)
 import { CombatCueBus, cueWeaponOfCategory, cueSizeOfClass, screenPan } from './combat/CombatCueBus.js';   // ARC CV-2b — szyna sygnałów walki (F8)
-import { CombatLedger, pickTurret, ledgerRng, LEDGER_INFO_LEGEND } from './combat/CombatLedgerLogic.js';   // ARC CV-4a — rejestr salw (język broni, flaga cvWeapons)
-import { KC_SHARED, setKeyColourWreckState } from './KeyColourEmission.js';                           // ARC CV-1a — wspólne mnożniki maski; CV-5 — wypalanie wraku
+import { CombatLedger, pickTurret, ledgerRng, ledgerHash, LEDGER_INFO_LEGEND } from './combat/CombatLedgerLogic.js';   // ARC CV-4a — rejestr salw (język broni, flaga cvWeapons)
+import { KC_SHARED, KC_SCORCH_MAX, setKeyColourWreckState, setKeyColourScorch, setKeyColourScorchHeat, setKeyColourScorchCount } from './KeyColourEmission.js';   // ARC CV-1a — wspólne mnożniki maski; CV-5 — wypalanie wraku; CV-4b — osmalenia
+import { ShieldStates, bubbleAxes, ellipsoidPoint, hullPoint, scorchEnabled, allocScorch, scorchHeat, SHIELD_RIPPLES_MAX, SCORCH_MAX } from './combat/ShieldLogic.js';   // ARC CV-4b — osłony i pancerz
+import { ShieldBubblePool } from './combat/ShieldBubbles.js';                                         // ARC CV-4b — pula baniek osłon
 import { explosionPlan, explosionBudget, explosionClassOf, explosionSeed, damageStateOf, wreckHeatAt, wreckBurnColor, wreckFireWindow,
   wreckDrift, wreckConverge, sputterGate, emitterTicks, seedUnit as expSeedUnit } from './combat/ExplosionLogic.js';   // ARC CV-5 — wybuchy, uszkodzenia, wraki
 import { isStationInActiveSystem } from './StationRenderLogic.js';
@@ -5328,6 +5330,7 @@ export class ThreeRenderer {
       this._vessels.set(vessel.id, entry);
       if (killedLook) { entry.cvKilled = true; this._cvWpnKillLook(vessel.id, entry); }   // ARC CV-4a — przechył i zgaszenie jak w chwili zniszczenia
       else if (isWreck && this._cvDmgOn?.()) this._cvDmgWreckLook?.(vessel.id, entry);   // ARC CV-5 — wrak odbudowany: od razu wystygły (bez powtórki wybuchu)
+      this._cvShdReapplyScorch?.(vessel.id, entry);   // ARC CV-4b — osmalenia kadłuba po przebudowie (High)
       if (isEnemy && !isWreck && GAME_CONFIG.FEATURES.m4EnemyGhosts) this._applyVesselIntelVisibility(vessel, entry);
       this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
       if (isWreck && vessel.position?.dockedAt) {
@@ -5475,6 +5478,10 @@ export class ThreeRenderer {
     KC_SHARED.uKcRimMul.value = T.MODEL_RIM_GAIN ?? 0;
     KC_SHARED.uKcRimPow.value = T.MODEL_RIM_POWER ?? 4;
     KC_SHARED.uKcLiftCeil.value = T.MODEL_LIFT_CEIL ?? 0.95;
+    KC_SHARED.uKcRoughMin.value = T.MODEL_ROUGH_MIN ?? 0;   // ARC CV-4b (Finding 707) — podłoga szorstkości żywych kadłubów
+    KC_SHARED.uKcSpecCap.value = T.MODEL_SPEC_CAP ?? 0;     // ARC CV-4b (Finding 707) — kolano bezpośredniego odblasku
+    KC_SHARED.uKcScorchDark.value = T.SCORCH_DARK ?? 0.72;  // ARC CV-4b — osmalenia: przyciemnienie albedo
+    KC_SHARED.uKcScorchGlow.value = T.SCORCH_GLOW ?? 2.2;   // ARC CV-4b — osmalenia: żar świeżego brzegu
     const ep = themeEpoch();
     if (this._cvRimEpoch !== ep) {
       this._cvRimEpoch = ep;
@@ -7321,6 +7328,7 @@ export class ThreeRenderer {
       nowMs: this._presClock.nowMs, roundMs: R, gapL });
     if (!rec) return;
     this._cvWpnStats.rounds++;
+    if (this._cvShdOn?.()) this._cvShdPlanRound(rec, events);   // ARC CV-4b — bańka czy poszycie, rozpad (przed rysunkiem strzałów)
     const cues = F.cvPresets ? (this._ensureCueBus?.() ?? null) : null;
     for (const x of rec.entries) this._cvWpnSpawn(eng, x, events[x.index], rec, cues, led);
   }
@@ -7353,19 +7361,24 @@ export class ThreeRenderer {
     const px = p1x * Math.cos(ang) + p2x * Math.sin(ang), py = p1y * Math.cos(ang) + p2y * Math.sin(ang), pz = p1z * Math.cos(ang) + p2z * Math.sin(ang);
     // punkt końcowy względem środka celu (tryb 1): trafienie — kadłub od strony strzelca; pudło — obok celu i dalej za nim
     let ox, oy, oz;
-    if (x.hit) { const k = -0.35 * tSize; ox = dx * k; oy = dy * k; oz = dz * k; }
+    // ARC CV-4b (flaga `cvShields`) — trafienie kończy się na BAŃCE, dopóki osłona trzyma (plan rundy), inaczej na POSZYCIU (pod bańką);
+    // rama kanoniczna — punkt modelu (tryb 2: obraca się ze statkiem). Flaga OFF — punkt CV-4a co do bitu.
+    const shdEp = x.hit && x.shd && this._cvShdOn?.() ? this._cvShdEndPoint(x, tw, dx, dy, dz, tSize) : null;
+    const endMode = shdEp ? shdEp.mode : 1;
+    if (shdEp) { ox = shdEp.ox; oy = shdEp.oy; oz = shdEp.oz; }
+    else if (x.hit) { const k = -0.35 * tSize; ox = dx * k; oy = dy * k; oz = dz * k; }
     else {
       const off = Math.max(0.5 * L, (T.WPN_MISS_OFFSET ?? 0.9) * tSize), over = Math.max(0, T.WPN_MISS_OVERSHOOT ?? 0.6) * dl;
       ox = px * off + dx * over; oy = py * off + dy * over; oz = pz * off + dz * over;
     }
     const tyy = tw.y ?? 0.3;
-    const bx = tw.x + ox, by = tyy + oy, bz = tw.z + oz;
+    const bx = shdEp ? shdEp.x : tw.x + ox, by = shdEp ? shdEp.y : tyy + oy, bz = shdEp ? shdEp.z : tw.z + oz;
     const alpha = x.hit ? 0.95 : 0.55;
     if (x.kind === 'laser') {
       eng.spawnMote({ t0: x.chargeAt, life: Math.max(1, x.fireAt - x.chargeAt), x: mx, y: my, z: mzz, color, alpha: 0.95,
         size: (T.WPN_CHARGE_K ?? 0.6) * aSize, kind: 2, grow: 1.8, minPx: 3, maxPx: 28, id: x.attacker, mode: mMode, ox: mox, oy: moy, oz: moz });
       eng.spawnBeam({ t0: x.fireAt, life: Math.max(1, x.beamEnd - x.fireAt), ax: mx, ay: my, az: mzz, bx, by, bz, color, alpha,
-        aId: x.attacker, aMode: mMode, aox: mox, aoy: moy, aoz: moz, bId: x.target, bMode: 1, box: ox, boy: oy, boz: oz });
+        aId: x.attacker, aMode: mMode, aox: mox, aoy: moy, aoz: moz, bId: x.target, bMode: endMode, box: ox, boy: oy, boz: oz });
     } else {
       const missile = x.kind === 'missile';
       eng.spawnMote({ t0: x.fireAt, life: Math.max(1, (missile ? 0.08 : (T.WPN_MUZZLE_LIFE ?? 0.1)) * R), x: mx, y: my, z: mzz,
@@ -7378,15 +7391,20 @@ export class ThreeRenderer {
       eng.spawnBolt({ t0: x.fireAt, flight, trail: Math.max(1, (missile ? (T.WPN_MISSILE_TRAIL ?? 0.18) : (T.WPN_TRACER_LEN ?? 0.08)) * R),
         ax: mx, ay: my, az: mzz, bx, by, bz, cx: ux / ul * arc, cy: uy / ul * arc, cz: uz / ul * arc, color, alpha,
         widthMul: missile ? (T.WPN_MISSILE_WIDTH_MUL ?? 1.25) : 1, head: missile ? (T.WPN_MISSILE_HEAD ?? 2.5) : (T.WPN_KIN_HEAD ?? 1.2),
-        miss: !x.hit, aId: x.attacker, aMode: mMode, aox: mox, aoy: moy, aoz: moz, bId: x.target, bMode: 1, box: ox, boy: oy, boz: oz });
+        miss: !x.hit, aId: x.attacker, aMode: mMode, aox: mox, aoy: moy, aoz: moz, bId: x.target, bMode: endMode, box: ox, boy: oy, boz: oz });
     }
-    if (x.hit) this._cvWpnImpact(eng, x, bx, by, bz, ox, oy, oz, -dx, -dy, -dz, tSize, R);
+    if (x.hit) this._cvWpnImpact(eng, x, bx, by, bz, ox, oy, oz, -dx, -dy, -dz, tSize, R, endMode);
     this._cvWpnStats.shots++;
     if (cues) {
       const weapon = cueWeaponOfCategory(x.category);
       cues.schedule(x.fireAt, 'fire', weapon, av ? cueSizeOfClass(vesselSizeClass(av)) : null, mx, my, mzz, x.encounterId, x.attacker);
       if (x.hit) cues.schedule(x.impactAt, x.blocked > 0 ? 'shieldHit' : 'impact', weapon, tv ? cueSizeOfClass(vesselSizeClass(tv)) : null,
         bx, by, bz, x.encounterId, x.target);
+      // ARC CV-4b — rozpad osłony w chwili trafienia, które ją zbija (plan rundy; pokaz rozpadu w tej samej klatce — `_cvShdImpacts`)
+      if (x.shd?.collapse) {
+        cues.schedule(x.impactAt, 'shieldDown', null, tv ? cueSizeOfClass(vesselSizeClass(tv)) : null, bx, by, bz, x.encounterId, x.target);
+        if (this._cvShd) this._cvShd.stats.cues++;   // odczyt `shieldInfo().liczniki.cues` — sygnały rozpadu z bitwy i z konsoli
+      }
       if (x.killed) {
         const kAt = led.killAt(x.target);
         if (Number.isFinite(kAt)) cues.schedule(kAt, 'kill', null, tv ? cueSizeOfClass(vesselSizeClass(tv)) : null, tw.x, tyy, tw.z, x.encounterId, x.target);
@@ -7396,10 +7414,25 @@ export class ThreeRenderer {
 
   // Trafienie: kadłub (obrażenia > 0) — iskry od kadłuba, żar, biały błysk; same osłony — cyjanowe iskry i poświata (bańka osłony
   // z falą — CV-4b). Liczba iskier z budżetu cząstek presetu (CV-2b). Kierunki iskier z ziarna wpisu (bez losowania gry).
-  _cvWpnImpact(eng, x, bx, by, bz, ox, oy, oz, nx, ny, nz, tSize, R) {
+  _cvWpnImpact(eng, x, bx, by, bz, ox, oy, oz, nx, ny, nz, tSize, R, mode = 1, tShift = 0, asHull = false) {
     const T = this.cvTuning;
     const L = VESSEL_TARGET_SIZE.frigate;
-    const t0 = x.impactAt;
+    // ARC CV-4b (flaga `cvShields`) — trafienie w BAŃKĘ: falę rysuje bańka osłony (`ShieldBubbles`) — bez iskier i bez łaty cyjanowej; trafienie
+    // rozbijające z nadmiarem (`dmg` > 0) — iskry i żar CV-4a na POSZYCIU chwilę po błysku rozpadu (nadmiar przebija przez pancerz).
+    if (!asHull && x.shd?.onBubble && this._cvShdOn?.()) {
+      if (!x.shd.collapse || !(x.dmg > 0)) return;
+      const delay = Math.max(0, T.SHD_HULL_DELAY ?? 0.035) * R;
+      if (x.shdHull) {
+        const w = this._cvShdHullW ?? (this._cvShdHullW = { x: 0, y: 0, z: 0 });
+        if (!this._cvWpnResolveLocal(x.target, x.shdHull[0], x.shdHull[1], x.shdHull[2], w)) return;
+        this._cvWpnImpact(eng, x, w.x, w.y, w.z, x.shdHull[0], x.shdHull[1], x.shdHull[2], nx, ny, nz, tSize, R, 2, delay, true);
+      } else if (x.shdHullW) {
+        const h = x.shdHullW;
+        this._cvWpnImpact(eng, x, bx - ox + h[0], by - oy + h[1], bz - oz + h[2], h[0], h[1], h[2], nx, ny, nz, tSize, R, 1, delay, true);
+      }
+      return;
+    }
+    const t0 = x.impactAt + tShift;
     const missile = x.kind === 'missile';
     const hull = x.dmg > 0;
     const budget = GAME_CONFIG.FEATURES?.cvPresets ? (this._gfx?.eff?.particles ?? 16000) : 16000;
@@ -7414,16 +7447,16 @@ export class ThreeRenderer {
       const sp = speed * (0.5 + 0.7 * rnd()) / vl;
       eng.spawnMote({ t0, life: Math.max(1, (T.WPN_SPARK_LIFE ?? 0.35) * R * (0.6 + 0.4 * rnd())), x: bx, y: by, z: bz,
         vx: vx * sp, vy: vy * sp, vz: vz * sp, color: sparkCol, alpha: 1, size: (T.WPN_SPARK_SIZE ?? 0.18) * L, kind: 0, grow: 0.5,
-        minPx: 1.5, maxPx: 6, id: x.target, mode: 1, ox, oy, oz });
+        minPx: 1.5, maxPx: 6, id: x.target, mode, ox, oy, oz });
     }
     if (hull) {
       eng.spawnMote({ t0, life: Math.max(1, (T.WPN_GLOW_LIFE ?? 0.5) * R), x: bx, y: by, z: bz, color: 0xff6a20, alpha: 0.9,
-        size: (T.WPN_GLOW_K ?? 0.8) * tSize * (missile ? 1.4 : 1), kind: 1, grow: 1.3, minPx: 3, maxPx: 48, id: x.target, mode: 1, ox, oy, oz });
+        size: (T.WPN_GLOW_K ?? 0.8) * tSize * (missile ? 1.4 : 1), kind: 1, grow: 1.3, minPx: 3, maxPx: 48, id: x.target, mode, ox, oy, oz });
       eng.spawnMote({ t0, life: Math.max(1, 0.08 * R), x: bx, y: by, z: bz, color: 0xffffff, alpha: 1, size: 0.5 * tSize * (missile ? 1.5 : 1),
-        kind: 1, grow: 1.6, minPx: 4, maxPx: 32, id: x.target, mode: 1, ox, oy, oz });
+        kind: 1, grow: 1.6, minPx: 4, maxPx: 32, id: x.target, mode, ox, oy, oz });
     } else {
       eng.spawnMote({ t0, life: Math.max(1, 0.2 * R), x: bx, y: by, z: bz, color: FX_SHIELD_COLOR, alpha: 0.8, size: 0.6 * tSize,
-        kind: 1, grow: 1.4, minPx: 3, maxPx: 36, id: x.target, mode: 1, ox, oy, oz });
+        kind: 1, grow: 1.4, minPx: 3, maxPx: 36, id: x.target, mode, ox, oy, oz });
     }
   }
 
@@ -7497,7 +7530,8 @@ export class ThreeRenderer {
   _cvWpnTick() {
     const led = this._cvLedger;
     const now = this._presClock.nowMs;
-    const { kills } = led.advance(now);
+    const { kills, impacts } = led.advance(now);
+    if (impacts.length && (this._cvShd || this._cvShdOn?.())) this._cvShdImpacts?.(impacts);   // ARC CV-4b — fale, rozpad, osmalenia
     for (const id of kills) this._cvWpnPresentKill(id);
     if (!(this._cvWpnPruneAt > now - 2000)) {
       this._cvWpnPruneAt = now;
@@ -7555,6 +7589,363 @@ export class ThreeRenderer {
     entry.cvKilled = true;
     this._cvWpnStats.wreckUnknown++;
     return null;
+  }
+
+  // ── ARC CV-4b — OSŁONY I PANCERZ (flaga `cvShields`; plan §2.4, §2.10; Finding 653 (b)) ──────────────────────────────────────
+  // Plan rundy (`ShieldStates.planRound` — w chwili nadejścia, wpisy rejestru w kolejności trafień): strzał kończy się na BAŃCE, dopóki
+  // osłona trzyma (koniec wiązki / pocisku tam, gdzie strzał spotyka elipsoidę bańki), inaczej na POSZYCIU (elipsoida wpisana w kadłub —
+  // pod bańką); trafienie zbijające osłonę do zera (`shieldAfter` ≤ ε) — rozpad + sygnał `shieldDown` w chwili trafienia. Pokaz trafienia
+  // (`_cvShdImpacts`, z `_cvWpnTick`): fala na bańce, rozpad, osmalenie kadłuba (High). Co klatkę (`_cvShdTick`): zegar efektów osłon
+  // (prezentacja × FX_TIME_SCALE — pauza = pauza), próbki osłony POKAZYWANEJ (regeneracja — słaba fala, po rozpadzie powrót bańki), bańki
+  // z puli (`ShieldBubbles`: pozycja i obrót sprite'a × rama kanoniczna — idą za sceną i choreografią), żar osmaleń. Statek bez osłony —
+  // bez bańki. Wynik bitwy nietknięty (keeper `cv_fx_results` A9).
+
+  /** Czy ścieżka CV-4b działa: `cvShields` + rejestr salw (`cvWeapons`) + silnik FX (`cvFxEngine`) + efekty walki (`fcCombatFx`). */
+  _cvShdOn() {
+    const F = GAME_CONFIG.FEATURES;
+    return !!(F?.cvShields && F?.cvWeapons && F?.cvFxEngine && F?.fcCombatFx);
+  }
+
+  _cvShdState() {
+    if (this._cvShd) return this._cvShd;
+    this._cvShd = {
+      states: new ShieldStates({ tuning: this.cvTuning }),
+      now: 0,                 // [ms] zegar efektów osłon (krok prezentacji × FX_TIME_SCALE)
+      landed: new Map(),      // id → osłona zabrana przez trafienia pokazane w tej klatce (regeneracja = wzrost BEZ nich)
+      scorch: new Map(),      // id → plamy osmalenia [{ t0, p:[x,y,z] }] (przestrzeń modelu)
+      debug: new Map(),       // id → { sh, max, virtual, n } — `cvShieldHit` poza bitwą
+      seen: new Set(),
+      seeds: new Map(),
+      v: new THREE.Vector3(), qi: new THREE.Quaternion(), u: { x: 0, y: 0, z: 0 }, p: {}, h: {},
+      ep: { mode: 1, ox: 0, oy: 0, oz: 0, x: 0, y: 0, z: 0 },
+      scorchOn: false,
+      stats: { planned: 0, ripples: 0, collapses: 0, regens: 0, reforms: 0, hullHits: 0, scorch: 0, debugHits: 0, cues: 0 },
+    };
+    return this._cvShd;
+  }
+
+  /** Pula baniek (RAZ; rozgrzewka programu przy budowie — bez przycięcia przy pierwszym trafieniu). */
+  _ensureShieldBubbles() {
+    if (this._shieldBubbles) return this._shieldBubbles;
+    if (!this._fxGroup) this._ensureFxEngine();
+    this._shieldBubbles = new ShieldBubblePool({ THREE, parent: this._fxGroup, logDepth: logDepthOn() });
+    this._shieldBubblesPrewarm = this._shieldBubbles.prewarm(this.renderer, this.camera);
+    return this._shieldBubbles;
+  }
+
+  /** Budżet fal na bańkę z presetu (High 8 / Medium 4 / Low 1; presety OFF — High). */
+  _cvShdRipples() {
+    const n = GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff?.shieldRipples : null;
+    return Number.isFinite(n) ? Math.max(1, Math.min(SHIELD_RIPPLES_MAX, n)) : SHIELD_RIPPLES_MAX;
+  }
+
+  /** Kierunek świata → przestrzeń statku: rama kanoniczna (sprite × rama, przestrzeń modelu) albo sam obrót sprite'a. */
+  _cvShdDir(e, dx, dy, dz, out) {
+    const st = this._cvShd;
+    if (e?.canonical && e.rig?.canon) st.qi.copy(e.sprite.quaternion).multiply(e.rig.canon.quaternion).invert();
+    else if (e?.sprite) st.qi.copy(e.sprite.quaternion).invert();
+    else return null;
+    st.v.set(dx, dy, dz).applyQuaternion(st.qi);
+    out.x = st.v.x; out.y = st.v.y; out.z = st.v.z;
+    return out;
+  }
+
+  /** Plan rundy osłon: pole ładunku `shieldAfter` na wpisach, osłona pokazywana i maks. z `vesselStates` starcia (pierwsze spojrzenie). */
+  _cvShdPlanRound(rec, events) {
+    const st = this._cvShdState();
+    const led = this._cvLedger;
+    const enc = (window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []).find((e) => e.id === rec.encounterId) ?? null;
+    for (const x of rec.entries) {
+      const sa = Number(events[x.index]?.shieldAfter);
+      x.shieldAfter = Number.isFinite(sa) ? sa : Infinity;   // brak pola (stary ładunek) — nigdy rozpad
+    }
+    st.states.planRound(rec.entries, (id) => {
+      const s = enc?.vesselStates?.get?.(id);
+      if (!s) return null;
+      return { presented: led ? led.presented(id, s.hp, s.shieldHP, s.hpStart, s.shieldHPStart).shield : Math.max(0, s.shieldHP), max: s.shieldHPStart };
+    });
+    st.stats.planned += rec.entries.length;
+  }
+
+  /**
+   * Punkt końcowy trafienia wg planu: na BAŃCE (elipsoida z półwymiarów kadłuba — `bubbleAxes`) albo na POSZYCIU (`hullPoint`), w kierunku
+   * strzelca. Rama kanoniczna — punkt modelu (tryb 2) + świat; inny rysunek — przesunięcie w świecie (sfera 0,55 × rozmiar / 0,35 × rozmiar).
+   * Zapisuje na wpisie `shdDir` (kierunek fali na sferze bańki), `shdHull` (punkt poszycia w przestrzeni modelu — iskry nadmiaru, osmalenie)
+   * albo `shdHullW` (przesunięcie poszycia w świecie). Zwraca wspólny obiekt (skopiuj przed kolejnym wywołaniem).
+   */
+  _cvShdEndPoint(x, tw, dx, dy, dz, tSize) {
+    const st = this._cvShdState();
+    const e = this._vessels.get(x.target);
+    const out = st.ep;
+    const T = this.cvTuning;
+    const onBubble = !!x.shd?.onBubble;
+    if (e?.canonical && e.rig?.half && this._cvShdDir(e, -dx, -dy, -dz, st.u)) {
+      const hp = hullPoint(e.rig.half, st.u.x, st.u.y, st.u.z, T, st.h);
+      x.shdHull = [hp.x, hp.y, hp.z];
+      let p = hp;
+      if (onBubble) {
+        p = ellipsoidPoint(bubbleAxes(e.rig.half, T), st.u.x, st.u.y, st.u.z, st.p);
+        x.shdDir = [p.sx, p.sy, p.sz];
+      }
+      out.mode = 2; out.ox = p.x; out.oy = p.y; out.oz = p.z;
+      if (!this._cvWpnResolveLocal(x.target, p.x, p.y, p.z, out)) { out.x = tw.x; out.y = tw.y ?? 0.3; out.z = tw.z; }
+      return out;
+    }
+    const k = -(onBubble ? 0.55 : 0.35) * tSize;
+    out.mode = 1; out.ox = dx * k; out.oy = dy * k; out.oz = dz * k;
+    out.x = tw.x + out.ox; out.y = (tw.y ?? 0.3) + out.oy; out.z = tw.z + out.oz;
+    x.shdHull = null;
+    x.shdHullW = [-dx * 0.35 * tSize, -dy * 0.35 * tSize, -dz * 0.35 * tSize];
+    if (onBubble && this._cvShdDir(e, -dx, -dy, -dz, st.u)) {
+      const l = Math.hypot(st.u.x, st.u.y, st.u.z) || 1;
+      x.shdDir = [st.u.x / l, st.u.y / l, st.u.z / l];
+    }
+    return out;
+  }
+
+  /** Trafienia pokazane w tej klatce (rejestr): fala na bańce / rozpad wg planu, osłona zabrana (regeneracja), osmalenie kadłuba (High). */
+  _cvShdImpacts(impacts) {
+    const st = this._cvShdState();
+    const ripN = this._cvShdRipples();
+    for (const x of impacts) {
+      if (!x?.hit || !x.shd) continue;
+      if (x.blocked > 0) st.landed.set(x.target, (st.landed.get(x.target) ?? 0) + x.blocked);
+      const dir = x.shdDir ? { sx: x.shdDir[0], sy: x.shdDir[1], sz: x.shdDir[2] } : null;
+      const r = st.states.impact(x, dir, st.now, { ripples: ripN });
+      if (r?.ripple >= 0) st.stats.ripples++;
+      if (r?.collapse) st.stats.collapses++;
+      if (x.shd.hull && x.dmg > 0) {
+        st.stats.hullHits++;
+        if (x.shdHull) this._cvShdScorch(x.target, x.shdHull);
+      }
+    }
+  }
+
+  /** Raz na klatkę (z `_tickCvFx`, po rejestrze): zegar efektów osłon, próbki osłony pokazywanej, bańki, żar osmaleń. */
+  _cvShdTick() {
+    const on = this._cvShdOn();
+    const st = this._cvShd ?? (on ? this._cvShdState() : null);
+    if (!st) return;
+    const T = this.cvTuning;
+    st.now += (this._presClock?.lastStepMs ?? 0) * Math.max(0, Number(T?.FX_TIME_SCALE ?? 1) || 0);
+    const seen = st.seen;
+    seen.clear();
+    if (on) {
+      const K = window.KOSMOS;
+      const led = this._cvLedger;
+      for (const enc of K?.deepSpaceCombatSystem?.listActive?.() ?? []) {
+        if (!isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: K?.activeSystemId })) continue;
+        for (const [id, s] of enc.vesselStates ?? []) {
+          if (!(s.shieldHPStart > 0)) continue;   // statek bez osłony — bez bańki
+          const pr = led ? led.presented(id, s.hp, s.shieldHP, s.hpStart, s.shieldHPStart).shield : Math.max(0, s.shieldHP);
+          const r = st.states.sample(id, { presented: pr, max: s.shieldHPStart, landed: st.landed.get(id) ?? 0, now: st.now });
+          if (r?.shimmer) { if (r.reform) st.stats.reforms++; else st.stats.regens++; }
+          seen.add(id);
+        }
+      }
+      for (const [id, d] of st.debug) {
+        if (seen.has(id)) continue;
+        st.states.sample(id, { presented: d.sh, max: d.max, landed: st.landed.get(id) ?? 0, now: st.now });
+        seen.add(id);
+      }
+    }
+    st.landed.clear();
+    const pool = this._shieldBubbles ?? (on && st.states.ships.size ? this._ensureShieldBubbles() : null);
+    if (pool) this._cvShdBubbles(pool, st, seen);
+    this._cvShdScorchTick(st);
+  }
+
+  // Bańki: stan → slot puli (przekształcenie z TEJ klatki — scena i choreografia już ustawiły sprite), uniformy; koniec — slot zwolniony.
+  _cvShdBubbles(pool, st, seen) {
+    const T = this.cvTuning;
+    pool.root.visible = !this._galaxyActive;
+    const sh = pool.shared;
+    sh.uCore.value = T.SHD_CORE ?? 1.5; sh.uRim.value = T.SHD_RIM ?? 2.0; sh.uRimPow.value = Math.max(0.5, T.SHD_RIM_POW ?? 6);
+    sh.uBack.value = T.SHD_BACK ?? 0.35; sh.uShell.value = T.SHD_SHELL ?? 0;
+    sh.uCell.value = T.SHD_CELL ?? 6.5; sh.uCellGain.value = T.SHD_CELL_GAIN ?? 0.55; sh.uRipMs.value = Math.max(1, T.SHD_RIPPLE_MS ?? 720);
+    sh.uRipSpeed.value = T.SHD_RIPPLE_SPEED ?? 2.6; sh.uRipWidth.value = Math.max(0.01, T.SHD_RIPPLE_WIDTH ?? 0.085);
+    sh.uFlickHz.value = T.SHD_FLICKER_HZ ?? 11; sh.uColMs.value = Math.max(1, T.SHD_COLLAPSE_MS ?? 900);
+    sh.uColFlash.value = T.SHD_COLLAPSE_FLASH ?? 1.8; sh.uShMs.value = Math.max(1, T.SHD_SHIMMER_MS ?? 650);
+    sh.uTimeS.value = (st.now / 1000) % 600;
+    const ripN = this._cvShdRipples();
+    const ripMs = Math.max(1, T.SHD_RIPPLE_MS ?? 720);
+    const vm = window.KOSMOS?.vesselManager;
+    for (const [id, s] of st.states.ships) {
+      const e = this._vessels.get(id);
+      const dead = !e?.sprite || e.cvKilled || e.isWreck;
+      const v = dead ? null : st.states.visual(id, st.now);
+      if (!v?.visible || !e.sprite.visible) {
+        pool.release(id);
+        if (dead || (!seen.has(id) && !st.debug.has(id))) st.states.drop(id);
+        continue;
+      }
+      const slot = pool.acquire(id, st.now);
+      const m = slot.mesh;
+      const grow = v.collapseAge >= 0 ? 1 + Math.max(0, T.SHD_COLLAPSE_GROW ?? 0.14) * (v.collapseAge / Math.max(1, T.SHD_COLLAPSE_MS ?? 900)) : 1;
+      m.position.copy(e.sprite.position);
+      if (e.canonical && e.rig?.canon && e.rig.half) {
+        const ax = bubbleAxes(e.rig.half, T);
+        const sc = e.rig.canon.scale.x * grow;
+        m.quaternion.copy(e.sprite.quaternion).multiply(e.rig.canon.quaternion);
+        m.scale.set(ax[0] * sc, ax[1] * sc, ax[2] * sc);
+      } else {
+        const ves = vm?.getVessel?.(id);
+        m.quaternion.copy(e.sprite.quaternion);
+        m.scale.setScalar(0.55 * (ves ? vesselTargetSize(ves) : VESSEL_TARGET_SIZE.frigate) * grow);
+      }
+      const u = slot.u;
+      u.uFade.value = v.fade; u.uBright.value = v.bright; u.uFlicker.value = v.flicker; u.uCrisp.value = v.crisp;
+      u.uCol.value = v.collapseAge; u.uSh.value = v.shimmerAge; u.uShGain.value = v.shimmerGain; u.uCount.value = ripN;
+      let seed = st.seeds.get(id);
+      if (seed === undefined) { seed = (ledgerHash('cv4b-cells', id) % 997) / 7.3; st.seeds.set(id, seed); }
+      u.uSeed.value = seed;
+      const ra = u.uRip.value, am = u.uRipAmp.value;
+      for (let i = 0; i < SHIELD_RIPPLES_MAX; i++) {
+        const r = s.ripples[i];
+        const age = st.now - r.t0;
+        const o = i * 4;
+        ra[o] = r.sx; ra[o + 1] = r.sy; ra[o + 2] = r.sz;
+        ra[o + 3] = i < ripN && age >= 0 && age < ripMs ? age : -1;
+        am[i] = r.amp;
+      }
+      m.visible = true;
+    }
+  }
+
+  // Osmalenie kadłuba w punkcie modelu (High): pula statku (najstarsza zastępowana), na wszystkie materiały rigu (przestrzeń geometrii siatki).
+  _cvShdScorch(id, p) {
+    if (!scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null)) return;
+    const st = this._cvShdState();
+    const e = this._vessels.get(id);
+    if (!(e?.canonical && e.rig?.scorchXf?.length)) return;
+    let list = st.scorch.get(id);
+    if (!list) { list = []; st.scorch.set(id, list); }
+    const k = allocScorch(list, Math.min(SCORCH_MAX, KC_SCORCH_MAX), st.now);
+    list[k].p[0] = p[0]; list[k].p[1] = p[1]; list[k].p[2] = p[2];
+    this._cvShdApplyScorch(e, list, st.now);
+    st.scorchOn = true;
+    st.stats.scorch++;
+  }
+
+  _cvShdApplyScorch(e, list, now) {
+    const T = this.cvTuning;
+    const r = Math.max(1e-4, T.SCORCH_R ?? 0.085);
+    for (const xf of e.rig?.scorchXf ?? []) {
+      const m = xf.inv;
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i].p;
+        setKeyColourScorch(xf.mat, i,
+          m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
+          m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
+          m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14],
+          r / (xf.s2m || 1), scorchHeat(now - list[i].t0, T));
+      }
+      setKeyColourScorchCount(xf.mat, list.length);
+    }
+  }
+
+  // Żar plam stygnie (tylko dopóki coś jest ciepłe); preset bez osmaleń (Medium / Low) — plamy zdjęte; statek usunięty — zapis zdjęty.
+  _cvShdScorchTick(st) {
+    if (!st.scorchOn) return;
+    const on = scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null) && GAME_CONFIG.FEATURES?.cvShields;
+    const T = this.cvTuning;
+    const cool = Math.max(1, T.SCORCH_COOL_MS ?? 1800);
+    for (const [id, list] of st.scorch) {
+      const e = this._vessels.get(id);
+      if (!e) { st.scorch.delete(id); continue; }
+      if (!on) {
+        for (const xf of e.rig?.scorchXf ?? []) setKeyColourScorchCount(xf.mat, 0);
+        st.scorch.delete(id);
+        continue;
+      }
+      let hot = false;
+      for (const s of list) if (st.now - s.t0 < cool + 50) { hot = true; break; }
+      if (!hot) continue;
+      for (const xf of e.rig?.scorchXf ?? []) for (let i = 0; i < list.length; i++) setKeyColourScorchHeat(xf.mat, i, scorchHeat(st.now - list[i].t0, T));
+    }
+    if (!st.scorch.size) st.scorchOn = false;
+  }
+
+  /** Rig przebudowany (zmiana presetu, wczytanie): osmalenia statku wracają na nowe materiały (High). */
+  _cvShdReapplyScorch(id, e) {
+    const list = this._cvShd?.scorch?.get?.(id);
+    if (!list?.length || !(e?.canonical && e.rig?.scorchXf?.length)) return;
+    if (!scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null)) return;
+    this._cvShdApplyScorch(e, list, this._cvShd.now);
+  }
+
+  /**
+   * ARC CV-4b — `KOSMOS.debug.cvShieldHit(...)`: trafienie w osłonę statku poza bitwą (parada / bitwa po końcu) — tylko prezentacja: każde
+   * wywołanie zabiera ~42 % osłony (`maxHint` — osłona z modułów; brak — osłona wirtualna 35), trzecie ją rozbija, kolejne trafiają kadłub
+   * (iskry, żar, osmalenie na High). Kierunek — od strony kamery z rozrzutem z ziarna. Zwolnione tempo: `cvTuning.FX_TIME_SCALE`.
+   */
+  cvShieldHitVessel(id, { maxHint = 0 } = {}) {
+    if (!this._cvShdOn()) return { ok: false, reason: 'cvShields_off' };
+    const e = this._vessels.get(id);
+    if (!e?.sprite?.visible) return { ok: false, reason: 'not_visible' };
+    if (e.cvKilled || e.isWreck) return { ok: false, reason: 'wreck' };
+    if (window.KOSMOS?.deepSpaceCombatSystem?._findActiveEncounterContaining?.(id)) return { ok: false, reason: 'in_battle' };
+    const st = this._cvShdState();
+    const eng = this._ensureFxEngine();
+    this._ensureShieldBubbles();
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null;
+    let d = st.debug.get(id);
+    if (!d) {
+      const mx = Number(maxHint) > 0 ? Number(maxHint) : 35;
+      d = { max: mx, sh: mx, virtual: !(Number(maxHint) > 0), n: 0 };
+      st.debug.set(id, d);
+    }
+    d.n++;
+    const sp = e.sprite.position, cp = this.camera.position;
+    const rnd = ledgerRng(ledgerHash('cv4b-hit', id, d.n));
+    let ux = cp.x - sp.x, uy = cp.y - sp.y, uz = cp.z - sp.z;
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux = ux / ul + (rnd() * 2 - 1) * 0.6; uy = uy / ul + (rnd() * 2 - 1) * 0.6; uz = uz / ul + (rnd() * 2 - 1) * 0.6;
+    const ul2 = Math.hypot(ux, uy, uz) || 1;
+    const dx = -ux / ul2, dy = -uy / ul2, dz = -uz / ul2;   // kierunek strzału (strzelec → cel)
+    const full = 0.42 * d.max;
+    const blocked = Math.min(d.sh, full);
+    const dmg = blocked < full ? Math.max(1, full - blocked) : 0;   // nadmiar przez pancerz — minimum 1 jak w DSCS
+    const before = d.sh;
+    d.sh = Math.max(0, d.sh - blocked);
+    const now = this._presClock?.nowMs ?? 0;
+    const R = window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000;
+    const x = { encounterId: null, round: d.n, index: 0, attacker: null, target: id, kind: 'kinetic', category: 'medium', hit: true,
+      dmg, blocked, shieldAfter: d.sh, killed: false, fireAt: now, impactAt: now, seed: ledgerHash('cv4b-hit-fx', id, d.n), u1: rnd(), u2: rnd(), u3: rnd() };
+    st.states.planRound([x], () => ({ presented: before, max: d.max }));
+    const tSize = v ? vesselTargetSize(v) : VESSEL_TARGET_SIZE.frigate;
+    const ep = this._cvShdEndPoint(x, sp, dx, dy, dz, tSize);
+    this._cvWpnImpact(eng, x, ep.x, ep.y, ep.z, ep.ox, ep.oy, ep.oz, -dx, -dy, -dz, tSize, R, ep.mode);
+    this._cvShdImpacts([x]);
+    if (GAME_CONFIG.FEATURES?.cvPresets) {
+      const cues = this._ensureCueBus?.();
+      const size = v ? cueSizeOfClass(vesselSizeClass(v)) : null;
+      cues?.schedule(now, x.shd.onBubble ? 'shieldHit' : 'impact', 'kinetic', size, ep.x, ep.y, ep.z, null, id);
+      if (x.shd.collapse) { cues?.schedule(now, 'shieldDown', null, size, ep.x, ep.y, ep.z, null, id); st.stats.cues++; }
+    }
+    st.stats.debugHits++;
+    return { ok: true, id, name: v?.name ?? id, hit: d.n, shield: Number(d.sh.toFixed(2)), max: d.max, virtualShield: d.virtual,
+      onBubble: x.shd.onBubble, collapse: x.shd.collapse, hull: x.shd.hull && dmg > 0,
+      scorch: (st.scorch.get(id)?.length ?? 0), fxTimeScale: this.cvTuning?.FX_TIME_SCALE ?? 1, paused: !!window.KOSMOS?.timeSystem?.isPaused };
+  }
+
+  /** ARC CV-4b — odczyt: stan osłon (bańka podniesiona / opadła, siła, fale), pula baniek, osmalenia, liczniki, budżet fal presetu. */
+  cvShieldInfo() {
+    const st = this._cvShd;
+    const vm = window.KOSMOS?.vesselManager;
+    const ships = [];
+    if (st) {
+      for (const [id, s] of st.states.ships) {
+        const v = st.states.visual(id, st.now);
+        ships.push({ statek: vm?.getVessel?.(id)?.name ?? id, maks: s.max, sila: Number((s.frac ?? 0).toFixed(3)), banka: s.dispUp ? 'trzyma' : 'opadla',
+          widoczna: !!v?.visible, fale: s.stats.ripples, rozpady: s.stats.collapses, regeneracje: s.stats.regens, powroty: s.stats.reforms,
+          osmalenia: st.scorch.get(id)?.length ?? 0 });
+      }
+    }
+    return { cvShields: !!GAME_CONFIG.FEATURES?.cvShields, on: this._cvShdOn(), fxTimeScale: this.cvTuning?.FX_TIME_SCALE ?? 1,
+      faleNaBanke: this._cvShdRipples(), osmaleniaWlaczone: scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null),
+      zegarMs: st ? Math.round(st.now) : null, statki: ships, liczniki: st ? { ...st.stats, plan: { ...st.states.stats } } : null,
+      pula: this._shieldBubbles?.stats() ?? null, rozgrzewka: this._shieldBubblesPrewarm ?? null };
   }
 
   // ── ARC CV-5 — WYBUCHY, STANY USZKODZEŃ, PŁONĄCE WRAKI (flaga `cvDamage`; plan §2.5, §2.10; Findingi 615, 618, 619, 620, 627,
@@ -8009,6 +8400,7 @@ export class ThreeRenderer {
     });
     // ARC CV-5 (Finding 644) — rozgrzewka: programy wszystkich pul (strzały, wybuchy, dym, odłamki) i bufory przed pierwszym użyciem
     this._fxPrewarm = this._fxEngine.prewarm?.(this.renderer, this.camera) ?? null;
+    if (this._cvShdOn?.()) this._ensureShieldBubbles?.();   // ARC CV-4b — pula baniek i jej program przed pierwszym trafieniem
     return this._fxEngine;
   }
 
@@ -8024,6 +8416,7 @@ export class ThreeRenderer {
     this._fxEngine?.update({ nowMs: this._presClock.nowMs, dmgNowMs: this._cvDmg?.now, camera: this.camera, viewportH: window.innerHeight || 1,
       visible: !this._galaxyActive, stage: !!GAME_CONFIG.FEATURES?.cvStage });   // ARC CV-3a3 (653 (b)(c)) — łata sceny bitwy
     if (this._cvLedger) this._cvWpnTick?.();   // ARC CV-4a — rejestr salw: trafienia (HP pokazywane), zniszczenia w swojej chwili
+    if (this._cvShd || this._cvShdOn?.()) this._cvShdTick?.();   // ARC CV-4b — osłony: próbki, bańki (po przekształceniach sceny), osmalenia
     if (this._cueBus) this._flushCues();   // ARC CV-2b — sygnały walki, których czas nadszedł (zegar prezentacji)
   }
 

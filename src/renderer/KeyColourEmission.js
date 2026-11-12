@@ -37,14 +37,30 @@
 // do przypalonego kadłuba z kilkoma migającymi iskrami (`uKcEmber`, `uKcTime`). Tryb wybiera uniform `uKcBurnMode` materiału:
 // 0 — wygląd CV-1a co do wyrażeń (flaga OFF), 1 — wypalanie. Szum potrzebuje położenia w przestrzeni modelu — druga wstawka do
 // szablonu WIERZCHOŁKA (`vKcObj`, kotwice `common` i `begin_vertex`). Jeden program dla wszystkich statków (klucz v3).
+//
+// ARC CV-4b (pozycja 0 — Finding 707) — ODBLASK GWIAZDY NA ŻYWYCH KADŁUBACH: materiał CV-1a zostawia mapy szorstkości / metaliczności
+// modelu (`roughness` / `metalness` je MNOŻĄ), więc gładkie metalowe panele dawały odblask gwiazdy setki razy ponad progiem bloomu
+// (pomiar: pod gwiazdą F do 449 × próg na pikselu, pod M do 56 ×) — białe plamy po stronie gwiazdy (także pod kątem ślizgowym, gdy
+// gwiazda jest przed kamerą: Fresnel → biel). Dwa człony, oba UNIFORMAMI wspólnymi (pokrętła `cvTuning.MODEL_ROUGH_MIN` /
+// `MODEL_SPEC_CAP`, 0 = wygląd CV-1a co do wyrażeń): podłoga szorstkości (szerszy, łagodniejszy odblask — metaliczność z mapy
+// nietknięta, więc metal zostaje metalem: barwny odblask, bez rozproszonej „plastikowej” bieli) i MIĘKKIE KOLANO bezpośredniego
+// odblasku (`cap · (1 − e^(−L / cap))` na najjaśniejszym kanale — liniowe przy małych wartościach, nigdy ponad `cap`; barwa odblasku
+// zachowana). Kolano stoi PO oświetleniu (przed `aomap_fragment`) i dotyka WYŁĄCZNIE `reflectedLight.directSpecular` — emisja
+// (maska koloru-klucza HDR, żar wraku) i światło rozproszone bez zmian. Klucz programu v4.
+// ARC CV-4b — OSMALENIA KADŁUBA (High): do `KC_SCORCH_MAX` plam w przestrzeni GEOMETRII siatki (`vKcObj`; renderer przelicza punkt
+// trafienia z przestrzeni modelu na każdą siatkę), ciemniejsze albedo, matowsze, świeża plama z gasnącym żarem brzegu; zostają na
+// żywym statku i przechodzą na wrak (te same materiały).
 
 // Szerokość rampy barwy na jednostkę `soft` [°]: soft 0,06 ⇒ 6° — pełna maska do hueTol − 6°, zero od hueTol.
 export const KC_HUE_SOFT_DEG = 100;
-export const KC_PROGRAM_KEY = 'kosmos-cv5-keycolour-v3';   // ARC CV-5 — wypalanie wraku (wstawka wierzchołka)
+export const KC_PROGRAM_KEY = 'kosmos-cv4b-keycolour-v4';   // ARC CV-5 — wypalanie wraku (wstawka wierzchołka); CV-4b — odblask (707), osmalenia
+/** ARC CV-4b — najwięcej plam osmalenia na materiał (stała programu — jeden program dla wszystkich statków). */
+export const KC_SCORCH_MAX = 6;
 
 const ANCHOR_PARS = '#include <emissivemap_pars_fragment>';
 const ANCHOR_MAIN = '#include <emissivemap_fragment>';
 const ANCHOR_LIFT = '#include <opaque_fragment>';
+const ANCHOR_SPEC = '#include <aomap_fragment>';   // ARC CV-4b (707) — po `lights_fragment_end`, przed sumą odblasku
 const MARK = 'uKcGainMul';   // token obecny wyłącznie we wstawce (wykrywa podwójną transformację)
 // ARC CV-5 — wstawka WIERZCHOŁKA: położenie w przestrzeni modelu dla szumu szwów wraku
 const ANCHOR_V_COMMON = '#include <common>';
@@ -77,6 +93,13 @@ uniform vec3 uKcEmber;
 uniform float uKcObjScale;
 uniform float uKcSeamFreq;
 uniform float uKcTime;
+uniform float uKcRoughMin;
+uniform float uKcSpecCap;
+uniform vec4 uKcScorch[${KC_SCORCH_MAX}];
+uniform float uKcScorchHeat[${KC_SCORCH_MAX}];
+uniform float uKcScorchN;
+uniform float uKcScorchDark;
+uniform float uKcScorchGlow;
 varying vec3 vKcObj;
 float kcHash3(vec3 p) {
   p = fract(p * 0.3183099 + vec3(0.11, 0.17, 0.13));
@@ -138,6 +161,25 @@ vec3 kcRimL = vec3(0.0);
   vec3 kcTex = diffuseColor.rgb;
 #endif
   diffuseColor.rgb *= mix(vec3(1.0), uKcBody, clamp(uKcBodyAmt * uKcTintMul, 0.0, 1.0));
+  roughnessFactor = max(roughnessFactor, uKcRoughMin);
+  if (uKcScorchN > 0.5) {
+    float kcSc = 0.0;
+    float kcHot = 0.0;
+    for (int i = 0; i < ${KC_SCORCH_MAX}; i++) {
+      if (float(i) >= uKcScorchN) break;
+      vec4 kcS = uKcScorch[i];
+      float kcR = max(kcS.w, 1e-5);
+      float kcNz = kcNoise3(vKcObj / kcR * 2.7 + vec3(float(i) * 7.3, 1.1, 3.7));
+      float kcD = length(vKcObj - kcS.xyz) / kcR * (0.75 + 0.5 * kcNz);
+      float kcW = 1.0 - kcStep(0.4, 1.0, kcD);
+      kcSc = max(kcSc, kcW);
+      kcHot = max(kcHot, (1.0 - kcStep(0.0, 0.35, abs(kcD - 0.62))) * kcW * uKcScorchHeat[i]);
+    }
+    diffuseColor.rgb *= 1.0 - clamp(uKcScorchDark, 0.0, 1.0) * kcSc;
+    roughnessFactor = mix(roughnessFactor, 1.0, 0.7 * kcSc);
+    metalnessFactor = mix(metalnessFactor, 0.08, 0.6 * kcSc);
+    totalEmissiveRadiance += vec3(1.0, 0.34, 0.07) * (uKcScorchGlow * kcHot);
+  }
   if (uKcBurnMode > 0.5) {
     roughnessFactor = max(roughnessFactor, 0.94);
     metalnessFactor = min(metalnessFactor, 0.04);
@@ -169,6 +211,19 @@ vec3 kcRimL = vec3(0.0);
       float kcSpot = kcStep(0.9, 0.965, kcE) * (0.5 + 0.5 * sin(uKcTime * 0.007 + kcE * 60.0));
       totalEmissiveRadiance += uKcEmber * (uKcBurnMul * kcSpot);
     }
+  }
+}
+`;
+
+// ARC CV-4b (Finding 707) — wstawka PRZED `aomap_fragment` (oświetlenie policzone, odblask jeszcze nie zsumowany): miękkie kolano
+// NAJJAŚNIEJSZEGO KANAŁU bezpośredniego odblasku — `cap · (1 − e^(−L / cap))`, barwa zachowana (skala wektora). Kanał, nie luminancja:
+// pod czerwoną gwiazdą M odblask w samym czerwonym (waga luminancji 0,21) przechodził pod kolanem luminancji do ~3,3, a światło
+// czytelności podnosiło resztę kanałów (pomiar: resztka 1,2 × próg). `uKcSpecCap` ≤ 0 — wyłączone (wygląd CV-1a). Lustro w JS: `kcSpecKnee`.
+export const KC_SPEC_GLSL = `
+{
+  float kcSL = max(reflectedLight.directSpecular.r, max(reflectedLight.directSpecular.g, reflectedLight.directSpecular.b));
+  if (uKcSpecCap > 0.0 && kcSL > 1e-6) {
+    reflectedLight.directSpecular *= (uKcSpecCap * (1.0 - exp(-kcSL / uKcSpecCap))) / kcSL;
   }
 }
 `;
@@ -207,14 +262,20 @@ export function injectKeyColourVertex(vertSrc) {
 export function injectKeyColour(fragSrc) {
   if (typeof fragSrc !== 'string') throw new Error('[KeyColourEmission] oczekiwano tekstu shadera');
   if (fragSrc.includes(MARK)) throw new Error('[KeyColourEmission] shader JUŻ ma wstawkę (podwójna transformacja)');
-  for (const a of [ANCHOR_PARS, ANCHOR_MAIN, ANCHOR_LIFT]) {
+  for (const a of [ANCHOR_PARS, ANCHOR_MAIN, ANCHOR_SPEC, ANCHOR_LIFT]) {
     if (!fragSrc.includes(a)) throw new Error(`[KeyColourEmission] brak kotwicy „${a}"`);
   }
   // Wstawka światła czytelności MUSI stać za liczeniem oświetlenia (inaczej `outgoingLight` jeszcze nie istnieje).
   if (fragSrc.indexOf(ANCHOR_LIFT) < fragSrc.indexOf(ANCHOR_MAIN)) throw new Error(`[KeyColourEmission] „${ANCHOR_LIFT}" przed „${ANCHOR_MAIN}"`);
+  // ARC CV-4b (707) — kolano odblasku: po głównej wstawce (podłoga szorstkości już w `roughnessFactor`), przed sumą (`opaque_fragment`).
+  const iSpec = fragSrc.indexOf(ANCHOR_SPEC);
+  if (iSpec < fragSrc.indexOf(ANCHOR_MAIN) || iSpec > fragSrc.indexOf(ANCHOR_LIFT)) {
+    throw new Error(`[KeyColourEmission] „${ANCHOR_SPEC}" poza oknem „${ANCHOR_MAIN}" … „${ANCHOR_LIFT}"`);
+  }
   return fragSrc
     .replace(ANCHOR_PARS, ANCHOR_PARS + '\n' + KC_PARS_GLSL)
     .replace(ANCHOR_MAIN, ANCHOR_MAIN + '\n' + KC_MAIN_GLSL)
+    .replace(ANCHOR_SPEC, KC_SPEC_GLSL + ANCHOR_SPEC)
     .replace(ANCHOR_LIFT, KC_LIFT_GLSL + ANCHOR_LIFT);
 }
 
@@ -246,6 +307,16 @@ export function keyColourMask(r8, g8, b8, kc) {
   const wH = kc.hueTol > 0 ? 1 - kcStep(Math.max(0, kc.hueTol - sd), kc.hueTol, dh) : 0;
   const ss = Math.max(kc.soft, 1e-4);
   return wH * kcStep(kc.satMin, kc.satMin + ss, sat) * kcStep(kc.valMin, kc.valMin + ss, mx);
+}
+
+/**
+ * ARC CV-4b (Finding 707) — lustro kolana odblasku (`KC_SPEC_GLSL`): luminancja bezpośredniego odblasku po kolanie. `cap` ≤ 0 —
+ * bez zmian (wygląd CV-1a). Rosnące, ciągłe, nigdy ponad `cap`, przy małych L ≈ L.
+ */
+export function kcSpecKnee(L, cap) {
+  const l = Number(L) || 0;
+  if (!(cap > 0) || !(l > 1e-6)) return l;
+  return cap * (1 - Math.exp(-l / cap));
 }
 
 /** Barwa HSV (°) próbki sRGB 0–255 — ta sama konwencja co maska. */
@@ -283,6 +354,12 @@ export const KC_SHARED = Object.freeze({
   // ARC CV-5 — wypalanie wraku: gęstość szwów (`WRECK_SEAM_FREQ`) i czas migania iskier (zegar efektów uszkodzeń, ms)
   uKcSeamFreq: { value: 9.0 },
   uKcTime: { value: 0 },
+  // ARC CV-4b (Finding 707) — podłoga szorstkości i kolano odblasku (`MODEL_ROUGH_MIN` / `MODEL_SPEC_CAP`); 0 — wygląd CV-1a
+  uKcRoughMin: { value: 0 },
+  uKcSpecCap: { value: 0 },
+  // ARC CV-4b — osmalenia: przyciemnienie albedo i żar świeżego brzegu (`SCORCH_DARK` / `SCORCH_GLOW`)
+  uKcScorchDark: { value: 0.72 },
+  uKcScorchGlow: { value: 2.2 },
 });
 
 const UNIFORMS = new WeakMap();   // material → uniformy (NIE userData — patrz nagłówek)
@@ -319,6 +396,10 @@ export function applyKeyColour(material, kc) {
       // materiału); gęstość szwów i czas — wspólne (`KC_SHARED`)
       uKcBurnMode: { value: 0 }, uKcHeat: { value: 1 }, uKcEmber: { value: { x: 0, y: 0, z: 0 } }, uKcObjScale: { value: 1 },
       uKcSeamFreq: KC_SHARED.uKcSeamFreq, uKcTime: KC_SHARED.uKcTime,
+      // ARC CV-4b — odblask (707) wspólny; osmalenia: punkty i żar WŁASNE (płaskie tablice — `flatten` three bierze je wprost)
+      uKcRoughMin: KC_SHARED.uKcRoughMin, uKcSpecCap: KC_SHARED.uKcSpecCap,
+      uKcScorch: { value: new Float32Array(4 * KC_SCORCH_MAX) }, uKcScorchHeat: { value: new Float32Array(KC_SCORCH_MAX) },
+      uKcScorchN: { value: 0 }, uKcScorchDark: KC_SHARED.uKcScorchDark, uKcScorchGlow: KC_SHARED.uKcScorchGlow,
     };
     UNIFORMS.set(material, u);
     material.onBeforeCompile = onBeforeCompileKc;
@@ -398,4 +479,29 @@ export function setKeyColourWreckState(material, { mode = 1, heat = 1, burn = nu
 export function setKeyColourObjScale(material, scale) {
   const u = keyColourUniformsOf(material);
   if (u) u.uKcObjScale.value = Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+/**
+ * ARC CV-4b — plama osmalenia `slot` materiału: środek w przestrzeni GEOMETRII siatki (`vKcObj`), promień w jej jednostkach, żar brzegu
+ * [0, 1]. Liczba aktywnych plam — `setKeyColourScorchCount`.
+ */
+export function setKeyColourScorch(material, slot, x, y, z, r, heat = 0) {
+  const u = keyColourUniformsOf(material);
+  if (!u || !(slot >= 0) || slot >= KC_SCORCH_MAX) return;
+  const a = u.uKcScorch.value, o = slot * 4;
+  a[o] = x; a[o + 1] = y; a[o + 2] = z; a[o + 3] = Math.max(0, Number(r) || 0);
+  u.uKcScorchHeat.value[slot] = Math.max(0, Math.min(1, Number(heat) || 0));
+}
+
+/** ARC CV-4b — żar brzegu plamy `slot` [0, 1] (stygnięcie — renderer co klatkę, dopóki coś jest ciepłe). */
+export function setKeyColourScorchHeat(material, slot, heat) {
+  const u = keyColourUniformsOf(material);
+  if (!u || !(slot >= 0) || slot >= KC_SCORCH_MAX) return;
+  u.uKcScorchHeat.value[slot] = Math.max(0, Math.min(1, Number(heat) || 0));
+}
+
+/** ARC CV-4b — liczba aktywnych plam osmalenia materiału (0 — bez plam; pętla w shaderze kończy się na niej). */
+export function setKeyColourScorchCount(material, n) {
+  const u = keyColourUniformsOf(material);
+  if (u) u.uKcScorchN.value = Math.max(0, Math.min(KC_SCORCH_MAX, Math.floor(Number(n) || 0)));
 }

@@ -34,6 +34,7 @@ import { LIVE_LIGHT_POOL } from './LightPool.js';          // ARC CV-2b — pokr
 import { LIVE_CUE } from './CombatCueBus.js';              // ARC CV-2b — pokrętła szyny sygnałów walki
 import { LEDGER_TUNING } from './CombatLedgerLogic.js';    // ARC CV-4a — pokrętła harmonogramu salw (rejestr)
 import { EXP_TUNING } from './ExplosionLogic.js';          // ARC CV-5 — pokrętła wybuchów, wraków i stanów uszkodzeń
+import { SHIELD_TUNING } from './ShieldLogic.js';          // ARC CV-4b — pokrętła osłon (bańka, fale, rozpad) i osmaleń
 
 /** Pojemności pul (instancje). Pamięć: 13 / 11 liczb float na instancję — razem ok. 0,5 MB. Iskry ×2 względem szczytu
  *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4).
@@ -136,6 +137,12 @@ export const LIVE_CV_FX = {
   MODEL_RIM_GAIN:     0.8,   // obwódka (fresnel) w kolorze strony — swój chłodna biel, wróg rola `alert` motywu
   MODEL_RIM_POWER:    4.0,   // wykładnik obwódki — większy = cieńsza krawędź
   MODEL_LIFT_CEIL:    0.95,  // sufit wypełnienia + obwódki (liniowo); < 1,0 = bez bloomu (próg 1,0), > 1,0 — bloom świadomie
+  // ARC CV-4b (pozycja 0 — Finding 707): żywe kadłuby świeciły na biało ku gwieździe — mapa szorstkości MNOŻY `roughness`, więc gładkie
+  // panele dawały odblask do 449 × próg bloomu (gwiazda F, pomiar `kosmos-handover/cv-4b/707/`). Podłoga szorstkości (szerszy odblask,
+  // metaliczność z mapy nietknięta — metal zostaje metalem) i miękkie kolano najjaśniejszego kanału BEZPOŚREDNIEGO odblasku (nigdy ponad kolano;
+  // emisja i światło rozproszone bez zmian). 0 / 0 — wygląd CV-1a co do wyrażeń (kontrola). Strojenie, bez pinów.
+  MODEL_ROUGH_MIN:    0.4,   // podłoga szorstkości kadłuba (0 — szorstkość z mapy, jak CV-1a)
+  MODEL_SPEC_CAP:     0.7,   // [liniowo] kolano najjaśniejszego kanału bezpośredniego odblasku: cap · (1 − e^(−L / cap)); 0 — bez kolana
   // Finding 684: pomiar w grze (fregata ≈ 31 / 62 px): przy 1,0 czerwone punkty na szarym kadłubie ledwo czytelne, przy 2,0 wyraźne
   // (poświata ≈ 10–12 px), przy 3,0 rozlana plama 25–28 px; ponowna kontrola właściciela (2026-11-11): przy 2,0 światło dziobu za mocne
   // ⇒ 1,4 (w jego pliku dwa cyjanowe punkty dziobu nakładają się i sumują — skutek #685, kliknie je ponownie).
@@ -161,6 +168,9 @@ export const LIVE_CV_FX = {
   // ARC CV-5 (flaga `cvDamage`) — wybuchy warstwowe, stany uszkodzeń, płonące wraki (`ExplosionLogic`: `EXP_*`, `WRECK_*`, `DMG_*`,
   // `FX_TIME_SCALE` — zwolnione tempo efektów, wyłącznie prezentacja). Czytane przy każdym wybuchu i co klatkę. Strojenie, bez pinów.
   ...EXP_TUNING,
+  // ARC CV-4b (flaga `cvShields`) — osłony i pancerz (`ShieldLogic`: `SHD_*` — dopasowanie bańki, fale, siła, rozpad, regeneracja;
+  // `SCORCH_*` — osmalenia kadłuba). Czytane co klatkę i przy trafieniu. Strojenie, bez pinów.
+  ...SHIELD_TUNING,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)

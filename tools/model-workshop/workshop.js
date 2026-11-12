@@ -1064,6 +1064,8 @@ function tick() {
   KC_SHARED.uKcRimMul.value = T.MODEL_RIM_GAIN ?? 0;
   KC_SHARED.uKcRimPow.value = T.MODEL_RIM_POWER ?? 4;
   KC_SHARED.uKcLiftCeil.value = T.MODEL_LIFT_CEIL ?? 0.95;
+  KC_SHARED.uKcRoughMin.value = T.MODEL_ROUGH_MIN ?? 0;   // ARC CV-4b (Finding 707) — podgląd = gra
+  KC_SHARED.uKcSpecCap.value = T.MODEL_SPEC_CAP ?? 0;
   pool.update({ fovDeg: camera.fov, viewportH: canvas.clientHeight || 1, gain: T.MODEL_LIGHT_GAIN, minPx: T.MODEL_LIGHT_MIN_PX,
     fadePx: T.MODEL_LIGHT_FADE_PX, fadeEndPx: T.MODEL_LIGHT_FADE_END_PX });
   // Smuga jak `_applyExhaust` (gałąź kanoniczna): promień z dyszy, długość z pokręteł, migotanie długości.

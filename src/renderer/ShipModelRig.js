@@ -48,7 +48,9 @@ export function templateBounds(THREE, template) {
   const box = new THREE.Box3().setFromObject(template);
   const size = box.getSize(new THREE.Vector3());
   const c = box.getCenter(new THREE.Vector3());
-  const out = { c: [c.x, c.y, c.z], m: Math.max(size.x, size.y, size.z) || 1 };
+  const m = Math.max(size.x, size.y, size.z) || 1;
+  // ARC CV-4b — półwymiary kadłuba w ZNORMALIZOWANEJ przestrzeni modelu (najdłuższy wymiar = 1): bańka osłony i punkt trafienia kadłuba
+  const out = { c: [c.x, c.y, c.z], m, h: [size.x / (2 * m), size.y / (2 * m), size.z / (2 * m)] };
   _bboxCache.set(template, out);
   return out;
 }
@@ -178,6 +180,25 @@ export function buildShipRig({ THREE, template, hardpoints, targetSize, kind = '
   });
   paintRigMaterials(THREE, materials, kind, { burnHot, enemyRimHex });
 
+  // ARC CV-4b — osmalenia kadłuba: przekształcenie ZNORMALIZOWANEJ przestrzeni modelu → przestrzeń GEOMETRII każdej siatki (`vKcObj`
+  // wstawki koloru-klucza = surowe `position`). Siatka klonu = siatka szablonu (ta sama kolejność przejścia); łańcuch: lokalna macierz
+  // modelu (skala 1 / m, przesunięcie) × macierz świata węzła w szablonie. Same liczby (16 na materiał) — bez obiektów THREE w rigu.
+  model.updateMatrix();
+  const tplMeshes = [];
+  template.traverse((o) => { if (o.isMesh) tplMeshes.push(o); });
+  const scorchXf = [];
+  const mGeo = new THREE.Matrix4();
+  let ti = 0;
+  model.traverse((child) => {
+    if (!child.isMesh) return;
+    const tm = tplMeshes[ti++];
+    if (!tm || !child.material) return;
+    mGeo.multiplyMatrices(model.matrix, tm.matrixWorld);
+    const s2m = mGeo.getMaxScaleOnAxis() || 1;
+    const inv = mGeo.clone().invert().elements.slice();
+    for (const mat of (Array.isArray(child.material) ? child.material : [child.material])) scorchXf.push({ mat, inv, s2m });
+  });
+
   // Smuga silnika (Finding 619): czubek w dyszy, podstawa za rufą wzdłuż `d`; geometria jednostkowa — długość i promień
   // ustawia co klatkę `_applyExhaust` (pokrętła `MODEL_PLUME_*`, migotanie długości, nie grubości).
   let cone = null;
@@ -227,8 +248,10 @@ export function buildShipRig({ THREE, template, hardpoints, targetSize, kind = '
   // ARC CV-5 — punkty uszkodzeń (pożary, dym, wybuchy wtórne) i dysza (iskry krztuszącego się silnika) — same dane.
   const damagePoints = rigDamagePoints(THREE, template, hp);
   const nozzle = nz && Array.isArray(nz.p) && Array.isArray(nz.d) ? { p: [nz.p[0], nz.p[1], nz.p[2]], d: [nz.d[0], nz.d[1], nz.d[2]] } : null;
+  // ARC CV-4b — półwymiary kadłuba (przestrzeń modelu) dla bańki osłony i punktu trafienia kadłuba; przekształcenia osmaleń.
+  const half = templateBounds(THREE, template).h.slice();
   return { root, canon, model, materials, exhaust: cone, lights, nozzleR: nz?.r ?? 0.04, frameQuat: q, slot: hp.slot,
-    weapons, frameBow: [fb[0] / fbl, fb[1] / fbl, fb[2] / fbl], damagePoints, nozzle };
+    weapons, frameBow: [fb[0] / fbl, fb[1] / fbl, fb[2] / fbl], damagePoints, nozzle, half, scorchXf };
 }
 
 /**
