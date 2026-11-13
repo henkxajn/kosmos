@@ -1785,14 +1785,42 @@ export class UIManager {
     // D-FDj — UDANY odwrót. Dotąd `vessel:autoRetreatIssued` nie miał ANI JEDNEGO subskrybenta
     // w całym `src/`, więc naprawa F-D objawiałaby się WYŁĄCZNIE zniknięciem komunikatów
     // o porażce — czyli gate mierzyłby ciszę i nie odróżniłby jej od „nic się nie stało".
-    EventBus.on('vessel:autoRetreatIssued', ({ vesselId, destinationPlanetId, destinationName }) => {
+    EventBus.on('vessel:autoRetreatIssued', ({ vesselId, battleId, destinationPlanetId, destinationName }) => {
       const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
       // ⚠ `window.KOSMOS.entityManager`, NIE import — `UIManager` nie importuje `EntityManager`
       // (wzór sąsiedniego handlera `vessel:autoRetreatLowFuel`).
       const body = window.KOSMOS?.entityManager?.get?.(destinationPlanetId);
-      this._log(t('log.m4.autoRetreatIssued',
+      const text = t('log.m4.autoRetreatIssued',
         v?.name ?? vesselId ?? '?',
-        destinationName ?? body?.name ?? destinationPlanetId ?? '?'), 'combat');
+        destinationName ?? body?.name ?? destinationPlanetId ?? '?');
+      // ARC CV-8b (#713) — odwrót strony bitwy ORBITALNEJ (EAH, nie starcie DSCS) w oglądanym układzie: powtórka tej bitwy startuje w tym
+      // samym `battle:resolved`, ale PO `AutoRetreatSystem` — decyzja po zdarzeniu (mikrozadanie): powtórka w toku → linia czeka na jej
+      // koniec i NIE wychodzi dla wraku (EAH rozbija stronę, która się wycofała — #632); bez powtórki — od razu. Poza widokiem — od razu.
+      const orb = window.KOSMOS?.threeRenderer?.cvOrbital;
+      if (GAME_CONFIG.FEATURES?.cvOrbital && orb && battleId != null && !String(battleId).startsWith('battle_ds_')
+        && v?.systemId === window.KOSMOS?.activeSystemId) {
+        queueMicrotask(() => {
+          if (orb.replays?.has?.(battleId)) {
+            const m = (this._orbitalRetreatHold ??= new Map());
+            if (!m.has(battleId)) m.set(battleId, []);
+            m.get(battleId).push({ vesselId, text });
+            return;
+          }
+          this._log(text, 'combat');
+        });
+        return;
+      }
+      this._log(text, 'combat');
+    });
+    // ARC CV-8b (#713) — koniec powtórki: wstrzymane linie odwrotu — tylko dla statków, które nie są wrakami.
+    EventBus.on('combatfx:orbitalReplayEnd', ({ battleId }) => {
+      const held = this._orbitalRetreatHold?.get(battleId);
+      if (!held) return;
+      this._orbitalRetreatHold.delete(battleId);
+      for (const h of held) {
+        if (window.KOSMOS?.vesselManager?.getVessel?.(h.vesselId)?.isWreck) continue;
+        this._log(h.text, 'combat');
+      }
     });
 
     // D-FDh — statek utknął w dryfie (brak WŁASNEJ kolonii w tym układzie). Dotąd ta gałąź

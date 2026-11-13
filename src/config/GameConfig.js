@@ -640,8 +640,11 @@ export const GAME_CONFIG = {
     //   (bez udawanych statków); ten sam rejestr salw, osłony, uszkodzenia, wraki, warstwa taktyczna, pasek walki (wiersz bitwy
     //   orbitalnej) i reżyser co w wolnej przestrzeni; wygląd wraku i wybuch czekają na zniszczenie w powtórce. Tylko w OGLĄDANYM
     //   układzie, poza trybem galaktyki (Finding 628) — inaczej baner jak dziś; baner wyniku PO powtórce, bez modalu kina (auto-slow
-    //   zostaje); „imitacja” 16 kresek (`_spawnBattleBurst`) nie rysuje się nigdzie. Czytana przy bitwie. OFF = dzisiejsza ścieżka
-    //   co do bitu (bez `fx`, burst, modal / kino Path A). Wyłączenie: KOSMOS.debug.cvOrbital(0).
+    //   zostaje). Czytana przy bitwie. ARC CV-8b (#713, #635) — pod flagą także: wpisy Dziennika skutków bitwy orbitalnej (EAH)
+    //   i „Utracono kontakt” wraków powtórki czekają na koniec powtórki, a rajd rozstrzygnięty dwa razy (starcie DSCS w podejściu +
+    //   bitwa EAH) ma JEDEN baner i JEDNĄ linię Dziennika (`RaidAnnounceLogic`). OFF (po CV-8b, które wycofało „imitację” 16 kresek,
+    //   modal „BITWA NIEUCHRONNA” i kino BattleView3D): bez powtórki i bez `fx` — wraki od razu, baner wyniku i wpisy Dziennika od
+    //   razu, każda bitwa rajdu osobno. Wyłączenie: KOSMOS.debug.cvOrbital(0).
     cvOrbital: true,
   },
 

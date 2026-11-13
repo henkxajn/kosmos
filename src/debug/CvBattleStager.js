@@ -45,7 +45,13 @@
 //                                         `hangar`, `tower`, `grid`; także `cvBattle({kind: /orbital/.source})`
 //   orbitalInfo()                       — ARC CV-8a: powtórki w toku (rundy, runda bieżąca, strzelcy stron, emitery, hangar, zniszczenia
 //                                         zaplanowane / pokazane, w widoku) i liczniki (start, odmowy widoku, przerwania)
-//   cvOrbital(1) / cvOrbital(0)         — ARC CV-8a: flaga `cvOrbital` ON / OFF (OFF = dzisiejszy burst 16 kresek i modal kina Path A)
+//   cvOrbital(1) / cvOrbital(0)         — ARC CV-8a: flaga `cvOrbital` ON / OFF (CV-8b: OFF = bez powtórki — wraki, baner i Dziennik od razu;
+//                                         burst 16 kresek, modal „BITWA NIEUCHRONNA” i kino BattleView3D wycofane)
+//   cvOrbitalBattle({raid: 1})          — ARC CV-8b (#635): RAJD rozstrzygnięty dwa razy — napastnicy na orbicie kolonii, okręty gracza
+//                                         na orbicie: po wznowieniu czasu starcie DSCS, w jego trakcie bitwa orbitalna EAH; jeden baner
+//                                         i jedna linia Dziennika na rajd (po powtórce)
+//   cvOrbitalBattle({raid: 2})          — wariant z lotem: rajderzy na drodze kolonii, podejście DSCS, ocaleli gonią kolonię (na szybkiej
+//                                         orbicie dłużej niż sufit czekania 15 s — baner podejścia osobno; `KOSMOS.debug.raidHold(ms)`)
 //   battleInfo()                        — M1: aktywne starcia (runda, żywi, uciekający) i ostatnia rozstrzygnięta bitwa DSCS: rundy,
 //                                         zwycięzca, odwrót, powód końca (`endReason`), straty i WRAKI uczestników — `wrakiTylkoPrzy0HP:
 //                                         true` znaczy, że na wrak poszły wyłącznie okręty zestrzelone (wraki == straty)
@@ -953,10 +959,16 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
      * jeden okręt gracza w hangarze); `lose: 1` — wygrywa AI (10 na 1, bez budynków obrony); `big: 1` — 10 na 10 + wieża 3 + siatka 2;
      * `outOfView: 1` — przed rozstrzygnięciem widok na INNY zbadany układ (bitwa poza widokiem — sam baner). Bez cudzysłowów:
      *   cvOrbitalBattle() · cvOrbitalBattle({lose: 1}) · cvOrbitalBattle({nA: 3, nB: 2, hangar: 0, tower: 0, grid: 0}) · cvOrbitalBattle({outOfView: 1})
+     * ARC CV-8b (#635) — RAJD rozstrzygnięty dwa razy (napastnicy domyślnie 4, okręty gracza 2 na orbicie ciała, bez hangaru, wieża 2 + siatka 1):
+     * `raid: 1` — napastnicy na orbicie ciała z misją `attack`; partia EAH rusza dopiero, gdy zacznie się starcie DSCS z ich udziałem
+     *   (`vessel:engaged`) — bitwa orbitalna rozstrzyga się W TRAKCIE starcia (kolejność odwrotna, szybka i powtarzalna);
+     * `raid: 2` — napastnicy `raidDist` AU od ciała (0,55 — poza promieniem „już przy ciele” #663) NA DRODZE ciała, z rozkazem `attack`
+     *   (`MovementOrderSystem`), czas 1 t/s: starcie DSCS w podejściu, ocaleli wznawiają atak (F130) i gonią ciało (planeta szybsza od okrętów).
+     * Jedno ogłoszenie na rajd: `KOSMOS.debug.announceInfo().raidGroups`.
      * Poziomy obrony (`tower`, `grid`) dokłada narzędzie WYŁĄCZNIE tej bitwie tego ciała (`WarSystem._cvStagerDefence`, zdejmowane po
      * bitwie). Wojna z imperium AI deklarowana przez EAH, jeśli jej nie ma (jak w grze). ⚠ Statki testowe w stanie gry — nie zapisuj.
      */
-    cvOrbitalBattle({ nA = null, nB = null, hangar = 1, tower = null, grid = null, seed = 1, lose = 0, big = 0, outOfView = 0 } = {}) {
+    cvOrbitalBattle({ nA = null, nB = null, hangar = 1, tower = null, grid = null, seed = 1, lose = 0, big = 0, outOfView = 0, raid = 0, raidDist = 0.55 } = {}) {
       const K = window.KOSMOS ?? {};
       const vm = K.vesselManager, ts = K.timeSystem, eah = K.enemyAttackHandler, oss = K.orbitalSpaceSystem, cm = K.colonyManager;
       const warSys = K.warSystem, dscs = K.deepSpaceCombatSystem;
@@ -965,11 +977,14 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       if ((getRenderer()?.cvOrbital?.replays?.size ?? 0) > 0) return { ok: false, reason: 'replay_in_progress' };
       // `lose`: 10 napastników na 1 okręt bez obrony budynków — okręty gracza już stojące w układzie (np. w GATE-S4 trzy uzbrojone
       // fregaty w hangarze stolicy) też bronią (EAH: wszystkie okręty gracza w służbie w układzie), więc przewaga musi być duża
-      const preset = Number(big) ? { nA: 10, nB: 10, tower: 3, grid: 2 } : Number(lose) ? { nA: 10, nB: 1, tower: 0, grid: 0 } : { nA: 5, nB: 5, tower: 2, grid: 1 };
+      const RAID = Number(raid) === 2 ? 2 : (Number(raid) ? 1 : 0);
+      if (RAID && !K.movementOrderSystem) return { ok: false, reason: 'no_world' };
+      const preset = RAID ? { nA: 4, nB: 2, tower: 2, grid: 1 }
+        : Number(big) ? { nA: 10, nB: 10, tower: 3, grid: 2 } : Number(lose) ? { nA: 10, nB: 1, tower: 0, grid: 0 } : { nA: 5, nB: 5, tower: 2, grid: 1 };
       const NA = Math.max(1, Math.min(10, Math.floor(Number(nA ?? preset.nA) || 1)));
       const NB = Math.max(0, Math.min(10, Math.floor(Number(nB ?? preset.nB) || 0)));
       const TW = Math.max(0, Math.floor(Number(tower ?? preset.tower) || 0)), GR = Math.max(0, Math.floor(Number(grid ?? preset.grid) || 0));
-      const NH = Math.max(0, Math.min(NB, Math.floor(Number(Number(lose) && hangar === 1 ? 0 : hangar) || 0)));
+      const NH = RAID ? 0 : Math.max(0, Math.min(NB, Math.floor(Number(Number(lose) && hangar === 1 ? 0 : hangar) || 0)));
       // Poprzedni test — statki zdjęte (bez linii w Dzienniku); w trakcie starcia DSCS — odmowa.
       const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
       const old = all.filter(isCvVessel);
@@ -1000,7 +1015,22 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         v.systemId = sys; v.status = 'idle'; v.mission = null; v.serviceState = 'active';
         if (v.fuel) v.fuel.current = v.fuel.max = 9999;
         v._cvBattle = seed;
-        if (s.side === 'A') {
+        if (s.side === 'A' && RAID === 2) {
+          // #635 — rajder w wolnej przestrzeni NA DRODZE ciała (tam, gdzie ciało będzie za chwilę — ciało nadlatuje, zbliżenie czołowe; za
+          // ciałem pościg trwałby długo), co najmniej `raidDist` AU od ciała (poza promieniem „już przy ciele” #663); rozkaz `attack` niżej
+          v.ownerEmpireId = empire.id; v.owner = empire.id; v.isEnemy = true;
+          const AU = GAME_CONFIG.AU_TO_PX, minD = Math.max(0.05, Number(raidDist) || 0.55) * AU;
+          let ahead = null;
+          for (let lead = 0.02; lead <= 0.6 && !ahead; lead += 0.01) {
+            const p = vm._predictPosition?.(body.id, ts.gameTime + lead);
+            if (p && Math.hypot(p.x - body.x, p.y - body.y) >= minD) ahead = p;
+          }
+          const d = Math.hypot(body.x, body.y) || 1;
+          const base = ahead ?? { x: body.x + (body.x / d) * minD, y: body.y + (body.y / d) * minD };
+          const ux = (base.x - body.x) / (Math.hypot(base.x - body.x, base.y - body.y) || 1), uy = (base.y - body.y) / (Math.hypot(base.x - body.x, base.y - body.y) || 1);
+          const side = (s.index - (NA - 1) / 2) * 0.04 * AU;
+          Object.assign(v.position, { state: 'orbiting', dockedAt: null, x: base.x - uy * side, y: base.y + ux * side });
+        } else if (s.side === 'A') {
           v.ownerEmpireId = empire.id; v.owner = empire.id; v.isEnemy = true;
           onOrbit(v);
           v.status = 'on_mission';
@@ -1020,13 +1050,36 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         if (!other || ssm.switchActiveSystem?.(other) !== true) return { ok: false, reason: 'no_other_system', warning: CV_BATTLE.WARNING };
         view = other;
       }
-      for (const v of made.A) eah._onVesselArrived(v, v.mission);   // partia 500 ms czasu realnego → rozstrzygnięcie (także w pauzie)
+      let raidOrders = null;
+      if (RAID === 2) {
+        // #635 — prawdziwy lot: rozkaz `attack` (jak `DirectorOffensive`), czas 1 t/s — podejście trwa kilka sekund, starcie zwalnia czas
+        raidOrders = made.A.map((v) => K.movementOrderSystem.issueOrder(v.id, { type: 'attack', targetBodyId: body.id, issuedBy: 'cv_stager', bypassFuelCheck: true })?.ok ?? false);
+        ts.setMultiplier?.(3);
+      } else if (RAID === 1) {
+        // #635 — partia EAH dopiero, gdy ruszy starcie DSCS napastników (DSCS zawiesza misję na czas starcia — przylot z ZAPAMIĘTANĄ misją)
+        const missions = new Map(made.A.map((v) => [v.id, v.mission]));
+        const ids = new Set(missions.keys());
+        let fired = false;
+        const onEngaged = ({ sideA = [], sideB = [] } = {}) => {
+          if (fired || ![...sideA, ...sideB].some((id) => ids.has(id))) return;
+          fired = true;
+          EventBus.off?.('vessel:engaged', onEngaged);
+          for (const v of made.A) if (!v.isWreck) eah._onVesselArrived(v, missions.get(v.id));
+        };
+        EventBus.on('vessel:engaged', onEngaged);
+        raidOrders = 'engaged';
+      } else {
+        for (const v of made.A) eah._onVesselArrived(v, v.mission);   // partia 500 ms czasu realnego → rozstrzygnięcie (także w pauzie)
+      }
       console.warn(CV_BATTLE.WARNING);
       return {
         ok: true, system: sys, body: body.id, bodyName: body.name ?? body.id, empire: empire.name ?? empire.id,
         attackers: made.A.length, defenders: made.B.length, hangar: NH, tower: TW, grid: GR, viewNow: view ?? sys,
+        ...(RAID ? { raid: true, raidOrders } : {}),
         flags: { cvOrbital: !!GAME_CONFIG.FEATURES?.cvOrbital, cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons },
-        note: 'rozstrzygniecie za ~0,5 s czasu realnego; wznow czas, zeby obejrzec powtorke (orbitalInfo())', paused: !!ts.isPaused,
+        note: RAID === 1 ? 'rajd: wznow czas — starcie DSCS na orbicie, w jego trakcie bitwa przy kolonii (powtorka po starciu) — jeden baner'
+          : RAID === 2 ? 'rajd z lotem: wznow czas (1 t/s); starcie DSCS w podejsciu, ocaleli gonia kolonie (sufit czekania 15 s)'
+          : 'rozstrzygniecie za ~0,5 s czasu realnego; wznow czas, zeby obejrzec powtorke (orbitalInfo())', paused: !!ts.isPaused,
         warning: CV_BATTLE.WARNING,
       };
     },
@@ -1040,7 +1093,10 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         ostatniaBitwaOrbitalna: last ? { bitwa: last.id, tury: last.turns, zwyciezca: last.winner, odwrot: last.retreated ?? null, cialo: last.location?.planetId } : null };
     },
 
-    /** ARC CV-8a — flaga `cvOrbital`: cvOrbital(1) — ON, cvOrbital(0) — OFF (dzisiejszy burst / modal kina), cvOrbital() — przełącz. Czytana przy bitwie. */
+    /**
+     * ARC CV-8a — flaga `cvOrbital`: cvOrbital(1) — ON, cvOrbital(0) — OFF, cvOrbital() — przełącz. Czytana przy bitwie. ARC CV-8b — OFF po
+     * wycofaniu imitacji, modalu i kina: bez powtórki (wraki od razu), baner i wpisy Dziennika od razu, bitwy rajdu osobno.
+     */
     cvOrbital(on) {
       const F = GAME_CONFIG.FEATURES;
       F.cvOrbital = on === undefined ? !F.cvOrbital : !!on;

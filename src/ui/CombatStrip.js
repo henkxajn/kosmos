@@ -172,10 +172,22 @@ export class CombatStrip {
     const orb = K?.threeRenderer?.cvOrbital?.encounters?.() ?? [];
     const dscsList = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
     const encs = orb.length ? dscsList.concat(orb) : dscsList;
-    if (!encs.length) return [];
+    // ARC CV-8b (§3.1-6, D-CV-27 (a)) — wiersz WYNIKU bitwy orbitalnej po końcu powtórki (stan końcowy, słowo wyniku zamiast „R n”)
+    const ended = K?.threeRenderer?.cvOrbital?.endedEncounters?.() ?? [];
+    if (!encs.length && !ended.length) return [];
+    const env = this._stripEnv(K);
+    const rows = encs.length ? stripBattles(encs, env) : [];
+    for (const x of ended) {
+      const r = stripBattles([{ ...x.venc, isActive: true }], env)[0];
+      if (r) rows.push({ ...r, result: x.outcome });
+    }
+    return rows;
+  }
+
+  _stripEnv(K) {
     const vm = K.vesselManager;
     const vessel = (id) => vm?.getVessel?.(id) ?? vm?._vessels?.get?.(id) ?? null;
-    return stripBattles(encs, {
+    return {
       getPos: (id) => vessel(id)?.position ?? null,
       radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX),
       activeSystemId: K.activeSystemId ?? null,
@@ -191,7 +203,7 @@ export class CombatStrip {
         const hull = HULLS?.[hullId];
         return hull ? getName(hull, 'ship') : (hullId ? String(hullId).replace(/^hull_/, '') : null);
       },
-    });
+    };
   }
 
   // ── Rysunek ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -232,7 +244,9 @@ export class CombatStrip {
         loc: orbBody ?? this._systemName(r.systemId, K),
         own: { counts: counts(r.own), pct: r.own.hidden > 0 ? '' : pct(r.own), role: r.own.role, hidden: r.own.hidden > 0, frac: r.own.pct },
         foe: { counts: counts(r.enemy), pct: r.enemy.hidden > 0 ? '' : pct(r.enemy), role: r.enemy.role, hidden: r.enemy.hidden > 0, frac: r.enemy.pct },
-        round: t('combatStrip.round', r.round),   // M1 — bez limitu rund: „R n”
+        // M1 — bez limitu rund: „R n”; ARC CV-8b — wiersz wyniku po powtórce: słowo wyniku (Zwycięstwo / Porażka / Remis / Pat)
+        round: r.result ? t(`combatStrip.result.${r.result}`) : t('combatStrip.round', r.round),
+        result: r.result ?? null,
       };
     };
     const lines = visible.map((r) => ({ row: r, ...lineOf(r) }));
@@ -319,7 +333,9 @@ export class CombatStrip {
         if (sd.pct) this._drawLine(ctx, this._line(ctx, sd.pct, txt), cx, by, R[sd.role] ?? R.primary, S.SUB_ALPHA);
         cx += pctW + S.FIELD_GAP;
       }
-      this._drawLine(ctx, this._line(ctx, l.round, txt), cx, by, R.primary, S.DIM_ALPHA);
+      // ARC CV-8b — słowo wyniku w roli: porażka `alert`, zwycięstwo `primary` pełne, remis / pat jak „R n”
+      const resRole = l.result === 'defeat' ? R.alert : R.primary;
+      this._drawLine(ctx, this._line(ctx, l.round, txt), cx, by, resRole, l.result === 'victory' || l.result === 'defeat' ? 1 : S.DIM_ALPHA);
       // Chipy przy prawej krawędzi bloku.
       const tx = lr.x + lr.w - S.PAD_X - togW;
       const wx = tx - S.CHIP_GAP - watchW;

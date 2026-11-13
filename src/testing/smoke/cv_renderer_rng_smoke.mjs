@@ -145,7 +145,9 @@ header('T3 — RendererRng: prywatny, deterministyczny strumień warstwy wizualn
 
 // ── T4 — źródło warstwy wizualnej: przeniesione / zostawione ──────────────────────────────────────────────────────
 header('T4 — źródło: zero Math.random w warstwie wizualnej, stan gry nietknięty');
-const MOVED = ['src/renderer/ThreeRenderer.js', 'src/scenes/BattleView3D.js', 'src/scenes/TitleScene.js',
+// ARC CV-8b — 'src/scenes/BattleView3D.js' zdjęte z listy ŚWIADOMIE: plik usunięty razem z kinem (D-CV-27 (a)); jego nieobecność pinuje
+// `cv_retire_cinema_smoke` N1. Reszta listy bez zmian.
+const MOVED = ['src/renderer/ThreeRenderer.js', 'src/scenes/TitleScene.js',
   'src/scenes/FactionSelectScene.js', 'src/scenes/EndgameScene.js', 'src/ui/ScheduledEventPopup.js'];
 // Odwołania, które MUSZĄ zostać na Math.random (stan gry albo poza zakresem CV) — liczby z inwentarza CV-0b.
 const KEPT = {

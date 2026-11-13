@@ -61,7 +61,22 @@ export const ORB_TUNING = {
   ORB_BATTERY_CONE_DEG:  55,     // [°] emitery na półkuli: stożek wokół kierunku bitwy
   ORB_LEAD_MS:           700,    // [ms prezentacji] wejście w formację przed pierwszą rundą
   ORB_TAIL_ROUNDS:       3,      // [R] po ostatniej rundzie — najwyżej tyle czekania na ostatnie trafienia rejestru
+  ORB_RESULT_LINGER_MS:  10000,  // [ms prezentacji] ARC CV-8b (§3.1-6) — wiersz WYNIKU bitwy na pasku walki po końcu powtórki (pauza = pauza)
 };
+
+/**
+ * ARC CV-8b (§3.1-6, D-CV-27 (a)) — wynik bitwy orbitalnej z perspektywy gracza dla wiersza paska walki po powtórce. EAH: strona A =
+ * napastnicy, B = gracz. Pat (strażnik M1 / bezpiecznik — `endReason`) — 'stalemate'; remis przez wzajemne zniszczenie — 'draw'.
+ * @returns {'victory'|'defeat'|'draw'|'stalemate'}
+ */
+export function orbitalOutcome(result, { playerSide = 'B' } = {}) {
+  const er = result?.endReason ?? null;
+  if (er === 'no_damage_possible' || er === 'safety_cap') return 'stalemate';
+  const w = result?.winner;
+  if (w === playerSide) return 'victory';
+  if (w === 'A' || w === 'B') return 'defeat';
+  return 'draw';
+}
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);

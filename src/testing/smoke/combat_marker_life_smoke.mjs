@@ -7,7 +7,12 @@
 //   bez strzału: zbliżanie, odliczanie broni) i W PAUZIE (P2 §10.6: luki 416 ms i 1808 ms przy aktywnym starciu).
 // KSZTAŁT: znacznik żyje wg STANU starcia — jest, dopóki starcie aktywne i w oglądanym układzie (także w pauzie), znika
 //   z jego końcem (`planEngagementMarkers` w `VesselFxLogic`, renderer synchronizuje co klatkę z
-//   `deepSpaceCombatSystem.listActive()`); 1600 ms zostaje WYŁĄCZNIE dla imitacji bitew orbitalnych (`kind: 'burst'`).
+//   `deepSpaceCombatSystem.listActive()`); 1600 ms zostało WYŁĄCZNIE dla imitacji bitew orbitalnych (`kind: 'burst'`) — do CV-8b.
+// ⚠ ARC CV-8b (D-CV-27 (a)) — imitacja bitwy orbitalnej (`_spawnBattleBurst`, znacznik `burst`, `ENGAGEMENT_BURST_TTL_MS`) WYCOFANA
+//   (bitwa orbitalna gra jako powtórka na scenie planety, CV-8a). PRZECELOWANE ŚWIADOMIE: T4 (czas życia imitacji) → T4 pin
+//   nieobecności (stary znacznik bez starcia znika jak każdy, eksportu czasu życia nie ma); T6b (stała czasu życia w synchronizacji)
+//   → bez stałej i bez czasu życia; T6d (imitacja stawia `burst`) → producenta imitacji nie ma. Sedno Findingu 457 (T1–T3, T5, T6a,
+//   T6c) bez zmian.
 // ⚠ `ThreeRenderer` nie importuje się pod node ⇒ plan wykonaniem (także na PRAWDZIWYM cyklu życia starcia DSCS:
 //   rundy co 110 ms zegara starcia, rundy bez strzału, pauza 10 s bez tików), renderer — pin źródłowy.
 //
@@ -15,12 +20,12 @@
 //   T1  starcie aktywne w oglądanym układzie: znacznik powstaje raz, potem trwa (bez duplikatów)
 //   T2  koniec starcia (nieaktywne / zniknęło z listy) — znacznik zdjęty w tej samej klatce
 //   T3  starcie w innym układzie — brak znacznika; przełączenie widoku na układ starcia — jest; z powrotem — zdjęty
-//   T4  imitacja bitwy orbitalnej (`burst`): 1600 ms — trwa przy 1600, zdjęta po 1601 ms
+//   T4  (CV-8b) imitacji bitwy orbitalnej nie ma: stary znacznik bez aktywnego starcia znika w tej samej klatce, bez czasu życia
 //   T5  PRAWDZIWE starcie DSCS (wykonanie): znacznik w KAŻDEJ klatce aktywnego starcia — przez rundy bez strzału
 //       i przez pauzę 10 s (zegar realny płynie, tików brak) — i brak po rozstrzygnięciu (KONTROLA: dzisiejsza reguła
 //       — salwa + 1600 ms — na tym samym przebiegu GUBI znacznik w trakcie starcia)
 //   T6  źródło `ThreeRenderer`: `_tickEngagementMarkers` przez plan ze `listActive()` i układem widoku; salwa nie stawia
-//       znacznika; imitacja orbitalna = `'burst'`; bez stałej 1600 w synchronizacji starć
+//       znacznika; (CV-8b) bez stałej 1600 i bez czasu życia w synchronizacji, bez producenta imitacji orbitalnej
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -49,7 +54,7 @@ const EMP = 'emp_t';
 /** Atrapa znaczników renderera: Map id → { kind, lastTouchMs }; jedna „klatka” = plan + zastosowanie (jak renderer). */
 function frame(markers, encounters, activeSystemId, nowMs) {
   const p = plan({ markers: [...markers].map(([id, m]) => ({ id, kind: m.kind, lastTouchMs: m.lastTouchMs })),
-    encounters, activeSystemId, nowMs, burstTtlMs: FX.ENGAGEMENT_BURST_TTL_MS ?? 1600 });
+    encounters, activeSystemId, nowMs });
   if (!p) return { ok: false, created: 0, disposed: 0 };
   for (const id of p.dispose) markers.delete(id);
   for (const u of p.upsert) markers.set(u.id, { kind: 'encounter', lastTouchMs: nowMs, x: u.x, y: u.y });
@@ -93,14 +98,14 @@ header('T3  starcie w innym układzie');
 }
 
 // ═══ T4 ═══════════════════════════════════════════════════════════════════════
-header('T4  imitacja bitwy orbitalnej (`burst`) — 1600 ms');
+header('T4  (CV-8b) imitacji bitwy orbitalnej nie ma — znacznik bez starcia znika od razu, bez czasu życia');
 {
   const m = new Map([['orbital_1_2', { kind: 'burst', lastTouchMs: 1000 }]]);
-  const a = frame(m, [], 'sys_home', 2600);
-  const kept = m.has('orbital_1_2');
-  const b = frame(m, [], 'sys_home', 2601);
-  assert(a.ok && kept && FX.ENGAGEMENT_BURST_TTL_MS === 1600, 'T4a trwa przy 1600 ms od dotknięcia (czas życia 1600)');
-  assert(b.ok && !m.has('orbital_1_2'), 'T4b zdjęta po 1601 ms');
+  const a = frame(m, [], 'sys_home', 1001);
+  assert(a.ok && !m.has('orbital_1_2') && !('ENGAGEMENT_BURST_TTL_MS' in FX), 'T4a stary znacznik (dawna imitacja) bez aktywnego starcia — zdjęty w pierwszej klatce; eksportu czasu życia nie ma');
+  const m2 = new Map();
+  const b = frame(m2, [encOf('enc_9', 'sys_home')], 'sys_home', 1001);
+  assert(b.ok && m2.has('enc_9') && b.created === 1, 'T4b KONTROLA: aktywne starcie w widoku — znacznik jest');
 }
 
 // ═══ T5 ═══════════════════════════════════════════════════════════════════════
@@ -176,9 +181,9 @@ header('T6  źródło `ThreeRenderer`');
   assert(mk.length > 0 && body('  _onCombatRoundFx(payload) {').includes('_spawnCombatTracer('), 'T6-0 KONTROLA: obie metody znalezione');
   assert(/planEngagementMarkers\(/.test(mk) && /listActive\?\.\(\)/.test(mk) && /activeSystemId:\s*window\.KOSMOS\?\.activeSystemId/.test(mk),
     'T6a synchronizacja: plan ze `listActive()` i układem widoku');
-  assert(!/\b1600\b/.test(mk) && /ENGAGEMENT_BURST_TTL_MS/.test(mk), 'T6b bez stałej 1600 w synchronizacji (czas życia wyłącznie imitacji orbitalnej)');
+  assert(!/\b1600\b/.test(mk) && !/ENGAGEMENT_BURST_TTL_MS|burstTtlMs/.test(mk), 'T6b (CV-8b) bez stałej 1600 i bez czasu życia w synchronizacji');
   assert(!body('  _onCombatRoundFx(payload) {').includes('_upsertEngagementMarker('), 'T6c salwa nie stawia znacznika (cykl życia = stan starcia)');
-  assert(/_upsertEngagementMarker\('orbital_'[^;]*'burst'\)/.test(body('  _spawnBattleBurst(gx, gy) {')), 'T6d imitacja bitwy orbitalnej — znacznik `burst`');
+  assert(!/_spawnBattleBurst|'burst'/.test(tr), 'T6d (CV-8b) producenta imitacji bitwy orbitalnej (`_spawnBattleBurst`, znacznik `burst`) nie ma');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

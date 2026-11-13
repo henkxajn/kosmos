@@ -3407,6 +3407,11 @@ export default {
   'combat.hudShield':       'shield',
   // ARC CV-6b2 — combat strip (flag `cvStrip`) replacing the combat card
   'combatStrip.round':      'R{0}',
+  // ARC CV-8b (§3.1-6) — result row of an orbital battle on the combat strip after the replay
+  'combatStrip.result.victory':   'Victory',
+  'combatStrip.result.defeat':    'Defeat',
+  'combatStrip.result.draw':      'Draw',
+  'combatStrip.result.stalemate': 'Stalemate',
   'combatStrip.more':       '+{0}',
   'combatStrip.log':        'RECENT FIRE',
   'combatStrip.logRound':   'R{0}',

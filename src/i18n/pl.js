@@ -3410,6 +3410,11 @@ export default {
   'combat.hudShield':       'tarcza',
   // ARC CV-6b2 — pasek walki (flaga `cvStrip`) zamiast karty walki
   'combatStrip.round':      'R{0}',
+  // ARC CV-8b (§3.1-6) — wiersz wyniku bitwy orbitalnej na pasku walki po powtórce
+  'combatStrip.result.victory':   'Zwycięstwo',
+  'combatStrip.result.defeat':    'Porażka',
+  'combatStrip.result.draw':      'Remis',
+  'combatStrip.result.stalemate': 'Pat',
   'combatStrip.more':       '+{0}',
   'combatStrip.log':        'OSTATNIE STRZAŁY',
   'combatStrip.logRound':   'R{0}',

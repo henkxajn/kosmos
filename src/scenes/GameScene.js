@@ -137,8 +137,8 @@ import { FleetSystem }         from '../systems/FleetSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { THEME }             from '../config/ThemeConfig.js';
-import { BattleView3D }      from './BattleView3D.js';
-import { showBattleIntro, showBattleOutcome, getBattleViewPreference } from '../ui/BattleIntroModal.js';
+import { showBattleOutcome } from '../ui/BattleIntroModal.js';   // ARC CV-8b (D-CV-27 (a)) — sam baner wyniku; modal „BITWA NIEUCHRONNA” i kino BattleView3D wycofane
+import { RaidAnnouncer, raidEnemyIds, stillRaiding, raidBusy, RAID_ANNOUNCE } from '../ui/RaidAnnounceLogic.js';   // ARC CV-8b (#635) — jedno ogłoszenie na rajd
 import { clusterBannerStep, clusterPeerIds, clusterRadiusPx, clusterGraceJoin, clusterBannerDue, clusterGraceMs, CLUSTER_GRACE } from '../ui/BattleClusterLogic.js';   // ARC CV-3a2 (Finding 638) — jeden baner na klaster; #675 — okno łaski
 import { ClusterNarrator, isClusterNarrated, encounterIdOfBattle } from '../ui/CombatNarration.js';   // ARC CV-6b2 (Finding 639) — Dziennik: linia na klaster
 import { ContactBatcher, CONTACT_NARRATION, PROXIMITY_COOLDOWN_YEARS, contactLogEntry } from '../ui/ContactNarration.js';   // #640 — jedna linia kontaktów na zdarzenie
@@ -629,6 +629,12 @@ export class GameScene {
       //                                     ogłoszenie od razu — jak przed krokiem); bez argumentu — odczyt (rundy i ms).
       //   KOSMOS.debug.contactWindow(250) — okno zbierania linii kontaktów w ms czasu prezentacji (0 = linia na klatkę).
       //   KOSMOS.debug.announceInfo()     — co czeka na ogłoszenie: bitwy (baner, linie), partie kontaktów, okno wykryć.
+      // ARC CV-8b (#635) — KOSMOS.debug.raidHold(15000) — sufit czekania grupy rajdu na rajdera w drodze [ms prezentacji] (0 = bez sufitu);
+      //   bez argumentu — odczyt. Pokrętło na sesję (F5 przywraca).
+      raidHold: (ms) => {
+        if (ms !== undefined) RAID_ANNOUNCE.HOLD_MAX_MS = Math.max(0, Number(ms) || 0);
+        return { holdMaxMs: RAID_ANNOUNCE.HOLD_MAX_MS, raidGroups: this._raidAnnouncer?.holding ?? 0 };
+      },
       battleGrace: (rounds) => {
         if (rounds !== undefined) CLUSTER_GRACE.ROUNDS = Math.max(0, Number(rounds) || 0);
         return { rounds: CLUSTER_GRACE.ROUNDS, ms: this._battleGraceMs() };
@@ -642,6 +648,8 @@ export class GameScene {
         graceMs: this._battleGraceMs(),
         bannerGroups: this._battleClusterHold?.length ?? 0,
         lineGroups: this._clusterNarrator?.holding ?? 0,
+        raidGroups: this._raidAnnouncer?.holding ?? 0,   // ARC CV-8b (#635) — rajdy czekające na jedno ogłoszenie
+        orbitalHeld: { banners: this._orbitalBannerHold?.size ?? 0, lines: this._orbitalLogHold?.size ?? 0, contacts: this._orbitalContactHold?.size ?? 0 },   // CV-8a / CV-8b (#713)
         contactBatches: this._contactBatcher?.size ?? 0,
         sightingPopupOpen: !!this._sightingPopupOpen,
       }),
@@ -2747,8 +2755,8 @@ export class GameScene {
       // ThreeRenderer subskrybuje 'accretion:newPlanet' samodzielnie
     });
 
-    // ── Faza 5: cinematic BattleView3D po rozstrzygnięciu bitwy ──
-    this._battleView3D = null;  // leniwa inicjalizacja
+    // ── Baner wyniku bitwy (kolejka — żeby banery się nie nakładały). ARC CV-8b (D-CV-27 (a)) — modal „BITWA NIEUCHRONNA” i kino
+    // BattleView3D wycofane: każda bitwa kończy się banerem (bitwa w widoku — po walce na scenie), auto-slow zamiast modalu.
     this._battleQueue = [];     // bitwy oczekujące w kolejce (żeby nie nakładały się)
     this._battleShowing = false;
 
@@ -2835,17 +2843,21 @@ export class GameScene {
       battleData.aggressorArchetype = sides.foeArchetype;
       battleData.playerSide         = sides.playerSide;
 
+      // ARC CV-8b (Finding 635, decyzja właściciela 48 (9)) — rajd, który rozstrzygnął się dwa razy (starcie DSCS w podejściu, potem
+      // bitwa orbitalna EAH ocalałych rajderów): bitwa trafia do grupy rajdu (`RaidAnnouncer`) — jeden baner i jedna linia Dziennika
+      // na rajd, z wynikiem scalonym, gdy żaden rajder nie jest już w drodze. Dwa rekordy bitew zostają (mechanika nietknięta).
+      if (GAME_CONFIG.FEATURES?.cvOrbital) this._noteRaidBattle({ battleId, result });
+
       // ARC CV-8a (flaga `cvOrbital`, D-CV-27 (a), Finding 632) — bitwa orbitalna (`fx` z `EnemyAttackHandler`): ŹRÓDŁO 'orbital'
-      // (potyczka bez wojny przestaje udawać walkę deep-space 'dscs'), baner wyniku zamiast modalu kina; w oglądanym układzie baner
-      // czeka na koniec powtórki na scenie planety (`combatfx:orbitalReplayEnd`), poza nim — od razu. Auto-slow — jak dotąd (UIManager).
+      // (potyczka bez wojny przestaje udawać walkę deep-space 'dscs'), baner wyniku; w oglądanym układzie baner czeka na koniec
+      // powtórki na scenie planety (`combatfx:orbitalReplayEnd`), poza nim — od razu. Auto-slow — jak dotąd (UIManager).
       if (fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital) {
         battleData.source = 'orbital';
         if (this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
           (this._orbitalBannerHold ??= new Map()).set(battleId, battleData);
           return;
         }
-        this._battleQueue.push(battleData);
-        this._tryShowNextBattle();
+        this._queueBanner(battleData);
         return;
       }
 
@@ -2854,19 +2866,27 @@ export class GameScene {
       // z wynikiem scalonym (`BattleClusterLogic`). Dziennik bez zmian — linia na starcie do CV-6b (#639). Pod flagą `cvStage`.
       const banners = (battleData.source === 'dscs' && GAME_CONFIG.FEATURES?.cvStage)
         ? this._clusterBattleBanners(battleData) : [battleData];
-      for (const b of banners) this._battleQueue.push(b);
-      if (banners.length) this._tryShowNextBattle();
+      for (const b of banners) this._queueBanner(b);
     });
 
-    // ARC CV-8a — koniec powtórki bitwy orbitalnej (także przerwanej zmianą układu) — baner wyniku, który na nią czekał.
+    // ARC CV-8a — koniec powtórki bitwy orbitalnej (także przerwanej zmianą układu) — baner wyniku i linia bitwy, które na nią czekały.
+    // ARC CV-8b (#713, decyzja 48 (4)) — razem z nimi wpisy skutków EAH (zestrzeleni / pat / remis) i „Utracono kontakt” wraków powtórki:
+    // jedno ogłoszenie w chwili, gdy gracz widzi wynik. Kolejność jak poza widokiem: linia bitwy, skutki, kontakty (partia), baner.
     EventBus.on('combatfx:orbitalReplayEnd', ({ battleId }) => {
-      const line = this._orbitalLogHold?.get(battleId);
-      if (line) { this._orbitalLogHold.delete(battleId); window.KOSMOS?.eventLogSystem?.push?.(line); }
+      const held = this._orbitalLogHold?.get(battleId);
+      if (held) {
+        this._orbitalLogHold.delete(battleId);
+        this._writeBattleLine(held.line, [battleId]);
+        if (held.extras?.length && !(GAME_CONFIG.FEATURES?.cvOrbital && this._raidAnnouncer?.offerExtras(battleId, held.extras))) {
+          for (const e of held.extras) window.KOSMOS?.eventLogSystem?.push?.(e);
+        }
+      }
+      const lost = this._orbitalContactHold?.get(battleId);
+      if (lost) { this._orbitalContactHold.delete(battleId); for (const n of lost) this._noteContact('lost', n); }
       const b = this._orbitalBannerHold?.get(battleId);
       if (!b) return;
       this._orbitalBannerHold.delete(battleId);
-      this._battleQueue.push(b);
-      this._tryShowNextBattle();
+      this._queueBanner(b);
     });
 
     // Wpis do EventLoga dla KAŻDEJ bitwy (także obcy-vs-obcy w przyszłości).
@@ -2878,12 +2898,16 @@ export class GameScene {
     EventBus.on('battle:resolved', ({ warId, battleId, result, fx }) => {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog || !result) return;
-      // ARC CV-8a — bitwa orbitalna w powtórce: linia bitwy w Dzienniku czeka na koniec powtórki (jak baner — wynik nie wyprzedza walki)
-      if (fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital && this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
-        const held = this._battleLogEntry({ warId, result });
-        if (held) (this._orbitalLogHold ??= new Map()).set(battleId, held);
+      const orbital = fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital;
+      // ARC CV-8a — bitwa orbitalna w powtórce: linia bitwy w Dzienniku czeka na koniec powtórki (jak baner — wynik nie wyprzedza walki).
+      // ARC CV-8b (#713) — razem z nią wpisy skutków EAH: `fx.logHeld` mówi EAH, że wpis przejęła prezentacja (EAH sprawdza po zdarzeniu).
+      if (orbital && this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
+        fx.logHeld = true;
+        (this._orbitalLogHold ??= new Map()).set(battleId, { line: this._battleLogEntry({ warId, result }), extras: fx.logEntries ?? [] });
         return;
       }
+      // ARC CV-8b (#635 / #713) — bitwa orbitalna rajdu w grupie (poza widokiem): wpisy skutków EAH czekają na ogłoszenie rajdu.
+      if (orbital && this._raidAnnouncer?.offerExtras(battleId, fx.logEntries ?? [])) fx.logHeld = true;
       // ARC CV-6b2 (Finding 639) — pod flagą `cvStrip` bitwa DSCS idzie przez narratora klastra: JEDNA linia bitwy (wynik
       // scalony jak baner) i JEDNA linia potyczki na klaster starć, po ostatnim `battle:resolved` klastra. Reszta (wojna,
       // obrona orbitalna, bez flagi) — linia na bitwę jak dotąd.
@@ -2891,8 +2915,7 @@ export class GameScene {
         this._narrateBattleCluster({ battleId, result });
         return;
       }
-      const entry = this._battleLogEntry({ warId, result });
-      if (entry) evtLog.push(entry);
+      this._writeBattleLine(this._battleLogEntry({ warId, result }), [battleId]);
     });
 
     // ARC CV-6b2 (Finding 639) — potyczka bitwy DSCS pod flagą `cvStrip`: linię pisze narrator klastra (raz na klaster, przed linią
@@ -2927,10 +2950,20 @@ export class GameScene {
 
     // #687 — nazwa w „Utracono kontakt” wg reguły kanonicznej, z jakości wywiadu W CHWILI UTRATY (`quality` w ładunku — Wywiad zdejmuje
     // rekord wraku przed zdarzeniem; brak pola — bieżący rekord). Rumor (np. kontakt wygasły po degradacji) — sama pozycja.
-    EventBus.on('intel:vesselContactLost', ({ vesselId, lastKnownPosition, quality }) => {
+    EventBus.on('intel:vesselContactLost', ({ vesselId, lastKnownPosition, quality, reason }) => {
       const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
       const q = quality ?? window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality;
-      this._noteContact('lost', { vessel, id: vesselId, position: lastKnownPosition ?? null, named: enemyVesselNamed(q) });
+      const note = { vessel, id: vesselId, position: lastKnownPosition ?? null, named: enemyVesselNamed(q) };
+      // ARC CV-8b (#713) — wrak okrętu, który w powtórce bitwy orbitalnej jeszcze nie zginął (EAH robi wraki zaraz po zdarzeniu): linia
+      // „Utracono kontakt” czeka na koniec tej powtórki (`combatfx:orbitalReplayEnd`) — strata nie wyprzedza walki na ekranie.
+      const heldIn = reason === 'wrecked' && GAME_CONFIG.FEATURES?.cvOrbital ? this.threeRenderer?.cvOrbital?.heldBattleOf?.(vesselId) : null;
+      if (heldIn != null) {
+        const m = (this._orbitalContactHold ??= new Map());
+        if (!m.has(heldIn)) m.set(heldIn, []);
+        m.get(heldIn).push(note);
+        return;
+      }
+      this._noteContact('lost', note);
     });
 
     // #640 — kontakt sensoryczny (wróg w zasięgu sensorów statku gracza). Do kroku #640 pisał go `UIManager` — linię na PARĘ
@@ -4337,6 +4370,7 @@ export class GameScene {
       }
     }
     this._releaseBattleGrace(nowMs);
+    this._releaseRaids(nowMs);
   }
 
   /** #640 / #675 — bieżący czas prezentacji okien ogłoszeń [ms] (0 przed pierwszą klatką). */
@@ -4359,8 +4393,7 @@ export class GameScene {
     const graceMs = this._battleGraceMs();
     if (this._battleClusterHold?.length) {
       const banners = clusterBannerDue(this._battleClusterHold, { nowMs, graceMs, isActive });
-      for (const b of banners) this._battleQueue.push(b);
-      if (banners.length) this._tryShowNextBattle();
+      for (const b of banners) this._queueBanner(b);
     }
     if (this._clusterNarrator?.holding) this._writeNarration(this._clusterNarrator.releaseDue({ nowMs, graceMs, isActive }));
   }
@@ -4376,7 +4409,58 @@ export class GameScene {
   _writeNarration(outs) {
     for (const o of outs ?? []) {
       if (o.kind === 'skirmish') this.uiManager?._log?.(o.text, 'combat');
-      else window.KOSMOS?.eventLogSystem?.push?.(o.entry);
+      else this._writeBattleLine(o.entry, o.battleIds ?? []);
+    }
+  }
+
+  // ── ARC CV-8b — jedno ogłoszenie na bitwę i na rajd ───────────────────────────────────────────────────────────────
+
+  // Gotowy baner bitwy (po klastrze / oknie łaski / powtórce) do kolejki — chyba że należy do rajdu, który czeka (#635): wtedy
+  // parkuje w grupie rajdu i wyjdzie raz, scalony (`_releaseRaids`). Flaga `cvOrbital` OFF — jak dotąd.
+  _queueBanner(b) {
+    if (!b) return;
+    if (GAME_CONFIG.FEATURES?.cvOrbital && this._raidAnnouncer?.offerBanner(b)) return;
+    this._battleQueue.push(b);
+    this._tryShowNextBattle();
+  }
+
+  // Linia bitwy (`log.battleLine`) do Dziennika — chyba że należy do rajdu (#635): połknięta, rajd dostaje jedną linię scaloną.
+  _writeBattleLine(entry, battleIds = []) {
+    if (!entry) return;
+    if (GAME_CONFIG.FEATURES?.cvOrbital && this._raidAnnouncer?.offerLine(battleIds)) return;
+    window.KOSMOS?.eventLogSystem?.push?.(entry);
+  }
+
+  // #635 — bitwa z graczem, dla której wyjdzie baner: grupę rajdu otwiera starcie DSCS z rajderem dalej w drodze (misja `attack`,
+  // wznowiona przed `battle:resolved` — F130) albo bitwa EAH, której rajder walczy jeszcze w aktywnym starciu DSCS (kolejność odwrotna);
+  // bitwa (DSCS albo EAH), której strona wroga ma statek grupy, do niej dołącza.
+  _noteRaidBattle({ battleId, result }) {
+    const enemyIds = raidEnemyIds(result);
+    if (!enemyIds.length) return;
+    const vm = window.KOSMOS?.vesselManager, dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    const kind = isDeepSpaceBattle(normalizeBattleLocation(result.location)) ? 'approach' : 'colony';
+    const continuing = kind === 'approach'
+      ? enemyIds.filter((id) => stillRaiding(vm?.getVessel?.(id)))
+      : enemyIds.filter((id) => !!dscs?._findActiveEncounterContaining?.(id));
+    (this._raidAnnouncer ??= new RaidAnnouncer()).noteBattle({ battleId, kind, enemyIds, continuing });
+  }
+
+  // #635 — raz na klatkę (zegar prezentacji): rajdy, na które nic już nie czeka (banery bitew, rajderzy w drodze) — po oknie łaski
+  // jedna linia scalona w Dzienniku (`log.battleLine` — `_battleLogEntry`, jedyny producent), wpisy skutków EAH, jeden baner.
+  _releaseRaids(nowMs) {
+    if (!this._raidAnnouncer?.holding) return;
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager, dscs = K?.deepSpaceCombatSystem;
+    const inCombat = (id) => !!dscs?._findActiveEncounterContaining?.(id);
+    const busy = (id) => raidBusy(vm?.getVessel?.(id), { inCombat });
+    for (const rel of this._raidAnnouncer.releaseDue({ nowMs, graceMs: this._battleGraceMs(), busy, holdMaxMs: RAID_ANNOUNCE.HOLD_MAX_MS })) {
+      const b = rel.banner;
+      if (!b) continue;
+      const entry = this._battleLogEntry({ warId: b.warId ?? null, result: b.result });
+      if (entry) K?.eventLogSystem?.push?.(entry);
+      for (const e of rel.extras ?? []) K?.eventLogSystem?.push?.(e);
+      this._battleQueue.push(b);
+      this._tryShowNextBattle();
     }
   }
 
@@ -4537,62 +4621,19 @@ export class GameScene {
       nowMs: this._announceNowMs(), graceMs: this._battleGraceMs() }));
   }
 
-  // ── Faza 5: pipeline BattleView3D ──────────────────────────
+  // ── Kolejka banerów wyniku bitwy ─────────────────────────────
+  // ARC CV-8b (D-CV-27 (a)) — KAŻDA bitwa kończy się banerem wyniku: deep-space i orbitalna (w widoku — po walce na scenie; poza
+  // widokiem — od razu), wojenna i potyczka. Modal „BITWA NIEUCHRONNA” (pytanie Obserwuj / Pomiń, preferencja w localStorage) i kino
+  // BattleView3D (własna scena na `#three-canvas`, zawieszony renderer główny) wycofane; „Obserwuj” = kamera na scenę bitwy (pasek
+  // walki, znak bitwy), zamiast pauzującego pytania — auto-slow (`UIManager`, Finding 157).
   async _tryShowNextBattle() {
     if (this._battleShowing) return;
     if (this._battleQueue.length === 0) return;
     this._battleShowing = true;
-
     const battleData = this._battleQueue.shift();
-
-    // Fleet Command Console (Slice 1) — bitwy deep-space (DSCS, Path B) rozgrywają
-    // się NA ŻYWO na głównej mapie (smugi + kamera + auto-slow). Pomijamy modal kina
-    // — tylko lekki baner outcome (domknięcie). Kino zostaje dla Path A (war-driven,
-    // abstrakcja bez żywych meshy). Rollback: fcCombatFx=false → stary pełny modal.
-    if (GAME_CONFIG.FEATURES?.fcCombatFx && (battleData?.source === 'dscs' || battleData?.source === 'orbital')) {   // CV-8a — orbitalna: baner
-      try { await showBattleOutcome(battleData); }
-      catch (err) { console.error('[BattleOutcome] Error:', err); }
-      this._battleShowing = false;
-      if (this._battleQueue.length > 0) this._tryShowNextBattle();
-      return;
-    }
-
-    // Preferencja gracza — 'ask' (domyślnie) lub 'skip' (Zawsze pomijaj)
-    const pref = getBattleViewPreference();
-    let choice = 'skip';
-    if (pref === 'ask') {
-      try {
-        choice = await showBattleIntro(battleData);
-      } catch (err) {
-        console.error('[BattleView] Intro error:', err);
-        choice = 'skip';
-      }
-    }
-
-    if (choice === 'watch') {
-      // Leniwa inicjalizacja BattleView3D z canvas
-      if (!this._battleView3D) {
-        const canvas = document.getElementById('three-canvas');
-        if (canvas) this._battleView3D = new BattleView3D(canvas);
-      }
-      if (this._battleView3D) {
-        try {
-          await this._battleView3D.start(battleData);
-        } catch (err) {
-          console.error('[BattleView3D] Error:', err);
-        }
-      }
-    } else {
-      // Skip / Zawsze pomijaj — tylko baner outcome, bez cinematic 3D
-      try {
-        await showBattleOutcome(battleData);
-      } catch (err) {
-        console.error('[BattleOutcome] Error:', err);
-      }
-    }
-
+    try { await showBattleOutcome(battleData); }
+    catch (err) { console.error('[BattleOutcome] Error:', err); }
     this._battleShowing = false;
-    // Kolejna w kolejce, jeśli jest
     if (this._battleQueue.length > 0) this._tryShowNextBattle();
   }
 

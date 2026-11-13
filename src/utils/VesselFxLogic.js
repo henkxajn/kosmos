@@ -74,11 +74,10 @@ export function rumorGhostHold({ isEnemy, quality, revealed = false, ghostsOn = 
 // go wyłącznie salwa, a po 1600 ms CZASU REALNEGO bez strzału znikał — przy 400 ms na rundę także w trakcie starcia
 // (rundy bez strzału: zbliżanie, odliczanie broni) i w pauzie (P2 §10.6: luki 416 ms i 1808 ms). Teraz: znacznik jest,
 // dopóki starcie jest aktywne i w oglądanym układzie (`isEngagementInView`) — także w pauzie — i znika z jego końcem.
-// Czas życia 1600 ms zostaje WYŁĄCZNIE dla jednorazowych „imitacji” bitew orbitalnych (`kind: 'burst'`).
-// in: { markers: [{ id, kind: 'encounter'|'burst', lastTouchMs }], encounters: [{ id, isActive, systemId, point }],
-//       activeSystemId, nowMs, burstTtlMs }   out: { upsert: [{ id, x, y }], dispose: [id] }
-export const ENGAGEMENT_BURST_TTL_MS = 1600;
-export function planEngagementMarkers({ markers = [], encounters = [], activeSystemId, nowMs, burstTtlMs = ENGAGEMENT_BURST_TTL_MS }) {
+// ARC CV-8b — rodzaj 'burst' (jednorazowa „imitacja” bitwy orbitalnej, 1600 ms czasu realnego) wycofany razem z imitacją: każdy
+// znacznik to znacznik starcia DSCS.
+// in: { markers: [{ id }], encounters: [{ id, isActive, systemId, point }], activeSystemId }   out: { upsert: [{ id, x, y }], dispose: [id] }
+export function planEngagementMarkers({ markers = [], encounters = [], activeSystemId }) {
   const want = new Map();
   for (const e of encounters) {
     if (!e?.isActive || !e.id) continue;
@@ -92,10 +91,6 @@ export function planEngagementMarkers({ markers = [], encounters = [], activeSys
   for (const m of markers) {
     if (!m?.id) continue;
     have.add(m.id);
-    if (m.kind === 'burst') {
-      if (nowMs - (m.lastTouchMs ?? 0) > burstTtlMs) dispose.push(m.id);
-      continue;
-    }
     if (!want.has(m.id)) dispose.push(m.id);
   }
   for (const [id, p] of want) if (!have.has(id)) upsert.push({ id, x: p.x, y: p.y });

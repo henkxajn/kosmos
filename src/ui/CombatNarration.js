@@ -119,7 +119,8 @@ export class ClusterNarrator {
       for (const it of items) this._remember(this._done, it.battleId, rec, DONE_CAP);
       const merged = mergeClusterBattles(items);
       const entry = merged?.result ? this._lineFor(merged.result) : null;
-      if (entry) out.push({ kind: 'battle', entry, size: items.length });
+      // ARC CV-8b (#635) — `battleIds`: bitwy linii (linia bitwy rajdu, który rozstrzygnął się dwa razy, idzie scalona — `RaidAnnouncer`)
+      if (entry) out.push({ kind: 'battle', entry, size: items.length, battleIds: items.map((it) => it.battleId) });
     }
     return out;
   }

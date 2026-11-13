@@ -69,6 +69,7 @@ const SR = await tryImport('../../ui/CombatStrip.js');
 const NR = await tryImport('../../ui/CombatNarration.js');
 const STAGER = await tryImport('../../debug/CvBattleStager.js');
 const CNX = await tryImport('../../ui/ContactNarration.js');   // #640 — zakres `_tickAnnouncements` (partie kontaktów)
+const RALX = await tryImport('../../ui/RaidAnnounceLogic.js');   // ARC CV-8b (#635) — bramka rajdu w metodach `GameScene`
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -308,7 +309,9 @@ block('P3 — „Obserwuj”: ładunek paska == ładunek karty pod `cvStage` (pr
 const gsScope = { window: globalThis.window, GAME_CONFIG, t, EntityManager, normalizeBattleLocation, isDeepSpaceBattle, systemDisplayName,
   resolveBattleSides, battleWinnerName, ClusterNarrator: NR?.ClusterNarrator, encounterIdOfBattle: NR?.encounterIdOfBattle, clusterPeerIds, clusterRadiusPx,
   clusterBannerStep, clusterGraceJoin: BCX.clusterGraceJoin, clusterBannerDue: BCX.clusterBannerDue, clusterGraceMs: BCX.clusterGraceMs,
-  PresentationClock, ContactBatcher: CNX?.ContactBatcher, CONTACT_NARRATION: CNX?.CONTACT_NARRATION, contactLogEntry: CNX?.contactLogEntry };
+  PresentationClock, ContactBatcher: CNX?.ContactBatcher, CONTACT_NARRATION: CNX?.CONTACT_NARRATION, contactLogEntry: CNX?.contactLogEntry,
+  // ARC CV-8b (#635) — bramka rajdu w metodach `GameScene` (PRZECELOWANE ŚWIADOMIE: zakres kompilacji i lista metod niżej)
+  RaidAnnouncer: RALX?.RaidAnnouncer, raidEnemyIds: RALX?.raidEnemyIds, stillRaiding: RALX?.stillRaiding, raidBusy: RALX?.raidBusy, RAID_ANNOUNCE: RALX?.RAID_ANNOUNCE };
 function runNarration(flagOn, { graceRounds = null } = {}) {
   reseed('cv6b2-strip'); world();
   F.cvStrip = flagOn;
@@ -321,7 +324,8 @@ function runNarration(flagOn, { graceRounds = null } = {}) {
   gs._narrateBattleCluster = compile(GS, '_narrateBattleCluster', scope);
   gs._clusterBattleBanners = compile(GS, '_clusterBattleBanners', scope);   // baner gry (CV-3a2) — ten sam strumień
   // #675 — okno łaski: te same metody co gra (zegar prezentacji, wyjście po oknie, dołączenie dobicia, wpisy narratora)
-  for (const m of ['_tickAnnouncements', '_announceNowMs', '_battleGraceMs', '_releaseBattleGrace', '_joinBattleGrace', '_writeNarration']) {
+  for (const m of ['_tickAnnouncements', '_announceNowMs', '_battleGraceMs', '_releaseBattleGrace', '_joinBattleGrace', '_writeNarration',
+    '_queueBanner', '_writeBattleLine', '_noteRaidBattle', '_releaseRaids']) {   // ARC CV-8b — bramka rajdu (#635)
     gs[m] = compile(GS, m, scope);
   }
   const ui = { lines: [] };
@@ -668,7 +672,8 @@ block('P8 — źródło: pierścień i biały błysk pod flagą — nie, paski H
   const iEsc = gs.indexOf('um?.combatStripEscape?.()'), iModal = gs.indexOf('escapeHeldByModal('), iFleet = gs.indexOf('escapeClosesFleetPanel(');
   assert(iEsc > iModal && iEsc < iFleet && iModal > 0,
     'P8b Esc: rozwinięty pasek zwija się po oknie DOM, przed panelem floty i zaznaczeniem (`GameScene`)');
-  assert(/if \(!warId && GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) \{\s*this\._narrateBattleCluster\(\{ battleId, result \}\);\s*return;\s*\}\s*const entry = this\._battleLogEntry\(\{ warId, result \}\);\s*if \(entry\) evtLog\.push\(entry\);/.test(gs)
+  // ARC CV-8b (#635) — PRZECELOWANE ŚWIADOMIE: linia „reszty” idzie przez `_writeBattleLine` (bramka rajdu), routing bez zmian
+  assert(/if \(!warId && GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) \{\s*this\._narrateBattleCluster\(\{ battleId, result \}\);\s*return;\s*\}\s*this\._writeBattleLine\(this\._battleLogEntry\(\{ warId, result \}\), \[battleId\]\);/.test(gs)
     && /if \(GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) return;\s*this\._log\(this\.skirmishLineText\(empireId\), 'combat'\);/.test(ui)
     && (gs.match(/t\(\s*'log\.battleLine'/g) ?? []).length === 1 && (ui.match(/t\(\s*'log\.skirmish'/g) ?? []).length === 1,
     'P8c routing Dziennika: bitwa DSCS pod flagą → narrator klastra, reszta → linia jak dotąd; potyczka DSCS pod flagą nie w `UIManager`; jeden autor każdej linii');

@@ -235,6 +235,13 @@ export class EnemyAttackHandler {
       },
     };
 
+    // ARC CV-8b (#713, decyzja właściciela 48 (4)) — wpis Dziennika skutków bitwy (zestrzeleni / pat / remis) liczony PRZED zdarzeniem
+    // i dołożony do `fx` (`fx.logEntries`): prezentacja (`GameScene`) w trakcie zdarzenia może go PRZEJĄĆ (`fx.logHeld = true` —
+    // powtórka w widoku albo bitwa rajdu, który rozstrzygnął się dwa razy, #635) i wypisać razem z linią bitwy, gdy gracz widzi wynik.
+    // Nieprzejęty (poza widokiem, flaga OFF — bez `fx`, świat bez sceny) — wpis jak dotąd, PO skutkach. Treść i kolejność bez zmian.
+    const logEntry = this._orbitalLogEntry({ result, count: allEnemies.length, firstVessel, systemId });
+    if (fx) fx.logEntries = logEntry ? [logEntry] : [];
+
     if (war) {
       // ⚠ W1-4 (K-3, podpisane) — ZMIANA ZACHOWANIA, świadoma i widoczna.
       // Do W1-3 ta gałąź omijała `recordBattle`: pisała `gameState.battles` wprost, sama
@@ -293,15 +300,6 @@ export class EnemyAttackHandler {
       for (const v of allEnemies) {
         this._turnIntoWreck(v, planetId, year);
       }
-      const count = allEnemies.length;
-      evtLog?.push({
-        text: count > 1
-          ? t('log.el.orbitalShotDown', count, this._systemLabel(systemId))
-          : t('log.el.orbitalShotDown1', firstVessel.name ?? '?', this._systemLabel(systemId)),
-        channel: 'combat',
-        severity: 'info',
-        entityRef: systemId,
-      });
     } else if (isStalemate(result)) {
       // M1 (decyzja właściciela 5 i 6) — PAT: żadna strona nie mogła zadać obrażeń (strażnik) albo ukryty bezpiecznik tur.
       // Remis BEZ wraków żywych: wrogowie zostają na orbicie jak po wygranej (bez rozbicia floty gracza), Dziennik mówi „pat”.
@@ -312,23 +310,33 @@ export class EnemyAttackHandler {
         v.status = 'idle';
         v.mission = null;
       }
-      evtLog?.push({
-        text: t('log.el.orbitalStalemate', this._systemLabel(systemId), allEnemies.length),
-        channel: 'combat',
-        severity: 'warn',
-        entityRef: systemId,
-      });
     } else {
       // Draw — oboje tracą (wzajemne zniszczenie w tej samej turze)
       for (const v of allEnemies) this._turnIntoWreck(v, planetId, year);
       this._wreckPlayerVesselsInSystem(systemId, year);
-      evtLog?.push({
-        text: t('log.el.orbitalDraw', this._systemLabel(systemId), allEnemies.length),
-        channel: 'combat',
-        severity: 'warn',
-        entityRef: systemId,
-      });
     }
+    // ARC CV-8b (#713) — wpis skutków PO skutkach (kolejność jak dotąd), chyba że prezentacja przejęła go w trakcie zdarzenia.
+    if (logEntry && !fx?.logHeld) evtLog?.push(logEntry);
+  }
+
+  /**
+   * Wpis Dziennika skutków bitwy orbitalnej (treść 1:1 z dawnych gałęzi skutków): wygrana obrony — zestrzeleni, pat (M1, bez wraków),
+   * remis przez wzajemne zniszczenie; wygrana napastnika — bez wpisu (`null`; linia bitwy w `GameScene` mówi wszystko). ARC CV-8b (#713).
+   */
+  _orbitalLogEntry({ result, count, firstVessel, systemId }) {
+    if (result.winner === 'B') {
+      return {
+        text: count > 1
+          ? t('log.el.orbitalShotDown', count, this._systemLabel(systemId))
+          : t('log.el.orbitalShotDown1', firstVessel?.name ?? '?', this._systemLabel(systemId)),
+        channel: 'combat', severity: 'info', entityRef: systemId,
+      };
+    }
+    if (result.winner === 'A') return null;
+    if (isStalemate(result)) {
+      return { text: t('log.el.orbitalStalemate', this._systemLabel(systemId), count), channel: 'combat', severity: 'warn', entityRef: systemId };
+    }
+    return { text: t('log.el.orbitalDraw', this._systemLabel(systemId), count), channel: 'combat', severity: 'warn', entityRef: systemId };
   }
 
   /**

@@ -16,7 +16,7 @@
 //   R6 koniec starcia: powrót do skali prawdziwej przez JOIN_MS czasu prezentacji (nie skokiem), w pauzie stoi
 //   R7 tryb galaktyki — bez sceny; R8 uczestnik przy ciele, ciało BEZ rysunku (atrapa bez `getBodyWorldInfo`) — bez sceny
 //      (CV-3a3: skorupa przy ciele wymaga rysunku ciała — przy ciele z rysunkiem scena jest: `cv_stage_shell_smoke`)
-//   R9 (642) pierścień starcia DSCS ukryty pod flagą, znacznik imitacji orbitalnej — nie; R10 (641) eksplozja wraku pod
+//   R9 (642) pierścień starcia DSCS ukryty pod flagą (CV-8b: imitacja orbitalna wycofana — każdy znacznik to starcie); R10 (641) eksplozja wraku pod
 //      flagą bez płaskiego pierścienia (OFF — z pierścieniem)
 //   R11 (643) przesunięcie ekranowe kadru walki: przy „Obserwuj” — `setViewOffset`, cel kamery nietknięty; po końcu —
 //      wygaszenie i `clearViewOffset`; przy podglądzie obserwatorium — nic
@@ -290,11 +290,14 @@ block('R7 / R8 — tryb galaktyki bez sceny; uczestnik przy ciele bez rysunku ci
 block('R9 / R10 — (642) pierścień starcia ukryty; (641) eksplozja wraku bez płaskiego pierścienia', () => {
   const { R } = world();
   const mk = () => { const mesh = new THREE.Object3D(); mesh.visible = true; return mesh; };
-  R._engagementMarkers.set('enc_1', { mesh: mk(), kind: 'encounter' });
-  R._engagementMarkers.set('orbital_x', { mesh: mk(), kind: 'burst' });
+  // ARC CV-8b — znacznik imitacji bitwy orbitalnej (`burst`) WYCOFANY (przecelowane świadomie: dawna KONTROLA „imitacja zostaje”
+  // nie ma już przedmiotu); KONTROLA zastępcza — inny obiekt sceny (nie znacznik starcia) zostaje widoczny.
+  R._engagementMarkers.set('enc_1', { mesh: mk() });
+  R._engagementMarkers.set('enc_2', { mesh: mk() });
+  const other = mk();
   R._hideEncounterRings();
-  assert(R._engagementMarkers.get('enc_1').mesh.visible === false && R._engagementMarkers.get('orbital_x').mesh.visible === true,
-    'R9 pierścień starcia DSCS ukryty, znacznik imitacji bitwy orbitalnej — bez zmian');
+  assert(R._engagementMarkers.get('enc_1').mesh.visible === false && R._engagementMarkers.get('enc_2').mesh.visible === false && other.visible === true,
+    'R9 pierścienie starć DSCS ukryte (każdy znacznik to starcie — CV-8b), obiekt spoza znaczników — bez zmian');
   R.spawned = []; GAME_CONFIG.FEATURES.cvStage = true; R._spawnExplosion(new THREE.Vector3(1, 0.3, 1), 0.016);
   const on = [...R.spawned];
   R.spawned = []; GAME_CONFIG.FEATURES.cvStage = false; R._spawnExplosion(new THREE.Vector3(1, 0.3, 1), 0.016);

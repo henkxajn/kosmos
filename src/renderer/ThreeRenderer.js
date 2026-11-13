@@ -96,7 +96,7 @@ import {
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR, combatFxPace,
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
-  isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS, ENGAGEMENT_RING, engagementRingBand,
+  isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_RING, engagementRingBand,
   isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR, HIT_GLOW, hitGlowWorldSize,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR, rumorGhostHold }
@@ -237,8 +237,8 @@ const _SUN_TO_CAM    = new THREE.Vector3(); // scratch — kierunek gwiazda→ka
 // płynęły O POŁOWĘ za wolno, przy 120 fps dwa razy za szybko — tempo zależało od
 // wydajności maszyny, a nie od zegara.
 // ⚠ SUFIT JEST OBOWIĄZKOWY, nie ostrożnościowy: requestAnimationFrame zamiera w karcie
-// w tle, a sama pętla renderowania ma jeszcze dwie bramki (_contextLost oraz
-// _renderingEnabled — BattleView3D przejmuje canvas na czas starcia). Powrót po minucie
+// w tle, a sama pętla renderowania ma jeszcze bramkę _contextLost (do CV-8b także
+// _renderingEnabled — kino BattleView3D przejmowało canvas na czas starcia). Powrót po minucie
 // dostarczyłby dt liczone w SEKUNDACH i jednym skokiem teleportowałby każdą warstwę
 // chmur i każdą burzę. 0.1 s = 6 klatek przy 60 fps: spadki wydajności przechodzą,
 // skok w czasie nie.
@@ -1896,10 +1896,10 @@ export class ThreeRenderer {
     // salwa CV-2a (`_cvFxRoundFx`) pod tą flagą ustępuje, więc strzał rysuje się raz.
     EventBus.on('combat:roundFx', safe((p) => this._cvWpnRoundFx(p)));
 
-    // Fix#3 — bitwy orbitalne/abstrakcyjne (EnemyAttackHandler/WarSystem, „stare zasady",
-    // statki niefizycznie blisko) NIE mają combat:roundFx. Syntezujemy „imitację" walki
-    // (burst smug+błysków) przy planecie/celu, żeby walka była WIDOCZNA na mapie.
-    EventBus.on('battle:resolved', safe((p) => this._onBattleResolvedFx(p)));
+    // ARC CV-8a / CV-8b — bitwa orbitalna (EnemyAttackHandler, klucz `fx`) gra jako powtórka na scenie planety (`CvOrbital.handle` —
+    // idempotentne, woła je też `GameScene`; poza oglądanym układzie — sam baner). CV-8b (D-CV-27 (a)) wycofało „imitację” walki
+    // (16 kresek wokół planety, `_spawnBattleBurst`) razem z kinem BattleView3D.
+    EventBus.on('battle:resolved', safe((p) => this._cvOrb?.handle?.(p)));
 
     // Slice 1 — łagodny auto-focus kamery gdy gracz wchodzi w starcie (wide framing).
     // Domyślnie ON (gracz chce widzieć bitwy); close-up = klik statku / „Obserwuj bitwę".
@@ -4420,12 +4420,6 @@ export class ThreeRenderer {
     if (this._colonyTooltipEl) this._colonyTooltipEl.style.display = 'none';
   }
 
-  // ── Suspend/resume (Faza 5 — BattleView3D przejmuje canvas) ──
-  // Gdy _renderingEnabled=false, pętla żyje (odbiera eventy) ale nic nie rysuje
-  // na głównej scenie. BattleView3D używa tego samego canvas i renderera.
-  suspend() { this._renderingEnabled = false; }
-  resume()  { this._renderingEnabled = true;  }
-
   // ── Cinematic intro (start nowej gry) ──────────────────────────
   // Driver kamery per-frame — GameScene rejestruje fn(nowMs) wołaną w pętli
   // renderowania TUŻ PRZED cameraController.update() (własny dt; lerpy kontrolera
@@ -4490,16 +4484,12 @@ export class ThreeRenderer {
 
   // ── Pętla renderowania ────────────────────────────────────────
   _startLoop() {
-    // Faza 5: bramka na rendering (BattleView3D zawiesza przy starciu)
-    if (this._renderingEnabled === undefined) this._renderingEnabled = true;
-
+    // ARC CV-8b — bramka `_renderingEnabled` (BattleView3D zawieszał główną scenę na czas kina) wycofana razem z kinem.
     const loop = () => {
       requestAnimationFrame(loop);
 
       // Pomiń rendering gdy kontekst WebGL utracony
       if (this._contextLost) return;
-      // Faza 5: BattleView3D przejął canvas — nie rysujemy głównej sceny
-      if (!this._renderingEnabled) return;
 
       try {
         if (this._fxStatsRun) this._fxStatsBegin();   // ARC CV-2a — pomiar fxStats (wyłącznie w trakcie pomiaru)
@@ -4520,8 +4510,8 @@ export class ThreeRenderer {
           // Delikatne „oddychanie" jasności korony (±3%).
           // ⚠ Faza jest AKUMULOWANA w _tickClouds, a NIE brana z this._clock (U6).
           //   THREE.Clock zwraca POZYCJĘ na osi czasu ściennego i liczy dalej, gdy pętla
-          //   stoi — a stoi przy utracie kontekstu i przez CAŁĄ bitwę (BattleView3D
-          //   przejmuje canvas). Po powrocie oddech przeskakiwałby o długość przerwy.
+          //   stoi — a stoi przy utracie kontekstu (do CV-8b także przez całe kino
+          //   BattleView3D). Po powrocie oddech przeskakiwałby o długość przerwy.
           //   Dla samego sinusa to drobiazg, ale smugi korony jadą na tej samej rodzinie
           //   faz i tam skok jest widoczny jako cięcie. Jedna rodzina, jeden zegar.
           const gU = this._starCorona.material.uniforms?.uGain;
@@ -8716,63 +8706,6 @@ export class ThreeRenderer {
     if (rep.pools) console.table(rep.pools);
   }
 
-  // Fix#3 — FX dla bitew orbitalnych/abstrakcyjnych (bez per-rundy combat:roundFx).
-  _onBattleResolvedFx(payload) {
-    // ARC CV-8a (flaga `cvOrbital`, Finding 628) — „imitacja” 16 kresek nie rysuje się NIGDZIE: bitwa orbitalna w oglądanym układzie
-    // gra jako powtórka na scenie planety (`CvOrbital.handle` — idempotentne, woła je też `GameScene`), poza nim — sam baner.
-    if (GAME_CONFIG.FEATURES?.cvOrbital) { this._cvOrb?.handle?.(payload); return; }
-    if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
-    // ARC CV-6b2 (Finding 630) — `uiPrefs.combatFxVisible` wycofany (patrz `_onCombatRoundFx`); imitacja bitwy orbitalnej — do CV-8b.
-    const result = payload?.result;
-    if (!result) return;
-    const pA = result.participantA, pB = result.participantB;
-    const loc = result.location;
-    let playerIn = pA?.empireId === 'player' || pB?.empireId === 'player'
-                || pA?.type === 'player' || pB?.type === 'player';
-    // Fallback: bitwa przy kolonii gracza (obrona orbitalna — kształt participantów bywa różny).
-    if (!playerIn && loc?.planetId && window.KOSMOS?.colonyManager?.isPlayerColony?.(loc.planetId)) {
-      playerIn = true;
-    }
-    if (!playerIn) return;
-    if (loc?.point && Number.isFinite(loc.point.x)) return;  // deep-space → combat:roundFx już rysuje
-    let fx = null, fy = null;
-    if (loc?.planetId) {
-      const planet = EntityManager.get(loc.planetId);
-      if (planet && Number.isFinite(planet.x)) { fx = planet.x; fy = planet.y; }
-    }
-    if (fx == null) {
-      const hp = window.KOSMOS?.homePlanet;
-      if (hp && Number.isFinite(hp.x)) { fx = hp.x; fy = hp.y; }
-    }
-    if (fx == null) return;
-    this._spawnBattleBurst(fx, fy);
-  }
-
-  // Burst „imitacji" walki wokół celu (gameplay coords). Wall-clock (widoczny przy każdej prędkości).
-  _spawnBattleBurst(gx, gy) {
-    const cx = S(gx), cz = S(gy);
-    const R = 0.6;
-    const COLORS = [0x60E0FF, 0xFFD060, 0xFF6060];
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2 + i * 0.7;  // deterministyczny rozrzut
-      const ex = cx + Math.cos(a) * R, ez = cz + Math.sin(a) * R;
-      const col = COLORS[i % 3];
-      const delay = (i % 8) * 110;
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(ex, 0.3, ez), new THREE.Vector3(cx, 0.3, cz)]),
-        new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 }),
-      );
-      this._spawnFx(line, { kind: 'tracer', lifetime: FX_TRACER_MS, baseOpacity: 0.9, delay });
-      if (i % 2 === 0) {
-        const flash = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8),
-          new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 }));
-        flash.position.set(cx + Math.cos(a) * R * 0.5, 0.3, cz + Math.sin(a) * R * 0.5);
-        this._spawnFx(flash, { kind: 'flash', lifetime: FX_FLASH_MS, baseScale: 1, delay: delay + 120 });
-      }
-    }
-    this._upsertEngagementMarker('orbital_' + Math.round(gx) + '_' + Math.round(gy), gx, gy, 'burst');
-  }
-
   // Endpoint smugi → world coords {x,z} z bramką fog-of-war. Preferuj live/intel,
   // fallback snapshot (vessel zginął). null = pomiń (wróg niewykryty).
   _combatEndpointWorld(vesselId, snapPos) {
@@ -9895,7 +9828,7 @@ export class ThreeRenderer {
   // ARC CV-3a1 (Finding 642) — pod flagą `cvStage` pierścień starcia DSCS ukryty (stały promień 0,026 AU był mniejszy od
   // bitwy — każdy statek 10 na 10 stał poza nim); znacznik imitacji bitwy orbitalnej (`burst`) bez zmian (CV-8).
   _hideEncounterRings() {
-    for (const [, e] of this._engagementMarkers) if ((e.kind ?? 'encounter') === 'encounter' && e.mesh) e.mesh.visible = false;
+    for (const [, e] of this._engagementMarkers) if (e.mesh) e.mesh.visible = false;
   }
 
   // ── POLISH P2b (D2, CP18) — biały błysk trafienia NA MODELU ───────────────────────────────────────────────────
@@ -10187,10 +10120,10 @@ export class ThreeRenderer {
     return -_WATCH_V.z;
   }
 
-  // ── Znacznik starcia (persistent; starcie DSCS — wg stanu starcia, imitacja bitwy orbitalnej — TTL) ──────
-  // kind: 'encounter' (starcie DSCS — żyje, dopóki starcie aktywne i w oglądanym układzie) | 'burst' (imitacja bitwy
-  // orbitalnej `_spawnBattleBurst` — 1600 ms czasu realnego). POLISH P2a (Finding 457).
-  _upsertEngagementMarker(encounterId, gx, gy, kind = 'encounter') {
+  // ── Znacznik starcia (persistent; starcie DSCS — wg stanu starcia) ──────
+  // Żyje, dopóki starcie aktywne i w oglądanym układzie. POLISH P2a (Finding 457). ARC CV-8b — rodzaj 'burst' (imitacja bitwy
+  // orbitalnej, 1600 ms czasu realnego) wycofany razem z imitacją.
+  _upsertEngagementMarker(encounterId, gx, gy) {
     if (!encounterId) return;
     let entry = this._engagementMarkers.get(encounterId);
     if (!entry) {
@@ -10202,7 +10135,7 @@ export class ThreeRenderer {
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;
       this.scene.add(mesh);
-      entry = { mesh, geom, mat, kind, _lastTouch: 0 };
+      entry = { mesh, geom, mat, _lastTouch: 0 };
       this._engagementMarkers.set(encounterId, entry);
     }
     entry.mesh.position.set(S(gx), 0.05, S(gy));
@@ -10221,24 +10154,23 @@ export class ThreeRenderer {
   }
 
   // POLISH P2a (Finding 457) — synchronizacja ze STANEM starć (co klatkę, także w pauzie gry): znacznik starcia DSCS jest,
-  // dopóki starcie aktywne i w oglądanym układzie, i znika z jego końcem; imitacja bitwy orbitalnej — 1600 ms. Bez pulsu
+  // dopóki starcie aktywne i w oglądanym układzie, i znika z jego końcem. Bez pulsu
   // (POLISH P2b CLOSE, C6, CP27).
   _tickEngagementMarkers(nowMs) {
     const encounters = (window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [])
       .map((e) => ({ id: e.id, isActive: e.isActive, systemId: e.location?.systemId, point: e.location?.point }));
     if (!this._engagementMarkers.size && !encounters.length) return;
     const plan = planEngagementMarkers({
-      markers: [...this._engagementMarkers].map(([id, e]) => ({ id, kind: e.kind ?? 'encounter', lastTouchMs: e._lastTouch ?? 0 })),
-      encounters, activeSystemId: window.KOSMOS?.activeSystemId, nowMs, burstTtlMs: ENGAGEMENT_BURST_TTL_MS,
+      markers: [...this._engagementMarkers].map(([id]) => ({ id })),
+      encounters, activeSystemId: window.KOSMOS?.activeSystemId,
     });
     for (const id of plan.dispose) this._disposeEngagementMarker(id);
-    for (const u of plan.upsert) this._upsertEngagementMarker(u.id, u.x, u.y, 'encounter');
+    for (const u of plan.upsert) this._upsertEngagementMarker(u.id, u.x, u.y);
     if (!this._engagementMarkers.size) return;
     // POLISH P2b (D1, Finding 467) — znacznik starcia DSCS w ŚRODKU uczestników (co klatkę — walka odpływa od punktu
     // startu o ~0,1 AU); bez sprite'ów — punkt startu (`location.point`, jak dotąd).
     const dscs = window.KOSMOS?.deepSpaceCombatSystem;
     for (const [id, e] of this._engagementMarkers) {
-      if ((e.kind ?? 'encounter') !== 'encounter') continue;
       const enc = dscs?._activeEncounters?.get?.(id);
       const c = enc?.isActive ? this._engagementCentre(enc) : null;
       if (c) e.mesh.position.set(c.x, c.y, c.z);

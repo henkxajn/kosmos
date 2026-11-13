@@ -6,7 +6,8 @@
 //     podwarstw (np. położenie i zasięg obiektu z radarem, zegar symulacji, gdy biegnie ping) — albo trwa animacja (ping,
 //     błysk); w spoczynku (pauza, kamera stoi, brak animacji) — zero wywołań ctx;
 //   • chowa się jawnie (kanwa czyszczona raz) pod overlayem pełnoekranowym, globusem, w czystym widoku (SHIFT, lot intro),
-//     poza trybem cywilizacji i gdy renderer 3D jest zawieszony (`BattleView3D`) albo stracił kontekst WebGL;
+//     poza trybem cywilizacji i gdy renderer 3D stracił kontekst WebGL (ARC CV-8b — zawieszenie renderera przez kino
+//     BattleView3D wycofane razem z kinem);
 //   • skala jak `#ui-canvas` — rysunek w px LOGICZNYCH UI (px CSS / `UI_SCALE`); gęstość bufora jak renderera 3D
 //     (`renderer.getPixelRatio()` — supersampling ×1,5: linie HUD tej samej ostrości co linie 3D);
 //   • kolory WYŁĄCZNIE z ról motywu (`HudPalette.resolveHudRoles(THEME)`) czytanych przy każdym rysunku — zero hexów;
@@ -68,7 +69,7 @@ export function hudGate(K) {
   if (um?._cleanView === true || tr?._cleanView === true) return { shown: false, reason: 'cleanView' };
   if (um?.overlayManager?.isAnyOpen?.() === true) return { shown: false, reason: 'overlay' };
   if (K.planetGlobeOpen) return { shown: false, reason: 'globe' };
-  if (!tr || tr._renderingEnabled === false || tr._contextLost === true) return { shown: false, reason: 'renderer' };
+  if (!tr || tr._contextLost === true) return { shown: false, reason: 'renderer' };
   return { shown: true, reason: null };
 }
 

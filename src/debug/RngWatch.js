@@ -9,7 +9,7 @@
 
 // Pliki warstwy wizualnej (basename). Każde losowanie z nich po CV-0b = błąd (powinny wołać `rendererRandom`).
 export const VISUAL_SOURCES = Object.freeze([
-  'three.core.js', 'three.module.js', 'ThreeRenderer.js', 'RendererRng.js', 'BattleView3D.js',
+  'three.core.js', 'three.module.js', 'ThreeRenderer.js', 'RendererRng.js',   // ARC CV-8b — 'BattleView3D.js' wycofany razem z kinem
   'TitleScene.js', 'FactionSelectScene.js', 'EndgameScene.js', 'ScheduledEventPopup.js',
 ]);
 

@@ -22,7 +22,7 @@ import EntityManager from '../core/EntityManager.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
-  buildOrbitalReplay, orbitalFormation, orbitalBearing, orbitalEmitterDirs, orbitalReplayInView, orbitalEncounterId, ORB_TUNING,
+  buildOrbitalReplay, orbitalFormation, orbitalBearing, orbitalEmitterDirs, orbitalReplayInView, orbitalEncounterId, orbitalOutcome, ORB_TUNING,
 } from './combat/OrbitalReplayLogic.js';
 import { VESSEL_TARGET_SIZE } from './VesselModelResolver.js';
 
@@ -118,6 +118,7 @@ export class CvOrbital {
       systemId: fx.systemId, stageIds, hangar: new Set(defenders.filter((d) => d.hangar).map((d) => d.id)),
       holdHidden: new Set(defenders.filter((d) => d.hangar && rep.kills[d.id] != null).map((d) => d.id)),
       deferred: new Map(), shown: new Set(), bearing: null, emitterDirs: null,
+      outcome: orbitalOutcome(result, { playerSide: 'B' }),   // CV-8b — wiersz wyniku na pasku walki po powtórce (§3.1-6)
     };
     this.replays.set(battleId, st);
     this._byEnc.set(encId, st);
@@ -197,7 +198,26 @@ export class CvOrbital {
     st.venc.isActive = false;
     this._reapplyIntel(st);   // po powtórce — widoczność wg wywiadu
     if (why === 'aborted') this.stats.aborted++; else this.stats.ended++;
+    // ARC CV-8b (§3.1-6) — wynik zostaje widoczny po powtórce: wiersz WYNIKU na pasku walki (stan końcowy stron + słowo wyniku zamiast
+    // „R n”) przez `ORB_RESULT_LINGER_MS` czasu prezentacji. Przerwana powtórka (zmiana układu, galaktyka) — bez wiersza (bitwa poza widokiem).
+    if (why !== 'aborted') {
+      (this._recent ??= []).push({ venc: st.venc, outcome: st.outcome, endedAt: this.r?._presClock?.nowMs ?? 0 });
+      if (this._recent.length > 4) this._recent.shift();
+    }
     EventBus.emit('combatfx:orbitalReplayEnd', { battleId: st.battleId, encounterId: st.encId, reason: why });
+  }
+
+  /**
+   * ARC CV-8b (§3.1-6) — skończone powtórki do wiersza WYNIKU na pasku walki: `{ venc, outcome, endedAt }` z ostatnich
+   * `ORB_RESULT_LINGER_MS` ms czasu prezentacji (starsze wypadają; pauza = pauza — w pauzie wiersz stoi), tylko w oglądanym układzie.
+   */
+  endedEncounters() {
+    if (!this._recent?.length) return [];
+    const now = this.r?._presClock?.nowMs ?? 0;
+    const linger = Math.max(0, Number(this.tuning.ORB_RESULT_LINGER_MS ?? 10000) || 0);
+    this._recent = this._recent.filter((x) => now - x.endedAt <= linger);
+    const view = window.KOSMOS?.activeSystemId ?? null;
+    return this._recent.filter((x) => x.venc?.location?.systemId === view);
   }
 
   _reapplyIntel(st) {
@@ -255,6 +275,17 @@ export class CvOrbital {
     if (!this.replays.size) return false;
     for (const st of this.replays.values()) if (st.rep.kills[vesselId] != null && !st.shown.has(vesselId)) return true;
     return false;
+  }
+
+  /**
+   * ARC CV-8b (#713) — bitwa powtórki w toku, w której okręt ma zaplanowane, jeszcze niepokazane zniszczenie (`battleId`) albo null.
+   * `GameScene` wstrzymuje do końca tej powtórki wpisy Dziennika o jego stracie („Utracono kontakt” wraku) — wynik nie wyprzedza walki.
+   */
+  heldBattleOf(vesselId) {
+    if (!this.replays.size || vesselId == null) return null;
+    const id = String(vesselId);
+    for (const st of this.replays.values()) if (st.rep.kills[id] != null && !st.shown.has(id)) return st.battleId;
+    return null;
   }
 
   /** Okręt z hangaru z zaplanowanym zniszczeniem — sprite wraku dopiero po zniszczeniu w powtórce (bez udawanego statku). */

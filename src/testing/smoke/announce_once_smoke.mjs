@@ -77,6 +77,9 @@ import * as NR                   from '../../ui/CombatNarration.js';
 const tryImport = async (rel) => { try { return await import(rel); } catch (e) { console.log(`  ! import ${rel}: ${e.message}`); return null; } };
 const CN = await tryImport('../../ui/ContactNarration.js');
 const STAGER = await tryImport('../../debug/CvBattleStager.js');
+// ARC CV-8b (#635) — grupa rajdu: metody `GameScene` (`_queueBanner`, `_writeBattleLine`, `_noteRaidBattle`, `_releaseRaids`) czytają
+// `RaidAnnounceLogic` — PRZECELOWANE ŚWIADOMIE (lista metod i zakres kompilacji); import dynamiczny: na kodzie sprzed CV-8b modułu nie ma.
+const RAL = await tryImport('../../ui/RaidAnnounceLogic.js');
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -162,10 +165,12 @@ const SCOPE = () => ({
   CLUSTER_GRACE: BC.CLUSTER_GRACE, ClusterNarrator: NR.ClusterNarrator, encounterIdOfBattle: NR.encounterIdOfBattle,
   isClusterNarrated: NR.isClusterNarrated, normalizeBattleLocation, isDeepSpaceBattle, systemDisplayName, resolveBattleSides,
   battleWinnerName,
+  RaidAnnouncer: RAL?.RaidAnnouncer, raidEnemyIds: RAL?.raidEnemyIds, stillRaiding: RAL?.stillRaiding, raidBusy: RAL?.raidBusy, RAID_ANNOUNCE: RAL?.RAID_ANNOUNCE,
 });
 const METHODS = ['_showFirstSightings', '_onSightingPopupDismissed', '_sightingPopupOne', '_sightingPopupMany', '_tickAnnouncements',
   '_announceNowMs', '_battleGraceMs', '_releaseBattleGrace', '_joinBattleGrace', '_writeNarration', '_noteContact',
-  '_noteProximityContact', '_battleLogEntry', '_clusterNarratorOf', '_narrateBattleCluster', '_clusterBattleBanners'];
+  '_noteProximityContact', '_battleLogEntry', '_clusterNarratorOf', '_narrateBattleCluster', '_clusterBattleBanners',
+  '_queueBanner', '_writeBattleLine', '_noteRaidBattle', '_releaseRaids'];   // ARC CV-8b — bramka rajdu (#635)
 
 // Atrapa sceny: prawdziwe metody i handlery `GameScene`; baner = zapis (kolejka banerów schodzi od razu — DOM poza keeperem).
 function makeScene() {

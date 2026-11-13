@@ -132,11 +132,12 @@ header('L2  bramka widoczności — schowana warstwa nie rysuje; jedno czyszczen
     ['cleanView', () => { K.uiManager._cleanView = true; }, () => { K.uiManager._cleanView = false; }],
     ['cleanView', () => { K.threeRenderer._cleanView = true; }, () => { K.threeRenderer._cleanView = false; }],
     ['civMode', () => { K.civMode = false; }, () => { K.civMode = true; }],
-    ['renderer', () => { K.threeRenderer._renderingEnabled = false; }, () => { K.threeRenderer._renderingEnabled = true; }],
+    // ARC CV-8b — przypadek „renderer zawieszony” (`_renderingEnabled = false`, kino BattleView3D) PRZECELOWANY ŚWIADOMIE: kino i bramka
+    // `suspend` / `resume` wycofane, pola nikt nie pisze (pin nieobecności — `cv_retire_cinema_smoke` N4); zostaje utracony kontekst WebGL.
     ['renderer', () => { K.threeRenderer._contextLost = true; }, () => { K.threeRenderer._contextLost = false; }],
   ];
   const names = ['overlay', 'globus (`planetGlobeOpen`)', 'SHIFT (UI `_cleanView`)', 'SHIFT (renderer `_cleanView`)', 'poza trybem cywilizacji',
-    'renderer zawieszony (`BattleView3D`)', 'kontekst WebGL utracony'];
+    'kontekst WebGL utracony'];
   gateCases.forEach(([reason, on, off], i) => {
     setWorld(); W0.camEpoch = 1;
     const probe = mkProbe(); const h = mk(probe);

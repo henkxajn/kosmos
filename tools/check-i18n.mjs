@@ -376,7 +376,9 @@ const HARDCODED_BASELINE = process.env.KOSMOS_I18N_BASELINE
                                          //    nazwy własne, świadomie nietłumaczone.
   'src/scenes/UIManager.js':        16,  // ⚠ w tym EKRAN KOŃCA GRY — Finding 113, otwarty.
   'src/ui/BattleGroupPanel.js':      1,  // DOM (269): nagłówek grupy bojowej.
-  'src/ui/BattleIntroModal.js':      3,  // DOM (269): Finding 158 — zaszyty polski + angielski nagłówek.
+  // ARC CV-8b (2026-11-13): 'src/ui/BattleIntroModal.js' 3 → 0 i WYPADA — trzy napisy siedziały w popupie „ENGAGEMENT IMMINENT”
+  //   (nagłówek, polski podpis, podpowiedź klawiszy), wycofanym razem z kinem BattleView3D (D-CV-27 (a)). Baner wyniku pisze przez
+  //   `innerHTML` (sink spoza bramki — polskie słowa banera to Finding 163, osobno).
   'src/ui/BattleReportModal.js':     1,  // DOM (269): stopka „Kliknij aby zamknąć".
   'src/ui/CargoLoadModal.js':        5,  // DOM (269): nagłówki sekcji ładowni (klasa 113).
   'src/ui/ColonyOverlay.js':        17,  // ⚠ w tym 3 flashe budowy — znane z arca BRAMKA WŁASNOŚCI.
