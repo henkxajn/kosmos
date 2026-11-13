@@ -144,8 +144,9 @@ export class CvDirector {
     const encIds = this.battle?.encIds ?? null;
     // Koniec LOGIKI (§3.1-3: „po końcu logicznym reszta w tempie 1,25×”) — z DSCS, nie ze sceny: scena zostaje po końcu logiki, dopóki
     // rejestr ma coś do pokazania (Finding 711).
-    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
-    const activeHere = encIds ? [...encIds].some((id) => dscs?._activeEncounters?.get?.(id)?.isActive === true) : false;
+    // ARC CV-8a — także starcie wirtualne powtórki bitwy orbitalnej (koniec „logiki” = ostatnia runda powtórki w rejestrze)
+    const encOf = (id) => r._cvEncById?.(id) ?? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(id) ?? null;
+    const activeHere = encIds ? [...encIds].some((id) => { const e = encOf(id); return e?.isActive === true && e.logicEnded !== true; }) : false;
     const anyActive = (r._stageFrame?.clusters ?? 0) > 0;
     const pending = led ? led.hasPending(encIds) : false;
     const ended = !!encIds && !activeHere;
@@ -247,9 +248,9 @@ export class CvDirector {
   _startBattle(info, now) {
     const r = this.r, cc = r._cameraController;
     const encIds = new Set((info.encounterIds ?? []).map(String));
-    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
     const primary = [...encIds].sort()[0];
-    const seed = Number(dscs?._activeEncounters?.get?.(primary)?.seedBase) || 0;
+    const enc0 = r._cvEncById?.(primary) ?? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(primary) ?? null;   // CV-8a — także powtórka
+    const seed = Number(enc0?.seedBase) || 0;
     this.battle = { key: primary, encIds, ids: [...(info.ids ?? [])], seed, startedAt: now };
     this.schedule = new DirectorSchedule({ seed: seed ^ 0x5eed });
     this._shotIdx = -1; this._from = null; this._live = null; this._resultUntil = null; this._heroSlowFor = -1;
@@ -360,7 +361,7 @@ export class CvDirector {
       const p = e.sprite.position;
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) continue;
       // Żywy = żywy w PREZENTACJI: wrak logiki z zabójczym trafieniem jeszcze w drodze (rejestr: 'pending') nadal leci i strzela.
-      const alive = !(e.cvKilled || (v.isWreck && r._cvLedger?.killState?.(id) !== 'pending'));
+      const alive = !(e.cvKilled || ((r._cvVisWreck ? r._cvVisWreck(v) : v.isWreck) && r._cvLedger?.killState?.(id) !== 'pending'));   // CV-8a — wrak powtórki
       const bow = alive ? r.getVesselBowWorld?.(id) : null;
       const vel = this._velocity(id, p, now);
       const own = playerIn ? !isEnemyVessel(v) : sideA.has(String(id));

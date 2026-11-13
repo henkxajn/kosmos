@@ -37,6 +37,15 @@
 //                                         każdego statku z ziarna (to samo `seed` = te same floty i ta sama bitwa); jawne `hulls` /
 //                                         `weapons` wygrywają z losowaniem; skład w wyniku (`fleets`). Nazwa nie `mix` — `mixed`
 //                                         to już opcja bitwy przy ciele (`atBody`), a `'mixed'` — domyślny cykl kadłubów i broni
+//   cvOrbitalBattle()                   — ARC CV-8a: atak AI na kolonię gracza w oglądanym układzie PRAWDZIWĄ ścieżką EnemyAttackHandler
+//                                         (5 napastników na orbicie, 5 okrętów gracza — 1 w hangarze, wieża 2 + siatka 1 tylko tej bitwie);
+//                                         rozstrzygnięcie po 0,5 s czasu realnego, powtórka na scenie planety po wznowieniu czasu; wygrywa
+//                                         gracz. `{lose: 1}` — wygrywa AI (10 na 1, bez budynków obrony), `{big: 1}` — 10 na 10 + wieża 3 + siatka 2,
+//                                         `{outOfView: 1}` — widok na inny układ przed rozstrzygnięciem (sam baner), jawne `nA`, `nB`,
+//                                         `hangar`, `tower`, `grid`; także `cvBattle({kind: /orbital/.source})`
+//   orbitalInfo()                       — ARC CV-8a: powtórki w toku (rundy, runda bieżąca, strzelcy stron, emitery, hangar, zniszczenia
+//                                         zaplanowane / pokazane, w widoku) i liczniki (start, odmowy widoku, przerwania)
+//   cvOrbital(1) / cvOrbital(0)         — ARC CV-8a: flaga `cvOrbital` ON / OFF (OFF = dzisiejszy burst 16 kresek i modal kina Path A)
 //   battleInfo()                        — M1: aktywne starcia (runda, żywi, uciekający) i ostatnia rozstrzygnięta bitwa DSCS: rundy,
 //                                         zwycięzca, odwrót, powód końca (`endReason`), straty i WRAKI uczestników — `wrakiTylkoPrzy0HP:
 //                                         true` znaczy, że na wrak poszły wyłącznie okręty zestrzelone (wraki == straty)
@@ -113,7 +122,7 @@
 //     wyłączony do przeładowania strony; ⚠ nie zapisuj gry po teście — F5 bez zapisu wraca do stanu sprzed testu.
 //   · ponowne `cvBattle()` po zakończonym starciu zdejmuje statki poprzedniego testu (bez linii w Dzienniku); w trakcie
 //     starcia — odmowa `battle_in_progress`.
-// Starcia orbitalne (`kind: 'orbital'`) — CV-8a.
+// Starcia orbitalne — CV-8a: `cvOrbitalBattle()` (także `cvBattle({kind: /orbital/.source})`), odczyt `orbitalInfo()`, flaga `cvOrbital(1|0)`.
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
@@ -421,7 +430,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
   return {
     /** Starcie testowe — patrz nagłówek. Zwraca odczyt sceny; ostrzeżenie także w konsoli. */
     cvBattle({ nA = 10, nB = 10, hulls = 'mixed', weapons = 'mixed', kind = 'deep', seed = 1, split = false, atBody = false, mixed = false, battles = 1, warp = 0, star = 0, doctrine = null, engage = 1, random = 0 } = {}) {
-      if (kind === 'orbital') return { ok: false, reason: 'not_yet', step: 'CV-8a' };
+      // ARC CV-8a — `kind: 'orbital'` = `cvOrbitalBattle` (atak na kolonię gracza ścieżką EnemyAttackHandler, powtórka na scenie planety)
+      if (kind === 'orbital') return this.cvOrbitalBattle({ nA: nA === 10 ? null : nA, nB: nB === 10 ? null : nB, seed });
       const doc = cvDoctrineOf(doctrine);   // ARC CV-3b — doktryna strony A (null — bez floty)
       if (doc === undefined) return { ok: false, reason: 'unknown_doctrine', doctrine, known: Object.keys(CV_DOCTRINES) };
       const K = window.KOSMOS ?? {};
@@ -934,6 +944,107 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       if (!v) return { ok: false, reason: 'no_ship', alive: mine.map((x) => x.name) };
       const r = mos.issueOrder(v.id, { type: 'retreat', issuedBy: 'cvRetreat' });
       return { ok: !!r?.ok, vessel: v.name, id: v.id, reason: r?.reason ?? null };
+    },
+
+    /**
+     * ARC CV-8a — BITWA ORBITALNA na scenie planety: atak AI na kolonię gracza PRAWDZIWĄ ścieżką `EnemyAttackHandler` (napastnicy
+     * z misją `attack` na orbicie ciała kolonii → partia 500 ms czasu realnego → `BattleSystem.resolveBattle` → `battle:resolved`
+     * z kluczem `fx` → powtórka). Gra na PAUZIE — start: wznowienie czasu. Domyślnie wygrywa gracz (nA 5 na nB 5 + wieża 2 + siatka 1,
+     * jeden okręt gracza w hangarze); `lose: 1` — wygrywa AI (10 na 1, bez budynków obrony); `big: 1` — 10 na 10 + wieża 3 + siatka 2;
+     * `outOfView: 1` — przed rozstrzygnięciem widok na INNY zbadany układ (bitwa poza widokiem — sam baner). Bez cudzysłowów:
+     *   cvOrbitalBattle() · cvOrbitalBattle({lose: 1}) · cvOrbitalBattle({nA: 3, nB: 2, hangar: 0, tower: 0, grid: 0}) · cvOrbitalBattle({outOfView: 1})
+     * Poziomy obrony (`tower`, `grid`) dokłada narzędzie WYŁĄCZNIE tej bitwie tego ciała (`WarSystem._cvStagerDefence`, zdejmowane po
+     * bitwie). Wojna z imperium AI deklarowana przez EAH, jeśli jej nie ma (jak w grze). ⚠ Statki testowe w stanie gry — nie zapisuj.
+     */
+    cvOrbitalBattle({ nA = null, nB = null, hangar = 1, tower = null, grid = null, seed = 1, lose = 0, big = 0, outOfView = 0 } = {}) {
+      const K = window.KOSMOS ?? {};
+      const vm = K.vesselManager, ts = K.timeSystem, eah = K.enemyAttackHandler, oss = K.orbitalSpaceSystem, cm = K.colonyManager;
+      const warSys = K.warSystem, dscs = K.deepSpaceCombatSystem;
+      if (!vm || !ts || !eah || !oss || !cm || !warSys) return { ok: false, reason: 'no_world' };
+      if (getRenderer()?._galaxyActive) return { ok: false, reason: 'galaxy_mode' };
+      if ((getRenderer()?.cvOrbital?.replays?.size ?? 0) > 0) return { ok: false, reason: 'replay_in_progress' };
+      // `lose`: 10 napastników na 1 okręt bez obrony budynków — okręty gracza już stojące w układzie (np. w GATE-S4 trzy uzbrojone
+      // fregaty w hangarze stolicy) też bronią (EAH: wszystkie okręty gracza w służbie w układzie), więc przewaga musi być duża
+      const preset = Number(big) ? { nA: 10, nB: 10, tower: 3, grid: 2 } : Number(lose) ? { nA: 10, nB: 1, tower: 0, grid: 0 } : { nA: 5, nB: 5, tower: 2, grid: 1 };
+      const NA = Math.max(1, Math.min(10, Math.floor(Number(nA ?? preset.nA) || 1)));
+      const NB = Math.max(0, Math.min(10, Math.floor(Number(nB ?? preset.nB) || 0)));
+      const TW = Math.max(0, Math.floor(Number(tower ?? preset.tower) || 0)), GR = Math.max(0, Math.floor(Number(grid ?? preset.grid) || 0));
+      const NH = Math.max(0, Math.min(NB, Math.floor(Number(Number(lose) && hangar === 1 ? 0 : hangar) || 0)));
+      // Poprzedni test — statki zdjęte (bez linii w Dzienniku); w trakcie starcia DSCS — odmowa.
+      const all = vm.getAllVessels?.() ?? [...(vm._vessels?.values?.() ?? [])];
+      const old = all.filter(isCvVessel);
+      if (old.some((v) => dscs?._findActiveEncounterContaining?.(v.id))) return { ok: false, reason: 'battle_in_progress' };
+      for (const v of old) vm.destroyVessel?.(v.id, { reason: 'dismantled' });
+      const sys = K.activeSystemId ?? 'sys_home';
+      const cols = (cm.getPlayerColonies?.() ?? []).filter((c) => (EntityManager.get(c.planetId)?.systemId ?? 'sys_home') === sys && !c.isOutpost);
+      const col = cols.find((c) => c.planetId === K.homePlanet?.id) ?? cols[0] ?? null;
+      const body = col ? EntityManager.get(col.planetId) : null;
+      if (!body) return { ok: false, reason: 'no_player_colony_in_view', system: sys };
+      const empire = pickAiEmpire(K);
+      if (!empire) return { ok: false, reason: 'no_ai_empire' };
+      if (!ts.isPaused) ts.pause?.();
+      const ss = getSaveSystem();
+      if (ss && '_autosaveInterval' in ss) ss._autosaveInterval = 0;
+      const layout = cvBattleLayout({ nA: NA, nB: Math.max(1, NB), seed });
+      const home = K.homePlanet ?? body;
+      const onOrbit = (v) => {
+        Object.assign(v.position, { state: 'orbiting', dockedAt: body.id });
+        oss.assignOrbit(body.id, v.id, resolveVesselOrbitalRole(v));
+        const p = oss.getPosition(v.id, { x: body.x / 10, z: body.y / 10 }, orbitClockSec());
+        v.position.x = p ? p.x * 10 : body.x; v.position.y = p ? p.z * 10 : body.y;
+      };
+      const made = { A: [], B: [] };
+      for (const s of layout.ships) {
+        if (s.side === 'B' && s.index >= NB) continue;
+        const v = vm.createAndRegister(s.hull, home.id, { name: s.name, modules: s.modules, systemId: sys });
+        v.systemId = sys; v.status = 'idle'; v.mission = null; v.serviceState = 'active';
+        if (v.fuel) v.fuel.current = v.fuel.max = 9999;
+        v._cvBattle = seed;
+        if (s.side === 'A') {
+          v.ownerEmpireId = empire.id; v.owner = empire.id; v.isEnemy = true;
+          onOrbit(v);
+          v.status = 'on_mission';
+          v.mission = { type: 'attack', targetId: body.id, targetName: body.name ?? body.id };
+        } else if (s.index < NH) {
+          Object.assign(v.position, { state: 'docked', dockedAt: body.id, x: body.x, y: body.y });
+          v.colonyId = body.id;
+        } else onOrbit(v);
+        made[s.side].push(v);
+      }
+      getRenderer()?._restoreActiveSystemVesselSprites?.();
+      warSys._cvStagerDefence = (TW || GR) ? { planetId: body.id, tower: TW, grid: GR } : null;
+      let view = null;
+      if (Number(outOfView)) {
+        const ssm = K.starSystemManager;
+        const other = (ssm?.getAllSystems?.() ?? []).map((x) => x.id ?? x.systemId).find((id) => id && id !== sys);
+        if (!other || ssm.switchActiveSystem?.(other) !== true) return { ok: false, reason: 'no_other_system', warning: CV_BATTLE.WARNING };
+        view = other;
+      }
+      for (const v of made.A) eah._onVesselArrived(v, v.mission);   // partia 500 ms czasu realnego → rozstrzygnięcie (także w pauzie)
+      console.warn(CV_BATTLE.WARNING);
+      return {
+        ok: true, system: sys, body: body.id, bodyName: body.name ?? body.id, empire: empire.name ?? empire.id,
+        attackers: made.A.length, defenders: made.B.length, hangar: NH, tower: TW, grid: GR, viewNow: view ?? sys,
+        flags: { cvOrbital: !!GAME_CONFIG.FEATURES?.cvOrbital, cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons },
+        note: 'rozstrzygniecie za ~0,5 s czasu realnego; wznow czas, zeby obejrzec powtorke (orbitalInfo())', paused: !!ts.isPaused,
+        warning: CV_BATTLE.WARNING,
+      };
+    },
+
+    /** ARC CV-8a — odczyt powtórek bitew orbitalnych: rundy, strzelcy stron, emitery, hangar, zniszczenia zaplanowane / pokazane, w widoku. */
+    orbitalInfo() {
+      const o = getRenderer()?.cvOrbital;
+      if (!o) return { ok: false, reason: 'no_renderer' };
+      const last = Object.values(gameState.get?.('battles') ?? {}).filter((b) => b?.location?.planetId && !b?.location?.point).slice(-1)[0] ?? null;
+      return { ok: true, ...o.info(),
+        ostatniaBitwaOrbitalna: last ? { bitwa: last.id, tury: last.turns, zwyciezca: last.winner, odwrot: last.retreated ?? null, cialo: last.location?.planetId } : null };
+    },
+
+    /** ARC CV-8a — flaga `cvOrbital`: cvOrbital(1) — ON, cvOrbital(0) — OFF (dzisiejszy burst / modal kina), cvOrbital() — przełącz. Czytana przy bitwie. */
+    cvOrbital(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvOrbital = on === undefined ? !F.cvOrbital : !!on;
+      return { cvOrbital: F.cvOrbital };
     },
 
     /**

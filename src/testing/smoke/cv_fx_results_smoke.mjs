@@ -166,7 +166,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'stepChoreo2Offset', 'stepChoreo2Facing', 'stepChoreo2Engine', 'NOZZLE_KEY_HEX', 'wreckAfterDrift'];
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
   '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
-  '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
+  '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage', 'getVesselStageBlend',
   '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease', '_choreoEnd', '_choreoExhaust', '_applyExhaust',
   '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues',   // ARC CV-2b — sygnały walki (A6)
   '_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvWpnPresentKill', '_cvWpnKillLook',
@@ -456,12 +456,17 @@ function snapshotScene(st) {
 }
 
 // ═══ S — stager ═══════════════════════════════════════════════════════════════════════════════════════════════════
-header('S1 — stager: starcie orbitalne to krok CV-8a');
+// ⚠ S1 PRZECELOWANE ŚWIADOMIE (CV-8a, 2026-11-13): przed CV-8a `kind: 'orbital'` zwracało `not_yet`; od CV-8a deleguje do
+//   `cvOrbitalBattle` (atak na kolonię gracza prawdziwą ścieżką EnemyAttackHandler — keeper `cv_orbital_results_smoke`). Świat headless
+//   nie ma `enemyAttackHandler` ani `orbitalSpaceSystem`, więc delegacja kończy się odmową świata — pin: delegacja zamiast `not_yet`.
+header('S1 — stager: starcie orbitalne deleguje do cvOrbitalBattle (CV-8a)');
 {
   world();
   const H = helpers();
   const r = H?.cvBattle({ kind: 'orbital' });
-  assert(r?.ok === false && r?.reason === 'not_yet' && r?.step === 'CV-8a', `S1 kind 'orbital' → not_yet (CV-8a)${r ? '' : ' — brak stagera'}`);
+  const d = H?.cvOrbitalBattle?.({});
+  assert(r?.reason !== 'not_yet' && typeof H?.cvOrbitalBattle === 'function' && JSON.stringify(r) === JSON.stringify(d),
+    `S1 kind 'orbital' → cvOrbitalBattle (ten sam wynik: ${JSON.stringify(r)})${r ? '' : ' — brak stagera'}`);
 }
 
 header('S2 / S3 / S4 — scena cvBattle (10 na 10, ziarno 1) i jej starcie');

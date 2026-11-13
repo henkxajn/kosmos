@@ -37,6 +37,7 @@ import { EXP_TUNING } from './ExplosionLogic.js';          // ARC CV-5 — pokr�
 import { SHIELD_TUNING } from './ShieldLogic.js';          // ARC CV-4b — pokrętła osłon (bańka, fale, rozpad) i osmaleń
 import { TAC_TUNING } from '../../ui/HudCombatLogic.js';   // ARC CV-6a — pokrętła warstwy taktycznej (`TAC_*`, podwarstwa HUD)
 import { DIR_TUNING } from './CameraDirectorLogic.js';      // ARC CV-7 — pokrętła kamery reżysera (`DIR_*`)
+import { ORB_TUNING } from './OrbitalReplayLogic.js';       // ARC CV-8a — pokrętła powtórki bitwy orbitalnej (`ORB_*`)
 
 /** Pojemności pul (instancje). Pamięć: 13 / 11 liczb float na instancję — razem ok. 0,5 MB. Iskry ×2 względem szczytu
  *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4).
@@ -211,6 +212,9 @@ export const LIVE_CV_FX = {
   // ARC CV-7 (flaga `cvDirector`) — kamera reżysera (`CameraDirectorLogic`: `DIR_*` — długości ujęć, kąty, dystanse, przejścia,
   // bohater i spowolnienie, strażnicy, wstrząs, 9:16). Czytane CO KLATKĘ i przy każdym ujęciu. Strojenie, bez pinów.
   ...DIR_TUNING,
+  // ARC CV-8a (flaga `cvOrbital`) — powtórka bitwy orbitalnej (`OrbitalReplayLogic`: `ORB_*` — długość powtórki, kadencja broni,
+  // podłoga ocalałych, emitery obrony, formacja sceny planety). Czytane przy starcie powtórki i przy każdym rozwiązaniu sceny.
+  ...ORB_TUNING,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)

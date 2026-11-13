@@ -632,6 +632,17 @@ export const GAME_CONFIG = {
     //   interfejsu (KOSMOS.debug.cvCapture(1|0), klawisz F9, Esc); nagrywarka rolek płótna 3D (klawisz F10, KOSMOS.debug.cvRecord(1|0) —
     //   z 9:16 wycinek 1080 × 1920, MP4 albo WebM). Czytana CO KLATKĘ. OFF = bez chipa, bez reżysera, tempo prezentacji 1.
     cvDirector: true,
+    // `cvOrbital` (CV-8a, D-CV-25 / D-CV-26 / D-CV-27, Findingi 628 / 632 / 635) — BITWA ORBITALNA NA SCENIE: atak na kolonię
+    //   (`EnemyAttackHandler`) niesie w `battle:resolved` klucz-rodzeństwo `fx` (napastnicy, okręty gracza w układzie, okręty
+    //   w hangarach, obrona wieża / siatka / żetonowa, ciało, układ — rekord bitwy i wynik bez zmian), a renderer odgrywa POWTÓRKĘ
+    //   z osi tur `BattleSystem` (`src/renderer/combat/OrbitalReplayLogic.js`, klej `src/renderer/CvOrbital.js`) na scenie planety:
+    //   napastnicy na łuku orbity, obrońcy na skorupie ciała, emitery obrony na powierzchni, okręty w hangarach strzelają z emiterów
+    //   (bez udawanych statków); ten sam rejestr salw, osłony, uszkodzenia, wraki, warstwa taktyczna, pasek walki (wiersz bitwy
+    //   orbitalnej) i reżyser co w wolnej przestrzeni; wygląd wraku i wybuch czekają na zniszczenie w powtórce. Tylko w OGLĄDANYM
+    //   układzie, poza trybem galaktyki (Finding 628) — inaczej baner jak dziś; baner wyniku PO powtórce, bez modalu kina (auto-slow
+    //   zostaje); „imitacja” 16 kresek (`_spawnBattleBurst`) nie rysuje się nigdzie. Czytana przy bitwie. OFF = dzisiejsza ścieżka
+    //   co do bitu (bez `fx`, burst, modal / kino Path A). Wyłączenie: KOSMOS.debug.cvOrbital(0).
+    cvOrbital: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

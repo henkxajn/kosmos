@@ -563,7 +563,10 @@ export class WarSystem {
     // ogłosił wynik (ścieżka `_classifyBattle`), milczymy: dublet szedł do KAŻDEGO
     // subskrybenta i miał skutki stanowe (podwójny rozkaz odwrotu + podwójna opłata paliwowa).
     if (opts.announce !== false) {
-      EventBus.emit('battle:resolved', { warId, battleId, result: battleRec });
+      // ARC CV-8a (D-CV-25) — dane powtórki bitwy orbitalnej jako klucz-RODZEŃSTWO zdarzenia (`fx`), NIGDY w rekordzie bitwy
+      // (`battleRec` = obiekt w `gameState.battles` — zapis). Bez `opts.fx` (flaga `cvOrbital` OFF, inne ścieżki) — ładunek co do
+      // klucza jak dotąd.
+      EventBus.emit('battle:resolved', opts.fx ? { warId, battleId, result: battleRec, fx: opts.fx } : { warId, battleId, result: battleRec });
     }
 
     return battleRec;
@@ -899,24 +902,12 @@ export class WarSystem {
     // brak obrony → symboliczna obrona pasywna planety (30 HP / 2 dmg).
     const colonies = this._defendingColonies(systemId, targetBodyId);
 
-    let defHP = 0, defDmg = 0, defArmor = 0;
-    for (const col of colonies) {
-      const actives = col.buildingSystem?._active;
-      if (!actives) continue;
-      actives.forEach(entry => {
-        const id = entry.building?.id;
-        const lv = entry.level ?? 1;
-        if (id === 'defense_tower') {
-          defHP    += 40 * lv;
-          defDmg   += 5  * lv;
-          defArmor += 1  * lv;
-        } else if (id === 'defense_grid') {
-          defHP    += 100 * lv;
-          defDmg   += 10  * lv;
-          defArmor += 2   * lv;
-        }
-      });
-    }
+    // ARC CV-8a — poziomy z JEDNEGO miejsca (`_defenceLevels`), z którego czyta też `fx` powtórki bitwy orbitalnej
+    // (`orbitalDefenceOf`); sumy co do liczby jak dawna pętla (Σ 40·lv = 40·Σ lv).
+    const lv = this._defenceLevels(colonies);
+    const defHP    = 40 * lv.tower + 100 * lv.grid;
+    const defDmg   = 5  * lv.tower + 10  * lv.grid;
+    const defArmor = 1  * lv.tower + 2   * lv.grid;
 
     void targetBodyId;   // konsumowane wyżej (zakres budynków) — patrz `_defendingColonies`
     const hasDefense = defHP > 0;
@@ -956,6 +947,43 @@ export class WarSystem {
     // hasFleet && !hasDefense → unit = flota gracza (bez zmian)
 
     return unit;
+  }
+
+  /**
+   * ARC CV-8a — sumy poziomów `defense_tower` / `defense_grid` w koloniach (ta sama pętla, z której liczy `_buildPlayerBattleUnit`).
+   * Stager `KOSMOS.debug.cvOrbitalBattle({ defence })` może dołożyć poziomy WYŁĄCZNIE swojemu ciału (`_cvStagerDefence` — pole
+   * narzędzia konsoli, w grze null; zdejmuje je `EnemyAttackHandler` po bitwie tego ciała).
+   * @returns {{ tower:number, grid:number }}
+   */
+  _defenceLevels(colonies) {
+    let tower = 0, grid = 0;
+    for (const col of colonies ?? []) {
+      const actives = col.buildingSystem?._active;
+      if (actives) actives.forEach(entry => {
+        const id = entry.building?.id;
+        const lv = entry.level ?? 1;
+        if (id === 'defense_tower') tower += lv;
+        else if (id === 'defense_grid') grid += lv;
+      });
+      const o = this._cvStagerDefence;
+      if (o && o.planetId === col.planetId) { tower += Math.max(0, o.tower | 0); grid += Math.max(0, o.grid | 0); }
+    }
+    return { tower, grid };
+  }
+
+  /**
+   * ARC CV-8a (D-CV-25) — obrona ciała dla `fx` powtórki bitwy orbitalnej: poziomy wieży i siatki z kolonii broniących ciała
+   * (ten sam zakres co `_buildPlayerBattleUnit` — D-199-2 = V4) i obrona żetonowa (kolonia bez floty i bez budynków obrony —
+   * 30 HP / 2 obrażeń w `_buildPlayerBattleUnit`). Tylko odczyt.
+   * @returns {{ tower:number, grid:number, token:boolean, poolHp:number }}
+   */
+  orbitalDefenceOf(systemId, targetBodyId = null) {
+    const colonies = this._defendingColonies(systemId, targetBodyId);
+    const lv = this._defenceLevels(colonies);
+    const hasFleet = this._playerVesselsInSystem(systemId).length > 0;
+    const defHP = 40 * lv.tower + 100 * lv.grid;
+    const token = !hasFleet && defHP <= 0 && colonies.length > 0;
+    return { tower: lv.tower, grid: lv.grid, token, poolHp: token ? 30 : defHP };
   }
 
   // ── Pomocnicze ───────────────────────────────────────────────

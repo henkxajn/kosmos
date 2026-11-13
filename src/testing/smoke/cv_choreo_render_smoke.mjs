@@ -84,7 +84,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'simClockMs', 'exhaustIntensityRaw', 'vesselSizeClass', 'createChoreo', 'choreoSeed', 'choreoClassOf', 'choreoEnvelope', 'postureOf', 'pickFacingTarget',
   'stepChoreoOffset', 'constrainChoreo', 'stepChoreoFacing', 'stepChoreoEngine', 'quatFromYawPitchRoll', '_CHQ_A', '_CHQ_C', '_CHQ_D', '_CHV',
   'stepChoreo2Offset', 'stepChoreo2Facing', 'stepChoreo2Engine', 'NOZZLE_KEY_HEX'];   // CV-3c
-const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_setSpriteBase', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
+const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_setSpriteBase', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage', 'getVesselStageBlend',
   '_stageWatchFit', '_placeFreeVessel', '_tickCombatGlide', '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease',
   '_choreoEnd', '_choreoExhaust', '_applyExhaust'];
 function makeMethod(name, over = {}) {

@@ -107,7 +107,7 @@ export class HudCombatLayer {
         const isEnemy = isEnemyVessel(v);
         const quality = isEnemy ? (intel?.getVesselContact?.(id)?.quality ?? 'unknown') : null;
         let inPE = false;
-        if (isEnemy) { try { inPE = tr._isCombatRevealed?.(id) === true; } catch { inPE = false; } }
+        if (isEnemy) { try { inPE = tr._isCombatRevealed?.(id) === true || tr._cvOrb?.revealed?.(id) === true; } catch { inPE = false; } }   // CV-8a — napastnik powtórki
         const vis = tacVisibility({ isEnemy, quality, inPlayerEngagement: inPE });
         visOf.set(id, vis);
         if (vis === 'hidden') {
@@ -120,7 +120,7 @@ export class HudCombatLayer {
         if (!w || !Number.isFinite(w.x) || !Number.isFinite(w.y) || !Number.isFinite(w.z)) continue;
         const st = stOf.get(id) ?? null;
         const pres = vis === 'full' && st ? (tr.cvPresentedState?.(id, st) ?? null) : null;
-        const killed = v.isWreck === true || e.cvKilled === true || pres?.killed === true
+        const killed = (tr._cvVisWreck ? tr._cvVisWreck(v) : v.isWreck === true) || e.cvKilled === true || pres?.killed === true
           || (st != null && !(Math.max(0, Number(pres ? pres.hp : st.hp) || 0) > 0));
         const own = playerSide.has(id);
         const heading = vis === 'full' ? (tr.getVesselBowWorld?.(id) ?? null) : null;

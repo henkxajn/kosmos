@@ -56,6 +56,7 @@ import { initialGfxLevel, normalizeGfxLevel, nextGfxLevelInCycle, readRendererSt
 import { CombatLightPool } from './combat/LightPool.js';                                              // ARC CV-2b — stała pula świateł (D-CV-18)
 import { CombatCueBus, cueWeaponOfCategory, cueSizeOfClass, screenPan } from './combat/CombatCueBus.js';   // ARC CV-2b — szyna sygnałów walki (F8)
 import { CombatLedger, pickTurret, ledgerRng, ledgerHash, LEDGER_INFO_LEGEND } from './combat/CombatLedgerLogic.js';   // ARC CV-4a — rejestr salw (język broni, flaga cvWeapons)
+import { CvOrbital } from './CvOrbital.js';     // ARC CV-8a — powtórka bitwy orbitalnej na scenie planety (flaga cvOrbital)
 import { CvDirector } from './CvDirector.js';   // ARC CV-7 — kamera reżysera, spowolnienie bohatera, wstrząs, 9:16, tryb nagrywania, nagrywarka rolek (flaga cvDirector)
 import { KC_SHARED, KC_SCORCH_MAX, setKeyColourWreckState, setKeyColourScorch, setKeyColourScorchHeat, setKeyColourScorchCount } from './KeyColourEmission.js';   // ARC CV-1a — wspólne mnożniki maski; CV-5 — wypalanie wraku; CV-4b — osmalenia
 import { ShieldStates, bubbleAxes, ellipsoidPoint, hullPoint, scorchEnabled, allocScorch, scorchHeat, SHIELD_RIPPLES_MAX, SCORCH_MAX } from './combat/ShieldLogic.js';   // ARC CV-4b — osłony i pancerz
@@ -530,6 +531,10 @@ export class ThreeRenderer {
     // OBU zegarów prezentacji — `_presRate`, 1 = bez zmian), wstrząs, przewodnik 9:16, tryb nagrywania. Chip domyślnie wyłączony.
     this._presRate             = 1;
     this._cvDir                = new CvDirector(this);
+    // ARC CV-8a (flaga `cvOrbital`, D-CV-25 / D-CV-26 / D-CV-27) — powtórka bitwy orbitalnej (starcia wirtualne dla sceny, rejestru,
+    // paska walki i reżysera; wraki wstrzymane do zniszczenia w powtórce). Bez powtórek w toku — każde zapytanie zwraca „brak”.
+    this._cvOrb                = new CvOrbital(this);
+    this.cvOrbital             = this._cvOrb;
     // ARC CV-4a (flaga `cvWeapons`) — rejestr salw (leniwie, przy pierwszej rundzie pod flagą): harmonogram strzałów w czasie
     // prezentacji, HP / osłona pokazywane, zniszczenie w chwili trafienia zabijającego; licznik kolejki wieżyczek na statek.
     this._cvLedger             = null;
@@ -1667,6 +1672,12 @@ export class ThreeRenderer {
     // planety. Wcześniej było "dryfuj statycznie" ale wrak lądował w środku mesh'a
     // planety (y=0.02 < promień planety) i znikał wizualnie).
     EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {
+      // ARC CV-8a — bitwa orbitalna w powtórce: zamiana we wrak czeka na zniszczenie okrętu w powtórce (`CvOrbital.afterKill`);
+      // wraki z `EnemyAttackHandler` przychodzą ZARAZ po rozstrzygnięciu, zanim powtórka cokolwiek pokaże.
+      if (this._cvOrb?.deferWreck?.(vesselId, vessel)) return;
+      this._onVesselWreckedView(vesselId, vessel);
+    }));
+    this._onVesselWreckedView = (vesselId, vessel) => {
       const entry = this._vessels.get(vesselId);
       if (!entry) return;
       // ARC CV-4a (flaga `cvWeapons`) — zniszczenie pokazane już w chwili trafienia zabijającego (rejestr salw): bez drugiej
@@ -1771,7 +1782,7 @@ export class ThreeRenderer {
         if (entry.tex) entry.tex.dispose();
         entry.tex = tex;
       }
-    }));
+    };
 
     // ── M2b C7: POI sprites lifecycle (event-driven, brak per-frame sync) ──
     // Subskrypcje aktywne od konstruktora; CRUD POI po starcie auto-rejestruje
@@ -5046,6 +5057,7 @@ export class ThreeRenderer {
    */
   _addVesselSprite(vessel) {
     if (this._vessels.has(vessel.id)) return;
+    if (this._cvOrb?.holdsHidden?.(vessel.id)) return;   // ARC CV-8a — okręt z hangaru: wrak dopiero po zniszczeniu w powtórce
 
     // Resolver wybiera plik wg napędu+klasy. Jeśli już wiemy że pliku brak
     // (poprzedni load 404) — od razu DEFAULT, bez ponownego nieudanego fetcha.
@@ -5170,7 +5182,7 @@ export class ThreeRenderer {
       // Materiały: zachowaj oryginalne z GLB (gracz) / crimson (wróg) / szary (wrak).
       // Klonujemy, bo materiały GLB są współdzielone z template cache — bez klonu tint
       // rozlałby się na wszystkie statki tego samego modelu (także gracza).
-      const isWreck = !!vessel.isWreck;
+      const isWreck = (this._cvVisWreck?.(vessel) ?? !!vessel?.isWreck);   // ARC CV-8a — wrak powtórki bitwy orbitalnej dopiero po zniszczeniu
       const redTint  = new THREE.Color(0xff4466);
       // Wrak — wypalony czarny (kontrast z naturalnym pomarańczowym cargo3d.glb).
       // Wcześniejszy rdzawy #554438 był zbyt podobny do żywych statków.
@@ -5319,7 +5331,7 @@ export class ThreeRenderer {
 
     const placeModel = ([template, hardpoints]) => {
       if (this._vessels.has(vessel.id)) return;
-      const isWreck = !!vessel.isWreck;
+      const isWreck = (this._cvVisWreck?.(vessel) ?? !!vessel?.isWreck);   // ARC CV-8a — wrak powtórki bitwy orbitalnej dopiero po zniszczeniu
       // ARC CV-4a (flaga `cvWeapons`) — okręt, którego zniszczenie rejestr salw już pokazał, przebudowany w trakcie bitwy (np. zmiana
       // presetu tekstur): od razu wygląd wraku, bez smugi i świateł (wrakiem w logice zostanie dopiero na końcu bitwy).
       const killedLook = !isWreck && ((!!GAME_CONFIG.FEATURES?.cvWeapons && this._cvLedger?.killState?.(vessel.id) === 'shown')
@@ -6232,7 +6244,8 @@ export class ThreeRenderer {
     if (!isEnemyVessel(vessel)) return;
 
     // POLISH P2a (CP17, Findingi 455, 462) — wróg w aktywnym starciu z graczem: widoczny w pełnym kryciu, w żywej pozycji.
-    const revealed = this._isCombatRevealed(vessel.id);
+    // ARC CV-8a — także napastnik powtórki bitwy orbitalnej (atak na kolonię gracza = starcie z graczem — reguła P2a CP17)
+    const revealed = this._isCombatRevealed(vessel.id) || (this._cvOrb?.revealed?.(vessel.id) ?? false);
 
     // Legacy ścieżka — binarna widoczność z ObservatorySystem
     if (!GAME_CONFIG.FEATURES.m4EnemyGhosts) {
@@ -7186,7 +7199,7 @@ export class ThreeRenderer {
     if (!GAME_CONFIG.FEATURES?.fcCombatFx) { cone.visible = false; return; }
     const intensity = exhaustIntensityRaw({
       state:   vessel?.position?.state,
-      isWreck: !!(vessel?.isWreck || entry.isWreck || entry.cvKilled),   // ARC CV-4a — zniszczenie pokazane: smuga zgaszona
+      isWreck: !!((this._cvVisWreck?.(vessel) ?? !!vessel?.isWreck) || entry.isWreck || entry.cvKilled),   // ARC CV-4a — zniszczenie pokazane: smuga zgaszona (CV-8a — wrak powtórki dopiero po zniszczeniu)
     });
     // Lekki flicker (throb silnika) — desync per statek przez _exhaustPhase. ARC CV-3b (Finding 677): faza z zegara prezentacji,
     // gdy prowadzi go scena bitwy (`cvStage`) — pauza zatrzymuje także smugi poza walką (§2.12-4); bez sceny — czas realny jak dawniej.
@@ -7397,8 +7410,14 @@ export class ThreeRenderer {
   // Jeden wpis rejestru → efekty (czasy bezwzględne zegara prezentacji). Końce śledzone: wieżyczka (tryb 2 — punkt modelu, obraca
   // się ze statkiem) albo przesunięcie w świecie (tryb 1); punkt trafienia — na kadłubie od strony strzelca, pudło — obok celu i dalej.
   _cvWpnSpawn(eng, x, ev, rec, cues, led) {
-    const aw = this._combatEndpointWorld(x.attacker, ev?.aPos);
-    const tw = this._combatEndpointWorld(x.target, ev?.tPos);
+    // ARC CV-8a — strzał w pulę obrony planety: efekt na emiterze z ziarna wpisu (kopia wpisu wyłącznie dla rysunku — rejestr bez zmian)
+    const fxT = this._cvOrb?.fxTarget?.(x);
+    if (fxT) x = { ...x, target: fxT };
+    // ARC CV-8a — powtórka bitwy orbitalnej: końce z kleju (sprite okrętu albo punkt na powierzchni: emiter, pula obrony, hangar);
+    // atak na kolonię gracza to starcie z graczem — napastnik ujawniony jak w starciu DSCS z graczem (P2a CP17), bez bramki wywiadu
+    const orbE = this._cvOrb?.isOrbitalEncounter?.(x.encounterId) ?? false;
+    const aw = orbE ? this._cvOrb.endpoint(x.attacker) : this._combatEndpointWorld(x.attacker, ev?.aPos);
+    const tw = orbE ? this._cvOrb.endpoint(x.target) : this._combatEndpointWorld(x.target, ev?.tPos);
     if (!aw || !tw) { this._cvWpnStats.hidden++; return; }   // mgła wojny — brak efektu i sygnału (brak przecieku)
     const T = this.cvTuning;
     const R = rec.R;
@@ -7606,7 +7625,7 @@ export class ThreeRenderer {
     for (const id of kills) this._cvWpnPresentKill(id);
     if (!(this._cvWpnPruneAt > now - 2000)) {
       this._cvWpnPruneAt = now;
-      led.prune(now, new Set((window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []).map((e) => e.id)));
+      led.prune(now, new Set(this._cvEncList().map((e) => e.id)));   // ARC CV-8a — także starcia wirtualne powtórek
     }
   }
 
@@ -7615,6 +7634,7 @@ export class ThreeRenderer {
   // przestaje strzelać z konstrukcji rejestru, choreografia przechodzi w postawę „wyłączony” (`aliveOf`). Późny `vessel:wrecked`
   // (koniec bitwy) — bez drugiego pokazu (`_cvWpnWreckGate`). Dokładnie raz na okręt — pilnuje tego flaga `entry.cvKilled`.
   _cvWpnPresentKill(id) {
+    if (this._cvOrb?.presentKill?.(id)) return;   // ARC CV-8a — okręt z hangaru: wybuch na emiterze, sprite wraku po nim
     const e = this._vessels.get(id);
     if (!e || e.cvKilled) return;
     e.cvKilled = true;
@@ -7626,6 +7646,7 @@ export class ThreeRenderer {
     this._cvWpnKillLook(id, e);
     this._cvWpnStats.killsShown++;
     this._cvDir?.onKillShown(id);   // ARC CV-7 — wstrząs przy wybuchu w kadrze
+    this._cvOrb?.afterKill?.(id);   // ARC CV-8a — zaległa zamiana we wrak okrętu bitwy orbitalnej (bez drugiej eksplozji)
   }
 
   // Wygląd wraku w chwili zniszczenia — rama kanoniczna (ten sam rysunek co zamiana we wrak przy `vessel:wrecked`); przechył: statek
@@ -7729,7 +7750,7 @@ export class ThreeRenderer {
   _cvShdPlanRound(rec, events) {
     const st = this._cvShdState();
     const led = this._cvLedger;
-    const enc = (window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []).find((e) => e.id === rec.encounterId) ?? null;
+    const enc = this._cvEncList().find((e) => e.id === rec.encounterId) ?? null;
     for (const x of rec.entries) {
       const sa = Number(events[x.index]?.shieldAfter);
       x.shieldAfter = Number.isFinite(sa) ? sa : Infinity;   // brak pola (stary ładunek) — nigdy rozpad
@@ -7808,7 +7829,7 @@ export class ThreeRenderer {
     if (on) {
       const K = window.KOSMOS;
       const led = this._cvLedger;
-      for (const enc of K?.deepSpaceCombatSystem?.listActive?.() ?? []) {
+      for (const enc of this._cvEncList()) {
         if (!isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: K?.activeSystemId })) continue;
         for (const [id, s] of enc.vesselStates ?? []) {
           if (!(s.shieldHPStart > 0)) continue;   // statek bez osłony — bez bańki
@@ -8286,7 +8307,7 @@ export class ThreeRenderer {
   // Stany uszkodzeń żywych uczestników oglądanych starć — z HP POKAZYWANEGO (rejestr salw; bez rejestru — logiczne).
   _cvDmgStates(eng, st) {
     const K = window.KOSMOS;
-    const encs = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    const encs = this._cvEncList();
     if (!encs.length || this._galaxyActive) return;
     const T = this.cvTuning;
     const B = explosionBudget(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null);
@@ -8483,7 +8504,7 @@ export class ThreeRenderer {
     const now = this._presClock.nowMs;
     const vm = window.KOSMOS?.vesselManager;
     const nameOf = (id) => vm?.getVessel?.(id)?.name ?? id;
-    const active = new Set((window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []).map((e) => e.id));
+    const active = new Set(this._cvEncList().map((e) => e.id));
     const encs = led.encounterIds().map((id) => ({
       starcie: id, aktywne: active.has(id), wTymStarciu: led.encounterStats(id),
       rundy: led.roundsOf(id).sort((a, b) => a.round - b.round).slice(-rounds).map((r) => ({
@@ -8494,7 +8515,7 @@ export class ThreeRenderer {
       })),
     }));
     const hp = [];
-    for (const enc of window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []) {
+    for (const enc of this._cvEncList()) {
       for (const [id, s] of enc.vesselStates ?? []) {
         const pr = led.presented(id, s.hp, s.shieldHP, s.hpStart, s.shieldHPStart);
         hp.push({ statek: nameOf(id), hpLogika: r2(Math.max(0, s.hp)), hpPokazane: r2(pr.hp), czeka: pr.pending, zniszczenie: led.killState(id) ?? '—' });
@@ -8516,7 +8537,8 @@ export class ThreeRenderer {
     }
     this._fxEngine = new FxEngine({
       THREE, parent: this._fxGroup, logDepth: logDepthOn(), nowMs: this._presClock.nowMs,
-      resolve: (id) => { const e = this._vessels.get(id); return e?.sprite?.visible ? e.sprite.position : null; },
+      // ARC CV-8a — końce bez sprite'a w powtórce bitwy orbitalnej: emitery obrony, pula obrony, okręty w hangarach (`CvOrbital.anchorPos`)
+      resolve: (id) => { const e = this._vessels.get(id); return e?.sprite?.visible ? e.sprite.position : (this._cvOrb?.anchorPos?.(id) ?? null); },
       // ARC CV-4a — punkt w przestrzeni modelu (wieżyczka) → świat, co klatkę (statek obraca się z choreografią)
       resolveLocal: (id, x, y, z, out) => this._cvWpnResolveLocal(id, x, y, z, out),
     });
@@ -8538,6 +8560,7 @@ export class ThreeRenderer {
     this._fxEngine?.update({ nowMs: this._presClock.nowMs, dmgNowMs: this._cvDmg?.now, camera: this.camera, viewportH: window.innerHeight || 1,
       visible: !this._galaxyActive, stage: !!GAME_CONFIG.FEATURES?.cvStage,   // ARC CV-3a3 (653 (b)(c)) — łata sceny bitwy
       smaa: !!GAME_CONFIG.FEATURES?.cvChoreo2 && !!this._smaaPass?.enabled });   // ARC CV-3c (decyzja 45 (5)) — wiązki pod SMAA
+    this._cvOrb?.tick?.();   // ARC CV-8a — rundy powtórek bitew orbitalnych do rejestru salw (zegar prezentacji), koniec, przerwanie
     if (this._cvLedger) this._cvWpnTick?.();   // ARC CV-4a — rejestr salw: trafienia (HP pokazywane), zniszczenia w swojej chwili
     if (this._cvShd || this._cvShdOn?.()) this._cvShdTick?.();   // ARC CV-4b — osłony: próbki, bańki (po przekształceniach sceny), osmalenia
     if (this._cueBus) this._flushCues();   // ARC CV-2b — sygnały walki, których czas nadszedł (zegar prezentacji)
@@ -8695,6 +8718,9 @@ export class ThreeRenderer {
 
   // Fix#3 — FX dla bitew orbitalnych/abstrakcyjnych (bez per-rundy combat:roundFx).
   _onBattleResolvedFx(payload) {
+    // ARC CV-8a (flaga `cvOrbital`, Finding 628) — „imitacja” 16 kresek nie rysuje się NIGDZIE: bitwa orbitalna w oglądanym układzie
+    // gra jako powtórka na scenie planety (`CvOrbital.handle` — idempotentne, woła je też `GameScene`), poza nim — sam baner.
+    if (GAME_CONFIG.FEATURES?.cvOrbital) { this._cvOrb?.handle?.(payload); return; }
     if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
     // ARC CV-6b2 (Finding 630) — `uiPrefs.combatFxVisible` wycofany (patrz `_onCombatRoundFx`); imitacja bitwy orbitalnej — do CV-8b.
     const result = payload?.result;
@@ -8962,6 +8988,14 @@ export class ThreeRenderer {
   // ARC CV-3a2 — klaster z pozycji LOGICZNYCH uczestników (`encounterClusters`): to samo źródło co karta walki (jeden wiersz
   // na klaster) i baner wyniku (jeden na klaster); dawniej środek z pozycji sprite'ów (różnica — ruch płynny ≤ 1 rundy).
   _stageClusters() {
+    const out = this._stageClustersDscs();
+    // ARC CV-8a (flaga `cvOrbital`) — powtórki bitew orbitalnych w widoku: klaster na ciało (skorupa = ciało, rozwiązanie formacji
+    // planety — `CvOrbital.solveStage`); bez powtórek — lista DSCS co do obiektu.
+    const orb = this._cvOrb?.stageClusters?.() ?? [];
+    return orb.length ? out.concat(orb) : out;
+  }
+
+  _stageClustersDscs() {
     const K = window.KOSMOS;
     let act = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
     // ARC CV-7 (flaga `cvDirector`, Finding 711) — starcie skończone w logice ZOSTAJE na scenie, dopóki rejestr salw ma dla niego coś
@@ -9111,8 +9145,10 @@ export class ThreeRenderer {
         const cIn = { x: 0, y: c.y, z: 0 };
         for (const q of inp) { cIn.x += q.x; cIn.z += q.z; }
         cIn.x /= inp.length; cIn.z /= inp.length;
-        st.sol = solveStage({ points: inp, centre: cIn, L, edges, prevOffsets: st.offsets, priority,
-          shell: shellBody ? { body: shellBody, pinned: cl.pinnedIds } : null, opts: spread !== 1 ? { SPREAD: spread } : {} });
+        st.sol = cl.orbital   // ARC CV-8a — scena planety: formacja powtórki bitwy orbitalnej (napastnicy na łuku, obrońcy na skorupie)
+          ? this._cvOrb.solveStage(cl, inp, shellBody, L, spread)
+          : solveStage({ points: inp, centre: cIn, L, edges, prevOffsets: st.offsets, priority,
+            shell: shellBody ? { body: shellBody, pinned: cl.pinnedIds } : null, opts: spread !== 1 ? { SPREAD: spread } : {} });
         st.offsets = st.sol.offsets;
         // ARC CV-6b — RUCH CIĄGŁY W PRĘDKOŚCI: każdy statek dostaje odcinek Hermite'a od pozycji i prędkości wyświetlanej TERAZ
         // (odcinek tego klastra; po zmianie id klastra — cel i prędkość z poprzedniej klatki; nowy uczestnik — od razu w celu)
@@ -9253,6 +9289,27 @@ export class ThreeRenderer {
     }
     for (const [cid, st] of this._stageState) if (st.frame !== this._frameNo) this._stageState.delete(cid);
     this._stageFrame = frame;
+  }
+
+  // ARC CV-8a — akcesory starć dla warstwy wizualnej: starcia DSCS + starcia WIRTUALNE powtórek bitew orbitalnych (`CvOrbital`).
+  // Bez powtórek w toku — dokładnie lista / obiekt DSCS (ścieżka sprzed CV-8a). Logika gry tych akcesorów nie używa.
+  _cvEncList() {
+    const a = window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    const o = this._cvOrb?.encounters?.();
+    return o?.length ? a.concat(o) : a;
+  }
+
+  _cvEncById(id) {
+    return window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(id) ?? this._cvOrb?.byId?.(id) ?? null;
+  }
+
+  /** ARC CV-8a — wrak w PREZENTACJI: wrak logiki, chyba że powtórka bitwy orbitalnej wstrzymuje jego zamianę do zniszczenia w powtórce. */
+  _cvVisWreck(v) {
+    return !!v?.isWreck && !(this._cvOrb?.wreckDeferred?.(v.id) ?? false);
+  }
+
+  _cvEncOf(vesselId) {
+    return window.KOSMOS?.deepSpaceCombatSystem?._findActiveEncounterContaining?.(vesselId) ?? this._cvOrb?.encOf?.(vesselId) ?? null;
   }
 
   /** ARC CV-3a1 — o ile scena przesuwa sprite statku (0 — skala prawdziwa; > 0 — rysowany ≠ bez sceny). HUD: radar. */
@@ -9480,7 +9537,7 @@ export class ThreeRenderer {
         : stepChoreoEngine(ch, { dtMs: dt, posture: ch.posture, L }, T);
       ch.engineOut = lvl;
       const v = vm?.getVessel?.(id);
-      const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!(v?.isWreck || e.isWreck || e.cvKilled) });
+      const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!((this._cvVisWreck?.(v) ?? !!v?.isWreck) || e.isWreck || e.cvKilled) });
       this._choreoExhaust(e, e.cvKilled ? 0 : raw + (lvl - raw) * (m.cw ?? 1));   // ARC CV-4a — zniszczony: silnik gaśnie od razu
     }
     if (info?.choreo && errs.length) {
@@ -9532,7 +9589,7 @@ export class ThreeRenderer {
 
   /** ARC CV-3b — czy wrapperowi pisze kurs ktoś inny (lot z misją, orbita ciała, wrak); statek wolny — nie. */
   _choreoHeadingOwned(id, v, e) {
-    if (e?.isWreck || v?.isWreck) return true;
+    if (e?.isWreck || (this._cvVisWreck?.(v) ?? !!v?.isWreck)) return true;
     if (v?.position?.state === 'in_transit' && v?.mission) return true;
     if (v?.position?.dockedAt != null) {
       const orb = window.KOSMOS?.orbitalSpaceSystem?.getOrbit?.(id);
@@ -9548,7 +9605,7 @@ export class ThreeRenderer {
     const w = Math.max(0, Math.min(1, (m.cw ?? 1) * m.w));
     if (e.canonical && e.rig?.canon && e.rig.frameQuat && ch.q) this._choreoOrient(id, e, m, w);
     const v = window.KOSMOS?.vesselManager?.getVessel?.(id);
-    const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!(v?.isWreck || e.isWreck || e.cvKilled) });
+    const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!((this._cvVisWreck?.(v) ?? !!v?.isWreck) || e.isWreck || e.cvKilled) });
     this._choreoExhaust(e, e.cvKilled ? 0 : raw + ((ch.engineOut ?? 0) - raw) * w);
   }
 
@@ -9800,10 +9857,9 @@ export class ThreeRenderer {
   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć: gdy obserwowane starcie się skończyło, a klaster trwa, kamera
   // przechodzi na inne aktywne starcie tego klastra (lista starć klastra z poprzedniej klatki).
   _stageSuccessor(encounterId, clusterIds) {
-    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
     for (const eid of clusterIds ?? []) {
       if (eid === encounterId) continue;
-      const e = dscs?._activeEncounters?.get?.(eid);
+      const e = this._cvEncById(eid);
       if (e?.isActive) return e;
     }
     return null;
@@ -9819,7 +9875,7 @@ export class ThreeRenderer {
     let goal = null;
     const encId = this._watch?.encounterId ?? this._autoFocus?.encounterId ?? null;
     if (GAME_CONFIG.FEATURES?.cvStage && cc && encId && !this._galaxyActive && !this._galaxyFlight) {
-      const enc = window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(encId);
+      const enc = this._cvEncById(encId);
       const fit = enc?.isActive ? this._stageWatchFit(enc) : null;
       if (fit) {
         const r = viewOffsetFrame({ points: fit.points, pivot: { x: cc._target.x, y: cc._target.y, z: cc._target.z }, d: cc._dist,
@@ -9971,7 +10027,7 @@ export class ThreeRenderer {
     if (!cc) return;
     if (this._watch) this._endWatch();
     const minDistBefore = cc._minDist;
-    const enc = encounterId ? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(encounterId) : null;
+    const enc = encounterId ? this._cvEncById(encounterId) : null;
     if (!enc?.isActive) {
       // Brak aktywnego starcia (ładunek bez id albo starcie już rozstrzygnięte) — dawny kadr punktu startu (bez śledzenia).
       cc.setMinDist(0.005);
@@ -10006,7 +10062,7 @@ export class ThreeRenderer {
       return;
     }
     if (w.fitDist && w.dist != null && Math.abs(cc._targetDist - w.dist) > 1e-6) w.fitDist = false;   // kółko gracza
-    let enc = window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(w.encounterId);
+    let enc = this._cvEncById(w.encounterId);
     if (GAME_CONFIG.FEATURES?.cvStage) {   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
       if (!enc?.isActive) { const nx = this._stageSuccessor(w.encounterId, w.clusterIds); if (nx) { w.encounterId = nx.id; enc = nx; } }
       w.clusterIds = this._stageClusterOf.get(enc?.id)?.encounterIds ?? null;
@@ -10044,7 +10100,7 @@ export class ThreeRenderer {
     const a = this._autoFocus;
     const cc = this._cameraController;
     if (!a || !cc) { this._autoFocus = null; return; }
-    let enc = a.encounterId ? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(a.encounterId) : null;
+    let enc = a.encounterId ? this._cvEncById(a.encounterId) : null;
     if (GAME_CONFIG.FEATURES?.cvStage && a.encounterId) {   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
       if (!enc?.isActive) { const nx = this._stageSuccessor(a.encounterId, a.clusterIds); if (nx) { a.encounterId = nx.id; enc = nx; } }
       a.clusterIds = this._stageClusterOf.get(enc?.id)?.encounterIds ?? null;

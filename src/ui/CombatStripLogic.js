@@ -81,6 +81,8 @@ function sideStats(members, { isEnemy, inPlayerEngagement, quality, nameOf, clas
     // ARC CV-4a (flaga `cvWeapons`, Finding 614) — HP / osłona POKAZYWANE (rejestr salw: spadają w chwili trafienia); bez rejestru — stan logiczny.
     const pr = presented && st ? presented(id, st) : null;
     const h = Math.max(0, Number(pr ? pr.hp : st?.hp) || 0), h0 = Math.max(0, Number(st?.hpStart) || 0);
+    // ARC CV-8a — pula obrony planety (powtórka bitwy orbitalnej, `uncounted`): HP w pasku siły strony, bez liczby okrętów i wiersza
+    if (st?.uncounted) { hp += h; hpStart += h0; continue; }
     const sh = Math.max(0, Number(pr ? pr.shield : st?.shieldHP) || 0), sh0 = Math.max(0, Number(st?.shieldHPStart) || 0);
     const isAlive = h > 0;
     ships.push({ id, visible, alive: isAlive, hp: h, hpStart: h0, shield: sh, shieldStart: sh0,

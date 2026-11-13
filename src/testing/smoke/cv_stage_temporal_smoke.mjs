@@ -96,7 +96,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn', 'shellBaseAt',
   'simClockMs', 'capBillboardWorld', 'COMBAT_WATCH', 'ALERT_MARKER_SCALE', 'ALERT_MARKER_REF_DIST', 'ALERT_MARKER_PULSE_MAX',
   'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION'];
-const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
+const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage', 'getVesselStageBlend',
   '_stageWatchFit', '_stageFields', 'stageLogicalOf', 'stageWorldOf', '_placeFreeVessel', '_tickCombatGlide', '_syncEnemyAlertMarkers',
   '_spawnExplosion', '_stageKept',   // ARC CV-5 (Finding 706) — `_stageKept` (brak przed poprawką — pin T12 czerwony, suita idzie dalej)
   '_setSpriteBase'];   // ARC CV-7 (Finding 711) — `_placeFreeVessel` pod flagą `cvDirector` pisze bazę przez `_setSpriteBase` (prawdziwa metoda)

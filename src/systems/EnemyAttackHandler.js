@@ -21,6 +21,7 @@ import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel, isInService } from '../entities/Vessel.js';
 import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
+import { GAME_CONFIG } from '../config/GameConfig.js';  // ARC CV-8a — flaga `cvOrbital` (klucz `fx` powtórki bitwy orbitalnej)
 
 // Okno czasu (ms realnych) na dołączenie kolejnych wrogów do tej samej bitwy.
 // Jeśli wrogi vessel #A przyleci, a w ciągu BATTLE_BATCH_WINDOW_MS dotrze #B
@@ -191,6 +192,12 @@ export class EnemyAttackHandler {
       weapons: [{ damage: 2, tracking: 0.5 }],
     };
 
+    // ARC CV-8a (D-CV-25) — dane powtórki bitwy na scenie planety: listy LOKALNE tylko tutaj (napastnicy, okręty gracza w układzie,
+    // zadokowane w hangarach, obrona ciała). Klucz-RODZEŃSTWO `fx` zdarzenia `battle:resolved` — NIE w rekordzie bitwy (zapis bez
+    // zmian, keeper `cv_orbital_results_smoke`). Liczone PRZED `resolveBattle` i przed wrakami (stan „hangar” po bitwie już nie
+    // istnieje — wrak trafia na orbitę cmentarną). Flaga OFF — `null`, ładunek zdarzenia jak dotąd.
+    const fx = GAME_CONFIG.FEATURES?.cvOrbital ? this._orbitalFx({ allEnemies, systemId, planetId, empireId }) : null;
+
     // Seed deterministyczny — rok + suma hash wrogów
     let seedSum = 0;
     for (const v of allEnemies) seedSum += this._hashStr(v.id);
@@ -203,6 +210,9 @@ export class EnemyAttackHandler {
       location,
       seed,
     });
+    // ARC CV-8a — powód końca do `fx`: rekord bitwy wojny (`recordBattle`) nie niesie `endReason`, a pat (strażnik M1 / bezpiecznik)
+    // ma w powtórce zostać patem (bez wraków), nie „remisem przez wzajemne zniszczenie”.
+    if (fx) fx.endReason = result.endReason ?? null;
 
     const battleRec = {
       ...result,
@@ -239,7 +249,7 @@ export class EnemyAttackHandler {
       // emituje `battle:resolved` i ustawia dominację orbitalną przez `_updateOrbitalDominance`.
       // KONSEKWENCJA DO ZOBACZENIA NA GATE 2: wojny zaczynają się wyczerpywać od ataków
       // orbitalnych, więc auto-pokój i akceptacja pokoju mogą przychodzić WCZEŚNIEJ.
-      const rec = warSys?.recordBattle?.(war.id, battleRec);
+      const rec = warSys?.recordBattle?.(war.id, battleRec, fx ? { fx } : undefined);
       if (!rec) {
         // Głośno (R12): wojna istnieje, a księgowanie nie przyjęło bitwy — to błąd wpięcia,
         // nie stan gry. Nie emitujemy nic po cichu, bo cichy brak wpisu jest właśnie tym
@@ -261,8 +271,12 @@ export class EnemyAttackHandler {
       // (napięcie + pamięć, zero exhaustion).
       battleRec.id = `skirmish_${year.toFixed(2)}_${empireId}_${firstArrivedId}`.replace(/\./g, '_');
       battleRec.year = year;
-      EventBus.emit('battle:resolved', { warId: null, battleId: battleRec.id, result: battleRec });
+      EventBus.emit('battle:resolved', fx ? { warId: null, battleId: battleRec.id, result: battleRec, fx }
+        : { warId: null, battleId: battleRec.id, result: battleRec });
     }
+
+    // ARC CV-8a — poziomy obrony dołożone przez stager konsoli (`cvOrbitalBattle({ defence })`) — tylko na tę jedną bitwę tego ciała.
+    if (warSys?._cvStagerDefence?.planetId === planetId) warSys._cvStagerDefence = null;
 
     // Skutki — dotyczą wszystkich wrogów biorących udział
     if (result.winner === 'A') {
@@ -315,6 +329,26 @@ export class EnemyAttackHandler {
         entityRef: systemId,
       });
     }
+  }
+
+  /**
+   * ARC CV-8a (D-CV-25) — `fx` powtórki bitwy orbitalnej (wyłącznie odczyt świata, przed rozstrzygnięciem):
+   * `{ kind: 'orbital', attackerIds, defenderIds, hangarIds, defence: { tower, grid, token, poolHp }, planetId, systemId, empireId }`.
+   * Obrońcy = okręty gracza w służbie w układzie (`WarSystem._playerVesselsInSystem` — ten sam zbiór co jednostka obrońcy
+   * `_buildPlayerBattleUnit`), hangar = zadokowani (bez sprite'a — strzelają z emiterów, D-CV-26), obrona = `orbitalDefenceOf`.
+   */
+  _orbitalFx({ allEnemies, systemId, planetId, empireId }) {
+    const warSys = window.KOSMOS?.warSystem;
+    const defenders = warSys?._playerVesselsInSystem?.(systemId) ?? [];
+    const def = warSys?.orbitalDefenceOf?.(systemId, planetId) ?? { tower: 0, grid: 0, token: false, poolHp: 0 };
+    return {
+      kind: 'orbital',
+      attackerIds: allEnemies.map(v => v.id),
+      defenderIds: defenders.map(v => v.id),
+      hangarIds: defenders.filter(v => v.position?.state === 'docked').map(v => v.id),
+      defence: { tower: def.tower, grid: def.grid, token: !!def.token, poolHp: def.poolHp },
+      planetId, systemId, empireId: empireId ?? null,
+    };
   }
 
   // Nazwa WYSWIETLANA ukladu — kanon `systemDisplayName` (rejestr → nazwa GWIAZDY → id).

@@ -81,7 +81,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION',
   // ARC CV-3a2 — klastry z pozycji logicznych i pole kliku sceny
   'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn'];
-const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage',
+const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage',
   'getVesselStageBlend', '_stageWatchFit', '_stageSuccessor', '_syncCombatViewOffset', '_hideEncounterRings', '_spawnExplosion',
   '_placeFreeVessel', '_tickCombatGlide', '_stageFields', 'stageLogicalOf', 'stageWorldOf'];
 function makeMethod(name) {

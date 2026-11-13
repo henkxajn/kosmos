@@ -512,7 +512,7 @@ const VALUES = () => [THREE, S, GAME_CONFIG, globalThis.window, globalThis.perfo
   CUEBUS?.screenPan, CUEBUS?.CombatCueBus, EventBus, RIG?.paintRigMaterials, RRNG.rendererRandom, HPTS?.wreckTiltQuaternion, ENGINE?.FxEngine, () => true,
   VES.isEnemyVessel, FX.isEndpointVisibleInCombat, FX.isPlayerEngagement, CHOREO?.quatFromYawPitchRoll, FX.WRECK_EMISSIVE_COLOR, 2.5, globalThis.document,
   LEDGER?.LEDGER_INFO_LEGEND];
-const METHODS = ['_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvWpnPresentKill', '_cvWpnKillLook',
+const METHODS = ['_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_cvWpnPresentKill', '_cvWpnKillLook',
   '_cvWpnWreckGate', 'cvPresentedState', 'cvEventShown', '_ensureFxEngine', '_tickCvFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
   '_ensureCueBus', '_cueDestroyed', '_flushCues', '_cvTiltWreck', '_cvFxRoundFx', '_cueEncounterId', '_cueShot', 'cvLedgerInfo'];
 function makeMethod(name) {
@@ -522,12 +522,18 @@ function makeMethod(name) {
 }
 /** Handler `vessel:wrecked` renderera (nie metoda — ciało strzałki z konstruktora, wyciągnięte ze źródła). */
 function wreckHandler() {
-  const head = "EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {";
-  const i = TR.indexOf(head);
-  if (i < 0) return null;
-  const b0 = i + head.length;
-  const end = TR.indexOf('\n    }));\n', b0);
-  return new Function(...NAMES, `return function ({ vesselId, vessel }) {\n${TR.slice(b0, end)}\n};`)(...VALUES());
+  // ⚠ PRZECELOWANE ŚWIADOMIE (CV-8a, 2026-11-13): ciało słuchacza `vessel:wrecked` przeniesione do `this._onVesselWreckedView`
+  //   (słuchacz zostawia sobie tylko wstrzymanie wraku powtórki bitwy orbitalnej — `CvOrbital.deferWreck` — i woła je; powtórka woła
+  //   to samo ciało po zniszczeniu w powtórce). Kod ciała co do znaku ten sam — wyciągamy je z nowego miejsca; stare — zapas.
+  const heads = [["this._onVesselWreckedView = (vesselId, vessel) => {", '\n    };\n'], ["EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {", '\n    }));\n']];
+  for (const [head, tail] of heads) {
+    const i = TR.indexOf(head);
+    if (i < 0) continue;
+    const b0 = i + head.length;
+    const end = TR.indexOf(tail, b0);
+    return new Function(...NAMES, `return function ({ vesselId, vessel }) {\n${TR.slice(b0, end)}\n};`)(...VALUES());
+  }
+  return null;
 }
 
 /** Atrapa renderera z prawdziwymi metodami CV-4a; statki = obiekty z pozycją rysowaną (świat), rama kanoniczna — atrapa rigu. */

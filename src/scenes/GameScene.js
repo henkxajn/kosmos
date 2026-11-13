@@ -2790,7 +2790,7 @@ export class GameScene {
       this.colonyManager.switchActiveColony(planetId);
     });
 
-    EventBus.on('battle:resolved', ({ warId, battleId, result }) => {
+    EventBus.on('battle:resolved', ({ warId, battleId, result, fx }) => {
       // Tylko gdy civMode aktywny i gracz bierze udział
       if (!window.KOSMOS?.civMode) return;
       if (!result) return;
@@ -2835,6 +2835,20 @@ export class GameScene {
       battleData.aggressorArchetype = sides.foeArchetype;
       battleData.playerSide         = sides.playerSide;
 
+      // ARC CV-8a (flaga `cvOrbital`, D-CV-27 (a), Finding 632) — bitwa orbitalna (`fx` z `EnemyAttackHandler`): ŹRÓDŁO 'orbital'
+      // (potyczka bez wojny przestaje udawać walkę deep-space 'dscs'), baner wyniku zamiast modalu kina; w oglądanym układzie baner
+      // czeka na koniec powtórki na scenie planety (`combatfx:orbitalReplayEnd`), poza nim — od razu. Auto-slow — jak dotąd (UIManager).
+      if (fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital) {
+        battleData.source = 'orbital';
+        if (this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
+          (this._orbitalBannerHold ??= new Map()).set(battleId, battleData);
+          return;
+        }
+        this._battleQueue.push(battleData);
+        this._tryShowNextBattle();
+        return;
+      }
+
       // ARC CV-3a2 (Finding 638, decyzja właściciela §3.2-3) — JEDEN baner na klaster starć: wynik starcia, którego klaster
       // jeszcze trwa (inne aktywne starcie w tym samym miejscu), czeka; baner wychodzi po OSTATNIM `battle:resolved` klastra,
       // z wynikiem scalonym (`BattleClusterLogic`). Dziennik bez zmian — linia na starcie do CV-6b (#639). Pod flagą `cvStage`.
@@ -2844,15 +2858,32 @@ export class GameScene {
       if (banners.length) this._tryShowNextBattle();
     });
 
+    // ARC CV-8a — koniec powtórki bitwy orbitalnej (także przerwanej zmianą układu) — baner wyniku, który na nią czekał.
+    EventBus.on('combatfx:orbitalReplayEnd', ({ battleId }) => {
+      const line = this._orbitalLogHold?.get(battleId);
+      if (line) { this._orbitalLogHold.delete(battleId); window.KOSMOS?.eventLogSystem?.push?.(line); }
+      const b = this._orbitalBannerHold?.get(battleId);
+      if (!b) return;
+      this._orbitalBannerHold.delete(battleId);
+      this._battleQueue.push(b);
+      this._tryShowNextBattle();
+    });
+
     // Wpis do EventLoga dla KAŻDEJ bitwy (także obcy-vs-obcy w przyszłości).
     // Niezależny od cinematic/queue powyżej — trwały ślad dla gracza.
     //
     // Dwupasmowy: legacy war-path (WarSystem/EAH) vs VCS deep-space
     // (warId=null, participantX.type='vessel_group'). Obie ścieżki dają wpis
     // o tym samym schemacie — gracz ma trwały ślad nawet bez wojny formalnej.
-    EventBus.on('battle:resolved', ({ warId, battleId, result }) => {
+    EventBus.on('battle:resolved', ({ warId, battleId, result, fx }) => {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog || !result) return;
+      // ARC CV-8a — bitwa orbitalna w powtórce: linia bitwy w Dzienniku czeka na koniec powtórki (jak baner — wynik nie wyprzedza walki)
+      if (fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital && this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
+        const held = this._battleLogEntry({ warId, result });
+        if (held) (this._orbitalLogHold ??= new Map()).set(battleId, held);
+        return;
+      }
       // ARC CV-6b2 (Finding 639) — pod flagą `cvStrip` bitwa DSCS idzie przez narratora klastra: JEDNA linia bitwy (wynik
       // scalony jak baner) i JEDNA linia potyczki na klaster starć, po ostatnim `battle:resolved` klastra. Reszta (wojna,
       // obrona orbitalna, bez flagi) — linia na bitwę jak dotąd.
@@ -4518,7 +4549,7 @@ export class GameScene {
     // się NA ŻYWO na głównej mapie (smugi + kamera + auto-slow). Pomijamy modal kina
     // — tylko lekki baner outcome (domknięcie). Kino zostaje dla Path A (war-driven,
     // abstrakcja bez żywych meshy). Rollback: fcCombatFx=false → stary pełny modal.
-    if (GAME_CONFIG.FEATURES?.fcCombatFx && battleData?.source === 'dscs') {
+    if (GAME_CONFIG.FEATURES?.fcCombatFx && (battleData?.source === 'dscs' || battleData?.source === 'orbital')) {   // CV-8a — orbitalna: baner
       try { await showBattleOutcome(battleData); }
       catch (err) { console.error('[BattleOutcome] Error:', err); }
       this._battleShowing = false;

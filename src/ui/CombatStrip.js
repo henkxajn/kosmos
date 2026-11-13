@@ -168,7 +168,10 @@ export class CombatStrip {
   }
 
   _battles(K) {
-    const encs = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    // ARC CV-8a (flaga `cvOrbital`) — także starcia wirtualne powtórek bitew orbitalnych (wiersz bitwy przy planecie, póki trwa powtórka)
+    const orb = K?.threeRenderer?.cvOrbital?.encounters?.() ?? [];
+    const dscsList = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    const encs = orb.length ? dscsList.concat(orb) : dscsList;
     if (!encs.length) return [];
     const vm = K.vesselManager;
     const vessel = (id) => vm?.getVessel?.(id) ?? vm?._vessels?.get?.(id) ?? null;
@@ -223,8 +226,10 @@ export class CombatStrip {
     const lineOf = (r) => {
       const pct = (s) => (s.total > 0 ? `${Math.round(s.pct * 100)}%` : '');
       const counts = (s) => (s.hidden > 0 ? '?' : `${s.alive}/${s.total}`);
+      // ARC CV-8a — wiersz bitwy orbitalnej: miejsce = ciało (nazwa planety), nie sam układ
+      const orbBody = r.encounters?.[0]?.orbital ? (EntityManager.get?.(r.encounters[0].location?.planetId)?.name ?? null) : null;
       return {
-        loc: this._systemName(r.systemId, K),
+        loc: orbBody ?? this._systemName(r.systemId, K),
         own: { counts: counts(r.own), pct: r.own.hidden > 0 ? '' : pct(r.own), role: r.own.role, hidden: r.own.hidden > 0, frac: r.own.pct },
         foe: { counts: counts(r.enemy), pct: r.enemy.hidden > 0 ? '' : pct(r.enemy), role: r.enemy.role, hidden: r.enemy.hidden > 0, frac: r.enemy.pct },
         round: t('combatStrip.round', r.round),   // M1 — bez limitu rund: „R n”

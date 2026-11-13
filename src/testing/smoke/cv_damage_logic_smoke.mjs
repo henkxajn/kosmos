@@ -241,7 +241,7 @@ const VALUES = () => [THREE, S, GAME_CONFIG, globalThis.window, globalThis.perfo
   LEDGER?.LEDGER_INFO_LEGEND, FX.EXPLOSION_RING_COLOR, 2.5, KC?.KC_SHARED, KC?.setKeyColourWreckState, { SHELL_FLOOR_L: 2, JOIN_MS: 500 },
   X?.explosionPlan, X?.explosionBudget, X?.explosionClassOf, X?.explosionSeed, X?.damageStateOf, X?.wreckHeatAt, X?.wreckBurnColor, X?.wreckFireWindow,
   X?.wreckDrift, X?.wreckConverge, X?.sputterGate, X?.emitterTicks, X?.seedUnit, X?.wreckAfterDrift];
-const METHODS = ['_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvWpnPresentKill', '_cvWpnKillLook',
+const METHODS = ['_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_cvWpnPresentKill', '_cvWpnKillLook',
   '_cvWpnWreckGate', 'cvPresentedState', 'cvEventShown', '_ensureFxEngine', '_tickCvFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
   '_ensureCueBus', '_cueDestroyed', '_flushCues', '_cvTiltWreck', '_spawnExplosion', '_lightClockMs', '_setSpriteBase', '_spriteBase', '_stageMark', '_stagePlace',
   '_cvDmgOn', '_cvDmgState', '_cvDmgTick', '_cvDmgExplode', '_cvDmgPoint', '_cvDmgRunSeq', '_cvDmgWreckLook', '_cvDmgPaintHeat', '_cvDmgWrecks',
@@ -252,12 +252,18 @@ function makeMethod(name) {
   return new Function(...NAMES, `return function (${m.params}) {\n${m.body}\n};`)(...VALUES());
 }
 function wreckHandler() {
-  const head = "EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {";
-  const i = TR.indexOf(head);
-  if (i < 0) return null;
-  const b0 = i + head.length;
-  const end = TR.indexOf('\n    }));\n', b0);
-  return new Function(...NAMES, `return function ({ vesselId, vessel }) {\n${TR.slice(b0, end)}\n};`)(...VALUES());
+  // ⚠ PRZECELOWANE ŚWIADOMIE (CV-8a, 2026-11-13): ciało słuchacza `vessel:wrecked` przeniesione do `this._onVesselWreckedView`
+  //   (słuchacz zostawia sobie tylko wstrzymanie wraku powtórki bitwy orbitalnej — `CvOrbital.deferWreck` — i woła je; powtórka woła
+  //   to samo ciało po zniszczeniu w powtórce). Kod ciała co do znaku ten sam — wyciągamy je z nowego miejsca; stare — zapas.
+  const heads = [["this._onVesselWreckedView = (vesselId, vessel) => {", '\n    };\n'], ["EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {", '\n    }));\n']];
+  for (const [head, tail] of heads) {
+    const i = TR.indexOf(head);
+    if (i < 0) continue;
+    const b0 = i + head.length;
+    const end = TR.indexOf(tail, b0);
+    return new Function(...NAMES, `return function ({ vesselId, vessel }) {\n${TR.slice(b0, end)}\n};`)(...VALUES());
+  }
+  return null;
 }
 const clock = { now: 1e6 };
 performance.now = () => clock.now;

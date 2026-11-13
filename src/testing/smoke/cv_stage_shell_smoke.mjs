@@ -288,7 +288,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'fitWatchFrameOffset', 'viewOffsetFrame', 'watchSafeRect', 'getMapInsets', 'COSMIC', 'glideRetarget', 'glideStep',
   'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn', 'shellBaseAt',
   'simClockMs', 'capBillboardWorld', 'COMBAT_WATCH', 'ALERT_MARKER_SCALE', 'ALERT_MARKER_REF_DIST', 'ALERT_MARKER_PULSE_MAX'];
-const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
+const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage', 'getVesselStageBlend',
   '_stageWatchFit', '_stageFields', 'stageLogicalOf', 'stageWorldOf', '_placeFreeVessel', '_tickCombatGlide', '_setSpriteBase', '_syncEnemyAlertMarkers'];
 const trNum = (re) => Number((TR.match(re) ?? [])[1]);
 const ALERT_MARKER_SCALE = trNum(/const ALERT_MARKER_SCALE\s*=\s*([\d.]+)/), ALERT_MARKER_REF_DIST = trNum(/const ALERT_MARKER_REF_DIST\s*=\s*([\d.]+)/);
