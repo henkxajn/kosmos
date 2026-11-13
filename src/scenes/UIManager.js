@@ -1791,7 +1791,7 @@ export class UIManager {
       // samym `battle:resolved`, ale PO `AutoRetreatSystem` — decyzja po zdarzeniu (mikrozadanie): powtórka w toku → linia czeka na jej
       // koniec i NIE wychodzi dla wraku (EAH rozbija stronę, która się wycofała — #632); bez powtórki — od razu. Poza widokiem — od razu.
       const orb = window.KOSMOS?.threeRenderer?.cvOrbital;
-      if (GAME_CONFIG.FEATURES?.cvOrbital && orb && battleId != null && !String(battleId).startsWith('battle_ds_')
+      if (orb && battleId != null && !String(battleId).startsWith('battle_ds_')
         && v?.systemId === window.KOSMOS?.activeSystemId) {
         queueMicrotask(() => {
           if (orb.replays?.has?.(battleId)) {

@@ -21,7 +21,6 @@ import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel, isInService } from '../entities/Vessel.js';
 import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
-import { GAME_CONFIG } from '../config/GameConfig.js';  // ARC CV-8a — flaga `cvOrbital` (klucz `fx` powtórki bitwy orbitalnej)
 
 // Okno czasu (ms realnych) na dołączenie kolejnych wrogów do tej samej bitwy.
 // Jeśli wrogi vessel #A przyleci, a w ciągu BATTLE_BATCH_WINDOW_MS dotrze #B
@@ -195,8 +194,8 @@ export class EnemyAttackHandler {
     // ARC CV-8a (D-CV-25) — dane powtórki bitwy na scenie planety: listy LOKALNE tylko tutaj (napastnicy, okręty gracza w układzie,
     // zadokowane w hangarach, obrona ciała). Klucz-RODZEŃSTWO `fx` zdarzenia `battle:resolved` — NIE w rekordzie bitwy (zapis bez
     // zmian, keeper `cv_orbital_results_smoke`). Liczone PRZED `resolveBattle` i przed wrakami (stan „hangar” po bitwie już nie
-    // istnieje — wrak trafia na orbitę cmentarną). Flaga OFF — `null`, ładunek zdarzenia jak dotąd.
-    const fx = GAME_CONFIG.FEATURES?.cvOrbital ? this._orbitalFx({ allEnemies, systemId, planetId, empireId }) : null;
+    // istnieje — wrak trafia na orbitę cmentarną). CV-Z — zawsze (flaga `cvOrbital` zdjęta).
+    const fx = this._orbitalFx({ allEnemies, systemId, planetId, empireId });
 
     // Seed deterministyczny — rok + suma hash wrogów
     let seedSum = 0;

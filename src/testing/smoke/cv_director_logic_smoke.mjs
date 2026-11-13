@@ -225,8 +225,6 @@ guard('K6', () => {
   // Klej: prawdziwy CvDirector na atrapie renderera i kontrolera kamery.
   if (!CD?.CvDirector) { ok(false, 'K6d moduł CvDirector'); return; }
   const prevKOS = globalThis.window.KOSMOS;
-  const flag0 = GAME_CONFIG.FEATURES.cvDirector;
-  GAME_CONFIG.FEATURES.cvDirector = true;
   const V3 = () => ({ x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } });
   const cc = { _theta: 0.3, _phi: 1.1, _goalTheta: null, _goalPhi: null, _dist: 5, _targetDist: 5, _goalTarget: V3().set(0, 0.3, 0), _target: V3().set(0, 0.3, 0),
     _isDragging: false, _hasMoved: false, _minDist: 0.3, setMinDist(v) { this._minDist = v; } };
@@ -269,7 +267,7 @@ guard('K6', () => {
     ok(d.takeBack('icon') === true && d.chipState === 'paused', 'K6h klik w ikonę / znak bitwy (`takeBack`) — przejęcie');
     d.setArmed(false);
     ok(d.chipState === 'off' && !d.active && !d.battle && cc._minDist === 0.3, 'K6i chip wyłączony — reżyser puszcza kamerę i bitwę; podłoga zoomu wraca do 0,3');
-  } finally { GAME_CONFIG.FEATURES.cvDirector = flag0; globalThis.window.KOSMOS = prevKOS; }
+  } finally { globalThis.window.KOSMOS = prevKOS; }
 });
 
 header('K7 — strażnicy: kamera nigdy w kadłubie, ciele ani gwieździe');
@@ -410,9 +408,10 @@ guard('K13', () => {
   const n = (tr.match(/\.tick\(performance\.now\(\), \{ paused: [^}]*rate: this\._presRate \?\? 1 \}/g) ?? []).length;
   ok(n === 2 && /_stageClock\.tick\(performance\.now\(\), \{[^}]*rate: this\._presRate/.test(tr) && /_presClock\.tick\(performance\.now\(\), \{[^}]*rate: this\._presRate/.test(tr),
     `K13b OBA zegary prezentacji (scena / choreografia i FX / rejestr / HUD) z tym samym mnożnikiem (${n})`);
-  ok(/if \(GAME_CONFIG\.FEATURES\?\.cvDirector && this\._cvDir\?\.wantsBattles\?\.\(\)\) return;/.test(tr), 'K13c auto-fokus nowego starcia ustępuje włączonemu reżyserowi');
+  ok(/if \(this\._cvDir\?\.wantsBattles\?\.\(\)\) return;/.test(tr) && !/FEATURES\?\.cvDirector/.test(tr), 'K13c auto-fokus nowego starcia ustępuje włączonemu reżyserowi (CV-Z — bez bramki flagi)');
   ok(!!FX?.LIVE_CV_FX && Object.keys(T).length > 40 && Object.keys(T).every((k) => k in FX.LIVE_CV_FX), 'K13d pokrętła `DIR_*` żywe w `cvTuning` (alias `LIVE_CV_FX`)');
-  ok(GAME_CONFIG.FEATURES.cvDirector === true, 'K13e flaga `cvDirector` domyślnie ON (chip domyślnie wyłączony — `uiPrefs.cvDirector`)');
+  // CV-Z — przecelowane świadomie: flaga `cvDirector` zdjęta (reżyser na stałe); chip dalej domyślnie wyłączony — `uiPrefs.cvDirector`.
+  ok(!('cvDirector' in GAME_CONFIG.FEATURES) && 'fcCombatFx' in GAME_CONFIG.FEATURES, 'K13e (CV-Z) klucz `cvDirector` zdjęty z FEATURES (reżyser na stałe; chip domyślnie wyłączony — `uiPrefs.cvDirector`)');
 });
 
 header('K14 — nagrywarka rolek (F10)');

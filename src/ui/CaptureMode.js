@@ -1,4 +1,4 @@
-// CaptureMode — TRYB NAGRYWANIA rolek (ARC COMBAT VISUALS, krok CV-7; flaga `cvDirector`).
+// CaptureMode — TRYB NAGRYWANIA rolek (ARC COMBAT VISUALS, krok CV-7; na stałe od CV-Z).
 // Chowa CAŁY interfejs (belki, outlinery, pasek walki, powiadomienia, okna DOM, warstwa HUD — etykiety, ikony, znak bitwy)
 // i nakładki 3D „czystego widoku” (linie orbit, tras, handlu, celowniki); zostaje scena 3D i efekty walki. Opcjonalnie cienka
 // ramka 9:16 POZA kadrem (przewodnik — `CvDirector`). Wyjście: Esc albo ten sam klawisz (`CAPTURE_KEY`) — wszystko wraca DOKŁADNIE:

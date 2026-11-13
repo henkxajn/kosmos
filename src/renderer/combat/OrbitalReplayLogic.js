@@ -1,5 +1,5 @@
 // OrbitalReplayLogic — REŻYSER POWTÓRKI BITWY ORBITALNEJ (ARC COMBAT VISUALS, krok CV-8a; plan §2.8, D-CV-25, D-CV-26, D-CV-27,
-// Findingi 628, 632, 635; flaga `cvOrbital`).
+// Findingi 628, 632, 635; na stałe od CV-Z).
 //
 // ⚠ Importy wyłącznie z czystego `CombatLedgerLogic` (ziarno, generator) — wykonuje się pod node (keeper `cv_orbital_logic_smoke`
 // — wykonaniem, nie lekturą). Bez THREE, bez `window`, bez losowania gry (reguła CV-0b): wszystko z ziarna = skrót `battleId`.

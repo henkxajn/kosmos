@@ -1,5 +1,5 @@
 // ReelRecorder — NAGRYWARKA ROLEK (narzędzie właściciela do TikToka / Reels; ARC COMBAT VISUALS, krok CV-7 — zmiana 2 po kontroli
-// właściciela 2026-11-13; flaga `cvDirector`). Klawisz F10 albo `KOSMOS.debug.cvRecord(1|0)` — start / stop.
+// właściciela 2026-11-13; na stałe od CV-Z). Klawisz F10 albo `KOSMOS.debug.cvRecord(1|0)` — start / stop.
 //
 // Nagrywa WYŁĄCZNIE płótno 3D (`#three-canvas`: scena i efekty walki — interfejs DOM i warstwa HUD nigdy nie trafiają do pliku;
 // z trybem nagrywania F9 kadr jest czysty także na ekranie). Przy przewodniku 9:16 — wycinek kadru 9:16 skalowany do płótna

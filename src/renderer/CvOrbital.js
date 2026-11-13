@@ -1,5 +1,5 @@
 // CvOrbital — klej POWTÓRKI BITWY ORBITALNEJ w rendererze (ARC COMBAT VISUALS, krok CV-8a; plan §2.8, D-CV-25 / D-CV-26 /
-// D-CV-27, Findingi 628 / 632 / 635; flaga `cvOrbital`). Logika powtórki — czysty `combat/OrbitalReplayLogic.js`.
+// D-CV-27, Findingi 628 / 632 / 635; na stałe od CV-Z). Logika powtórki — czysty `combat/OrbitalReplayLogic.js`.
 //
 // Przepływ:
 //   `battle:resolved` z kluczem `fx` (EnemyAttackHandler — atak na kolonię) → `handle(payload)` (idempotentne: woła je słuchacz
@@ -52,10 +52,9 @@ export class CvOrbital {
     this.stats = { started: 0, refusedView: 0, refusedFlags: 0, ended: 0, aborted: 0, roundsFed: 0, killsShown: 0, hangarKills: 0, deferred: 0, last: null };
   }
 
-  /** Warunki powtórki: `cvOrbital` + efekty walki (`fcCombatFx`). */
+  /** Warunek powtórki: efekty walki (`fcCombatFx`). CV-Z — flaga `cvOrbital` zdjęta (powtórka jedyną prezentacją bitwy orbitalnej). */
   get flag() {
-    const F = GAME_CONFIG.FEATURES;
-    return !!(F?.cvOrbital && F?.fcCombatFx);
+    return !!GAME_CONFIG.FEATURES?.fcCombatFx;
   }
 
   get tuning() { return this.r?.cvTuning ?? ORB_TUNING; }
@@ -454,6 +453,6 @@ export class CvOrbital {
         czasMs: Math.round(now - st.startedAt), nadwyzka: rep.stats.excess, odrzucone: rep.stats.dropped,
       };
     });
-    return { flaga: !!GAME_CONFIG.FEATURES?.cvOrbital, gotowa: this.flag, powtorki: list, liczniki: { ...this.stats } };
+    return { gotowa: this.flag, powtorki: list, liczniki: { ...this.stats } };
   }
 }

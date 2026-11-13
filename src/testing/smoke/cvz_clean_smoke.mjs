@@ -8,6 +8,8 @@
 //   Z4 usunięte ścieżki OFF: metody renderera (dawne smugi i błysk, salwa CV-2a, pierścień starcia, paski HP 3D, kadr bez sceny),
 //      karta walki `CombatHUD` (plik) i czip „⚔ Walki”; KONTROLA — renderer czytany (metody sceny są)
 //   Z5 klucze i18n dawnej karty walki wycofane w PL i EN; klucze paska walki zostają
+//   Z6 grupa 5: `EnemyAttackHandler` zawsze niesie `fx` bitwy orbitalnej (bez bramki), `GameScene` bez bramki `cvOrbital`;
+//      reżyser bez flagi — FUNKCJA zostaje: chip domyślnie WYŁĄCZONY (`uiPrefs.cvDirector`, D-CV-23), F9 / F10 i `cv916` działają
 import '../headless/env.js';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 
@@ -19,11 +21,13 @@ const ROOT = new URL('../../../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8').replace(/\r\n/g, '\n');
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 
-// Wycofane flagi CV-Z — grupy 1–4 (grupa 5 dopisuje `cvOrbital`, `cvDirector`).
-const RETIRED = ['cvFxEngine', 'cvStage', 'cvChoreo', 'cvChoreo2', 'cvModels', 'cvPresets', 'cvWeapons', 'cvDamage', 'cvShields', 'cvStrip', 'cvTactical'];
+// Wycofane flagi CV-Z — grupy 1–5.
+const RETIRED = ['cvFxEngine', 'cvStage', 'cvChoreo', 'cvChoreo2', 'cvModels', 'cvPresets', 'cvWeapons', 'cvDamage', 'cvShields', 'cvStrip', 'cvTactical',
+  'cvOrbital', 'cvDirector'];
 // Przełączniki konsoli → flaga (nazwa przełącznika bywa krótsza od flagi).
 const TOGGLES = { cvFx: 'cvFxEngine', cvStage: 'cvStage', cvChoreo: 'cvChoreo', cvChoreo2: 'cvChoreo2', cvModels: 'cvModels', cvPresets: 'cvPresets',
-  cvWeapons: 'cvWeapons', cvDamage: 'cvDamage', cvShields: 'cvShields', cvStrip: 'cvStrip', cvTactical: 'cvTactical' };
+  cvWeapons: 'cvWeapons', cvDamage: 'cvDamage', cvShields: 'cvShields', cvStrip: 'cvStrip', cvTactical: 'cvTactical',
+  cvOrbital: 'cvOrbital', cvDirectorFlag: 'cvDirector' };
 
 const GC = await tryImport('../../config/GameConfig.js');
 const ST = await tryImport('../../debug/CvBattleStager.js');
@@ -47,10 +51,14 @@ guard('Z2', () => {
     }
   };
   walk('src');
-  const re = new RegExp(`\\.(${RETIRED.join('|')})\\b(?!\\s*\\()`);
+  // Odczyt FLAGI: `FEATURES.cvX` / `F.cvX` (alias `const F = GAME_CONFIG.FEATURES`) — nie `threeRenderer.cvDirector` (getter reżysera)
+  // ani `uiPrefs.cvDirector` (chip), które zostają.
+  const re = new RegExp(`(?:FEATURES|\\bF)\\s*\\??\\.\\s*(${RETIRED.join('|')})\\b`);
   const hits = files.filter((p) => re.test(strip(read(p))));
   assert(files.length > 100 && hits.length === 0, `Z2 ${files.length} plików, odczyt wycofanej flagi: ${hits.join(', ') || 'brak'}`);
-  assert(re.test('if (GAME_CONFIG.FEATURES?.cvStage) x();') && !re.test('debug.cvStage(0)'), 'Z2 KONTROLA: wzorzec łapie odczyt flagi, nie wywołanie przełącznika');
+  assert(re.test('if (GAME_CONFIG.FEATURES?.cvStage) x();') && re.test('F.cvOrbital = 1') && !re.test('debug.cvStage(0)')
+    && !re.test('K.threeRenderer?.cvDirector') && !re.test('uiPrefs.cvDirector === true'),
+    'Z2 KONTROLA: wzorzec łapie odczyt flagi, nie przełącznik konsoli, getter reżysera ani preferencję chipa');
 });
 
 console.log('Z3 — przełączniki konsoli wycofanych flag');
@@ -94,6 +102,32 @@ guard('Z5', () => {
   assert(left.length === 0 && /'combat\.watchBattle':/.test(pl) && /'combat\.watchBattle':/.test(en) && /'combatStrip\.round':/.test(pl),
     `Z5 ${old.length} kluczy karty wycofanych w PL i EN (zostały: ${left.join(', ') || '—'}); KONTROLA — \`combat.watchBattle\` i klucze paska zostają`);
 });
+
+console.log('Z6 — grupa 5: bitwa orbitalna i reżyser bez flag');
+await (async () => {
+  try {
+    const eah = strip(read('src/systems/EnemyAttackHandler.js')), gs = strip(read('src/scenes/GameScene.js'));
+    assert(/const fx = this\._orbitalFx\(\{ allEnemies, systemId, planetId, empireId \}\);/.test(eah) && !/cvOrbital/.test(eah),
+      'Z6a `EnemyAttackHandler` zawsze liczy `fx` powtórki (bez bramki flagi)');
+    assert(/if \(fx\?\.kind === 'orbital'\) \{/.test(gs) && /this\._noteRaidBattle\(\{ battleId, result \}\);/.test(gs)
+      && /if \(this\._raidAnnouncer\?\.offerBanner\(b\)\) return;/.test(gs) && /if \(!dir\) return;/.test(gs),
+      'Z6b `GameScene`: źródło orbital, rajd i F9 / F10 bez bramki flagi');
+    const D = await import('../../renderer/CvDirector.js');
+    const proto = D.CvDirector?.prototype ?? {};
+    const desc = (n) => Object.getOwnPropertyDescriptor(proto, n);
+    const prevK = globalThis.window.KOSMOS;
+    globalThis.window.KOSMOS = { uiPrefs: {} };
+    const off = desc('armed')?.get?.call({});
+    globalThis.window.KOSMOS.uiPrefs.cvDirector = true;
+    const on = desc('armed')?.get?.call({});
+    globalThis.window.KOSMOS = prevK;
+    assert(!desc('flag') && off === false && on === true,
+      `Z6c reżyser bez getteru \`flag\`; chip domyślnie WYŁĄCZONY (armed ${off}), włączony preferencją (armed ${on}) — D-CV-23`);
+    const cd = strip(read('src/renderer/CvDirector.js'));
+    assert(/setRecording\(on\) \{/.test(cd) && !/flag_off/.test(cd) && /setPromo916\(/.test(cd) && /setCapture\(/.test(cd),
+      'Z6d nagrywarka (F10), tryb nagrywania (F9) i 9:16 bez odmowy „flag_off”');
+  } catch (e) { fail++; console.log(`  ✗ Z6 rzucił: ${String(e?.stack ?? e).slice(0, 300)}`); }
+})();
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

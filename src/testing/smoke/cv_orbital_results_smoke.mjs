@@ -5,10 +5,11 @@
 // (zegar prezentacji, prawdziwy rejestr salw `CombatLedger`, geometria ciała) — klej importuje się pod node (bez THREE).
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 // PINY:
-//   R1 `fx` (flaga `cvOrbital` ON): klucz-RODZEŃSTWO zdarzenia — rodzaj, napastnicy = wrogowie na orbicie ciała, obrońcy = okręty gracza
+//   R1 `fx` (CV-Z — zawsze; flaga `cvOrbital` zdjęta): klucz-RODZEŃSTWO zdarzenia — rodzaj, napastnicy = wrogowie na orbicie ciała, obrońcy = okręty gracza
 //      w służbie w układzie, hangar = zadokowani, obrona z budynków (narzędzie konsoli `_cvStagerDefence`), ciało, układ, imperium
-//   R2 wynik i rekord bitwy (`gameState.battles`) co do JSON identyczne ON / OFF; OFF — zdarzenie bez klucza `fx`; `fx` nigdy w wyniku
-//      ani w rekordzie (ścieżka wojny I potyczki bez wojny)
+//   R2 wynik i rekord bitwy (`gameState.battles`) co do JSON identyczne z NAGRANIEM sprzed CV-Z (`36ddfb4`, ścieżka bez powtórki —
+//      `fixtures/traces/CVZ-orbital-results-baseline.json`); `fx` tylko na zdarzeniu, nigdy w wyniku ani w rekordzie (wojna I potyczka
+//      bez wojny). CV-Z — przecelowane świadomie: dawne porównanie ON / OFF w jednym drzewie straciło stronę OFF.
 //   R3 każde id `fx` istnieje w rejestrze statków
 //   R4 powtórka na kleju: start w widoku; wraki z EAH wstrzymane do zniszczenia w powtórce (bez wczesnej zamiany); na końcu
 //      zniszczenia POKAZANE = straty LOGICZNE (wraki EAH wśród uczestników), każde raz; `combatfx:orbitalReplayEnd` dokładnie raz
@@ -39,14 +40,12 @@ let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { pass++; console.log('  ✓ ' + l); } else { fail++; console.log('  ✗ ' + l); } };
 const guard = (label, fn) => { try { fn(); } catch (e) { fail++; console.log(`  ✗ ${label}: WYJĄTEK ${e?.stack ?? e}`); } };
 const F = GAME_CONFIG.FEATURES;
-const FLAG0 = F.cvOrbital;
 
 const WAR_A = ['engine_ion', 'weapon_kinetic', 'weapon_laser', 'armor_standard'];
 const WAR_B = ['engine_ion', 'weapon_laser', 'weapon_kinetic', 'shield_basic'];
 
 /** Świat z atakiem na kolonię gracza; `glue` — klej powtórki z atrapą renderera podpięty PRZED rozstrzygnięciem. */
-function battle({ flag = true, nA = 3, nB = 3, hangar = 1, tower = 2, grid = 1, modsA = WAR_A, modsB = WAR_B, glue = false, view = null, galaxy = false } = {}) {
-  F.cvOrbital = flag;
+function battle({ nA = 3, nB = 3, hangar = 1, tower = 2, grid = 1, modsA = WAR_A, modsB = WAR_B, glue = false, view = null, galaxy = false } = {}) {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization' });
   const K = window.KOSMOS;
@@ -118,13 +117,11 @@ const sameSet = (a, b) => JSON.stringify([...new Set(a)].sort()) === JSON.string
 // ── proces potomny R2: jedna bitwa w świecie od zera, wynik i rekord jako JSON ──
 if (process.argv.includes('--child')) {
   const mode = process.argv[process.argv.indexOf('--child') + 1];
-  const flag = mode.endsWith('-on');
   let p = null;
   if (mode.startsWith('war')) {
-    const w = battle({ flag });
+    const w = battle();
     p = w.events.find((e) => e.result?.location?.planetId === w.home.id) ?? null;
   } else {
-    F.cvOrbital = flag;
     const core = new GameCore(); core.boot({ quiet: true, scenario: 'civilization' });
     if (core.fleetPoolSystem) core.fleetPoolSystem.enabled = false;
     if (core.garrisonSystem) core.garrisonSystem.enabled = false;
@@ -146,7 +143,7 @@ if (process.argv.includes('--child')) {
 console.log('R1 / R3 — klucz fx (flaga ON)');
 let ON = null;
 guard('R1', () => {
-  ON = battle({ flag: true });
+  ON = battle();
   const p = ON.events.find((e) => e.result?.location?.planetId === ON.home.id);
   const fx = p?.fx;
   assert(!!fx && fx.kind === 'orbital', 'R1a: zdarzenie bitwy orbitalnej niesie fx (rodzaj orbital)');
@@ -159,24 +156,25 @@ guard('R1', () => {
   assert(ids.length > 0 && ids.every((id) => !!vm.getVessel(id)), `R3: każde id fx istnieje (${ids.length})`);
 });
 
-console.log('R2 — wynik i rekord bitwy identyczne ON / OFF; fx tylko na zdarzeniu (procesy potomne — ten sam świat od zera)');
+console.log('R2 — wynik i rekord bitwy identyczne z nagraniem sprzed CV-Z; fx tylko na zdarzeniu (procesy potomne — świat od zera)');
 guard('R2', () => {
   // ⚠ ON i OFF w OSOBNYCH procesach: licznik id statków żyje w module, więc drugi świat w tym samym procesie dostaje inne id
   //   statków, a ziarno bitwy EAH zależy od id (`_hashStr`) — porównanie w jednym procesie mierzyłoby różnicę id, nie flagi.
   const run = (mode) => JSON.parse(execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--child', mode], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 })
     .split('\n').find((l) => l.startsWith('CHILD:')).slice(6));
-  const on = run('war-on'), off = run('war-off');
-  assert(!!on.result && on.result === off.result, `R2a: wynik bitwy (rekord z zdarzenia) co do JSON identyczny ON / OFF (${on.result?.length} znaków)`);
-  assert(!!on.record && on.record === off.record, 'R2b: rekord gameState.battles co do JSON identyczny ON / OFF');
-  assert(on.hasFx && !off.hasFx && !on.result.includes('"fx"') && !on.record.includes('"fx"'), 'R2c: fx tylko na zdarzeniu przy ON — nigdy w wyniku ani w rekordzie');
-  const sOn = run('skirm-on'), sOff = run('skirm-off');
-  assert(!!sOn.result && sOn.result === sOff.result && sOn.warId === null && sOn.hasFx && !sOff.hasFx,
-    'R2d: potyczka bez wojny (EAH emituje sama) — wynik identyczny, fx tylko przy ON');
+  const base = JSON.parse(readFileSync(new URL('../fixtures/traces/CVZ-orbital-results-baseline.json', import.meta.url), 'utf-8'));
+  const on = run('war');
+  assert(!!on.result && on.result === base.war.result, `R2a: wynik bitwy (rekord z zdarzenia) co do JSON identyczny z nagraniem \`${base.recordedAt}\` (${on.result?.length} znaków)`);
+  assert(!!on.record && on.record === base.war.record, 'R2b: rekord gameState.battles co do JSON identyczny z nagraniem');
+  assert(on.hasFx && !on.result.includes('"fx"') && !on.record.includes('"fx"'), 'R2c: fx na zdarzeniu — nigdy w wyniku ani w rekordzie');
+  const sOn = run('skirm');
+  assert(!!sOn.result && sOn.result === base.skirm.result && sOn.warId === null && sOn.hasFx,
+    'R2d: potyczka bez wojny (EAH emituje sama) — wynik identyczny z nagraniem, fx na zdarzeniu');
 });
 
 console.log('R4 / R5 — powtórka na kleju: wraki wstrzymane, straty pokazane = logiczne, hangar');
 guard('R4', () => {
-  const w = battle({ flag: true, glue: true, nA: 3, nB: 4, hangar: 1, tower: 2, grid: 1 });
+  const w = battle({ glue: true, nA: 3, nB: 4, hangar: 1, tower: 2, grid: 1 });
   const p = w.events.find((e) => e.fx);
   const st = w.orb.replays.get(p.battleId);
   assert(!!st && st.rep.rounds >= ORB_TUNING.ORB_ROUNDS_MIN, `R4a: powtórka wystartowała w widoku (${st?.rep.rounds} rund z ${st?.rep.turns} tur)`);
@@ -199,7 +197,7 @@ guard('R4', () => {
   if (hangarDoomed) assert(w.fake.sprites.filter((id) => id === hangarId).length === 1 && holdWhileAlive && w.fake.booms.length >= 1, 'R5c: hangar — jeden sprite wraku po zniszczeniu, wybuch na emiterze');
   else assert(!w.fake.sprites.includes(hangarId), 'R5c: hangar ocalały — bez sprite\'a (zadokowany jak był)');
   // druga strona: wygrywa AI — obrońcy (w tym hangar) giną
-  const w2 = battle({ flag: true, glue: true, nA: 6, nB: 2, hangar: 1, tower: 0, grid: 0 });
+  const w2 = battle({ glue: true, nA: 6, nB: 2, hangar: 1, tower: 0, grid: 0 });
   const p2 = w2.events.find((e) => e.fx);
   const loss2 = [...p2.fx.attackerIds, ...p2.fx.defenderIds].filter((id) => w2.core.vesselManager.getVessel(id)?.isWreck);
   const shown2 = runReplay(w2);
@@ -209,11 +207,11 @@ guard('R4', () => {
 
 console.log('R6 — bramka widoku i przerwanie');
 guard('R6', () => {
-  const other = battle({ flag: true, glue: true, view: 'sys_other_test' });
+  const other = battle({ glue: true, view: 'sys_other_test' });
   assert(other.orb.replays.size === 0 && other.orb.stats.refusedView === 1 && other.wrecked.length > 0, 'R6a: bitwa w innym układzie — bez powtórki, wraki od razu (dzisiejsza ścieżka)');
-  const gal = battle({ flag: true, glue: true, galaxy: true });
+  const gal = battle({ glue: true, galaxy: true });
   assert(gal.orb.replays.size === 0 && gal.orb.stats.refusedView === 1, 'R6b: tryb galaktyki — bez powtórki');
-  const ab = battle({ flag: true, glue: true, nA: 3, nB: 3 });
+  const ab = battle({ glue: true, nA: 3, nB: 3 });
   const st = [...ab.orb.replays.values()][0];
   const nDef = st.deferred.size;
   ab.fake._presClock.nowMs = 2000; ab.orb.tick();
@@ -221,13 +219,16 @@ guard('R6', () => {
   ab.orb.tick();
   assert(nDef > 0 && ab.ends.length === 1 && ab.ends[0].reason === 'aborted' && ab.orb.replays.size === 0 && ab.fake.views.length === nDef,
     `R6c: zmiana układu w trakcie — przerwanie, zaległe zamiany we wrak od razu (${ab.fake.views.length}/${nDef}), koniec raz`);
-  const offFlag = battle({ flag: false, glue: true });
-  assert(offFlag.orb.replays.size === 0 && !offFlag.events.some((e) => e.fx), 'R6d: flaga OFF — bez fx i bez powtórki');
+  // CV-Z — przecelowane świadomie: dawne R6d („flaga OFF — bez fx i bez powtórki”) — ścieżka OFF usunięta; stary klucz nie ma skutku.
+  F.cvOrbital = false;
+  const offFlag = battle({ glue: true });
+  delete F.cvOrbital;
+  assert(offFlag.orb.replays.size === 1 && offFlag.events.some((e) => e.fx?.kind === 'orbital'), 'R6d (CV-Z): stary klucz `cvOrbital: false` bez skutku — fx i powtórka są');
 });
 
 console.log('R7 — pat (bezbronni)');
 guard('R7', () => {
-  const w = battle({ flag: true, glue: true, modsA: ['engine_ion'], modsB: ['engine_ion'], tower: 0, grid: 0, hangar: 0, nA: 2, nB: 2 });
+  const w = battle({ glue: true, modsA: ['engine_ion'], modsB: ['engine_ion'], tower: 0, grid: 0, hangar: 0, nA: 2, nB: 2 });
   const p = w.events.find((e) => e.fx);
   const wr = [...p.fx.attackerIds, ...p.fx.defenderIds].filter((id) => w.core.vesselManager.getVessel(id)?.isWreck);
   const shown = runReplay(w);
@@ -239,7 +240,7 @@ guard('R7b', () => {
   // ⚠ Pat bezbronnych (R7) nie odróżnia „pat” od „remis przez wzajemne zniszczenie” — bez strzałów nikt i tak nie ginie. Tu strona A ma
   //   laser (5), strona B — regenerację osłony 6 / turę (2 × shield_phase): strażnik M1 kończy bitwę w turze 0 (`no_damage_possible`),
   //   rekord wojny (`recordBattle`) nie niesie `endReason` — bez `fx.endReason` powtórka zrobiłaby z tego wzajemne zniszczenie.
-  const w = battle({ flag: true, glue: true, modsA: ['engine_ion', 'weapon_laser'], modsB: ['engine_ion', 'shield_phase', 'shield_phase'], tower: 0, grid: 0, hangar: 0, nA: 1, nB: 1 });
+  const w = battle({ glue: true, modsA: ['engine_ion', 'weapon_laser'], modsB: ['engine_ion', 'shield_phase', 'shield_phase'], tower: 0, grid: 0, hangar: 0, nA: 1, nB: 1 });
   const p = w.events.find((e) => e.fx);
   const st = w.orb.replays.get(p.battleId);
   const wr = [...p.fx.attackerIds, ...p.fx.defenderIds].filter((id) => w.core.vesselManager.getVessel(id)?.isWreck);
@@ -251,8 +252,7 @@ guard('R7b', () => {
 
 console.log('R8 — narzędzie obrony konsoli');
 guard('R8', () => {
-  F.cvOrbital = true;
-  const w = battle({ flag: true, tower: 2, grid: 1 });
+  const w = battle({ tower: 2, grid: 1 });
   assert(w.core.warSystem._cvStagerDefence == null, 'R8a: `_cvStagerDefence` zdjęte po bitwie tego ciała');
   const unit0 = w.core.warSystem._buildPlayerBattleUnit(w.sys, w.home.id);
   w.core.warSystem._cvStagerDefence = { planetId: w.home.id, tower: 2, grid: 1 };
@@ -268,7 +268,8 @@ guard('R9', () => {
   const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const gs = strip(readFileSync(new URL('../../scenes/GameScene.js', import.meta.url), 'utf-8').replace(/\r\n/g, '\n'));
   const tr = strip(readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf-8').replace(/\r\n/g, '\n'));
-  assert(/fx\?\.kind === 'orbital' && GAME_CONFIG\.FEATURES\?\.cvOrbital\)\s*\{\s*battleData\.source = 'orbital'/.test(gs), 'R9a: GameScene — źródło orbital (Finding 632)');
+  assert(/if \(fx\?\.kind === 'orbital'\)\s*\{\s*battleData\.source = 'orbital'/.test(gs) && !/cvOrbital\b(?!\s*\?\.)/.test(gs.replace(/threeRenderer\?\.cvOrbital/g, '')),
+    'R9a: GameScene — źródło orbital (Finding 632), bez bramki flagi `cvOrbital` (CV-Z)');
   assert(/combatfx:orbitalReplayEnd/.test(gs) && /_orbitalBannerHold/.test(gs), 'R9b: GameScene — baner czeka na koniec powtórki (D-CV-27 (a))');
   // ARC CV-8b — PRZECELOWANE ŚWIADOMIE: R9f — linia trzymana razem z wpisami skutków EAH (#713, `{ line, extras }`); R9c — kino i modal
   // wycofane, baner dla KAŻDEGO źródła (`_tryShowNextBattle` bez gałęzi źródła — pin nieobecności `cv_retire_cinema_smoke` N3c);
@@ -279,6 +280,5 @@ guard('R9', () => {
   assert(/this\._cvOrb\?\.deferWreck\?\.\(vesselId, vessel\)\) return;/.test(tr), 'R9e: renderer — wrak wstrzymany do zniszczenia w powtórce');
 });
 
-F.cvOrbital = FLAG0;
 console.log(`\ncv_orbital_results_smoke: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

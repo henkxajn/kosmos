@@ -12,8 +12,8 @@
 //   N3 modal kina: `BattleIntroModal` eksportuje WYŁĄCZNIE baner (`showBattleOutcome`); żadnego `showBattleIntro` / preferencji
 //      `kosmos_battle_view_auto` w `src/`; `_tryShowNextBattle` = sam baner dla każdego źródła; baner wykonany na atrapie DOM
 //   N4 `suspend` / `resume` / `_renderingEnabled` — nie ma ich w rendererze ani w bramce HUD (wykonanie `hudGate`)
-//   N5 znaczenie `cvOrbital` OFF po CV-8b: bez `fx` powtórka się nie zaczyna (wykonanie `CvOrbital.handle`), EAH buduje `fx` tylko
-//      pod flagą, `GameScene` — rajd i wstrzymania Dziennika tylko pod flagą; baner bitwy orbitalnej bez flagi — od razu
+//   N5 bez `fx` powtórka się nie zaczyna (wykonanie `CvOrbital.handle`); CV-Z (przecelowane świadomie — flaga `cvOrbital` zdjęta):
+//      EAH buduje `fx` zawsze, `GameScene` — rajd i wstrzymania Dziennika bez bramki flagi, klucza flagi nie ma
 //   N6 `check-i18n`: baseline bez `BattleIntroModal.js` (trzy napisy zniknęły z popupem)
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 import '../headless/env.js';
@@ -92,13 +92,12 @@ console.log('N5 — znaczenie `cvOrbital` OFF po CV-8b');
 guard('N5', () => {
   const orb = new CvOrbital({ _presClock: { nowMs: 0 } });
   const r0 = orb.handle({ battleId: 'b1', result: { winner: 'B' } });
-  assert(r0 === false && orb.replays.size === 0, 'N5a bez `fx` (flaga OFF — EAH go nie buduje) powtórka się nie zaczyna');
+  assert(r0 === false && orb.replays.size === 0, 'N5a bez `fx` powtórka się nie zaczyna');
   const eah = strip(read('src/systems/EnemyAttackHandler.js'));
-  assert(/const fx = GAME_CONFIG\.FEATURES\?\.cvOrbital \? this\._orbitalFx\(/.test(eah), 'N5b EAH buduje `fx` wyłącznie pod flagą');
-  assert(/if \(GAME_CONFIG\.FEATURES\?\.cvOrbital && this\._raidAnnouncer\?\.offerBanner\(b\)\) return;/.test(GS)
-    && /if \(GAME_CONFIG\.FEATURES\?\.cvOrbital && this\._raidAnnouncer\?\.offerLine\(battleIds\)\) return;/.test(GS)
-    && /reason === 'wrecked' && GAME_CONFIG\.FEATURES\?\.cvOrbital \?/.test(GS), 'N5c GameScene: rajd (#635) i wstrzymania Dziennika (#713) tylko pod flagą');
-  assert(typeof GAME_CONFIG.FEATURES.cvOrbital === 'boolean', 'N5d flaga `cvOrbital` dalej istnieje (CV-Z zdejmie ścieżkę OFF)');
+  assert(/const fx = this\._orbitalFx\(/.test(eah) && !/cvOrbital/.test(eah), 'N5b (CV-Z) EAH buduje `fx` zawsze');
+  assert(/if \(this\._raidAnnouncer\?\.offerBanner\(b\)\) return;/.test(GS) && /if \(this\._raidAnnouncer\?\.offerLine\(battleIds\)\) return;/.test(GS)
+    && /reason === 'wrecked' \? this\.threeRenderer/.test(GS) && !/FEATURES\?\.cvOrbital/.test(GS), 'N5c (CV-Z) GameScene: rajd (#635) i wstrzymania Dziennika (#713) bez bramki flagi');
+  assert(!('cvOrbital' in GAME_CONFIG.FEATURES), 'N5d (CV-Z) klucz flagi `cvOrbital` zdjęty — powtórka jedyną prezentacją bitwy orbitalnej');
 });
 
 console.log('N6 — check-i18n');

@@ -534,31 +534,10 @@ export const GAME_CONFIG = {
     //   z plików hardpointów), `cvPresets` (presety jakości High / Medium / Low, pula świateł, szyna sygnałów walki), `cvWeapons` (język broni
     //   i rejestr salw — salwa CV-2a usunięta), `cvDamage` (wybuchy warstwowe, stany uszkodzeń, płonące wraki), `cvShields` (bańki osłon,
     //   osmalenia), `cvStrip` (pasek walki — karta walki `CombatHUD`, czip „⚔ Walki” i pierścień starcia usunięte), `cvTactical`
-    //   (warstwa taktyczna bitwy — paski HP 3D i dawne znaczniki starcia usunięte). Przestawienie dawnych kluczy w konsoli nie ma
-    //   skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
-    // `cvDirector` (CV-7, D-CV-23 / D-CV-24) — KAMERA REŻYSERA bitwy (`src/renderer/CvDirector.js`, `combat/CameraDirectorLogic.js`):
-    //   chip „Reżyser” na pasku walki (domyślnie WYŁĄCZONY — `uiPrefs.cvDirector`; konsola KOSMOS.debug.cvDirector(1|0)) — harmonogram
-    //   ujęć z ziarna starcia i zniszczeń z rejestru salw (plan ogólny, za okrętem flagowym, pojedynek, przelot, bohater przy wielkim
-    //   zniszczeniu, szeroki kadr, wynik), każde wejście kamery gracza oddaje mu kamerę („Reżyser (wstrzymany)”, klik chipa wznawia);
-    //   spowolnienie bohatera wyłącznie w prezentacji (0,35× ≤ 0,8 s, opóźnienie ≤ 1,5 R, doganianie 1,25×; tempo rund i logika
-    //   nietknięte); wstrząs przy bliskich wielkich trafieniach; przewodnik 9:16 (KOSMOS.debug.cv916(1|0)) i tryb nagrywania bez
-    //   interfejsu (KOSMOS.debug.cvCapture(1|0), klawisz F9, Esc); nagrywarka rolek płótna 3D (klawisz F10, KOSMOS.debug.cvRecord(1|0) —
-    //   z 9:16 wycinek 1080 × 1920, MP4 albo WebM). Czytana CO KLATKĘ. OFF = bez chipa, bez reżysera, tempo prezentacji 1.
-    cvDirector: true,
-    // `cvOrbital` (CV-8a, D-CV-25 / D-CV-26 / D-CV-27, Findingi 628 / 632 / 635) — BITWA ORBITALNA NA SCENIE: atak na kolonię
-    //   (`EnemyAttackHandler`) niesie w `battle:resolved` klucz-rodzeństwo `fx` (napastnicy, okręty gracza w układzie, okręty
-    //   w hangarach, obrona wieża / siatka / żetonowa, ciało, układ — rekord bitwy i wynik bez zmian), a renderer odgrywa POWTÓRKĘ
-    //   z osi tur `BattleSystem` (`src/renderer/combat/OrbitalReplayLogic.js`, klej `src/renderer/CvOrbital.js`) na scenie planety:
-    //   napastnicy na łuku orbity, obrońcy na skorupie ciała, emitery obrony na powierzchni, okręty w hangarach strzelają z emiterów
-    //   (bez udawanych statków); ten sam rejestr salw, osłony, uszkodzenia, wraki, warstwa taktyczna, pasek walki (wiersz bitwy
-    //   orbitalnej) i reżyser co w wolnej przestrzeni; wygląd wraku i wybuch czekają na zniszczenie w powtórce. Tylko w OGLĄDANYM
-    //   układzie, poza trybem galaktyki (Finding 628) — inaczej baner jak dziś; baner wyniku PO powtórce, bez modalu kina (auto-slow
-    //   zostaje). Czytana przy bitwie. ARC CV-8b (#713, #635) — pod flagą także: wpisy Dziennika skutków bitwy orbitalnej (EAH)
-    //   i „Utracono kontakt” wraków powtórki czekają na koniec powtórki, a rajd rozstrzygnięty dwa razy (starcie DSCS w podejściu +
-    //   bitwa EAH) ma JEDEN baner i JEDNĄ linię Dziennika (`RaidAnnounceLogic`). OFF (po CV-8b, które wycofało „imitację” 16 kresek,
-    //   modal „BITWA NIEUCHRONNA” i kino BattleView3D): bez powtórki i bez `fx` — wraki od razu, baner wyniku i wpisy Dziennika od
-    //   razu, każda bitwa rajdu osobno. Wyłączenie: KOSMOS.debug.cvOrbital(0).
-    cvOrbital: true,
+    //   (warstwa taktyczna bitwy — paski HP 3D i dawne znaczniki starcia usunięte), `cvOrbital` (powtórka bitwy orbitalnej na scenie
+    //   planety — jedyna prezentacja bitwy orbitalnej), `cvDirector` (kamera reżysera; FUNKCJA zostaje — chip domyślnie WYŁĄCZONY,
+    //   `uiPrefs.cvDirector`, D-CV-23; F9 tryb nagrywania, F10 nagrywarka rolek, `cv916`). Przestawienie dawnych kluczy w konsoli nie
+    //   ma skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

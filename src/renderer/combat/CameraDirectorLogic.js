@@ -1,5 +1,5 @@
 // CameraDirectorLogic — KAMERA REŻYSERA bitwy (ARC COMBAT VISUALS, krok CV-7; plan §2.7, D-CV-23, D-CV-24 pogodzone z D-CV-9
-// w §3.1-3; Findingi 658, 710; flaga `cvDirector`).
+// w §3.1-3; Findingi 658, 710; na stałe od CV-Z).
 //
 // Czysta logika: bez three, bez DOM, bez `window` — wykonuje się pod node (keeper `cv_director_logic_smoke` — wykonaniem, nie
 // lekturą). Klej z rendererem — `src/renderer/CvDirector.js` (kamera, chip, zegary, wstrząs, przewodnik 9:16).

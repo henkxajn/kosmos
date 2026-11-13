@@ -50,7 +50,6 @@ let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { pass++; console.log('  ✓ ' + l); } else { fail++; console.log('  ✗ ' + l); } };
 const guard = (label, fn) => { try { fn(); } catch (e) { fail++; console.log(`  ✗ ${label}: WYJĄTEK ${e?.stack ?? e}`); } };
 const F = GAME_CONFIG.FEATURES;
-const FLAG0 = F.cvOrbital;
 const AU = GAME_CONFIG.AU_TO_PX, SYS = 'sys_t', EMP = 'emp_t';
 const clock = { now: 1e7 };
 performance.now = () => clock.now;
@@ -328,11 +327,12 @@ guard('B1', () => {
   const held = raidWorld({ ...sc, claim: true });
   const tx2 = held.claimed[0]?.text;
   assert(typeof tx2 === 'string' && tx2.length > 0 && tx2 === txt && held.log.filter((e) => e.text === txt).length === 0, 'B1b przejęty (`fx.logHeld`): ten sam wpis w `fx.logEntries`, EAH go nie pisze');
+  // CV-Z — przecelowane świadomie: ścieżka OFF (`fx` null) usunięta; stary klucz `cvOrbital: false` nie ma skutku — `fx` jest zawsze.
   F.cvOrbital = false;
   const off = raidWorld(sc);
-  F.cvOrbital = FLAG0;
+  delete F.cvOrbital;
   const po = off.payloads.find((x) => x.result?.location?.planetId);
-  assert(po && po.fx === null && off.log.filter((e) => e.text === txt).length === 1, 'B1c flaga OFF: bez `fx`, wpis skutków jak dotąd');
+  assert(po && po.fx?.kind === 'orbital' && off.log.filter((e) => e.text === txt).length === 1, 'B1c (CV-Z) stary klucz OFF bez skutku: `fx` jest, wpis nieprzejęty pisze EAH raz');
   // treść 1:1 z dawnych gałęzi skutków (pat / remis / wygrana napastnika — bez wpisu)
   const E = new EnemyAttackHandler();
   const mk = (winner, extra = {}) => E._orbitalLogEntry?.({ result: { winner, ...extra }, count: 3, firstVessel: { name: 'X' }, systemId: 'sys_t' });
@@ -353,14 +353,15 @@ guard('B2', () => {
   const iLine = end.indexOf('_writeBattleLine(held.line'), iEx = end.indexOf('held.extras'), iC = end.indexOf("_noteContact('lost'"), iB = end.indexOf('_queueBanner(b)');
   assert(iLine > 0 && iEx > iLine && iC > iEx && iB > iC, 'B2b koniec powtórki: linia → skutki → kontakty → baner (kolejność jak poza widokiem)');
   const lost = handlerAt(GS, 'intel:vesselContactLost');
-  assert(/reason === 'wrecked' && GAME_CONFIG\.FEATURES\?\.cvOrbital \? this\.threeRenderer\?\.cvOrbital\?\.heldBattleOf\?\.\(vesselId\) : null/.test(lost) && /_orbitalContactHold/.test(lost),
+  assert(/reason === 'wrecked' \? this\.threeRenderer\?\.cvOrbital\?\.heldBattleOf\?\.\(vesselId\) : null/.test(lost) && /_orbitalContactHold/.test(lost),
     'B2c „Utracono kontakt” wraku, który w powtórce jeszcze nie zginął — trzymany pod jej bitwą');
   assert(/this\._releaseRaids\(nowMs\)/.test(body(GS, '  _tickAnnouncements(realNowMs) {')), 'B2d klatka ogłoszeń zwalnia rajdy');
   assert(/offerBanner\(b\)/.test(body(GS, '  _queueBanner(b) {')) && /offerLine\(battleIds\)/.test(body(GS, '  _writeBattleLine(entry, battleIds = []) {'))
     && /this\._writeBattleLine\(o\.entry, o\.battleIds/.test(body(GS, '  _writeNarration(outs) {')), 'B2e baner i linia (także narratora klastra) przez bramkę rajdu');
   const bnr = handlerAt(GS, 'battle:resolved', 0);
   const iNote = bnr.indexOf('this._noteRaidBattle('), iGate = bnr.indexOf('if (!sides.playerInvolved) return;');
-  assert(iNote > iGate && iGate > 0 && /if \(GAME_CONFIG\.FEATURES\?\.cvOrbital\) this\._noteRaidBattle/.test(bnr), 'B2f bitwa trafia do rajdu po bramkach banera, pod flagą `cvOrbital`');
+  assert(iNote > iGate && iGate > 0 && /\n\s*this\._noteRaidBattle\(\{ battleId, result \}\);/.test(bnr) && !/cvOrbital\)/.test(bnr),
+    'B2f bitwa trafia do rajdu po bramkach banera (CV-Z — bez bramki flagi `cvOrbital`)');
   // linie odwrotu (`vessel:autoRetreatIssued`, UIManager) bitwy orbitalnej w powtórce — decyzja po zdarzeniu, wstrzymane, wrak bez linii
   const ret = handlerAt(UI, 'vessel:autoRetreatIssued');
   const retEnd = UI.slice(UI.indexOf("EventBus.on('combatfx:orbitalReplayEnd'"), UI.indexOf("EventBus.on('combatfx:orbitalReplayEnd'") + 600);
@@ -386,10 +387,9 @@ guard('C1', () => {
   cases.push(['obrona kolonii z wojną (cvOrbital ON)', warW.payloads.find((x) => x.result?.location?.planetId)]);
   const skW = raidWorld({ raiders: 2, defenders: 0, dist: 0.3, frames: 120, announce: 'plain', war: false });
   cases.push(['potyczka EAH bez wojny', skW.payloads.find((x) => x.result?.location?.planetId)]);
-  F.cvOrbital = false;
-  const offW = raidWorld({ raiders: 2, defenders: 0, dist: 0.3, tower: 3, grid: 2, frames: 120, announce: 'plain' });
-  F.cvOrbital = FLAG0;
-  cases.push(['obrona kolonii, flaga OFF', offW.payloads.find((x) => x.result?.location?.planetId)]);
+  // CV-Z — przecelowane świadomie: przypadek „flaga OFF” usunięty razem ze ścieżką OFF (obrona kolonii — już wyżej).
+  const offW = raidWorld({ raiders: 2, defenders: 0, dist: 0.3, frames: 120, announce: 'plain' });
+  cases.push(['obrona kolonii bez obrony budynków', offW.payloads.find((x) => x.result?.location?.planetId)]);
   const fb = read('src/systems/WarSystem.js');
   const fbPart = /participantB:\s*\{\s*type:\s*'player',\s*empireId:\s*'player'/.test(fb) ? { result: { participantA: { type: 'empire', empireId: EMP }, participantB: { type: 'player', empireId: 'player' } } } : null;
   cases.push(['forceBattle (kształt z WarSystem)', fbPart]);
@@ -440,6 +440,5 @@ guard('D1', () => {
   assert(/_writeBattleLine\(held\.line, \[battleId\]\)/.test(end), 'D1f linia bitwy (`log.battleLine`) wychodzi w Dzienniku po końcu powtórki');
 });
 
-F.cvOrbital = FLAG0;
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

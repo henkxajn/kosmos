@@ -1,5 +1,5 @@
-// CvDirector — klej KAMERY REŻYSERA z rendererem (ARC COMBAT VISUALS, krok CV-7; plan §2.7, D-CV-23, D-CV-24 / §3.1-3; flaga
-// `cvDirector`). Logika (harmonogram, spowolnienie, kadr, strażnicy, wstrząs, 9:16) — `combat/CameraDirectorLogic.js` (czysta,
+// CvDirector — klej KAMERY REŻYSERA z rendererem (ARC COMBAT VISUALS, krok CV-7; plan §2.7, D-CV-23, D-CV-24 / §3.1-3; na stałe
+// od CV-Z). Logika (harmonogram, spowolnienie, kadr, strażnicy, wstrząs, 9:16) — `combat/CameraDirectorLogic.js` (czysta,
 // keeper); tutaj: odczyt sceny bitwy z renderera, zapis stanu kamery kontrolera, przejęcie kamery przez gracza, chip paska walki,
 // mnożnik tempa obu zegarów prezentacji, wstrząs kamery, przewodnik 9:16 (DOM) i tryb nagrywania (DOM, `ui/CaptureMode.js`).
 //
@@ -15,7 +15,6 @@
 // Kod warstwy wizualnej nigdy nie woła `Math.random` (reguła CV-0b).
 
 import * as THREE from 'three';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import { getMapInsets } from '../ui/MapInsets.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
@@ -68,14 +67,14 @@ export class CvDirector {
     this.stats = { battles: 0, shots: 0, heroes: 0, heroSlows: 0, takeBacks: 0, cuts: 0, guards: 0, minClearance: Infinity };
     // Nagrywarka rolek (F10, `KOSMOS.debug.cvRecord`) — płótno 3D, przy przewodniku 9:16 wycinek 1080 × 1920; pętla renderu woła
     // `reel.onFrame()` tuż po `render()`.
-    this.reel = new ReelRecorder(renderer, { promo: () => this.flag && this.promo916 });
+    this.reel = new ReelRecorder(renderer, { promo: () => this.promo916 });
     this.lastTakeBack = null;
   }
 
   // ── Stan chipa ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  get flag() { return !!GAME_CONFIG.FEATURES?.cvDirector; }
-  get armed() { return this.flag && window.KOSMOS?.uiPrefs?.cvDirector === true; }
+  // CV-Z — flaga `cvDirector` zdjęta: reżyser zawsze dostępny, chip domyślnie WYŁĄCZONY (`uiPrefs.cvDirector`, D-CV-23).
+  get armed() { return window.KOSMOS?.uiPrefs?.cvDirector === true; }
   /** Reżyser pisze kamerę w tej klatce (włączony, z bitwą, bez przejęcia). */
   get active() { return this.armed && !this.paused && !!this.battle; }
   /** Chip: 'off' | 'armed' | 'paused'. */
@@ -138,7 +137,6 @@ export class CvDirector {
     this._lastReal = realNowMs;
     const dt = raw > 0 ? Math.min(raw, 100) : 0;
     const T = dirTuning(r.cvTuning);
-    if (!this.flag) { this.warp.reset(); r._presRate = 1; return 1; }
     const R = ts?.combatRoundMs?.() ?? 1150;
     const led = r._cvLedger;
     const encIds = this.battle?.encIds ?? null;
@@ -448,7 +446,7 @@ export class CvDirector {
 
   /** Pokazane zniszczenie okrętu (rejestr) — uraz wg klasy i odległości, gdy w kadrze. */
   onKillShown(id) {
-    if (!this.flag || !this._shakeOn()) return;
+    if (!this._shakeOn()) return;
     const e = this.r._vessels?.get?.(id), v = window.KOSMOS?.vesselManager?.getVessel?.(id);
     if (!e?.sprite?.visible) return;
     this.shake.add(shakeTrauma({ kind: 'kill', cls: v ? vesselSizeClass(v) : null, ...this._eventView(e.sprite.position) }, dirTuning(this.r.cvTuning)));
@@ -456,7 +454,7 @@ export class CvDirector {
 
   /** Trafienia z rejestru tej klatki — wielkie (rakieta, duże obrażenia) blisko kamery dodają uraz. */
   onImpacts(impacts) {
-    if (!this.flag || !this._shakeOn() || !impacts?.length) return;
+    if (!this._shakeOn() || !impacts?.length) return;
     const T = dirTuning(this.r.cvTuning);
     for (const x of impacts) {
       if (!x?.hit) continue;
@@ -484,7 +482,7 @@ export class CvDirector {
   applyShake() {
     const T = dirTuning(this.r.cvTuning);
     this.shake.step(this.r._presClock?.lastStepMs ?? 0, T);
-    if (!(this.shake.trauma > 0) || !this.flag) return;
+    if (!(this.shake.trauma > 0)) return;
     if (!this._shakeOn()) { this.shake.trauma = 0; return; }
     const o = this.shake.offset(T);
     const cam = this.r.camera;
@@ -495,9 +493,8 @@ export class CvDirector {
 
   setPromo916(on) { this.promo916 = !!on; this._syncGuide(true); return this.promo916; }
 
-  /** Nagrywarka rolek: start / stop (Promise przy stopie). Bez flagi — nic. */
+  /** Nagrywarka rolek: start / stop (Promise przy stopie). */
   setRecording(on) {
-    if (!this.flag) return Promise.resolve({ ok: false, reason: 'flag_off' });
     on = !!on;
     if (on === this.reel.recording) return Promise.resolve({ ok: true, recording: on });
     return on ? Promise.resolve(this.reel.start()) : this.reel.stop();
@@ -516,7 +513,7 @@ export class CvDirector {
   _syncGuide(force = false) {
     if (typeof document === 'undefined') return;
     const T = dirTuning(this.r.cvTuning);
-    const st = promoGuideStyle({ on: this.flag && this.promo916, capture: this.capture }, T);
+    const st = promoGuideStyle({ on: this.promo916, capture: this.capture }, T);
     const W = window.innerWidth || 1, H = window.innerHeight || 1;
     const rc = promoRect916(W, H);
     const key = `${st.visible}|${st.dark}|${st.frame}|${W}x${H}`;
@@ -563,7 +560,7 @@ export class CvDirector {
     }
     const ph = this.schedule?.pendingHero ?? null;
     return {
-      flag: this.flag, chip: this.chipState, control: this.active ? 'director' : 'player',
+      chip: this.chipState, control: this.active ? 'director' : 'player',
       pauseReason: this.paused ? this.pauseReason : null, lastTakeBack: this.lastTakeBack,
       battle: this.battle ? { key: this.battle.key, encounters: [...this.battle.encIds], ships: this.battle.ids.length, seed: this.battle.seed } : null,
       shot: sh ? { type: sh.type, index: sh.index, subject: sh.subjectId ?? null, target: sh.targetId ?? sh.attackerId ?? null,

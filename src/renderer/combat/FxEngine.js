@@ -208,10 +208,10 @@ export const LIVE_CV_FX = {
   // ARC CV-6a — warstwa taktyczna (`HudCombatLogic`: `TAC_*` — przekazanie zoomu ikon, próg znaku bitwy
   // z histerezą, anti-overlap, linie ognia, mikropaski, ramka, pasma). Czytane CO KLATKĘ przez podwarstwę HUD. Strojenie, bez pinów.
   ...TAC_TUNING,
-  // ARC CV-7 (flaga `cvDirector`) — kamera reżysera (`CameraDirectorLogic`: `DIR_*` — długości ujęć, kąty, dystanse, przejścia,
+  // ARC CV-7 — kamera reżysera (`CameraDirectorLogic`: `DIR_*` — długości ujęć, kąty, dystanse, przejścia,
   // bohater i spowolnienie, strażnicy, wstrząs, 9:16). Czytane CO KLATKĘ i przy każdym ujęciu. Strojenie, bez pinów.
   ...DIR_TUNING,
-  // ARC CV-8a (flaga `cvOrbital`) — powtórka bitwy orbitalnej (`OrbitalReplayLogic`: `ORB_*` — długość powtórki, kadencja broni,
+  // ARC CV-8a — powtórka bitwy orbitalnej (`OrbitalReplayLogic`: `ORB_*` — długość powtórki, kadencja broni,
   // podłoga ocalałych, emitery obrony, formacja sceny planety). Czytane przy starcie powtórki i przy każdym rozwiązaniu sceny.
   ...ORB_TUNING,
 };

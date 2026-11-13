@@ -3409,7 +3409,7 @@ export default {
   'combatStrip.watchHint':  'Camera to this battle',
   'combatStrip.expand':     'Battle details',
   'combatStrip.collapse':   'Hide details',
-  // ARC CV-7 — director camera chip (flag `cvDirector`)
+  // ARC CV-7 — director camera chip
   'combatStrip.director':        'Director',
   'combatStrip.directorPaused':  'Director (paused)',
   'combatStrip.directorHint':    'Director camera — picks the battle shots itself; a mouse drag, the wheel or a camera key gives you the camera back',

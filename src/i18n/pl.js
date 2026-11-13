@@ -3412,7 +3412,7 @@ export default {
   'combatStrip.watchHint':  'Kamera na tę bitwę',
   'combatStrip.expand':     'Szczegóły bitwy',
   'combatStrip.collapse':   'Zwiń szczegóły',
-  // ARC CV-7 — chip kamery reżysera (flaga `cvDirector`)
+  // ARC CV-7 — chip kamery reżysera
   'combatStrip.director':        'Reżyser',
   'combatStrip.directorPaused':  'Reżyser (wstrzymany)',
   'combatStrip.directorHint':    'Kamera reżysera — sama dobiera ujęcia bitwy; ruch myszą, kółko albo klawisz kamery oddaje ci kamerę',

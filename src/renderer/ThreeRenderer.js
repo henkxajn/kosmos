@@ -55,8 +55,8 @@ import { initialGfxLevel, normalizeGfxLevel, nextGfxLevelInCycle, readRendererSt
 import { CombatLightPool } from './combat/LightPool.js';                                              // ARC CV-2b — stała pula świateł (D-CV-18)
 import { CombatCueBus, cueWeaponOfCategory, cueSizeOfClass, screenPan } from './combat/CombatCueBus.js';   // ARC CV-2b — szyna sygnałów walki (F8)
 import { CombatLedger, pickTurret, ledgerRng, ledgerHash, LEDGER_INFO_LEGEND } from './combat/CombatLedgerLogic.js';   // ARC CV-4a — rejestr salw (język broni, flaga cvWeapons)
-import { CvOrbital } from './CvOrbital.js';     // ARC CV-8a — powtórka bitwy orbitalnej na scenie planety (flaga cvOrbital)
-import { CvDirector } from './CvDirector.js';   // ARC CV-7 — kamera reżysera, spowolnienie bohatera, wstrząs, 9:16, tryb nagrywania, nagrywarka rolek (flaga cvDirector)
+import { CvOrbital } from './CvOrbital.js';     // ARC CV-8a — powtórka bitwy orbitalnej na scenie planety
+import { CvDirector } from './CvDirector.js';   // ARC CV-7 — kamera reżysera, spowolnienie bohatera, wstrząs, 9:16, tryb nagrywania, nagrywarka rolek
 import { KC_SHARED, KC_SCORCH_MAX, setKeyColourWreckState, setKeyColourScorch, setKeyColourScorchHeat, setKeyColourScorchCount } from './KeyColourEmission.js';   // ARC CV-1a — wspólne mnożniki maski; CV-5 — wypalanie wraku; CV-4b — osmalenia
 import { ShieldStates, bubbleAxes, ellipsoidPoint, hullPoint, scorchEnabled, allocScorch, scorchHeat, SHIELD_RIPPLES_MAX, SCORCH_MAX } from './combat/ShieldLogic.js';   // ARC CV-4b — osłony i pancerz
 import { ShieldBubblePool } from './combat/ShieldBubbles.js';                                         // ARC CV-4b — pula baniek osłon
@@ -520,11 +520,11 @@ export class ThreeRenderer {
     // i silnik FX walki z pulami (leniwie, przy pierwszej salwie pod flagą `cvFxEngine`); pomiar `KOSMOS.debug.fxStats()`.
     this._presClock            = new PresentationClock();
     this._fxEngine             = null;
-    // ARC CV-7 (flaga `cvDirector`, D-CV-23 / D-CV-24) — kamera reżysera: harmonogram ujęć, spowolnienie bohatera (mnożnik tempa
+    // ARC CV-7 (D-CV-23 / D-CV-24) — kamera reżysera: harmonogram ujęć, spowolnienie bohatera (mnożnik tempa
     // OBU zegarów prezentacji — `_presRate`, 1 = bez zmian), wstrząs, przewodnik 9:16, tryb nagrywania. Chip domyślnie wyłączony.
     this._presRate             = 1;
     this._cvDir                = new CvDirector(this);
-    // ARC CV-8a (flaga `cvOrbital`, D-CV-25 / D-CV-26 / D-CV-27) — powtórka bitwy orbitalnej (starcia wirtualne dla sceny, rejestru,
+    // ARC CV-8a (D-CV-25 / D-CV-26 / D-CV-27) — powtórka bitwy orbitalnej (starcia wirtualne dla sceny, rejestru,
     // paska walki i reżysera; wraki wstrzymane do zniszczenia w powtórce). Bez powtórek w toku — każde zapytanie zwraca „brak”.
     this._cvOrb                = new CvOrbital(this);
     this.cvOrbital             = this._cvOrb;
@@ -1859,7 +1859,7 @@ export class ThreeRenderer {
       if (this._watch) return;
       // ARC CV-7 — włączony reżyser (chip) prowadzi bitwę w widoku sam — auto-fokus ustępuje (inaczej przestawiłby kamerę, a reżyser
       // odczytałby to jako przejęcie przez gracza).
-      if (GAME_CONFIG.FEATURES?.cvDirector && this._cvDir?.wantsBattles?.()) return;
+      if (this._cvDir?.wantsBattles?.()) return;
       const vm = window.KOSMOS?.vesselManager;
       const playerIn = [...sideA, ...sideB].some(id => {
         const v = vm?.getVessel?.(id); return v && !isEnemyVessel(v);
@@ -8333,10 +8333,9 @@ export class ThreeRenderer {
     const finishing = !!g && !g.done && Math.abs(g.to.x - to.x) <= 1e-9 && Math.abs(g.to.z - to.z) <= 1e-9;
     if (!inCombat && !finishing) {
       entry.glide = null;
-      // ARC CV-7 (flaga `cvDirector`, Finding 711) — statek sceny trzymanej po końcu logiki: zapis bazy (sprite zostaje rysowany na
-      // scenie także między klatkami — dawniej skakał do skali prawdziwej przy każdym tiku fizyki i wracał w następnej klatce).
-      if (GAME_CONFIG.FEATURES?.cvDirector) this._setSpriteBase(vid, entry, to.x, 0.3, to.z);
-      else p.set(to.x, 0.3, to.z);
+      // ARC CV-7 (Finding 711) — statek sceny trzymanej po końcu logiki: zapis bazy (sprite zostaje rysowany na scenie także między
+      // klatkami — dawniej skakał do skali prawdziwej przy każdym tiku fizyki i wracał w następnej klatce).
+      this._setSpriteBase(vid, entry, to.x, 0.3, to.z);
       return;
     }
     if (!g) {   // pierwszy raz w starciu — sprite już stoi w pozycji logicznej, ruch od następnego kroku
@@ -8462,7 +8461,7 @@ export class ThreeRenderer {
   // na klaster) i baner wyniku (jeden na klaster); dawniej środek z pozycji sprite'ów (różnica — ruch płynny ≤ 1 rundy).
   _stageClusters() {
     const out = this._stageClustersDscs();
-    // ARC CV-8a (flaga `cvOrbital`) — powtórki bitew orbitalnych w widoku: klaster na ciało (skorupa = ciało, rozwiązanie formacji
+    // ARC CV-8a — powtórki bitew orbitalnych w widoku: klaster na ciało (skorupa = ciało, rozwiązanie formacji
     // planety — `CvOrbital.solveStage`); bez powtórek — lista DSCS co do obiektu.
     const orb = this._cvOrb?.stageClusters?.() ?? [];
     return orb.length ? out.concat(orb) : out;
@@ -8471,11 +8470,11 @@ export class ThreeRenderer {
   _stageClustersDscs() {
     const K = window.KOSMOS;
     let act = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
-    // ARC CV-7 (flaga `cvDirector`, Finding 711) — starcie skończone w logice ZOSTAJE na scenie, dopóki rejestr salw ma dla niego coś
+    // ARC CV-7 (Finding 711) — starcie skończone w logice ZOSTAJE na scenie, dopóki rejestr salw ma dla niego coś
     // do pokazania (najwyżej 3 R czasu prezentacji): logika kończy bitwę w chwili nadejścia ostatniej rundy, a jej trafienia
     // zabijające rejestr pokazuje do ~1 R później — dawniej scena rozchodziła się do skali prawdziwej PRZED ostatnim zniszczeniem
     // (bohater ostatniego okrętu strony grał bez sceny, kadr szeroki gonił rozbiegające się statki). Obiekt starcia — tylko odczyt.
-    if (GAME_CONFIG.FEATURES?.cvDirector && this._cvLedger) {
+    if (this._cvLedger) {
       const L = this._stageLinger ?? (this._stageLinger = new Map());
       const now = this._presClock?.nowMs ?? 0;
       const R = K?.timeSystem?.combatRoundMs?.() ?? 1150;

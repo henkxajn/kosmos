@@ -352,13 +352,10 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
 function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, director = false } = {}) {
   const on = mode === 'on';
   // CV-Z — tryb ON = pełna warstwa wizualna (flagi kroków, które jeszcze istnieją, ustawione jawnie; reszta na stałe).
-  const dirFlag = GAME_CONFIG.FEATURES.cvDirector;   // ARC CV-7 — A11: reżyser i spowolnienie tylko w trybie `director`
-  GAME_CONFIG.FEATURES.cvDirector = director === true;
+  // ARC CV-7 — A11: reżyser i spowolnienie tylko w trybie `director` (prawdziwy `CvDirector` z chipem włączonym niżej; CV-Z — bez flagi).
   const T5 = ENGINE?.LIVE_CV_FX ?? null;
   const fxScale0 = T5?.FX_TIME_SCALE;
   if (on && T5) T5.FX_TIME_SCALE = 0.25;   // zwolnione tempo efektów — tylko prezentacja (A2 obejmuje i je)
-  const presetsFlag = GAME_CONFIG.FEATURES.cvPresets;
-  GAME_CONFIG.FEATURES.cvPresets = on;
 
   reseed('cv2a-battle'); reseedRendererRandom();
   let R = null, st = null, outsider = null, recallList = null, recallNoEnc = null, ctlAi = null;
@@ -420,8 +417,6 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     const realMs = rec.clock.length > 1 ? rec.clock[rec.clock.length - 1] - rec.clock[0] : 0;
     return { scene, sig: { battles: rec.battles, wrecks: rec.wrecks }, trace: rec.rounds, slots, realMs };
   });
-  GAME_CONFIG.FEATURES.cvPresets = presetsFlag;
-  GAME_CONFIG.FEATURES.cvDirector = dirFlag;
   if (T5 && fxScale0 !== undefined) T5.FX_TIME_SCALE = fxScale0;
   const audio = mode === 'on' ? (AUDIO_SYS?.cueStats?.() ?? null) : null;
   return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name, audio };
@@ -614,8 +609,10 @@ const DIRB = runBattle({ mode: 'on', seed: 1, director: true });
   assert(!!CVDIR && (DIRB.R?.warpFrames ?? 0) > 100 && Math.abs((DIRB.R?.warpMinRate ?? 1) - 0.35) < 1e-9 && (DIRB.R?.warpMaxLag ?? 0) > 100
     && (DIRB.R?._cvDir?.warp?.heroes ?? 0) >= 2,
     'A11a świadek: spowolnienie naprawdę szło — tempo prezentacji 0,35× / 1,25× przez setki klatek, zegar prezentacji za realnym, ≥ 2 bohaterów');
-  assert((DIRB.R?.lingerFrames ?? 0) > 10 && !(ON.R?.lingerFrames > 0),
-    `A11d (Finding 711) scena zostaje po końcu logiki, dopóki rejestr ma zniszczenia do pokazania (${DIRB.R?.lingerFrames ?? 0} klatek); bez flagi — ani klatki (${ON.R?.lingerFrames ?? 0})`);
+  // CV-Z — przecelowane świadomie: scena trzymana po końcu logiki (Finding 711) nie zależy już od flagi `cvDirector` — w każdym
+  //   przebiegu z rejestrem salw (dawna kontrola „bez flagi — ani klatki” straciła przedmiot).
+  assert((DIRB.R?.lingerFrames ?? 0) > 10 && (ON.R?.lingerFrames ?? 0) > 10,
+    `A11d (Finding 711) scena zostaje po końcu logiki, dopóki rejestr ma zniszczenia do pokazania — z reżyserem (${DIRB.R?.lingerFrames ?? 0} klatek) i bez (${ON.R?.lingerFrames ?? 0})`);
   assert(same(DIRB.sig, NONE.sig) && same(DIRB.trace, NONE.trace),
     `A11b sygnatura (z wrakami) i ślad każdej rundy identyczne reżyser + spowolnienie == bez renderera ${JSON.stringify(DIRB.sig.battles)}`);
   assert(NONE.draws.length > 0 && same(DIRB.draws, NONE.draws) && same(DIRB.slots, NONE.slots),

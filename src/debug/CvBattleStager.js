@@ -45,8 +45,7 @@
 //                                         `hangar`, `tower`, `grid`; także `cvBattle({kind: /orbital/.source})`
 //   orbitalInfo()                       — ARC CV-8a: powtórki w toku (rundy, runda bieżąca, strzelcy stron, emitery, hangar, zniszczenia
 //                                         zaplanowane / pokazane, w widoku) i liczniki (start, odmowy widoku, przerwania)
-//   cvOrbital(1) / cvOrbital(0)         — ARC CV-8a: flaga `cvOrbital` ON / OFF (CV-8b: OFF = bez powtórki — wraki, baner i Dziennik od razu;
-//                                         burst 16 kresek, modal „BITWA NIEUCHRONNA” i kino BattleView3D wycofane)
+//   cvOrbital()                         — CV-Z: wycofane (powtórka bitwy orbitalnej na stałe) — zwraca { retired: true }
 //   cvOrbitalBattle({raid: 1})          — ARC CV-8b (#635): RAJD rozstrzygnięty dwa razy — napastnicy na orbicie kolonii, okręty gracza
 //                                         na orbicie: po wznowieniu czasu starcie DSCS, w jego trakcie bitwa orbitalna EAH; jeden baner
 //                                         i jedna linia Dziennika na rajd (po powtórce)
@@ -71,7 +70,7 @@
 //   cv916(1) / cv916(0)                 — ARC CV-7: przewodnik 9:16 (kadr rolki, poza nim przyciemnienie); reżyser kadruje w nim
 //   cvCapture(1) / cvCapture(0)         — ARC CV-7: tryb nagrywania — bez interfejsu (klawisz F9, wyjście Esc albo F9); z 9:16 —
 //                                         cienka ramka poza kadrem; zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE
-//   cvDirectorFlag(1) / cvDirectorFlag(0) — ARC CV-7: flaga `cvDirector` (OFF — bez chipa, bez reżysera, tempo prezentacji 1)
+//   cvDirectorFlag()                    — CV-Z: wycofane (flaga `cvDirector` zdjęta; reżyser — cvDirector(1|0), chip domyślnie wyłączony)
 //   cvRecord(1) / cvRecord(0)           — ARC CV-7: nagrywarka rolek (jak F10) — płótno 3D; z 9:16 wycinek 1080 × 1920, 60 kl./s;
 //                                         MP4 (H.264) albo WebM VP9; plik kosmos_reel_RRRRMMDD_GGMMSS pobiera się przy stopie
 //   tacticalInfo()                      — ARC CV-6a: per bitwa w widoku — stopień zoomu (`zoom`: glyph / icons / handover / cinema),
@@ -116,7 +115,7 @@
 //     wyłączony do przeładowania strony; ⚠ nie zapisuj gry po teście — F5 bez zapisu wraca do stanu sprzed testu.
 //   · ponowne `cvBattle()` po zakończonym starciu zdejmuje statki poprzedniego testu (bez linii w Dzienniku); w trakcie
 //     starcia — odmowa `battle_in_progress`.
-// Starcia orbitalne — CV-8a: `cvOrbitalBattle()` (także `cvBattle({kind: /orbital/.source})`), odczyt `orbitalInfo()`, flaga `cvOrbital(1|0)`.
+// Starcia orbitalne — CV-8a: `cvOrbitalBattle()` (także `cvBattle({kind: /orbital/.source})`), odczyt `orbitalInfo()`.
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
@@ -1020,7 +1019,6 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         ok: true, system: sys, body: body.id, bodyName: body.name ?? body.id, empire: empire.name ?? empire.id,
         attackers: made.A.length, defenders: made.B.length, hangar: NH, tower: TW, grid: GR, viewNow: view ?? sys,
         ...(RAID ? { raid: true, raidOrders } : {}),
-        flags: { cvOrbital: !!GAME_CONFIG.FEATURES?.cvOrbital },
         note: RAID === 1 ? 'rajd: wznow czas — starcie DSCS na orbicie, w jego trakcie bitwa przy kolonii (powtorka po starciu) — jeden baner'
           : RAID === 2 ? 'rajd z lotem: wznow czas (1 t/s); starcie DSCS w podejsciu, ocaleli gonia kolonie (sufit czekania 15 s)'
           : 'rozstrzygniecie za ~0,5 s czasu realnego; wznow czas, zeby obejrzec powtorke (orbitalInfo())', paused: !!ts.isPaused,
@@ -1037,15 +1035,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         ostatniaBitwaOrbitalna: last ? { bitwa: last.id, tury: last.turns, zwyciezca: last.winner, odwrot: last.retreated ?? null, cialo: last.location?.planetId } : null };
     },
 
-    /**
-     * ARC CV-8a — flaga `cvOrbital`: cvOrbital(1) — ON, cvOrbital(0) — OFF, cvOrbital() — przełącz. Czytana przy bitwie. ARC CV-8b — OFF po
-     * wycofaniu imitacji, modalu i kina: bez powtórki (wraki od razu), baner i wpisy Dziennika od razu, bitwy rajdu osobno.
-     */
-    cvOrbital(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvOrbital = on === undefined ? !F.cvOrbital : !!on;
-      return { cvOrbital: F.cvOrbital };
-    },
+    /** CV-Z — flaga `cvOrbital` wycofana: powtórka bitwy orbitalnej na stałe (jedyna prezentacja). */
+    cvOrbital() { return retiredFlag('cvOrbital'); },
 
     /**
      * M1 — odczyt bitew (bez cudzysłowów): aktywne starcia i ostatnia rozstrzygnięta bitwa DSCS. `wrakiTylkoPrzy0HP` — liczba wraków
@@ -1137,14 +1128,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       return { ok: true, ...d.reel.info() };
     },
 
-    /** ARC CV-7 — flaga `cvDirector`: cvDirectorFlag(0) — bez chipa i reżysera (tempo prezentacji 1), cvDirectorFlag(1) — z powrotem. */
-    cvDirectorFlag(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvDirector = on === undefined ? !F.cvDirector : !!on;
-      const d = getRenderer()?.cvDirector;
-      if (!F.cvDirector && d) { if (d.reel?.recording) d.reel.stop(); if (d.capture) d.setCapture(false); d._stopBattle?.('off'); d.setPromo916(false); }
-      return { cvDirector: F.cvDirector };
-    },
+    /** CV-Z — flaga `cvDirector` wycofana: reżyser na stałe dostępny (chip domyślnie WYŁĄCZONY — `cvDirector(1|0)` działa). */
+    cvDirectorFlag() { return retiredFlag('cvDirector'); },
 
     /** ARC CV-6a — warstwa taktyczna z ostatniej klatki HUD: per bitwa stopień zoomu, ikony, znak, linie ognia, mgła, pasma. */
     tacticalInfo() {

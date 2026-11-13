@@ -2846,12 +2846,12 @@ export class GameScene {
       // ARC CV-8b (Finding 635, decyzja właściciela 48 (9)) — rajd, który rozstrzygnął się dwa razy (starcie DSCS w podejściu, potem
       // bitwa orbitalna EAH ocalałych rajderów): bitwa trafia do grupy rajdu (`RaidAnnouncer`) — jeden baner i jedna linia Dziennika
       // na rajd, z wynikiem scalonym, gdy żaden rajder nie jest już w drodze. Dwa rekordy bitew zostają (mechanika nietknięta).
-      if (GAME_CONFIG.FEATURES?.cvOrbital) this._noteRaidBattle({ battleId, result });
+      this._noteRaidBattle({ battleId, result });
 
-      // ARC CV-8a (flaga `cvOrbital`, D-CV-27 (a), Finding 632) — bitwa orbitalna (`fx` z `EnemyAttackHandler`): ŹRÓDŁO 'orbital'
+      // ARC CV-8a (D-CV-27 (a), Finding 632) — bitwa orbitalna (`fx` z `EnemyAttackHandler`): ŹRÓDŁO 'orbital'
       // (potyczka bez wojny przestaje udawać walkę deep-space 'dscs'), baner wyniku; w oglądanym układzie baner czeka na koniec
       // powtórki na scenie planety (`combatfx:orbitalReplayEnd`), poza nim — od razu. Auto-slow — jak dotąd (UIManager).
-      if (fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital) {
+      if (fx?.kind === 'orbital') {
         battleData.source = 'orbital';
         // CV-Z (Finding 721) — utracone okręty w liczbach (`EnemyAttackHandler`, `fx.shipsLost`): `lossesA/B` tej ścieżki to HP.
         if (fx.shipsLost) battleData.shipLosses = { A: fx.shipsLost.A, B: fx.shipsLost.B };
@@ -2879,7 +2879,7 @@ export class GameScene {
       if (held) {
         this._orbitalLogHold.delete(battleId);
         this._writeBattleLine(held.line, [battleId]);
-        if (held.extras?.length && !(GAME_CONFIG.FEATURES?.cvOrbital && this._raidAnnouncer?.offerExtras(battleId, held.extras))) {
+        if (held.extras?.length && !this._raidAnnouncer?.offerExtras(battleId, held.extras)) {
           for (const e of held.extras) window.KOSMOS?.eventLogSystem?.push?.(e);
         }
       }
@@ -2900,7 +2900,7 @@ export class GameScene {
     EventBus.on('battle:resolved', ({ warId, battleId, result, fx }) => {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog || !result) return;
-      const orbital = fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital;
+      const orbital = fx?.kind === 'orbital';
       // ARC CV-8a — bitwa orbitalna w powtórce: linia bitwy w Dzienniku czeka na koniec powtórki (jak baner — wynik nie wyprzedza walki).
       // ARC CV-8b (#713) — razem z nią wpisy skutków EAH: `fx.logHeld` mówi EAH, że wpis przejęła prezentacja (EAH sprawdza po zdarzeniu).
       if (orbital && this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
@@ -2957,7 +2957,7 @@ export class GameScene {
       const note = { vessel, id: vesselId, position: lastKnownPosition ?? null, named: enemyVesselNamed(q) };
       // ARC CV-8b (#713) — wrak okrętu, który w powtórce bitwy orbitalnej jeszcze nie zginął (EAH robi wraki zaraz po zdarzeniu): linia
       // „Utracono kontakt” czeka na koniec tej powtórki (`combatfx:orbitalReplayEnd`) — strata nie wyprzedza walki na ekranie.
-      const heldIn = reason === 'wrecked' && GAME_CONFIG.FEATURES?.cvOrbital ? this.threeRenderer?.cvOrbital?.heldBattleOf?.(vesselId) : null;
+      const heldIn = reason === 'wrecked' ? this.threeRenderer?.cvOrbital?.heldBattleOf?.(vesselId) : null;
       if (heldIn != null) {
         const m = (this._orbitalContactHold ??= new Map());
         if (!m.has(heldIn)) m.set(heldIn, []);
@@ -4417,10 +4417,10 @@ export class GameScene {
   // ── ARC CV-8b — jedno ogłoszenie na bitwę i na rajd ───────────────────────────────────────────────────────────────
 
   // Gotowy baner bitwy (po klastrze / oknie łaski / powtórce) do kolejki — chyba że należy do rajdu, który czeka (#635): wtedy
-  // parkuje w grupie rajdu i wyjdzie raz, scalony (`_releaseRaids`). Flaga `cvOrbital` OFF — jak dotąd.
+  // parkuje w grupie rajdu i wyjdzie raz, scalony (`_releaseRaids`).
   _queueBanner(b) {
     if (!b) return;
-    if (GAME_CONFIG.FEATURES?.cvOrbital && this._raidAnnouncer?.offerBanner(b)) return;
+    if (this._raidAnnouncer?.offerBanner(b)) return;
     this._battleQueue.push(b);
     this._tryShowNextBattle();
   }
@@ -4428,7 +4428,7 @@ export class GameScene {
   // Linia bitwy (`log.battleLine`) do Dziennika — chyba że należy do rajdu (#635): połknięta, rajd dostaje jedną linię scaloną.
   _writeBattleLine(entry, battleIds = []) {
     if (!entry) return;
-    if (GAME_CONFIG.FEATURES?.cvOrbital && this._raidAnnouncer?.offerLine(battleIds)) return;
+    if (this._raidAnnouncer?.offerLine(battleIds)) return;
     window.KOSMOS?.eventLogSystem?.push?.(entry);
   }
 
@@ -5276,12 +5276,12 @@ export class GameScene {
 
   // ── Klawiatura ─────────────────────────────────────────────────
   _setupKeyboard() {
-    // ARC CV-7 (flaga `cvDirector`) — tryb nagrywania rolek: F9 przełącza, Esc wychodzi (faza przechwytywania — przed całą kaskadą Esc
+    // ARC CV-7 — tryb nagrywania rolek: F9 przełącza, Esc wychodzi (faza przechwytywania — przed całą kaskadą Esc
     // gry); w trybie Shift nie przełącza „czystego widoku” (tryb sam go trzyma i przywraca stan sprzed wejścia).
     window.addEventListener('keydown', (e) => {
       if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.isContentEditable) return;
       const dir = this.threeRenderer?.cvDirector;
-      if (!dir || !GAME_CONFIG.FEATURES?.cvDirector) return;
+      if (!dir) return;
       if (isCaptureKey(e) && window.KOSMOS?.civMode) {
         e.preventDefault(); e.stopImmediatePropagation();
         dir.setCapture(!dir.capture);
@@ -5297,7 +5297,7 @@ export class GameScene {
       if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); dir.setCapture(false); return; }
       if (e.key === 'Shift') e.stopImmediatePropagation();
     }, true);
-    window.addEventListener('keyup', (e) => { if (isReelKey(e) && GAME_CONFIG.FEATURES?.cvDirector) e.preventDefault(); }, true);
+    window.addEventListener('keyup', (e) => { if (isReelKey(e)) e.preventDefault(); }, true);
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target?.isContentEditable) return;
 

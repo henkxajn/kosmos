@@ -564,7 +564,7 @@ export class WarSystem {
     // subskrybenta i miał skutki stanowe (podwójny rozkaz odwrotu + podwójna opłata paliwowa).
     if (opts.announce !== false) {
       // ARC CV-8a (D-CV-25) — dane powtórki bitwy orbitalnej jako klucz-RODZEŃSTWO zdarzenia (`fx`), NIGDY w rekordzie bitwy
-      // (`battleRec` = obiekt w `gameState.battles` — zapis). Bez `opts.fx` (flaga `cvOrbital` OFF, inne ścieżki) — ładunek co do
+      // (`battleRec` = obiekt w `gameState.battles` — zapis). Bez `opts.fx` (inne ścieżki) — ładunek co do
       // klucza jak dotąd.
       EventBus.emit('battle:resolved', opts.fx ? { warId, battleId, result: battleRec, fx: opts.fx } : { warId, battleId, result: battleRec });
     }

@@ -168,7 +168,7 @@ export class CombatStrip {
   }
 
   _battles(K) {
-    // ARC CV-8a (flaga `cvOrbital`) — także starcia wirtualne powtórek bitew orbitalnych (wiersz bitwy przy planecie, póki trwa powtórka)
+    // ARC CV-8a — także starcia wirtualne powtórek bitew orbitalnych (wiersz bitwy przy planecie, póki trwa powtórka)
     const orb = K?.threeRenderer?.cvOrbital?.encounters?.() ?? [];
     const dscsList = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
     const encs = orb.length ? dscsList.concat(orb) : dscsList;
@@ -258,9 +258,9 @@ export class CombatStrip {
     const roundW = Math.max(...lines.map((l) => wOf(l.round)));
     const watchLabel = `[ ${t('combat.watchBattle')} ]`;
     const watchW = wOf(watchLabel);
-    // ARC CV-7 (flaga `cvDirector`) — chip kamery reżysera na liniach bitew w oglądanym układzie: „[ Reżyser ]” (wyłączony albo gotowy),
+    // ARC CV-7 — chip kamery reżysera na liniach bitew w oglądanym układzie: „[ Reżyser ]” (wyłączony albo gotowy),
     // „[ ● Reżyser ]” (prowadzi tę bitwę), „[ Reżyser (wstrzymany) ]” (gracz przejął kamerę). Bez flagi — bez chipa (szerokość jak dziś).
-    const dirOn = !!GAME_CONFIG.FEATURES?.cvDirector && !!K?.threeRenderer?.cvDirector;
+    const dirOn = !!K?.threeRenderer?.cvDirector;
     const dirLabels = dirOn ? { off: `[ ${t('combatStrip.director')} ]`, on: `[ ● ${t('combatStrip.director')} ]`,
       paused: `[ ${t('combatStrip.directorPaused')} ]` } : null;
     const dirW = dirOn ? Math.max(wOf(dirLabels.off), wOf(dirLabels.on), wOf(dirLabels.paused)) + S.CHIP_GAP : 0;
