@@ -478,8 +478,10 @@ block('P5 — ☰ „Auto-fokus bitwy”: uiPrefs, wiersz menu, zapis → wczyta
     && /window\.KOSMOS\.uiPrefs = \{ \.\.\.\(window\.KOSMOS\.uiPrefs \?\? \{\}\), \.\.\.savedData\.uiPrefs \}/.test(gsS)
     && /uiPrefs\?\.battleAutoFocus === false\) return;/.test(trS),
     'P5c łańcuch w źródle: zapis niesie uiPrefs, wczytanie scala, renderer czyta `battleAutoFocus` przy starcie starcia');
-  assert(!/combatFxVisible/.test(trS) && /combatFxVisible/.test(TR) && !/combatFxVisible/.test(strip(read('src/ui/BottomBar.js'))),
-    'P5d `uiPrefs.combatFxVisible` bez czytelnika w kodzie (KONTROLA: komentarz o wycofaniu w rendererze jest)');
+  // CV-Z — przecelowane świadomie: komentarz o wycofaniu siedział w `_onCombatRoundFx` (usuniętym razem z salwą CV-2a); KONTROLA nazwy
+  //   klucza — w dokumentacji zapisu (plan) zamiast w rendererze.
+  assert(!/combatFxVisible/.test(trS) && !/combatFxVisible/.test(strip(read('src/ui/BottomBar.js'))) && /combatFxVisible/.test(read('docs/design/COMBAT_VISUALS_PLAN.md')),
+    'P5d `uiPrefs.combatFxVisible` bez czytelnika w kodzie (KONTROLA: klucz opisany w planie)');
 });
 
 // ═══ P6 — flaga OFF = karta ══════════════════════════════════════════════════════════════════════════════════════

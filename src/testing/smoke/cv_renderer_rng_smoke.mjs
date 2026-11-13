@@ -220,7 +220,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
 // CV-Z — PRZECELOWANE ŚWIADOMIE: dawne smugi `THREE.Line` (`_spawnCombatTracer`, `_spawnHitGlow`, `_follow*`) usunięte — salwa idzie do
 //   silnika FX z pulami (`_cvFxRoundFx`, zero alokacji THREE po rozgrzewce; neutralność pinuje `cv_fx_results_smoke`). Tu salwa trafia do
 //   zaślepki liczącej salwy; KONTROLA emuluje dawny UUID w każdej salwie (12 losowań — jak obiekty THREE dawnych smug).
-const FX_METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
+const FX_METHODS = ['_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
   '_spawnFx', '_disposeFx', '_spawnExplosion', 'debugRngCheck'];
 function makeMethod(name) {
   const m = methodOf(name);
@@ -236,9 +236,10 @@ function fakeRenderer({ oldUuid = false } = {}) {
   const R = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(55, 1600 / 1041, 0.001, 5000),
     _fxGroup: null, _activeEffects: [], _vessels: new Map(), spawned: 0, explosions: 0, salvos: 0, missing: [] };
   for (const n of FX_METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
-  R._cvFxRoundFx = function (events) {
+  // CV-Z (grupa 3) — salwa CV-2a (`_cvFxRoundFx`) i jej słuchacz `_onCombatRoundFx` usunięte; salwę rysuje `_cvWpnRoundFx` (rejestr salw).
+  R._cvWpnRoundFx = function (payload) {
     R.salvos++;
-    if (oldUuid) for (let k = 0; k < 12 * Math.max(1, events?.length ?? 0); k++) Math.random();
+    if (oldUuid) for (let k = 0; k < 12 * Math.max(1, payload?.events?.length ?? 0); k++) Math.random();
   };
   const spawn = R._spawnFx;
   R._spawnFx = function (mesh, cfg) {
@@ -329,7 +330,7 @@ function run(mode) {
     GAME_CONFIG.FEATURES.fcCombatFx = mode !== 'off';
     if (mode !== 'off') {
       R = fakeRenderer({ oldUuid: mode === 'control' });
-      EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
+      EventBus.on('combat:roundFx', (p) => R._cvWpnRoundFx(p));
       EventBus.on('vessel:wrecked', ({ vessel }) => {            // pierwszy krok handlera wraku renderera: eksplozja + przeskinowanie
         if (!vessel) return;
         R.explosions++;

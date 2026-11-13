@@ -197,12 +197,13 @@ header('T5  źródło `ThreeRenderer`');
 {
   const tr = strip(readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf8'));
   const body = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
-  const fx = body('  _onCombatRoundFx(payload) {');
-  const g = fx.indexOf('isEngagementInView('); const pc = fx.indexOf('combatFxPace(window.KOSMOS?.timeSystem?.combatRoundMs?.()');
+  // CV-Z (grupa 3) — salwa CV-2a (`_cvFxRoundFx`) i jej słuchacz `_onCombatRoundFx` usunięte; salwę rysuje `_cvWpnRoundFx` (rejestr salw).
+  const fx = body('  _cvWpnRoundFx(payload) {');
+  const g = fx.indexOf('isEngagementInView('); const pc = fx.indexOf('window.KOSMOS?.timeSystem?.combatRoundMs?.()');
   // CV-Z — PRZECELOWANE ŚWIADOMIE (plan §4 CV-Z: „combat_fx_pace T5” do wycofania): dawne smugi `_spawnCombatTracer` usunięte —
   //   T5a pinuje plan tempa przekazany silnikowi FX (`_cvFxRoundFx`), T5b / T5c (czasy i końce dawnych smug) wycofane.
-  assert(g > 0 && pc > g && /this\._cvFxRoundFx\(events, pace\)/.test(fx) && !/_spawnCombatTracer/.test(tr),
-    'T5a salwa (po regule widoku): tempo z `combatRoundMs()`, plan przekazany silnikowi FX; dawnych smug nie ma');
+  assert(g > 0 && pc > g && !/_spawnCombatTracer|_onCombatRoundFx|_cvFxRoundFx/.test(tr),
+    'T5a salwa (po regule widoku): tempo z `combatRoundMs()` w języku broni; dawnych smug i salwy CV-2a nie ma');
   const tov = body('  _tickOrbitingVessels() {');
   const svp = body('  _syncVesselPositions(vessels) {');
   assert(/this\._placeFreeVessel\(id, entry, vx, vy\)/.test(tov) && /this\._placeFreeVessel\(vessel\.id, entry, vx, vy\)/.test(svp)

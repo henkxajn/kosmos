@@ -90,19 +90,14 @@
 //   gfx() / gfx(2) / gfx(1) / gfx(0)    — ARC CV-2b: odczyt presetu / High / Medium / Low (zapis na maszynie, jak ☰ „Grafika”)
 //   cvLightFlash()                      — ARC CV-2b: błysk światła puli w środku oglądanej bitwy (High 4 / Medium 2 / Low 0 świateł)
 //   cueStats() / cueStats(0)            — ARC CV-2b: sygnały walki odebrane przez słuchacza `AudioSystem` / wyzerowanie licznika
-//   cvWeapons(1) / cvWeapons(0)         — ARC CV-4a: flaga `cvWeapons` (język broni + rejestr salw: HP i zniszczenie w chwili trafienia,
-//                                         strzały z wieżyczek) ON / OFF, od następnej salwy (OFF — salwy CV-2a)
+//   cvWeapons() / cvDamage() / cvShields() — CV-Z: wycofane (język broni, wybuchy, osłony na stałe) — { retired: true }
 //   ledgerInfo()                        — ARC CV-4a: rejestr salw — per starcie liczniki od jego początku (`wTymStarciu`) i ostatnie
 //                                         rundy (zdarzenia, opóźnienie startu i rozpiętość trafień w R, zniszczenia, strzały po
 //                                         zniszczeniu), HP pokazywane vs logiczne uczestników, liczniki od wczytania strony
 //                                         (`odZaladowaniaStrony` — sumy wszystkich starć, F5 zeruje), `legenda` (co liczy każdy licznik)
-//   cvDamage(1) / cvDamage(0)           — ARC CV-5: flaga `cvDamage` (wybuchy warstwowe, stany uszkodzeń, płonące wraki, dryf wraków)
-//                                         ON / OFF; OFF — łata CV-3a3 / CV-4a (kula ognia, czerwony żar całego kadłuba)
 //   cvExplode(/battleship/.source)      — ARC CV-5: wybuch statku testowego danej klasy (`frigate` / `destroyer` / `battleship`),
 //                                         najbliższego celowi kamery — tylko prezentacja (logika go nie zna; F5 bez zapisu); w pauzie
 //                                         stoi, zwolnione tempo: `KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE = 0.25`
-//   cvShields(1) / cvShields(0)         — ARC CV-4b: flaga `cvShields` (bańka osłony z falą w punkcie trafienia, siła z osłony pokazywanej,
-//                                         rozpad na gasnące komórki, regeneracja — słaba fala; osmalenia kadłuba na High); OFF = rysunek CV-4a / CV-5
 //   cvShieldHit(/battleship/.source)    — ARC CV-4b: trafienie w osłonę statku TESTOWEGO danej klasy najbliższego celowi kamery (parada / bitwa
 //                                         po końcu) — każde wywołanie zabiera ~42 % osłony, trzecie ją rozbija, kolejne trafiają kadłub (iskry,
 //                                         żar, osmalenie na High); tylko prezentacja. Zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE
@@ -732,13 +727,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
     /** CV-Z — flaga `cvPresets` wycofana (presety jakości i sygnały walki na stałe; poziom — gfx()). */
     cvPresets() { return retiredFlag('cvPresets'); },
 
-    /** ARC CV-4a — flaga `cvWeapons` (język broni + rejestr salw): cvWeapons(1) — ON, cvWeapons(0) — OFF (salwy CV-2a), cvWeapons() —
-     *  przełącz. Czytana w chwili salwy i co klatkę. */
-    cvWeapons(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvWeapons = on === undefined ? !F.cvWeapons : !!on;
-      return { cvWeapons: F.cvWeapons };
-    },
+    /** CV-Z — flaga `cvWeapons` wycofana (na stałe). */
+    cvWeapons() { return retiredFlag('cvWeapons'); },
 
     /** ARC CV-4a — rejestr salw: liczniki per starcie i od wczytania strony, ostatnie rundy, HP pokazywane vs logiczne (`ThreeRenderer.cvLedgerInfo`). */
     ledgerInfo() {
@@ -746,13 +736,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       return r?.cvLedgerInfo ? r.cvLedgerInfo() : { ok: false, reason: 'no_renderer' };
     },
 
-    /** ARC CV-5 — flaga `cvDamage` (wybuchy warstwowe, stany uszkodzeń, płonące wraki): cvDamage(1) — ON, cvDamage(0) — OFF (łata CV-3a3 /
-     *  CV-4a), cvDamage() — przełącz. Czytana przy każdym zniszczeniu i co klatkę. */
-    cvDamage(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvDamage = on === undefined ? !F.cvDamage : !!on;
-      return { cvDamage: F.cvDamage, fcCombatFx: !!F.fcCombatFx };
-    },
+    /** CV-Z — flaga `cvDamage` wycofana (na stałe). */
+    cvDamage() { return retiredFlag('cvDamage'); },
 
     /**
      * ARC CV-5 — wybuch statku TESTOWEGO (parada `cvParade` / bitwa `cvBattle`) danej klasy, najbliższego celowi kamery: cvExplode(/battleship/.source)
@@ -786,13 +771,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       return r?.cvDamageInfo ? r.cvDamageInfo() : { ok: false, reason: 'no_renderer' };
     },
 
-    /** ARC CV-4b — flaga `cvShields` (bańki osłon, fale, rozpad, regeneracja; osmalenia na High): cvShields(1) — ON, cvShields(0) — OFF
-     *  (rysunek CV-4a / CV-5), cvShields() — przełącz. Czytana w chwili salwy i co klatkę. */
-    cvShields(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvShields = on === undefined ? !F.cvShields : !!on;
-      return { cvShields: F.cvShields, cvWeapons: !!F.cvWeapons };
-    },
+    /** CV-Z — flaga `cvShields` wycofana (na stałe). */
+    cvShields() { return retiredFlag('cvShields'); },
 
     /**
      * ARC CV-4b — trafienie w osłonę statku TESTOWEGO (parada `cvParade` / bitwa `cvBattle` po końcu) danej klasy, najbliższego celowi kamery:
@@ -1043,7 +1023,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         ok: true, system: sys, body: body.id, bodyName: body.name ?? body.id, empire: empire.name ?? empire.id,
         attackers: made.A.length, defenders: made.B.length, hangar: NH, tower: TW, grid: GR, viewNow: view ?? sys,
         ...(RAID ? { raid: true, raidOrders } : {}),
-        flags: { cvOrbital: !!GAME_CONFIG.FEATURES?.cvOrbital, cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons },
+        flags: { cvOrbital: !!GAME_CONFIG.FEATURES?.cvOrbital },
         note: RAID === 1 ? 'rajd: wznow czas — starcie DSCS na orbicie, w jego trakcie bitwa przy kolonii (powtorka po starciu) — jeden baner'
           : RAID === 2 ? 'rajd z lotem: wznow czas (1 t/s); starcie DSCS w podejsciu, ocaleli gonia kolonie (sufit czekania 15 s)'
           : 'rozstrzygniecie za ~0,5 s czasu realnego; wznow czas, zeby obejrzec powtorke (orbitalInfo())', paused: !!ts.isPaused,

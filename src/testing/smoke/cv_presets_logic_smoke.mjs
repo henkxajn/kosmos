@@ -277,10 +277,10 @@ guard('T6 strażniki', () => {
   assert(!!caps && caps.beams.capacity === ENGINE.FX_POOL_CAPACITY.beam && caps.tracers.capacity === ENGINE.FX_POOL_CAPACITY.tracer
     && caps.sparks.capacity === ENGINE.FX_POOL_CAPACITY.spark && ens.length > 0 && !/capacity|_gfx/.test(ens),
     'T6b silnik FX budowany ze stałymi pojemnościami (`FX_POOL_CAPACITY`) — `_ensureFxEngine` nie czyta presetu');
-  const rf = body('_cvFxRoundFx');
-  const spawnAt = rf.indexOf('eng.spawnShot(');
-  assert(spawnAt > 0 && !/if\s*\(\s*cues[^)]*\)\s*\{?[^;]*eng\.spawnShot/.test(rf) && !/_gfx|throttle/.test(rf),
-    'T6c `_cvFxRoundFx`: `eng.spawnShot` bez warunku presetu / dławienia (gałąź sygnałów jest OSOBNĄ instrukcją)');
+  // CV-Z (grupa 3) — salwa CV-2a (`_cvFxRoundFx`) i jej słuchacz `_onCombatRoundFx` usunięte; salwę rysuje `_cvWpnRoundFx` (rejestr salw).
+  const rf = body('_cvWpnRoundFx'), sp = body('_cvWpnSpawn');
+  assert(rf.length > 0 && sp.length > 0 && /this\._cvWpnSpawn\(eng, x,/.test(rf) && !/_gfx|throttle/.test(rf + sp),
+    'T6c salwa języka broni (`_cvWpnRoundFx` → `_cvWpnSpawn`): strzały bez warunku presetu / dławienia');
 });
 
 // ── T7 — pula świateł ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -504,7 +504,7 @@ const make = (name) => {
     FakeSMAAPass, PRESETS?.bloomInputSize);
 };
 const GFX_METHODS = ['_initGfxState', '_applyGfx', '_setRendererPixelRatio', 'applyGfxPreset', '_tickGfx', 'cvGfxInfo', 'cvShipTextureMemory',
-  '_cvFxRoundFx', '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues', '_tickCvFx', '_ensureFxEngine',
+  '_ensureCueBus', '_cueDestroyed', '_flushCues', '_tickCvFx', '_ensureFxEngine',
   '_syncSmaa', '_syncBloomSize', '_bloomInputSize'];   // ARC CV-5 (pozycja 0) — SMAA i bloom w px CSS
 const clock = { now: 1e6 };
 const realPerfNow = performance.now.bind(performance);
@@ -591,83 +591,44 @@ guard('T10 ustawienia', () => {
       `T10u \`_bloomInputSize\`: px CSS × 1,25 przy gęstości 1,875 i 1,25 (${onSize.w} / ${onSize2.w})`);
   } finally { GAME_CONFIG.FEATURES.cvPresets = flag; localStorage.removeItem(lsKey); }
 });
-guard('T10 salwa', () => {
-  const flag = GAME_CONFIG.FEATURES.cvPresets, flagFx = GAME_CONFIG.FEATURES.cvFxEngine;
-  // ARC CV-4a — T10 pinuje sygnały na salwie CV-2a (`_cvFxRoundFx`); od CV-4a flaga `cvWeapons` (domyślnie ON) oddaje salwę językowi broni
-  // (keeper `cv_weapons_ledger_smoke` C1 pinuje sygnały w chwilach rejestru) — tu jawnie OFF.
-  const flagWpn = GAME_CONFIG.FEATURES.cvWeapons;
-  GAME_CONFIG.FEATURES.cvWeapons = false;
-  const run = (presets, { pausedFrames = 0, galaxy = false } = {}) => {
-    GAME_CONFIG.FEATURES.cvPresets = presets;
-    GAME_CONFIG.FEATURES.cvFxEngine = true;
+// CV-Z — PRZECELOWANE ŚWIADOMIE: dawne T10m–T10s pinowały sygnały salwy CV-2a (`_cvFxRoundFx` — usunięta razem z flagą `cvWeapons`);
+//   sygnały salwy w chwilach rejestru pinuje `cv_weapons_ledger_smoke` C1. Tu zostaje szyna w rendererze: sygnały zaplanowane na zegarze
+//   prezentacji wychodzą przez `_tickCvFx` (słuchacz `AudioSystem` odbiera każdy), pauza je trzyma, tryb galaktyki wycisza; wrak → „destroyed”.
+guard('T10 szyna sygnałów w rendererze', () => {
+  const run = ({ pausedFrames = 0, galaxy = false } = {}) => {
     EventBus.clear();
     const { R } = fakeRenderer();
     R._applyGfx('init');
-    for (const [id, x] of [['fa', -0.05], ['fb', 0.05], ['cr1', 0.06]]) { const s = new THREE.Object3D(); s.visible = true; s.position.set(x, 0.3, 0); R._vessels.set(id, { sprite: s }); }
     const got = [];
     EventBus.on('combatfx:cue', (c) => got.push(c));
     const audio = AUDIO ? new AUDIO.AudioSystem() : null;
     audio?.attach();
-    const pace = FXC.combatFxPace(1000);
-    const events = [
-      { attacker: 'fa', target: 'fb', category: 'short', hit: true, blockedByShield: 0 },
-      { attacker: 'fb', target: 'cr1', category: 'medium', hit: true, blockedByShield: 3 },
-      { attacker: 'cr1', target: 'fa', category: 'long', hit: false, blockedByShield: 0 },
-    ];
     R._tickCvFx();
     const t0 = R._presClock.nowMs;
-    R._cvFxRoundFx(events, pace);
-    const shots = R._fxEngine?.stats()?.shots ?? 0;
+    const bus = R._ensureCueBus();
+    const kinds = [['fire', 'laser', 0], ['fire', 'kinetic', 120], ['fire', 'missile', 240], ['impact', 'laser', 360], ['shieldHit', 'kinetic', 480]];
+    for (const [k, w, dt] of kinds) bus.schedule(t0 + dt, k, w, 'medium', 0.1 * dt / 120, 0.3, 0, 'enc_t', 'fa');
     window.KOSMOS.timeSystem.isPaused = pausedFrames > 0;
     for (let i = 0; i < pausedFrames; i++) { clock.now += 16; R._tickCvFx(); }
     const duringPause = got.length;
     window.KOSMOS.timeSystem.isPaused = false;
     R._galaxyActive = galaxy;
     for (let i = 0; i < 200; i++) { clock.now += 16; R._tickCvFx(); }
-    return { R, got, shots, t0, pace, duringPause, audio };
+    return { R, got, t0, duringPause, audio };
   };
   try {
-    const ON = run(true);
-    const fire = ON.got.filter((c) => c.kind === 'fire');
-    const hits = ON.got.filter((c) => c.kind !== 'fire');
-    const k = (c) => `${c.kind}/${c.weapon}`;
-    console.log(`     ON: strzały ${ON.shots}, sygnały ${ON.got.map((c) => `${k(c)}×${c.count}@${Math.round(c.t - ON.t0)}`).join(', ')}`);
-    assert(ON.shots === 3 && fire.length === 3 && hits.length === 2
-      && JSON.stringify(fire.map((c) => c.weapon).sort()) === '["kinetic","laser","missile"]'
-      && hits.some((c) => c.kind === 'impact' && c.weapon === 'laser' && c.vesselId === 'fb')
-      && hits.some((c) => c.kind === 'shieldHit' && c.weapon === 'kinetic' && c.vesselId === 'cr1' && c.size === 'large'),
-      'T10m salwa ON: 3 strzały w silniku i 3 × fire (laser / kinetyk / rakieta) + impact (bez osłony) + shieldHit (osłona) — pudło bez trafienia');
-    const fireT = fire.map((c) => Math.round(c.t - ON.t0)).sort((a, b) => a - b);
-    const want = [0, ON.pace.staggerMs, 2 * ON.pace.staggerMs];
-    const impactT = Math.round(hits.find((c) => c.kind === 'impact').t - ON.t0);
-    assert(fireT.every((t, i) => Math.abs(t - want[i]) <= 16) && Math.abs(impactT - ON.pace.flashDelayMs) <= 16
-      && ON.got.every((c) => c.encounterId === 'enc_t' && c.pan >= -1 && c.pan <= 1 && c.dist > 0),
-      `T10n czasy prezentacji: fire po rozrzucie salwy (${fireT.join(', ')} ms), impact po opóźnieniu błysku (${impactT} ms); id starcia, panorama, odległość`);
+    const ON = run();
     const st = ON.audio?.cueStats();
-    assert(!!st && st.received === ON.got.length && st.cues === ON.got.reduce((s, c) => s + c.count, 0),
-      `T10o słuchacz \`AudioSystem\` (po clear + attach) odebrał każdy sygnał (${st?.received} / ${ON.got.length})`);
-    // CV-Z — T10p (salwa bez presetów: szyna nie powstaje) wycofane razem z flagą `cvPresets`.
-    const P = run(true, { pausedFrames: 60 });
-    // Pauza tuż po salwie: zegar prezentacji stoi na chwili salwy — wychodzi WYŁĄCZNIE strzał z opóźnieniem 0 (jego chwila już
-    // nadeszła; efekt jest na ekranie), reszta czeka; po wznowieniu — w swoich chwilach.
-    assert(P.duringPause === 1 && P.got[0]?.kind === 'fire' && Math.abs(P.got[0].t - P.t0) < 1e-9 && P.got.length === 5,
-      `T10q pauza: przez 60 klatek pauzy tylko strzał z chwili salwy (${P.duringPause}), reszta po wznowieniu (razem ${P.got.length})`);
-    const G = run(true, { galaxy: true });
-    assert(G.got.length === 0 && (G.R._cueBus?.stats()?.muted ?? 0) === 5, 'T10r tryb galaktyki: sygnały przepadają (5 wyciszonych), nic nie wysłane');
-    // Low + pełne dławienie — każdy strzał nadal w silniku (T6 wykonaniem).
-    GAME_CONFIG.FEATURES.cvPresets = true;
-    EventBus.clear();
-    const { R: L } = fakeRenderer();
-    L._applyGfx('init'); L.applyGfxPreset(0); L._gfx.throttle.level = 4;
-    for (const id of ['fa', 'fb', 'cr1']) { const s = new THREE.Object3D(); s.visible = true; L._vessels.set(id, { sprite: s }); }
-    const many = Array.from({ length: 100 }, (_, i) => ({ attacker: ['fa', 'fb', 'cr1'][i % 3], target: ['fb', 'cr1', 'fa'][i % 3], category: ['short', 'medium', 'long'][i % 3], hit: i % 2 === 0, blockedByShield: i % 4 === 0 ? 1 : 0 }));
-    L._tickCvFx();
-    L._cvFxRoundFx(many, FXC.combatFxPace(1000));
-    const es = L._fxEngine?.stats();
-    assert(es?.shots === 100 && es.pools.beam.spawned + es.pools.tracer.spawned === 100 && es.pools.beam.steals + es.pools.tracer.steals === 0,
-      'T10s Low + pełne dławienie: salwa 100 strzałów — każdy w silniku (wiązka albo smuga), zero kradzieży');
-    // Wybuch wraku → „destroyed” (także przy fladze `cvFxEngine` OFF — szyna tyka zegar sama).
-    GAME_CONFIG.FEATURES.cvFxEngine = false;
+    assert(ON.got.length === 5 && ON.got.every((c) => c.encounterId === 'enc_t' && c.pan >= -1 && c.pan <= 1)
+      && ON.got.every((c, i) => Math.abs((c.t - ON.t0) - [0, 120, 240, 360, 480][i]) <= 16),   // chwila wysłania = klatka (16 ms)
+      `T10m sygnały w swoich chwilach prezentacji (${ON.got.map((c) => `${c.kind}@${Math.round(c.t - ON.t0)}`).join(', ')})`);
+    assert(!!st && st.received === ON.got.length, `T10o słuchacz \`AudioSystem\` (po clear + attach) odebrał każdy sygnał (${st?.received} / ${ON.got.length})`);
+    const P = run({ pausedFrames: 60 });
+    assert(P.duringPause === 1 && P.got[0]?.kind === 'fire' && P.got.length === 5,
+      `T10q pauza: przez 60 klatek pauzy tylko sygnał z chwili 0 (${P.duringPause}), reszta po wznowieniu (razem ${P.got.length})`);
+    const G = run({ galaxy: true });
+    assert(G.got.length === 0 && (G.R._cueBus?.stats()?.muted ?? 0) === 5,
+      `T10r tryb galaktyki: sygnały przepadają (${G.R._cueBus?.stats()?.muted ?? 0} wyciszonych), nic nie wysłane`);
     EventBus.clear();
     const { R: W } = fakeRenderer();
     W._applyGfx('init');
@@ -676,9 +637,9 @@ guard('T10 salwa', () => {
     const s = new THREE.Object3D(); s.visible = true; s.position.set(0.1, 0.3, 0.2);
     W._cueDestroyed('cr1', { id: 'cr1', shipId: 'hull_cruiser', lastBattleId: 'battle_ds_1' }, { sprite: s });
     for (let i = 0; i < 3; i++) { clock.now += 16; W._tickCvFx(); }
-    assert(gotW.length === 1 && gotW[0].kind === 'destroyed' && gotW[0].size === 'large' && gotW[0].vesselId === 'cr1' && gotW[0].encounterId === 'battle_ds_1'
-      && W._fxEngine === null, 'T10t wrak → jeden „destroyed” (rozmiar z klasy kadłuba: krążownik → large), także przy `cvFxEngine` OFF (silnik nie powstaje)');
-  } finally { GAME_CONFIG.FEATURES.cvPresets = flag; GAME_CONFIG.FEATURES.cvFxEngine = flagFx; GAME_CONFIG.FEATURES.cvWeapons = flagWpn; EventBus.clear(); }
+    assert(gotW.length === 1 && gotW[0].kind === 'destroyed' && gotW[0].size === 'large' && gotW[0].vesselId === 'cr1' && gotW[0].encounterId === 'battle_ds_1',
+      'T10t wrak → jeden „destroyed” (rozmiar z klasy kadłuba: krążownik → large)');
+  } finally { EventBus.clear(); }
 });
 
 // ── T11 — źródło ────────────────────────────────────────────────────────────────────────────────────────────────────

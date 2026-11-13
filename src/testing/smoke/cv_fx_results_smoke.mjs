@@ -169,11 +169,11 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'ShieldBubblePool', 'KC_SCORCH_MAX', 'setKeyColourScorch', 'setKeyColourScorchHeat', 'setKeyColourScorchCount', 'ledgerHash',
   // ARC CV-3c — lot wzdłuż kursu, wylot dysz, dryf wraków (tryb A10: flaga `cvChoreo2`)
   'stepChoreo2Offset', 'stepChoreo2Facing', 'stepChoreo2Engine', 'NOZZLE_KEY_HEX', 'wreckAfterDrift'];
-const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
-  '_spawnFx', '_disposeFx', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
+const METHODS = ['_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
+  '_spawnFx', '_disposeFx', '_ensureFxEngine', '_tickCvFx',
   '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage', 'getVesselStageBlend',
   '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease', '_choreoEnd', '_choreoExhaust', '_applyExhaust',
-  '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues',   // ARC CV-2b — sygnały walki (A6)
+  '_ensureCueBus', '_cueDestroyed', '_flushCues',   // ARC CV-2b — sygnały walki (A6)
   '_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvWpnPresentKill', '_cvWpnKillLook',
   '_cvWpnWreckGate', 'cvPresentedState', 'cvEventShown', '_spawnExplosion',   // ARC CV-4a — język broni i rejestr salw (A7)
   '_cvDmgOn', '_cvDmgState', '_cvDmgTick', '_cvDmgExplode', '_cvDmgPoint', '_cvDmgRunSeq', '_cvDmgWreckLook', '_cvDmgPaintHeat',
@@ -354,17 +354,12 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
   // CV-Z — tryb ON = pełna warstwa wizualna (flagi kroków, które jeszcze istnieją, ustawione jawnie; reszta na stałe).
   const dirFlag = GAME_CONFIG.FEATURES.cvDirector;   // ARC CV-7 — A11: reżyser i spowolnienie tylko w trybie `director`
   GAME_CONFIG.FEATURES.cvDirector = director === true;
-  const damageFlag = GAME_CONFIG.FEATURES.cvDamage;
-  GAME_CONFIG.FEATURES.cvDamage = on;
-  const shieldsFlag = GAME_CONFIG.FEATURES.cvShields;
-  GAME_CONFIG.FEATURES.cvShields = on;
   const T5 = ENGINE?.LIVE_CV_FX ?? null;
   const fxScale0 = T5?.FX_TIME_SCALE;
   if (on && T5) T5.FX_TIME_SCALE = 0.25;   // zwolnione tempo efektów — tylko prezentacja (A2 obejmuje i je)
   const presetsFlag = GAME_CONFIG.FEATURES.cvPresets;
   GAME_CONFIG.FEATURES.cvPresets = on;
-  const weaponsFlag = GAME_CONFIG.FEATURES.cvWeapons;
-  GAME_CONFIG.FEATURES.cvWeapons = on;
+
   reseed('cv2a-battle'); reseedRendererRandom();
   let R = null, st = null, outsider = null, recallList = null, recallNoEnc = null, ctlAi = null;
   const arrivals = [];
@@ -391,7 +386,6 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
           R.presBehind = Math.max(R.presBehind, d.warp.lagMs);
         };
       }
-      EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
       EventBus.on('combat:roundFx', (p) => R._cvWpnRoundFx(p));   // ARC CV-4a — drugi słuchacz renderera (pełny ładunek)
       // ARC CV-2b (A6) — wybuch wraku → sygnał „destroyed” (jak słuchacz `vessel:wrecked` renderera) i słuchacz `AudioSystem` po
       // `EventBus.clear()` świata (jak `GameScene.start`). Bez flagi `cvPresets` — szyna nie powstaje (metody i tak w atrapie).
@@ -427,9 +421,6 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     return { scene, sig: { battles: rec.battles, wrecks: rec.wrecks }, trace: rec.rounds, slots, realMs };
   });
   GAME_CONFIG.FEATURES.cvPresets = presetsFlag;
-  GAME_CONFIG.FEATURES.cvWeapons = weaponsFlag;
-  GAME_CONFIG.FEATURES.cvDamage = damageFlag;
-  GAME_CONFIG.FEATURES.cvShields = shieldsFlag;
   GAME_CONFIG.FEATURES.cvDirector = dirFlag;
   if (T5 && fxScale0 !== undefined) T5.FX_TIME_SCALE = fxScale0;
   const audio = mode === 'on' ? (AUDIO_SYS?.cueStats?.() ?? null) : null;

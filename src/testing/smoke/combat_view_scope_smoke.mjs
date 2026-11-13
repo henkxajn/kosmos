@@ -181,12 +181,13 @@ header('T6  źródło `ThreeRenderer` — cztery wejścia przez regułę');
   const tr = strip(readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf8'));
   const methodBody = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
   const handler = (ev) => { const i = tr.indexOf(`EventBus.on('${ev}'`); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n    }));', i)); };
-  const fx = methodBody('  _onCombatRoundFx(payload) {');
+  // CV-Z (grupa 3) — salwa CV-2a (`_cvFxRoundFx`) i jej słuchacz `_onCombatRoundFx` usunięte; salwę rysuje `_cvWpnRoundFx` (rejestr salw).
+  const fx = methodBody('  _cvWpnRoundFx(payload) {');
   const g = fx.indexOf('isEngagementInView(');
   const up = fx.indexOf('_upsertEngagementMarker(');
   // CV-Z — przecelowane świadomie: salwa idzie do silnika FX (`_cvFxRoundFx`; dawne smugi `_spawnCombatTracer` usunięte).
-  assert(fx.length > 0 && fx.includes('_cvFxRoundFx('), 'T6-0 KONTROLA: `_onCombatRoundFx` znaleziony (salwa w tym ciele)');
-  assert(g > 0 && g < fx.indexOf('_cvFxRoundFx(') && (up < 0 || g < up)
+  assert(fx.length > 0 && fx.includes('this._ensureFxEngine()'), 'T6-0 KONTROLA: `_cvWpnRoundFx` znaleziony (salwa w tym ciele)');
+  assert(g > 0 && g < fx.indexOf('this._ensureFxEngine()') && (up < 0 || g < up)
     && /encounterSystemId:\s*payload\?\.systemId/.test(fx) && /activeSystemId:\s*window\.KOSMOS\?\.activeSystemId/.test(fx),
     'T6a salwa: reguła na wejściu (układ z ładunku, układ widoku), PRZED smugami (i znacznikiem, jeśli salwa go stawia)');
   // znacznik starcia: albo stawia go bramkowana salwa (krok P2-1), albo synchronizacja ze STANEM starcia przez tę samą

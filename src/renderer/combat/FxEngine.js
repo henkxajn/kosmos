@@ -27,7 +27,7 @@
 //   i tablic typowanych w oknie 100 salw).
 
 import { buildFxShaders, BOLT_SEGMENTS } from './FxShaders.js';
-import { weaponColor, FX_SHIELD_COLOR } from '../../config/CombatFxConfig.js';
+import { weaponColor } from '../../config/CombatFxConfig.js';
 import { HIT_GLOW } from '../../utils/VesselFxLogic.js';
 import { CHOREO_TUNING, CHOREO2_TUNING } from './ChoreographyLogic.js';   // ARC CV-3b — pokrętła choreografii; CV-3c — lot wzdłuż kursu
 import { LIVE_LIGHT_POOL } from './LightPool.js';          // ARC CV-2b — pokrętła puli świateł (jedno źródło wartości domyślnych)
@@ -116,9 +116,8 @@ export const LIVE_CV_FX = {
   FLASH_CORE:   2.4,     // wzmocnienie HDR rdzenia błysku
   FLASH_MIN_PX: 6,       // [CSS px] podłoga / sufit błysku na ekranie
   FLASH_MAX_PX: 48,
-  // Finding 663 (dodatek 2, decyzja właściciela 2026-11-11: „wygląda sztucznie”) — płaski cyjanowy pierścień osłony przy trafieniu
-  // w tarczę (iskra `SPARK_KIND.ring`) WYŁĄCZONY do CV-4b (bańka osłony z falą). `true` z konsoli przywraca go od następnego strzału.
-  SHIELD_RING_ENABLED: false,
+  // Finding 663 (dodatek 2) — płaski cyjanowy pierścień osłony przy trafieniu w tarczę: CV-Z — kod usunięty (osłonę pokazuje bańka CV-4b);
+  // pokrętło `SHIELD_RING_ENABLED` wycofane.
   RING_K:       4.0,     // średnica pierścienia osłony = rozmiar modelu × K
   RING_MIN_PX:  8,
   RING_MAX_PX:  64,
@@ -219,7 +218,7 @@ export const LIVE_CV_FX = {
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)
 const HIT_ALPHA = 0.9, MISS_ALPHA = 0.4;   // jak dziś: trafienie 0,9, pudło 0,4
-const FLASH_ALPHA = 0.85, RING_ALPHA = 0.8, GLOW_ALPHA = 1.0;
+const FLASH_ALPHA = 0.85, GLOW_ALPHA = 1.0;
 const DEFAULT_TARGET_SIZE = 0.016;   // [WU] fregata — gdy rozmiaru celu nie da się ustalić
 const DEFAULT_Y = 0.3;               // [WU] wysokość statku w wolnej przestrzeni (gdy punkt bez y)
 
@@ -584,9 +583,6 @@ export class FxEngine {
     const ti = t0 + pace.flashDelayMs;
     this._spark(SPARK_KIND.flash, t, color, FLASH_ALPHA, ti, pace.flashMs, size, shot.targetId);
     this._spark(SPARK_KIND.glow, t, HIT_GLOW.COLOR, GLOW_ALPHA, ti, HIT_GLOW.MS, size, shot.targetId);
-    if (shot.blockedByShield > 0 && this.tuning.SHIELD_RING_ENABLED === true) {   // dodatek 2 — pierścień osłony do CV-4b wyłączony
-      this._spark(SPARK_KIND.ring, t, FX_SHIELD_COLOR, RING_ALPHA, ti, pace.shieldMs, size, shot.targetId);
-    }
   }
 
   _spark(kind, p, hex, alpha, t0, lifeMs, size, followId) {

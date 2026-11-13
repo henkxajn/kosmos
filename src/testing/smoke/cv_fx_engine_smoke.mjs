@@ -305,17 +305,12 @@ const make = (name) => {
   if (tick) for (let i = 0; i < 5; i++) tick.call(R0);
   assert(!!tick && R0._fxEngine === null && R0._presClock?._lastRealMs !== null,
     'T9a `_tickCvFx` tyka zegar prezentacji zawsze (bez gałęzi flagi); silnik nie powstaje w ticku (buduje go start renderera)');
-  const route = make('_onCombatRoundFx');
-  const calls = { engine: 0, pace: null };
-  const R = { _combatEndpointWorld: () => ({ x: 0, y: 0.3, z: 0 }), _cvFxRoundFx: (evs, pace) => { calls.engine += evs.length; calls.pace = pace; } };
-  const payload = { systemId: 'sys_v', events: [{ attacker: 'a', target: 'b', category: 'short', hit: true, blockedByShield: 0, aPos: { x: 0, y: 0 }, tPos: { x: 1, y: 0 } },
-    { attacker: 'b', target: 'a', category: 'long', hit: false, blockedByShield: 0, aPos: { x: 1, y: 0 }, tPos: { x: 0, y: 0 } }] };
-  window.KOSMOS = { activeSystemId: 'sys_v', uiPrefs: {}, timeSystem: { combatRoundMs: () => 400 } };
-  route?.call(R, payload);
-  assert(calls.engine === 2 && calls.pace?.tracerMs === FXC.combatFxPace(400).tracerMs,
-    'T9b salwa do `_cvFxRoundFx` z tempem `combatFxPace` (bez przełącznika)');
-  const gone = ['_spawnCombatTracer', '_spawnHitGlow', '_followTracerEnds', '_followFxTarget', '_hitGlowTexture'].filter((m) => fullBody(m) != null);
-  assert(gone.length === 0 && !/cvFxEngine/.test(fullBody('_onCombatRoundFx') ?? 'cvFxEngine') && !/explosionRing/.test(TR),
+  // CV-Z (grupa 3) — salwa CV-2a (`_cvFxRoundFx`) i jej słuchacz `_onCombatRoundFx` usunięte; salwę rysuje `_cvWpnRoundFx` (rejestr salw).
+  const listeners = (TR.match(/EventBus\.on\('combat:roundFx'[^\n]*/g) ?? []);
+  assert(listeners.length === 1 && /this\._cvWpnRoundFx\(p\)/.test(listeners[0]),
+    `T9b jeden słuchacz \`combat:roundFx\` w rendererze — język broni (\`_cvWpnRoundFx\`): ${listeners.length}`);
+  const gone = ['_spawnCombatTracer', '_spawnHitGlow', '_followTracerEnds', '_followFxTarget', '_hitGlowTexture', '_onCombatRoundFx', '_cvFxRoundFx', '_cueShot', '_cueEncounterId'].filter((m) => fullBody(m) != null);
+  assert(gone.length === 0 && !/explosionRing/.test(TR),
     `T9c dawnych smug \`THREE.Line\`, błysku na modelu i pierścienia uderzeniowego nie ma w \`ThreeRenderer\`${gone.length ? ' — są: ' + gone.join(', ') : ''}`);
   assert((fullBody('_ensureFxEngine') ?? '').includes('logDepth: logDepthOn()'),
     'T9f renderer buduje silnik z flagą logarytmicznej głębi mapy (`logDepth: logDepthOn()`) — chunki V-267 w programach FX (T6a)');

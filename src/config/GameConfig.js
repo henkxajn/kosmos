@@ -531,7 +531,9 @@ export const GAME_CONFIG = {
     // ── ARC COMBAT VISUALS (docs/design/COMBAT_VISUALS_PLAN.md) — flaga na krok, czytana W CHWILI UŻYCIA ──
     // CV-Z (metoda T4) — flagi kroków na stałe ON, klucze zdjęte, ścieżki OFF usunięte: `cvFxEngine` (silnik FX z pulami), `cvStage`
     //   (scena bitwy), `cvChoreo` i `cvChoreo2` (choreografia — lot wzdłuż kursu CV-3c jedynym trybem), `cvModels` (rama kanoniczna
-    //   z plików hardpointów), `cvPresets` (presety jakości High / Medium / Low, pula świateł, szyna sygnałów walki). Przestawienie
+    //   z plików hardpointów), `cvPresets` (presety jakości High / Medium / Low, pula świateł, szyna sygnałów walki), `cvWeapons` (język broni
+    //   i rejestr salw — salwa CV-2a usunięta), `cvDamage` (wybuchy warstwowe, stany uszkodzeń, płonące wraki), `cvShields` (bańki osłon,
+    //   osmalenia). Przestawienie
     //   dawnych kluczy w konsoli nie ma skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
     // `cvStrip` (CV-6b2) — PASEK WALKI zamiast karty walki (`CombatStrip` / `CombatStripLogic`): linia na bitwę (klaster starć),
     //   idiom HUD (ciemny pasek, font motywu, role palety, cyfry w kratce), rozwinięcie na żądanie (okręty, log rund), położenie
@@ -539,38 +541,6 @@ export const GAME_CONFIG = {
     //   pierścienia starcia i bez białego błysku trafienia (3D paski HP zostają do CV-6a). OFF = dzisiejsza karta co do bitu.
     //   Wyłączenie: KOSMOS.debug.cvStrip(0).
     cvStrip: true,
-    // `cvWeapons` (CV-4a) — JĘZYK BRONI i REJESTR SALW (`src/renderer/combat/CombatLedgerLogic.js`): każda runda oglądanego
-    //   starcia dostaje harmonogram w czasie prezentacji (salwy obu stron przeplecione — ogień jednoczesny M1; laser: ładowanie
-    //   → wiązka, kinetyk: błysk wylotu → pocisk → iskry, rakieta: start → tor łukiem; pudło leci dalej za cel), strzały
-    //   z wieżyczek pliku hardpointów (`weapons[]`), HP i osłona POKAZYWANE spadają w chwili TRAFIENIA (paski 3D, pasek walki —
-    //   Finding 614), zniszczenie w chwili trafienia zabijającego (okręt przestaje strzelać, gaśnie, wygląd wraku, eksplozja —
-    //   Findingi 615 / 655 (i); późny `vessel:wrecked` bez drugiego pokazu), sygnały walki w chwilach rejestru (+ `kill`).
-    //   Wymaga `cvFxEngine` (pule silnika FX). Wyłącznie rysunek — logika (DSCS) nietknięta, poza polami ładunku FX (D-CV-8).
-    //   Czytana w chwili salwy i co klatkę. OFF = ścieżka CV-2a co do bitu. Wyłączenie: KOSMOS.debug.cvWeapons(0).
-    cvWeapons: true,
-    // `cvDamage` (CV-5) — WYBUCHY, STANY USZKODZEŃ, PŁONĄCE WRAKI (`src/renderer/combat/ExplosionLogic.js`): śmierć okrętu w chwili
-    //   trafienia zabijającego jako wybuch WARSTWOWY w pulach silnika FX (błysk HDR i smuga anamorficzna, płaty kuli ognia z turbulencją
-    //   — biel → żółć → pomarańcz → czerwień → dym, fala uderzeniowa w płaszczyźnie statku, odłamki kadłuba, żar, dym, światło z puli
-    //   oświetlające sąsiadów), rozmiar z długości rysowanej kadłuba (Finding 619), klasa decyduje o sekwencji (fregata — jeden ostry
-    //   wybuch, niszczyciel — wtórny + główny, pancernik — 2–3 wtórne wzdłuż kadłuba, potem największy); stany uszkodzeń z HP
-    //   POKAZYWANEGO (dym ≤ 75 %, ogień ≤ 50 %, krztuszący się silnik ≤ 25 %); wrak bez czerwieni całego kadłuba — szwy stygnące 10–20 s,
-    //   1–2 pożary gasnące, dryf i obrót w kopercie, zbieżność do pozycji logicznej po bitwie (Finding 627); rozgrzewka programów FX przy
-    //   starcie (Finding 644). Budżety z presetu (`cvPresets`); strzałów nie dotyka. Wymaga `cvFxEngine`. Wyłącznie rysunek — wynik bitwy
-    //   nietknięty. Zwolnione tempo (prezentacja): KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE. OFF = łata CV-3a3 / CV-4a co do bitu.
-    //   Wyłączenie: KOSMOS.debug.cvDamage(0).
-    cvDamage: true,
-    // `cvShields` (CV-4b) — OSŁONY I PANCERZ (`src/renderer/combat/ShieldLogic.js`, `ShieldBubbles.js`): bańka osłony — elipsoida
-    //   dopasowana do rysowanego kadłuba (idzie za sceną i choreografią), NIEWIDOCZNA do trafienia; przy trafieniu fala rozchodzi się
-    //   od punktu, w którym strzał naprawdę spotyka bańkę (koniec wiązki / pocisku na bańce, dopóki osłona trzyma), fresnel krawędzi
-    //   i komórki rozbłyskują i gasną w ~0,65 s; siła z osłony POKAZYWANEJ (rejestr salw CV-4a): silna — fala ostra i jasna, słaba —
-    //   migotanie; trafienie, które zbija osłonę do zera — rozpad (błysk, bańka pęka na gasnące komórki; sygnał `shieldDown`), potem
-    //   strzały lądują na kadłubie (iskry i żar CV-4a — punkt na poszyciu, pod bańką); regeneracja w chwili nadejścia rundy — słaba
-    //   fala; statek bez osłony — bez bańki; łata cyjanowych iskier przy trafieniu w osłonę (CV-4a) i płaski pierścień osłony (#653 (b))
-    //   nie rysują się. Osmalenia kadłuba w punktach trafień — wyłącznie High (pula na statek, żar świeżej plamy stygnie; zostają na
-    //   wraku). Fale na bańkę z presetu (High 8 / Medium 4 / Low 1). Wymaga `cvWeapons` (rejestr salw) i `cvFxEngine`. Wyłącznie rysunek —
-    //   wynik bitwy nietknięty. Zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE. OFF = rysunek CV-4a / CV-5 co do bitu.
-    //   Wyłączenie: KOSMOS.debug.cvShields(0).
-    cvShields: true,
     // `cvTactical` (CV-6a) — WARSTWA TAKTYCZNA bitwy i zoom semantyczny (`src/ui/HudCombatLayer.js`, `HudCombatLogic.js` — podwarstwa
     //   HUD 2D, D-CV-20): daleko — sylwetki klas (fregata / niszczyciel / pancernik / cywilny / nieznany) w położeniach RYSOWANYCH
     //   (scena + choreografia) z kursem i wektorem prędkości, linie ognia w chwilach rejestru salw, mikropaski HP / osłony z wartości

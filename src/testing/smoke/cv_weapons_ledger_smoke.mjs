@@ -514,7 +514,7 @@ const VALUES = () => [THREE, S, GAME_CONFIG, globalThis.window, globalThis.perfo
   LEDGER?.LEDGER_INFO_LEGEND];
 const METHODS = ['_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_cvWpnPresentKill', '_cvWpnKillLook',
   '_cvWpnWreckGate', 'cvPresentedState', 'cvEventShown', '_ensureFxEngine', '_tickCvFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
-  '_ensureCueBus', '_cueDestroyed', '_flushCues', '_cvTiltWreck', '_cvFxRoundFx', '_cueEncounterId', '_cueShot', 'cvLedgerInfo'];
+  '_ensureCueBus', '_cueDestroyed', '_flushCues', '_cvTiltWreck', 'cvLedgerInfo'];   // CV-Z — salwa CV-2a (`_cvFxRoundFx`, `_cueShot`, `_cueEncounterId`) usunięta
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;

@@ -385,15 +385,7 @@ withFlags(ON, () => {
   R._cvWpnKillLook('b1', e3);
   assert(e3.cvWreck?.t0 === null && e3.cvWreck?.tDrift === null && R._cvDmgDrift?.('b1', env) === null,
     'D8f KONTROLA: bez epoki (nowa sesja — wczytanie zapisu) wrak odbudowany bez osi dryfu — stoi w swojej kotwicy');
-  // KONTROLA: flaga OFF — łata CV-3a3 (`_spawnFx`) w chwili trafienia
-  GAME_CONFIG.FEATURES.cvDamage = false;
-  const R2 = fakeR();
-  const s2 = [addShip(R2, 'a1', { x: -0.05 }), addShip(R2, 'b1', { x: 0.05, enemy: true })];
-  kosmosFor(s2);
-  R2._cvWpnRoundFx(payload(2, [pev('a1', 'b1', 'short', { killed: true, hpAfter: -4 })]));
-  runFrames(R2, (R2._cvLedger?.killAt?.('b1') ?? 0) + 200);
-  GAME_CONFIG.FEATURES.cvDamage = true;
-  assert(R2.legacy >= 1 && !R2._cvDmg && (R2._fxEngine?.stats?.().pools?.blast?.spawned ?? 0) === 0, 'D8d KONTROLA: `cvDamage` OFF — łata (kula ognia `_spawnFx`), pule CV-5 puste, stanu CV-5 brak');
+  // CV-Z — D8d (KONTROLA „`cvDamage` OFF — łata CV-3a3 w chwili trafienia”) wycofane razem z flagą.
 });
 
 // ── D9 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

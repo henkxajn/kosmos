@@ -66,7 +66,7 @@ export class HudCombatLayer {
     const list = tr._stageFrame?.list ?? [];
     const now = Number(tr._presClock?.nowMs) || 0;
     const vm = K.vesselManager, intel = K.intelSystem;
-    const led = FE.cvWeapons ? (tr._cvLedger ?? null) : null;
+    const led = tr._cvLedger ?? null;
     const sel = F.sel ?? {};
     const selIds = new Set([...(sel.vesselIds ?? []), sel.leadId].filter((x) => x != null).map(String));
     const clusters = [];

@@ -169,9 +169,9 @@ header('T6  źródło `ThreeRenderer` — biały błysk trafienia');
   const body = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
   // CV-Z — PRZECELOWANE ŚWIADOMIE (plan §4 CV-Z: „combat_hp_bar T4-T6” do wycofania): biały błysk trafienia P2b (`_spawnHitGlow`)
   //   i dawne smugi (`_spawnCombatTracer`) usunięte razem ze ścieżką bez silnika FX; trafienie pokazuje rejestr salw (CV-4a).
-  const fx = body('  _onCombatRoundFx(payload) {');
-  assert(!/_spawnCombatTracer|_spawnHitGlow/.test(tr) && /this\._cvFxRoundFx\(events, pace\)/.test(fx),
-    'T6 CV-Z: błysku na modelu i dawnych smug nie ma w źródle; salwa idzie do silnika FX');
+  const fx = body('  _cvWpnRoundFx(payload) {');
+  assert(!/_spawnCombatTracer|_spawnHitGlow|_onCombatRoundFx/.test(tr) && fx.length > 0,
+    'T6 CV-Z: błysku na modelu, dawnych smug i salwy CV-2a nie ma w źródle; salwę rysuje język broni (`_cvWpnRoundFx`)');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

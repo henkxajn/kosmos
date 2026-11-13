@@ -52,10 +52,10 @@ export class CvOrbital {
     this.stats = { started: 0, refusedView: 0, refusedFlags: 0, ended: 0, aborted: 0, roundsFed: 0, killsShown: 0, hangarKills: 0, deferred: 0, last: null };
   }
 
-  /** Warunki powtórki: `cvOrbital` + rejestr salw (`cvWeapons` / `fcCombatFx`). */
+  /** Warunki powtórki: `cvOrbital` + efekty walki (`fcCombatFx`). */
   get flag() {
     const F = GAME_CONFIG.FEATURES;
-    return !!(F?.cvOrbital && F?.cvWeapons && F?.fcCombatFx);
+    return !!(F?.cvOrbital && F?.fcCombatFx);
   }
 
   get tuning() { return this.r?.cvTuning ?? ORB_TUNING; }

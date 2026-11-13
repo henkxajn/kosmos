@@ -92,7 +92,7 @@ import { t } from '../i18n/i18n.js';
 import {
   weaponColor as fxWeaponColor,
   FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
-  FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR, combatFxPace,
+  FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
   isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_RING, engagementRingBand,
@@ -1846,7 +1846,6 @@ export class ThreeRenderer {
     }));
 
     // Fleet Command Console (Slice 1) — smugi walki na żywej mapie (FX-only).
-    EventBus.on('combat:roundFx', safe((p) => this._onCombatRoundFx(p)));
     // ARC CV-4a (flaga `cvWeapons`) — język broni i rejestr salw: osobny słuchacz z PEŁNYM ładunkiem (numer rundy, ziarno starcia);
     // salwa CV-2a (`_cvFxRoundFx`) pod tą flagą ustępuje, więc strzał rysuje się raz.
     EventBus.on('combat:roundFx', safe((p) => this._cvWpnRoundFx(p)));
@@ -5049,10 +5048,10 @@ export class ThreeRenderer {
     const placeModel = ([template, hardpoints]) => {
       if (this._vessels.has(vessel.id)) return;
       const isWreck = (this._cvVisWreck?.(vessel) ?? !!vessel?.isWreck);   // ARC CV-8a — wrak powtórki bitwy orbitalnej dopiero po zniszczeniu
-      // ARC CV-4a (flaga `cvWeapons`) — okręt, którego zniszczenie rejestr salw już pokazał, przebudowany w trakcie bitwy (np. zmiana
-      // presetu tekstur): od razu wygląd wraku, bez smugi i świateł (wrakiem w logice zostanie dopiero na końcu bitwy).
-      const killedLook = !isWreck && ((!!GAME_CONFIG.FEATURES?.cvWeapons && this._cvLedger?.killState?.(vessel.id) === 'shown')
-        || (this._cvDebugKilled?.has(vessel.id) === true && !!GAME_CONFIG.FEATURES?.cvDamage));   // ARC CV-5 — zniszczenie z `cvExplode`
+      // ARC CV-4a — okręt, którego zniszczenie rejestr salw już pokazał, przebudowany w trakcie bitwy (np. zmiana presetu tekstur):
+      // od razu wygląd wraku, bez smugi i świateł (wrakiem w logice zostanie dopiero na końcu bitwy).
+      const killedLook = !isWreck && (this._cvLedger?.killState?.(vessel.id) === 'shown'
+        || this._cvDebugKilled?.has(vessel.id) === true);   // ARC CV-5 — zniszczenie z `cvExplode`
       const key = `${slotInfo.variant}/${slotInfo.slot}`;
       const hp = this._cvLightTest ? this._cvLightTestDoc(key, template, hardpoints) : hardpoints;
       const rig = buildShipRig({
@@ -6939,48 +6938,6 @@ export class ThreeRenderer {
       onTick: (ef, p) => { ef.mesh.scale.setScalar(ef.baseScale * (0.001 + p * 3)); } });
   }
 
-  // ── Slice 1 — smugi walki na żywej mapie (FX-only, z combat:roundFx) ─────
-  _onCombatRoundFx(payload) {
-    if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
-    // ARC CV-6b2 (Finding 630, decyzja właściciela §3.2-23) — przełącznik `uiPrefs.combatFxVisible` WYCOFANY: chował każdy efekt
-    // walki wbrew celowi arca (wydajność dostaje własne pokrętło w presetach CV-2b); klucz w starym zapisie nie ma już czytelnika.
-    // POLISH P2a (CP7, Finding 453) — salwa i znacznik WYŁĄCZNIE dla starcia w oglądanym układzie: pozycje ładunku są
-    // lokalne dla układu starcia — w innym układzie smugi, błyski i pierścień lądowały w pustym punkcie widoku.
-    if (!isEngagementInView({ encounterSystemId: payload?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
-    const events = payload?.events ?? [];
-    // POLISH P2b (D3, A7) — czasy efektów z czasu realnego rundy oglądanego starcia (`combatRoundMs()`, CP2): salwa trzyma
-    // się do następnej rundy zamiast gasnąć po 260 ms (stałe strojone pod dawne 110 ms na rundę).
-    const pace = combatFxPace(window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? null);
-    // ARC CV-2a — salwa przez silnik FX z pulami (CV-Z — dawne smugi `THREE.Line` z błyskami usunięte).
-    this._cvFxRoundFx(events, pace);
-  }
-
-  // ── ARC CV-2a — silnik FX walki (pule, HDR, zegar prezentacji; flaga `cvFxEngine`) ──────────────────────────────
-  // Salwa jak dziś (`_onCombatRoundFx`): endpointy z `_combatEndpointWorld` (pozycja RYSOWANA, bramka mgły wojny — wróg
-  // niewykryty = brak strzału), rozrzut `(stagger % 8) × staggerMs`, czasy `combatFxPace`. Różnice: wiązka lasera i smuga
-  // pocisku z rdzeniem HDR i podłogą szerokości na ekranie, błysk / pierścień osłony / błysk na modelu jako iskry z pul;
-  // wiek efektu z zegara prezentacji (pauza zatrzymuje wszystko). Pudło — jak dziś: słabsza smuga do celu, bez błysku.
-  _cvFxRoundFx(events, pace) {
-    if (GAME_CONFIG.FEATURES?.cvWeapons) return;   // ARC CV-4a — salwę rysuje język broni (`_cvWpnRoundFx`, rejestr salw)
-    const eng = this._ensureFxEngine();
-    const vm = window.KOSMOS?.vesselManager;
-    // ARC CV-2b (F8) — sygnały walki w chwili, w której efekt pojawi się na ekranie (strzał po rozrzucie salwy,
-    // trafienie po opóźnieniu błysku); tylko strzały, które się rysują (ta sama bramka mgły wojny).
-    const cues = this._ensureCueBus?.() ?? null;
-    const encId = cues ? this._cueEncounterId(events) : null;
-    let stagger = 0;
-    for (const ev of events) {
-      const aw = this._combatEndpointWorld(ev.attacker, ev.aPos);
-      const tw = this._combatEndpointWorld(ev.target, ev.tPos);
-      if (!aw || !tw) continue;  // któryś endpoint fog-gated (wróg unknown) → skip, brak przecieku
-      const delayMs = (stagger++ % 8) * pace.staggerMs;
-      const tv = vm?.getVessel?.(ev.target);
-      eng.spawnShot({ a: aw, t: tw, category: ev.category, hit: ev.hit, blockedByShield: ev.blockedByShield, delayMs, pace,
-        attackerId: ev.attacker, targetId: ev.target, targetSize: tv ? vesselTargetSize(tv) : 0 });
-      if (cues) this._cueShot(cues, ev, aw, tw, delayMs, pace, encId, tv);
-    }
-  }
-
   // ── ARC CV-2b — szyna sygnałów walki (plan §2.9, F8, D-CV-19) ─────────────────────────────────────────
   // Szyna leniwie, przy pierwszej salwie / pierwszym wraku pod flagą; funkcje rzutu i wysyłki zbudowane RAZ (bez alokacji THREE
   // w klatce). Pozycja sygnału = pozycja RYSOWANA statku w chwili wysyłki (scena bitwy), panorama z przestrzeni kamery.
@@ -7004,26 +6961,6 @@ export class ThreeRenderer {
     return this._cueBus;
   }
 
-  // Id starcia salwy (`roundFx` go nie niesie do metod salwy): starcie, w którym jest strzelec pierwszego zdarzenia.
-  _cueEncounterId(events) {
-    const id = events?.[0]?.attacker;
-    if (id == null) return null;
-    return window.KOSMOS?.deepSpaceCombatSystem?._findActiveEncounterContaining?.(id)?.id ?? null;
-  }
-
-  // Strzał → „fire” (strzelec, po rozrzucie salwy); trafienie → „shieldHit” (osłona przyjęła część) albo „impact” (cel, po
-  // opóźnieniu błysku). Czas = zegar prezentacji (ten sam, na którym silnik FX rysuje strzał).
-  _cueShot(cues, ev, aw, tw, delayMs, pace, encId, tv) {
-    const now = this._presClock?.nowMs ?? 0;
-    const weapon = cueWeaponOfCategory(ev.category);
-    const av = window.KOSMOS?.vesselManager?.getVessel?.(ev.attacker);
-    cues.schedule(now + delayMs, 'fire', weapon, av ? cueSizeOfClass(vesselSizeClass(av)) : null,
-      aw.x, aw.y ?? 0.3, aw.z, encId, ev.attacker ?? null);
-    if (!ev.hit) return;
-    cues.schedule(now + delayMs + (pace?.flashDelayMs ?? 0), ev.blockedByShield > 0 ? 'shieldHit' : 'impact', weapon,
-      tv ? cueSizeOfClass(vesselSizeClass(tv)) : null, tw.x, tw.y ?? 0.3, tw.z, encId, ev.target ?? null);
-  }
-
   // Wybuch wraku → „destroyed” (rozmiar z klasy kadłuba), od razu — razem z kulą ognia `_spawnExplosion`.
   _cueDestroyed(vesselId, vessel, entry) {
     const p = entry?.sprite?.position;
@@ -7045,10 +6982,10 @@ export class ThreeRenderer {
   // z czasami z rejestru (ładowanie lasera → wiązka; błysk wylotu → pocisk → iskry; start rakiety → tor łukiem; pudło leci za
   // cel), strzał z wieżyczki pliku hardpointów; sygnały walki w chwilach rejestru. HP pokazywane i zniszczenie — `_cvWpnTick`.
   // Bramka mgły wojny jak w CV-2a (`_combatEndpointWorld`): niewidoczny koniec — bez efektu i bez sygnału (rejestr i tak liczy
-  // HP pokazywane). Wymaga silnika FX (`cvFxEngine`); flaga OFF — salwa CV-2a co do bitu.
+  // HP pokazywane). CV-Z — jedyna ścieżka salw (dawna salwa CV-2a `_cvFxRoundFx` i jej słuchacz `_onCombatRoundFx` usunięte).
   _cvWpnRoundFx(payload) {
     const F = GAME_CONFIG.FEATURES;
-    if (!F?.fcCombatFx || !F?.cvWeapons) return;
+    if (!F?.fcCombatFx) return;
     if (!isEngagementInView({ encounterSystemId: payload?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
     const events = payload?.events ?? [];
     if (!events.length || payload.encounterId == null || !Number.isFinite(payload.round)) return;
@@ -7358,10 +7295,10 @@ export class ThreeRenderer {
   // z puli (`ShieldBubbles`: pozycja i obrót sprite'a × rama kanoniczna — idą za sceną i choreografią), żar osmaleń. Statek bez osłony —
   // bez bańki. Wynik bitwy nietknięty (keeper `cv_fx_results` A9).
 
-  /** Czy ścieżka CV-4b działa: `cvShields` + rejestr salw (`cvWeapons`) + silnik FX (`cvFxEngine`) + efekty walki (`fcCombatFx`). */
+  /** Czy ścieżka CV-4b działa: efekty walki (`fcCombatFx`). */
   _cvShdOn() {
     const F = GAME_CONFIG.FEATURES;
-    return !!(F?.cvShields && F?.cvWeapons && F?.fcCombatFx);
+    return !!F?.fcCombatFx;
   }
 
   _cvShdState() {
@@ -7605,7 +7542,7 @@ export class ThreeRenderer {
   // Żar plam stygnie (tylko dopóki coś jest ciepłe); preset bez osmaleń (Medium / Low) — plamy zdjęte; statek usunięty — zapis zdjęty.
   _cvShdScorchTick(st) {
     if (!st.scorchOn) return;
-    const on = scorchEnabled(this._gfx?.eff ?? null) && GAME_CONFIG.FEATURES?.cvShields;
+    const on = scorchEnabled(this._gfx?.eff ?? null);
     const T = this.cvTuning;
     const cool = Math.max(1, T.SCORCH_COOL_MS ?? 1800);
     for (const [id, list] of st.scorch) {
@@ -7700,7 +7637,7 @@ export class ThreeRenderer {
           osmalenia: st.scorch.get(id)?.length ?? 0 });
       }
     }
-    return { cvShields: !!GAME_CONFIG.FEATURES?.cvShields, on: this._cvShdOn(), fxTimeScale: this.cvTuning?.FX_TIME_SCALE ?? 1,
+    return { on: this._cvShdOn(), fxTimeScale: this.cvTuning?.FX_TIME_SCALE ?? 1,
       faleNaBanke: this._cvShdRipples(), osmaleniaWlaczone: scorchEnabled(this._gfx?.eff ?? null),
       zegarMs: st ? Math.round(st.now) : null, statki: ships, liczniki: st ? { ...st.stats, plan: { ...st.states.stats } } : null,
       pula: this._shieldBubbles?.stats() ?? null, rozgrzewka: this._shieldBubblesPrewarm ?? null };
@@ -7716,10 +7653,10 @@ export class ThreeRenderer {
   // do pozycji logicznej po końcu bitwy (Finding 627). Stany uszkodzeń z HP POKAZYWANEGO: dym ≤ 75 %, ogień ≤ 50 %, krztuszący się
   // silnik ≤ 25 %. Budżety z presetu (`explosionBudget`); strzałów nic tu nie dotyka. Wynik bitwy nietknięty (keeper `cv_fx_results` A8).
 
-  /** Czy ścieżka CV-5 działa: `cvDamage` (wymaga silnika FX z pulami — `cvFxEngine` — i efektów walki `fcCombatFx`). */
+  /** Czy ścieżka CV-5 działa: efekty walki (`fcCombatFx`). */
   _cvDmgOn() {
     const F = GAME_CONFIG.FEATURES;
-    return !!(F?.cvDamage && F?.fcCombatFx);
+    return !!F?.fcCombatFx;
   }
 
   _cvDmgState() {
@@ -7972,7 +7909,7 @@ export class ThreeRenderer {
     if (!encs.length || this._galaxyActive) return;
     const T = this.cvTuning;
     const B = explosionBudget(this._gfx?.eff ?? null);
-    const led = GAME_CONFIG.FEATURES?.cvWeapons ? this._cvLedger : null;
+    const led = this._cvLedger ?? null;
     const vm = K?.vesselManager;
     for (const enc of encs) {
       if (!isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: K?.activeSystemId })) continue;
@@ -8131,7 +8068,7 @@ export class ThreeRenderer {
     const levels = { 1: 0, 2: 0, 3: 0 };
     for (const [, e] of this._vessels) if (!e.cvKilled && !e.isWreck && e.cvDmgLevel > 0) levels[e.cvDmgLevel] = (levels[e.cvDmgLevel] ?? 0) + 1;
     const ps = this._fxEngine?.stats()?.pools;
-    return { cvDamage: !!GAME_CONFIG.FEATURES?.cvDamage, on: this._cvDmgOn(), fxTimeScale: this.cvTuning?.FX_TIME_SCALE ?? 1,
+    return { on: this._cvDmgOn(), fxTimeScale: this.cvTuning?.FX_TIME_SCALE ?? 1,
       dmgMs: st ? Math.round(st.now) : null, sequences: st?.seqs?.length ?? 0, stats: st ? { ...st.stats } : null,
       damageLevels: { dym: levels[1], ogien: levels[2], krztuszenie: levels[3] }, wrecks,
       pools: ps ? { smoke: ps.smoke, blast: ps.blast, debris: ps.debris } : null, prewarm: this._fxPrewarm ?? null };
@@ -8139,17 +8076,17 @@ export class ThreeRenderer {
 
   /**
    * ARC CV-4a — HP / osłona POKAZYWANE uczestnika (pasek walki, paski 3D): stan logiczny + obrażenia trafień jeszcze nie pokazanych.
-   * Flaga OFF albo brak rejestru — null (czytelnik zostaje przy stanie logicznym).
+   * Brak rejestru — null (czytelnik zostaje przy stanie logicznym).
    */
   cvPresentedState(vesselId, st) {
-    if (!GAME_CONFIG.FEATURES?.cvWeapons || !this._cvLedger || !st) return null;
+    if (!this._cvLedger || !st) return null;
     const pr = this._cvLedger.presented(vesselId, st.hp, st.shieldHP, st.hpStart, st.shieldHPStart);
     return { hp: pr.hp, shield: pr.shield, pending: pr.pending, killed: this._vessels.get(vesselId)?.cvKilled === true };
   }
 
-  /** ARC CV-4a — czy zdarzenie rundy (starcie, runda, indeks) zostało już pokazane (log paska walki pod flagą). */
+  /** ARC CV-4a — czy zdarzenie rundy (starcie, runda, indeks) zostało już pokazane (log paska walki). */
   cvEventShown(encounterId, round, index) {
-    if (!GAME_CONFIG.FEATURES?.cvWeapons || !this._cvLedger) return true;
+    if (!this._cvLedger) return true;
     return this._cvLedger.isEventShown(encounterId, round, index);
   }
 
@@ -8161,7 +8098,7 @@ export class ThreeRenderer {
   cvLedgerInfo({ rounds = 6 } = {}) {
     const led = this._cvLedger;
     const r2 = (x) => (Number.isFinite(x) ? Number(x.toFixed(2)) : null);
-    if (!led) return { cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons, ledger: null, odZaladowaniaStrony: { renderer: { ...this._cvWpnStats } }, legenda: LEDGER_INFO_LEGEND };
+    if (!led) return { ledger: null, odZaladowaniaStrony: { renderer: { ...this._cvWpnStats } }, legenda: LEDGER_INFO_LEGEND };
     const now = this._presClock.nowMs;
     const vm = window.KOSMOS?.vesselManager;
     const nameOf = (id) => vm?.getVessel?.(id)?.name ?? id;
@@ -8183,7 +8120,7 @@ export class ThreeRenderer {
       }
     }
     const zgodne = hp.filter((h) => h.czeka === 0).every((h) => h.hpLogika === h.hpPokazane);
-    return { cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons, presMs: Math.round(now), starcia: encs, hp, hpBezCzekajacychZgodne: zgodne,
+    return { presMs: Math.round(now), starcia: encs, hp, hpBezCzekajacychZgodne: zgodne,
       odZaladowaniaStrony: { rejestr: { ...led.stats, czekajace: led.pendingCount() }, renderer: { ...this._cvWpnStats } }, legenda: LEDGER_INFO_LEGEND };
   }
 
@@ -8878,7 +8815,7 @@ export class ThreeRenderer {
     }
     // ARC CV-4a (flaga `cvWeapons`) — „żywy” do POKAZANEGO zniszczenia (rejestr salw): okręt zabity w logice, którego trafienie
     // zabijające jeszcze leci, dalej tańczy i celuje; od chwili trafienia — postawa „wyłączony” (silnik gaśnie, bez skrętu).
-    const wpnLed = GAME_CONFIG.FEATURES?.cvWeapons ? this._cvLedger : null;
+    const wpnLed = this._cvLedger ?? null;
     const aliveOf = (id) => {
       if (wpnLed) { if (this._vessels.get(id)?.cvKilled) return false; if (wpnLed.killState(id) === 'pending') return true; }
       const hp = encOf.get(id)?.vesselStates?.get?.(id)?.hp; return !(Number.isFinite(hp) && hp <= 0);
@@ -9156,7 +9093,7 @@ export class ThreeRenderer {
     const cone = e?.exhaust;
     if (!cone) return;
     e._choreoExhaust = true;
-    if (e.cvDmgSputter != null && GAME_CONFIG.FEATURES?.cvDamage) intensity *= e.cvDmgSputter;   // ARC CV-5 — krztuszący się silnik (≤ 25 % HP)
+    if (e.cvDmgSputter != null) intensity *= e.cvDmgSputter;   // ARC CV-5 — krztuszący się silnik (≤ 25 % HP)
     const flick = 0.8 + 0.2 * Math.sin(this._stageClock.nowMs * 0.02 + (e._exhaustPhase ?? 0));
     // ARC CV-3c (`cvChoreo2`) — wylot dysz zamiast stożka: jasność z choreografii, zakrztuszenie migocze wylotem (iskry z dyszy — CV-5)
     if (this._nozzleGlowSet?.(e, intensity, flick)) return;
@@ -9434,7 +9371,7 @@ export class ThreeRenderer {
     const keep = new Set();
     // ARC CV-4a (flaga `cvWeapons`, Finding 614) — HP POKAZYWANE z rejestru salw (spada w chwili trafienia); zniszczenie pokazane —
     // pasek znika razem z wyglądem wraku.
-    const led = GAME_CONFIG.FEATURES?.cvWeapons ? this._cvLedger : null;
+    const led = this._cvLedger ?? null;
     const stOf = led ? new Map() : null;
     if (stOf) for (const enc of list) for (const [id, st] of enc.vesselStates ?? []) stOf.set(id, st);
     this.camera.updateMatrixWorld();
