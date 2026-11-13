@@ -2073,6 +2073,8 @@ export class UIManager {
   // isOverUI — blokada kamery gdy kursor nad UI
   // ══════════════════════════════════════════════════════════════
   isOverUI(rawX, rawY) {
+    // ARC CV-7 — tryb nagrywania: interfejs niewidoczny, mysz należy do mapy (kamera w całym oknie).
+    if (window.KOSMOS?.captureMode) return false;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
 
@@ -2153,6 +2155,7 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   handleClick(x, y) {
     this._dirty = true;
+    if (window.KOSMOS?.captureMode) return false;   // ARC CV-7 — tryb nagrywania: klik nad niewidocznym interfejsem idzie do mapy
     // ARC GALAXY G3-B — klik nad powierzchnią UI (kolumny, pasy) zamyka picker [ Wyślij ▼ ], a sam klik idzie dalej; klik nad mapą
     // rozstrzyga warstwa HUD (`HudGalaxySendPickerLayer.handleClick`).
     if (window.KOSMOS?.galaxyMode?.sendPicker && this.isOverUI(x, y)) window.KOSMOS.galaxyMode.closeSendPicker();
@@ -2257,6 +2260,7 @@ export class UIManager {
   // Obsługa scrolla
   handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {
     this._dirty = true;
+    if (window.KOSMOS?.captureMode) return false;   // ARC CV-7 — tryb nagrywania: kółko należy do kamery
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%

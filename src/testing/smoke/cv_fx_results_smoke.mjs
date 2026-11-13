@@ -53,6 +53,11 @@
 //      (`cvWeapons` OFF jawnie — flaga domyślnie ON od CV-4a)
 //   A9 (CV-4b, flaga `cvShields`) — bańki osłon (plan rundy, fale, rozpad), punkt trafienia na bańce / poszyciu, osmalenia: wynik
 //      ON + cvWeapons + cvDamage + cvShields == bez renderera (sygnatura, ślad każdej rundy, losowania gry, sloty orbit); A1–A8 — cvShields OFF jawnie
+//   A11 (CV-7, flaga `cvDirector`) — kamera reżysera i SPOWOLNIENIE BOHATERA: tryb ON (pełny — CV-3c / CV-4b / CV-5) z prawdziwym
+//      `CvDirector` (chip włączony) i spowolnieniem wymuszanym przy KAŻDEJ okazji (tempo obu zegarów prezentacji 0,35× / 1,25× przez
+//      całą bitwę) == bez renderera (sygnatura z wrakami, ślad każdej rundy, losowania gry, sloty orbit); świadek — tempo prezentacji
+//      naprawdę się zmieniało (klatki z tempem ≠ 1, najmniejsze 0,35×, opóźnienie > 0) i zegar prezentacji zostawał za realnym;
+//      Finding 711 — scena zostaje po końcu logiki, dopóki rejestr ma zniszczenia do pokazania (A10 bez flagi — ani klatki)
 //   A8 (CV-5, flaga `cvDamage`) — wybuchy warstwowe, stany uszkodzeń z HP pokazywanego, wraki, pula świateł, zegar efektów
 //      ZWOLNIONY (`cvTuning.FX_TIME_SCALE` 0,25 — tylko prezentacja): tryb ON + `cvWeapons` + `cvDamage` == ON + `cvWeapons` ==
 //      ON == bez renderera (sygnatura, ślad, losowania, sloty); świadek — sekwencje wybuchów i emitery stanów uszkodzeń naprawdę
@@ -87,6 +92,7 @@ const tryImport = async (rel) => { try { return await import(rel); } catch (e) {
 const STAGER = await tryImport('../../debug/CvBattleStager.js');
 const ENGINE = await tryImport('../../renderer/combat/FxEngine.js');
 const CLOCK  = await tryImport('../../renderer/combat/PresentationClock.js');
+const CVDIR  = await tryImport('../../renderer/CvDirector.js');                  // ARC CV-7 — kamera reżysera i spowolnienie bohatera (A11)
 const RECALL = await tryImport('../../systems/director/DirectorRecall.js');
 const STAGEL = await tryImport('../../renderer/combat/BattleStageLogic.js');   // CV-3a1 — scena bitwy
 const SZOOM  = await tryImport('../../renderer/combat/SemanticZoomLogic.js');
@@ -230,6 +236,7 @@ function fakeRenderer() {
       if (n) { R.camera.position.set(cx / n, 0.3 + 0.2, cz / n + 0.35); R.camera.lookAt(cx / n, 0.3, cz / n); R.camera.updateMatrixWorld(true); }
     }
     R._tickBattleStage?.();
+    if (!dscs.listActive().length && (R._stageFrame?.clusters ?? 0) > 0) R.lingerFrames = (R.lingerFrames ?? 0) + 1;   // CV-7 (Finding 711)
     if (R._stageMarks.size) { R.stagedFrames++; for (const m of R._stageMarks.values()) R.stageMaxK = Math.max(R.stageMaxK, m.k); }
     if (R._stageFrame?.list?.some?.((c) => c.shell)) R.shellFrames++;
     // ARC CV-3b — klatki z choreografią (przesunięcie od kotwicy) i największe przesunięcie [L]
@@ -337,7 +344,9 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  * Starcie ze stagera, rozegrane do końca. mode: 'none' (bez renderera) · 'off' (renderer, flaga OFF) · 'on' (flaga ON);
  * `control` — słuchacz salwy losujący z `Math.random` (KONTROLA przyrządu).
  */
-function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false, weapons = false, damage = false, shields = false, choreo2 = false } = {}) {
+function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false, weapons = false, damage = false, shields = false, choreo2 = false, director = false } = {}) {
+  const dirFlag = GAME_CONFIG.FEATURES.cvDirector;   // ARC CV-7 — A11: reżyser i spowolnienie tylko w trybie `director`
+  GAME_CONFIG.FEATURES.cvDirector = director === true;
   const damageFlag = GAME_CONFIG.FEATURES.cvDamage;   // ARC CV-5 — A8: wybuchy i stany uszkodzeń tylko w trybie `damage` (A1–A7 — OFF jawnie)
   GAME_CONFIG.FEATURES.cvDamage = damage === true;
   const shieldsFlag = GAME_CONFIG.FEATURES.cvShields;   // ARC CV-4b — A9: osłony tylko w trybie `shields` (A1–A8 — OFF jawnie)
@@ -366,6 +375,23 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
       GAME_CONFIG.FEATURES.cvChoreo2 = mode === 'on' && choreo2;   // CV-3c — lot wzdłuż kursu (A10); A1–A9 — CV-3b jawnie
       window.innerWidth = 1600; window.innerHeight = 1041;
       R = fakeRenderer();
+      if (director && CVDIR?.CvDirector) {   // ARC CV-7 (A11) — prawdziwy reżyser; spowolnienie wymuszane przy każdej okazji
+        R._cvDir = new CVDIR.CvDirector(R);
+        window.KOSMOS.uiPrefs = { ...(window.KOSMOS.uiPrefs ?? {}), cvDirector: true };
+        R.warpFrames = 0; R.warpMinRate = 1; R.warpMaxLag = 0; R.presBehind = 0;
+        const base = R.frame;
+        R.frame = function () {
+          const d = R._cvDir, Rms = window.KOSMOS.timeSystem?.combatRoundMs?.() ?? 1150;
+          if (d.warp.canStartHero(Rms)) d.warp.startHero(Rms);
+          d.tickWarp(clock.now);
+          if (R._presRate !== 1) R.warpFrames++;
+          R.warpMinRate = Math.min(R.warpMinRate, R._presRate);
+          R.warpMaxLag = Math.max(R.warpMaxLag, d.warp.lagMs);
+          d.tickCamera();   // bez kontrolera kamery (atrapa) — wyjście od razu; pętla renderu woła go tu
+          base();
+          R.presBehind = Math.max(R.presBehind, d.warp.lagMs);
+        };
+      }
       EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
       if (weapons) EventBus.on('combat:roundFx', (p) => R._cvWpnRoundFx(p));   // ARC CV-4a — drugi słuchacz renderera (pełny ładunek)
       // ARC CV-2b (A6) — wybuch wraku → sygnał „destroyed” (jak słuchacz `vessel:wrecked` renderera) i słuchacz `AudioSystem` po
@@ -409,6 +435,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
   GAME_CONFIG.FEATURES.cvWeapons = weaponsFlag;
   GAME_CONFIG.FEATURES.cvDamage = damageFlag;
   GAME_CONFIG.FEATURES.cvShields = shieldsFlag;
+  GAME_CONFIG.FEATURES.cvDirector = dirFlag;
   if (T5 && fxScale0 !== undefined) T5.FX_TIME_SCALE = fxScale0;
   const audio = presets ? (AUDIO_SYS?.cueStats?.() ?? null) : null;
   return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name, audio };
@@ -655,6 +682,22 @@ const CH2 = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true, shield
     `A10b sygnatura (z wrakami) i ślad każdej rundy identyczne ON + cvChoreo2 == ON (CV-3b) == bez renderera ${JSON.stringify(CH2.sig.battles)}`);
   assert(NONE.draws.length > 0 && same(CH2.draws, NONE.draws) && same(CH2.slots, NONE.slots),
     `A10c sekwencja losowań gry (${CH2.draws.length}) i sloty orbit identyczne — lot, wyloty, odłamki i dryf wraków nie dotykają strumienia gry`);
+}
+
+header('A11 — (CV-7) kamera reżysera i spowolnienie bohatera (wymuszane przez całą bitwę): wynik == bez renderera');
+const DIRB = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true, shields: true, choreo2: true, director: true });
+{
+  console.log(`     reżyser: klatek z tempem ≠ 1: ${DIRB.R?.warpFrames ?? 0}, najmniejsze tempo ${DIRB.R?.warpMinRate}, największe opóźnienie `
+    + `${DIRB.R?.warpMaxLag?.toFixed?.(1)} ms, bohaterów ${DIRB.R?._cvDir?.warp?.heroes ?? 0}; brak modułu: ${!CVDIR}`);
+  assert(!!CVDIR && (DIRB.R?.warpFrames ?? 0) > 100 && Math.abs((DIRB.R?.warpMinRate ?? 1) - 0.35) < 1e-9 && (DIRB.R?.warpMaxLag ?? 0) > 100
+    && (DIRB.R?._cvDir?.warp?.heroes ?? 0) >= 2,
+    'A11a świadek: spowolnienie naprawdę szło — tempo prezentacji 0,35× / 1,25× przez setki klatek, zegar prezentacji za realnym, ≥ 2 bohaterów');
+  assert((DIRB.R?.lingerFrames ?? 0) > 10 && !(CH2.R?.lingerFrames > 0),
+    `A11d (Finding 711) scena zostaje po końcu logiki, dopóki rejestr ma zniszczenia do pokazania (${DIRB.R?.lingerFrames ?? 0} klatek); bez flagi — ani klatki (${CH2.R?.lingerFrames ?? 0})`);
+  assert(same(DIRB.sig, NONE.sig) && same(DIRB.trace, NONE.trace) && same(DIRB.sig, CH2.sig) && same(DIRB.trace, CH2.trace),
+    `A11b sygnatura (z wrakami) i ślad każdej rundy identyczne reżyser + spowolnienie == ON (CV-3c) == bez renderera ${JSON.stringify(DIRB.sig.battles)}`);
+  assert(NONE.draws.length > 0 && same(DIRB.draws, NONE.draws) && same(DIRB.slots, NONE.slots),
+    `A11c sekwencja losowań gry (${DIRB.draws.length}) i sloty orbit identyczne — tempo prezentacji nie dotyka logiki ani strumienia gry`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

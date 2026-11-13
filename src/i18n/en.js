@@ -3415,6 +3415,16 @@ export default {
   'combatStrip.watchHint':  'Camera to this battle',
   'combatStrip.expand':     'Battle details',
   'combatStrip.collapse':   'Hide details',
+  // ARC CV-7 — director camera chip (flag `cvDirector`)
+  'combatStrip.director':        'Director',
+  'combatStrip.directorPaused':  'Director (paused)',
+  'combatStrip.directorHint':    'Director camera — picks the battle shots itself; a mouse drag, the wheel or a camera key gives you the camera back',
+  'combatStrip.directorOnHint':  'The director is filming this battle — click to turn it off',
+  'combatStrip.directorPausedHint': 'You took the camera — click to bring the director back',
+  // ARC CV-7 — reel recorder (F10)
+  'reel.rec':          '● REC {0}',
+  'reel.saved':        '✓ Saved {0}',
+  'reel.unsupported':  'Recording is not available in this browser',
   'combatTac.hp':              'HP {0}%',
   'combatTac.unknown':         'unknown contact',
   'combatTac.wreck':           'destroyed',

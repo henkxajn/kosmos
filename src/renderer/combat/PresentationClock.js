@@ -41,7 +41,7 @@ export class PresentationClock {
    * @param {{ paused?: boolean }} [state]
    * @returns {number} krok zastosowany do czasu prezentacji [ms]
    */
-  tick(realNowMs, { paused = false } = {}) {
+  tick(realNowMs, { paused = false, rate = 1 } = {}) {
     let step = 0;
     if (Number.isFinite(realNowMs)) {
       if (this._lastRealMs != null) {
@@ -50,6 +50,9 @@ export class PresentationClock {
       }
       this._lastRealMs = realNowMs;
     }
+    // ARC CV-7 (D-CV-24, §3.1-3) — mnożnik tempa prezentacji: spowolnienie bohatera (0,35×) i doganianie (1,25×) z kamery
+    // reżysera (`PresentationWarp`). Logika walki go nie widzi — krok tylko tego zegara. 1 = krok bez zmian (co do bitu).
+    if (rate !== 1 && Number.isFinite(rate) && rate >= 0) step *= rate;
     this.paused = !!paused;
     if (this.paused) step = 0;
     this.nowMs += step;

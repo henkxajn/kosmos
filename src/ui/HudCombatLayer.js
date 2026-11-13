@@ -645,13 +645,15 @@ export class HudCombatLayer {
     if (!P?.on) return false;
     // Decyzja 46 (2) — klik w znak bitwy = „Obserwuj” tej bitwy (ten sam ładunek co przycisk paska walki).
     const gz = this.glyphZoneAt(x, y);
-    if (gz) { EventBus.emit('camera:watchBattle', { ...gz.payload }); return true; }
+    const dir = (typeof window !== 'undefined') ? window.KOSMOS?.threeRenderer?.cvDirector : null;   // ARC CV-7 — klik oddaje kamerę graczowi
+    if (gz) { dir?.takeBack?.('glyph'); EventBus.emit('camera:watchBattle', { ...gz.payload }); return true; }
     const z = tacHitAt(this._zones, x, y, (P.T ?? tacTuning(null)).TAC_HIT_PX);
     if (!z || !z.clickable) return false;
     const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
     const vm = K?.vesselManager;
     const target = this.clickTargetFor(z, (id) => vm?.getVessel?.(id) ?? null);
     if (!target) return false;
+    dir?.takeBack?.('icon');
     clickObject(target, { K, emit: (n, p) => EventBus.emit(n, p) });
     return true;
   }

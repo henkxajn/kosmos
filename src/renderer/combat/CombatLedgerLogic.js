@@ -476,6 +476,61 @@ export class CombatLedger {
 
   pendingCount() { return this._pending.length; }
 
+  // ── ARC CV-7 — odczyty kamery reżysera (wyłącznie odczyt; harmonogram nietknięty) ──────────────────────────────────────────
+
+  /**
+   * Zniszczenia zaplanowane, jeszcze nie pokazane, w starciach `encIds` (null — wszystkie), w kolejności chwili pokazania:
+   * `{ vesselId, at, impactAt, encounterId, attacker }` (`attacker` — strzelec trafienia zabijającego, gdy jeszcze czeka).
+   */
+  upcomingKills(encIds = null) {
+    const set = encIds == null ? null : new Set([...encIds].map(String));
+    const out = [];
+    for (const [vid, k] of this._kills) {
+      if (k.shown || !Number.isFinite(k.at)) continue;
+      if (set && !set.has(String(k.encounterId))) continue;
+      const x = this._pending.find((y) => y.killed && y.target === vid && y.encounterId === k.encounterId) ?? null;
+      out.push({ vesselId: vid, at: k.at, impactAt: k.impactAt, encounterId: k.encounterId, attacker: x?.attacker ?? null });
+    }
+    return out.sort((a, b) => a.at - b.at || (a.vesselId < b.vesselId ? -1 : 1));
+  }
+
+  /** Czy w starciach `encIds` (null — wszystkie) coś jeszcze czeka na pokazanie (trafienie albo zniszczenie). */
+  hasPending(encIds = null) {
+    const set = encIds == null ? null : new Set([...encIds].map(String));
+    if (this._pending.some((x) => !set || set.has(String(x.encounterId)))) return true;
+    for (const [, k] of this._kills) if (!k.shown && (!set || set.has(String(k.encounterId)))) return true;
+    return false;
+  }
+
+  /**
+   * Najzajętsze pary strzelec → cel w starciach `encIds` ze strzałami w oknie [fromMs, toMs] (chwila strzału): `{ attacker, target,
+   * shots, dmg }` malejąco (strzały, obrażenia, klucz — deterministycznie).
+   */
+  pairIntensity(encIds = null, fromMs = -Infinity, toMs = Infinity) {
+    const set = encIds == null ? null : new Set([...encIds].map(String));
+    const acc = new Map();
+    for (const [id, es] of this._enc) {
+      if (set && !set.has(String(id))) continue;
+      for (const r of es.rounds.values()) for (const x of r.entries) {
+        if (!(x.fireAt >= fromMs && x.fireAt <= toMs)) continue;
+        const key = `${x.attacker}>${x.target}`;
+        const a = acc.get(key) ?? { attacker: x.attacker, target: x.target, shots: 0, dmg: 0, key };
+        a.shots++; a.dmg += x.dmg;
+        acc.set(key, a);
+      }
+    }
+    return [...acc.values()].sort((a, b) => b.shots - a.shots || b.dmg - a.dmg || (a.key < b.key ? -1 : 1));
+  }
+
+  /** Ostatni cel strzelca (najpóźniejszy strzał do chwili `nowMs`) albo null. */
+  lastTargetOf(attacker, nowMs = Infinity) {
+    let best = null;
+    for (const [, es] of this._enc) for (const r of es.rounds.values()) for (const x of r.entries) {
+      if (x.attacker === attacker && x.fireAt <= nowMs && (!best || x.fireAt > best.fireAt)) best = x;
+    }
+    return best?.target ?? null;
+  }
+
   /**
    * Sprzątanie: rundy w pełni pokazane starsze niż `keepMs` (zostaje `keepRounds` ostatnich na starcie), starcia nieaktywne
    * bez czekających zdarzeń, zniszczenia pokazane dawno temu (starcie już nieaktywne).

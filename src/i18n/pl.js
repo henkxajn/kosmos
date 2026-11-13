@@ -3418,6 +3418,16 @@ export default {
   'combatStrip.watchHint':  'Kamera na tę bitwę',
   'combatStrip.expand':     'Szczegóły bitwy',
   'combatStrip.collapse':   'Zwiń szczegóły',
+  // ARC CV-7 — chip kamery reżysera (flaga `cvDirector`)
+  'combatStrip.director':        'Reżyser',
+  'combatStrip.directorPaused':  'Reżyser (wstrzymany)',
+  'combatStrip.directorHint':    'Kamera reżysera — sama dobiera ujęcia bitwy; ruch myszą, kółko albo klawisz kamery oddaje ci kamerę',
+  'combatStrip.directorOnHint':  'Reżyser prowadzi tę bitwę — kliknij, aby wyłączyć',
+  'combatStrip.directorPausedHint': 'Przejąłeś kamerę — kliknij, aby reżyser wrócił',
+  // ARC CV-7 — nagrywarka rolek (F10)
+  'reel.rec':          '● REC {0}',
+  'reel.saved':        '✓ Zapisano {0}',
+  'reel.unsupported':  'Nagrywanie niedostępne w tej przeglądarce',
   'combatTac.hp':              'HP {0}%',
   'combatTac.unknown':         'nieznany kontakt',
   'combatTac.wreck':           'zniszczony',

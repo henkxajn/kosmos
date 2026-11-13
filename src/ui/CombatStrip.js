@@ -239,9 +239,15 @@ export class CombatStrip {
     const roundW = Math.max(...lines.map((l) => wOf(l.round)));
     const watchLabel = `[ ${t('combat.watchBattle')} ]`;
     const watchW = wOf(watchLabel);
+    // ARC CV-7 (flaga `cvDirector`) — chip kamery reżysera na liniach bitew w oglądanym układzie: „[ Reżyser ]” (wyłączony albo gotowy),
+    // „[ ● Reżyser ]” (prowadzi tę bitwę), „[ Reżyser (wstrzymany) ]” (gracz przejął kamerę). Bez flagi — bez chipa (szerokość jak dziś).
+    const dirOn = !!GAME_CONFIG.FEATURES?.cvDirector && !!K?.threeRenderer?.cvDirector;
+    const dirLabels = dirOn ? { off: `[ ${t('combatStrip.director')} ]`, on: `[ ● ${t('combatStrip.director')} ]`,
+      paused: `[ ${t('combatStrip.directorPaused')} ]` } : null;
+    const dirW = dirOn ? Math.max(wOf(dirLabels.off), wOf(dirLabels.on), wOf(dirLabels.paused)) + S.CHIP_GAP : 0;
     const togW = Math.max(wOf('[ ▼ ]'), wOf('[ ▲ ]'));   // glify jak „[ Rozkazy ▼ ]” panelu statku T5
     const sideW = cntW + 4 + S.BAR_W + 4 + pctW;
-    const fixedW = 2 * S.PAD_X + glyphW + S.FIELD_GAP + sideW + S.FIELD_GAP + sideW + S.FIELD_GAP + roundW + S.FIELD_GAP + watchW + S.CHIP_GAP + togW;
+    const fixedW = 2 * S.PAD_X + glyphW + S.FIELD_GAP + sideW + S.FIELD_GAP + sideW + S.FIELD_GAP + roundW + S.FIELD_GAP + watchW + S.CHIP_GAP + togW + dirW;
     const locW0 = Math.min(locNat, S.LOC_MAX_W);
 
     // Rozwinięcie (bitwa widoczna w bloku): treść i wysokość.
@@ -315,6 +321,13 @@ export class CombatStrip {
       const payload = stripWatchPayload(l.row);
       const chY = lr.y, chH = lr.h;
       if (payload) chip(watchLabel, wx, chY, chH, { kind: 'watch', id: l.row.id, payload }, t('combatStrip.watchHint'));
+      if (dirOn && l.row.inView) {
+        const c = K.threeRenderer.cvDirector.chipFor(l.row.id);
+        const st = c.state === 'paused' && c.mine ? 'paused' : c.state !== 'off' && c.mine ? 'on' : 'off';
+        const lbl = dirLabels[st];
+        const hint = t(st === 'paused' ? 'combatStrip.directorPausedHint' : st === 'on' ? 'combatStrip.directorOnHint' : 'combatStrip.directorHint');
+        chip(lbl, wx - S.CHIP_GAP - wOf(lbl), chY, chH, { kind: 'director', id: l.row.id }, hint);
+      }
       const open = this._expanded?.id === l.row.id;
       chip(open ? '[ ▲ ]' : '[ ▼ ]', tx, chY, chH, { kind: 'toggle', id: l.row.id }, t(open ? 'combatStrip.collapse' : 'combatStrip.expand'));
     });
@@ -452,7 +465,7 @@ export class CombatStrip {
   chipAt(x, y) {
     if (!this.isOver(x, y)) return null;
     const z = stripHitAt(this._zones, x, y);
-    return z?.kind === 'watch' || z?.kind === 'toggle' ? z.kind : null;
+    return z?.kind === 'watch' || z?.kind === 'toggle' || z?.kind === 'director' ? z.kind : null;
   }
 
   /** Kursor (px logiczne) — podświetlenie chipów i podpowiedź w następnej klatce. */
@@ -466,6 +479,12 @@ export class CombatStrip {
     if (!this.isOver(x, y)) return false;
     const z = stripHitAt(this._zones, x, y);
     if (z?.kind === 'watch' && z.payload) { emit('camera:watchBattle', { ...z.payload }); return true; }
+    if (z?.kind === 'director') {   // ARC CV-7 — chip reżysera: włącz (tę bitwę) / wyłącz / wznów po przejęciu
+      const dir = (typeof window !== 'undefined') ? window.KOSMOS?.threeRenderer?.cvDirector : null;
+      dir?.chipClick?.(z.id);
+      if (typeof window !== 'undefined' && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+      return true;
+    }
     if (z?.kind === 'toggle') {
       const row = this._rowsById.get(z.id);
       if (this._expanded?.id === z.id || !row) this.collapse();

@@ -55,6 +55,15 @@
 //   cvTactical(1) / cvTactical(0)       — ARC CV-6a: flaga `cvTactical` (warstwa taktyczna: ikony klas, znak bitwy z daleka, linie
 //                                         ognia, mikropaski, ramka, pasma zasięgu; uczestnicy bez etykiet, znaczników i pasków HP 3D)
 //                                         ON / OFF, od następnej klatki; OFF = etykiety, znaczniki i paski HP 3D jak dziś
+//   cvDirector(1) / cvDirector(0)       — ARC CV-7: kamera reżysera WŁĄCZONA / WYŁĄCZONA (jak chip „Reżyser” na pasku walki); prowadzi
+//                                         bitwę w oglądanym układzie, każde wejście kamery gracza ją wstrzymuje, chip wznawia
+//   directorInfo()                      — ARC CV-7: bieżące ujęcie, następne, bohater (spowolnienie, opóźnienie w R), kto ma kamerę
+//   cv916(1) / cv916(0)                 — ARC CV-7: przewodnik 9:16 (kadr rolki, poza nim przyciemnienie); reżyser kadruje w nim
+//   cvCapture(1) / cvCapture(0)         — ARC CV-7: tryb nagrywania — bez interfejsu (klawisz F9, wyjście Esc albo F9); z 9:16 —
+//                                         cienka ramka poza kadrem; zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE
+//   cvDirectorFlag(1) / cvDirectorFlag(0) — ARC CV-7: flaga `cvDirector` (OFF — bez chipa, bez reżysera, tempo prezentacji 1)
+//   cvRecord(1) / cvRecord(0)           — ARC CV-7: nagrywarka rolek (jak F10) — płótno 3D; z 9:16 wycinek 1080 × 1920, 60 kl./s;
+//                                         MP4 (H.264) albo WebM VP9; plik kosmos_reel_RRRRMMDD_GGMMSS pobiera się przy stopie
 //   tacticalInfo()                      — ARC CV-6a: per bitwa w widoku — stopień zoomu (`zoom`: glyph / icons / handover / cinema),
 //                                         px_L, krycie ikon, ikony i mikrostosy, linie ognia teraz i w ostatniej sekundzie, ukryte
 //                                         mgłą, najmniejszy odstęp ikon, pasma zasięgu, najechanie
@@ -984,6 +993,53 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const hud = (typeof window !== 'undefined') ? window.KOSMOS?.hudLayer : null;
       hud?.wake?.();
       return { cvTactical: F.cvTactical, cvStage: !!F.cvStage };
+    },
+
+    /** ARC CV-7 — kamera reżysera: cvDirector(1) — włączona (jak chip), cvDirector(0) — wyłączona, cvDirector() — przełącz. */
+    cvDirector(on) {
+      const d = getRenderer()?.cvDirector;
+      if (!d) return { ok: false, reason: 'no_renderer' };
+      const want = on === undefined ? d.chipState === 'off' : !!on;
+      d.setArmed(want);
+      return { ok: true, flag: d.flag, chip: d.chipState };
+    },
+
+    /** ARC CV-7 — odczyt reżysera: ujęcie (typ, podmiot, ile zostało), następne ujęcia, bohater, opóźnienie w R, kto ma kamerę. */
+    directorInfo() {
+      const d = getRenderer()?.cvDirector;
+      return d ? d.info() : { ok: false, reason: 'no_renderer' };
+    },
+
+    /** ARC CV-7 — przewodnik 9:16 (kadr rolki): cv916(1) / cv916(0) / cv916() — przełącz. Reżyser kadruje w nim. */
+    cv916(on) {
+      const d = getRenderer()?.cvDirector;
+      if (!d) return { ok: false, reason: 'no_renderer' };
+      return { ok: true, promo916: d.setPromo916(on === undefined ? !d.promo916 : !!on) };
+    },
+
+    /** ARC CV-7 — tryb nagrywania (bez interfejsu): cvCapture(1) / cvCapture(0) / cvCapture() — przełącz; klawisz F9, wyjście Esc. */
+    cvCapture(on) {
+      const d = getRenderer()?.cvDirector;
+      if (!d) return { ok: false, reason: 'no_renderer' };
+      return { ok: true, capture: d.setCapture(on === undefined ? !d.capture : !!on) };
+    },
+
+    /** ARC CV-7 — nagrywarka rolek (jak F10): cvRecord(1) — start, cvRecord(0) — stop i pobranie pliku, cvRecord() — przełącz. */
+    cvRecord(on) {
+      const d = getRenderer()?.cvDirector;
+      if (!d) return { ok: false, reason: 'no_renderer' };
+      const want = on === undefined ? !d.reel.recording : !!on;
+      d.setRecording(want);
+      return { ok: true, recording: want, ...d.reel.info() };
+    },
+
+    /** ARC CV-7 — flaga `cvDirector`: cvDirectorFlag(0) — bez chipa i reżysera (tempo prezentacji 1), cvDirectorFlag(1) — z powrotem. */
+    cvDirectorFlag(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvDirector = on === undefined ? !F.cvDirector : !!on;
+      const d = getRenderer()?.cvDirector;
+      if (!F.cvDirector && d) { if (d.reel?.recording) d.reel.stop(); if (d.capture) d.setCapture(false); d._stopBattle?.('off'); d.setPromo916(false); }
+      return { cvDirector: F.cvDirector };
     },
 
     /** ARC CV-6a — warstwa taktyczna z ostatniej klatki HUD: per bitwa stopień zoomu, ikony, znak, linie ognia, mgła, pasma. */

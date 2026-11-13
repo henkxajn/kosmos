@@ -36,6 +36,7 @@ import { LEDGER_TUNING } from './CombatLedgerLogic.js';    // ARC CV-4a — pokr
 import { EXP_TUNING } from './ExplosionLogic.js';          // ARC CV-5 — pokrętła wybuchów, wraków i stanów uszkodzeń
 import { SHIELD_TUNING } from './ShieldLogic.js';          // ARC CV-4b — pokrętła osłon (bańka, fale, rozpad) i osmaleń
 import { TAC_TUNING } from '../../ui/HudCombatLogic.js';   // ARC CV-6a — pokrętła warstwy taktycznej (`TAC_*`, podwarstwa HUD)
+import { DIR_TUNING } from './CameraDirectorLogic.js';      // ARC CV-7 — pokrętła kamery reżysera (`DIR_*`)
 
 /** Pojemności pul (instancje). Pamięć: 13 / 11 liczb float na instancję — razem ok. 0,5 MB. Iskry ×2 względem szczytu
  *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4).
@@ -207,6 +208,9 @@ export const LIVE_CV_FX = {
   // ARC CV-6a (flaga `cvTactical`) — warstwa taktyczna (`HudCombatLogic`: `TAC_*` — przekazanie zoomu ikon, próg znaku bitwy
   // z histerezą, anti-overlap, linie ognia, mikropaski, ramka, pasma). Czytane CO KLATKĘ przez podwarstwę HUD. Strojenie, bez pinów.
   ...TAC_TUNING,
+  // ARC CV-7 (flaga `cvDirector`) — kamera reżysera (`CameraDirectorLogic`: `DIR_*` — długości ujęć, kąty, dystanse, przejścia,
+  // bohater i spowolnienie, strażnicy, wstrząs, 9:16). Czytane CO KLATKĘ i przy każdym ujęciu. Strojenie, bez pinów.
+  ...DIR_TUNING,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)

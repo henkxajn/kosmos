@@ -623,6 +623,15 @@ export const GAME_CONFIG = {
     //   Kolory z ról motywu (D-CV-22), mgła wojny = `isEndpointVisibleInCombat`. Wymaga `cvStage`. Czytana CO KLATKĘ.
     //   OFF = etykiety, znaczniki i paski HP 3D jak dziś co do bitu. Wyłączenie: KOSMOS.debug.cvTactical(0).
     cvTactical: true,
+    // `cvDirector` (CV-7, D-CV-23 / D-CV-24) — KAMERA REŻYSERA bitwy (`src/renderer/CvDirector.js`, `combat/CameraDirectorLogic.js`):
+    //   chip „Reżyser” na pasku walki (domyślnie WYŁĄCZONY — `uiPrefs.cvDirector`; konsola KOSMOS.debug.cvDirector(1|0)) — harmonogram
+    //   ujęć z ziarna starcia i zniszczeń z rejestru salw (plan ogólny, za okrętem flagowym, pojedynek, przelot, bohater przy wielkim
+    //   zniszczeniu, szeroki kadr, wynik), każde wejście kamery gracza oddaje mu kamerę („Reżyser (wstrzymany)”, klik chipa wznawia);
+    //   spowolnienie bohatera wyłącznie w prezentacji (0,35× ≤ 0,8 s, opóźnienie ≤ 1,5 R, doganianie 1,25×; tempo rund i logika
+    //   nietknięte); wstrząs przy bliskich wielkich trafieniach; przewodnik 9:16 (KOSMOS.debug.cv916(1|0)) i tryb nagrywania bez
+    //   interfejsu (KOSMOS.debug.cvCapture(1|0), klawisz F9, Esc); nagrywarka rolek płótna 3D (klawisz F10, KOSMOS.debug.cvRecord(1|0) —
+    //   z 9:16 wycinek 1080 × 1920, MP4 albo WebM). Czytana CO KLATKĘ. OFF = bez chipa, bez reżysera, tempo prezentacji 1.
+    cvDirector: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

@@ -174,6 +174,8 @@ import { isSystemExploredId, isSystemExplored } from '../utils/SystemExploration
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { outlinerKeyAction } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2-4 — klawisze outlinerów (§7.16)
 import { layerForKeyCode, layerKeyAllowed, toggleHudLayer, GALAXY_SHIPS_LAYER } from '../ui/HudLayerChipsLogic.js';   // paczka B — klawisze 6–9 (D-HUD-14)
+import { isCaptureKey } from '../ui/CaptureMode.js';   // ARC CV-7 — tryb nagrywania (F9, Esc)
+import { isReelKey } from '../renderer/ReelRecorder.js';   // ARC CV-7 — nagrywarka rolek (F10)
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
@@ -5200,6 +5202,28 @@ export class GameScene {
 
   // ── Klawiatura ─────────────────────────────────────────────────
   _setupKeyboard() {
+    // ARC CV-7 (flaga `cvDirector`) — tryb nagrywania rolek: F9 przełącza, Esc wychodzi (faza przechwytywania — przed całą kaskadą Esc
+    // gry); w trybie Shift nie przełącza „czystego widoku” (tryb sam go trzyma i przywraca stan sprzed wejścia).
+    window.addEventListener('keydown', (e) => {
+      if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.isContentEditable) return;
+      const dir = this.threeRenderer?.cvDirector;
+      if (!dir || !GAME_CONFIG.FEATURES?.cvDirector) return;
+      if (isCaptureKey(e) && window.KOSMOS?.civMode) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        dir.setCapture(!dir.capture);
+        return;
+      }
+      // Nagrywarka rolek (zmiana 2 po kontroli właściciela): F10 — start / stop (preventDefault: F10 nie aktywuje menu przeglądarki).
+      if (isReelKey(e) && window.KOSMOS?.civMode) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (!e.repeat) dir.setRecording(!dir.reel.recording);
+        return;
+      }
+      if (!dir.capture) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); dir.setCapture(false); return; }
+      if (e.key === 'Shift') e.stopImmediatePropagation();
+    }, true);
+    window.addEventListener('keyup', (e) => { if (isReelKey(e) && GAME_CONFIG.FEATURES?.cvDirector) e.preventDefault(); }, true);
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target?.isContentEditable) return;
 

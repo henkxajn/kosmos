@@ -56,6 +56,7 @@ import { initialGfxLevel, normalizeGfxLevel, nextGfxLevelInCycle, readRendererSt
 import { CombatLightPool } from './combat/LightPool.js';                                              // ARC CV-2b — stała pula świateł (D-CV-18)
 import { CombatCueBus, cueWeaponOfCategory, cueSizeOfClass, screenPan } from './combat/CombatCueBus.js';   // ARC CV-2b — szyna sygnałów walki (F8)
 import { CombatLedger, pickTurret, ledgerRng, ledgerHash, LEDGER_INFO_LEGEND } from './combat/CombatLedgerLogic.js';   // ARC CV-4a — rejestr salw (język broni, flaga cvWeapons)
+import { CvDirector } from './CvDirector.js';   // ARC CV-7 — kamera reżysera, spowolnienie bohatera, wstrząs, 9:16, tryb nagrywania, nagrywarka rolek (flaga cvDirector)
 import { KC_SHARED, KC_SCORCH_MAX, setKeyColourWreckState, setKeyColourScorch, setKeyColourScorchHeat, setKeyColourScorchCount } from './KeyColourEmission.js';   // ARC CV-1a — wspólne mnożniki maski; CV-5 — wypalanie wraku; CV-4b — osmalenia
 import { ShieldStates, bubbleAxes, ellipsoidPoint, hullPoint, scorchEnabled, allocScorch, scorchHeat, SHIELD_RIPPLES_MAX, SCORCH_MAX } from './combat/ShieldLogic.js';   // ARC CV-4b — osłony i pancerz
 import { ShieldBubblePool } from './combat/ShieldBubbles.js';                                         // ARC CV-4b — pula baniek osłon
@@ -525,6 +526,10 @@ export class ThreeRenderer {
     // i silnik FX walki z pulami (leniwie, przy pierwszej salwie pod flagą `cvFxEngine`); pomiar `KOSMOS.debug.fxStats()`.
     this._presClock            = new PresentationClock();
     this._fxEngine             = null;
+    // ARC CV-7 (flaga `cvDirector`, D-CV-23 / D-CV-24) — kamera reżysera: harmonogram ujęć, spowolnienie bohatera (mnożnik tempa
+    // OBU zegarów prezentacji — `_presRate`, 1 = bez zmian), wstrząs, przewodnik 9:16, tryb nagrywania. Chip domyślnie wyłączony.
+    this._presRate             = 1;
+    this._cvDir                = new CvDirector(this);
     // ARC CV-4a (flaga `cvWeapons`) — rejestr salw (leniwie, przy pierwszej rundzie pod flagą): harmonogram strzałów w czasie
     // prezentacji, HP / osłona pokazywane, zniszczenie w chwili trafienia zabijającego; licznik kolejki wieżyczek na statek.
     this._cvLedger             = null;
@@ -1895,6 +1900,9 @@ export class ThreeRenderer {
       if (!isEngagementInView({ encounterSystemId: location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
       // POLISH P2a (CP13) — gracz obserwuje inną walkę („Obserwuj”): nowe starcie nie zabiera mu kamery.
       if (this._watch) return;
+      // ARC CV-7 — włączony reżyser (chip) prowadzi bitwę w widoku sam — auto-fokus ustępuje (inaczej przestawiłby kamerę, a reżyser
+      // odczytałby to jako przejęcie przez gracza).
+      if (GAME_CONFIG.FEATURES?.cvDirector && this._cvDir?.wantsBattles?.()) return;
       const vm = window.KOSMOS?.vesselManager;
       const playerIn = [...sideA, ...sideB].some(id => {
         const v = vm?.getVessel?.(id); return v && !isEnemyVessel(v);
@@ -4070,6 +4078,9 @@ export class ThreeRenderer {
   // ARC CV-6a — kierunek DZIOBU statku w świecie (jednostkowy) z macierzy sprite'a: rama kanoniczna (`entry.canonical`, CV-1a) —
   // dziób w lokalnym +Z, ścieżka OFF / billboard — dziób w lokalnym −X (dawna orientacja modeli). Choreografia (kurs, pochylenie)
   // jest w macierzy, więc to kurs RYSOWANY. `null` bez sprite'a albo dla billboardu (bez modelu — kurs nieznany).
+  /** ARC CV-7 — kamera reżysera (chip paska walki, `KOSMOS.debug.cvDirector` / `directorInfo` / `cv916` / `cvCapture`). */
+  get cvDirector() { return this._cvDir; }
+
   getVesselBowWorld(vesselId) {
     const e = this._vessels.get(vesselId);
     const sp = e?.sprite;
@@ -4483,6 +4494,8 @@ export class ThreeRenderer {
         if (this._fxStatsRun) this._fxStatsBegin();   // ARC CV-2a — pomiar fxStats (wyłącznie w trakcie pomiaru)
         const t = this._clock.getElapsedTime();
         this._frameNo++;   // POLISH P2b — klatka pętli renderu (pamięć środka uczestników starcia na jedną klatkę)
+        // ARC CV-7 — mnożnik tempa prezentacji tej klatki (spowolnienie bohatera / doganianie) PRZED tikami obu zegarów prezentacji.
+        this._cvDir?.tickWarp(performance.now());
 
         // Aktualizuj migotanie gwiazd tła
         if (this._starTwinkleUniform) this._starTwinkleUniform.value = t;
@@ -4527,6 +4540,8 @@ export class ThreeRenderer {
         this._unstageVessels();          // ARC CV-3a1 — sprite'y sceny na pozycje bez sceny (piszą je ruch płynny i orbity)
         this._tickCombatGlide();
         this._tickBattleStage();         // ARC CV-3a1 — scena bitwy: pozycje rysowane (prawo sceny × zoom semantyczny)
+        // ARC CV-7 — kamera reżysera: przejęcie przez gracza (stan kontrolera ≠ ostatni zapis), harmonogram, kadr, strażnicy, zapis.
+        this._cvDir?.tickCamera();
         // ARC GALAXY G1 — w trybie galaktyki kamera należy do płyty: „Obserwuj” i auto-fokus starcia wstrzymane (wracają po wyjściu).
         if (this._watch && !this._galaxyActive && !this._galaxyFlight) this._updateWatchCamera();
         // POLISH P2b (D1, Finding 467) — auto-fokus starcia: cel śledzi środek walki (co klatkę, także w pauzie gry).
@@ -4535,6 +4550,7 @@ export class ThreeRenderer {
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
         this._syncCombatViewOffset();    // ARC CV-3a1 (Finding 643) — kompozycja kadru walki przesunięciem ekranowym
+        this._cvDir?.applyShake();       // ARC CV-7 — wstrząs kamery (wyłącznie prezentacja; następna klatka liczy kamerę od nowa)
 
         // NIEBO (D-GX-4) — kopuła nieba jedzie z kamerą (obraz nieba zależy tylko od ORIENTACJI — ciągły z konstrukcji);
         // pokrętła nieba co klatkę (przeliczenie tylko przy zmianie). `_sky` = null tylko przed zbudowaniem kopuły.
@@ -4595,6 +4611,8 @@ export class ThreeRenderer {
         } finally {
           if (undoFlight) undoFlight();
         }
+        // ARC CV-7 — nagrywarka rolek (F10): kopia klatki płótna 3D TUŻ PO renderze (bufor WebGL ważny w tym samym zadaniu).
+        this._cvDir?.reel?.onFrame();
         if (this._fxStatsRun) this._fxStatsEnd();     // ARC CV-2a — po pełnej klatce (wszystkie przebiegi composera)
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
@@ -7584,6 +7602,7 @@ export class ThreeRenderer {
     const now = this._presClock.nowMs;
     const { kills, impacts } = led.advance(now);
     if (impacts.length && (this._cvShd || this._cvShdOn?.())) this._cvShdImpacts?.(impacts);   // ARC CV-4b — fale, rozpad, osmalenia
+    if (impacts.length) this._cvDir?.onImpacts(impacts);   // ARC CV-7 — wstrząs przy bliskich wielkich trafieniach
     for (const id of kills) this._cvWpnPresentKill(id);
     if (!(this._cvWpnPruneAt > now - 2000)) {
       this._cvWpnPruneAt = now;
@@ -7606,6 +7625,7 @@ export class ThreeRenderer {
     }
     this._cvWpnKillLook(id, e);
     this._cvWpnStats.killsShown++;
+    this._cvDir?.onKillShown(id);   // ARC CV-7 — wstrząs przy wybuchu w kadrze
   }
 
   // Wygląd wraku w chwili zniszczenia — rama kanoniczna (ten sam rysunek co zamiana we wrak przy `vessel:wrecked`); przechył: statek
@@ -8512,7 +8532,7 @@ export class ThreeRenderer {
     // ARC CV-2b — także, gdy czekają sygnały walki (`_cueBus`; wrak przy fladze `cvFxEngine` OFF).
     if (!GAME_CONFIG.FEATURES?.cvFxEngine && !this._fxEngine?.hasActive() && !(this._cueBus?.pending() > 0)) return;
     const ts = window.KOSMOS?.timeSystem;
-    this._presClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0 });
+    this._presClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0, rate: this._presRate ?? 1 });   // CV-7 — mnożnik tempa
     // ARC CV-5 — zegar efektów uszkodzeń, sekwencje wybuchów, stany uszkodzeń, wraki (przed przesłaniem pul — nowe cząstki w tej klatce)
     if (this._cvDmg || this._cvDmgOn?.()) this._cvDmgTick?.();
     this._fxEngine?.update({ nowMs: this._presClock.nowMs, dmgNowMs: this._cvDmg?.now, camera: this.camera, viewportH: window.innerHeight || 1,
@@ -8812,7 +8832,14 @@ export class ThreeRenderer {
       && isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId });
     const g = entry.glide;
     const finishing = !!g && !g.done && Math.abs(g.to.x - to.x) <= 1e-9 && Math.abs(g.to.z - to.z) <= 1e-9;
-    if (!inCombat && !finishing) { entry.glide = null; p.set(to.x, 0.3, to.z); return; }
+    if (!inCombat && !finishing) {
+      entry.glide = null;
+      // ARC CV-7 (flaga `cvDirector`, Finding 711) — statek sceny trzymanej po końcu logiki: zapis bazy (sprite zostaje rysowany na
+      // scenie także między klatkami — dawniej skakał do skali prawdziwej przy każdym tiku fizyki i wracał w następnej klatce).
+      if (GAME_CONFIG.FEATURES?.cvDirector) this._setSpriteBase(vid, entry, to.x, 0.3, to.z);
+      else p.set(to.x, 0.3, to.z);
+      return;
+    }
     if (!g) {   // pierwszy raz w starciu — sprite już stoi w pozycji logicznej, ruch od następnego kroku
       entry.glide = { from: { ...to }, to, elapsedMs: 0, durMs: 1, done: true };
       p.set(to.x, 0.3, to.z);
@@ -8936,7 +8963,26 @@ export class ThreeRenderer {
   // na klaster) i baner wyniku (jeden na klaster); dawniej środek z pozycji sprite'ów (różnica — ruch płynny ≤ 1 rundy).
   _stageClusters() {
     const K = window.KOSMOS;
-    const act = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    let act = K?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    // ARC CV-7 (flaga `cvDirector`, Finding 711) — starcie skończone w logice ZOSTAJE na scenie, dopóki rejestr salw ma dla niego coś
+    // do pokazania (najwyżej 3 R czasu prezentacji): logika kończy bitwę w chwili nadejścia ostatniej rundy, a jej trafienia
+    // zabijające rejestr pokazuje do ~1 R później — dawniej scena rozchodziła się do skali prawdziwej PRZED ostatnim zniszczeniem
+    // (bohater ostatniego okrętu strony grał bez sceny, kadr szeroki gonił rozbiegające się statki). Obiekt starcia — tylko odczyt.
+    if (GAME_CONFIG.FEATURES?.cvDirector && this._cvLedger) {
+      const L = this._stageLinger ?? (this._stageLinger = new Map());
+      const now = this._presClock?.nowMs ?? 0;
+      const R = K?.timeSystem?.combatRoundMs?.() ?? 1150;
+      const live = new Set(act.map((e) => e.id));
+      for (const e of act) L.set(e.id, { enc: e, endedAt: null });
+      let extra = null;
+      for (const [id, rec] of L) {
+        if (live.has(id)) continue;
+        if (rec.endedAt == null) rec.endedAt = now;
+        if (!this._cvLedger.hasPending([id]) || now - rec.endedAt > 3 * R || now < rec.endedAt) { L.delete(id); continue; }
+        (extra ??= []).push(rec.enc);
+      }
+      if (extra) act = [...act, ...extra];
+    } else if (this._stageLinger?.size) this._stageLinger.clear();
     if (!act.length) return [];
     const inView = act.filter((enc) => isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: K?.activeSystemId }));
     if (!inView.length) return [];
@@ -8981,7 +9027,7 @@ export class ThreeRenderer {
       return;
     }
     const ts = window.KOSMOS?.timeSystem;
-    const dt = this._stageClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0 });
+    const dt = this._stageClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0, rate: this._presRate ?? 1 });   // CV-7 — mnożnik tempa
     const clusters = (this._galaxyActive || this._galaxyFlight) ? [] : this._stageClusters();
     if (!clusters.length && !this._stageMarks.size) { this._stageFrame = null; this._stageState.clear(); return; }
     const L = VESSEL_TARGET_SIZE.frigate;
