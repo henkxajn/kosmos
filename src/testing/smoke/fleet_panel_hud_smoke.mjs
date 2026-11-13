@@ -655,9 +655,9 @@ header('F11 montaż — dawne panele floty i grupy poza rysunkiem i klikiem `UIM
     'F11f rysunek T6 w miejscu panelu statku (zaraz po T5); nienarysowany — `clear` + kotwica wyzerowana; zapisu przeszkody kart brak (T4)');
   const hc = body(UI, '\n  handleClick(x, y) {');
   ok(hc.indexOf('this._vesselPanelClick(x, y)') > 0 && hc.indexOf('this._fleetPanelHudClick(x, y)') > hc.indexOf('this._vesselPanelClick(x, y)')
-    && hc.indexOf('this._fleetPanelHudClick(x, y)') < hc.indexOf('this.combatHud?.handleClick?.(x, y)')
+    && hc.indexOf('this._fleetPanelHudClick(x, y)') < hc.indexOf('this.combatStrip?.handleClick?.(x, y)') && !/combatHud\?\.handleClick/.test(hc)
     && !/fleetCommandPanel\?\.handleClick|fleetGroupPanel\?\.handleClick|fleetCommandPanel\.handleClick|fleetGroupPanel\.handleClick/.test(UI),
-    'F11g klik: T6 zaraz po panelu statku (przed kartą walki); dawnych paneli floty i grupy brak w łańcuchu kliku');
+    'F11g klik: T6 zaraz po panelu statku (przed paskiem walki — CV-Z: karta walki usunięta); dawnych paneli floty i grupy brak w łańcuchu kliku');
 }
 
 // ═══ F12 ══════════════════════════════════════════════════════════════════════

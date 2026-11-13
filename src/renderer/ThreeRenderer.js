@@ -63,7 +63,7 @@ import { ShieldBubblePool } from './combat/ShieldBubbles.js';                   
 import { explosionPlan, explosionBudget, explosionClassOf, explosionSeed, damageStateOf, wreckHeatAt, wreckBurnColor, wreckFireWindow,
   wreckDrift, wreckConverge, sputterGate, emitterTicks, seedUnit as expSeedUnit, wreckAfterDrift } from './combat/ExplosionLogic.js';   // ARC CV-5 — wybuchy, uszkodzenia, wraki; CV-3c — dryf po bitwie
 import { isStationInActiveSystem } from './StationRenderLogic.js';
-import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, glideRetarget, glideStep,
+import { COMBAT_WATCH, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, glideRetarget, glideStep,
   centroidOf, fitWatchFrameOffset, viewOffsetFrame } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
@@ -75,7 +75,6 @@ import { GalaxyPlate } from './GalaxyPlate.js';   // ARC GALAXY G1 — płyta ga
 import { GALAXY_K, GALAXY_LAYER, CAMERA_FAR, GALAXY_FADE_MS, GALAXY_PICK_HALF_PX, LIVE_GALAXY, pickGalaxyStar }
   from '../ui/GalaxyModeLogic.js';
 import { makeHudProjector } from '../ui/HudProjection.js';   // ARC GALAXY G1 — rzut gwiazd płyty (ten sam co warstwa HUD)
-import { tacActive } from '../ui/HudCombatLogic.js';         // ARC CV-6a — warstwa taktyczna (flaga `cvTactical`): koniec pasków HP 3D
 import { GalaxyTerritory } from './GalaxyTerritory.js';     // ARC GALAXY G2-3 — terytorium na płycie (rozlane światło, zasłony)
 import { buildPlateTerritoryPayload, plateTerritoryVisibility, plateOwnerHalos, plateRiserIds } from '../ui/GalaxyTerritoryLogic.js';
 import { subPixelHidden } from '../ui/GalaxyFlightLogic.js'; // ARC GALAXY G2-1 — siatki poniżej 0,5 px chowane w trakcie lotu
@@ -95,8 +94,8 @@ import {
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
-  isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_RING, engagementRingBand,
-  isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR,
+  isEngagementInView, watchBattleAction,
+  isPlayerEngagement, isEndpointVisibleInCombat,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   rumorGhostHold }
   from '../utils/VesselFxLogic.js';
@@ -206,9 +205,6 @@ const ALERT_MARKER_PULSE_MAX = 1.16;        // szczyt pulsu celownika (1 + 0,16 
 // które z bliska zakrywały kadr (sonda P2a, scena 3 na 2: pierścień osłony rośnie do 0,30 j. promienia).
 const FX_WATCH_CAPPED = new Set(['explosion']);   // CV-Z — dawne smugi, błyski i pierścienie walki usunięte
 const _WATCH_V = new THREE.Vector3();       // POLISH P2a — wektor roboczy głębi widoku (`_viewDepth`)
-const _HP_R = new THREE.Vector3();          // POLISH P2b (D2) — oś „w prawo” ekranu w świecie (paski HP)
-const _HP_U = new THREE.Vector3();          // POLISH P2b (D2) — oś „w górę” ekranu w świecie (paski HP)
-const _RING_P = new THREE.Vector3();        // POLISH P2b CLOSE (C6) — punkt okręgu pierścienia starcia (głębia widoku)
 const _STAGE_V = new THREE.Vector3();       // ARC CV-3a1 — środek sceny bitwy (dystans kamery → zoom semantyczny)
 // ARC CV-3b — choreografia: kwaterniony i wektor tymczasowe (kurs na węźle `canon` rigu — bez alokacji THREE co klatkę)
 const _CHQ_A = new THREE.Quaternion(), _CHQ_C = new THREE.Quaternion(), _CHQ_D = new THREE.Quaternion();
@@ -550,7 +546,6 @@ export class ThreeRenderer {
     this._fxStatsLast          = null;
     this._selectedVesselId     = null;       // mirror UIManager (ui:selectionChanged)
     this._factionColorCache    = new Map();  // ownerEmpireId → 0xRRGGBB
-    this._engagementMarkers    = new Map();  // encounterId → { mesh, geom, mat } (znacznik starcia, TTL)
     this._bodyVeil             = null;       // { bodyId, mesh, geom, mat } — szara zasłona niezbadanego ciała (podgląd obserwatorium)
     this._focusViewOffset      = null;       // { fracX, fracY } — przesunięcie widoku 3D w podglądzie obserwatorium
     this._observatoryPreviewActive = false;  // czy overlay obserwatorium jest otwarty (podgląd ciała)
@@ -559,12 +554,9 @@ export class ThreeRenderer {
     // uczestników. null | { encounterId, fitDist, minDistBefore, minDistSet, goal, dist } — `_updateWatchCamera`.
     this._watch                = null;
     // POLISH P2b (D1, Finding 467) — auto-fokus starcia śledzi środek walki: null | { encounterId, goal } —
-    // `_updateAutoFocusCamera`; środek uczestników z kadru „Obserwuj” (`_engagementCentre`, pamięć na jedną klatkę).
+    // `_updateAutoFocusCamera`; cel — oś kadru sceny bitwy (`_stageWatchFit`).
     this._autoFocus            = null;
-    this._centreCache          = new Map();  // encounterId → środek uczestników (klatka `_centreFrame`)
-    this._centreFrame          = -1;
     this._frameNo              = 0;          // licznik klatek pętli renderu
-    this._hpBars               = new Map();  // POLISH P2b (D2, Finding 451) — vesselId → { bg, fill, col } (paski HP starcia)
     this._glideLastMs          = null;       // POLISH P2b (D3, Finding 461) — czas realny ostatniej klatki płynnego zbliżenia
     // ARC CV-3a1 — SCENA BITWY (flaga `cvStage`): znaczniki sprite'ów sceny (vesselId → { base, drawn, w, k, cluster }),
     // stan klastrów starć (clusterId → { key, sol, offsets }), zegar prezentacji wejścia / wyjścia ze sceny, statystyka
@@ -4131,7 +4123,7 @@ export class ThreeRenderer {
     const vMgr = window.KOSMOS?.vesselManager;
     // ARC CV-6a, decyzja właściciela 46 (1) — uczestników bitwy w widoku nazywa przy CTRL warstwa taktyczna (przy ich ikonach, rozkład bez
     // kupy); tu ich pomijamy. Flaga OFF — etykiety CTRL jak dziś.
-    const tacPart = tacActive(GAME_CONFIG.FEATURES) ? this._stageParticipants : null;
+    const tacPart = this._stageParticipants;   // ARC CV-6a — uczestnicy bitwy w widoku: nazwy przy ikonach warstwy taktycznej
     for (const [id, entry] of this._vessels) {
       if (tacPart?.has?.(id)) continue;
       const p = project(entry.sprite);
@@ -4430,7 +4422,6 @@ export class ThreeRenderer {
     for (const [, e] of this._predictionConeMeshes)   each(e?.group);
     for (const [, sp] of this._enemyAlertMarkers)     each(sp);
     for (const [, sp] of this._tacticalGlyphs)        each(sp);
-    for (const [, b] of this._hpBars)                 { each(b.bg); each(b.fill); }   // POLISH P2b (D2)
     // ARKUSZ HUD H0 — widoczność orbit po wyjściu z czystego widoku liczona z preferencji (filtr, zaznaczenie, najechanie),
     // nie z `_cvVis`: linie przebudowane w trakcie SHIFT nie mają `_cvVis` i wracałyby wszystkie.
     if (!hidden) this._hudRestyleOrbits();
@@ -4535,10 +4526,7 @@ export class ThreeRenderer {
         this._tickGfx();                 // ARC CV-2b — preset jakości: dławienie w walce, obwiednia świateł puli (flaga OFF — tylko porównanie)
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
-        this._tickEngagementMarkers(performance.now());
-        // ARC CV-3a1 (Finding 642) — scena oznacza bitwę sama; ARC CV-6b2 — pod flagą `cvStrip` pierścień starcia odchodzi razem z kartą
-        // (pasek walki nazywa bitwy; pierścienie „imitacji” bitew orbitalnych — CV-8b).
-        this._hideEncounterRings();
+        // ARC CV-3a1 (Finding 642) / CV-6b2 / CV-Z — pierścień starcia usunięty: bitwę oznacza scena, pasek walki i znak warstwy taktycznej.
         this._syncCombatReveal();        // POLISH P2a (CP17) — koniec starcia z graczem: widoczność wg wywiadu
         // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
@@ -4546,7 +4534,6 @@ export class ThreeRenderer {
         // później): limit rozmiaru ekranowego pasków HP i celownika wroga bez opóźnienia o klatkę. Dawniej na początku
         // `_syncInsignia` — insygnia frakcji usunięte (ZNACZNIK STATKU SM-Z: znacznik statku rysuje warstwa HUD 2D).
         this.camera.updateMatrixWorld();
-        this._syncCombatHpBars();        // POLISH P2b (D2, Finding 451, CP16) — paski HP uczestników aktywnego starcia
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
         this._syncTacticalGlyphs();      // F2 tryb Y — glify-billboardy (no-op poza trybem)
         this._syncBodyScanVeil();        // reforma obserwatorium — szara zasłona niezbadanego ciała w podglądzie
@@ -9347,94 +9334,6 @@ export class ThreeRenderer {
     cam.setViewOffset(W, H, -nx, -ny, W, H);
   }
 
-  // ARC CV-3a1 (Finding 642) — pierścień starcia DSCS ukryty (stały promień 0,026 AU był mniejszy od
-  // bitwy — każdy statek 10 na 10 stał poza nim); znacznik imitacji bitwy orbitalnej (`burst`) bez zmian (CV-8).
-  _hideEncounterRings() {
-    for (const [, e] of this._engagementMarkers) if (e.mesh) e.mesh.visible = false;
-  }
-
-  // ── POLISH P2b (D2, Finding 451, CP16) — paski HP uczestników AKTYWNEGO starcia ───────────────────────────────
-  // Pod każdym uczestnikiem starcia w oglądanym układzie (obie strony — `planCombatHpBars`): tło + wypełnienie w kolorze
-  // właściciela, stały rozmiar EKRANOWY `HP_BAR` (40 × 5 px), odstęp od krawędzi modelu `HP_BAR.GAP_PX`; poległy w trakcie
-  // starcia — pusty pasek; koniec starcia — paski znikają. Billboardy w scenie 3D (ten sam kadr co modele, co klatkę).
-  _syncCombatHpBars() {
-    // ARC CV-6a (flaga `cvTactical`, §3.2-16) — koniec podkładki: HP uczestników bitwy w widoku pokazują mikropaski warstwy taktycznej
-    // (HUD 2D, wartości pokazywane), a w kinie — pasek walki; paski 3D zdjęte (także te, które już stoją). OFF — dzisiejsze paski.
-    if (tacActive(GAME_CONFIG.FEATURES)) {
-      if (this._hpBars.size) for (const id of [...this._hpBars.keys()]) this._disposeHpBar(id);
-      return;
-    }
-    const list = window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [];
-    if (!list.length && !this._hpBars.size) return;
-    const plan = planCombatHpBars({ encounters: list, activeSystemId: window.KOSMOS?.activeSystemId });
-    const vm = window.KOSMOS?.vesselManager;
-    const keep = new Set();
-    // ARC CV-4a (flaga `cvWeapons`, Finding 614) — HP POKAZYWANE z rejestru salw (spada w chwili trafienia); zniszczenie pokazane —
-    // pasek znika razem z wyglądem wraku.
-    const led = this._cvLedger ?? null;
-    const stOf = led ? new Map() : null;
-    if (stOf) for (const enc of list) for (const [id, st] of enc.vesselStates ?? []) stOf.set(id, st);
-    this.camera.updateMatrixWorld();
-    const H = window.innerHeight || 1;
-    const tanHalf = Math.tan(this.camera.fov * Math.PI / 360);
-    const m = this.camera.matrixWorld.elements;
-    const right = _HP_R.set(m[0], m[1], m[2]).normalize();
-    const up = _HP_U.set(m[4], m[5], m[6]).normalize();
-    for (const b of plan) {
-      const entry = this._vessels.get(b.vesselId);
-      const v = vm?.getVessel?.(b.vesselId);
-      if (!entry?.sprite?.visible || !v || v.isWreck) continue;
-      if (led && entry.cvKilled) continue;
-      let frac = b.frac;
-      if (led) {
-        const st = stOf.get(b.vesselId);
-        if (st) { const pr = led.presented(b.vesselId, st.hp, st.shieldHP, st.hpStart, st.shieldHPStart); frac = st.hpStart > 0 ? Math.max(0, Math.min(1, pr.hp / st.hpStart)) : 0; }
-      }
-      const p = entry.sprite.position;
-      const depth = this._viewDepth(p);
-      if (!(depth > 0)) continue;
-      const wpp = 2 * depth * tanHalf / H;   // jednostki świata na piksel ekranu w głębi statku
-      let bar = this._hpBars.get(b.vesselId);
-      if (!bar) bar = this._createHpBar(b.vesselId);
-      keep.add(b.vesselId);
-      const col = this._factionColorHex(v);
-      if (bar.col !== col) { bar.fill.material.color.setHex(col); bar.col = col; }
-      const offPx = (vesselTargetSize(v) / 2) / wpp + HP_BAR.GAP_PX + HP_BAR.H_PX / 2;   // środek paska pod statkiem
-      const cx = p.x - up.x * offPx * wpp, cy = p.y - up.y * offPx * wpp, cz = p.z - up.z * offPx * wpp;
-      bar.bg.position.set(cx, cy, cz);
-      bar.bg.scale.set((HP_BAR.W_PX + 2 * HP_BAR.BORDER_PX) * wpp, (HP_BAR.H_PX + 2 * HP_BAR.BORDER_PX) * wpp, 1);
-      bar.bg.visible = true;
-      const half = (HP_BAR.W_PX / 2) * wpp;
-      bar.fill.position.set(cx - right.x * half, cy - right.y * half, cz - right.z * half);
-      bar.fill.scale.set(Math.max(1e-6, HP_BAR.W_PX * frac * wpp), HP_BAR.H_PX * wpp, 1);
-      bar.fill.visible = frac > 0;
-      bar.frac = frac;
-    }
-    for (const id of [...this._hpBars.keys()]) if (!keep.has(id)) this._disposeHpBar(id);
-  }
-
-  _createHpBar(vesselId) {
-    const mk = (color, opacity, order) => {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false }));
-      sp.renderOrder = order;
-      this.scene.add(sp);
-      return sp;
-    };
-    const bg = mk(0x000000, 0.65, 990);
-    const fill = mk(0xffffff, 1, 991);
-    fill.center.set(0, 0.5);   // wypełnienie rośnie od lewej krawędzi paska
-    const bar = { bg, fill, col: null, frac: 1 };
-    this._hpBars.set(vesselId, bar);
-    return bar;
-  }
-
-  _disposeHpBar(vesselId) {
-    const bar = this._hpBars.get(vesselId);
-    if (!bar) return;
-    for (const sp of [bar.bg, bar.fill]) { this.scene.remove(sp); sp.material?.dispose?.(); }
-    this._hpBars.delete(vesselId);
-  }
-
   // ── POLISH P2a (CP13, Finding 458) — „Obserwuj / Watch”: kamera śledzi walkę ──────────────────────────────
   // Start: cel kamery od razu w kadrze walki (jak dotąd `focusOnInstant`), dystans dochodzi lerpem kontrolera; minDist
   // na czas obserwacji ≤ `ZOOM_MIN_DIST` (gracz może przybliżyć kółkiem), po końcu wraca do wartości sprzed.
@@ -9535,22 +9434,6 @@ export class ThreeRenderer {
     a.goal = { x: g.x, y: g.y, z: g.z };
   }
 
-  // POLISH P2b (D1, Finding 467) — kadr „Obserwuj” starcia (`_computeWatchFit`: środek uczestników, punkty, prostokąt
-  // bezpieczny) pamiętany na jedną klatkę pętli renderu (znacznik i auto-fokus czytają go razem).
-  _engagementFit(enc) {
-    if (!enc?.id) return null;
-    if (this._centreFrame !== this._frameNo) { this._centreCache.clear(); this._centreFrame = this._frameNo; }
-    if (this._centreCache.has(enc.id)) return this._centreCache.get(enc.id);
-    const fit = this._computeWatchFit(enc);
-    this._centreCache.set(enc.id, fit);
-    return fit;
-  }
-
-  // Środek uczestników starcia (sprite'y żywych, widocznych) = `centroid` kadru „Obserwuj” — pozycja znacznika starcia.
-  _engagementCentre(enc) {
-    return this._engagementFit(enc)?.centroid ?? null;
-  }
-
   // POLISH P2b (D1, Finding 467) — cel auto-fokusu: uczestnicy wyśrodkowani w prostokącie bezpiecznym kadru „Obserwuj”
   // (ekran bez pasków UI i panelu walki — nie pod kartą) przy BIEŻĄCYM dystansie kamery: `watchTargetAt`, ta sama reguła
   // co „Obserwuj”, bez dopasowania dystansu. Środek uczestników na środku ekranu stawiał część z nich pod panelem walki
@@ -9560,115 +9443,10 @@ export class ThreeRenderer {
     return this._stageWatchFit(enc)?.target ?? null;   // ARC CV-3a1 (643) — oś na bitwie
   }
 
-  // Kadr walki: pozycje sprite'ów żywych, widocznych uczestników (wróg ukryty mgłą nie wchodzi — bez przecieku), kąty
-  // i FOV bieżącej kamery, prostokąt bezpieczny bez pasków UI i panelu walki (`CombatHUD.getPanelRect`).
-  _computeWatchFit(enc) {
-    const cc = this._cameraController;
-    if (!cc || !enc) return null;
-    const pts = [];
-    const ids = [...(enc.sideA?.vesselIds ?? []), ...(enc.sideA?.joinedVesselIds ?? []),
-      ...(enc.sideB?.vesselIds ?? []), ...(enc.sideB?.joinedVesselIds ?? [])];
-    for (const id of ids) {
-      const st = enc.vesselStates?.get?.(id);
-      if (st && !(st.hp > 0)) continue;
-      const e = this._vessels.get(id);
-      if (!e?.sprite?.visible) continue;
-      const p = e.sprite.position;
-      if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) continue;
-      pts.push({ x: p.x, y: p.y, z: p.z });
-    }
-    if (!pts.length) return null;
-    const W = window.innerWidth || 1, H = window.innerHeight || 1;
-    // ARKUSZ UI U4-2 (Finding 496) — wcięcia z jednego źródła: lewy i prawy outliner (0, gdy schowane — dawniej prawe
-    // 150 px na sztywno), dół nad pasem dolnym / Dokiem taktycznym; górny pas jak dotąd (`TOP_BAR_H`).
-    const ins = getMapInsets(window.KOSMOS);
-    const safe = watchSafeRect({
-      W, H, uiScale: window.KOSMOS?.uiScale ?? 1, hudRect: window.KOSMOS?.combatHud?.getPanelRect?.() ?? null,
-      topBarH: COSMIC.TOP_BAR_H, bottomH: ins.bottom,
-      rightW: ins.right,
-      leftW: ins.left,
-    });
-    const fit = fitWatchFrame({ points: pts, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
-      aspect: this.camera.aspect, W, H, safe });
-    // POLISH P2b (D1) — punkty i prostokąt bezpieczny kadru także dla auto-fokusu (`_autoFocusTarget`).
-    return fit ? { ...fit, points: pts, safe, W, H } : null;
-  }
-
   // Głębia punktu w przestrzeni widoku kamery [j.] — rozmiar billboardu na ekranie zależy od głębi, nie od odległości.
   _viewDepth(pos) {
     _WATCH_V.copy(pos).applyMatrix4(this.camera.matrixWorldInverse);
     return -_WATCH_V.z;
-  }
-
-  // ── Znacznik starcia (persistent; starcie DSCS — wg stanu starcia) ──────
-  // Żyje, dopóki starcie aktywne i w oglądanym układzie. POLISH P2a (Finding 457). ARC CV-8b — rodzaj 'burst' (imitacja bitwy
-  // orbitalnej, 1600 ms czasu realnego) wycofany razem z imitacją.
-  _upsertEngagementMarker(encounterId, gx, gy) {
-    if (!encounterId) return;
-    let entry = this._engagementMarkers.get(encounterId);
-    if (!entry) {
-      // POLISH P2b CLOSE (C6, CP27) — cienki pas: szerokość na ekranie co klatkę (`_tickEngagementMarkers`), stałe krycie.
-      // ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli `alert` motywu nadaje `_syncHud3dColors` (pętla renderu, przed rysunkiem).
-      const geom = new THREE.RingGeometry(ENGAGEMENT_RING.RADIUS - 0.001, ENGAGEMENT_RING.RADIUS + 0.001, ENGAGEMENT_RING.SEGMENTS);
-      const mat  = new THREE.MeshBasicMaterial({ transparent: true, opacity: ENGAGEMENT_RING.OPACITY,
-        side: THREE.DoubleSide, depthWrite: false });
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.rotation.x = -Math.PI / 2;
-      this.scene.add(mesh);
-      entry = { mesh, geom, mat, _lastTouch: 0 };
-      this._engagementMarkers.set(encounterId, entry);
-    }
-    entry.mesh.position.set(S(gx), 0.05, S(gy));
-    entry._lastTouch = performance.now();
-  }
-
-  _disposeEngagementMarker(encounterId) {
-    const e = this._engagementMarkers.get(encounterId);
-    if (!e) return;
-    this.scene.remove(e.mesh); e.geom.dispose(); e.mat.dispose();
-    this._engagementMarkers.delete(encounterId);
-  }
-
-  _disposeAllEngagementMarkers() {
-    for (const k of [...this._engagementMarkers.keys()]) this._disposeEngagementMarker(k);
-  }
-
-  // POLISH P2a (Finding 457) — synchronizacja ze STANEM starć (co klatkę, także w pauzie gry): znacznik starcia DSCS jest,
-  // dopóki starcie aktywne i w oglądanym układzie, i znika z jego końcem. Bez pulsu
-  // (POLISH P2b CLOSE, C6, CP27).
-  _tickEngagementMarkers(nowMs) {
-    const encounters = (window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [])
-      .map((e) => ({ id: e.id, isActive: e.isActive, systemId: e.location?.systemId, point: e.location?.point }));
-    if (!this._engagementMarkers.size && !encounters.length) return;
-    const plan = planEngagementMarkers({
-      markers: [...this._engagementMarkers].map(([id]) => ({ id })),
-      encounters, activeSystemId: window.KOSMOS?.activeSystemId,
-    });
-    for (const id of plan.dispose) this._disposeEngagementMarker(id);
-    for (const u of plan.upsert) this._upsertEngagementMarker(u.id, u.x, u.y);
-    if (!this._engagementMarkers.size) return;
-    // POLISH P2b (D1, Finding 467) — znacznik starcia DSCS w ŚRODKU uczestników (co klatkę — walka odpływa od punktu
-    // startu o ~0,1 AU); bez sprite'ów — punkt startu (`location.point`, jak dotąd).
-    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
-    for (const [id, e] of this._engagementMarkers) {
-      const enc = dscs?._activeEncounters?.get?.(id);
-      const c = enc?.isActive ? this._engagementCentre(enc) : null;
-      if (c) e.mesh.position.set(c.x, c.y, c.z);
-    }
-    // POLISH P2b CLOSE (C6, CP27) — pierścień SUBTELNY: pas o stałej szerokości na ekranie (`ENGAGEMENT_RING.WIDTH_PX`
-    // w głębi każdego punktu okręgu), stałe krycie, bez pulsu (dawniej krycie 0,05–0,5 i skala 0,9–1,1 z sinusa zegara
-    // realnego; przy bliskim kadrze pas świata 0,25–0,32 j. miał ~100–290 px). Promień bez zmian.
-    this.camera.updateMatrixWorld();
-    const H = window.innerHeight || 1;
-    for (const [, e] of this._engagementMarkers) {
-      const c = e.mesh.position;
-      const pos = e.geom.attributes.position;
-      engagementRingBand({ radius: ENGAGEMENT_RING.RADIUS, widthPx: ENGAGEMENT_RING.WIDTH_PX, segments: ENGAGEMENT_RING.SEGMENTS,
-        fovDeg: this.camera.fov, H, out: pos.array, depthAt: (lx, ly) => this._viewDepth(_RING_P.set(c.x + lx, c.y, c.z - ly)) });
-      pos.needsUpdate = true;
-      e.geom.computeBoundingSphere();
-      e.mesh.visible = !this._watch;   // POLISH P2a (CP14) — pierścień ukryty przy „Obserwuj” (kamera i tak jest przy walce)
-    }
   }
 
   // ── Slice 2 — efekty skanu (FX-only, z eventów rekonu/odkrycia) ──────────
@@ -10387,13 +10165,6 @@ export class ThreeRenderer {
         const hex = this._hud3dHex('primary');
         e.fillMesh?.material?.color?.setHex(hex);
         e.lineMesh?.material?.color?.setHex(hex);
-        e.hudEpoch = ep;
-      }
-    }
-    if (this._engagementMarkers.size) {
-      for (const [, e] of this._engagementMarkers) {
-        if (e.hudEpoch === ep) continue;
-        e.mat?.color?.setHex(this._hud3dHex('alert'));
         e.hudEpoch = ep;
       }
     }

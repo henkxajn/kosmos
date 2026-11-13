@@ -533,24 +533,9 @@ export const GAME_CONFIG = {
     //   (scena bitwy), `cvChoreo` i `cvChoreo2` (choreografia — lot wzdłuż kursu CV-3c jedynym trybem), `cvModels` (rama kanoniczna
     //   z plików hardpointów), `cvPresets` (presety jakości High / Medium / Low, pula świateł, szyna sygnałów walki), `cvWeapons` (język broni
     //   i rejestr salw — salwa CV-2a usunięta), `cvDamage` (wybuchy warstwowe, stany uszkodzeń, płonące wraki), `cvShields` (bańki osłon,
-    //   osmalenia). Przestawienie
-    //   dawnych kluczy w konsoli nie ma skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
-    // `cvStrip` (CV-6b2) — PASEK WALKI zamiast karty walki (`CombatStrip` / `CombatStripLogic`): linia na bitwę (klaster starć),
-    //   idiom HUD (ciemny pasek, font motywu, role palety, cyfry w kratce), rozwinięcie na żądanie (okręty, log rund), położenie
-    //   z `MapInsets` (#629) pod górną belką; jedna linia Dziennika i jedna linia potyczki na klaster (#639); bez karty, bez
-    //   pierścienia starcia i bez białego błysku trafienia (3D paski HP zostają do CV-6a). OFF = dzisiejsza karta co do bitu.
-    //   Wyłączenie: KOSMOS.debug.cvStrip(0).
-    cvStrip: true,
-    // `cvTactical` (CV-6a) — WARSTWA TAKTYCZNA bitwy i zoom semantyczny (`src/ui/HudCombatLayer.js`, `HudCombatLogic.js` — podwarstwa
-    //   HUD 2D, D-CV-20): daleko — sylwetki klas (fregata / niszczyciel / pancernik / cywilny / nieznany) w położeniach RYSOWANYCH
-    //   (scena + choreografia) z kursem i wektorem prędkości, linie ognia w chwilach rejestru salw, mikropaski HP / osłony z wartości
-    //   pokazywanych, ramka starcia z rundą, pasma zasięgu zaznaczonego / najechanego statku (prawo sceny); bardzo daleko — JEDEN znak
-    //   bitwy „⚔ 10 : 9” z paskami siły i rundą (zamiast stosu „⚠ ×N”, Finding 674); blisko — kino bez ikon (krycie ikon =
-    //   1 − smoothstep(8, 24, px_L), to samo px_L co scena). Uczestnicy bitwy w widoku: bez etykiet nazw (nazwa przy najechaniu
-    //   i dla zaznaczonego), bez znaczników statku SM-1 (zastępują je ikony), bez pasków HP 3D (koniec podkładki §3.2-16).
-    //   Kolory z ról motywu (D-CV-22), mgła wojny = `isEndpointVisibleInCombat`. Wymaga `cvStage`. Czytana CO KLATKĘ.
-    //   OFF = etykiety, znaczniki i paski HP 3D jak dziś co do bitu. Wyłączenie: KOSMOS.debug.cvTactical(0).
-    cvTactical: true,
+    //   osmalenia), `cvStrip` (pasek walki — karta walki `CombatHUD`, czip „⚔ Walki” i pierścień starcia usunięte), `cvTactical`
+    //   (warstwa taktyczna bitwy — paski HP 3D i dawne znaczniki starcia usunięte). Przestawienie dawnych kluczy w konsoli nie ma
+    //   skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
     // `cvDirector` (CV-7, D-CV-23 / D-CV-24) — KAMERA REŻYSERA bitwy (`src/renderer/CvDirector.js`, `combat/CameraDirectorLogic.js`):
     //   chip „Reżyser” na pasku walki (domyślnie WYŁĄCZONY — `uiPrefs.cvDirector`; konsola KOSMOS.debug.cvDirector(1|0)) — harmonogram
     //   ujęć z ziarna starcia i zniszczeń z rejestru salw (plan ogólny, za okrętem flagowym, pojedynek, przelot, bohater przy wielkim

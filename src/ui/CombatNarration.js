@@ -1,5 +1,5 @@
 // CombatNarration — ARC COMBAT VISUALS, krok CV-6b2 (Finding 639, COMBAT_VISUALS_PLAN.md §4 CV-6b2): narrator Dziennika bitew
-// deep-space pod flagą `cvStrip` — JEDNA linia bitwy i JEDNA linia potyczki na KLASTER starć, nie na starcie.
+// deep-space — JEDNA linia bitwy i JEDNA linia potyczki na KLASTER starć, nie na starcie.
 //
 // Dlaczego: DSCS nie łączy starć — jedna bitwa na ekranie to zwykle kilka starć w jednym miejscu (Finding 638), a Dziennik pisał
 // linię bitwy (`log.battleLine`, `GameScene`) i linię potyczki (`log.skirmish`, `UIManager` — starcie bez stanu wojny) dla KAŻDEGO

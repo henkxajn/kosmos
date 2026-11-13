@@ -8,7 +8,7 @@
 // PINY:
 //   N1 BattleView3D: pliku nie ma; żaden plik `src/` go nie importuje
 //   N2 imitacja bitwy orbitalnej: brak producenta (`_spawnBattleBurst`, `_onBattleResolvedFx`, 'burst'); słuchacz `battle:resolved`
-//      renderera tylko przekazuje bitwę do powtórki; znacznik starcia = wyłącznie starcie DSCS (wykonanie `planEngagementMarkers`)
+//      renderera tylko przekazuje bitwę do powtórki; CV-Z — znacznik starcia (`planEngagementMarkers`) usunięty w całości
 //   N3 modal kina: `BattleIntroModal` eksportuje WYŁĄCZNIE baner (`showBattleOutcome`); żadnego `showBattleIntro` / preferencji
 //      `kosmos_battle_view_auto` w `src/`; `_tryShowNextBattle` = sam baner dla każdego źródła; baner wykonany na atrapie DOM
 //   N4 `suspend` / `resume` / `_renderingEnabled` — nie ma ich w rendererze ani w bramce HUD (wykonanie `hudGate`)
@@ -51,11 +51,9 @@ guard('N2', () => {
   assert(!/_spawnBattleBurst|_onBattleResolvedFx/.test(TR) && !/'burst'/.test(TR), 'N2a ThreeRenderer: brak `_spawnBattleBurst`, `_onBattleResolvedFx` i znacznika `burst`');
   assert(/EventBus\.on\('battle:resolved', safe\(\(p\) => this\._cvOrb\?\.handle\?\.\(p\)\)\);/.test(TR), 'N2b słuchacz `battle:resolved` renderera — wyłącznie powtórka bitwy orbitalnej');
   assert(!('ENGAGEMENT_BURST_TTL_MS' in FXL), 'N2c `VesselFxLogic` bez czasu życia imitacji');
-  // znacznik starcia: stary znacznik (np. dawny rodzaj 'burst') bez aktywnego starcia znika jak każdy; aktywne starcie w widoku — jest
-  const enc = { id: 'enc_1', isActive: true, systemId: 'sys_a', point: { x: 1, y: 2 } };
-  const p1 = FXL.planEngagementMarkers({ markers: [{ id: 'orbital_1_2', kind: 'burst', lastTouchMs: 1e9 }], encounters: [], activeSystemId: 'sys_a', nowMs: 1e9 });
-  const p2 = FXL.planEngagementMarkers({ markers: [], encounters: [enc], activeSystemId: 'sys_a' });
-  assert(p1.dispose.includes('orbital_1_2') && p2.upsert.length === 1 && p2.upsert[0].id === 'enc_1', 'N2d znacznik = wyłącznie starcie DSCS (bez wyjątku czasu życia)');
+  // CV-Z — przecelowane świadomie: znacznik starcia usunięty w całości (planer i renderer) — pin nieobecności.
+  assert(!('planEngagementMarkers' in FXL) && !('ENGAGEMENT_RING' in FXL) && typeof FXL.isEngagementInView === 'function' && !/_engagementMarkers/.test(TR),
+    'N2d (CV-Z): znacznika starcia nie ma (planer `VesselFxLogic` i renderer); KONTROLA — moduł wczytany');
 });
 
 console.log('N3 — modal kina (intro) i preferencja');

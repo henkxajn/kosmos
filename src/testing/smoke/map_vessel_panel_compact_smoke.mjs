@@ -391,7 +391,7 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
   const iLabels = at('this._drawAllLabels(ctx, tr)');
   const iPanel  = at('this._drawShipPanelHud(ctx, W, H)');
   const iFleet  = at('this._drawFleetPanelHud(');
-  const iCombat = at('this.combatHud.draw(');
+  const iCombat = at('this.combatStrip.draw(');   // CV-Z — przecelowane świadomie: karta walki `combatHud.draw` usunięta, panel walki = pasek
   const iBrack  = at('this._drawSelectionBrackets(');
 
   // K1 — ANTY-JAŁOWOŚĆ NOŚNA: każde wywołanie DOKŁADNIE RAZ. Bez tego „naprawa" polegająca
@@ -421,7 +421,7 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
 
   // Z2 — to jest fix KLASOWY, nie jednopanelowy.
   ok(iLabels < iFleet, `Z2: etykiety CTRL PRZED panelem floty / grupy T6 (${iLabels} < ${iFleet})`);
-  ok(iLabels < iCombat, `Z2: etykiety CTRL PRZED combatHud (${iLabels} < ${iCombat})`);
+  ok(iLabels < iCombat, `Z2: etykiety CTRL PRZED paskiem walki (${iLabels} < ${iCombat})`);
 
   // Z3 — czego NIE wolno było przestawić: ramki RTS zostają NAD etykietami.
   ok(iBrack > iLabels, `Z3: ramki RTS zaznaczenia dalej PO etykietach CTRL (${iBrack} > ${iLabels})`);

@@ -27,7 +27,8 @@
 //       odjęte; zbyt mały → cały ekran z marginesem
 //   T8  limit billboardu: na ekranie ≤ limit; poniżej limitu rozmiar bez zmian (dzisiejszy wygląd z daleka)
 //   T9  model przy kadrze 1 na 1 — nie mniejszy niż dziś przy „Obserwuj” (d 1,21: ~10 px); liczby z prawdziwej sceny — sonda
-//   T10 `CombatHUD.getPanelRect` (wykonanie): prostokąt narysowanego panelu; brak przy braku starć i po minimalizacji
+//   T10 `CombatStrip.getPanelRect` (wykonanie; CV-Z — przecelowane świadomie z usuniętej karty `CombatHUD`, fasada `combatHud`
+//       zwraca prostokąt paska): prostokąt narysowanego paska z krawędzią; brak przy braku starć (pasek się nie minimalizuje)
 //   T11 źródło `ThreeRenderer`: śledzenie co klatkę PRZED `update()` kontrolera; kadr z pozycji SPRITE'ÓW; prostokąt
 //       z panelem walki; koniec obserwacji przy przejęciu kamery / końcu starcia (minDist wraca); auto-fokus nie
 //       przejmuje obserwowanej walki; limit szewronu i celownika; pierścień ukryty przy „Obserwuj”; bez tabeli strojenia
@@ -37,7 +38,7 @@
 
 import '../headless/env.js';           // MUSI być pierwszy
 import EventBus      from '../../core/EventBus.js';
-import { CombatHUD } from '../../ui/CombatHUD.js';
+import { CombatStrip } from '../../ui/CombatStrip.js';   // CV-Z — karta walki usunięta: T10 na pasku walki (fasada `combatHud`)
 import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -247,7 +248,7 @@ header('T9  model przy kadrze 1 na 1 — nie mniejszy niż dziś');
 }
 
 // ═══ T10 ══════════════════════════════════════════════════════════════════════
-header('T10 `CombatHUD.getPanelRect` (wykonanie)');
+header('T10 `CombatStrip.getPanelRect` (wykonanie)');
 {
   EventBus.clear();
   const enc = { id: 'e1', isActive: true, currentRound: 2, timeline: [], location: { systemId: 'sys_home', point: { x: 1, y: 2 } },
@@ -256,18 +257,18 @@ header('T10 `CombatHUD.getPanelRect` (wykonanie)');
     vesselStates: new Map([['a', { hp: 1, hpStart: 2, weapons: [] }], ['b', { hp: 1, hpStart: 2, weapons: [] }]]) };
   let list = [enc];
   window.KOSMOS = { civMode: true, deepSpaceCombatSystem: { listActive: () => list }, vesselManager: { _vessels: new Map() } };
-  const hud = new CombatHUD();
+  const hud = new CombatStrip();
   const ctx = new Proxy({ measureText: () => ({ width: 10 }) }, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
   const has = typeof hud.getPanelRect === 'function';
-  hud.draw(ctx, 1280, 720);
+  const opts = { K: window.KOSMOS, insets: { left: 0, right: 0, top: 28, bottom: 62 } };
+  hud.draw(ctx, 1280, 720, opts);
   const r = has ? hud.getPanelRect() : undefined;
   console.log(`     prostokąt ${JSON.stringify(r ?? null)}`);
-  assert(!!r && r.w === 560 && r.x === 1280 / 2 - 280 && r.y > 0 && r.y + r.h < 720, 'T10a prostokąt narysowanego panelu (560 j. szerokości, środek ekranu, nad dołem)');
-  hud.toggleMinimize(); hud.draw(ctx, 1280, 720);
-  const rMin = has ? hud.getPanelRect() : undefined;
-  hud.toggleMinimize(); list = []; hud.draw(ctx, 1280, 720);
+  assert(!!r && r.edge === 'top' && r.w > 0 && r.y >= 28 && r.y + r.h < 720 - 62 && r.x > 0 && r.x + r.w < 1280,
+    'T10a prostokąt narysowanego paska (krawędź górna, w obszarze mapy, nad dołem)');
+  list = []; hud.draw(ctx, 1280, 720, opts);
   const rNone = has ? hud.getPanelRect() : undefined;
-  assert(has && rMin === null && rNone === null, 'T10b zminimalizowany / brak starć — `null`');
+  assert(has && rNone === null, 'T10b brak starć — `null`');
 }
 
 // ═══ T11 ══════════════════════════════════════════════════════════════════════
@@ -280,10 +281,12 @@ header('T11 źródło `ThreeRenderer`');
   const up = loop.indexOf('this._updateWatchCamera()'); const cu = loop.indexOf('this._cameraController.update()');
   assert(loop.length > 0 && cu > 0, 'T11-0 KONTROLA: pętla renderu i `update()` kontrolera znalezione');
   assert(up > 0 && up < cu, 'T11a śledzenie co klatkę w pętli renderu, PRZED `update()` kontrolera');
-  const fitB = body('  _computeWatchFit(enc) {');
-  assert(/\.sprite\.position/.test(fitB) && !/\.position\.x\s*\/\s*10|S\(v\.position/.test(fitB) && /fitWatchFrame\(/.test(fitB)
-    && /watchSafeRect\(/.test(fitB) && /getPanelRect/.test(fitB) && /hp > 0/.test(fitB) && /sprite\?\.visible/.test(fitB),
-    'T11b kadr z pozycji SPRITE\'ÓW żywych, widocznych uczestników; prostokąt bez paneli UI i panelu walki');
+  // CV-Z — przecelowane świadomie: kadr „Obserwuj” bez sceny (`_computeWatchFit`) usunięty; kadr to `_stageWatchFit` — pozycje
+  // RYSOWANE wszystkich widocznych uczestników (także zniszczonych w trakcie — ARC CV-6b), prostokąt bez paneli UI i paska walki.
+  const fitB = body('  _stageWatchFit(enc) {');
+  assert(/\.sprite\.position/.test(fitB) && /sprite\?\.visible/.test(fitB) && /fitWatchFrameOffset\(/.test(fitB)
+    && /watchSafeRect\(/.test(fitB) && /getPanelRect/.test(fitB) && !/_computeWatchFit/.test(tr),
+    'T11b kadr sceny z pozycji SPRITE\'ÓW widocznych uczestników; prostokąt bez paneli UI i paska walki (`_computeWatchFit` usunięty)');
   const upd = body('  _updateWatchCamera() {');
   assert(/_goalTarget/.test(upd) && /this\._endWatch\(\)/.test(upd) && /isEngagementInView\(/.test(upd)
     && /fitDist = false/.test(upd), 'T11c koniec przy przejęciu kamery i końcu / wyjściu starcia z widoku; kółko — koniec dopasowania dystansu');
@@ -305,12 +308,13 @@ header('T11 źródło `ThreeRenderer`');
   assert(!/_upsertInsignia|_syncInsignia|INSIGNIA_WORLD_SIZE|INSIGNIA_LIFT_RATIO|INSIGNIA_MAX_PX/.test(tr),
     'T11g szewron insygniów usunięty (SM-Z) — znacznik statku rysuje warstwa HUD w rozmiarze stałym w px');
   const mw = loop.indexOf('this.camera.updateMatrixWorld()');
-  assert(mw > 0 && loop.indexOf('this._syncCombatHpBars()') > mw && loop.indexOf('this._syncEnemyAlertMarkers()') > mw,
-    'T11g2 macierz widoku kamery odświeżona w pętli renderu PRZED paskami HP i celownikiem (bez opóźnienia o klatkę przy zbliżaniu)');
+  // CV-Z — przecelowane świadomie: paski HP 3D usunięte (flaga `cvTactical` zdjęta) — zostaje celownik wroga.
+  assert(mw > 0 && loop.indexOf('this._syncEnemyAlertMarkers()') > mw && !/_syncCombatHpBars/.test(loop),
+    'T11g2 macierz widoku kamery odświeżona w pętli renderu PRZED celownikiem (pasków HP 3D nie ma — CV-Z)');
   const ret = body('  _syncEnemyAlertMarkers() {');
   assert(/capBillboardWorld\(ALERT_MARKER_SCALE \* distFactor/.test(ret) && /RETICLE_MAX_PX/.test(ret), 'T11h celownik: limit ekranowy');
-  const mk = body('  _tickEngagementMarkers(nowMs) {');
-  assert(/visible = !this\._watch/.test(mk), 'T11i pierścień starcia ukryty przy „Obserwuj”');
+  // CV-Z — przecelowane świadomie: pierścień starcia usunięty w całości — przy „Obserwuj” nie ma czego ukrywać.
+  assert(!/_tickEngagementMarkers|_engagementMarkers/.test(tr), 'T11i pierścienia starcia nie ma (CV-Z) — przy „Obserwuj” nic go nie rysuje');
   let logic = null;
   try { logic = strip(readFileSync(new URL('../../renderer/CombatWatchLogic.js', import.meta.url), 'utf8')); } catch { logic = null; }
   assert(logic != null && !/StrikesBackTuning|import\s/.test(logic) && !/StrikesBackTuning/.test(tr),

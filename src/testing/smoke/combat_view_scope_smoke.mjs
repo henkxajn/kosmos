@@ -19,7 +19,8 @@
 //       tempo starcia (CP4) i rysowanie mówią o tym samym układzie
 //   T3  `watchBattleAction` — ten sam układ: kadr; inny: przełącz + kadr; nieznany: nic
 //   T4  DSCS (wykonanie): ładunek `combat:roundFx` niesie `systemId` = układ starcia (KONTROLA: salwa wyemitowana)
-//   T5  `CombatHUD` (wykonanie, atrapa ctx): przycisk „Watch” emituje `camera:watchBattle` z id starcia i jego układem
+//   T5  pasek walki `CombatStrip` (wykonanie, atrapa ctx; CV-Z — przecelowane świadomie z usuniętej karty `CombatHUD`): chip
+//       „Obserwuj” emituje `camera:watchBattle` z id starcia i jego układem
 //   T6  źródło `ThreeRenderer` — cztery wejścia: salwa (smugi + znacznik), auto-fokus, „Obserwuj” (przełączenie PRZED
 //       kadrem) — reguła na wejściu, PRZED pierwszym efektem / ruchem kamery
 //   T7  źródło DSCS: pole `systemId` w emisji `combat:roundFx`; plik bez czasu realnego (`combat_pace_smoke` T9a)
@@ -45,7 +46,7 @@ import { VesselManager }       from '../../systems/VesselManager.js';
 import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import * as DSCSmod            from '../../systems/DeepSpaceCombatSystem.js';
 import * as FX                 from '../../utils/VesselFxLogic.js';
-import { CombatHUD }           from '../../ui/CombatHUD.js';
+import { CombatStrip }         from '../../ui/CombatStrip.js';   // CV-Z — karta walki usunięta: T5 na pasku walki
 import { readFileSync }        from 'node:fs';
 
 const { DeepSpaceCombatSystem, ROUND_INTERVAL_MS } = DSCSmod;
@@ -152,7 +153,7 @@ header('T4  DSCS (wykonanie): `combat:roundFx` niesie układ starcia');
 }
 
 // ═══ T5 ═══════════════════════════════════════════════════════════════════════
-header('T5  `CombatHUD` (wykonanie): przycisk „Watch” — id starcia i jego układ w `camera:watchBattle`');
+header('T5  pasek walki (wykonanie): chip „Obserwuj” — id starcia i jego układ w `camera:watchBattle`');
 {
   EventBus.clear();
   const enc = { id: 'encounter_x_player_emp_t', isActive: true, currentRound: 3, timeline: [],
@@ -162,10 +163,10 @@ header('T5  `CombatHUD` (wykonanie): przycisk „Watch” — id starcia i jego 
     vesselStates: new Map([['a1', { hp: 100, hpStart: 120, weapons: [] }], ['b1', { hp: 90, hpStart: 120, weapons: [] }]]) };
   window.KOSMOS = { civMode: true, activeSystemId: 'sys_home',
     deepSpaceCombatSystem: { listActive: () => [enc] }, vesselManager: { _vessels: new Map() } };
-  const hud = new CombatHUD();
+  const hud = new CombatStrip();
   const ctx = new Proxy({ measureText: () => ({ width: 10 }) }, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
-  hud.draw(ctx, 1280, 720);
-  const b = hud._watchBtnBounds;
+  hud.draw(ctx, 1280, 720, { K: window.KOSMOS, insets: { left: 0, right: 0, top: 28, bottom: 62 } });
+  const b = hud._zones.find((z) => z.kind === 'watch') ?? null;
   const got = [];
   EventBus.on('camera:watchBattle', (p) => got.push(p));
   const ate = b ? hud.handleClick(b.x + b.w / 2, b.y + b.h / 2) : false;
@@ -190,11 +191,9 @@ header('T6  źródło `ThreeRenderer` — cztery wejścia przez regułę');
   assert(g > 0 && g < fx.indexOf('this._ensureFxEngine()') && (up < 0 || g < up)
     && /encounterSystemId:\s*payload\?\.systemId/.test(fx) && /activeSystemId:\s*window\.KOSMOS\?\.activeSystemId/.test(fx),
     'T6a salwa: reguła na wejściu (układ z ładunku, układ widoku), PRZED smugami (i znacznikiem, jeśli salwa go stawia)');
-  // znacznik starcia: albo stawia go bramkowana salwa (krok P2-1), albo synchronizacja ze STANEM starcia przez tę samą
-  // regułę (krok P2-5: `planEngagementMarkers` — wykonanie w `combat_marker_life_smoke`)
-  const mk = methodBody('  _tickEngagementMarkers(nowMs) {');
-  assert((up > g && g > 0) || /planEngagementMarkers\(/.test(mk),
-    'T6e znacznik: z bramkowanej salwy albo z synchronizacji stanu starcia przez regułę widoku');
+  // CV-Z — przecelowane świadomie: znacznik starcia (pierścień, `_tickEngagementMarkers`) usunięty — pin nieobecności.
+  assert(up < 0 && !/_tickEngagementMarkers|_engagementMarkers|planEngagementMarkers/.test(tr) && g > 0,
+    'T6e (CV-Z) znacznika starcia nie ma — salwa go nie stawia, synchronizacji nie ma (bitwę oznacza scena i pasek walki)');
   const eng = handler('vessel:engaged');
   const ge = eng.indexOf('isEngagementInView(');
   assert(ge > 0 && ge < eng.indexOf('focusOn') && /encounterSystemId:\s*location\?\.systemId/.test(eng),

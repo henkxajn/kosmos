@@ -205,7 +205,7 @@ export const LIVE_CV_FX = {
   // ARC CV-4b (flaga `cvShields`) — osłony i pancerz (`ShieldLogic`: `SHD_*` — dopasowanie bańki, fale, siła, rozpad, regeneracja;
   // `SCORCH_*` — osmalenia kadłuba). Czytane co klatkę i przy trafieniu. Strojenie, bez pinów.
   ...SHIELD_TUNING,
-  // ARC CV-6a (flaga `cvTactical`) — warstwa taktyczna (`HudCombatLogic`: `TAC_*` — przekazanie zoomu ikon, próg znaku bitwy
+  // ARC CV-6a — warstwa taktyczna (`HudCombatLogic`: `TAC_*` — przekazanie zoomu ikon, próg znaku bitwy
   // z histerezą, anti-overlap, linie ognia, mikropaski, ramka, pasma). Czytane CO KLATKĘ przez podwarstwę HUD. Strojenie, bez pinów.
   ...TAC_TUNING,
   // ARC CV-7 (flaga `cvDirector`) — kamera reżysera (`CameraDirectorLogic`: `DIR_*` — długości ujęć, kąty, dystanse, przejścia,

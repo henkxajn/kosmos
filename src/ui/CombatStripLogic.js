@@ -1,5 +1,5 @@
 // CombatStripLogic — ARC COMBAT VISUALS, krok CV-6b2 (COMBAT_VISUALS_PLAN.md §3.2-16, §3.2-23, §4 CV-6b2; Findingi 629, 630,
-// 639): czysta logika PASKA WALKI, który pod flagą `cvStrip` zastępuje kartę walki (`CombatHUD`). Rysunek, pomiar tekstu
+// 639): czysta logika PASKA WALKI, który zastąpił kartę walki (`CombatHUD`, usuniętą w CV-Z). Rysunek, pomiar tekstu
 // i strefy — `CombatStrip`; spięcie z hostem (rysunek, klik, kółko, kursor, Esc) — `UIManager`.
 //   • JEDNOSTKA = KLASTER STARĆ — ta sama reguła co scena bitwy, baner wyniku i Dziennik (`encounterClusters`: pozycje
 //     LOGICZNE uczestników, ten sam układ, środki ≤ `STAGE.CLUSTER_AU`; Finding 638): jedna linia na bitwę, nigdy na starcie;

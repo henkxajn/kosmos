@@ -3397,19 +3397,7 @@ export default {
   'fleet.retreatThreshold.label':    'Próg auto-wycofania',
   'fleet.retreatThreshold.tooltip':  'Procent łącznego HP floty, poniżej którego wszyscy żywi członkowie ruszają do najbliższej friendly planety. Aktywne tylko gdy doktryna = retreat_at_50.',
 
-  // === CombatHUD (deep-space) — PL celowo ASCII (font HUD) ===
-  'combat.hudHeaderSingle': 'BITWA W DEEP-SPACE',
-  'combat.hudHeaderMulti':  'BITWY W DEEP-SPACE ({0})',
-  'combat.hudChip':         '⚔ Walki',          // ARKUSZ UI U0-3 (Finding 481) — czip zminimalizowanego HUD walki
-  'combat.hudChipN':        '⚔ Walki [{0}]',
-  'combat.hudMore':         '+ {0} kolejnych…',
-  'combat.hudRound':        'runda {0}',
-  'combat.hudAlive':        'zywych: {0}/{1}',
-  'combat.hudBattleLog':    'log walki',
-  'combat.hudNoWeapons':    'bez broni',
-  'combat.hudMiss':         'pudlo',
-  'combat.hudShield':       'tarcza',
-  // ARC CV-6b2 — pasek walki (flaga `cvStrip`) zamiast karty walki
+  // ARC CV-6b2 — pasek walki (CV-Z: dawna karta walki i jej klucze usunięte)
   'combatStrip.round':      'R{0}',
   // ARC CV-8b (§3.1-6) — wiersz wyniku bitwy orbitalnej na pasku walki po powtórce
   'combatStrip.result.victory':   'Zwycięstwo',

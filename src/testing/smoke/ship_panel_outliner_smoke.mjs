@@ -27,7 +27,8 @@
 //   S8  rozbiórka (D-TR-13, 543): `fleet:disbandRequest` dopiero po potwierdzeniu (`_handleHit`)
 //   S9  D-TR-14 (539): klik ciała / stacji na mapie nie zdejmuje zaznaczenia statku (scena + renderer); pustka — zdejmuje
 //   S10 montaż: panel rysowany PO outlinerze (świeży układ listy w tej samej klatce); `seamRight`; klucz i18n
-//   S11 STROJENIE 1 (Finding 545) — karta walki jako przeszkoda kotwicy, okno 1280×720, scena starcia (prawdziwy `CombatHUD`):
+//   S11 STROJENIE 1 (Finding 545) — karta walki jako przeszkoda kotwicy, okno 1280×720, scena starcia (CV-Z: atrapa fasady
+//       `combatHud.getPanelRect()` z prostokątami nagranymi z prawdziwej karty na `36ddfb4` — karta usunięta):
 //       panel przy wierszu przesunięty w pionie nad kartę (łącznik, gdy wiersz w zasięgu), „Obserwuj” odsłonięte; brak
 //       miejsca → kotwica zapasowa; KONTROLE: bez przeszkody panel zakrywa „Obserwuj”, bez starcia i w oknie właściciela —
 //       bez zmian; kolejność kliku przy ON — panel przed kartą walki (rysunek = klik)
@@ -56,7 +57,6 @@ import { worldToGameplay } from '../../utils/CoordTransform.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { resolveVesselPanelAnchor, resolveMapSelectionSurface } from '../../ui/MapVesselPanelLogic.js';
 import * as CI from '../../ui/ClickIntentLogic.js';
-import { CombatHUD } from '../../ui/CombatHUD.js';
 
 let SPA = null, OL = null, LO = null, MI = null;
 try { SPA = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first: piny padną */ }
@@ -558,35 +558,19 @@ header('S10 montaż');
 // ═══ S11 ══════════════════════════════════════════════════════════════════════
 header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, okno 1280×720, scena starcia');
 {
-  // Prawdziwy `CombatHUD` na atrapie kanwy; świat starcia podstawiony na czas rysowania karty (geometria karty jak w grze).
-  const hudCtx = () => ({ font: '10px monospace', textAlign: 'left',
-    measureText(s) { const px = Number(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1]) || 10; return { width: [...String(s)].length * px * 0.6 }; },
-    fillText() {}, fillRect() {}, strokeRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, save() {}, restore() {} });
-  const mkEnc = (id, nA, nB, round = 1, point = { x: 0, y: 0 }) => {
-    const states = new Map(), vessels = new Map();
-    const ids = (n, side) => Array.from({ length: n }, (_, i) => {
-      const vid = `${id}_${side}${i}`;
-      states.set(vid, { hp: 100, hpStart: 120, weapons: [{ moduleId: 'weapon_laser' }] });
-      vessels.set(vid, { id: vid, name: `Okręt ${side}${i}`, hullId: 'hull_frigate' });
-      return vid;
-    });
-    const a = ids(nA, 'a'), b = ids(nB, 'b');
-    const timeline = [];
-    for (let r = 1; r <= round; r++) timeline.push({ round: r, events: [
-      { attacker: b[0], target: a[0], weapon: 'weapon_missile', hit: true, damage: 10, blockedByShield: 0 },
-      { attacker: a[0], target: b[0], weapon: 'weapon_laser', hit: true, damage: 13, blockedByShield: 0 }] });
-    return { enc: { id, isActive: true, currentRound: round, timeline, location: { systemId: 'sys_home', planetId: null, point: { ...point } },
-      sideA: { vesselIds: a, joinedVesselIds: [], ownerEmpireId: 'player', label: 'Gracz' },
-      sideB: { vesselIds: b, joinedVesselIds: [], ownerEmpireId: 'emp_001', label: 'Konsorcjum' }, vesselStates: states }, vessels };
+  // CV-Z — przecelowane świadomie: karta walki `CombatHUD` usunięta (flaga `cvStrip` zdjęta). Przeszkodą kotwicy jest prostokąt
+  //   z fasady `combatHud.getPanelRect()` (D-CV-21; dziś — pasek walki). Logika przeszkody (`ShipPanelAnchorLogic`, Finding 545) nie
+  //   zależy od kształtu panelu, więc scena zostaje: atrapa fasady zwraca prostokąty NAGRANE z prawdziwej karty na `36ddfb4`
+  //   (ta sama scena co dawne `hudOf`: 1 na 1 przy 720 i 945 j., dwa starcia przy 720 j.; przycisk „Obserwuj” karty 1 na 1).
+  const CARD_REC = {
+    1: { 720: { x: 360, y: 446, w: 560, h: 224 }, 945: { x: 360, y: 671, w: 560, h: 224 } },
+    2: { 720: { x: 360, y: 362, w: 560, h: 308 } },
   };
+  const WATCH_REC = { x: 828, y: 472, w: 84, h: 13 };
+  const mkEnc = (id) => ({ id });
   const hudOf = (encs, H) => {
-    const vessels = new Map(); for (const e of encs) for (const [k, v] of e.vessels) vessels.set(k, v);
-    const saved = globalThis.window.KOSMOS;
-    globalThis.window.KOSMOS = { civMode: true, activeSystemId: 'sys_home', deepSpaceCombatSystem: { listActive: () => encs.map((e) => e.enc) },
-      vesselManager: { _vessels: vessels }, starSystemManager: { getAllSystems: () => [] }, tacticalDock: { getReservedHeight: () => 0 } };
-    const hud = new CombatHUD();
-    try { hud.draw(hudCtx(), W, H); } catch { /* pin pada */ } finally { globalThis.window.KOSMOS = saved; }
-    return hud;
+    const rect = encs.length ? (CARD_REC[encs.length]?.[H] ?? null) : null;
+    return { getPanelRect: () => (rect ? { ...rect } : null), _watchBtns: rect && encs.length === 1 && H === 720 ? [{ ...WATCH_REC }] : [] };
   };
   const over = (a, b) => !!a && !!b && a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   const PAD = SPA?.SHIP_PANEL_OBSTACLE_PAD ?? NaN;
@@ -642,9 +626,12 @@ header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, o
   // E — kolejność kliku: panel PRZED kartą walki (rysowany po niej); panel stacji nie łapie kliku (T4)
   const hc = body(UI, '  handleClick(x, y) {');
   const iFirst = hc.indexOf('if (this._vesselPanelClick(x, y)) return true;');
-  const iCombat = hc.indexOf('this.combatHud?.handleClick?.(x, y)');
-  ok(iFirst > 0 && iCombat > iFirst && hc.split('this._vesselPanelClick(x, y)').length === 2 && !/stationPanel\??\.handleClick/.test(hc),
-    'S11j kolejność kliku: panel statku przed kartą walki (rysunek = klik), jedno wywołanie; klik panelu stacji usunięty (T4)');
+  // CV-Z — przecelowane świadomie: klik karty walki usunięty razem z kartą; panel statku zostaje PIERWSZY (rysowany ostatni),
+  //   pasek walki niżej w kaskadzie.
+  const iCombat = hc.indexOf('this.combatStrip?.handleClick?.(x, y)');
+  ok(iFirst > 0 && iCombat > iFirst && hc.split('this._vesselPanelClick(x, y)').length === 2 && !/stationPanel\??\.handleClick/.test(hc)
+    && !/combatHud\?\.handleClick/.test(hc),
+    'S11j kolejność kliku: panel statku przed paskiem walki (rysunek = klik), jedno wywołanie; klik karty walki i panelu stacji usunięty (CV-Z, T4)');
   const mVpc = compileMethod(UI, '_vesselPanelClick', {});
   const vself = (hidden, surf = 'vessel', ovl = false) => ({ overlayManager: { isAnyOpen: () => ovl }, _mapSurface: () => surf,
     _shipPanelDockHidden: () => hidden, _shipPanelHud: { rect: { x: 0, y: 0, w: 10, h: 10 }, handleClick: () => true } });

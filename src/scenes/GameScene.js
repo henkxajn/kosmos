@@ -2910,20 +2910,19 @@ export class GameScene {
       }
       // ARC CV-8b (#635 / #713) — bitwa orbitalna rajdu w grupie (poza widokiem): wpisy skutków EAH czekają na ogłoszenie rajdu.
       if (orbital && this._raidAnnouncer?.offerExtras(battleId, fx.logEntries ?? [])) fx.logHeld = true;
-      // ARC CV-6b2 (Finding 639) — pod flagą `cvStrip` bitwa DSCS idzie przez narratora klastra: JEDNA linia bitwy (wynik
-      // scalony jak baner) i JEDNA linia potyczki na klaster starć, po ostatnim `battle:resolved` klastra. Reszta (wojna,
-      // obrona orbitalna, bez flagi) — linia na bitwę jak dotąd.
-      if (!warId && GAME_CONFIG.FEATURES?.cvStrip && isClusterNarrated(battleId)) {
+      // ARC CV-6b2 (Finding 639) — bitwa DSCS idzie przez narratora klastra: JEDNA linia bitwy (wynik scalony jak baner) i JEDNA linia
+      // potyczki na klaster starć, po ostatnim `battle:resolved` klastra. Reszta (wojna, obrona orbitalna) — linia na bitwę.
+      if (!warId && isClusterNarrated(battleId)) {
         this._narrateBattleCluster({ battleId, result });
         return;
       }
       this._writeBattleLine(this._battleLogEntry({ warId, result, shipLosses: orbital ? fx.shipsLost : null }), [battleId]);
     });
 
-    // ARC CV-6b2 (Finding 639) — potyczka bitwy DSCS pod flagą `cvStrip`: linię pisze narrator klastra (raz na klaster, przed linią
+    // ARC CV-6b2 (Finding 639) — potyczka bitwy DSCS: linię pisze narrator klastra (raz na klaster, przed linią
     // bitwy); ten słuchacz łapie wyłącznie potyczkę SPÓŹNIONĄ (po opowiedzianej grupie) — `UIManager` jej nie pisze.
     EventBus.on('war:skirmish', ({ empireId, battleId }) => {
-      if (!GAME_CONFIG.FEATURES?.cvStrip || !isClusterNarrated(battleId)) return;
+      if (!isClusterNarrated(battleId)) return;
       for (const text of this._clusterNarratorOf().onSkirmish({ empireId, battleId })) this.uiManager?._log?.(text, 'combat');
     });
 
@@ -4609,7 +4608,7 @@ export class GameScene {
     return this._clusterNarrator;
   }
 
-  // ARC CV-6b2 (Finding 639) — bitwa DSCS w Dzienniku pod flagą `cvStrip`: krok grupy klastra (pozostałe aktywne starcia — jak
+  // ARC CV-6b2 (Finding 639) — bitwa DSCS w Dzienniku: krok grupy klastra (pozostałe aktywne starcia — jak
   // baner), gotowa grupa — linie potyczki (kanał walki, `_log` jak `UIManager`) i jedna linia bitwy.
   _narrateBattleCluster({ battleId, result }) {
     const K = window.KOSMOS;
@@ -5360,7 +5359,7 @@ export class GameScene {
         // REFORMA ZAKŁADEK T2 — okno DOM (raport ciała z przypięcia, `.kosmos-modal-overlay`) zamyka się własnym Esc; kaskada
         // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰).
         if (escapeHeldByModal({ K: window.KOSMOS, domModalOpen: !!document.querySelector('.kosmos-modal-overlay') })) return;
-        // ARC CV-6b2 — rozwinięty pasek walki (flaga `cvStrip`) zwija się PIERWSZY: przed panelem floty, zaznaczeniem i przypięciem.
+        // ARC CV-6b2 — rozwinięty pasek walki zwija się PIERWSZY: przed panelem floty, zaznaczeniem i przypięciem.
         if (um?.combatStripEscape?.()) {
           e.preventDefault();
           return;

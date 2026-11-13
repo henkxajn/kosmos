@@ -10,9 +10,9 @@
 //      poza soczewką — tożsamość; stopień 0 — brak pola; wybór pola: najbliższy środek obejmujący punkt
 //   A3 źródło: wszystkie trzy wejścia kliku (picker celu i patrol, prawy klik, dymek współrzędnych) przez JEDNO miejsce —
 //      `GameScene._resolveClickTarget` woła `stageLogicalOf` (bez ciał i POI); `castRay` z `clickPlaneY`
-//   A4 (638) klastry z pozycji LOGICZNYCH: dwa starcia w jednym miejscu — jeden klaster; daleko — dwa; karta walki: jeden
-//      wiersz na klaster (widok scalony: strony, stany, log), lista bez zmian, gdy nic się nie łączy; `CombatHUD` pod flagą
-//      `cvStage` — jeden „Watch” dla dwóch starć w jednym miejscu, bez flagi — dwa (dzisiejsza karta)
+//   A4 (638) klastry z pozycji LOGICZNYCH: dwa starcia w jednym miejscu — jeden klaster; daleko — dwa; pasek walki: jedna
+//      bitwa na klaster, nic się nie łączy — bitwa na starcie; jeden ładunek „Obserwuj” dla dwóch starć w jednym miejscu
+//      (CV-Z — przecelowane świadomie: karta walki `CombatHUD` i `combatCardRows` usunięte, ich rolę przejął pasek)
 //   A5 (638) baner: dwa starcia klastra rozstrzygnięte w różnych chwilach — ŻADNEGO banera po pierwszym, JEDEN (scalony:
 //      straty sumą, tury maks., werdykt z liczby wygranych) po drugim; KONTROLA: dwa klastry — dwa banery; starcie, które
 //      skończyło się inną drogą, nie wiesza grupy; źródło: ścieżka B pod flagą przez `_clusterBattleBanners`
@@ -40,7 +40,7 @@ const BC = await tryImport('../../ui/BattleClusterLogic.js');
 const RH = await tryImport('../../utils/RaycasterHelper.js');
 const RP = await tryImport('../../utils/RaycasterPure.js');
 const ST = await tryImport('../../debug/CvBattleStager.js');
-const HUD = await tryImport('../../ui/CombatHUD.js');
+const SBL = await tryImport('../../ui/CombatStripLogic.js');   // CV-Z — karta walki usunięta: piny A4b–A4d na pasku walki
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -173,25 +173,20 @@ block('A4 — (638) klastry z pozycji logicznych, karta: jeden wiersz na klaster
   const cl = SL.encounterClusters([e2, e1, e3], getPos, radius);
   assert(cl.length === 2 && cl[0].id === 'encounter_a' && cl[0].encounterIds.join() === 'encounter_a,encounter_b' && cl[1].encounterIds.join() === 'encounter_c',
     `A4a 0,15 AU — jeden klaster (id = najmniejsze id starcia), 1 AU — osobny (${cl.map((c) => c.encounterIds.join('+')).join(' · ')})`);
-  const rows = BC.combatCardRows([e1, e2, e3], { getPos, radius, labelFor: (o, n) => `${o}:${n}` });
+  const rows = SBL.stripBattles([e1, e2, e3], { getPos, radius, activeSystemId: 'sys_v' });
   const m = rows[0];
-  assert(rows.length === 2 && m.clusterEncounterIds?.join() === 'encounter_a,encounter_b' && m.sideA.vesselIds.length === 4 && m.vesselStates.size === 8
-    && m.sideA.label === 'player:4' && m.currentRound === 5 && m.timeline.length === 8 && m.timeline[m.timeline.length - 1].round === 5 && rows[1] === e3,
-    `A4b karta: 3 starcia → 2 wiersze; wiersz scalony — strony (4 + 4), stany (8), runda maks. (5), log wyrównany do końca (8 rund), etykieta z tłumaczenia; pojedyncze starcie bez zmian`);
-  const far = BC.combatCardRows([e1, e3], { getPos, radius });
-  assert(far.length === 2 && far[0] === e1 && far[1] === e3, 'A4c KONTROLA: nic się nie łączy — lista wejściowa bez zmian (te same obiekty, ta sama kolejność)');
-  // `CombatHUD` — prawdziwy `draw` na atrapie kanwy: pod flagą jeden „Watch” dla dwóch starć w jednym miejscu, bez flagi — dwa
-  const vessels = new Map([...pos.keys()].map((id) => [id, { id, name: id, hullId: 'hull_frigate', position: pos.get(id) }]));
-  const ctx = { font: '10px monospace', textAlign: 'left', textBaseline: 'alphabetic', fillStyle: '', strokeStyle: '', lineWidth: 1,
-    measureText(s) { return { width: String(s).length * 6 }; }, fillText() {}, fillRect() {}, strokeRect() {}, beginPath() {}, moveTo() {}, lineTo() {},
-    stroke() {}, save() {}, restore() {}, rect() {}, clip() {} };
-  window.KOSMOS = { civMode: true, activeSystemId: 'sys_v', deepSpaceCombatSystem: { listActive: () => [e1, e2] },
-    vesselManager: { _vessels: vessels, getVessel: (id) => vessels.get(id) ?? null }, starSystemManager: { getAllSystems: () => [] },
-    tacticalDock: { getReservedHeight: () => 0 }, empireRegistry: { get: () => ({ name: 'Liga' }) } };
-  // CV-Z — przecelowane świadomie: wariant „bez flagi `cvStage`” (karta na starcie) usunięty razem z flagą.
-  const hudOn = new HUD.CombatHUD(); hudOn.draw(ctx, 1600, 1041);
-  assert(hudOn._watchBtns.length === 1 && hudOn._watchBtns[0].encounterId === 'encounter_a',
-    `A4d \`CombatHUD\`: dwa starcia w jednym miejscu — ${hudOn._watchBtns.length} „Watch” (klaster, kamera kadruje oba)`);
+  assert(rows.length === 2 && m.encounterIds.join() === 'encounter_a,encounter_b' && m.id === 'encounter_a' && m.round === 5
+    && rows[1].encounterIds.join() === 'encounter_c' && m.encounters.length === 2,
+    `A4b pasek: 3 starcia → 2 bitwy; bitwa scalona — id najmniejszego starcia, runda maks. (5); pojedyncze starcie osobno (${rows.map((r) => r.encounterIds.join('+')).join(' · ')})`);
+  const merged = BC.mergeEncounterView([e1, e2], { labelFor: (o, n) => `${o}:${n}` });
+  assert(merged.sideA.vesselIds.length === 4 && merged.vesselStates.size === 8 && merged.sideA.label === 'player:4' && merged.timeline.length === 8
+    && merged.timeline[merged.timeline.length - 1].round === 5, 'A4b2 widok scalony (oś rund paska): strony 4 + 4, stany 8, log wyrównany do końca (8 rund), etykieta z tłumaczenia');
+  const far = SBL.stripBattles([e1, e3], { getPos, radius, activeSystemId: 'sys_v' });
+  assert(far.length === 2 && far.every((r) => r.encounterIds.length === 1), 'A4c KONTROLA: nic się nie łączy — bitwa na starcie');
+  const pay = SBL.stripWatchPayload(rows[0]);
+  assert(pay?.encounterId === 'encounter_a' && pay.systemId === 'sys_v' && SBL.stripWatchPayload(rows[1])?.encounterId === 'encounter_c',
+    `A4d pasek: dwa starcia w jednym miejscu — JEDEN ładunek „Obserwuj” (klaster, ${pay?.encounterId}); starcie daleko — własny`);
+  assert(!('combatCardRows' in BC), 'A4e (CV-Z): `combatCardRows` usunięte razem z kartą walki');
 });
 
 // ═══ A5 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════

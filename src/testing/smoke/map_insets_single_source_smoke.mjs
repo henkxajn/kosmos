@@ -138,7 +138,8 @@ header('M5–M10  jedno źródło pasa dolnego i wcięć — Dok, LayoutConfig, 
   ok(/import \{ BOTTOM_STRIP_H \} from '\.\/MapInsets\.js';/.test(fmo) && /const TIME_STRIP_H = BOTTOM_STRIP_H;/.test(fmo)
     && /contentH = oh - TAB_H - TIME_STRIP_H/.test(fmo),
     'M7 SEDNO: Dowództwo — `TIME_STRIP_H = BOTTOM_STRIP_H` z `MapInsets` (dawniej 20 na sztywno); treść dalej ustępuje pasowi');
-  const wf = body(src('../../renderer/ThreeRenderer.js'), '  _computeWatchFit(enc) {');
+  // CV-Z — przecelowane świadomie: kadr „Obserwuj” bez sceny (`_computeWatchFit`) usunięty; kadr to `_stageWatchFit` (ten sam odczyt wcięć).
+  const wf = body(src('../../renderer/ThreeRenderer.js'), '  _stageWatchFit(enc) {');
   ok(/watchSafeRect\(/.test(wf) && /const ins = getMapInsets\(window\.KOSMOS\);/.test(wf)
     && /bottomH: ins\.bottom\b/.test(wf) && /rightW: ins\.right\b/.test(wf) && /leftW: ins\.left\b/.test(wf)
     && !/OUTLINER_W|BOTTOM_NAV_H/.test(wf),

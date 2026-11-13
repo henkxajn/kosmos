@@ -338,18 +338,18 @@ for (const [f, loc] of [['stm', 'pl'], ['raj', 'en'], ['spm', 'pl']]) {
   });
   const bar = new BottomControlBar();
   bar.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
+  // CV-Z — przecelowane świadomie: czip ⚔ (zminimalizowana karta walki, 481 / 482) usunięty razem z kartą `CombatHUD` — dawny
+  //   sygnał „zminimalizowana karta” nic nie rysuje i nie łapie kliku; klaster zegara bez zmian, nad mapą pasek walki nie znika.
   const chip = bar._chipRect, bg = bar._bgRect;
-  ok(!!chip && chip.label === t('combat.hudChipN', 3), `C1 czip widoczny, etykieta przez i18n: „${chip?.label}"`);
-  ok(!!chip && !inter(chip, { x: 0, y: 0, w: W, h: BAND_H }), `C2 czip nie przecina pasma górnej belki (y ${chip?.y})`);
-  const cluster = [bar._bellRect, bar._menuRect, bar._playRect, ...bar._speedRects, bg];
-  ok(!!chip && !cluster.some(r => inter(chip, r)) && chip.x + chip.w <= bg.x - 4 + 1e-6 && chip.x >= prev.x,
-    `C3 czip na lewo od paska zegara, nad przedostatnim slotem: x ${chip?.x}…${chip ? chip.x + chip.w : '?'} ≤ ${bg.x - 4}, ≥ ${prev.x}`);
-  ok(!!chip && chip.y === bg.y && chip.h === bg.h, `C4 czip w tym samym rzędzie co pasek zegara (y ${chip?.y} = ${bg.y})`);
-  const cx = chip ? chip.x + chip.w / 2 : -1, cy = chip ? chip.y + chip.h / 2 : -1;
-  const r1 = bar.handleClick(cx, cy);
-  ok(r1 === true && toggles.length === 1 && bar.isOver(cx, cy), `C5 klik w czip → toggleMinimize (${toggles.length}×), blokada kamery nad czipem`);
+  const ref = new BottomControlBar();
+  window.KOSMOS.combatHud = null; ref.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
+  const same = (p, q) => !!p && !!q && p.x === q.x && p.y === q.y && p.w === q.w && p.h === q.h;
+  ok(chip === undefined && same(bg, ref._bgRect) && same(bar._bellRect, ref._bellRect) && bar._speedRects.every((r, i) => same(r, ref._speedRects[i])),
+    `C1–C4 (CV-Z): czipu ⚔ nie ma przy dawnym sygnale „zminimalizowana karta”; klaster zegara w tych samych px co bez sygnału (pasek x ${bg?.x})`);
+  const cx = bg.x - 30, cy = bg.y + bg.h / 2;
+  ok(bar.handleClick(cx, cy) === false && toggles.length === 0, `C5 (CV-Z): klik w dawne miejsce czipu nie woła \`toggleMinimize\` (${toggles.length}×)`);
   const dr = new TopResourceDrawer(); frames(dr, 2);
-  ok(!!chip && dr.handleClick(cx, cy) === false && !dr.isOver(cx, cy), 'C5b pasmo belki nie pochłania kliku w czip (czip poza prostokątem pasma — 482)');
+  ok(dr.handleClick(cx, cy) === false && !dr.isOver(cx, cy), 'C5b pasmo belki nie sięga rzędu paska zegara (482)');
 }
 setLocale('pl'); usePreset('stm');
 
@@ -367,20 +367,20 @@ scene([colony('c1', 'Alfa')], {
 const barP = new BottomControlBar();
 barP.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
 const baseY = barP._bgRect.y;
-ok(baseY === H - 6 - 36 - 20 && barP._chipRect?.y === baseY,
-  `C6-0 KONTROLA: rząd tuż nad paskiem nawigacji (y ${baseY} = H − 6 − 36 − 20), czip w tym samym rzędzie (${barP._chipRect?.y})`);
+ok(baseY === H - 6 - 36 - 20 && barP._chipRect === undefined,
+  `C6-0 KONTROLA: rząd tuż nad paskiem nawigacji (y ${baseY} = H − 6 − 36 − 20); czipu walk nie ma (CV-Z)`);
 peekAt[prevPrimary] = 500;
 barP.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
-ok(barP._chipRect?.y === baseY && barP._bgRect.y === baseY,
-  `C6a atrapa karty przedostatniego slotu (góra 500) → czip zostaje (${barP._chipRect?.y}), pasek zegara też (${barP._bgRect.y}) — dawniej czip 480`);
+ok(barP._bgRect.y === baseY,
+  `C6a atrapa karty przedostatniego slotu (góra 500) → pasek zegara zostaje (${barP._bgRect.y}) — dawniej czip 480 (CV-Z — czipu nie ma)`);
 peekAt[prevPrimary] = null; peekAt[lastPrimary] = 450;
 barP.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
-ok(barP._chipRect?.y === baseY && barP._bgRect.y === baseY,
+ok(barP._bgRect.y === baseY,
   `C6b atrapa karty ostatniego slotu (góra 450) → pasek zegara zostaje (${barP._bgRect.y}) — dawniej 430`);
 const srcBCB = readFileSync(fileURLToPath(new URL('../../ui/BottomControlBar.js', import.meta.url)), 'utf8');
 const codeBCB = srcBCB.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-ok(/_stripTop\(H\) \{/.test(codeBCB) && (codeBCB.match(/this\._stripTop\(H\)/g) ?? []).length === 2 && !/peekTopY|_peek\b/.test(codeBCB),
-  'C6c czip i pasek zegara liczą rząd JEDNYM `_stripTop(H)` (dwa wywołania, bez parametru slotu), zero odczytu karty peek w pliku');
+ok(/_stripTop\(H\) \{/.test(codeBCB) && (codeBCB.match(/this\._stripTop\(H\)/g) ?? []).length === 1 && !/peekTopY|_peek\b/.test(codeBCB),
+  'C6c pasek zegara liczy rząd JEDNYM `_stripTop(H)` (jedno wywołanie — CV-Z: czip usunięty, bez parametru slotu), zero odczytu karty peek w pliku');
 
 console.log('\n── C7: BottomBar nie rysuje już czipu w górnej belce ──');
 scene([colony('c1', 'Alfa')], {

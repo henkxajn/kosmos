@@ -109,8 +109,11 @@ header('B  pas dolny — tło, klaster zegara, suwak, czip ⚔');
   chipBar.draw(recCtx(), W, H, TS, { left: 150 });
   const ovChip = new BottomControlBar();
   ovChip.draw(recCtx(), W, H, TS);
-  ok(at(chipBar._chipRect, 932, 771, 56, 20) && at(ovChip._chipRect, 1032, 771, 56, 20),
-    `B6 SEDNO (pin px): czip ⚔ nad mapą x 932 (na lewo od suwaka, +1 jak suwak — 564), pod overlayem x 1032 (na lewo od zegara, bez zmian) (jest ${chipBar._chipRect?.x} / ${ovChip._chipRect?.x})`);
+  // CV-Z — przecelowane świadomie: czip ⚔ (zminimalizowana karta walki) usunięty razem z kartą — dawny sygnał nie rysuje nic,
+  //   klaster zegara i suwak w tych samych px (B5).
+  ok(chipBar._chipRect === undefined && ovChip._chipRect === undefined && at(chipBar._zoomRect, 992, 771, 100, 20)
+    && typeof chipBar._drawCombatChip === 'undefined',
+    `B6 (CV-Z): czipu ⚔ nie ma — także przy dawnym sygnale „zminimalizowana karta”; suwak zoomu x 992 bez zmian (${chipBar._zoomRect?.x})`);
   K.combatHud = null; delete K.deepSpaceCombatSystem; delete K.threeRenderer;
   ok(ops(cMap, 'stroke').length === 1 && ops(cMap, 'strokeRect').length === 5,
     `B7 KONTROLA: pas bez ramy także nad mapą — jedyny stroke() to separator (${ops(cMap, 'stroke').length}), 5 obrysów prędkości (${ops(cMap, 'strokeRect').length})`);

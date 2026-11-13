@@ -163,10 +163,8 @@ export class BottomBar {
       }
     }
 
-    // UI v3 — bell 🔔 + MENU ☰ + blok czasu PRZENIESIONE do dolnego BottomControlBar. Czip walk
-    // (zminimalizowany CombatHUD) też tam — ARKUSZ UI, U0-3 (opcja 1): na lewo od paska zegara, z własnym
-    // hit-testem (Finding 482 — tu, w prawym końcu górnej belki, klik zjadało pasmo surowców). _bellClickBounds
-    // nieużywane.
+    // UI v3 — bell 🔔 + MENU ☰ + blok czasu PRZENIESIONE do dolnego BottomControlBar (czip walk — CV-Z: usunięty z kartą walki).
+    // _bellClickBounds nieużywane.
     this._bellClickBounds = null;
 
     this._logClickBounds = null;  // EventLog → EventLogDrawer

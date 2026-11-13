@@ -1,7 +1,7 @@
 // HudCombatLayer — ARC COMBAT VISUALS, krok CV-6a (COMBAT_VISUALS_PLAN.md §2.6, D-CV-20, D-CV-22; Findingi 653 (a), 666, 674):
 // WARSTWA TAKTYCZNA bitwy — podwarstwa HUD 2D (`HudLayer`) między znacznikiem statku a etykietami (zbierana przed etykietami:
-// etykiety omijają znak bitwy i linię najechania — `labelObstacles`). Flaga `cvTactical` (czytana co klatkę), wymaga `cvStage`
-// (scena podaje klastry starć w widoku i `px_L`). Logika — czysty `HudCombatLogic`; tu: odczyt świata (`F.K` = `window.KOSMOS`),
+// etykiety omijają znak bitwy i linię najechania — `labelObstacles`). Na stałe od CV-Z (flaga `cvTactical`
+// zdjęta); scena podaje klastry starć w widoku i `px_L`. Logika — czysty `HudCombatLogic`; tu: odczyt świata (`F.K` = `window.KOSMOS`),
 // rzut wspólnym projektorem, rysunek Canvas 2D w px logicznych, klik i najechanie.
 //   • sylwetki klas (fregata / niszczyciel / pancernik / cywilny / nieznany) w położeniach RYSOWANYCH (scena + choreografia), nos
 //     wg rysowanego kursu (dziób modelu), znacznik kursu, krótki wektor prędkości rysowanej; wrak — przekreślony, przygaszony;
@@ -27,7 +27,7 @@ import { isPlayerEngagement } from '../utils/VesselFxLogic.js';
 import { areAtWar } from '../utils/WarGate.js';
 import { clickObject, vesselTarget, vesselsTarget, enemyTarget } from './ClickIntentLogic.js';
 import {
-  tacActive, tacTuning, tacIconAlpha, tacGlyphMode, tacVisibility, tacIconClass, tacRole, tacLayoutIcons, tacFireLines, tacFireStyle,
+  tacTuning, tacIconAlpha, tacGlyphMode, tacVisibility, tacIconClass, tacRole, tacLayoutIcons, tacFireLines, tacFireStyle,
   tacMissEnd, tacMicroBars, tacGlyphCounts, tacBandRadiusWU, tacUniqueRanges, tacHitAt, tacIconShape, tacMinSeparation,
   tacWatchPayload, tacBattleArrow, tacPlaceNames, tacBandTarget,
 } from './HudCombatLogic.js';
@@ -56,8 +56,8 @@ export class HudCombatLayer {
   /** Klastry starć w widoku z uczestnikami (widoczność, położenie rysowane, klasa, kurs, HP pokazywane), linie ognia. */
   prepare(F) {
     this.stats.prepares++;
-    const K = F.K, tr = K.threeRenderer, FE = F.features ?? {};
-    if (!tacActive(FE) || F.mode !== 'system' || !tr) {
+    const K = F.K, tr = K.threeRenderer;
+    if (F.mode !== 'system' || !tr) {   // CV-Z — warstwa taktyczna na stałe (flaga `cvTactical` zdjęta)
       if (this._prep.on) { this._glyph.clear(); this._vel.clear(); this._zones = []; this._glyphZones = []; this._obstacles = []; }
       this._prep = { on: false, clusters: [] };
       return 'tc:0';

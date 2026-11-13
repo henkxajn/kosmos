@@ -174,11 +174,13 @@ header('Z8–Z10  czip ⚔, bez obrysów, podpowiedź');
   K.deepSpaceCombatSystem = { listActive: () => [{}] };
   bar = new BottomControlBar(); drawMap(bar);
   const z = bar._zoomRect, c = bar._chipRect;
-  ok(!!z && !!c && c.x + c.w === z.x - 4 && bar.getDockSpan === undefined, `Z8a SEDNO: czip ⚔ na lewo od suwaka (${c?.x + c?.w} = ${z?.x} − 4); rzędu doku brak (T4)`);
+  // CV-Z — przecelowane świadomie: czip ⚔ (zminimalizowana karta walki) usunięty razem z kartą — dawny sygnał nic nie rysuje.
+  ok(!!z && c === undefined && z.x + z.w === bar._bellRect.x - 6 && bar.getDockSpan === undefined,
+    `Z8a (CV-Z): przy dawnym sygnale „zminimalizowana karta” czipu ⚔ nie ma, suwak na swoim miejscu (${z?.x}); rzędu doku brak (T4)`);
   K.combatHud = null; delete K.deepSpaceCombatSystem;
   bar = new BottomControlBar(); const ctx = drawMap(bar);
-  ok(!!bar._zoomRect && bar._chipRect === null && bar._zoomRect.x + bar._zoomRect.w === bar._bellRect.x - 6,
-    'Z8b SEDNO: bez czipu — suwak tuż na lewo od 🔔 (odstęp 6 px), czipu brak');
+  ok(!!bar._zoomRect && bar._chipRect === undefined && bar._zoomRect.x + bar._zoomRect.w === bar._bellRect.x - 6,
+    'Z8b SEDNO: suwak tuż na lewo od 🔔 (odstęp 6 px), czipu brak');
   ok(ops(ctx, 'stroke').length === 1 && ops(ctx, 'strokeRect').length === 5,
     `Z9a KONTROLA: pas nad mapą bez obrysów — jedyny stroke() to separator (${ops(ctx, 'stroke').length}), 5 obrysów prędkości (${ops(ctx, 'strokeRect').length})`);
   ok(knobX(ctx) != null, 'Z9b SEDNO: suwak z samych `fillRect` (gałka 6 × 12) — liczby obrysów jak bez suwaka');

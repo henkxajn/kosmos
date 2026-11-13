@@ -18,7 +18,8 @@
 //   K7  klucz klatki warstwy zmienia się przy każdym zdarzeniu rejestru (strzał, trafienie) i stoi w pauzie bez ruchu (spoczynek)
 //   K8  strefy kliku: ikona w położeniu RYSOWANYM rozstrzyga statek, który gracz widzi (nie ten, którego położenie logiczne
 //       leży pod kursorem); cel reguły kliku — własny / wróg / mikrostos
-//   K9  flaga OFF: warstwa bez elementów; etykiety, znaczniki i paski HP 3D — ścieżka dzisiejsza (bramka `tacActive`)
+//   K9  CV-Z (przecelowane świadomie — flaga `cvTactical` zdjęta, ścieżka OFF usunięta): stary klucz OFF nie ma skutku (warstwa
+//       działa), `tacActive` nie istnieje, etykiety i znaczniki pomijają uczestników bez bramki, pasków HP 3D nie ma w rendererze
 //   K10 pasma zasięgu: promień przez prawo sceny (monotoniczny; stopień 1 = G(d), 0 = skala prawdziwa; skala awaryjna)
 //   K11 Finding 633 — duch `rumor` trzyma położenie ostatnio znane także w `orbiting` (predykat + oba miejsca zapisu żywego)
 //   K12 i18n — klucze PL + EN
@@ -321,8 +322,8 @@ header('K8 — klik ikony: statek, który gracz widzi');
     'K8b: cel reguły kliku — wróg / własny / własny mikrostos; obok ikony — nic (klik idzie do mapy)');
 }
 
-// ── K9 — flaga OFF ────────────────────────────────────────────────────────────────────────────────────────────────
-header('K9 — flaga OFF: dzisiejsza ścieżka');
+// ── K9 — CV-Z: flaga zdjęta ───────────────────────────────────────────────────────────────────────────────────────
+header('K9 — CV-Z: warstwa taktyczna na stałe');
 {
   let res = null;
   try {
@@ -332,18 +333,17 @@ header('K9 — flaga OFF: dzisiejsza ścieżka');
     // CV-Z — przecelowane świadomie: przypadek `cvStage` OFF usunięty razem z flagą (scena na stałe).
     res = { key, count: c.count, obst: L.labelObstacles().length };
   } catch (e) { res = 'ERR ' + e.message; }
-  ok(res?.key === 'tc:0' && res?.count === 0 && res?.obst === 0,
-    `K9a: \`cvTactical\` OFF — warstwa bez elementów i bez przeszkód ${JSON.stringify(res)}`);
-  ok(call('tacActive', { cvTactical: true }) === true && call('tacActive', { cvTactical: false }) === false && call('tacActive', null) === false,
-    'K9b: `tacActive` — flaga (CV-Z — scena na stałe)');
+  ok(typeof res === 'object' && res?.count > 0 && res?.key !== 'tc:0',
+    `K9a (CV-Z): stary klucz \`cvTactical: false\` bez skutku — warstwa rysuje bitwę (${res?.count} elementów)`);
+  ok(LG && typeof LG.tacActive === 'undefined' && typeof LG.tacTuning === 'function',
+    'K9b (CV-Z): `tacActive` usunięte z `HudCombatLogic` (KONTROLA — moduł wczytany, `tacTuning` jest)');
   const lbl = strip(src('../../ui/HudLabelLayer.js')), sm = strip(src('../../ui/HudShipMarkerLayer.js')), tr = strip(src('../../renderer/ThreeRenderer.js'));
-  const iHp = tr.indexOf('  _syncCombatHpBars() {'), hpBody = iHp >= 0 ? tr.slice(iHp, iHp + 600) : '';
-  ok(/const tacPart = tacActive\(F\.features\) \? \(tr\?\._stageParticipants \?\? null\) : null;/.test(lbl) && /if \(tacKeep && tacPart\.has\(p\.id\) && !tacKeep\.has\(String\(p\.id\)\)\) continue;/.test(lbl),
-    'K9c: etykiety — uczestnicy bitwy pomijani TYLKO przy `tacActive` (zaznaczony zostaje); OFF — lista jak dziś');
-  ok(/const tacPart = tacActive\(F\.features\) \? \(tr\?\._stageParticipants \?\? null\) : null;/.test(sm) && /if \(tacPart\?\.has\?\.\(vid\)\) continue;/.test(sm),
-    'K9d: znaczniki statku — uczestnicy pomijani TYLKO przy `tacActive`');
-  ok(/if \(tacActive\(GAME_CONFIG\.FEATURES\)\) \{[\s\S]*?_disposeHpBar\(id\);[\s\S]*?return;\s*\}/.test(hpBody) && /planCombatHpBars\(/.test(tr.slice(iHp, iHp + 1400)),
-    'K9e: paski HP 3D — zdjęte TYLKO przy `tacActive`; OFF — dzisiejsze `planCombatHpBars`');
+  ok(/const tacPart = tr\?\._stageParticipants \?\? null;/.test(lbl) && /if \(tacKeep && tacPart\.has\(p\.id\) && !tacKeep\.has\(String\(p\.id\)\)\) continue;/.test(lbl) && !/tacActive/.test(lbl),
+    'K9c: etykiety — uczestnicy bitwy pomijani bez bramki flagi (zaznaczony zostaje)');
+  ok(/const tacPart = tr\?\._stageParticipants \?\? null;/.test(sm) && /if \(tacPart\?\.has\?\.\(vid\)\) continue;/.test(sm) && !/tacActive/.test(sm),
+    'K9d: znaczniki statku — uczestnicy pomijani bez bramki flagi');
+  ok(!/_syncCombatHpBars|planCombatHpBars|_createHpBar|_hpBars/.test(tr) && /_stageParticipants/.test(tr),
+    'K9e (CV-Z): pasków HP 3D nie ma w rendererze (KONTROLA — plik czytany, `_stageParticipants` jest)');
 }
 
 // ── K10 — pasma zasięgu przez prawo sceny ─────────────────────────────────────────────────────────────────────────
@@ -473,8 +473,8 @@ guard('K15', () => {
   ok(allOk, 'K15d: rozkład nazw — 20 gęstych zestawów, żadne dwie nazwy na sobie (bez miejsca — nazwa pominięta)');
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
   const iL = tr.indexOf('  getAllVisibleLabels() {'), body = iL >= 0 ? tr.slice(iL, tr.indexOf('\n  }\n', iL)) : '';
-  ok(/const tacPart = tacActive\(GAME_CONFIG\.FEATURES\) \? this\._stageParticipants : null;/.test(body) && /if \(tacPart\?\.has\?\.\(id\)\) continue;/.test(body),
-    'K15e: etykiety CTRL renderera pomijają uczestników bitwy w widoku TYLKO przy `tacActive` (OFF — jak dziś)');
+  ok(/const tacPart = this\._stageParticipants;/.test(body) && /if \(tacPart\?\.has\?\.\(id\)\) continue;/.test(body),
+    'K15e: etykiety CTRL renderera pomijają uczestników bitwy w widoku (CV-Z — bez bramki flagi)');
 });
 
 // ── K16 — pasma: najechany wrak nie gasi pasm zaznaczonego ────────────────────────────────────────────────────────

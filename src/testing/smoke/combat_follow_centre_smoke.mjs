@@ -222,15 +222,14 @@ header('T5  źródło `ThreeRenderer`');
   //   (`watchTargetAt` z `_engagementFit`) usunięty razem z flagą `cvStage`. Regułę `watchTargetAt` dalej wyprowadza T6.
   assert(/this\._stageWatchFit\(enc\)\?\.target/.test(aft) && !/setTargetDist|fitWatchFrame|watchTargetAt/.test(aft),
     'T5e cel auto-fokusu: oś kadru sceny bitwy (`_stageWatchFit`) — bez dopasowania dystansu');
-  const fitM = body('  _engagementFit(enc) {');
-  assert(/this\._computeWatchFit\(enc\)/.test(fitM) && /_centreFrame !== this\._frameNo/.test(fitM)
-    && /this\._engagementFit\(enc\)\?\.centroid/.test(body('  _engagementCentre(enc) {')),
-    'T5f kadr z `_computeWatchFit` pamiętany na jedną klatkę; środek znacznika = `centroid` kadru');
-  assert(/points: pts, safe, W, H/.test(body('  _computeWatchFit(enc) {')), 'T5g kadr zwraca punkty i prostokąt bezpieczny (wspólne dla „Obserwuj” i auto-fokusu)');
-  const mk = body('  _tickEngagementMarkers(nowMs) {');
-  const up = mk.indexOf('this._upsertEngagementMarker(u.id'); const mv = mk.indexOf('this._engagementCentre(enc)');
-  assert(up > 0 && mv > up && /e\.mesh\.position\.set\(c\.x, c\.y, c\.z\)/.test(mk) && /visible = !this\._watch/.test(mk),
-    'T5h znacznik starcia DSCS co klatkę w środku uczestników (po synchronizacji ze stanem); ukryty przy „Obserwuj” jak dotąd');
+  // CV-Z — przecelowane świadomie: dawny kadr bez sceny (`_engagementFit` / `_engagementCentre` / `_computeWatchFit`) i znacznik
+  //   starcia (`_tickEngagementMarkers`) usunięte. Kadr sceny pamiętany na jedną klatkę (`_stageFitCache`, klatka `_stageFitFrame`).
+  const sf = body('  _stageWatchFit(enc) {');
+  assert(/this\._stageFitFrame !== this\._frameNo/.test(sf) && /this\._stageFitCache\.has\(enc\.id\)/.test(sf),
+    'T5f kadr sceny (`_stageWatchFit`) pamiętany na jedną klatkę');
+  assert(!/_engagementFit|_engagementCentre|_computeWatchFit/.test(tr), 'T5g (CV-Z) dawnego kadru bez sceny nie ma (`_engagementFit`, `_engagementCentre`, `_computeWatchFit`)');
+  assert(!/_tickEngagementMarkers|_upsertEngagementMarker|_engagementMarkers/.test(tr) && sf.length > 0,
+    'T5h (CV-Z) znacznika starcia nie ma — bitwę oznacza scena, pasek walki i znak warstwy taktycznej');
   const imp = tr.slice(0, tr.indexOf('export class ThreeRenderer'));
   assert(/autoFocusFollowStep/.test(imp) && /viewOffsetFrame/.test(imp), 'T5i reguły importowane z `CombatWatchLogic` (CV-Z — `watchTargetAt` bez czytelnika w rendererze)');
 }

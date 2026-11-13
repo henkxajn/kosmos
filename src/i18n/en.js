@@ -3394,19 +3394,7 @@ export default {
   'fleet.retreatThreshold.label':    'Retreat threshold',
   'fleet.retreatThreshold.tooltip':  'Percentage of aggregate fleet HP below which all alive members move to nearest friendly planet. Active only when doctrine = retreat_at_50.',
 
-  // === CombatHUD (deep-space) ===
-  'combat.hudHeaderSingle': 'DEEP-SPACE BATTLE',
-  'combat.hudHeaderMulti':  'DEEP-SPACE BATTLES ({0})',
-  'combat.hudChip':         '⚔ Battles',        // ARKUSZ UI U0-3 (Finding 481) — minimized combat HUD chip
-  'combat.hudChipN':        '⚔ Battles [{0}]',
-  'combat.hudMore':         '+ {0} more…',
-  'combat.hudRound':        'round {0}',
-  'combat.hudAlive':        'alive: {0}/{1}',
-  'combat.hudBattleLog':    'battle log',
-  'combat.hudNoWeapons':    'unarmed',
-  'combat.hudMiss':         'miss',
-  'combat.hudShield':       'shield',
-  // ARC CV-6b2 — combat strip (flag `cvStrip`) replacing the combat card
+  // ARC CV-6b2 — combat strip (CV-Z: the old combat card and its keys removed)
   'combatStrip.round':      'R{0}',
   // ARC CV-8b (§3.1-6) — result row of an orbital battle on the combat strip after the replay
   'combatStrip.result.victory':   'Victory',

@@ -70,97 +70,14 @@ export function rumorGhostHold({ isEnemy, quality, revealed = false, ghostsOn = 
   return ghostsOn === true && isEnemy === true && quality === 'rumor' && revealed !== true;
 }
 
-// POLISH P2a (Finding 457) — znacznik starcia (pierścień) żyje wg STANU starcia, nie wg czasu realnego. Dawniej odświeżała
-// go wyłącznie salwa, a po 1600 ms CZASU REALNEGO bez strzału znikał — przy 400 ms na rundę także w trakcie starcia
-// (rundy bez strzału: zbliżanie, odliczanie broni) i w pauzie (P2 §10.6: luki 416 ms i 1808 ms). Teraz: znacznik jest,
-// dopóki starcie jest aktywne i w oglądanym układzie (`isEngagementInView`) — także w pauzie — i znika z jego końcem.
-// ARC CV-8b — rodzaj 'burst' (jednorazowa „imitacja” bitwy orbitalnej, 1600 ms czasu realnego) wycofany razem z imitacją: każdy
-// znacznik to znacznik starcia DSCS.
-// in: { markers: [{ id }], encounters: [{ id, isActive, systemId, point }], activeSystemId }   out: { upsert: [{ id, x, y }], dispose: [id] }
-export function planEngagementMarkers({ markers = [], encounters = [], activeSystemId }) {
-  const want = new Map();
-  for (const e of encounters) {
-    if (!e?.isActive || !e.id) continue;
-    if (!isEngagementInView({ encounterSystemId: e.systemId, activeSystemId })) continue;
-    if (!Number.isFinite(e.point?.x) || !Number.isFinite(e.point?.y)) continue;
-    want.set(e.id, e.point);
-  }
-  const upsert = [];
-  const dispose = [];
-  const have = new Set();
-  for (const m of markers) {
-    if (!m?.id) continue;
-    have.add(m.id);
-    if (!want.has(m.id)) dispose.push(m.id);
-  }
-  for (const [id, p] of want) if (!have.has(id)) upsert.push({ id, x: p.x, y: p.y });
-  return { upsert, dispose };
-}
+// CV-Z — znacznik starcia (`planEngagementMarkers`, Finding 457) i pierścień (`ENGAGEMENT_RING`, `engagementRingBand`, CP27)
+// usunięte: bitwę oznacza scena, pasek walki i znak warstwy taktycznej.
 
-// ── POLISH P2b CLOSE (C6, CP27) — pierścień starcia SUBTELNY ───────────────────────────────────────────────────────
-// Bramka P2B (2026-10-18): pierścień „za duży i zbyt mocny … pulsuje w dużym zoomie”. Teraz: cienka linia o STAŁEJ
-// szerokości na ekranie (WIDTH_PX przy każdym zbliżeniu), stałe krycie, bez pulsu; promień bez zmian (środek dawnego pasa
-// 0,25–0,32 j. świata), pierścień w środku uczestników (P2b-1) i ukryty przy „Obserwuj” (CP14).
-// ARKUSZ HUD paczka B (D-HUD-16) — kolor w roli `alert` motywu (`ThreeRenderer._syncHud3dColors`; dawniej 0xff5544).
-export const ENGAGEMENT_RING = Object.freeze({ RADIUS: 0.285, WIDTH_PX: 1.5, OPACITY: 0.3, SEGMENTS: 64 });
-
-// Pozycje pasa pierścienia w płaszczyźnie XY (mesh obrócony o −π/2 wokół X), kolejność wierzchołków jak `RingGeometry`
-// z `phiSegments` = 1: najpierw okrąg wewnętrzny (segments + 1), potem zewnętrzny. Szerokość pasa w świecie na każdym
-// wierzchołku = widthPx · świat-na-piksel w głębi TEGO wierzchołka (2 · głębia · tan(fov/2) / H) → stała szerokość
-// na ekranie także przy bliskim kadrze, gdy bliższa i dalsza strona okręgu leżą w różnej głębi.
-// depthAt(lx, ly) — głębia widoku punktu okręgu (współrzędne lokalne pasa); `out` — tablica docelowa (opcjonalna).
-export function engagementRingBand({ radius, widthPx, segments, fovDeg, H, depthAt, out = null }) {
-  const n = segments + 1;
-  const arr = out ?? new Float32Array(n * 2 * 3);
-  const k = 2 * Math.tan((fovDeg * Math.PI) / 360) / Math.max(1, H);
-  for (let i = 0; i < n; i++) {
-    const th = (i / segments) * Math.PI * 2;
-    const cx = Math.cos(th), sy = Math.sin(th);
-    const d = Math.max(1e-6, Number(depthAt(radius * cx, radius * sy)) || 0);
-    const half = 0.5 * widthPx * k * d;
-    const ri = Math.max(0, radius - half), ro = radius + half;
-    arr[i * 3] = ri * cx; arr[i * 3 + 1] = ri * sy; arr[i * 3 + 2] = 0;
-    const j = (n + i) * 3;
-    arr[j] = ro * cx; arr[j + 1] = ro * sy; arr[j + 2] = 0;
-  }
-  return arr;
-}
-
-// ── POLISH P2b (D2) — paski HP uczestników starcia (Finding 451, CP16) i biały błysk trafienia na modelu (CP18) ────────
-// Pasek: stały rozmiar EKRANOWY (px), pod statkiem (odstęp od krawędzi modelu), tło + wypełnienie w kolorze właściciela.
-export const HP_BAR = Object.freeze({ W_PX: 40, H_PX: 5, BORDER_PX: 1, GAP_PX: 6 });
+// ── POLISH P2b (D2) — biały błysk trafienia (CP18; dziś stała `HIT_GLOW` silnika FX). CV-Z — paski HP 3D (`HP_BAR`,
+// `hpBarFrac`, `planCombatHpBars`, Finding 451) usunięte: HP uczestników pokazują mikropaski warstwy taktycznej i pasek walki.
 // Błysk: biały, stałe 200 ms (CP18); rozmiar dopasowany do modelu (× MODEL_K), z podłogą MIN_PX na ekranie — przy kadrze
 // auto-fokusu (≤ 6 j.) model fregaty ma ~2 px, a błysk ma być widoczny.
 export const HIT_GLOW = Object.freeze({ MS: 200, COLOR: 0xffffff, MODEL_K: 1.6, MIN_PX: 12 });
-
-/** Ułamek HP paska: hp / hpStart w [0, 1]; brak stanu / hpStart ≤ 0 → 0. */
-export function hpBarFrac(state) {
-  const h0 = state?.hpStart;
-  if (!(h0 > 0) || !Number.isFinite(state?.hp)) return 0;
-  return Math.max(0, Math.min(1, state.hp / h0));
-}
-
-// Plan pasków HP — uczestnicy AKTYWNEGO starcia DSCS w oglądanym układzie (`isEngagementInView`), OBIE strony (CP16);
-// poległy w trakcie starcia — pasek pusty (frac 0; wrak powstaje dopiero na końcu starcia — Finding 460); koniec starcia —
-// pasków nie ma. Wejście: starcia z `DeepSpaceCombatSystem.listActive()` (pola `sideA/sideB`, `vesselStates`, `location`).
-// out: [{ vesselId, encounterId, frac, enemy }]
-export function planCombatHpBars({ encounters = [], activeSystemId }) {
-  const out = [];
-  for (const enc of encounters ?? []) {
-    if (!enc?.isActive) continue;
-    if (!isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId })) continue;
-    for (const side of [enc.sideA, enc.sideB]) {
-      if (!side) continue;
-      const enemy = side.ownerEmpireId !== 'player';
-      for (const id of [...(side.vesselIds ?? []), ...(side.joinedVesselIds ?? [])]) {
-        const st = enc.vesselStates?.get?.(id);
-        if (!st) continue;
-        out.push({ vesselId: id, encounterId: enc.id, frac: hpBarFrac(st), enemy });
-      }
-    }
-  }
-  return out;
-}
 
 // Rozmiar świata błysku trafienia: model × MODEL_K, ale na ekranie nie mniej niż MIN_PX (rozmiar px = świat · H /
 // (2 · głębia · tan(fov/2))). Głębia nieokreślona — sam rozmiar modelu.

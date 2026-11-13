@@ -345,8 +345,8 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   const C = CL?.HUD_CHIPS ?? {};
   ok(chips.length === 4 && chips.map((c) => c.layer).join(',') === 'radar,routes,labels,orbits', `C7a: cztery chipy [R] [T] [E] [O] nad mapą (${chips.length})`);
   ok(chips.length === 4 && Math.abs(chips[0].x - (150 + C.CHIP_GAP)) < 1e-9 && chips.every((c, i) => i === 0 || c.x >= chips[i - 1].x + chips[i - 1].w)
-    && chips[3].x + chips[3].w <= on.b._chipRect.x - C.CHIP_GAP + 1e-9,
-    'C7b: od lewego końca pasa (miejsce dawnego doku), bez nakładania, przed czipem ⚔ / suwakiem');
+    && chips[3].x + chips[3].w <= on.b._zoomRect.x - C.CHIP_GAP + 1e-9,
+    'C7b: od lewego końca pasa (miejsce dawnego doku), bez nakładania, przed suwakiem (CV-Z — czip ⚔ usunięty z kartą walki)');
   // Tekst chipu z reguły modułu (`chipText` — nawiasy wg `CHIP_SPACED`), nie z literału keepera.
   const br = (L) => call('chipText', L, true)?.text ?? `[${L}]`;
   const texts = on.c._calls.filter((x) => x.op === 'fillText').map((x) => x.args[0]);
@@ -355,8 +355,8 @@ header('C7  chipy na pasie dolnym (prawdziwy BottomControlBar)');
   const off = draw({ left: 150 }, true);
   const same = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
   ok(same(on.b._bellRect, off.b._bellRect) && same(on.b._menuRect, off.b._menuRect) && same(on.b._playRect, off.b._playRect)
-    && on.b._speedRects.every((r, i) => same(r, off.b._speedRects[i])) && same(on.b._zoomRect, off.b._zoomRect) && same(on.b._chipRect, off.b._chipRect),
-    'C7d SEDNO (pin px): zegar, suwak, 🔔, ☰ i ⚔ w tych samych px z chipami i bez nich');
+    && on.b._speedRects.every((r, i) => same(r, off.b._speedRects[i])) && same(on.b._zoomRect, off.b._zoomRect) && on.b._chipRect === undefined,
+    'C7d SEDNO (pin px): zegar, suwak, 🔔 i ☰ w tych samych px z chipami i bez nich (CV-Z — czipu ⚔ nie ma, także przy dawnym sygnale „zminimalizowana karta”)');
   ok((off.b.getLayerChips?.() ?? []).length === 0 && (on.b.getLayerChips?.() ?? []).length === 4,
     'C7e KONTROLA: wariant porównawczy bez chipów (rysunek chipów wycięty) — pas jak po T4; z chipami — cztery (pin C7d nie jest jałowy)');
   const ov = draw(null);

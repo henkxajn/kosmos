@@ -9,7 +9,7 @@
 // (Finding 638; zmierzone: 5 na 5 z celem na statek → dwa równoległe starcia 0,15 AU od siebie). Scena bitwy (CV-3a1)
 // rysuje je jako jedną bitwę; ta sama reguła klastra (`encounterClusters` — pozycje LOGICZNE uczestników, ten sam układ,
 // środki ≤ 0,30 AU, pojedyncze wiązanie, id = najmniejsze id starcia) daje tu kartę z jednym wierszem na klaster i jeden
-// baner wyniku na klaster — po OSTATNIM `battle:resolved` klastra. Od CV-6b2 (#639, flaga `cvStrip`) tę samą grupę czyta
+// baner wyniku na klaster — po OSTATNIM `battle:resolved` klastra. Od CV-6b2 (#639) tę samą grupę czyta
 // narrator Dziennika (`CombatNarration` — jedna linia bitwy i jedna potyczki na klaster) i pasek walki (`CombatStripLogic`).
 // #675 (krok poza CV, §3.2-25) — okno łaski przed ogłoszeniem: dobicie zaczęte zaraz po końcu klastra ze statkami tej bitwy
 // dołącza do jej ogłoszenia (`clusterGraceJoin` / `clusterGraceDue`, pokrętło `CLUSTER_GRACE`).
@@ -25,7 +25,7 @@ export function clusterRadiusPx(auToPx) {
 const byIdAsc = (a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
 
 /**
- * Widok scalony kilku starć klastra — kształt starcia, który rysuje karta walki (`CombatHUD._drawEncounterRow`): strony
+ * Widok scalony kilku starć klastra (dawny kształt wiersza karty walki; dziś — oś rund paska walki, `stripLog`): strony
  * (statki pierwotne i dołączone wszystkich starć), stany statków, oś rund wyrównana do końca (ostatnie rundy wszystkich
  * starć na końcu — log „najnowsze najpierw”), runda = najdłuższa, punkt i id — starcia o najmniejszym id (klaster).
  * @param {object[]} encs — starcia klastra (≥ 1)
@@ -66,23 +66,7 @@ export function mergeEncounterView(encs, { labelFor = null } = {}) {
   };
 }
 
-/**
- * Wiersze karty walki — jeden na klaster starć. Klaster jednego starcia — samo starcie (rysunek bez zmian); kilku —
- * widok scalony (`mergeEncounterView`). Gdy żaden klaster nie łączy starć — lista wejściowa bez zmian (kolejność też).
- * @param {object[]} encounters — aktywne starcia (`DSCS.listActive()`)
- * @param {{ getPos: (vesselId:string) => ({x:number,y:number}|null), radius: number, labelFor?: Function }} o
- */
-export function combatCardRows(encounters, { getPos, radius, labelFor = null } = {}) {
-  const list = (encounters ?? []).filter(Boolean);
-  if (list.length < 2 || typeof getPos !== 'function' || !(radius > 0)) return list;
-  const clusters = encounterClusters(list, getPos, radius);
-  if (clusters.length === list.length) return list;
-  const byId = new Map(list.map((e) => [e.id, e]));
-  return clusters.map((cl) => {
-    const encs = cl.encounterIds.map((id) => byId.get(id)).filter(Boolean);
-    return encs.length === 1 ? encs[0] : mergeEncounterView(encs, { labelFor });
-  });
-}
+// CV-Z — `combatCardRows` (wiersze karty walki) usunięte razem z kartą: bitwy paska liczy `CombatStripLogic.stripBattles`.
 
 /**
  * Pozostałe AKTYWNE starcia klastra starcia `encounterId` (w chwili `battle:resolved` rozstrzygane starcie jest jeszcze

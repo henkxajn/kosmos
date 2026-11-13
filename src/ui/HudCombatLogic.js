@@ -1,5 +1,5 @@
 // HudCombatLogic — ARC COMBAT VISUALS, krok CV-6a (COMBAT_VISUALS_PLAN.md §2.6, D-CV-20, D-CV-22; Findingi 633, 653 (a),
-// 666, 674): czysta logika WARSTWY TAKTYCZNEJ bitwy — podwarstwy HUD 2D `HudCombatLayer` (flaga `cvTactical`, wymaga `cvStage`).
+// 666, 674): czysta logika WARSTWY TAKTYCZNEJ bitwy — podwarstwy HUD 2D `HudCombatLayer` (na stałe od CV-Z).
 //   • ZOOM SEMANTYCZNY w jednym ruchu: krycie ikon = 1 − smoothstep(8, 24, px_L) — to samo `px_L` (długość fregaty na ekranie
 //     w głębi środka RYSOWANEJ bitwy, `ThreeRenderer._tickBattleStage`), które steruje sceną; kino (px_L ≥ 24) — bez ikon i bez
 //     mikropasków; daleko — gdy rysowana bitwa jest za mała na ikony, JEDEN znak bitwy („⚔ 10 : 9”, dwa paski siły, runda) z histerezą;
@@ -54,13 +54,7 @@ export const TAC_TUNING = Object.freeze({
 
 export const TAC = { ...TAC_TUNING };
 
-/**
- * Czy warstwa taktyczna działa (flaga `cvTactical` i scena `cvStage` — scena podaje klastry starć i `px_L`). JEDNO źródło dla
- * podwarstwy, etykiet i znaczników uczestników (HUD) i pasków HP 3D (renderer): przy OFF wszystko jak dziś.
- */
-export function tacActive(features) {
-  return !!features?.cvTactical;
-}
+// CV-Z — `tacActive` (flaga `cvTactical`) usunięte: warstwa taktyczna na stałe, paski HP 3D usunięte z renderera.
 
 /** Bieżące pokrętła: alias `cvTuning` (gdy jest) nad domyślnymi; brak / zła wartość — domyślna. */
 export function tacTuning(live = null) {

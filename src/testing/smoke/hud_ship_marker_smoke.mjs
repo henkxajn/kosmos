@@ -146,9 +146,10 @@ header('M0  API, bez flagi, miejsce podwarstwy, macierz kamery w pętli renderu'
     'M0d: podwarstwa znacznika po radarze, PRZED etykietami (zbierana przed nimi — przeszkody etykiet; rysowana pod nimi)');
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
   const i0 = tr.indexOf('  _startLoop() {'), loop = i0 >= 0 ? tr.slice(i0, tr.indexOf('\n  }\n', i0)) : '';
-  const mw = loop.indexOf('this.camera.updateMatrixWorld()'), hp = loop.indexOf('this._syncCombatHpBars()'), am = loop.indexOf('this._syncEnemyAlertMarkers()');
-  ok(mw > 0 && hp > mw && am > mw && !/_syncInsignia/.test(loop),
-    'M0e: pętla renderu odświeża macierz kamery PRZED paskami HP i celownikiem wroga (dawniej na początku `_syncInsignia`, usuniętego)');
+  // CV-Z — przecelowane świadomie: paski HP 3D usunięte (flaga `cvTactical` zdjęta) — zostaje celownik wroga.
+  const mw = loop.indexOf('this.camera.updateMatrixWorld()'), am = loop.indexOf('this._syncEnemyAlertMarkers()');
+  ok(mw > 0 && am > mw && !/_syncInsignia|_syncCombatHpBars/.test(loop),
+    'M0e: pętla renderu odświeża macierz kamery PRZED celownikiem wroga (dawniej na początku `_syncInsignia`; paski HP 3D usunięte — CV-Z)');
   const H = mkHud();
   ok(typeof H.lay?.handleClick !== 'function' && typeof H.lay?.coversUiPoint !== 'function' && typeof H.lay?.pinButtonAt !== 'function'
     && typeof H.lay?.labelObstacles === 'function', 'M0f: podwarstwa bez strefy kliku (klik idzie dalej, do pickera statków 3D); przeszkody etykiet — tak');

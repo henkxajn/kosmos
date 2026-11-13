@@ -6,11 +6,11 @@
 //   P1 układ (czysty `stripLayout`): przy 1280×833 i 1600×1041 (px logiczne), z outlinerami i bez, z Dokiem, 1 i 3 linie, „+N”,
 //      rozwinięcie krótkie i dłuższe niż miejsce, obie krawędzie — prostokąt w obszarze mapy z `MapInsets`, nigdy nad kolumnami
 //      outlinerów ani nad pasem dolnym; rozwinięcie przewija się, gdy nie mieści się; pasek u góry staje pod banerem pickera;
-//      KONTROLA (#629): dzisiejsza karta (prawdziwy `CombatHUD`) przy 1280×833 wchodzi na pas dolny
+//      (CV-Z — KONTROLA #629 na karcie `CombatHUD` usunięta razem z kartą; pasek nad pasem dolnym zostaje)
 //   P2 bitwy = klastry (prawdziwe DSCS + stager `cvBattle({ nA: 4, nB: 4, split: 1 })` w świecie bez renderera): cztery starcia,
 //      JEDNA bitwa paska; liczby i sumy HP stron = sumy starć (przed i w trakcie walki); mgła wojny = `isEndpointVisibleInCombat`
 //      na każdym okręcie (bitwa gracza — wróg widoczny przy wywiadzie „nieznany”; bitwa bez gracza — „?”, przy contact — widoczny)
-//   P3 „Obserwuj”: ładunek paska == ładunek dzisiejszej karty pod `cvStage` (prawdziwe kliknięcia obu — `camera:watchBattle`)
+//   P3 „Obserwuj”: ładunek paska == ładunek bitwy-klastra (prawdziwe kliknięcie — `camera:watchBattle`; CV-Z — bez karty)
 //   P4 Dziennik (#639) na tym samym rozegranym split 4v4: pod flagą JEDNA linia bitwy i JEDNA linia potyczki na klaster —
 //      prawdziwe metody `GameScene` (`_narrateBattleCluster`, `_clusterNarratorOf`, `_battleLogEntry`) i `UIManager.skirmishLineText`
 //      wycięte ze źródła; wynik scalony jak baner (straty sumą, tury maks.); KONTROLA: bez flagi — linia na starcie (4 + 4);
@@ -22,9 +22,9 @@
 //      = druga bitwa — split 4v4 dawał 2 linie i 2 banery). P4i: z oknem — jedna bitwa; KONTROLA w P4i: okno 0 — po dwie
 //   P5 ☰ „Auto-fokus bitwy” (#630): przełącznik w uiPrefs, wiersz menu z i18n, zapis i wczytanie (kształt `SaveSystem` /
 //      `GameScene`) — stan przeżywa; `combatFxVisible` bez czytelnika w kodzie (KONTROLA: komentarz o wycofaniu jest)
-//   P6 flaga OFF = dzisiejsza karta: `combatHud.getPanelRect` / `isMinimized` bez flagi jak dotąd, z flagą — pasek; UIManager
-//      rysuje i klika kartę wyłącznie bez flagi; `watchSafeRect` z krawędzią 'top' zaczyna się POD paskiem (KONTROLA: bez krawędzi
-//      — dzisiejszy wzór)
+//   P6 CV-Z (przecelowane świadomie — flaga `cvStrip` zdjęta, karta `CombatHUD` usunięta): `combatHud` = fasada prostokąta paska
+//      (D-CV-21), UIManager rysuje i klika pasek bez bramki; `watchSafeRect` z krawędzią 'top' zaczyna się POD paskiem (KONTROLA: bez
+//      krawędzi — dawny wzór)
 //   P7 obsługa paska (logika stref): „Obserwuj” emituje, ▾ / ▴ rozwija jedną bitwę, Esc zwija (raz), kółko przewija rozwinięcie
 //      i jest pochłonięte nad paskiem, klik w pasek pochłonięty, poza nim — nie; 5 bitew → 3 linie i „+N”; kursor „rączki”
 //   P8 źródło: pierścień starcia i biały błysk trafienia pod flagą — nie, paski HP 3D zostają (CV-6a); Esc w kaskadzie `GameScene`;
@@ -36,7 +36,7 @@
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { reseed }                from '../headless/env.js';
-import { readFileSync }          from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import EventBus                  from '../../core/EventBus.js';
 import EntityManager             from '../../core/EntityManager.js';
 import { GAME_CONFIG }           from '../../config/GameConfig.js';
@@ -60,7 +60,6 @@ import { systemDisplayName }     from '../../ui/MapLabelLogic.js';
 import { clusterPeerIds, clusterRadiusPx, clusterBannerStep } from '../../ui/BattleClusterLogic.js';
 import * as BCX                  from '../../ui/BattleClusterLogic.js';   // #675 — okno łaski (nowe eksporty: przestrzeń nazw — fail-first bez błędu linkowania)
 import { PresentationClock }     from '../../renderer/combat/PresentationClock.js';   // #675 — zegar okien ogłoszeń w `_tickAnnouncements`
-import { CombatHUD }             from '../../ui/CombatHUD.js';
 import { BottomBar }             from '../../ui/BottomBar.js';
 
 const tryImport = async (rel) => { try { return await import(rel); } catch (e) { console.log(`  ! import ${rel}: ${e.message}`); return null; } };
@@ -155,23 +154,12 @@ block('P1 — układ w obszarze mapy z MapInsets (#629), obie krawędzie, rozwin
   const aside = SL.stripLayout({ W: 1280, H: 833, insets: ins, lines: 2, naturalW: 470, edge: 'top', banner: { ...banner, x: 2, w: 100 } });
   assert(under.block.y === banner.y + banner.h + S.BANNER_GAP && aside.block.y === plain.block.y && plain.block.y < under.block.y,
     `P1d pasek u góry staje pod banerem pickera (y ${plain.block.y} → ${under.block.y}); KONTROLA: baner obok — y bez zmian (${aside.block.y})`);
-  // KONTROLA #629 — dzisiejsza karta (prawdziwy `CombatHUD`, bez flagi) przy 1280×833 wchodzi na pas dolny obszaru mapy.
-  const saved = globalThis.window.KOSMOS;
-  const states = new Map([['a1', { hp: 90, hpStart: 120, weapons: [] }], ['b1', { hp: 90, hpStart: 120, weapons: [] }]]);
-  const enc = { id: 'encounter_1', isActive: true, currentRound: 2, timeline: [], location: { systemId: 'sys_home', planetId: null, point: { x: 0, y: 0 } },
-    sideA: { vesselIds: ['a1'], joinedVesselIds: [], ownerEmpireId: 'player', label: 'Gracz' },
-    sideB: { vesselIds: ['b1'], joinedVesselIds: [], ownerEmpireId: 'emp_x', label: 'X' }, vesselStates: states };
-  const fl = F.cvStrip, fs = F.cvStage; F.cvStrip = false; F.cvStage = false;
-  let card = null;
-  try {
-    globalThis.window.KOSMOS = { civMode: true, activeSystemId: 'sys_home', deepSpaceCombatSystem: { listActive: () => [enc] },
-      vesselManager: { _vessels: new Map(), getVessel: () => null }, starSystemManager: { getAllSystems: () => [] } };
-    const hud = new CombatHUD(); hud.draw(mkCtx(), 1280, 833); card = hud.getPanelRect();
-  } finally { globalThis.window.KOSMOS = saved; F.cvStrip = fl; F.cvStage = fs; }
+  // CV-Z — przecelowane świadomie: KONTROLA #629 na prawdziwej karcie `CombatHUD` usunięta razem z kartą (flaga `cvStrip` zdjęta);
+  // zostaje pin paska — prostokąt nad pasem dolnym — z kontrolą geometrii (ten sam pas przecina prostokąt postawiony na nim).
   const stripBand = { x: 0, y: 833 - civBottom, w: 1280, h: 20 };
   const stripRect = SL.stripLayout({ W: 1280, H: 833, insets: { left: 0, right: 0, top: COSMIC.TOP_BAND_H, bottom: civBottom }, lines: 1, naturalW: 470 }).rect;
-  assert(!!card && overlap(card, stripBand) && !overlap(stripRect, stripBand),
-    `P1e KONTROLA #629: karta (y ${card?.y}–${card ? card.y + card.h : '—'}) wchodzi na pas dolny (y ${stripBand.y}–${stripBand.y + 20}); pasek — nie`);
+  assert(!overlap(stripRect, stripBand) && overlap({ x: 0, y: stripBand.y - 5, w: 100, h: 10 }, stripBand),
+    `P1e #629: pasek (y ${stripRect?.y}–${stripRect ? stripRect.y + stripRect.h : '—'}) nie wchodzi na pas dolny (y ${stripBand.y}–${stripBand.y + 20}); KONTROLA — prostokąt na pasie go przecina`);
 });
 
 // ═══ Świat bez renderera: DSCS + stager + WarSystem (potyczka) ════════════════════════════════════════════════════
@@ -282,26 +270,21 @@ block('P2e — bitwa BEZ gracza: wróg ukryty mgłą („?”), przy wywiadzie c
     'P2f KONTROLA: ten sam stan przy wywiadzie contact — widoczne, liczby i żywi policzone');
 });
 
-block('P3 — „Obserwuj”: ładunek paska == ładunek karty pod `cvStage` (prawdziwe kliknięcia, `camera:watchBattle`)', () => {
+block('P3 — „Obserwuj”: ładunek paska (prawdziwe kliknięcie, `camera:watchBattle`) == ładunek bitwy-klastra', () => {
+  // CV-Z — przecelowane świadomie: porównanie z kartą `CombatHUD` usunięte razem z kartą; zostaje kształt ładunku klastra (id starcia
+  // o najmniejszym id, jego układ i punkt — ten sam, który niosła karta pod `cvStage`).
   reseed('cv6b2-strip'); world();
   helpers()?.cvBattle({ seed: 1, nA: 4, nB: 4, split: true });
-  const fl = F.cvStrip, fs = F.cvStage;
-  F.cvStage = true; F.cvStrip = false;
-  const hud = new CombatHUD(); hud.draw(mkCtx(), 1600, 1041);
-  const btn = hud._watchBtns?.[0] ?? null;
-  hud.handleClick(btn.x + 1, btn.y + 1);
-  const cardEmit = out.watch.splice(0);
-  F.cvStrip = true;
   const strip = new SR.CombatStrip();
   strip.draw(mkCtx(), 1600, 1041, { K: window.KOSMOS, insets: { left: 0, right: 0, top: 28, bottom: 62 } });
-  const z = strip._zones.find((q) => q.kind === 'watch');
-  strip.handleClick(z.x + 1, z.y + 1);
+  const zs = strip._zones.filter((q) => q.kind === 'watch');
+  strip.handleClick(zs[0].x + 1, zs[0].y + 1);
   const stripEmit = out.watch.splice(0);
-  F.cvStrip = fl; F.cvStage = fs;
   const row = SL.stripBattles(dscs.listActive(), env())[0];
-  assert(hud._watchBtns.length === 1 && cardEmit.length === 1 && stripEmit.length === 1
-    && JSON.stringify(stripEmit[0]) === JSON.stringify(cardEmit[0]) && JSON.stringify(SL.stripWatchPayload(row)) === JSON.stringify(cardEmit[0]),
-    `P3 karta (1 wiersz na klaster) i pasek emitują to samo: ${JSON.stringify(stripEmit[0])}`);
+  const minId = [...row.encounterIds].sort()[0];
+  assert(zs.length === 1 && stripEmit.length === 1 && JSON.stringify(stripEmit[0]) === JSON.stringify(SL.stripWatchPayload(row))
+    && stripEmit[0].encounterId === minId && row.encounterIds.length >= 2,
+    `P3 jeden „Obserwuj” na klaster (${row.encounterIds.length} starć), ładunek = starcie o najmniejszym id: ${JSON.stringify(stripEmit[0])}`);
 });
 
 // ═══ P4 — Dziennik ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -314,7 +297,7 @@ const gsScope = { window: globalThis.window, GAME_CONFIG, t, EntityManager, norm
   RaidAnnouncer: RALX?.RaidAnnouncer, raidEnemyIds: RALX?.raidEnemyIds, stillRaiding: RALX?.stillRaiding, raidBusy: RALX?.raidBusy, RAID_ANNOUNCE: RALX?.RAID_ANNOUNCE };
 function runNarration(flagOn, { graceRounds = null } = {}) {
   reseed('cv6b2-strip'); world();
-  F.cvStrip = flagOn;
+  const narrate = flagOn;   // CV-Z — w grze narrator klastra zawsze (flaga `cvStrip` zdjęta); `false` = KONTROLA uprzęży: linia na starcie
   const keepGrace = BCX.CLUSTER_GRACE?.ROUNDS;
   if (graceRounds != null && BCX.CLUSTER_GRACE) BCX.CLUSTER_GRACE.ROUNDS = graceRounds;
   const scope = { ...gsScope, window: globalThis.window };
@@ -335,15 +318,15 @@ function runNarration(flagOn, { graceRounds = null } = {}) {
   // słuchacz Dziennika `GameScene` (routing) i słuchacz potyczki `UIManager` / spóźnionej potyczki `GameScene`
   EventBus.on('battle:resolved', ({ warId, battleId, result }) => {
     if (!result) return;
-    if (!warId && F.cvStrip && NR.isClusterNarrated(battleId)) { gs._narrateBattleCluster({ battleId, result }); return; }
+    if (!warId && narrate && NR.isClusterNarrated(battleId)) { gs._narrateBattleCluster({ battleId, result }); return; }
     const e = gs._battleLogEntry({ warId, result }); if (e) window.KOSMOS.eventLogSystem.push(e);
   });
   EventBus.on('war:skirmish', ({ empireId, battleId }) => {
-    if (F.cvStrip && NR.isClusterNarrated(battleId)) return;
+    if (narrate && NR.isClusterNarrated(battleId)) return;
     ui._log(ui.skirmishLineText(empireId), 'combat');
   });
   EventBus.on('war:skirmish', ({ empireId, battleId }) => {
-    if (!F.cvStrip || !NR.isClusterNarrated(battleId)) return;
+    if (!narrate || !NR.isClusterNarrated(battleId)) return;
     for (const text of gs._clusterNarratorOf().onSkirmish({ empireId, battleId })) ui._log(text, 'combat');
   });
   const results = [], banners = [], spans = new Map();
@@ -375,7 +358,6 @@ function runNarration(flagOn, { graceRounds = null } = {}) {
   const graceMs = gs._battleGraceMs?.() ?? 0;
   onFrame = null;
   ts.pause();
-  F.cvStrip = true;
   if (BCX.CLUSTER_GRACE) BCX.CLUSTER_GRACE.ROUNDS = keepGrace;
   const battleLines = out.log.filter((e) => /^⚔ Bitwa/.test(e.text));
   const skLines = out.legacy.filter((e) => /^⚔ Potyczka/.test(e.text));
@@ -399,10 +381,8 @@ function runNarration(flagOn, { graceRounds = null } = {}) {
 }
 
 block('P4 — Dziennik (#639): split 4v4 — JEDNA linia bitwy i JEDNA linia potyczki na bitwę (klaster); bez flagi — linia na starcie', () => {
-  const fl = F.cvStrip;
   const ON = runNarration(true);
   const OFF = runNarration(false);
-  F.cvStrip = fl;
   const nEnc = ON.battles.length, nBat = ON.groups.length;
   assert(ON.st?.ok === true && nEnc >= 4 && ON.skirmishes.length === nEnc && nBat >= 1 && nBat < nEnc,
     `P4a świadek: DSCS ogłosił ${nEnc} starć, \`WarSystem\` — ${ON.skirmishes.length} potyczek (mechanika NA STARCIE nietknięta); oś czasu — ${nBat} bitw(y) (${ON.groups.map((g) => g.length).join(' + ')} starć)`);
@@ -420,16 +400,14 @@ block('P4 — Dziennik (#639): split 4v4 — JEDNA linia bitwy i JEDNA linia pot
   assert(expect.length === ON.battleLines.length && expect.every((x, i) => ON.battleLines[i]?.text.includes(x)),
     `P4d każda linia niesie wynik swojej bitwy scalony jak baner (straty sumą, tury maks.): ${expect.join(' · ')}`);
   assert(OFF.battleLines.length === nEnc && OFF.skLines.length === nEnc,
-    `P4e KONTROLA bez flagi: linia na starcie — ${OFF.battleLines.length} linii bitwy i ${OFF.skLines.length} potyczek (dzisiejszy Dziennik)`);
+    `P4e KONTROLA uprzęży bez narratora (dawna ścieżka OFF, w grze usunięta — CV-Z): linia na starcie — ${OFF.battleLines.length} linii bitwy i ${OFF.skLines.length} potyczek`);
   // Id starć niosą przyrostek zajętości z `gameState` (pamięta bitwy poprzedniego świata) — porównanie WYNIKÓW w kolejności rozstrzygnięć.
   const sig = (R) => R.results.map((r) => [r.winner, r.lossesA, r.lossesB, r.turns]);
   if (JSON.stringify(sig(OFF)) !== JSON.stringify(sig(ON))) { console.log('     ON ', JSON.stringify(sig(ON))); console.log('     OFF', JSON.stringify(sig(OFF))); }
   assert(JSON.stringify(sig(OFF)) === JSON.stringify(sig(ON)),
-    'P4f wyniki starć z flagą i bez — identyczne (narrator nie dotyka walki)');
+    'P4f wyniki starć z narratorem i bez — identyczne (narrator nie dotyka walki)');
   // #675 — pin naprawy: z oknem łaski dobicie dołącza (jedna bitwa); KONTROLA w środku: okno 0 (zachowanie sprzed kroku) — druga bitwa
-  const fl0 = F.cvStrip;
   const G0 = runNarration(true, { graceRounds: 0 });
-  F.cvStrip = fl0;
   assert(ON.graceMs > 0 && nBat === 1 && ON.battleLines.length === 1 && G0.graceMs === 0 && G0.groups.length === 2
     && G0.battleLines.length === 2 && G0.skLines.length === 2 && G0.banners.length === 2,
     `P4i #675 dobicie w oknie łaski (${ON.graceMs} ms) — ${nBat} bitwa, ${ON.battleLines.length} linia; KONTROLA okno 0 — ${G0.groups.length} bitwy, ${G0.battleLines.length} linie bitwy, ${G0.skLines.length} potyczki, ${G0.banners.length} banery`);
@@ -485,41 +463,37 @@ block('P5 — ☰ „Auto-fokus bitwy”: uiPrefs, wiersz menu, zapis → wczyta
 });
 
 // ═══ P6 — flaga OFF = karta ══════════════════════════════════════════════════════════════════════════════════════
-block('P6 — flaga OFF = dzisiejsza karta; prostokąt panelu i czip; `watchSafeRect` z krawędzią', () => {
-  const saved = globalThis.window.KOSMOS, fl = F.cvStrip, fs = F.cvStage;
+block('P6 — CV-Z: `combatHud` = fasada prostokąta paska; `UIManager` bez karty; `watchSafeRect` z krawędzią', () => {
+  // CV-Z — przecelowane świadomie: dawne P6a–P6d (karta bez flagi, czip „⚔ Walki”, rysunek / klik / najechanie karty w `UIManager`)
+  // opisywały ścieżkę OFF usuniętą razem z kartą `CombatHUD`.
+  const saved = globalThis.window.KOSMOS;
   const states = new Map([['a1', { hp: 90, hpStart: 120, weapons: [] }], ['b1', { hp: 70, hpStart: 120, weapons: [] }]]);
   const enc = { id: 'encounter_1', isActive: true, currentRound: 2, timeline: [], location: { systemId: 'sys_home', planetId: null, point: { x: 0, y: 0 } },
     sideA: { vesselIds: ['a1'], joinedVesselIds: [], ownerEmpireId: 'player', label: 'Gracz' },
     sideB: { vesselIds: ['b1'], joinedVesselIds: [], ownerEmpireId: 'emp_x', label: 'X' }, vesselStates: states };
-  let cardRect = null, offRect = null, onRect = null, minOff = null, minOn = null, minNoStrip = null, stripRect = null;
+  let stripRect = null, facRect = undefined, facNone = undefined;
+  const ui = strip(UI);
+  const ic = UI.indexOf('  constructor('), ctor = ic >= 0 ? UI.slice(ic, UI.indexOf('\n  }\n', ic)) : '';
   try {
-    F.cvStage = false;
     globalThis.window.KOSMOS = { civMode: true, activeSystemId: 'sys_home', deepSpaceCombatSystem: { listActive: () => [enc] },
       vesselManager: { _vessels: new Map(), getVessel: () => null }, starSystemManager: { getAllSystems: () => [] } };
-    const hud = new CombatHUD();
-    F.cvStrip = false; hud.draw(mkCtx(), 1280, 833); cardRect = hud.getPanelRect();
-    const strip = new SR.CombatStrip(); strip.draw(mkCtx(), 1280, 833, { K: window.KOSMOS, insets: { left: 0, right: 0, top: 28, bottom: 62 } });
-    stripRect = strip.getPanelRect();
-    window.KOSMOS.combatStrip = strip;
-    offRect = hud.getPanelRect();
-    F.cvStrip = true; onRect = hud.getPanelRect();
-    hud._minimized = true;
-    minOn = hud.isMinimized(); F.cvStrip = false; minOff = hud.isMinimized();
-    delete window.KOSMOS.combatStrip; F.cvStrip = true; minNoStrip = hud.isMinimized();
-  } finally { globalThis.window.KOSMOS = saved; F.cvStrip = fl; F.cvStage = fs; }
-  assert(!!cardRect && JSON.stringify(offRect) === JSON.stringify(cardRect) && !('edge' in cardRect),
-    'P6a bez flagi `combatHud.getPanelRect()` = prostokąt karty (także gdy pasek istnieje)');
-  assert(!!stripRect && JSON.stringify(onRect) === JSON.stringify(stripRect) && onRect.edge === 'top',
-    `P6b z flagą — prostokąt paska z krawędzią (${JSON.stringify(onRect)})`);
-  assert(minOn === false && minOff === true && minNoStrip === true,
-    'P6c czip „⚔ Walki”: z flagą i paskiem karta nie jest „zminimalizowana”; bez flagi / bez paska — jak dotąd');
-  const ui = strip(UI);
-  assert(/if \(civMode && !globeOpen && !GAME_CONFIG\.FEATURES\?\.cvStrip\) this\.combatHud\.draw\(ctx, W, H\);/.test(ui)
-    && /if \(civMode && !globeOpen && GAME_CONFIG\.FEATURES\?\.cvStrip\) \{\s*this\.combatStrip\.draw\(/.test(ui)
-    && /\} else this\.combatStrip\?\.clear\?\.\(\);/.test(ui)
-    && /if \(!GAME_CONFIG\.FEATURES\?\.cvStrip && this\.combatHud\?\.handleClick\?\.\(x, y\)\) return true;/.test(ui)
-    && /else this\.combatHud\?\.handleMouseMove\?\.\(x, y\);/.test(ui),
-    'P6d `UIManager`: karta rysowana, klikana i najeżdżana WYŁĄCZNIE bez flagi; pasek z flagą (bez niej — czyszczony)');
+    const s = new SR.CombatStrip(); s.draw(mkCtx(), 1280, 833, { K: window.KOSMOS, insets: { left: 0, right: 0, top: 28, bottom: 62 } });
+    stripRect = s.getPanelRect();
+    // fasada z konstruktora `UIManager` (ta sama linia źródła), wykonana na atrapie z paskiem i bez
+    const m = /this\.combatHud = (\{ getPanelRect: \(\) => this\.combatStrip\?\.getPanelRect\?\.\(\) \?\? null \});/.exec(ctor);
+    if (m) {
+      const um = { combatStrip: s };
+      facRect = new Function(`return ${m[1]};`).call(um).getPanelRect();
+      facNone = new Function(`return ${m[1]};`).call({ combatStrip: null }).getPanelRect();
+    }
+  } finally { globalThis.window.KOSMOS = saved; }
+  assert(!!stripRect && stripRect.edge === 'top' && JSON.stringify(facRect) === JSON.stringify(stripRect) && facNone === null,
+    `P6a fasada \`combatHud.getPanelRect()\` = prostokąt paska (${JSON.stringify(facRect)}), bez paska — null (D-CV-21)`);
+  assert(!/CombatHUD/.test(ui) && /if \(civMode && !globeOpen\) \{\s*this\.combatStrip\.draw\(/.test(ui) && /\} else this\.combatStrip\?\.clear\?\.\(\);/.test(ui)
+    && /this\.combatStrip\?\.handleClick\?\.\(x, y\)/.test(ui) && !/cvStrip/.test(ui),
+    'P6b `UIManager`: pasek rysowany, klikany i czyszczony bez bramki flagi; karty `CombatHUD` nie ma');
+  assert(!/['"]\.\.\/\.\.\/ui\/CombatHUD\.js['"]|ui\/CombatHUD\.js/.test(strip(UI) + strip(GS)) && !existsSync(new URL('src/ui/CombatHUD.js', ROOT)),
+    'P6c (CV-Z) plik `src/ui/CombatHUD.js` usunięty, nikt go nie importuje');
   const base = { W: 1600, H: 1041, uiScale: 1.25, topBarH: 46, bottomH: 62, rightW: 210, leftW: 190 };
   const top = CW.watchSafeRect({ ...base, hudRect: { x: 400, y: 32, w: 470, h: 40, edge: 'top' } });
   const old = CW.watchSafeRect({ ...base, hudRect: { x: 400, y: 32, w: 470, h: 40 } });
@@ -589,9 +563,9 @@ block('P7 — obsługa: „Obserwuj”, ▾ / ▴, Esc, kółko, pochłanianie k
     const um = { combatStrip: s, _dirty: false };
     s.handleClick(tg.x + 1, tg.y + 1);
     const e1 = mEsc?.call(um), e2 = mEsc?.call(um);
-    const fl = F.cvStrip; s.handleClick(tg.x + 1, tg.y + 1); F.cvStrip = false; const e3 = mEsc?.call(um); F.cvStrip = fl;
+    s.handleClick(tg.x + 1, tg.y + 1); const e3 = mEsc?.call({ combatStrip: null, _dirty: false }); s.collapse?.();
     assert(e1 === true && um._dirty === true && e2 === false && e3 === false,
-      'P7i `UIManager.combatStripEscape`: rozwinięty — Esc skonsumowany; zwinięty — nie; bez flagi — nie');
+      'P7i `UIManager.combatStripEscape`: rozwinięty — Esc skonsumowany; zwinięty — nie; bez paska — nie (CV-Z — bez bramki flagi)');
   } finally { globalThis.window.KOSMOS = saved; }
 });
 
@@ -667,18 +641,17 @@ block('P7k — parytet z kartą (G5-C): prostokąt HUD nad paskiem (otwarty pick
 // ═══ P8 — źródło, i18n, stała rund ═══════════════════════════════════════════════════════════════════════════════
 block('P8 — źródło: pierścień i biały błysk pod flagą — nie, paski HP 3D zostają; Esc w kaskadzie; routing Dziennika; i18n', () => {
   const tr = strip(TR), gs = strip(GS), ui = strip(UI);
-  // CV-Z — przecelowane świadomie: pierścień starcia ukrywany bez flagi, biały błysk P2b usunięty razem z dawnymi smugami.
-  assert((/\n\s+this\._hideEncounterRings\(\);/.test(tr) || !/_tickEngagementMarkers\(/.test(tr)) && !/_spawnHitGlow/.test(tr)
-    && /\n\s+this\._syncCombatHpBars\(\);/.test(tr),
-    'P8a bez pierścienia starcia i białego błysku (P2b — kod usunięty); paski HP 3D bez bramki (zostają do CV-6a)');
+  // CV-Z — przecelowane świadomie: pierścień starcia, biały błysk P2b i paski HP 3D usunięte (kod nie istnieje).
+  assert(!/_hideEncounterRings|_tickEngagementMarkers|_spawnHitGlow|_syncCombatHpBars/.test(tr) && /_stageParticipants/.test(tr),
+    'P8a bez pierścienia starcia, białego błysku i pasków HP 3D (kod usunięty); KONTROLA — plik renderera czytany');
   const iEsc = gs.indexOf('um?.combatStripEscape?.()'), iModal = gs.indexOf('escapeHeldByModal('), iFleet = gs.indexOf('escapeClosesFleetPanel(');
   assert(iEsc > iModal && iEsc < iFleet && iModal > 0,
     'P8b Esc: rozwinięty pasek zwija się po oknie DOM, przed panelem floty i zaznaczeniem (`GameScene`)');
   // ARC CV-8b (#635) — PRZECELOWANE ŚWIADOMIE: linia „reszty” idzie przez `_writeBattleLine` (bramka rajdu), routing bez zmian
-  assert(/if \(!warId && GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) \{\s*this\._narrateBattleCluster\(\{ battleId, result \}\);\s*return;\s*\}\s*this\._writeBattleLine\(this\._battleLogEntry\(\{ warId, result(, shipLosses: orbital \? fx\.shipsLost : null)? \}\), \[battleId\]\);/.test(gs)
-    && /if \(GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) return;\s*this\._log\(this\.skirmishLineText\(empireId\), 'combat'\);/.test(ui)
+  assert(/if \(!warId && isClusterNarrated\(battleId\)\) \{\s*this\._narrateBattleCluster\(\{ battleId, result \}\);\s*return;\s*\}\s*this\._writeBattleLine\(this\._battleLogEntry\(\{ warId, result(, shipLosses: orbital \? fx\.shipsLost : null)? \}\), \[battleId\]\);/.test(gs)
+    && /if \(isClusterNarrated\(battleId\)\) return;\s*this\._log\(this\.skirmishLineText\(empireId\), 'combat'\);/.test(ui)
     && (gs.match(/t\(\s*'log\.battleLine'/g) ?? []).length === 1 && (ui.match(/t\(\s*'log\.skirmish'/g) ?? []).length === 1,
-    'P8c routing Dziennika: bitwa DSCS pod flagą → narrator klastra, reszta → linia jak dotąd; potyczka DSCS pod flagą nie w `UIManager`; jeden autor każdej linii');
+    'P8c routing Dziennika: bitwa DSCS → narrator klastra, reszta → linia jak dotąd; potyczka DSCS nie w `UIManager`; jeden autor każdej linii (CV-Z — bez flagi)');
   const pl = read('src/i18n/pl.js'), en = read('src/i18n/en.js');
   const keys = ['combatStrip.round', 'combatStrip.more', 'combatStrip.log', 'combatStrip.logRound', 'combatStrip.miss', 'combatStrip.shield',
     'combatStrip.watchHint', 'combatStrip.expand', 'combatStrip.collapse', 'menu.battleAutoFocus'];

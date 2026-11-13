@@ -404,9 +404,10 @@ header('L7  montaż w UIManager i rendererze (piny źródłowe)');
   ok(/insets: getMapInsets\(K\)/.test(spo) && /column: shown \? ro\._rect : null/.test(spo),
     'L7i-T3 przy ON: klamra panelu z `MapInsets` (góra — pod belką, dół — nad pasem), kolumna z ostatniego rysunku outlinera');
   const tr = src('../../renderer/ThreeRenderer.js');
-  const wf = body(tr, '  _computeWatchFit(enc) {');
+  // CV-Z — przecelowane świadomie: kadr „Obserwuj” bez sceny (`_computeWatchFit`) usunięty; kadr to `_stageWatchFit`.
+  const wf = body(tr, '  _stageWatchFit(enc) {');
   ok(/const ins = getMapInsets\(window\.KOSMOS\);/.test(wf) && /leftW: ins\.left\b/.test(wf),
-    'L7j kadr „Obserwuj” (`_computeWatchFit`): `leftW` z `MapInsets` (jeden odczyt `ins` — U4-2)');
+    'L7j kadr „Obserwuj” (`_stageWatchFit`): `leftW` z `MapInsets` (jeden odczyt `ins` — U4-2)');
 }
 
 // ═══ wspólne dla L8–L10 (U2-3) ═══════════════════════════════════════════════════════════════════════════════════

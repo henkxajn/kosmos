@@ -59,8 +59,6 @@ const MENU_W  = 16;
 // (482: `UIManager` woła belkę przed `_hitTestTopButtons`), a D-UI-12 przypina tam kredyty. Tu ma własny hit-test,
 // wołany w łańcuchu UIManagera PRZED pasmem belki. W samym pasku zegara miejsca nie ma (klaster zajmuje 159–172 px
 // z 182 px slotu — pomiar U0, `kosmos-handover/ui-u0/STOP_U0_CHIP.md`).
-const CHIP_PAD_X = 14;   // szerokość czipu = tekst + 14 (jak dawny czip w BottomBar)
-const CHIP_GAP   = 4;    // odstęp czipu od lewej krawędzi paska zegara (nad mapą — od suwaka zoomu)
 // Suwak zoomu (U4-4, decyzja (d)) — tylko kreski i prostokąty z `fillRect` (pas bez ram i obrysów — U0-1).
 const ZOOM_W     = 100;  // px — szerokość suwaka (z końcówkami „−” / „+”)
 const ZOOM_GAP   = 6;    // px — odstęp od 🔔
@@ -76,7 +74,6 @@ export class BottomControlBar {
     this._menuRect  = null;
     this._playRect  = null;
     this._speedRects = [];
-    this._chipRect  = null;   // U0-3: czip walk {x,y,w,h,label} albo null (niewidoczny)
     this._zoomRect  = null;   // U4-4: suwak zoomu {x,y,w,h} nad mapą; null pod overlayem / bez kamery
     this._zoomTrack = null;   // U4-4: tor suwaka {x,w}
     this._zoomDragging = false;
@@ -311,32 +308,20 @@ export class BottomControlBar {
       this._drawZoomSlider(ctx, cam, cy);
     }
 
-    // ── Czip walk (U0-3, opcja 1): na lewo od paska zegara, w rzędzie nad PRZEDOSTATNIM slotem nawigacji; nad mapą —
-    //    na lewo od suwaka zoomu (U4-4) ──
-    this._chipRect = null;
-    const hud = window.KOSMOS?.combatHud;
-    if (hud?.isMinimized?.() && hud?.hasActiveEncounters?.()) {
-      const n = window.KOSMOS?.deepSpaceCombatSystem?.listActive?.()?.length ?? 0;
-      const label = n > 1 ? t('combat.hudChipN', n) : t('combat.hudChip');
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      const w = Math.ceil(ctx.measureText(label).width) + CHIP_PAD_X;
-      const top = this._stripTop(H);
-      this._chipRect = { x: (this._zoomRect ? this._zoomRect.x : lastSlotX) - CHIP_GAP - w, y: top, w, h: STRIP_H, label };
-      this._drawCombatChip(ctx, this._chipRect);
-    }
+    // CV-Z — czip walk (U0-3, zminimalizowana karta walki) usunięty razem z kartą: pasek walki się nie minimalizuje.
 
-    // Paczka B — chipy warstw od lewego końca pasa (miejsce dawnego rzędu doku), do klastra po prawej (czip ⚔, suwak, 🔔);
+    // Paczka B — chipy warstw od lewego końca pasa (miejsce dawnego rzędu doku), do klastra po prawej (suwak, 🔔);
     // tylko nad mapą. Rysowane PO klastrze — klaster liczony bez nich (te same px).
     this._layerChips = [];
     this._layerSpanEnd = null;
     if (mapMode) {
-      this._drawLayerChips(ctx, bgLeft, stripTop, this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x);
+      this._drawLayerChips(ctx, bgLeft, stripTop, this._zoomRect?.x ?? this._bellRect.x);
     }
     // ARC GALAXY G1 (D-GX-9) — pigułka trybu mapy w wolnym odcinku między chipami warstw a klastrem po prawej; tylko nad mapą.
     this._mapPill = [];
     if (mapMode) {
       const spanLeft = this._layerSpanEnd != null ? this._layerSpanEnd + HUD_CHIPS.CHIP_GAP : bgLeft + HUD_CHIPS.CHIP_GAP;
-      const spanRight = (this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x) - HUD_CHIPS.CHIP_GAP;
+      const spanRight = (this._zoomRect?.x ?? this._bellRect.x) - HUD_CHIPS.CHIP_GAP;
       this._drawMapModePill(ctx, spanLeft, stripTop, spanRight);
     }
 
@@ -425,22 +410,6 @@ export class BottomControlBar {
     return true;
   }
 
-  // Czip walk — własne tło i ramka jak dawny czip w górnej belce (ciemny podkład + akcent, czerwona ramka i tekst).
-  _drawCombatChip(ctx, b) {
-    ctx.fillStyle = bgAlpha(0.9);
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.fillStyle = THEME.accentMed ?? 'rgba(60, 60, 60, 0.6)';
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = THEME.danger ?? '#ff4466';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.danger ?? '#ff4466';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 0.5);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  }
-
   _drawTextBtn(ctx, rc, cy, label, textColor, bgColor, hover, fontSize) {
     if (bgColor) { ctx.fillStyle = bgColor; ctx.fillRect(rc.x, rc.y, rc.w, rc.h); }
     else if (hover) { ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(rc.x, rc.y, rc.w, rc.h); }
@@ -485,12 +454,6 @@ export class BottomControlBar {
   _in(rc, x, y) { return rc && x >= rc.x && x <= rc.x + rc.w && y >= rc.y && y <= rc.y + rc.h; }
 
   handleClick(x, y) {
-    // Czip walk (U0-3, Finding 482) — przywraca zminimalizowany HUD walki; własny prostokąt, przed resztą paska.
-    if (this._in(this._chipRect, x, y)) {
-      window.KOSMOS?.combatHud?.toggleMinimize?.();
-      this._markDirty();
-      return true;
-    }
     if (!this._bgRect) return false;
     // Paczka B — chip warstwy: przełączenie (`uiPrefs.hudLayers`), warstwa HUD i orbity 3D czytają stan co klatkę.
     const chip = chipAt(this._layerChips, x, y);
@@ -559,5 +522,5 @@ export class BottomControlBar {
     if (h !== this._hover) { this._hover = h; this._markDirty(); }
   }
 
-  isOver(x, y) { return this._in(this._bgRect, x, y) || this._in(this._chipRect, x, y); }
+  isOver(x, y) { return this._in(this._bgRect, x, y); }
 }

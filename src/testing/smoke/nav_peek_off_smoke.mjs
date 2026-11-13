@@ -121,7 +121,8 @@ header('P3 · P4 — pasek zegara i czip walk nieruchome przy najechaniu na swó
   window.KOSMOS.bottomNavBar = nav;
   const bar = new BottomControlBar();
   bar.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
-  ok(bar._bgRect?.y === ROW_Y && bar._chipRect?.y === ROW_Y, `KONTROLA: rząd przed najechaniem y ${bar._bgRect?.y} (czip ${bar._chipRect?.y}) = ${ROW_Y}`);
+  // CV-Z — przecelowane świadomie: czip walk (zminimalizowana karta) usunięty razem z kartą; P4 mierzy rząd paska przy PRZEDOSTATNIM kafelku.
+  ok(bar._bgRect?.y === ROW_Y && bar._chipRect === undefined, `KONTROLA: rząd przed najechaniem y ${bar._bgRect?.y} = ${ROW_Y}; czipu walk nie ma (CV-Z)`);
   const ys = [];
   const c = center(LAST);
   nav.draw(recCtx(), W, H); nav.handleMouseMove(c.x, c.y);
@@ -132,8 +133,8 @@ header('P3 · P4 — pasek zegara i czip walk nieruchome przy najechaniu na swó
   const cp = center(PREV);
   nav.handleMouseMove(cp.x, cp.y);
   await sleep(650);
-  for (let k = 0; k < 12; k++) { nav.handleMouseMove(cp.x, cp.y); nav.draw(recCtx(), W, H); bar.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState); ysChip.push(bar._chipRect?.y); await sleep(40); }
-  ok(ysChip.length === 12 && ysChip.every((y) => y === ROW_Y), `P4 SEDNO: najechanie na PRZEDOSTATNI kafelek — czip walk stoi (y w 12 klatkach: ${[...new Set(ysChip)].join(', ')})`);
+  for (let k = 0; k < 12; k++) { nav.handleMouseMove(cp.x, cp.y); nav.draw(recCtx(), W, H); bar.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState); ysChip.push(bar._bgRect?.y); await sleep(40); }
+  ok(ysChip.length === 12 && ysChip.every((y) => y === ROW_Y), `P4 SEDNO: najechanie na PRZEDOSTATNI kafelek — rząd paska stoi (y w 12 klatkach: ${[...new Set(ysChip)].join(', ')})`);
 }
 
 // ═══ K2 ════════════════════════════════════════════════════════════════════════

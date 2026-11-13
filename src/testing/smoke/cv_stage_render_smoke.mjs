@@ -16,8 +16,8 @@
 //   R6 koniec starcia: powrót do skali prawdziwej przez JOIN_MS czasu prezentacji (nie skokiem), w pauzie stoi
 //   R7 tryb galaktyki — bez sceny; R8 uczestnik przy ciele, ciało BEZ rysunku (atrapa bez `getBodyWorldInfo`) — bez sceny
 //      (CV-3a3: skorupa przy ciele wymaga rysunku ciała — przy ciele z rysunkiem scena jest: `cv_stage_shell_smoke`)
-//   R9 (642) pierścień starcia DSCS ukryty pod flagą (CV-8b: imitacja orbitalna wycofana — każdy znacznik to starcie); R10 (641) eksplozja wraku pod
-//      flagą bez płaskiego pierścienia (OFF — z pierścieniem)
+//   R9 (642) pierścień starcia DSCS — CV-Z: znacznik starcia i jego ukrywanie usunięte (kod nie istnieje); R10 (641) eksplozja
+//      wraku bez płaskiego pierścienia
 //   R11 (643) przesunięcie ekranowe kadru walki: przy „Obserwuj” — `setViewOffset`, cel kamery nietknięty; po końcu —
 //      wygaszenie i `clearViewOffset`; przy podglądzie obserwatorium — nic
 //   R12 (638) jedna bitwa = klaster: kadr obejmuje oba starcia klastra; obserwacja przechodzi na drugie starcie klastra
@@ -82,7 +82,7 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   // ARC CV-3a2 — klastry z pozycji logicznych i pole kliku sceny
   'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn'];
 const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage',
-  'getVesselStageBlend', '_stageWatchFit', '_stageSuccessor', '_syncCombatViewOffset', '_hideEncounterRings', '_spawnExplosion',
+  'getVesselStageBlend', '_stageWatchFit', '_stageSuccessor', '_syncCombatViewOffset', '_spawnExplosion',
   '_placeFreeVessel', '_tickCombatGlide', '_stageFields', 'stageLogicalOf', 'stageWorldOf'];
 function makeMethod(name) {
   const m = methodOf(name);
@@ -286,15 +286,11 @@ block('R7 / R8 — tryb galaktyki bez sceny; uczestnik przy ciele bez rysunku ci
 // ═══ R9 / R10 ═════════════════════════════════════════════════════════════════════════════════════════════════════
 block('R9 / R10 — (642) pierścień starcia ukryty; (641) eksplozja wraku bez płaskiego pierścienia', () => {
   const { R } = world();
-  const mk = () => { const mesh = new THREE.Object3D(); mesh.visible = true; return mesh; };
-  // ARC CV-8b — znacznik imitacji bitwy orbitalnej (`burst`) WYCOFANY (przecelowane świadomie: dawna KONTROLA „imitacja zostaje”
-  // nie ma już przedmiotu); KONTROLA zastępcza — inny obiekt sceny (nie znacznik starcia) zostaje widoczny.
-  R._engagementMarkers.set('enc_1', { mesh: mk() });
-  R._engagementMarkers.set('enc_2', { mesh: mk() });
-  const other = mk();
-  R._hideEncounterRings();
-  assert(R._engagementMarkers.get('enc_1').mesh.visible === false && R._engagementMarkers.get('enc_2').mesh.visible === false && other.visible === true,
-    'R9 pierścienie starć DSCS ukryte (każdy znacznik to starcie — CV-8b), obiekt spoza znaczników — bez zmian');
+  // CV-Z — przecelowane świadomie: pierścień starcia (znacznik `_engagementMarkers` + `_hideEncounterRings`) usunięty — pin
+  // nieobecności zamiast pinu ukrywania (bitwę oznacza scena, pasek walki i znak warstwy taktycznej).
+  const trSrc = strip(read('src/renderer/ThreeRenderer.js'));
+  assert(!/_engagementMarkers|_hideEncounterRings|_tickEngagementMarkers|_upsertEngagementMarker/.test(trSrc) && /_spawnExplosion\(/.test(trSrc),
+    'R9 (CV-Z): pierścienia starcia nie ma w kodzie renderera (znacznik, ukrywanie, tik); KONTROLA — plik czytany (jest `_spawnExplosion`)');
   // CV-Z — przecelowane świadomie: KONTROLA ścieżki OFF (płaski pierścień `explosionRing`) usunięta razem z kodem pierścienia.
   R.spawned = []; R._spawnExplosion(new THREE.Vector3(1, 0.3, 1), 0.016);
   const on = [...R.spawned];
@@ -407,9 +403,9 @@ block('R14 — źródło: tripwire (b), kolejność w pętli renderu, bramki fla
     && at('this._tickBattleStage()') < at('this._updateWatchCamera()') && at('this._cameraController.update()') < at('this._syncCombatViewOffset()')
     && at('this._syncCombatViewOffset()') < at('this._updateActiveEffects('),
     'R14b pętla renderu: powrót na bazę → ruch płynny → scena → kamera walki → `update()` kontrolera → przesunięcie ekranowe → efekty');
-  // CV-Z — przecelowane świadomie: pierścień starcia ukrywany zawsze (flagi `cvStage` / `cvStrip` zdjęte).
-  assert(/this\._tickEngagementMarkers\(performance\.now\(\)\);\s*this\._hideEncounterRings\(\);/.test(loop) || !/_tickEngagementMarkers/.test(loop),
-    'R14c (642) pierścień starcia nie rysuje się (ukryty bez flagi albo znaczników nie ma)');
+  // CV-Z — przecelowane świadomie: pierścień starcia usunięty (flagi `cvStage` / `cvStrip` zdjęte) — pętla go nie tyka.
+  assert(!/_tickEngagementMarkers|_hideEncounterRings/.test(loop) && loop.length > 0,
+    'R14c (642) pierścień starcia nie istnieje — pętla renderu go nie tyka');
   const pf = methodOf('_placeFreeVessel'); const sw = methodOf('_startWatch'); const uw = methodOf('_updateWatchCamera');
   assert(/glideRetarget\(g, to, this\._spriteBase\(vid, entry\),/.test(pf?.body ?? '')
     && /const fit = this\._stageWatchFit\(enc\);/.test(sw?.body ?? '') && !/_computeWatchFit/.test(sw?.body ?? '')

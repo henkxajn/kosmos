@@ -64,10 +64,7 @@
 //   cvFocusDamaged()                    — ARC CV-3c: kamera na najbardziej uszkodzony żywy statek oglądanej bitwy (stan uszkodzeń CV-5:
 //                                         3 = krztuszący się silnik ≤ 25 % HP — wylot dysz migocze i sypie iskrami); null, gdy nikt
 //                                         nie jest uszkodzony
-//   cvStrip(1) / cvStrip(0)             — ARC CV-6b2: flaga `cvStrip` (pasek walki zamiast karty walki) ON / OFF, od następnej klatki
-//   cvTactical(1) / cvTactical(0)       — ARC CV-6a: flaga `cvTactical` (warstwa taktyczna: ikony klas, znak bitwy z daleka, linie
-//                                         ognia, mikropaski, ramka, pasma zasięgu; uczestnicy bez etykiet, znaczników i pasków HP 3D)
-//                                         ON / OFF, od następnej klatki; OFF = etykiety, znaczniki i paski HP 3D jak dziś
+//   cvStrip() / cvTactical()            — CV-Z: wycofane (pasek walki i warstwa taktyczna na stałe) — zwracają { retired: true }
 //   cvDirector(1) / cvDirector(0)       — ARC CV-7: kamera reżysera WŁĄCZONA / WYŁĄCZONA (jak chip „Reżyser” na pasku walki); prowadzi
 //                                         bitwę w oglądanym układzie, każde wejście kamery gracza ją wstrzymuje, chip wznawia
 //   directorInfo()                      — ARC CV-7: bieżące ujęcie, następne, bohater (spowolnienie, opóźnienie w R), kto ma kamerę
@@ -593,7 +590,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         return {
           ok: out.length === nBattles && out.every((b) => b.ok), battles: out, system: sys, star: sw.info, seed, members: made.length,
           ...(Number(random) ? { random: 1 } : {}),
-          empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvStrip: !!GAME_CONFIG.FEATURES?.cvStrip,
+          empire: empire.name ?? empire.id, paused: !!ts.isPaused,
           autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
         };
       }
@@ -1092,22 +1089,9 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       };
     },
 
-    /** ARC CV-6b2 — flaga `cvStrip` (pasek walki zamiast karty): cvStrip(1) — ON, cvStrip(0) — OFF, cvStrip() — przełącz. Czytana co klatkę. */
-    cvStrip(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvStrip = on === undefined ? !F.cvStrip : !!on;
-      return { cvStrip: F.cvStrip };
-    },
-
-    /** ARC CV-6a — flaga `cvTactical` (warstwa taktyczna bitwy): cvTactical(1) — ON, cvTactical(0) — OFF, cvTactical() — przełącz.
-     *  Czytana co klatkę (warstwa HUD, etykiety, znaczniki, paski HP 3D). */
-    cvTactical(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvTactical = on === undefined ? !F.cvTactical : !!on;
-      const hud = (typeof window !== 'undefined') ? window.KOSMOS?.hudLayer : null;
-      hud?.wake?.();
-      return { cvTactical: F.cvTactical };
-    },
+    /** CV-Z — flagi `cvStrip` (pasek walki) i `cvTactical` (warstwa taktyczna) wycofane: na stałe ON, klucze zdjęte. */
+    cvStrip() { return retiredFlag('cvStrip'); },
+    cvTactical() { return retiredFlag('cvTactical'); },
 
     /** ARC CV-7 — kamera reżysera: cvDirector(1) — włączona (jak chip), cvDirector(0) — wyłączona, cvDirector() — przełącz. */
     cvDirector(on) {
@@ -1167,7 +1151,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const hud = (typeof window !== 'undefined') ? window.KOSMOS?.hudLayer : null;
       const layer = hud?._sublayers?.find?.((s) => s?.debug && s.debug()?.id === 'combat') ?? null;
       if (!layer) return { ok: false, reason: 'no_layer' };
-      return { ok: true, cvTactical: !!GAME_CONFIG.FEATURES.cvTactical, ...layer.debug() };
+      return { ok: true, ...layer.debug() };
     },
 
     /** ARC CV-3a1 — scena bitwy z tej klatki: klastry, stopień sceny, prowadnica, odstępy strzelec → cel w długościach fregaty. */

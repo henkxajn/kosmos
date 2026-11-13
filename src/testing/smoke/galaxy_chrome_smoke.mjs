@@ -649,7 +649,6 @@ header('H16 szyna ustępuje rozwinięciu gwiazdy (Finding 608, G5-C)');
   let SP = null, HL = null, CH = null;
   try { SP = await import('../../ui/HudGalaxySendPickerLayer.js'); } catch (e) { console.log('  (picker:', e.message + ')'); }
   try { HL = await import('../../ui/HudLayer.js'); } catch (e) { console.log('  (HudLayer:', e.message + ')'); }
-  try { CH = await import('../../ui/CombatHUD.js'); } catch (e) { console.log('  (CombatHUD:', e.message + ')'); }
   const box = { x: 500, y: 600, w: 220, h: 120 };
   const picker = SP?.HudGalaxySendPickerLayer ? new SP.HudGalaxySendPickerLayer({ ctx: null }) : null;
   if (picker) picker._last = { box: { ...box }, zones: [] };
@@ -661,22 +660,12 @@ header('H16 szyna ustępuje rozwinięciu gwiazdy (Finding 608, G5-C)');
   globalThis.window.KOSMOS.galaxyMode.sendPicker = { systemId: 'sys_x' };
   const rects = call(() => HL?.HudLayer?.prototype?.uiPassThroughRects?.call({ _gate: { shown: true }, _shown: true, _activeSublayers: () => [picker, { openBox: () => null }] }));
   ok(JSON.stringify(rects) === JSON.stringify([box]), 'H16i HudLayer: prostokąty nad panelami UI = otwarty picker');
-  const hudC = CH?.CombatHUD ? new CH.CombatHUD() : null;
-  const log = [];
-  const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => { log.push([k, ...a]); }), set: (t, k, v) => { t[k] = v; return true; } });
-  globalThis.window.KOSMOS.hudLayer = { uiPassThroughRects: () => [box] };
-  if (hudC) hudC._drawPanel = () => log.push(['panel']);
-  call(() => hudC.draw(ctx, 1280, 800));
-  const clipped = log.some((e) => e[0] === 'clip' && e[1] === 'evenodd') && log.some((e) => e[0] === 'rect' && e[1] === box.x && e[2] === box.y);
-  ok(clipped && log.some((e) => e[0] === 'panel'), 'H16j karta walki rysuje się z wyciętym prostokątem pickera');
-  ok(call(() => hudC._underHud?.(box.x + 10, box.y + 10)) === true && call(() => hudC._underHud?.(10, 10)) === false, 'H16k punkt w pickerze — karta go przepuszcza, poza nim — nie');
-  const ch = stripComments(fs.readFileSync(new URL('../../ui/CombatHUD.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
-  const body = (name) => ch.slice(ch.indexOf(`\n  ${name}(`), ch.indexOf(`\n  ${name}(`) + 400);
-  ok(/_underHud\(mx, my\)/.test(body('handleClick')) && /_underHud\(mx, my\)/.test(body('handleMouseMove')), 'H16l klik i najechanie karty walki pytają o picker');
-  log.length = 0;
-  globalThis.window.KOSMOS.hudLayer = { uiPassThroughRects: () => [] };
-  call(() => hudC.draw(ctx, 1280, 800));
-  ok(!log.some((e) => e[0] === 'clip' || e[0] === 'save'), 'H16m KONTROLA: picker zamknięty — karta rysuje się bez wycinania');
+  // CV-Z — przecelowane świadomie: karta walki `CombatHUD` usunięta (flaga `cvStrip` zdjęta); wycięcie pickera niesie pasek walki
+  //   (`CombatStrip` — rysunek z wycięciem i klik / kursor przepuszczone, wykonanie w `cv_strip_smoke` P7k). Tu: źródło paska.
+  const cs = stripComments(fs.readFileSync(new URL('../../ui/CombatStrip.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
+  ok(/this\._holes = K\?\.hudLayer\?\.uiPassThroughRects\?\.\(\) \?\? \[\];/.test(cs) && /ctx\.clip\('evenodd'\)/.test(cs)
+    && !fs.existsSync(new URL('../../ui/CombatHUD.js', import.meta.url)),
+    'H16j–H16m (CV-Z) wycięcie pickera niesie pasek walki (czyta `uiPassThroughRects`, rysuje z `evenodd`); karty `CombatHUD` nie ma');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

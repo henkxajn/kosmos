@@ -36,7 +36,7 @@ import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
 import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) — nawiasy zaznaczenia, pierścienie i wektor alertu
 import { HudShipMarkerLayer } from './HudShipMarkerLayer.js';   // znacznik statku (D-SM-1…6) — zamiast insygnium frakcji 3D
-import { HudCombatLayer } from './HudCombatLayer.js';           // ARC CV-6a — warstwa taktyczna bitwy (flaga `cvTactical`)
+import { HudCombatLayer } from './HudCombatLayer.js';           // ARC CV-6a — warstwa taktyczna bitwy
 import { HudSkyLabelLayer } from './HudSkyLabelLayer.js';       // NIEBO (ARC GALAXY, O1) — etykiety nieba przy CTRL
 import { HudGalaxyLabelLayer } from './HudGalaxyLabelLayer.js'; // ARC GALAXY G1 — nazwy płyty (lista trybu galaktyki, S0/S3)
 import { HudGalaxyRouteLayer } from './HudGalaxyRouteLayer.js'; // ARC GALAXY G2-2 — szlaki i trasy płyty (chip [T])

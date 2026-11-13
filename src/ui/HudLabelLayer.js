@@ -73,7 +73,6 @@ import { STATION_MODULES } from '../data/StationModuleData.js';
 // ARKUSZ HUD paczka B (B-1, B-2) — model uwagi, nawiasy statku jako przeszkoda, alerty.
 import { labelAttentionTarget, makeAttentionMemory, bracketBox } from './HudAttentionLogic.js';
 import { HUD_ALERT } from './HudAlertLogic.js';
-import { tacActive } from './HudCombatLogic.js';   // ARC CV-6a — uczestnicy bitwy w widoku bez etykiet nazw (flaga `cvTactical`)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const q = (v) => Math.round(v * 1000);          // klucz klatki — położenie z dokładnością 0,001 j.
@@ -247,9 +246,9 @@ export class HudLabelLayer {
         });
         this._ptsCache = { key: ckey, t: F.now, points: all };
       }
-      // ARC CV-6a (flaga `cvTactical`) — uczestnik bitwy w widoku: bez etykiety nazwy (ikona warstwy taktycznej, nazwa przy
-      // najechaniu w linii warstwy); zaznaczony — etykieta zostaje. OFF — jak dziś.
-      const tacPart = tacActive(F.features) ? (tr?._stageParticipants ?? null) : null;
+      // ARC CV-6a — uczestnik bitwy w widoku: bez etykiety nazwy (ikona warstwy taktycznej, nazwa przy najechaniu w linii warstwy);
+      // zaznaczony — etykieta zostaje.
+      const tacPart = tr?._stageParticipants ?? null;
       const tacKeep = tacPart?.size ? new Set([...(sel.vesselIds ?? []), sel.leadId].filter((x) => x != null).map(String)) : null;
       for (const p of all) {
         if (tacKeep && tacPart.has(p.id) && !tacKeep.has(String(p.id))) continue;
