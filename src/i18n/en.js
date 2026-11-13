@@ -3326,6 +3326,7 @@ export default {
   //   Polish report of the loudest event in the game. The ⚔ prefix STAYS in both languages: it
   //   is the language-neutral filter handle used by the gate.
   'log.battleLine':                '⚔ Battle in {0}: {1} vs {2}. Winner: {3}. Losses: {4}/{5}, {6} turns.',
+  'battle.shipsLost':             'Ships lost: {0} / {1}',
   'battle.player':                 'Player',
   'battle.unknownForce':           'Unknown force',
   'battle.homeSystem':             'home',
@@ -3428,7 +3429,8 @@ export default {
   'combatStrip.directorPausedHint': 'You took the camera — click to bring the director back',
   // ARC CV-7 — reel recorder (F10)
   'reel.rec':          '● REC {0}',
-  'reel.saved':        '✓ Saved {0}',
+  'reel.saved':        '✓ Saved {0} ({1} s, {2} MB)',
+  'reel.saving':       '⏳ Saving {0}…',
   'reel.unsupported':  'Recording is not available in this browser',
   'combatTac.hp':              'HP {0}%',
   'combatTac.unknown':         'unknown contact',

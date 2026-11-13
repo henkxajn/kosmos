@@ -273,7 +273,7 @@ guard('R9', () => {
   // ARC CV-8b — PRZECELOWANE ŚWIADOMIE: R9f — linia trzymana razem z wpisami skutków EAH (#713, `{ line, extras }`); R9c — kino i modal
   // wycofane, baner dla KAŻDEGO źródła (`_tryShowNextBattle` bez gałęzi źródła — pin nieobecności `cv_retire_cinema_smoke` N3c);
   // R9d — burst usunięty, słuchacz renderera tylko przekazuje bitwę do powtórki (`cv_retire_cinema_smoke` N2).
-  assert(/\(this\._orbitalLogHold \?\?= new Map\(\)\)\.set\(battleId, \{ line: this\._battleLogEntry\(\{ warId, result \}\)/.test(gs) && /_orbitalLogHold\.delete\(battleId\)/.test(gs), 'R9f: GameScene — linia bitwy w Dzienniku też czeka na koniec powtórki (§3.1-6: Dziennik zachowuje log.battleLine; CV-8b — razem z wpisami skutków EAH)');
+  assert(/\(this\._orbitalLogHold \?\?= new Map\(\)\)\.set\(battleId, \{ line: this\._battleLogEntry\(\{ warId, result(, shipLosses: fx\.shipsLost)? \}\)/.test(gs) && /_orbitalLogHold\.delete\(battleId\)/.test(gs), 'R9f: GameScene — linia bitwy w Dzienniku też czeka na koniec powtórki (§3.1-6: Dziennik zachowuje log.battleLine; CV-8b — razem z wpisami skutków EAH)');
   assert(/await showBattleOutcome\(battleData\)/.test(gs) && !/showBattleIntro\(|new BattleView3D|from '\.\/BattleView3D\.js'/.test(gs), 'R9c: baner (bez modalu kina) — CV-8b: dla każdego źródła, kino i modal wycofane');
   assert(/EventBus\.on\('battle:resolved', safe\(\(p\) => this\._cvOrb\?\.handle\?\.\(p\)\)\);/.test(tr) && !/_spawnBattleBurst/.test(tr), 'R9d: renderer — burst nie istnieje (CV-8b), słuchacz tylko przekazuje bitwę do powtórki (Finding 628)');
   assert(/this\._cvOrb\?\.deferWreck\?\.\(vesselId, vessel\)\) return;/.test(tr), 'R9e: renderer — wrak wstrzymany do zniszczenia w powtórce');

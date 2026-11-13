@@ -673,7 +673,7 @@ block('P8 — źródło: pierścień i biały błysk pod flagą — nie, paski H
   assert(iEsc > iModal && iEsc < iFleet && iModal > 0,
     'P8b Esc: rozwinięty pasek zwija się po oknie DOM, przed panelem floty i zaznaczeniem (`GameScene`)');
   // ARC CV-8b (#635) — PRZECELOWANE ŚWIADOMIE: linia „reszty” idzie przez `_writeBattleLine` (bramka rajdu), routing bez zmian
-  assert(/if \(!warId && GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) \{\s*this\._narrateBattleCluster\(\{ battleId, result \}\);\s*return;\s*\}\s*this\._writeBattleLine\(this\._battleLogEntry\(\{ warId, result \}\), \[battleId\]\);/.test(gs)
+  assert(/if \(!warId && GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) \{\s*this\._narrateBattleCluster\(\{ battleId, result \}\);\s*return;\s*\}\s*this\._writeBattleLine\(this\._battleLogEntry\(\{ warId, result(, shipLosses: orbital \? fx\.shipsLost : null)? \}\), \[battleId\]\);/.test(gs)
     && /if \(GAME_CONFIG\.FEATURES\?\.cvStrip && isClusterNarrated\(battleId\)\) return;\s*this\._log\(this\.skirmishLineText\(empireId\), 'combat'\);/.test(ui)
     && (gs.match(/t\(\s*'log\.battleLine'/g) ?? []).length === 1 && (ui.match(/t\(\s*'log\.skirmish'/g) ?? []).length === 1,
     'P8c routing Dziennika: bitwa DSCS pod flagą → narrator klastra, reszta → linia jak dotąd; potyczka DSCS pod flagą nie w `UIManager`; jeden autor każdej linii');

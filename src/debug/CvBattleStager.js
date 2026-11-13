@@ -1191,13 +1191,19 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       return { ok: true, capture: d.setCapture(on === undefined ? !d.capture : !!on) };
     },
 
-    /** ARC CV-7 — nagrywarka rolek (jak F10): cvRecord(1) — start, cvRecord(0) — stop i pobranie pliku, cvRecord() — przełącz. */
+    /**
+     * ARC CV-7 — nagrywarka rolek (jak F10): cvRecord(1) — start, cvRecord(0) — stop i pobranie pliku, cvRecord() — przełącz.
+     * CV-Z (Finding 722) — zapis kończy się asynchronicznie: tuż po stopie `state: 'saving'` (nazwa pliku i długość już znane,
+     * `note: 'zapisywanie…'`); kolejne cvRecord(0) przy zatrzymanej nagrywarce niczego nie robi i zwraca stan końcowy (`state: 'saved'`,
+     * `file`, `seconds`, `lastBytes`, `lastError`). Wskaźnik na ekranie: „Zapisywanie…”, potem „Zapisano plik (s, MB)”.
+     */
     cvRecord(on) {
       const d = getRenderer()?.cvDirector;
       if (!d) return { ok: false, reason: 'no_renderer' };
       const want = on === undefined ? !d.reel.recording : !!on;
+      if (!want && !d.reel.recording) return { ok: true, ...d.reel.info() };
       d.setRecording(want);
-      return { ok: true, recording: want, ...d.reel.info() };
+      return { ok: true, ...d.reel.info() };
     },
 
     /** ARC CV-7 — flaga `cvDirector`: cvDirectorFlag(0) — bez chipa i reżysera (tempo prezentacji 1), cvDirectorFlag(1) — z powrotem. */

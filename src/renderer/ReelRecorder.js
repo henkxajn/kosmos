@@ -80,6 +80,16 @@ export function reelClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** CV-Z (Finding 722) — długość nagrania do wskaźnika „Zapisano” [s, jedno miejsce po przecinku]; brak — „—”. */
+export function reelSecondsText(seconds) {
+  return Number.isFinite(seconds) ? (Math.round(seconds * 10) / 10).toFixed(1) : '—';
+}
+
+/** CV-Z (Finding 722) — rozmiar pliku do wskaźnika „Zapisano” [MB, jedno miejsce po przecinku]; brak — „—”. */
+export function reelMegabytesText(bytes) {
+  return Number.isFinite(bytes) && bytes >= 0 ? (bytes / (1024 * 1024)).toFixed(1) : '—';
+}
+
 export class ReelRecorder {
   /**
    * @param {object} renderer — `ThreeRenderer` (płótno `renderer.renderer.domElement`)
@@ -101,7 +111,9 @@ export class ReelRecorder {
     this.frames = 0;
     this.lastBlob = null;
     this.lastFile = null;
+    this.lastSeconds = null;   // CV-Z (Finding 722) — długość ostatniego nagrania [s]
     this.lastError = null;
+    this._saving = null;       // CV-Z (Finding 722) — { file, seconds } między stopem a gotowym plikiem (zapis asynchroniczny)
   }
 
   get recording() { return !!this._mr && this._mr.state === 'recording'; }
@@ -109,6 +121,8 @@ export class ReelRecorder {
   /** Start — { ok, file, mime, w, h } albo { ok: false, reason }. */
   start() {
     if (this.recording) return { ok: false, reason: 'already_recording' };
+    // CV-Z (Finding 722) — poprzednie nagranie jeszcze się zapisuje: nowe `_chunks` / `_mr` nadpisałyby je w trakcie (`onstop` czyta stan)
+    if (this._saving) return { ok: false, reason: 'saving', file: this._saving.file };
     if (typeof document === 'undefined' || typeof MediaRecorder === 'undefined') return this._fail('unsupported');
     const src = this.r?.renderer?.domElement;
     if (!src) return this._fail('no_canvas');
@@ -141,23 +155,30 @@ export class ReelRecorder {
     return { ok: true, file, mime: pick.mime, w: size.w, h: size.h, promo };
   }
 
-  /** Stop — plik pobiera się sam; zwraca Promise z { ok, file, bytes } (blob także w `lastBlob`). */
+  /**
+   * Stop — plik pobiera się sam; zwraca Promise z { ok, file, bytes, seconds } (blob także w `lastBlob`). CV-Z (Finding 722) — zapis jest
+   * asynchroniczny (`MediaRecorder` stop → blob → pobranie): od stopu do gotowego pliku `info()` mówi `state: 'saving'` z nazwą pliku
+   * i długością nagrania, wskaźnik — „Zapisywanie…”; potem `state: 'saved'` z `lastBytes` / `lastSeconds` (albo `'error'` z `lastError`).
+   */
   stop() {
     const mr = this._mr;
     if (!mr) return Promise.resolve({ ok: false, reason: 'not_recording' });
     const mode = this._mode;
+    const seconds = mode ? +((Date.now() - mode.startedAt) / 1000).toFixed(1) : null;
+    this._saving = { file: mode?.file ?? null, seconds };
     return new Promise((resolve) => {
       mr.onstop = () => {
         const blob = new Blob(this._chunks, { type: mode?.mime?.split(';')[0] ?? 'video/webm' });
         this._chunks = [];
         try { this._stream?.getTracks?.().forEach((tr) => tr.stop()); } catch { /* nic */ }
-        this._mr = null; this._stream = null; this._track = null;
-        this.lastBlob = blob; this.lastFile = mode?.file ?? null;
+        this._mr = null; this._stream = null; this._track = null; this._saving = null;
+        this.lastBlob = blob; this.lastFile = mode?.file ?? null; this.lastSeconds = seconds;
         this._download(blob, mode?.file ?? 'kosmos_reel.webm');
-        this._indicator(false, mode?.file);
-        resolve({ ok: true, file: mode?.file, bytes: blob.size, frames: this.frames, mime: mode?.mime });
+        this._indicator(false, null, null, { file: mode?.file, seconds, bytes: blob.size });
+        resolve({ ok: true, file: mode?.file, bytes: blob.size, seconds, frames: this.frames, mime: mode?.mime });
       };
-      try { mr.stop(); } catch (e) { this.lastError = String(e); resolve({ ok: false, reason: 'stop_error' }); }
+      try { mr.stop(); this._indicator(false, null, t('reel.saving', mode?.file ?? '')); }
+      catch (e) { this._saving = null; this.lastError = String(e); resolve({ ok: false, reason: 'stop_error' }); }
     });
   }
 
@@ -216,21 +237,32 @@ export class ReelRecorder {
     el.textContent = t('reel.rec', reelClock(ms));
   }
 
-  _indicator(on, file = null, msg = null) {
+  // `saved` — { file, seconds, bytes } gotowego pliku (CV-Z, Finding 722): wskaźnik podaje nazwę, długość i rozmiar.
+  _indicator(on, file = null, msg = null, saved = null) {
     if (typeof document === 'undefined') return;
     const el = this._el();
     clearTimeout(this._indTimer);
     if (on) { el.style.color = '#ff3040'; el.style.display = 'block'; this._indicatorText(0); return; }
-    const text = msg ?? (file ? t('reel.saved', file) : null);
+    const text = msg ?? (saved ? t('reel.saved', saved.file ?? '', reelSecondsText(saved.seconds), reelMegabytesText(saved.bytes))
+      : (file ? t('reel.saved', file, '—', '—') : null));
     if (!text) { el.style.display = 'none'; return; }
     el.style.color = msg ? '#ffb000' : '#7dff9a'; el.textContent = text; el.style.display = 'block';
+    if (this._saving && msg) return;   // „Zapisywanie…” zostaje do gotowego pliku (wtedy zastępuje go „Zapisano”)
     this._indTimer = setTimeout(() => { el.style.display = 'none'; }, 3000);
   }
 
+  /**
+   * Stan nagrywarki. CV-Z (Finding 722) — `state`: 'recording' | 'saving' (po stopie, plik w drodze — `file` i `seconds` już znane,
+   * `note` „zapisywanie…”) | 'saved' (`lastBytes`, `seconds` = długość ostatniego nagrania) | 'error' | 'idle'.
+   */
   info() {
     const m = this._mode;
-    return { recording: this.recording, frames: this.frames, file: this.recording ? m?.file : this.lastFile, mime: m?.mime ?? null,
-      size: m ? `${m.w}x${m.h}` : null, promo: !!m?.promo, seconds: this.recording && m ? +((Date.now() - m.startedAt) / 1000).toFixed(1) : null,
+    const recording = this.recording, saving = !recording && !!this._saving;
+    const state = recording ? 'recording' : saving ? 'saving' : this.lastBlob ? 'saved' : this.lastError ? 'error' : 'idle';
+    const seconds = recording && m ? +((Date.now() - m.startedAt) / 1000).toFixed(1) : saving ? this._saving.seconds : this.lastSeconds;
+    return { recording, state, note: saving ? 'zapisywanie…' : null, frames: this.frames,
+      file: recording ? m?.file : saving ? this._saving.file : this.lastFile, mime: m?.mime ?? null,
+      size: m ? `${m.w}x${m.h}` : null, promo: !!m?.promo, seconds,
       lastBytes: this.lastBlob?.size ?? null, lastError: this.lastError };
   }
 }

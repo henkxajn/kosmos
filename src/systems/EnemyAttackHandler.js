@@ -213,6 +213,10 @@ export class EnemyAttackHandler {
     // ARC CV-8a — powód końca do `fx`: rekord bitwy wojny (`recordBattle`) nie niesie `endReason`, a pat (strażnik M1 / bezpiecznik)
     // ma w powtórce zostać patem (bez wraków), nie „remisem przez wzajemne zniszczenie”.
     if (fx) fx.endReason = result.endReason ?? null;
+    // CV-Z (Finding 721) — utracone OKRĘTY na stronę (baner wyniku i linia bitwy w liczbach — `lossesA/B` tej ścieżki to HP):
+    // te same reguły skutków co niżej (wygrana napastnika — okręty gracza w służbie w układzie, obrony — wszyscy napastnicy, remis —
+    // obie strony, pat — nikt). Liczone PRZED zdarzeniem z tej samej listy, którą rozbija `_wreckPlayerVesselsInSystem`.
+    if (fx) fx.shipsLost = this._shipsLost(result, allEnemies.length, systemId);
 
     const battleRec = {
       ...result,
@@ -452,8 +456,15 @@ export class EnemyAttackHandler {
   }
 
   _wreckPlayerVesselsInSystem(systemId, year) {
+    for (const v of this._playerVesselsToWreck(systemId)) this._turnIntoWreck(v, v.position?.dockedAt ?? null, year);
+  }
+
+  // Okręty gracza rozbijane, gdy układ pada (wygrana napastnika, remis). CV-Z (Finding 721) — jedna lista dla skutków i dla liczby
+  // utraconych okrętów w `fx.shipsLost` (baner liczy dokładnie te kadłuby, które gra rozbija).
+  _playerVesselsToWreck(systemId) {
     const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr?._vessels) return;
+    if (!vMgr?._vessels) return [];
+    const out = [];
     for (const v of vMgr._vessels.values()) {
       if (isEnemyVessel(v)) continue;
       if (v.isWreck)         continue;
@@ -462,8 +473,18 @@ export class EnemyAttackHandler {
       // których tam nie było — magazyn z definicji nie jest obsadzony.
       if (!isInService(v)) continue;
       if ((v.systemId ?? 'sys_home') !== systemId) continue;
-      this._turnIntoWreck(v, v.position?.dockedAt ?? null, year);
+      out.push(v);
     }
+    return out;
+  }
+
+  // CV-Z (Finding 721) — utracone okręty `{ A: napastnicy, B: gracz }` wg wyniku (reguły skutków `_resolveBatchedBattle`).
+  _shipsLost(result, attackerCount, systemId) {
+    if (isStalemate(result)) return { A: 0, B: 0 };
+    const playerLost = () => this._playerVesselsToWreck(systemId).length;
+    if (result.winner === 'A') return { A: 0, B: playerLost() };
+    if (result.winner === 'B') return { A: attackerCount, B: 0 };
+    return { A: attackerCount, B: playerLost() };
   }
 
   _hashStr(s) {

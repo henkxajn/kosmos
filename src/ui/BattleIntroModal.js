@@ -13,6 +13,8 @@
 
 import EventBus from '../core/EventBus.js';
 import { THEME } from '../config/ThemeConfig.js';
+import { t } from '../i18n/i18n.js';
+import { battleShipLosses } from './BattleShipLosses.js';   // CV-Z (Finding 721) — utracone okręty w liczbach
 
 let _savedTimeState = null;
 
@@ -36,6 +38,11 @@ export function showBattleOutcome(battleData) {
     }
 
     const res = battleData.result ?? {};
+    // CV-Z (Finding 721) — straty jako utracone OKRĘTY na stronę (A / B — kolejność nazw „X vs Y”); bitwa bez liczby okrętów
+    // (flota abstrakcyjna, `forceBattle`) — bez segmentu strat zamiast HP udających straty.
+    const shipLosses = battleShipLosses(battleData);
+    const lossSegment = shipLosses ? `&nbsp; · &nbsp;
+        ${t('battle.shipsLost', shipLosses.A, shipLosses.B)}` : '';
     const winner = res.winner;
     const playerSide = battleData.playerSide;
     let label = 'REMIS';
@@ -102,8 +109,7 @@ export function showBattleOutcome(battleData) {
         ${battleData.aggressorName ?? 'Agresor'} vs ${battleData.defenderName ?? 'Obrońca'}
         &nbsp; · &nbsp;
         Tur: ${res.turns ?? 0}
-        &nbsp; · &nbsp;
-        Straty: ${res.lossesA ?? 0} / ${res.lossesB ?? 0}
+        ${lossSegment}
       </div>
     `;
 

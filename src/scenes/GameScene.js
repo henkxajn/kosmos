@@ -2853,6 +2853,8 @@ export class GameScene {
       // powtórki na scenie planety (`combatfx:orbitalReplayEnd`), poza nim — od razu. Auto-slow — jak dotąd (UIManager).
       if (fx?.kind === 'orbital' && GAME_CONFIG.FEATURES?.cvOrbital) {
         battleData.source = 'orbital';
+        // CV-Z (Finding 721) — utracone okręty w liczbach (`EnemyAttackHandler`, `fx.shipsLost`): `lossesA/B` tej ścieżki to HP.
+        if (fx.shipsLost) battleData.shipLosses = { A: fx.shipsLost.A, B: fx.shipsLost.B };
         if (this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
           (this._orbitalBannerHold ??= new Map()).set(battleId, battleData);
           return;
@@ -2903,7 +2905,7 @@ export class GameScene {
       // ARC CV-8b (#713) — razem z nią wpisy skutków EAH: `fx.logHeld` mówi EAH, że wpis przejęła prezentacja (EAH sprawdza po zdarzeniu).
       if (orbital && this.threeRenderer?.cvOrbital?.handle?.({ warId, battleId, result, fx }) === true) {
         fx.logHeld = true;
-        (this._orbitalLogHold ??= new Map()).set(battleId, { line: this._battleLogEntry({ warId, result }), extras: fx.logEntries ?? [] });
+        (this._orbitalLogHold ??= new Map()).set(battleId, { line: this._battleLogEntry({ warId, result, shipLosses: fx.shipsLost }), extras: fx.logEntries ?? [] });
         return;
       }
       // ARC CV-8b (#635 / #713) — bitwa orbitalna rajdu w grupie (poza widokiem): wpisy skutków EAH czekają na ogłoszenie rajdu.
@@ -2915,7 +2917,7 @@ export class GameScene {
         this._narrateBattleCluster({ battleId, result });
         return;
       }
-      this._writeBattleLine(this._battleLogEntry({ warId, result }), [battleId]);
+      this._writeBattleLine(this._battleLogEntry({ warId, result, shipLosses: orbital ? fx.shipsLost : null }), [battleId]);
     });
 
     // ARC CV-6b2 (Finding 639) — potyczka bitwy DSCS pod flagą `cvStrip`: linię pisze narrator klastra (raz na klaster, przed linią
@@ -4520,7 +4522,8 @@ export class GameScene {
   // Wpis Dziennika dla bitwy (`battle:resolved`): `{ text, channel, severity, entityRef }` albo null (bitwa bez linii). Ciało
   // dawnego słuchacza 1:1 — ARC CV-6b2 wyjęło je do metody, żeby linię bitwy klastra (wynik scalony, `CombatNarration`)
   // budował TEN SAM kod; `GameScene` zostaje jedynym producentem `log.battleLine`.
-  _battleLogEntry({ warId, result }) {
+  // CV-Z (Finding 721) — `shipLosses` `{ A, B }`: utracone okręty bitwy orbitalnej (`fx.shipsLost`) zamiast `lossesA/B` (tam HP).
+  _battleLogEntry({ warId, result, shipLosses = null }) {
     if (!result) return null;
 
     const loc = normalizeBattleLocation(result.location);
@@ -4588,7 +4591,7 @@ export class GameScene {
 
     return {
       text:      t('log.battleLine', sysLabel, sides.sideAName, sides.sideBName, winnerLabel,
-                   Math.round(result.lossesA ?? 0), Math.round(result.lossesB ?? 0),
+                   Math.round(shipLosses?.A ?? result.lossesA ?? 0), Math.round(shipLosses?.B ?? result.lossesB ?? 0),
                    result.turns ?? 0) + retreatNote,
       channel:   'combat',
       severity,

@@ -24,6 +24,7 @@
 // albo jest wrakiem — więc dwa osobne rajdy dają dwa ogłoszenia. Stan tylko w pamięci (po wczytaniu zapisu nic nie czeka).
 
 import { isPlayerParticipant } from '../utils/BattleSides.js';
+import { battleShipLosses } from './BattleShipLosses.js';   // CV-Z (Finding 721) — utracone okręty w liczbach
 
 const RELEASED_CAP = 400;   // pamięć bitew już ogłoszonych w grupie (spóźniona linia — połknięta, bez dubla)
 
@@ -77,8 +78,11 @@ function bannerBattleIds(b) {
  * Scalony wynik rajdu (baner i linia Dziennika). Orientacja stron — ostatniej bitwy (bitwa o kolonię: A = wróg, B = gracz);
  * zwycięzca i odwrót — ostatniej bitwy; straty — sumą po stronie gracza i wroga (każda bitwa przeliczona na stronę gracza,
  * `playerSide`); tury — sumą. Jedna bitwa — bez zmian. Rekordy bitew nietknięte (nowe obiekty).
- * ⚠ Straty mają kolizję jednostek między ścieżkami (DSCS — liczba statków, BattleSystem — HP; `WarSystem._battleLoserSide`) —
- *   suma przenosi ją do jednej liczby tak samo, jak banery tych ścieżek pokazywały ją osobno.
+ * CV-Z (Finding 721) — straty liczone w OKRĘTACH (`battleShipLosses`: liczby z każdej bitwy — DSCS z `lossesA/B`, bitwa orbitalna
+ *   z `fx.shipsLost`), bez podwójnego liczenia (wrak z podejścia nie walczy w bitwie o kolonię). Dawniej suma `lossesA/B` mieszała
+ *   jednostki (DSCS — statki, BattleSystem — HP; na żywo „Straty: 666 / 494”). Scalone liczby trafiają do `shipLosses` (baner)
+ *   i do `lossesA/B` wyniku SCALONEGO (linia Dziennika rajdu) — rekordy bitew nietknięte. Bitwa bez liczby okrętów w rajdzie —
+ *   `shipLosses: null` (baner bez strat zamiast liczby bez sensu), `lossesA/B` — dawna suma.
  */
 export function mergeRaidBattles(items) {
   const list = (items ?? []).filter(Boolean);
@@ -86,6 +90,7 @@ export function mergeRaidBattles(items) {
   const last = list[list.length - 1];
   const ps = last.playerSide === 'A' || last.playerSide === 'B' ? last.playerSide : null;
   let lossP = 0, lossE = 0, lossA = 0, lossB = 0, turns = 0;
+  let shipP = 0, shipE = 0, shipA = 0, shipB = 0, shipsKnown = true;
   const ids = [];
   for (const it of list) {
     const r = it.result ?? {};
@@ -93,16 +98,25 @@ export function mergeRaidBattles(items) {
     lossA += la; lossB += lb;
     const pi = it.playerSide === 'A' || it.playerSide === 'B' ? it.playerSide : null;
     if (pi === 'A') { lossP += la; lossE += lb; } else if (pi === 'B') { lossP += lb; lossE += la; }
+    const sl = battleShipLosses(it);
+    if (!sl) shipsKnown = false;
+    else {
+      shipA += sl.A; shipB += sl.B;
+      if (pi === 'A') { shipP += sl.A; shipE += sl.B; } else if (pi === 'B') { shipP += sl.B; shipE += sl.A; }
+    }
     turns += Number(r.turns ?? 0) || 0;
     ids.push(...bannerBattleIds(it));
   }
+  const shipLosses = shipsKnown
+    ? { A: ps ? (ps === 'A' ? shipP : shipE) : shipA, B: ps ? (ps === 'A' ? shipE : shipP) : shipB }
+    : null;
   const result = {
     ...(last.result ?? {}), turns,
-    lossesA: ps ? (ps === 'A' ? lossP : lossE) : lossA,
-    lossesB: ps ? (ps === 'A' ? lossE : lossP) : lossB,
+    lossesA: shipLosses ? shipLosses.A : (ps ? (ps === 'A' ? lossP : lossE) : lossA),
+    lossesB: shipLosses ? shipLosses.B : (ps ? (ps === 'A' ? lossE : lossP) : lossB),
     raidBattleIds: ids,
   };
-  return { ...last, result, raidSize: list.length };
+  return { ...last, result, shipLosses, raidSize: list.length };
 }
 
 export class RaidAnnouncer {

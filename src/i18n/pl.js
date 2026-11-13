@@ -3329,6 +3329,7 @@ export default {
   //   meldunek o najgłośniejszym zdarzeniu w grze. Prefiks ⚔ ZOSTAJE w OBU językach: jest
   //   językowo neutralnym uchwytem filtra na gate'cie.
   'log.battleLine':                '⚔ Bitwa w {0}: {1} vs {2}. Zwycięzca: {3}. Straty: {4}/{5}, {6} tur.',
+  'battle.shipsLost':             'Utracone okręty: {0} / {1}',
   'battle.player':                 'Gracz',
   'battle.unknownForce':           'Obcy',
   'battle.homeSystem':             'dom',
@@ -3431,7 +3432,8 @@ export default {
   'combatStrip.directorPausedHint': 'Przejąłeś kamerę — kliknij, aby reżyser wrócił',
   // ARC CV-7 — nagrywarka rolek (F10)
   'reel.rec':          '● REC {0}',
-  'reel.saved':        '✓ Zapisano {0}',
+  'reel.saved':        '✓ Zapisano {0} ({1} s, {2} MB)',
+  'reel.saving':       '⏳ Zapisywanie {0}…',
   'reel.unsupported':  'Nagrywanie niedostępne w tej przeglądarce',
   'combatTac.hp':              'HP {0}%',
   'combatTac.unknown':         'nieznany kontakt',

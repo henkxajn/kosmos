@@ -303,11 +303,13 @@ guard('A7', () => {
 // ═══ A4 — scalanie ════════════════════════════════════════════════════════════════════════════════════════════════
 console.log('A4 — mergeRaidBattles');
 guard('A4', () => {
-  const dsc = { battleId: 'd1', playerSide: 'A', result: { id: 'd1', winner: 'B', lossesA: 2, lossesB: 0, turns: 15, location: { point: { x: 1, y: 1 } } } };
-  const col = { battleId: 'e1', playerSide: 'B', warId: 'w1', result: { id: 'e1', winner: 'B', lossesA: 120, lossesB: 40, turns: 9, location: { planetId: 'p', point: null } } };
+  // CV-Z (Finding 721) — A4b przecelowane świadomie: pinowało sumę `lossesA/B` z DWÓCH jednostek (DSCS — statki, EAH — HP: 2 + 40 = 42),
+  // czyli sam defekt. Teraz straty scalonego rajdu = utracone OKRĘTY (DSCS z `lossesA/B` przy `source: 'dscs'`, EAH z `shipLosses`).
+  const dsc = { battleId: 'd1', playerSide: 'A', source: 'dscs', result: { id: 'd1', winner: 'B', lossesA: 2, lossesB: 0, turns: 15, location: { point: { x: 1, y: 1 } } } };
+  const col = { battleId: 'e1', playerSide: 'B', warId: 'w1', source: 'orbital', shipLosses: { A: 3, B: 0 }, result: { id: 'e1', winner: 'B', lossesA: 120, lossesB: 40, turns: 9, location: { planetId: 'p', point: null } } };
   const m = RAL.mergeRaidBattles?.([dsc, col]);
   assert(m && m.result.winner === 'B' && m.playerSide === 'B' && m.warId === 'w1' && m.result.location.planetId === 'p', 'A4a orientacja, wojna i miejsce — z ostatniej bitwy (kolonia)');
-  assert(m && m.result.lossesB === 42 && m.result.lossesA === 120 && m.result.turns === 24, `A4b straty gracza 2 + 40 = ${m?.result?.lossesB}, wroga 0 + 120 = ${m?.result?.lossesA}, tury 24`);
+  assert(m && m.result.lossesB === 2 && m.result.lossesA === 3 && m.shipLosses?.B === 2 && m.shipLosses?.A === 3 && m.result.turns === 24, `A4b utracone okręty gracza 2 + 0 = ${m?.result?.lossesB}, wroga 0 + 3 = ${m?.result?.lossesA} (nie 42 / 120 z HP), tury 24`);
   assert(dsc.result.lossesA === 2 && col.result.turns === 9 && !('raidBattleIds' in col.result), 'A4c wejście nietknięte');
   assert(RAL.mergeRaidBattles?.([col]) === col, 'A4d jedna bitwa — ten sam obiekt');
 });
@@ -345,7 +347,7 @@ guard('B1', () => {
 console.log('B2 — #713: GameScene — linia, skutki i „Utracono kontakt” powtórki czekają na jej koniec');
 guard('B2', () => {
   const line = handlerAt(GS, 'battle:resolved', 1);
-  assert(/handle\?\.\(\{ warId, battleId, result, fx \}\) === true\) \{\s*fx\.logHeld = true;\s*\(this\._orbitalLogHold \?\?= new Map\(\)\)\.set\(battleId, \{ line: this\._battleLogEntry\(\{ warId, result \}\), extras: fx\.logEntries \?\? \[\] \}\);/.test(line),
+  assert(/handle\?\.\(\{ warId, battleId, result, fx \}\) === true\) \{\s*fx\.logHeld = true;\s*\(this\._orbitalLogHold \?\?= new Map\(\)\)\.set\(battleId, \{ line: this\._battleLogEntry\(\{ warId, result, shipLosses: fx\.shipsLost \}\), extras: fx\.logEntries \?\? \[\] \}\);/.test(line),
     'B2a linia bitwy powtórki + wpisy skutków EAH przejęte i trzymane do końca powtórki');
   const end = handlerAt(GS, 'combatfx:orbitalReplayEnd');
   const iLine = end.indexOf('_writeBattleLine(held.line'), iEx = end.indexOf('held.extras'), iC = end.indexOf("_noteContact('lost'"), iB = end.indexOf('_queueBanner(b)');
