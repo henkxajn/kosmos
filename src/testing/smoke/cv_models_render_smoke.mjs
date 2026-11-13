@@ -304,11 +304,11 @@ await block('R8 integracja — prawdziwe metody renderera: flaga ON / OFF, kurs,
   };
   R._addVesselModelCv = addCv; R._cvLightPool = pool; R._cvLightTestDoc = ltd; R._addVesselModel3D = add3d; R._cvTiltWreck = makeMethod('_cvTiltWreck');
   window.KOSMOS = { observatorySystem: { isVesselDetected: () => true } };
-  const F = GAME_CONFIG.FEATURES; const keep = { cvModels: F.cvModels, fcCombatFx: F.fcCombatFx, m4EnemyGhosts: F.m4EnemyGhosts };
+  const F = GAME_CONFIG.FEATURES; const keep = { fcCombatFx: F.fcCombatFx, m4EnemyGhosts: F.m4EnemyGhosts };
   // ⚠ `headless/env.js` kolejkuje `setTimeout(…, 0)` do ręcznego flusha — tu prawdziwe makrozadanie (obietnice ładowania dokończone).
   const tick = () => new Promise((r) => (globalThis.__origSetTimeout ?? setTimeout)(r, 1));
   try {
-    F.cvModels = true; F.fcCombatFx = true; F.m4EnemyGhosts = true;
+    F.fcCombatFx = true; F.m4EnemyGhosts = true;
     const own = trap({ id: 'v1', name: 'own', shipId: 'hull_frigate', position: trap({ x: 100, y: 50, state: 'in_transit' }), warpFuel: { max: 5 },
       mission: trap({ targetX: 400, targetY: -250, phase: 'outbound' }) });
     R._addVesselModel3D(own, 'assets/models/ships/warp_frigate.glb');
@@ -392,7 +392,6 @@ await block('R11 światło czytelności — uniformy strony własne dla materia�
   // `alert`, swoi i wraki bez zmian; bez zmiany epoki — bez przemalowania (koszt raz na zmianę motywu, nie co klatkę).
   const tick = makeMethod('_tickCvModels');
   assert(!!tick, 'R11e `_tickCvModels` wyciągnięty ze źródła renderera');
-  const F = GAME_CONFIG.FEATURES; const keep = F.cvModels;
   const keepShared = Object.fromEntries(Object.keys(KC.KC_SHARED).map((k) => [k, KC.KC_SHARED[k].value]));
   let alertHex = 0x2255ff;
   const R = {
@@ -404,7 +403,7 @@ await block('R11 światło czytelności — uniformy strony własne dla materia�
     ]),
   };
   try {
-    F.cvModels = true; themeEpochStub = 101;
+    themeEpochStub = 101;
     Object.assign(R.cvTuning, { MODEL_FILL: 0.123, MODEL_RIM_GAIN: 0.456, MODEL_RIM_POWER: 3.3, MODEL_LIFT_CEIL: 0.9, MODEL_ENEMY_TINT: 0.2 });
     tick.call(R);
     const S0 = KC.KC_SHARED;
@@ -418,7 +417,6 @@ await block('R11 światło czytelności — uniformy strony własne dla materia�
     assert(noRepaint && eq3(ue.uKcRim.value, lin(0xaa00ff)) && eq3(uo.uKcRim.value, lin(RIG.RIG_PALETTE.OWN_RIM)) && eq3(uw.uKcRim.value, [0, 0, 0]),
       'R11h bez zmiany epoki motywu — bez przemalowania; zmiana epoki — wróg w nowej roli `alert`, swój i wrak nietknięci');
   } finally {
-    F.cvModels = keep;
     for (const [k, v] of Object.entries(keepShared)) KC.KC_SHARED[k].value = v;
   }
 });

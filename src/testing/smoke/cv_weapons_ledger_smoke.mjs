@@ -686,12 +686,10 @@ withFlags({ fcCombatFx: true, cvFxEngine: true, cvWeapons: true, cvPresets: true
   R4._cvWpnRoundFx(payload(2, [pev('a1', 'b1', 'short', { killed: true, hpAfter: -4 })]));
   runFrames(R4, (R4._cvLedger?.killAt?.('b1') ?? 0) + 100);
   const shown4 = R4.explosions.length, q4 = R4._vessels.get('b1')?.sprite?.quaternion?.toArray?.().join();
-  GAME_CONFIG.FEATURES.cvWeapons = false;
   R4._onWrecked?.call(R4, { vesselId: 'b1', vessel: s4[1] });
   runFrames(R4, 200);
-  GAME_CONFIG.FEATURES.cvWeapons = true;
   assert(shown4 === 1 && R4.explosions.length === 1 && R4._vessels.get('b1')?.sprite?.quaternion?.toArray?.().join() === q4,
-    `K4 \`cvWeapons(0)\` po pokazanym zniszczeniu: wrak z logiki bez drugiej eksplozji i bez ponownego przechyłu (eksplozje ${shown4} → ${R4.explosions.length})`);
+    `K4 wrak z logiki po pokazanym zniszczeniu (705; CV-Z — bez flagi cvWeapons): bez drugiej eksplozji i bez ponownego przechyłu (eksplozje ${shown4} → ${R4.explosions.length})`);
   // K5: trafienie zabijające w locie, OFF, wrak z logiki przed trafieniem — jedna eksplozja (w chwili trafienia), nie dwie
   const R5 = fakeR();
   const s5 = [addShip(R5, 'a1', { x: -0.05, z: 0 }), addShip(R5, 'b1', { x: 0.05, z: 0, enemy: true })];
@@ -699,21 +697,17 @@ withFlags({ fcCombatFx: true, cvFxEngine: true, cvWeapons: true, cvPresets: true
   R5._cvWpnRoundFx(payload(2, [pev('a1', 'b1', 'long', { killed: true, hpAfter: -4 })]));
   const k5 = R5._cvLedger?.killAt?.('b1');
   runFrames(R5, 100);
-  GAME_CONFIG.FEATURES.cvWeapons = false;
   R5._onWrecked?.call(R5, { vesselId: 'b1', vessel: s5[1] });
   runFrames(R5, Math.max(0, (k5 ?? 0) + 100));
-  GAME_CONFIG.FEATURES.cvWeapons = true;
-  assert(R5.explosions.length === 1, `K5 \`cvWeapons(0)\` z trafieniem zabijającym w locie: jedna eksplozja (${R5.explosions.length})`);
+  assert(R5.explosions.length === 1, `K5 wrak z logiki przed trafieniem zabijającym w locie: jedna eksplozja (${R5.explosions.length})`);
   // K6 KONTROLA: sesja wyłącznie OFF (rejestru nie ma) — dzisiejsza ścieżka co do bitu: eksplozja przy wraku, wpis bez znacznika CV-4a
   const R6 = fakeR();
   const s6 = [addShip(R6, 'c1', { x: 0, z: 0, enemy: true })];
   kosmosFor(s6, { quality: 'contact' });
-  GAME_CONFIG.FEATURES.cvWeapons = false;
   R6._onWrecked?.call(R6, { vesselId: 'c1', vessel: s6[0] });
-  GAME_CONFIG.FEATURES.cvWeapons = true;
   const e6 = R6._vessels.get('c1');
   assert(R6._cvLedger === null && R6.explosions.length === 1 && e6?.cvKilled === undefined && R6._cvWpnStats.wreckUnknown === 0,
-    'K6 KONTROLA: tylko OFF, bez rejestru — dzisiejsza eksplozja przy wraku, bez znaczników i liczników CV-4a');
+    'K6 KONTROLA: bez rejestru salw (wrak bez starcia) — eksplozja przy wraku, bez znaczników i liczników CV-4a');
 });
 
 header('I — `ledgerInfo` (kontrola właściciela 2026-11-12): liczniki z nazwanym zakresem — per starcie i od wczytania strony, legenda');

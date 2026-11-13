@@ -117,7 +117,7 @@ function makeMethod(name) {
 // Parada na pauzie: każdy slot stawiany prawdziwym `_addVesselModelCv` (model i hardpointy z pliku dochodzą asynchronicznie), bez żadnej
 // aktualizacji pozycji potem — odczyt wylotów zaraz po dojściu modelu.
 async function paradeRun(choreo2) {
-  const F = GAME_CONFIG.FEATURES; const keep = { cvModels: F.cvModels, fcCombatFx: F.fcCombatFx };
+  const F = GAME_CONFIG.FEATURES; const keep = { fcCombatFx: F.fcCombatFx };
   const tick = () => new Promise((r) => (globalThis.__origSetTimeout ?? setTimeout)(r, 1));
   const R = {
     THREE, scene: new THREE.Scene(), _vessels: new Map(), _missingModelPaths: new Set(), _shipLightPool: null, _cvLightTest: false,
@@ -133,7 +133,7 @@ async function paradeRun(choreo2) {
   window.KOSMOS = { observatorySystem: { isVesselDetected: () => true }, vesselManager: { isImmobilized: () => false } };
   const out = [];
   try {
-    F.cvModels = true; F.fcCombatFx = true;
+    F.fcCombatFx = true;
     SLOTS.forEach((slot, i) => {
       const v = { id: `p${i}`, name: `CV-P${String(i + 1).padStart(2, '0')}`, shipId: 'hull_frigate', position: { x: 100 + i, y: 50, state: 'in_transit' },
         mission: { targetX: 400, targetY: 50, phase: 'outbound' } };

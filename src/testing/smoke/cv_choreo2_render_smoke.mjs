@@ -360,8 +360,6 @@ block('G6c / G6d — zniszczony: wylot ciemny; zakrztuszenie (≤ 25 % HP): rdze
   for (let f = 0; f < 3 * 64; f++) { if (f % 64 === 0) round(w); frame(R); }
   const id = w.A[0], e = R._vessels.get(id);
   const core = () => { const c = e.rig.glows[0].core.material.color; return c.r + c.g + c.b; };
-  const dmg0 = GAME_CONFIG.FEATURES.cvDamage;
-  GAME_CONFIG.FEATURES.cvDamage = true;
   let base = 0, choke = 0;
   for (let k = 0; k < 30; k++) { e.cvDmgSputter = null; frame(R); base += core(); }
   for (let k = 0; k < 30; k++) { e.cvDmgSputter = 0.12; frame(R); choke += core(); }
@@ -369,7 +367,6 @@ block('G6c / G6d — zniszczony: wylot ciemny; zakrztuszenie (≤ 25 % HP): rdze
   e.cvKilled = true;
   frame(R);
   const dark = e.rig.glows.every((g) => !g.group.visible);
-  GAME_CONFIG.FEATURES.cvDamage = dmg0;
   console.log(`     rdzeń: pełny ${(base / 30).toFixed(3)} → zakrztuszony ${(choke / 30).toFixed(3)}; zniszczony — wyloty ${dark ? 'zgaszone' : 'ZAPALONE'}`);
   assert(choke < 0.7 * base, `G6c zakrztuszenie przygasza rdzeń (${(choke / 30).toFixed(3)} < 0,7 × ${(base / 30).toFixed(3)})`);
   assert(dark, 'G6d zniszczony (pokazane trafienie zabijające) — wyloty dysz zgaszone');

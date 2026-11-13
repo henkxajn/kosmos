@@ -537,7 +537,6 @@ function fakeRenderer({ dpr = 1.25, rendererString = RTX } = {}) {
 }
 const lsKey = 'kosmos_gfx_quality';
 guard('T10 ustawienia', () => {
-  const flag = GAME_CONFIG.FEATURES.cvPresets;
   try {
     localStorage.removeItem(lsKey);
     // CV-Z — PRZECELOWANE ŚWIADOMIE: flaga `cvPresets` zdjęta — dawne T10b / T10h / T10i / T10l (ścieżka bez presetów i przełączanie
@@ -589,7 +588,7 @@ guard('T10 ustawienia', () => {
     const onSize2 = off2.R._bloomInputSize(1600 * 1.25, 1041 * 1.25);
     assert(off2.R._bloomCssPx === true && Math.abs(onSize.w - 2000) < 1e-9 && Math.abs(onSize2.w - 2000) < 1e-9,
       `T10u \`_bloomInputSize\`: px CSS × 1,25 przy gęstości 1,875 i 1,25 (${onSize.w} / ${onSize2.w})`);
-  } finally { GAME_CONFIG.FEATURES.cvPresets = flag; localStorage.removeItem(lsKey); }
+  } finally { localStorage.removeItem(lsKey); }
 });
 // CV-Z — PRZECELOWANE ŚWIADOMIE: dawne T10m–T10s pinowały sygnały salwy CV-2a (`_cvFxRoundFx` — usunięta razem z flagą `cvWeapons`);
 //   sygnały salwy w chwilach rejestru pinuje `cv_weapons_ledger_smoke` C1. Tu zostaje szyna w rendererze: sygnały zaplanowane na zegarze

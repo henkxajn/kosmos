@@ -293,7 +293,7 @@ function addShip(R, id, x, z) {
     scorchXf: [{ mat, inv: new THREE.Matrix4().elements.slice(), s2m: 1 }] };
   R._vessels.set(id, { sprite: wrapper, canonical: true, rig });
 }
-const flagsOn = { cvShields: GAME_CONFIG.FEATURES.cvShields, cvWeapons: GAME_CONFIG.FEATURES.cvWeapons, cvFxEngine: GAME_CONFIG.FEATURES.cvFxEngine, fcCombatFx: GAME_CONFIG.FEATURES.fcCombatFx, cvPresets: GAME_CONFIG.FEATURES.cvPresets };
+const flagsOn = { fcCombatFx: GAME_CONFIG.FEATURES.fcCombatFx };
 const setFlags = (o) => Object.assign(GAME_CONFIG.FEATURES, o);
 function fakeEng() {
   const log = [];
@@ -301,12 +301,11 @@ function fakeEng() {
 }
 function fakeCues() { const log = []; return { log, schedule: (...a) => log.push(a) }; }
 guard('L9', () => {
-  setFlags({ cvWeapons: true, cvFxEngine: true, fcCombatFx: true, cvPresets: true });
+  setFlags({ fcCombatFx: true });
   window.KOSMOS = { vesselManager: { getVessel: (id) => ({ id, name: id, shipId: 'hull_cruiser', modules: [] }) }, timeSystem: { combatRoundMs: () => 1000 } };
   const mkX = (o) => ({ encounterId: 'enc', round: 1, index: 0, attacker: 'a', target: 't', kind: 'kinetic', category: 'medium', hit: true, dmg: 0, blocked: 12,
     killed: false, chargeAt: null, fireAt: 100, impactAt: 300, flight: 200, beamEnd: null, seed: 7, u1: 0.3, u2: 0.6, u3: 0.1, shieldAfter: 8, ...o });
-  // OFF — punkt trafienia CV-4a: środek celu + (−0,35 × rozmiar) wzdłuż kierunku strzału, tryb 1
-  setFlags({ cvShields: false });
+  // Bez planu osłony (dawniej „cvShields OFF” — CV-Z: flaga zdjęta) — punkt trafienia CV-4a: środek celu + (−0,35 × rozmiar), tryb 1
   const R0 = fakeR(); addShip(R0, 'a', -0.2, 0); addShip(R0, 't', 0.2, 0);
   const e0 = fakeEng();
   const x0 = mkX({});
@@ -320,9 +319,8 @@ guard('L9', () => {
   const ok0 = !!bolt0 && bolt0.bMode === 1 && Math.abs(bolt0.box - ex[0]) < 1e-12 && Math.abs(bolt0.boy - ex[1]) < 1e-12 && Math.abs(bolt0.boz - ex[2]) < 1e-12
     && Math.abs(bolt0.bx - (tw.x + ex[0])) < 1e-12 && Math.abs(bolt0.by - (tw.y + ex[1])) < 1e-12;
   const cyan0 = e0.log.filter((l) => l[0] === 'mote' && l[1].color === FXC.FX_SHIELD_COLOR).length;
-  assert(ok0 && cyan0 > 0 && R0.missing.length === 0, `L9a cvShields OFF: koniec pocisku = punkt CV-4a co do bitu (tryb 1, −0,35 × rozmiar), trafienie w osłonę — cyjanowe iskry CV-4a (${cyan0}); brak metod ${JSON.stringify(R0.missing)}`);
+  assert(ok0 && cyan0 > 0 && R0.missing.length === 0, `L9a bez planu osłony: koniec pocisku = punkt CV-4a co do bitu (tryb 1, −0,35 × rozmiar), trafienie w osłonę — cyjanowe iskry CV-4a (${cyan0}); brak metod ${JSON.stringify(R0.missing)}`);
   // ON — plan: dwa trafienia na bańce, trzecie rozbija, czwarte w kadłub
-  setFlags({ cvShields: true });
   const R1 = fakeR('high'); addShip(R1, 'a', -0.2, 0); addShip(R1, 't', 0.2, 0);
   const st = R1._cvShdState();
   const xs = [mkX({ index: 0, impactAt: 300, blocked: 12, shieldAfter: 18 }), mkX({ index: 1, impactAt: 500, blocked: 12, shieldAfter: 6 }),
