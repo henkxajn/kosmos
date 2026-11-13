@@ -102,7 +102,15 @@ non-home system as an exploration target. This is what blocked the Entry
 1 test — I had to fall back to `moveToPoint`, which invalidated it. Not
 investigated; log only, needs its own audit.
 
-## ENTRY 4 — V4 (spójna głębia sceny): wejście i wyjście z BattleView3D, NIE zweryfikowane w przeglądarce
+## ENTRY 4 — V4 (spójna głębia sceny): wejście i wyjście z BattleView3D, NIE zweryfikowane w przeglądarce — ✅ ZAMKNIĘTE 2026-11-13 (CV-8b: przedmiot usunięty)
+
+> **Zamknięte bez wykonania, bo pytanie przestało istnieć.** ARC COMBAT VISUALS krok **CV-8b** (D-CV-27 (a), decyzja właściciela
+> 2026-11-08) usunął `src/scenes/BattleView3D.js`, modal intro („ENGAGEMENT IMMINENT” / „BITWA NIEUCHRONNA” — pytanie Obserwuj /
+> Pomiń, preferencja `kosmos_battle_view_auto`) i bramkę `ThreeRenderer.suspend()` / `resume()` (`_renderingEnabled`). Nic już nie
+> przejmuje `#three-canvas` ani renderera, nie ma drugiej kamery, której `logDepthBufFC` mógłby zostać po powrocie — §8 nie ma czego
+> sprawdzać. Bitwa Path A (obrona kolonii, `EnemyAttackHandler`) gra jako powtórka na scenie planety w GŁÓWNEJ scenie (CV-8a), z tymi
+> samymi materiałami co reszta mapy. Nieobecność pinuje keeper `src/testing/smoke/cv_retire_cinema_smoke.mjs` (N1 — plik i importy,
+> N3 — modal i preferencja, N4 — `suspend` / `resume` / `_renderingEnabled`). Treść niżej zostaje jako zapis historyczny.
 
 Status: wdrożone, sonda kompilacji + keepery zielone, **§8 gate'u NIE wykonany** —
 ryzyko przyjęte świadomie przez właściciela na live gate'cie 2026-09-09.

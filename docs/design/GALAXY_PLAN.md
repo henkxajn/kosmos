@@ -1165,7 +1165,7 @@ Expected balance at G5 (proposal, after D-GX-17 (c)): +14 added, ~37 retired (mo
 | O7 | **One group-warp path for AI and player** (SB54 `issueGroupAttack` reusing the G4 group journey) | after G4 two group-start paths exist | AI behaviour change — needs the AI gates |
 | O8 | **Remember the map mode across save / load** | G1 always starts in system mode | trivial, but changes the first frame after load |
 | O9 | **Remove `assets/backgrounds/deep_space*.png`** after G5 | only the dying stratcom surfaces read them | asset deletion |
-| O10 | **Sky of `BattleView3D` from the catalogue** (it draws its own 600 random points) | NIEBO makes the main sky deterministic; the battle cinema stays random | renderer of the cinema |
+| ~~O10~~ | ~~**Sky of `BattleView3D` from the catalogue** (it draws its own 600 random points)~~ **moot — `BattleView3D` removed in COMBAT VISUALS CV-8b** (2026-11-13, D-CV-27 (a)); every battle plays in the main scene under the catalogue sky | NIEBO makes the main sky deterministic; the battle cinema stays random | — |
 | ~~O11~~ | ~~**Dead config cleanup** (`BACKGROUND_COLOR`, `STAR_COUNT_BACKGROUND`, `THEME.starfield` ×11) if not done inside NIEBO~~ **done inside NIEBO** (Finding 597, `6ea7cad`) | Finding 597 | — |
 | O12 | **The dead `galaxy` entry of `CIV_TABS`** (`CivPanelDrawer.js:38`, key letters that disagree with the keymap) | A9 | housekeeping |
 | O13 | **Stale tmp smokes** (`tmp_tabscaffold_smoke` `_hoverShipId`, `tmp_territory_b1` save v91, `warp_stratcom_smoke` W12e vacuous and its unparsed summary) | A10 | housekeeping; the swept one dies or is re-aimed in G5 anyway |

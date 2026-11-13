@@ -603,7 +603,11 @@ który w V3/A1 złapała dopiero sonda).
 `LIVE_CLOUDS`. Warstwa, która przez pół roku była niewidoczna, shipuje się bez ani jednego
 strojenia — pokrętła (V-278) zostają jako żywy instrument, nie jako obejście.
 
-#### ⚠ Odstępstwo 1 — §8 (wejście/wyjście z BattleView3D): NIE ZWERYFIKOWANE NA ŻYWO
+#### ⚠ Odstępstwo 1 — §8 (wejście/wyjście z BattleView3D): NIE ZWERYFIKOWANE NA ŻYWO — ✅ bez przedmiotu od CV-8b
+
+> **2026-11-13, ARC COMBAT VISUALS CV-8b (D-CV-27 (a)):** `BattleView3D`, modal intro i `suspend` / `resume` renderera usunięte —
+> nic już nie przejmuje renderera ani kamery, więc §8 nie ma czego sprawdzać. `docs/deferred-live-gates.md` ENTRY 4 zamknięte z tym
+> powodem; nieobecność pinuje `cv_retire_cinema_smoke`. Tekst niżej — zapis historyczny.
 
 Zapis właściciela, dosłownie: *„§8 (battle in/out) not exercisable at the gate — risk
 accepted: loud failure mode + one-toggle mitigation; note it in the registry as »not
