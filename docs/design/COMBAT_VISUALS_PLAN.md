@@ -43,7 +43,8 @@
 > kept as built. CV-4a ✅ DONE 2026-11-12 (`fe232ac`; the combined owner's check CV-2b + CV-4a PASS, both pushed — decisions
 > 39–41). CV-5 ✅ DONE 2026-11-12 (`03c5c35`) and CV-4b ✅ DONE 2026-11-12 (`c831e9d`; shields and armour, item 0 — Finding 707):
 > the owner's combined check CV-5 + CV-4b PASS 2026-11-12 (A1–A6, B1–B6), both pushed — decisions 42–43. Decision 44: the owner's
-> notes → a NEW step CV-3c before CV-6a (§4 «CV-3c»). Next: CV-3c (§4 order).**
+> notes → a NEW step CV-3c before CV-6a (§4 «CV-3c»). CV-3c ✅ DONE 2026-11-13 (`be3ae86`; flag `cvChoreo2` default ON; the owner's
+> check PASS 2026-11-13, steps 1–8 — decision 45; Finding 709 fixed before the commit; §4 «CV-3c — delivered»). Next: CV-6a (§4 order).**
 > Anchor HEAD `95f7ab7` (ARKUSZ GALAXY closed). Phase A implemented nothing — no `src/` edits, no keepers, no smokes, no
 > probes in the browser. The only repo files written by this phase are this plan and one pointer line in `CLAUDE.md`,
 > committed as `docs(CV A)`; that commit is the anchor of CV-0b.
@@ -1159,6 +1160,17 @@ makes Live Server reload the page.
     puts every wreck at the battle's midpoint) — an owner-approved mechanics touch, an exception to F1 scoped to the wreck location;
     (6) fireball radius +25 %; (7) irregular debris shapes; (8) missiles — check against the CV-4a design; (9) the heat glow vs
     `FX_TIME_SCALE`. New order: … CV-4b → **CV-3c** → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z.
+45. **2026-11-13 — the owner's check of CV-3c: PASS (steps 1–8 of `kosmos-handover/cv-3c/CHECKLIST.md`) with one defect.**
+    (1) battleships' sideways drift (the bow follows their own loop, the drawn motion carries the stage solver's wander — bow vs
+    drawn motion 72°) — kept as „broadside drift”; (2) `WRECK_CONVERGE_MS` default 1200 → **5000** (after the stage dissolves the
+    wrecks spread to their true-scale death positions slowly, like drift); (3) the F3 windows scale with the spread — accepted (at
+    the default the drawn laser gap exceeds the 3–4 L window); (4) nozzle glow: kept on High / Medium, **Low = core only** (no halo,
+    no flare); (5) the SMAA compensation extended to lasers and kinetic — measured in paired frames vs CV-4a: kinetic −26 % →
+    head × 1.3, width × 1.08; laser at parity (+1 %) → its knobs kept at × 1.0 (the mechanism and the live knobs are in place);
+    (6) the fireball +25 % outside the flag and (7) the collision floor of the choreography in true ship lengths — accepted as built;
+    `STAGE_SPREAD` default **1.5** (the owner's choice after live tuning 1 / 1.35 / 1.5 / 1.6). NEW **709** — in `cvParade` CV-P01
+    showed no nozzle glow, CV-P13 fine — fixed before the commit. CV-3c committed `be3ae86`; order: … CV-3c ✅ → **CV-6a** → CV-7 →
+    CV-8a → CV-8b → CV-Z.
 
 ---
 
@@ -1197,6 +1209,8 @@ combined gate with CV-4a; next: **CV-4a** → …
 **2026-11-12 (§3.2-42):** CV-5 committed (`03c5c35`) — the owner's check combined with CV-4b.
 **2026-11-12 (§3.2-43, -44):** CV-4b delivered (`c831e9d`, §4 «CV-4b — delivered»); the combined owner's check CV-5 + CV-4b PASS, both
 pushed; the owner's notes → NEW step **CV-3c** (§4 «CV-3c»). Order: … CV-4b → **CV-3c** → CV-6a → CV-7 → CV-8a → CV-8b → CV-Z.
+**2026-11-13 (§3.2-45):** CV-3c delivered (`be3ae86`, §4 «CV-3c — delivered»); the owner's check PASS (steps 1–8) with one defect — Finding
+709, fixed before the commit. Order: … CV-3c ✅ → **CV-6a** → CV-7 → CV-8a → CV-8b → CV-Z.
 
 **Dependencies on CV-1 and the shims** (CV-2a, CV-3a and CV-3b now run before CV-1a):
 - CV-2a (FX engine, stager) — none: endpoints are drawn positions; muzzle hardpoints arrive with CV-4.
@@ -3565,6 +3579,69 @@ Planned 2026-11-12 from the owner's combined check CV-5 + CV-4b — recorded onl
 | **Keepers (logic)** | results identical ON / OFF except the wreck location (signature and every round's trace; the wreck point = the ship's last logical position — a keeper pinning the midpoint is re-aimed deliberately, with the reason); the pace change leaves the outcome unchanged; choreography: no pair changes its band, the motion follows the heading (no sideways slide), deterministic, pause freezes |
 | **Owner looks at** | a watched 10v10 at the new pace — ships fly and turn along their heading, turrets track, nozzles glow cyan, wrecks drift from where each ship died, bigger fireballs with irregular debris |
 
+#### CV-3c — delivered ✅ 2026-11-13 (`be3ae86`; flag `cvChoreo2`, default ON; the owner's check PASS — decision 45)
+
+One session; nothing moved to a CV-3c2. Handover: `kosmos-handover/cv-3c/` (`CHECKLIST.md`, five contact sheets, the live
+validation scripts and results; `709/` — the 24 parade sterns).
+- **Pace.** `StrikesBackData.combatRoundMs` 1000 → 1150. The tuning store keeps only changed values ⇒ a save without the key reads
+  1150, a stored custom value stays; no migration. Watched 10v10 (stager seed 1): **30.3 s → 34.8 s**, the same 31 rounds and winner
+  (results do not depend on the pace — `cv_fx_results_smoke` A4 at 400 / 1000 / 1150).
+- **Spacing.** NEW `BattleStageLogic.spreadLaw` + option `SPREAD` of `solveStage`: the stage law K, `DECONFLICT_L`, `COLLISION_L` and
+  `SEED_Y_L` scale together (exactly scale-invariant for the seed and converged solutions); the choreography envelope follows. Live
+  knob `cvTuning.STAGE_SPREAD`, default **1.5** (decision 45). Measured (solver, 22 configurations): nearest-neighbour median 1.60 L
+  (spread 1) → 2.16 L (1.35) → 2.40 L (1.5); live (`stageInfo`, 10v10, one sweep): 1.85 L (spread 1) → 2.41 L (1.35) → 3.46 L (1.6);
+  mis-banded 0, fallback 0 at every value.
+- **Choreography 2.0** (`ChoreographyLogic` `stepChoreo2Offset` / `stepChoreo2Facing` / `stepChoreo2Engine`; glue in
+  `ThreeRenderer._choreoCluster` / `_choreoPose`): closed-form loops on a sphere around the nearest live enemy (15 % hysteresis), crowd
+  scaling from the nearest anchor gap, the bow by a rate limiter (class turn caps, banking) following the smoothed DRAWN velocity,
+  battleships their own loop; deterministic (seed = encounter + ship), presentation clock (pause = pause), velocity-continuous,
+  the D-CV-6 band projection every frame (`constrainChoreo` with the collision floor in TRUE ship lengths — 1.5 / spread scene
+  units), doctrine postures, retreat away along the heading; mode crossfade 0.5 s. Live: bow vs drawn motion **9.9°** median
+  (CV-3b 89.9°); keeper on the real glue at the default spread 1.5: frigates 6.7° (p90 19.0°), destroyers 4.5°, battleships follow
+  their loop (drawn motion 72.7° — the stage wander; decision 45 (1) „broadside drift”). Turrets: shots leave the turret hardpoints with the best bearing
+  (CV-4a); the models have no separate turret meshes.
+- **Engine.** Under the flag the plume cone is replaced by a cyan nozzle glow (`ShipModelRig.buildNozzleGlows`: HDR core above the
+  bloom threshold, a soft halo, a short thrust flare ∝ thrust²; `_nozzleGlowSet`, knobs `cvTuning.NOZZLE_*`); intensity from the
+  choreography speed in combat, transit / dock outside; ≤ 25 % HP — sputter + nozzle sparks (core brightness variation 43 % vs 2 %
+  on a healthy ship); dark from the presented kill (`_cvWpnKillLook` — measured: a `cvExplode` wreck kept its glow). Low = core only
+  (decision 45 (4)). Cost at a full 10v10 on High: about +45 draw calls, JS loop +0.3–1.0 ms (ON 2.8–3.5 ms, OFF 2.3, `835f439` 2.5).
+- **Finding 709** (the owner's check): see §5. `_addVesselModelCv` applies the exhaust state right after the rig; NEW
+  `ShipModelRig.resolveNozzles` (the file nozzle kept; a missing radius from the hull section, a missing direction aft; a slot
+  without any usable nozzle — a nozzle at the hull stern). All 24 parade sterns at High with the parade PAUSED: 24 / 24 glows
+  (`709/contact_sheet_709_sterns_after.png`). Multi-engine models show the glow at the one nozzle their hardpoint file records (more
+  nozzles: Model Workshop, mode 2).
+- **Wrecks** (owner-approved mechanics touch, decision 44 (5)). `DeepSpaceCombatSystem._noteDeath` records the ship's position at the
+  killing hit (transient `encounter._deathPos`, not serialized), `_finalizeBattle` wrecks each loser at `_deathPointOf` (fallback —
+  the midpoint); `VesselCombatSystem._wreckGroup` — each vessel's own position. Results, `round.events` and the battle record
+  unchanged (keeper `cv3c_wreck_location` W3; the `warp_combat_607` trace differs ONLY in the wreck x). Live: 14 wrecks at 14 distinct
+  points (min spacing 0.0074 AU, radius 0.089 AU). Presentation: after the convergence (`WRECK_CONVERGE_MS` 5000 — decision 45 (2)) a
+  deterministic drift and tilted tumble (`ExplosionLogic.wreckAfterDrift`, τ `WRECK_AFTER_S` 14 s, done at 5 τ); a kill deferred to an
+  in-flight hit drifts from its explosion (measured live: 2 of 14 wrecks lost their drift before the fix). No salvage mechanic
+  exists; AI pools skip wrecks; a rebuilt wreck keeps its drift offset (`_cvWreckEpoch.afterT0`).
+- **Explosion.** `EXP_FIREBALL_K` 0.62 → 0.775 (+25 %), lobe spread 0.36 → 0.45; debris: four plate-shard variants instead of the
+  octahedron (`FxEngine.buildDebrisGeometry`, per-instance `aShape`), heat on the edges early (`FxShaders` debris program); both behind
+  the flag except the fireball radius (decision 45 (6)). `EXP_DEBRIS_SIZE` 0.03 kept.
+- **Weapons on High** (decision 44 (8), 45 (5)). The missile shader and parameters are byte-identical to CV-4a; paired frames in an
+  identical frame (paused, the same flight moment, `kosmos-handover/cv-3c/contact_sheet_missile.png`): High lost energy with
+  decision 41 (native + SMAA, bloom in CSS px) — missile 54.5k → 36.3k, kinetic 28.4k → 21.1k; laser at parity (351.5k / 354.8k);
+  Medium unchanged. Compensation only under SMAA + `cvChoreo2`: missile head × 1.4 / width × 1.08 (53.3k), kinetic head × 1.3 /
+  width × 1.08 (29.4k), laser × 1.0 (`WPN_SMAA_*` knobs; the beams through `FxEngine.update({ smaa })`).
+- **Hit aftermath.** `_cvWpnImpact`: the lives of sparks, heat glow, white flash and shield glow × 1 / `FX_TIME_SCALE`, spark speed ×
+  `FX_TIME_SCALE` (the same path).
+- **Console.** `KOSMOS.debug.cvChoreo2(0|1)`, `cvFocusDamaged()`, `damageInfo().wrecks[].dryf`, `stageInfo()` columns `lot` /
+  `rozsuniecie`; `fxStats` High 16.7 / 17.0 / 18.9 ms, Low 16.7 / 17.0 / 20.6 ms (RTX 3070, 10v10, vsync).
+- **Keepers.** NEW `cv_choreo2_logic` 34/0, `cv_choreo2_render` 19/0, `cv3c_wreck_location` 11/0, `cv3c_nozzle_slots` 8/0;
+  `cv_damage_logic` +D15 (deferred-kill drift) / D16 (glow dark at the kill) 59/0. Conscious retargets with the reason in the header:
+  `combat_pace` (T10 → 1150), `cv_fx_results` (+A10; the older blocks with `cvChoreo2` OFF), `cv_choreo_render` (CV-3b, spread 1),
+  `cv_stage_temporal` (T9 at spread 1 where the 30 % threshold was calibrated + NEW T9d at the default — zero stops; at ≥ 1.45 one
+  boundary slows to 23–28 %), `warp_combat_607` (NEW recording `CV3c-warp-combat-wreck-baseline` + witness: only the wreck x),
+  `sb2b_wreck_still` (the death position, with a witness). Fail-first on the pristine `835f439`: `cv_choreo2_logic` 2/15,
+  `cv_choreo2_render` 8/10 (every control green on both sides), `cv3c_wreck_location` 5/6, `cv3c_nozzle_slots` 3/3 (N3b — all 24
+  glows hidden), D15 without the deferred fix 56/2, D16 without the kill-look line 58/1. Sweep 402/402, `check-i18n` PASS.
+- ⚠ Session incident (no effect on the commit): removing a scratch worktree that held a `node_modules` junction deleted the main
+  `node_modules` and the tracked three stub through the npm `file:` link; restored (`git checkout` of the stub + `npm ci`), the sweep
+  re-run 401/401 at that point.
+
 ### CV-6a — tactical layer and semantic zoom (flag `cvTactical`)
 
 | | |
@@ -3922,6 +3999,7 @@ Status: 🔴 defect with a measured gameplay consequence now · 🟠 defect / la
 | **706** | ✅ | **A preset switch in a PAUSED battle can leave the ships off the stage.** A texture rebuild (High ↔ Medium / Low) while the game is paused: the rebuilt sprites get a fresh stage mark and the stage entry runs on the presentation clock, which stands — the ships stay at their logical (true-scale) positions until the game resumes (B1 frame: 20 / 20 ships, frigates 7–11 px instead of ≈ 43 px, 4 / 4 runs; the close-up frame 0 / 4); in a running battle it is a blink | `ThreeRenderer.cvRebuildVesselSprites` → `_tickBattleStage` / `_stagePlace`; `kosmos-handover/cv-4a/704/probe_704.mjs` | **record only** — owner's call (carry the stage mark over a rebuild, or place a rebuilt participant at its target at once) · **CV-5 ✅** — stage marks kept through the async rebuild (`_stageKeep` / `_stageKept`) AND the cluster stage state kept with the kept ids in the solve key (without the second the ships still moved 1–3.4 L); live 0 L, solves unchanged; keepers `cv_stage_temporal` T12 (control 70.8 L), `cv_presets_logic` T12 |
 | **707** | ✅ | **Live hulls glow white near the star.** The CV-1a material keeps the model's roughness / metalness MAPS (`roughness` and `metalness` only multiply them), so smooth metal panels give star specular highlights far above the bloom threshold — up close a white bloom patch on the star-facing side of some destroyer / battleship models (seen on the CV-5 contact sheets on live enemy ships, frame before any damage). Not CV-5: the wreck fix (matte in burn mode 1) shows the mechanism | `kosmos-handover/cv-5/sheet/diag_0_alive.png`, `diag_4_nobloom.png`; `KeyColourEmission` KC_MAIN (roughness / metalness writes only in mode 1) | **CV-4b item 0** (decision 42 (a)) — ✅ **`c831e9d` 2026-11-12** (the owner's combined check PASS — decision 43): a roughness floor `max(roughness, MODEL_ROUGH_MIN 0.4)` + a soft knee on the DIRECT specular (brightest channel, `MODEL_SPEC_CAP 0.7`) in the key-colour chunk; max hull luminance F 449.166 → 1.244, G 331.702 → 0.978, K 146.082 → 0.948, M 55.995 → 0.848; 0 / 0 = the CV-1a expression (control reproduces the pre-change numbers); `cvModels` OFF untouched (`kosmos-handover/cv-4b/707/`) |
 | **708** | ⚪ | **Shields collapse at the first hit — the bubble rarely holds in a battle.** The shield modules give 15 (small) / 35 (large) HP with a regen of 1 / 3 per round, a hit deals 15 / 24 / 36 (laser / kinetic / missile × `DAMAGE_MULT` 3) ⇒ a shield blocks one hit, at most two, and collapses; it re-forms (≥ 25 % of max) only after 3–4 rounds. Measured: watched 10v10 seed 1 — 12 of 12 hits on a bubble collapsed it; the validator's session — 62 hits on a bubble, 60 collapses. The bubble's 'strong' and 'weak — flickering' looks are seen mainly through `cvShieldHit`; a battle shows mostly the collapse | `kosmos-handover/cv-4b/probe_cv4b_battle.json`, `validate_CV4b_run.txt` (B3); `ShipModulesData` (shield modules), `DeepSpaceCombatSystem.DAMAGE_MULT` | recorded — not CV (F1, mechanics untouched); **decision 43: → a future MECHANICS arc** (with #700) |
+| **709** | ✅ | **Parade ships without a nozzle glow while paused (owner's check 2026-11-13).** In `cvParade` CV-P01 (non-warp frigate) showed no nozzle glow at all, CV-P13 (warp frigate) looked very good. Measured live: the nozzle data of all 24 parade slots is valid (one nozzle on the hull's rear face, radius 0.02–0.12, not occluded from behind); the glows start hidden (`buildNozzleGlows`) and outside combat only `_applyExhaust` on a POSITION UPDATE lit them, while the GLB rig arrives asynchronously after the sprite's last update ⇒ a model that arrived during PAUSE (the parade starts paused; also a load, a preset rebuild, a system switch) had no glow until the game resumed (paused: 0 / 24 visible, 0.4 s after resuming: 24 / 24). Warp models hid it with their own emissive nozzle ring (key-colour texture); non-warp models have none | `kosmos-handover/cv-3c/709/` (`probe709_timeline.json`, `before_paused_P01_P13.png`, `contact_sheet_709_sterns_after.png`); `ThreeRenderer._addVesselModelCv`, `ShipModelRig.buildNozzleGlows` | **CV-3c ✅** (`be3ae86`) — `_addVesselModelCv` applies the exhaust state right after the rig (under `cvChoreo2`); `resolveNozzles` — the file nozzle kept, a missing radius / direction filled, a hull-stern fallback for a slot without a usable nozzle; keeper `cv3c_nozzle_slots` (every parade slot ≥ 1 visible nozzle with radius > 0 right after a paused arrival; fail-first: 24 hidden); next free **710** |
 
 Cross-references (existing numbers, not refiled): **165** (orbital defence has no rounds — CV-8a gives it a presentation),
 **161** / **163** (banner pause and Polish literals — CV-8b), **453** (cross-system combat drawing — #628 is its orbital
