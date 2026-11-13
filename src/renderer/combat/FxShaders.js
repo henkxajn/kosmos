@@ -469,6 +469,8 @@ void main() {
 `;
 
 // ── DEBRIS (ARC CV-5) — odłamki kadłuba: instancje bryłki (nieregularny ośmiościan), ruch i obrót liczone w shaderze z wieku
+// ARC CV-3c — wariant bryłki z instancji (`aShape.x`: 0 — ośmiościan, 1–4 — odłamki blachy; wierzchołki innych wariantów odrzucane)
+// i żar tylko na krawędziach (`aShape.y` = 1, ściany boczne `aEdge`).
 // (`uTime` — zegar efektów uszkodzeń), oświetlenie od gwiazdy (początek układu), żar krawędzi na początku życia (HDR, stygnie).
 // Nieprzezroczyste (głębia zapisywana) — pod koniec życia bryłka się kurczy, zamiast przenikać.
 export const DEBRIS_VERT = `
@@ -479,11 +481,16 @@ attribute vec4 aAxis;
 attribute vec4 aParams;
 attribute vec3 aStretch;
 attribute vec3 aColor;
+attribute float aVar;
+attribute float aEdge;
+attribute vec2 aShape;
 varying vec3 vN;
 varying vec3 vWp;
 varying float vHot;
 varying vec3 vColor;
 varying float vShade;
+varying float vEdge;
+varying float vMode;
 vec3 dRot(vec3 v, vec3 k, float a) {
   float c = cos(a), s = sin(a);
   return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c);
@@ -496,7 +503,9 @@ void main() {
   vShade = aParams.w;
   vN = vec3(0.0, 1.0, 0.0);
   vWp = vec3(0.0);
-  if (age < 0.0 || age > life) {
+  vEdge = aEdge;
+  vMode = aShape.y;
+  if (age < 0.0 || age > life || abs(aVar - aShape.x) > 0.5) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
@@ -520,6 +529,8 @@ varying vec3 vWp;
 varying float vHot;
 varying vec3 vColor;
 varying float vShade;
+varying float vEdge;
+varying float vMode;
 void main() {
   vec3 n = normalize(vN);
   vec3 L = normalize(-vWp + vec3(1e-5));
@@ -527,7 +538,9 @@ void main() {
   vec3 V = normalize(cameraPosition - vWp);
   float rim = 1.0 - abs(dot(n, V));
   vec3 col = vColor * vShade * (0.16 + 0.9 * diff);
-  col += vec3(1.0, 0.4, 0.09) * (vHot * vHot * uCore * (0.35 + 0.65 * rim));
+  // CV-5 (tryb 0): żar całej bryłki z obwódką; CV-3c (tryb 1, decyzja 44 (7)): żar WYŁĄCZNIE na krawędziach blachy (ściany boczne)
+  float glowMask = vMode > 0.5 ? vEdge * (0.3 + 0.7 * rim) : (0.35 + 0.65 * rim);
+  col += vec3(1.0, 0.4, 0.09) * (vHot * vHot * uCore * glowMask);
   gl_FragColor = vec4(col, 1.0);
 }
 `;

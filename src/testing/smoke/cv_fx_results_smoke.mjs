@@ -35,8 +35,12 @@
 //      sprite'y przesunięte), tryb OFF — bez sceny
 //   A2 ON == OFF == bez renderera: sygnatura, ślad każdej rundy, sekwencja losowań gry, sloty orbit (obie warstwy CV)
 //   A3 KONTROLA przyrządu: słuchacz salwy losujący z `Math.random` przesuwa sloty orbit (i sekwencję)
-//   A4 tempo oglądanego starcia (`combatRoundMs`) 400 == 1000 (decyzja właściciela 2026-11-08: domyślnie 1000): sygnatura,
+//   A4 tempo oglądanego starcia (`combatRoundMs`) 400 == 1000 == 1150 (CV-3c, decyzja właściciela 44 (1): domyślnie 1150): sygnatura,
 //      ślad każdej rundy, sekwencja losowań gry, sloty orbit; świadek — czas realny starcia rośnie z kluczem
+//   A10 (CV-3c, flaga `cvChoreo2`) — lot wzdłuż kursu, wylot dysz, odłamki blachy, dryf wraków, rozsunięcie sceny `STAGE_SPREAD` 1,35:
+//      wynik ON + cvChoreo2 == ON z cvChoreo2 OFF == bez renderera (sygnatura z wrakami, ślad każdej rundy, losowania gry, sloty
+//      orbit); świadek — tryb ON naprawdę leciał pętlami CV-3c (statki w trybie 2). Tryby A1–A9 ustawiają `cvChoreo2` jawnie: OFF
+//      (pinują choreografię CV-3b), A10 — ON
 //   A5 (CV-3a3, D-CV-4) bitwa PRZY CIELE (`cvBattle({ atBody })` — gracz na orbitach, wróg przypięty przez DSCS): ON (scena
 //      ze skorupą) == OFF == bez renderera — sygnatura, ślad każdej rundy, sekwencja losowań gry, sloty orbit; świadek — tryb ON
 //      rysował skorupę
@@ -151,7 +155,9 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'wreckDrift', 'wreckConverge', 'sputterGate', 'emitterTicks', 'expSeedUnit', 'KC_SHARED', 'setKeyColourWreckState',
   // ARC CV-4b — osłony i pancerz (tryb A9: flaga `cvShields`)
   'ShieldStates', 'bubbleAxes', 'ellipsoidPoint', 'hullPoint', 'scorchEnabled', 'allocScorch', 'scorchHeat', 'SHIELD_RIPPLES_MAX', 'SCORCH_MAX',
-  'ShieldBubblePool', 'KC_SCORCH_MAX', 'setKeyColourScorch', 'setKeyColourScorchHeat', 'setKeyColourScorchCount', 'ledgerHash'];
+  'ShieldBubblePool', 'KC_SCORCH_MAX', 'setKeyColourScorch', 'setKeyColourScorchHeat', 'setKeyColourScorchCount', 'ledgerHash',
+  // ARC CV-3c — lot wzdłuż kursu, wylot dysz, dryf wraków (tryb A10: flaga `cvChoreo2`)
+  'stepChoreo2Offset', 'stepChoreo2Facing', 'stepChoreo2Engine', 'NOZZLE_KEY_HEX', 'wreckAfterDrift'];
 const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
   '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
   '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
@@ -162,7 +168,8 @@ const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVi
   '_cvDmgOn', '_cvDmgState', '_cvDmgTick', '_cvDmgExplode', '_cvDmgPoint', '_cvDmgRunSeq', '_cvDmgWreckLook', '_cvDmgPaintHeat',
   '_cvDmgWrecks', '_cvDmgStates', '_cvDmgDrift', '_cvDmgTumble', '_cvDmgConverge', '_setSpriteBase', '_lightClockMs', '_stageKept',   // ARC CV-5 (A8)
   '_cvShdOn', '_cvShdState', '_ensureShieldBubbles', '_cvShdRipples', '_cvShdDir', '_cvShdPlanRound', '_cvShdEndPoint', '_cvShdImpacts',
-  '_cvShdTick', '_cvShdBubbles', '_cvShdScorch', '_cvShdApplyScorch', '_cvShdScorchTick', '_cvShdReapplyScorch'];   // ARC CV-4b (A9)
+  '_cvShdTick', '_cvShdBubbles', '_cvShdScorch', '_cvShdApplyScorch', '_cvShdScorchTick', '_cvShdReapplyScorch',   // ARC CV-4b (A9)
+  '_nozzleGlowSet', '_cvWreckAfterStep'];   // ARC CV-3c (A10)
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -183,7 +190,8 @@ function makeMethod(name) {
     KCE?.KC_SHARED ?? { uKcTime: { value: 0 }, uKcSeamFreq: { value: 9 } }, KCE?.setKeyColourWreckState,
     SHLD?.ShieldStates, SHLD?.bubbleAxes, SHLD?.ellipsoidPoint, SHLD?.hullPoint, SHLD?.scorchEnabled, SHLD?.allocScorch, SHLD?.scorchHeat,
     SHLD?.SHIELD_RIPPLES_MAX, SHLD?.SCORCH_MAX, BUBL?.ShieldBubblePool, KCE?.KC_SCORCH_MAX, KCE?.setKeyColourScorch, KCE?.setKeyColourScorchHeat,
-    KCE?.setKeyColourScorchCount, LEDGER?.ledgerHash);
+    KCE?.setKeyColourScorchCount, LEDGER?.ledgerHash,
+    CHOREO?.stepChoreo2Offset, CHOREO?.stepChoreo2Facing, CHOREO?.stepChoreo2Engine, RIG?.NOZZLE_KEY_HEX ?? 0x7ff4ff, EXPL?.wreckAfterDrift);
 }
 
 /** Atrapa renderera: prawdziwe metody FX, sprite'y = Object3D za pozycjami logicznymi, zegar prezentacji z CV-2a. */
@@ -228,6 +236,10 @@ function fakeRenderer() {
     let ch = 0;
     for (const m of R._stageMarks.values()) if (m.choreo) { ch++; R.choreoMaxL = Math.max(R.choreoMaxL, Math.hypot(m.choreo.x, m.choreo.y, m.choreo.z) / VESSEL_TARGET_SIZE.frigate); }
     if (ch) R.choreoFrames++;
+    // ARC CV-3c (A10) — świadek: statki w trybie lotu wzdłuż kursu
+    let m2 = 0;
+    for (const m of R._stageMarks.values()) if (m.ch?.mode2 && m.choreo) m2++;
+    if (m2) R.choreo2Frames = (R.choreo2Frames ?? 0) + 1;
     R._tickCvFx?.();
   };
   return R;
@@ -325,7 +337,7 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  * Starcie ze stagera, rozegrane do końca. mode: 'none' (bez renderera) · 'off' (renderer, flaga OFF) · 'on' (flaga ON);
  * `control` — słuchacz salwy losujący z `Math.random` (KONTROLA przyrządu).
  */
-function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false, weapons = false, damage = false, shields = false } = {}) {
+function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false, weapons = false, damage = false, shields = false, choreo2 = false } = {}) {
   const damageFlag = GAME_CONFIG.FEATURES.cvDamage;   // ARC CV-5 — A8: wybuchy i stany uszkodzeń tylko w trybie `damage` (A1–A7 — OFF jawnie)
   GAME_CONFIG.FEATURES.cvDamage = damage === true;
   const shieldsFlag = GAME_CONFIG.FEATURES.cvShields;   // ARC CV-4b — A9: osłony tylko w trybie `shields` (A1–A8 — OFF jawnie)
@@ -340,6 +352,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
   GAME_CONFIG.FEATURES.cvWeapons = weapons === true;
   const stageFlag = GAME_CONFIG.FEATURES.cvStage;
   const choreoFlag = GAME_CONFIG.FEATURES.cvChoreo;
+  const choreo2Flag = GAME_CONFIG.FEATURES.cvChoreo2;   // ARC CV-3c (A10)
   reseed('cv2a-battle'); reseedRendererRandom();
   let R = null, st = null, outsider = null, recallList = null, recallNoEnc = null, ctlAi = null;
   const arrivals = [];
@@ -350,6 +363,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
       GAME_CONFIG.FEATURES.cvFxEngine = mode === 'on';
       GAME_CONFIG.FEATURES.cvStage = mode === 'on';   // CV-3a1 — scena bitwy w trybie ON, dzisiejszy rysunek w OFF
       GAME_CONFIG.FEATURES.cvChoreo = mode === 'on';  // CV-3b — choreografia na scenie w trybie ON
+      GAME_CONFIG.FEATURES.cvChoreo2 = mode === 'on' && choreo2;   // CV-3c — lot wzdłuż kursu (A10); A1–A9 — CV-3b jawnie
       window.innerWidth = 1600; window.innerHeight = 1041;
       R = fakeRenderer();
       EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
@@ -390,6 +404,7 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
   GAME_CONFIG.FEATURES.cvFxEngine = flag;
   GAME_CONFIG.FEATURES.cvStage = stageFlag;
   GAME_CONFIG.FEATURES.cvChoreo = choreoFlag;
+  GAME_CONFIG.FEATURES.cvChoreo2 = choreo2Flag;
   GAME_CONFIG.FEATURES.cvPresets = presetsFlag;
   GAME_CONFIG.FEATURES.cvWeapons = weaponsFlag;
   GAME_CONFIG.FEATURES.cvDamage = damageFlag;
@@ -531,19 +546,21 @@ const CTL = runBattle({ mode: 'on', seed: 1, control: true });
     'A3c (świadek) wynik bitwy DSCS nadal ten sam — ziarno starcia jest prywatne; skażenie widać w świecie, nie w bitwie');
 }
 
-header('A4 — tempo oglądanego starcia 400 == 1000 ms na rundę (ten sam wynik; domyślnie 1000 od 2026-11-08)');
+header('A4 — tempo oglądanego starcia 400 == 1000 == 1150 ms na rundę (ten sam wynik; domyślnie 1150 od CV-3c, decyzja 44 (1))');
 const K400  = runBattle({ mode: 'none', seed: 1, roundMs: 400 });
 const K1000 = runBattle({ mode: 'none', seed: 1, roundMs: 1000 });
+const K1150 = runBattle({ mode: 'none', seed: 1, roundMs: 1150 });
 {
   const rounds = K400.trace.length;
-  console.log(`     400: rund ${rounds}, czas realny ${K400.realMs} ms · 1000: rund ${K1000.trace.length}, czas realny ${K1000.realMs} ms · sygnatura ${JSON.stringify(K400.sig.battles)}`);
-  assert(K400.sig.battles.length >= 1 && same(K400.sig, K1000.sig), `A4a sygnatura identyczna przy 400 i 1000 ms ${JSON.stringify(K1000.sig.battles)}`);
-  assert(rounds >= 5 && same(K400.trace, K1000.trace), `A4b ślad każdej rundy identyczny (${rounds} rund: zdarzenia, HP, osłona, pozycje logiczne)`);
-  assert(K400.draws.length > 0 && same(K400.draws, K1000.draws), `A4c sekwencja losowań gry identyczna (${K400.draws.length} losowań)`);
-  assert(K400.slots.length === ARRIVAL_ROUNDS.length && same(K400.slots, K1000.slots), 'A4d sloty orbit statków przylatujących w trakcie starcia identyczne');
+  console.log(`     400: rund ${rounds}, czas realny ${K400.realMs} ms · 1000: ${K1000.realMs} ms · 1150: rund ${K1150.trace.length}, czas realny ${K1150.realMs} ms · sygnatura ${JSON.stringify(K400.sig.battles)}`);
+  assert(K400.sig.battles.length >= 1 && same(K400.sig, K1000.sig) && same(K1000.sig, K1150.sig), `A4a sygnatura identyczna przy 400, 1000 i 1150 ms ${JSON.stringify(K1150.sig.battles)}`);
+  assert(rounds >= 5 && same(K400.trace, K1000.trace) && same(K1000.trace, K1150.trace), `A4b ślad każdej rundy identyczny (${rounds} rund: zdarzenia, HP, osłona, pozycje logiczne)`);
+  assert(K400.draws.length > 0 && same(K400.draws, K1000.draws) && same(K1000.draws, K1150.draws), `A4c sekwencja losowań gry identyczna (${K400.draws.length} losowań)`);
+  assert(K400.slots.length === ARRIVAL_ROUNDS.length && same(K400.slots, K1000.slots) && same(K1000.slots, K1150.slots), 'A4d sloty orbit statków przylatujących w trakcie starcia identyczne');
   const q = (k) => 16 * k / 110 + 16;   // kwant siatki (jak `combat_pace_smoke`)
-  assert(rounds > 1 && Math.abs(K400.realMs - (rounds - 1) * 400) <= q(400) && Math.abs(K1000.realMs - (rounds - 1) * 1000) <= q(1000),
-    `A4e świadek: czas realny starcia = (rundy − 1) × klucz ± kwant (${K400.realMs} / ${K1000.realMs} ms) — klucz działa`);
+  assert(rounds > 1 && Math.abs(K400.realMs - (rounds - 1) * 400) <= q(400) && Math.abs(K1000.realMs - (rounds - 1) * 1000) <= q(1000)
+    && Math.abs(K1150.realMs - (rounds - 1) * 1150) <= q(1150),
+    `A4e świadek: czas realny starcia = (rundy − 1) × klucz ± kwant (${K400.realMs} / ${K1000.realMs} / ${K1150.realMs} ms) — klucz działa`);
 }
 
 header('A5 — (CV-3a3) bitwa przy ciele: wynik ON (skorupa) == OFF == bez renderera');
@@ -625,6 +642,19 @@ const SHD = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true, shield
     `A9b sygnatura i ślad każdej rundy identyczne ON + cvShields == ON + cvDamage == bez renderera ${JSON.stringify(SHD.sig.battles)}`);
   assert(NONE.draws.length > 0 && same(SHD.draws, NONE.draws) && same(SHD.slots, NONE.slots),
     `A9c sekwencja losowań gry (${SHD.draws.length}) i sloty orbit identyczne — osłony nie dotykają strumienia gry`);
+}
+
+header('A10 — (CV-3c) lot wzdłuż kursu, wylot dysz, odłamki blachy, dryf wraków, scena rozsunięta: wynik ON + cvChoreo2 == ON (CV-3b) == bez renderera');
+const CH2 = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true, shields: true, choreo2: true });
+{
+  console.log(`     ON + cvChoreo2: klatek z lotem CV-3c ${CH2.R?.choreo2Frames ?? 0}, z choreografią ${CH2.R?.choreoFrames ?? 0}, największe przesunięcie ${CH2.R?.choreoMaxL?.toFixed?.(3)} L; `
+    + `ON (CV-3b, A9): klatek z lotem CV-3c ${SHD.R?.choreo2Frames ?? 0}; rozsunięcie ${CH2.R?.cvTuning?.STAGE_SPREAD}; brak metod: ${JSON.stringify(CH2.R?.missing ?? null)}`);
+  assert((CH2.R?.choreo2Frames ?? 0) > 100 && !(SHD.R?.choreo2Frames > 0) && CH2.R.missing.length === 0,
+    'A10a świadek: tryb ON + cvChoreo2 naprawdę leciał pętlami CV-3c (statki w trybie 2); A9 (cvChoreo2 OFF) — ani klatki');
+  assert(same(CH2.sig, NONE.sig) && same(CH2.trace, NONE.trace) && same(CH2.sig, SHD.sig) && same(CH2.trace, SHD.trace),
+    `A10b sygnatura (z wrakami) i ślad każdej rundy identyczne ON + cvChoreo2 == ON (CV-3b) == bez renderera ${JSON.stringify(CH2.sig.battles)}`);
+  assert(NONE.draws.length > 0 && same(CH2.draws, NONE.draws) && same(CH2.slots, NONE.slots),
+    `A10c sekwencja losowań gry (${CH2.draws.length}) i sloty orbit identyczne — lot, wyloty, odłamki i dryf wraków nie dotykają strumienia gry`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

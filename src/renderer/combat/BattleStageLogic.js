@@ -83,6 +83,20 @@ function latticeOffset(k, R) {
   return { x: x * R * shell, y: u.y * R * shell, z: z * R * shell };
 }
 
+/**
+ * ARC CV-3c (decyzja właściciela 44 (2) — „statki w bitwie są zbyt blisko siebie”) — ROZSUNIĘCIE SCENY `spread`: prawo sceny
+ * G_s(d) = min(d, spread·K·d^ALPHA), a razem z nim podłogi rozsunięcia i kolizji, rozrzut ziarna w pionie (`solveStage`) oraz
+ * koperta choreografii (renderer: długość odniesienia L × spread). Wszystko razem ⇒ zadanie prowadnicy jest NIEZMIENNICZE wobec
+ * skali (przedziały pasm, podłogi, cele G(d) rosną o ten sam czynnik), więc rozwiązanie z rozsunięciem = rozwiązanie bez niego
+ * × spread wokół środka: te same pasma, ta sama skala awaryjna, ten sam niezmiennik D-CV-6. Okna właściciela F3 (laser 3–4 L,
+ * kinetyk 7–9 L, rakiety 12–15 L) rosną razem z nim (pokrętło `cvTuning.STAGE_SPREAD`, decyzja 44 (2) zastępuje okna).
+ * @returns {{ ALPHA:number, K:number }} prawo (to samo obiektowo, gdy spread = 1)
+ */
+export function spreadLaw(law = STAGE_LAW, spread = 1) {
+  const s = Number.isFinite(spread) && spread > 0 ? spread : 1;
+  return s === 1 ? law : { ALPHA: law.ALPHA, K: law.K * s };
+}
+
 /** Odstęp pary na scenie: G(d) = min(d, K·d^ALPHA). d ≤ 0 ⇒ 0. */
 export function stageGap(d, law = STAGE_LAW) {
   if (!(d > 0)) return 0;
@@ -190,7 +204,8 @@ function bandInterval(b, appEdges, marginFrac) {
  *   — ARC CV-3a3: bitwa przy ciele — rysowany środek i promień ciała, id statków unieruchomionych przy nim (skorupa, D-CV-4)
  * @returns {{ pos: Map<string,{x:number,y:number,z:number}>, offsets: Map<string,{x:number,y:number,z:number}>, misbanded: number,
  *   misbandedBefore: number, fallback: boolean, scale: number|null, passes: number, rIn: number, pairs: number,
- *   shell: object|null }}  shell — kierunek `u`, środek grupy `P`, wykluczeni, przesunięcie sztywne `shift` (pole kliku)
+ *   shell: object|null, law: {ALPHA:number,K:number}, spread: number }}  shell — kierunek `u`, środek grupy `P`, wykluczeni,
+ *   przesunięcie sztywne `shift` (pole kliku); law — prawo UŻYTE (z rozsunięciem — CV-3c), spread — rozsunięcie
  */
 /** Klucz pary (kolejność bez znaczenia). */
 export function pairKey(a, b) {
@@ -200,12 +215,18 @@ export function pairKey(a, b) {
 
 export function solveStage({ points, centre, L, edges, prevOffsets = null, priority = null, shell = null, law = STAGE_LAW, opts = {} }) {
   const o = { ...STAGE, ...opts };
+  // ARC CV-3c — rozsunięcie sceny (`opts.SPREAD`, renderer: `cvTuning.STAGE_SPREAD`): prawo, podłogi i rozrzut pionu razem.
+  const spread = Number.isFinite(o.SPREAD) && o.SPREAD > 0 ? o.SPREAD : 1;
+  if (spread !== 1) {
+    law = spreadLaw(law, spread);
+    o.DECONFLICT_L *= spread; o.COLLISION_L *= spread; o.SEED_Y_L *= spread;
+  }
   const pts = [...(points ?? [])].filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z))
     .sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
   const n = pts.length;
   const pos = new Map(), offsets = new Map();
   const c = { x: centre?.x ?? 0, y: Number.isFinite(centre?.y) ? centre.y : 0, z: centre?.z ?? 0 };
-  if (n === 0) return { pos, offsets, misbanded: 0, misbandedBefore: 0, fallback: false, scale: null, passes: 0, rIn: 0, pairs: 0, shell: null };
+  if (n === 0) return { pos, offsets, misbanded: 0, misbandedBefore: 0, fallback: false, scale: null, passes: 0, rIn: 0, pairs: 0, shell: null, law, spread };
   const app = apparentEdges(edges, law);
 
   // Pary: odstęp logiczny, pasmo, cel G(d) w przedziale twardym pasma z podłogą rozsunięcia / kolizji.
@@ -334,7 +355,7 @@ export function solveStage({ points, centre, L, edges, prevOffsets = null, prior
       pos.set(p.id, { x, y: c.y, z });
       offsets.set(p.id, null);
     });
-    out = { pos, offsets, misbanded, misbandedBefore, fallback: true, scale, passes, rIn, pairs: P.length, shell: null };
+    out = { pos, offsets, misbanded, misbandedBefore, fallback: true, scale, passes, rIn, pairs: P.length, shell: null, law, spread };
   } else {
     // Wyśrodkowanie: środek sceny = środek uczestników bez sceny (przesunięcie nie zmienia odstępów par) — przy każdym
     // mieszaniu środek rysowanej bitwy stoi w miejscu (przybliżenie kółkiem jest „focus pull”, nie przesuwa bitwy).
@@ -347,7 +368,7 @@ export function solveStage({ points, centre, L, edges, prevOffsets = null, prior
       pos.set(p.id, { x, y, z });
       offsets.set(p.id, { x: x - c.x, y: y - c.y, z: z - c.z });
     });
-    out = { pos, offsets, misbanded, misbandedBefore, fallback: misbanded > 0, scale: null, passes, rIn, pairs: P.length, shell: null };
+    out = { pos, offsets, misbanded, misbandedBefore, fallback: misbanded > 0, scale: null, passes, rIn, pairs: P.length, shell: null, law, spread };
   }
   // ARC CV-3a3 (D-CV-4) — skorupa przy ciele: rozwiązanie przesunięte SZTYWNO (każdy odstęp pary zostaje — wynik prowadnicy
   // pasm przechodzi bez zmian) tak, by grupa unieruchomionych przy ciele stała tuż za skorupą; `offsets` (ciepły start)

@@ -46,6 +46,11 @@
 //                                         rozkaz co PPM; choreografia obraca go od zagrożenia i zapala pełny ciąg; M1 — PRAWDZIWY lot
 //                                         na zegarze starcia (~0,03 AU na rundę), starcie kończy się, gdy strona wyjdzie poza 0,5 AU
 //   cvChoreo(1) / cvChoreo(0)           — ARC CV-3b: flaga `cvChoreo` (choreografia na scenie bitwy) ON / OFF; przejście 0,5 s
+//   cvChoreo2(1) / cvChoreo2(0)         — ARC CV-3c: flaga `cvChoreo2` (lot wzdłuż kursu, wylot dysz, odłamki, dryf wraków) ON / OFF;
+//                                         OFF = obraz CV-3b / CV-5 do porównania; ruch przenika przez 0,5 s
+//   cvFocusDamaged()                    — ARC CV-3c: kamera na najbardziej uszkodzony żywy statek oglądanej bitwy (stan uszkodzeń CV-5:
+//                                         3 = krztuszący się silnik ≤ 25 % HP — wylot dysz migocze i sypie iskrami); null, gdy nikt
+//                                         nie jest uszkodzony
 //   cvStrip(1) / cvStrip(0)             — ARC CV-6b2: flaga `cvStrip` (pasek walki zamiast karty walki) ON / OFF, od następnej klatki
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
 //   cvModels(1) / cvModels(0)           — ARC CV-1a: flaga `cvModels` (statki w ramie kanonicznej z plików hardpointów) ON / OFF;
@@ -866,6 +871,38 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const F = GAME_CONFIG.FEATURES;
       F.cvChoreo = on === undefined ? !F.cvChoreo : !!on;
       return { cvChoreo: F.cvChoreo };
+    },
+
+    /** ARC CV-3c — flaga `cvChoreo2` (lot wzdłuż kursu, wylot dysz zamiast stożków, odłamki, dryf wraków): cvChoreo2(1) — ON,
+     *  cvChoreo2(0) — OFF (obraz CV-3b / CV-5), cvChoreo2() — przełącz. Czytana co klatkę (ruch przenika przez 0,5 s). */
+    cvChoreo2(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvChoreo2 = on === undefined ? !F.cvChoreo2 : !!on;
+      return { cvChoreo2: F.cvChoreo2 };
+    },
+
+    /**
+     * ARC CV-3c — kamera (`vessel:focus`) na najbardziej uszkodzony żywy statek na scenie bitwy: najwyższy stan uszkodzeń CV-5
+     * (1 dym · 2 ogień · 3 krztuszący się silnik), remis — mniejsze HP pokazywane. Tylko odczyt i kamera, stan gry nietknięty.
+     */
+    cvFocusDamaged() {
+      const K = window.KOSMOS ?? {};
+      const R = getRenderer();
+      const vm = K.vesselManager, dscs = K.deepSpaceCombatSystem;
+      if (!R?._vessels || !vm || !dscs) return { ok: false, reason: 'no_world' };
+      let best = null;
+      for (const [id, e] of R._vessels) {
+        if (e.cvKilled || e.isWreck || !(e.cvDmgLevel > 0) || !R._stageMarks?.has?.(id)) continue;
+        const enc = dscs._findActiveEncounterContaining?.(id);
+        const st = enc?.vesselStates?.get?.(id);
+        if (!st || !(st.hp > 0)) continue;
+        const pr = R.cvPresentedState?.(id, st);
+        const hpPct = Math.round(100 * (pr?.hp ?? st.hp) / Math.max(1, st.hpStart ?? st.hp));
+        if (!best || e.cvDmgLevel > best.level || (e.cvDmgLevel === best.level && hpPct < best.hpPct)) best = { id, level: e.cvDmgLevel, hpPct };
+      }
+      if (!best) return { ok: false, reason: 'no_damaged_ship' };
+      K.eventBus?.emit?.('vessel:focus', { vesselId: best.id });
+      return { ok: true, vessel: vm.getVessel?.(best.id)?.name ?? best.id, id: best.id, poziom: best.level, hpProcent: best.hpPct };
     },
 
     /** ARC CV-3b — „Wycofaj się z bitwy” (ten sam rozkaz co PPM) dla statku nr `n` (od 1) żywej strony A testu w aktywnym starciu. */

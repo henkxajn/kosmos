@@ -37,6 +37,11 @@
 //      na scenie; KONTROLA: ta sama przebudowa bez wpisów oczekiwania (`_stageKeep`) — znaczniki i stan prowadnicy kasowane,
 //      statki w skali prawdziwej (objaw sprzed poprawki)
 //
+// ⚠ PRZECELOWANIE ŚWIADOME (CV-3c, decyzja właściciela 45 — `STAGE_SPREAD` domyślnie 1,5): T9a/b/c liczone przy rozsunięciu 1, przy
+//   którym skalibrowano próg 30 % (CV-6b). Rozsunięcie to skala, ale solver nie jest dokładnie niezmienniczy skalą w niezbieżnych
+//   przejściach gęstego szyku — przy ≥ 1,45 sekwencja rozwiązań stagera daje JEDNO spowolnienie do 23–28 % prędkości na granicy
+//   (zmierzone: 1 → 0,36, 1,35 → 0,34, 1,45 / 1,5 → 0,23, 1,55 → 0,25, 1,6 → 0,28; zatrzymań 0 przy każdej wartości). Właściwość
+//   ze zgłoszenia właściciela (zatrzymania na granicy rund) pinuje NOWY T9d przy domyślnym rozsunięciu: zatrzymań 0.
 // ⚠ Fail-first: metody i pokrętła CV-3a3 powstają w tym kroku — brak = pin czerwony, suita się nie przerywa (każdy blok łapie
 //   wyjątek, importy dynamiczne).
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -115,7 +120,7 @@ globalThis.performance.now = () => clock.now;
 let writes = 0;
 const trap = (obj) => new Proxy(obj, { set(t, k, v) { writes++; t[k] = v; return true; }, defineProperty(t, k, d) { writes++; return Reflect.defineProperty(t, k, d); } });
 
-function world({ split = false } = {}) {
+function world({ split = false, spread = undefined } = {}) {
   const layout = ST?.cvBattleLayout?.({ nA: 10, nB: 10 })?.ships ?? [];
   const vessels = new Map();
   const logical = new Map();   // pozycje logiczne poza pułapką (logika atrapy pisze tu, statek czyta przez getter)
@@ -142,7 +147,7 @@ function world({ split = false } = {}) {
   const R = { camera: cam, scene: new THREE.Scene(), _vessels: new Map(), _galaxyActive: false, _galaxyFlight: false,
     _stageMarks: new Map(), _stageState: new Map(), _stageClock: PC ? new PC.PresentationClock() : null, _stageFrame: null,
     _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _stageFitCache: new Map(), _stageFitFrame: -1, _frameNo: 0, _glideLastMs: null,
-    cvTuning: ENG?.LIVE_CV_FX ?? {}, missing: [] };
+    cvTuning: spread !== undefined ? { ...(ENG?.LIVE_CV_FX ?? {}), STAGE_SPREAD: spread } : (ENG?.LIVE_CV_FX ?? {}), missing: [] };   // CV-3c — T9
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
   for (const v of vessels.values()) {
     const sp = new THREE.Object3D(); sp.visible = true;
@@ -396,8 +401,8 @@ block('T8 — (653) łaty pod flagą `cvStage` — umowa flagi (bez pinów na wa
 // granicy rund statek, który jechał, nie zwalnia poniżej 30 % swojej prędkości sprzed granicy, a skok prędkości na granicy
 // jest najwyżej 1/3 skoku przejścia liniowego. KONTROLA (liczona TU, niezależnie od renderera): przejście liniowe z klamrą
 // (CV-3a3) na TYCH SAMYCH rozwiązaniach — staje (klatka bez ruchu) na każdej granicy i skacze w prędkości.
-block('T9 — CV-6b: na granicy rund prędkość nie spada do zera i nie skacze (ruch ciągły w prędkości)', () => {
-  const w = world();
+const t9Run = (spread) => {
+  const w = world({ spread });
   const { R } = w;
   placeCamera(R, 0.4);
   for (let i = 0; i < 40; i++) frame(R);
@@ -441,13 +446,21 @@ block('T9 — CV-6b: na granicy rund prędkość nie spada do zera i nie skacze 
     return { checks, stops, minRatio, dvMax };
   };
   const now = stats(pos), old = stats(lin);
-  console.log(`     ${solves.length} rozwiązań w ${12} rundach po ${PER * DT} ms: teraz — kontroli ${now.checks}, zatrzymań ${now.stops}, min. prędkość / sprzed granicy ${now.minRatio.toFixed(2)}, `
+  console.log(`     rozsunięcie ${spread ?? 'domyślne'}: ${solves.length} rozwiązań w ${12} rundach po ${PER * DT} ms: teraz — kontroli ${now.checks}, zatrzymań ${now.stops}, min. prędkość / sprzed granicy ${now.minRatio.toFixed(2)}, `
     + `skok prędkości maks. ${now.dvMax.toFixed(4)} L/klatkę; liniowo (CV-3a3) — zatrzymań ${old.stops}/${old.checks}, min. ${old.minRatio.toFixed(2)}, skok ${old.dvMax.toFixed(4)} L/klatkę`);
+  return { solves, now, old };
+};
+block('T9 — CV-6b: na granicy rund prędkość nie spada do zera i nie skacze (ruch ciągły w prędkości)', () => {
+  const { solves, now, old } = t9Run(1);
   assert(solves.length >= 12 && now.checks >= 100 && now.stops === 0 && now.minRatio >= 0.3,
     `T9a SEDNO: na każdej granicy rund statek jedzie dalej (${now.checks} kontroli, zatrzymań ${now.stops}, prędkość min. ${(now.minRatio * 100).toFixed(0)} % sprzed granicy ≥ 30 %)`);
   assert(now.dvMax > 0 && old.dvMax > 0 && now.dvMax <= old.dvMax / 3,
     `T9b SEDNO: skok prędkości na granicy ${now.dvMax.toFixed(4)} L/klatkę ≤ 1/3 skoku przejścia liniowego (${old.dvMax.toFixed(4)} / 3 = ${(old.dvMax / 3).toFixed(4)})`);
   assert(old.stops > old.checks / 2, `T9c KONTROLA: przejście liniowe z klamrą (CV-3a3) na tych samych rozwiązaniach staje na granicy (${old.stops}/${old.checks}) — próba nie jest jałowa`);
+  const dflt = ENG?.LIVE_CV_FX?.STAGE_SPREAD;
+  const d = t9Run(undefined);
+  assert(Number.isFinite(dflt) && dflt !== 1 && d.solves.length >= 12 && d.now.checks >= 100 && d.now.stops === 0,
+    `T9d CV-3c: przy domyślnym rozsunięciu ${dflt} — zatrzymań na granicach rund 0 (${d.now.checks} kontroli, min. ${(d.now.minRatio * 100).toFixed(0)} % prędkości sprzed granicy)`);
 });
 
 // ═══ T10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════

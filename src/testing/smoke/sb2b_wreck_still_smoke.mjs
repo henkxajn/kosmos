@@ -16,6 +16,9 @@
 //   T3  zapis sprzed SB40: wrak JUŻ w locie (wznowiona misja `in_transit`) — stoi, nie dolatuje i nie dokuje
 //   T4  KONTROLA: ocalały z tego samego starcia WZNAWIA misję i leci (wznowienie żywe działa jak dotąd)
 //   T5  KONTROLA: wrak na orbicie cmentarnej ciała (EAH, ciało) dalej podąża za ciałem — poza SB40, bez zmian
+// ⚠ PRZECELOWANIE CV-3c (decyzja właściciela 44 (5), 2026-11-12): „miejsce zniszczenia” = pozycja okrętu w chwili śmierci, nie punkt
+//   środkowy starcia (`enc.location.point`). T1b / T2b porównują wrak z pozycją okrętu sprzed `_finalizeBattle`; ŚWIADEK — ta pozycja
+//   leży z dala od punktu środkowego (pin rozróżnia obie reguły). Intencja SB40 (wrak stoi, nie leci, nie dokuje) — bez zmian.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -96,7 +99,8 @@ header('T1  wrak GRACZA z misją wstrzymaną na walkę — stoi w miejscu zniszc
   assert(okP && okA && enc && p._suspendedMission && p._combatPause && !p.mission,
     'T1-0 KONTROLA: oba rozkazy przyjęte, starcie powstało, gracz ma migawkę misji i jest zamrożony');
   enc.vesselStates.get(p.id).hp = 0;                        // gracz zniszczony
-  const wreckAt = enc.location.point;
+  const wreckAt = at(p);                                     // CV-3c — miejsce śmierci okrętu (zamrożony w walce)
+  assert(movedAU(wreckAt, enc.location.point) > 0.01, 'T1-0c ŚWIADEK CV-3c: miejsce śmierci gracza ≠ punkt środkowy starcia');
   const n0 = events.length;
   dscs._finalizeBattle(enc, 'B', null);
   const launchedWreck = events.slice(n0).some(e => e.n === 'vessel:launched' && e.id === p.id);
@@ -117,7 +121,8 @@ header('T2  wrak AI z misją wstrzymaną na walkę (pauza AI, F130)');
   const { p, a, enc } = combatScene();
   assert(a._suspendedMission && a._combatPause, 'T2-0 KONTROLA: rajder AI ma migawkę misji (pauza AI)');
   enc.vesselStates.get(a.id).hp = 0;
-  const wreckAt = enc.location.point;
+  const wreckAt = at(a);                                     // CV-3c — miejsce śmierci okrętu
+  assert(movedAU(wreckAt, enc.location.point) > 0.01, 'T2-0b ŚWIADEK CV-3c: miejsce śmierci rajdera ≠ punkt środkowy starcia');
   const n0 = events.length;
   dscs._finalizeBattle(enc, 'A', null);
   const launchedWreck = events.slice(n0).some(e => e.n === 'vessel:launched' && e.id === a.id);

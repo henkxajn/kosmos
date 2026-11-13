@@ -4312,7 +4312,7 @@ export class GameScene {
   /** #675 — okno łaski przed ogłoszeniem bitwy [ms czasu prezentacji]: `CLUSTER_GRACE.ROUNDS` × czas realny rundy oglądanego starcia. */
   _battleGraceMs() {
     const ts = this.timeSystem ?? window.KOSMOS?.timeSystem;
-    return clusterGraceMs(ts?.combatRoundMs?.() ?? 1000);
+    return clusterGraceMs(ts?.combatRoundMs?.() ?? 1150);
   }
 
   // #675 — raz na klatkę: bitwy, którym minęło okno łaski bez dołączonego starcia — baner (pod `cvStage`) i linie Dziennika

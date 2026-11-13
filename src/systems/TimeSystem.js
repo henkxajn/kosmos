@@ -12,7 +12,7 @@
 //   Gdy trwa starcie `DeepSpaceCombatSystem`, `update()` nie mnoży czasu realnego przez prędkość gracza: świat tyka
 //   klatkami SIATKI — 16 ms przy 1 d/s (dzisiejsza klatka 60 FPS przy auto-slow), niezależnie od prędkości i FPS — a czas
 //   realny decyduje wyłącznie o tempie odtwarzania siatki: starcie oglądane — `combatRoundMs()` ms na rundę (klucz
-//   strojenia `combatRoundMs`, domyślnie 1000 — decyzja właściciela 2026-11-08, dawniej 400 z CP2), starcie w innym
+//   strojenia `combatRoundMs`, domyślnie 1150 — decyzja właściciela 44 (1) 2026-11-12, wcześniej 1000, pierwotnie 400 z CP2), starcie w innym
 //   układzie — dzisiejsze 110 ms (`CombatPaceData`).
 //   Runda pada co 110 ms zegara starcia (reguła DSCS).
 //   `simClockMs` — zegar klatek symulacji (ms): przyrasta tylko, gdy gra tyka (poza starciem o czas realny klatki,
@@ -122,7 +122,7 @@ export class TimeSystem {
 
   /**
    * POLISH P1 (CP1, CP2) — czas REALNY jednej rundy starcia OGLĄDANEGO (ms): tempo odtwarzania siatki starcia.
-   * Klucz strojenia `combatRoundMs` (domyślnie 1000; `KOSMOS.debug.sbSet('combatRoundMs', 400)`), czytany w chwili użycia — zmiana
+   * Klucz strojenia `combatRoundMs` (domyślnie 1150 — CV-3c; `KOSMOS.debug.sbSet('combatRoundMs', 400)`), czytany w chwili użycia — zmiana
    * z konsoli działa od następnej klatki. Wynik starcia od tej wartości nie zależy.
    */
   combatRoundMs() {

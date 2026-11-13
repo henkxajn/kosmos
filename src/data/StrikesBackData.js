@@ -142,9 +142,13 @@ export const SB_TUNING = Object.freeze({
    * tyka siatką 16 ms przy 1 d/s, runda co 110 ms zegara starcia); 16 rund ≈ 15 s, 20 rund ≈ 19 s przy 1000 ms. M1 (decyzja 33):
    * bitwa nie ma już limitu 20 rund — 10 na 10 stagera trwa ~26–51 rund (≈ 26–51 s oglądane, ×0,11 s nieoglądane); wartość
    * zostaje 1000 (decyzja właściciela 2026-11-11: najpierw zobaczyć bitwy bez limitu).
-   * Domyślnie 1000 — decyzja właściciela 2026-11-08 (ARC CV, kontrola na żywo stagerem `cvBattle` przy 400 / 800 / 1000:
-   * 400 i 800 za szybko); dawniej 400 (CP2). Tabela zapisuje wyłącznie wartości zmienione — zapis bez wpisu czyta 1000.
+   * Domyślnie 1150 — ARC CV-3c, decyzja właściciela 44 (1) 2026-11-12 („za szybko i za dużo naraz na początku 10 na 10 —
+   * zwolnić ~15 %”); wcześniej 1000 (decyzja właściciela 2026-11-08 — kontrola stagerem `cvBattle` przy 400 / 800 / 1000),
+   * a pierwotnie 400 (CP2). Górna granica 1000 → 2000 (domyślna musi leżeć w zakresie). Tabela zapisuje wyłącznie wartości
+   * zmienione (ustawienie domyślnej zdejmuje wpis), więc zapis bez wpisu czyta 1150; jawny wpis (np. 800 z konsoli) zostaje do
+   * `KOSMOS.debug.sbReset('combatRoundMs')`. Jawne 1000 w zapisie mogło powstać wyłącznie przed 2026-11-08 (domyślna była 400),
+   * czyli jako wartość ustawiona ręcznie — zostaje jak każda inna.
    * Konsument: `TimeSystem.combatRoundMs` → siatka starcia (`TimeSystem._updateCombatGrid`).
    */
-  combatRoundMs: Object.freeze({ default: 1000, type: 'int', min: 50, max: 1000, unit: 'ms' }),
+  combatRoundMs: Object.freeze({ default: 1150, type: 'int', min: 50, max: 2000, unit: 'ms' }),
 });

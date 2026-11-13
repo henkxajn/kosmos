@@ -35,10 +35,10 @@ export const EXP_TUNING = {
   EXP_STREAK_K:         2.4,    // [Ls] długość smugi anamorficznej (poziomej na ekranie)
   EXP_STREAK_ASPECT:    24,     // proporcja smugi (długość / grubość)
   EXP_STREAK_MS:        90,
-  EXP_FIREBALL_K:       0.62,   // [Ls] promień największego płata kuli ognia u szczytu
+  EXP_FIREBALL_K:       0.775,  // [Ls] promień największego płata kuli ognia u szczytu; CV-3c (decyzja 44 (6)) — 0,62 → 0,775 (+25 %)
   EXP_FIREBALL_MS:      560,    // życie płata (fregata; niszczyciel × 1,15, pancernik × 1,35)
   EXP_FIREBALL_CORE:    1.5,    // wzmocnienie HDR rdzenia płata (wyżej — biel po tone mappingu zamiast pomarańczu)
-  EXP_LOBE_SPREAD:      0.36,   // [Ls] rozrzut środków płatów (asymetrycznie, z ziarna)
+  EXP_LOBE_SPREAD:      0.45,   // [Ls] rozrzut środków płatów (asymetrycznie, z ziarna); CV-3c — 0,36 → 0,45 (promień kuli +25 % razem z płatami)
   EXP_RING_K:           1.3,    // [Ls] promień fali uderzeniowej u końca (płaszczyzna statku)
   EXP_RING_MS:          380,
   EXP_RING_CORE:        0.6,
@@ -72,7 +72,13 @@ export const EXP_TUNING = {
   WRECK_DRIFT_PERIOD_S: 24,     // [s] okres dryfu
   WRECK_DRIFT_RAMP_S:   2.5,    // [s] dryf narasta od zera (bez skoku w chwili zniszczenia)
   WRECK_TUMBLE_DEG_S:   5,      // [°/s] obrót wraku (× 0,6–1,4)
-  WRECK_CONVERGE_MS:    1200,   // zbieżność wraku do pozycji logicznej (koniec bitwy — Finding 627)
+  WRECK_CONVERGE_MS:    5000,   // zbieżność wraku do pozycji logicznej (koniec bitwy — Finding 627); CV-3c decyzja 45 (2): 1200 → 5000 —
+                                // wraki rozjeżdżają się do miejsc śmierci (skala prawdziwa) powoli, jak dryf, nie wystrzałem z kadru
+  // ARC CV-3c (decyzja właściciela 44 (5) — „wraki mogłyby dryfować dalej, pokrzywione”; flaga `cvChoreo2`) — DRYF PO BITWIE: po zbieżności
+  // do pozycji logicznej (od CV-3c — miejsce śmierci okrętu) wrak płynie dalej i obraca się coraz wolniej, aż stanie (ograniczone).
+  WRECK_AFTER_S:        14,     // [s] stała gaśnięcia dryfu i obrotu po bitwie (staje po ~5 × to)
+  WRECK_AFTER_V:        0.08,   // [L / s] prędkość dryfu (× 0,6–1,4 z ziarna; szczyt < to); przesunięcie końcowe < to × WRECK_AFTER_S × 1,4
+  WRECK_AFTER_RAMP_S:   0.6,    // [s] narastanie prędkości dryfu od zera (zbieżność do pozycji logicznej kończy się w spoczynku)
   // ── stany uszkodzeń (z HP pokazywanego) ──────────────────────────────────────────────────────────────────────────────
   DMG_SMOKE_AT:         0.75,   // ≤ 75 % HP — cienki dym
   DMG_FIRE_AT:          0.5,    // ≤ 50 % — ogień
@@ -340,6 +346,30 @@ export function wreckDrift({ seed = 0, tMs = 0, envWU = 0, tuning = null } = {})
   const al = Math.hypot(ax0, ay0, az0) || 1;
   const rate = tune(T, 'WRECK_TUMBLE_DEG_S') * (0.6 + 0.8 * seedUnit(seed, 13)) * Math.PI / 180;
   return { x, y, z, ax: ax0 / al, ay: ay0 / al, az: az0 / al, angle: rate * t };
+}
+
+/**
+ * ARC CV-3c — dryf i obrót wraku PO BITWIE (od końca zbieżności do pozycji logicznej): prędkość v(t) = v₀·(e^(−t/τ) − e^(−t·(1/τ + 1/τᵣ)))
+ * — od zera (zbieżność kończy się w spoczynku), nigdy ponad v₀, gasnąca; przesunięcie = całka w postaci zamkniętej, kierunek z ziarna
+ * (głównie poziomo); obrót wokół osi z ziarna z tym samym profilem (ω₀) — ograniczone (|przesunięcie| < v₀·τ, kąt < ω₀·τ),
+ * deterministyczne, staje (`done` po 5τ). τᵣ = `WRECK_AFTER_RAMP_S`.
+ * Pauza = pauza (wejście na zegarze efektów). Długość odniesienia `L` [j.] — długość fregaty.
+ * @param {{ seed:number, tMs:number, L:number, tuning?:object }} p
+ * @returns {{ x:number, y:number, z:number, ax:number, ay:number, az:number, angle:number, done:boolean }}
+ */
+export function wreckAfterDrift({ seed = 0, tMs = 0, L = 0.016, tuning = null } = {}) {
+  const T = tuning ?? EXP_TUNING;
+  const t = Math.max(0, Number.isFinite(tMs) ? tMs : 0) / 1000;
+  const tau = Math.max(0.5, tune(T, 'WRECK_AFTER_S'));
+  const v0 = Math.max(0, tune(T, 'WRECK_AFTER_V')) * (0.6 + 0.8 * seedUnit(seed, 70)) * L;   // [j./s]
+  const a = 1 / tau, b = a + 1 / Math.max(0.05, tune(T, 'WRECK_AFTER_RAMP_S'));
+  const k = (1 - Math.exp(-a * t)) / a - (1 - Math.exp(-b * t)) / b;   // ∫ (e^(−a·t) − e^(−b·t)) dt [s] — profil drogi (≤ τ)
+  const az = 2 * Math.PI * seedUnit(seed, 71), el = (seedUnit(seed, 72) - 0.5) * 0.5;   // kierunek: azymut z ziarna, pochylenie ±0,25 rad
+  const dx = Math.cos(az) * Math.cos(el), dy = Math.sin(el), dz = Math.sin(az) * Math.cos(el);
+  const ax0 = seedUnit(seed, 10) * 2 - 1, ay0 = seedUnit(seed, 11) * 2 - 1, az0 = seedUnit(seed, 12) * 2 - 1;   // oś jak `wreckDrift`
+  const al = Math.hypot(ax0, ay0, az0) || 1;
+  const rate = tune(T, 'WRECK_TUMBLE_DEG_S') * (0.6 + 0.8 * seedUnit(seed, 13)) * Math.PI / 180;   // [rad/s] — ten sam obrót co na scenie
+  return { x: dx * v0 * k, y: dy * v0 * k, z: dz * v0 * k, ax: ax0 / al, ay: ay0 / al, az: az0 / al, angle: rate * k, done: t >= 5 * tau };
 }
 
 /** Zbieżność wraku do pozycji logicznej: punkt między `from` i `to` po `tMs` z `durMs` (wygładzone), `done` po końcu. */

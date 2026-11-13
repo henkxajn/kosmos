@@ -29,7 +29,7 @@
 import { buildFxShaders, BOLT_SEGMENTS } from './FxShaders.js';
 import { weaponColor, FX_SHIELD_COLOR } from '../../config/CombatFxConfig.js';
 import { HIT_GLOW } from '../../utils/VesselFxLogic.js';
-import { CHOREO_TUNING } from './ChoreographyLogic.js';   // ARC CV-3b — pokrętła choreografii (jedno źródło wartości domyślnych)
+import { CHOREO_TUNING, CHOREO2_TUNING } from './ChoreographyLogic.js';   // ARC CV-3b — pokrętła choreografii; CV-3c — lot wzdłuż kursu
 import { LIVE_LIGHT_POOL } from './LightPool.js';          // ARC CV-2b — pokrętła puli świateł (jedno źródło wartości domyślnych)
 import { LIVE_CUE } from './CombatCueBus.js';              // ARC CV-2b — pokrętła szyny sygnałów walki
 import { LEDGER_TUNING } from './CombatLedgerLogic.js';    // ARC CV-4a — pokrętła harmonogramu salw (rejestr)
@@ -65,6 +65,20 @@ export const LIVE_WPN_FX = {
   WPN_MISSILE_TRAIL:  0.18,    // [R] ogon rakiety (czas; pomiar na żywo: 0,3 R — ogon na 1/3–2/3 toru, rakiety czytały się jak lasery)
   WPN_MISSILE_ARC:    0.3,     // odchylenie punktu kontrolnego toru rakiety × długość toru
   WPN_MISSILE_HEAD:   2.5,     // wzmocnienie głowy rakiety
+  // ARC CV-3c (decyzja 44 (7), flaga `cvChoreo2`) — rakieta na High: SMAA i bloom w px CSS (CV-5, decyzja 41) zjadały ~⅓ energii cienkiej
+  // smugi. Pary klatek z CV-4a (`fe232ac`) w IDENTYCZNYM kadrze: głowa 35,5 tys. wobec 52,8 tys. (ΣY w promieniu 30 px), ogon 44 wobec 50 px;
+  // Średnia bez zmian (34,9 / 35,0 tys.). Kompensacja WYŁĄCZNIE przy aktywnym SMAA: głowa × 1,4 (3,5 → 47,4 tys., ogon 50,3 px), szerokość
+  // × 1,08 (strojenie: × 1,28 przestrzeliwał do 67 tys.).
+  WPN_SMAA_MISSILE_HEAD_K:  1.4,
+  WPN_SMAA_MISSILE_WIDTH_K: 1.08,
+  // Decyzja właściciela 45 (5) — kompensacja także dla kinetyka (pocisk: głowa, szerokość — per strzał) i lasera (wiązka: rdzeń, szerokość —
+  // uniformy puli przy aktywnym SMAA, `update({ smaa })`). Pary klatek CV-4a (`fe232ac`) ↔ teraz w identycznym kadrze (ΣY całej smugi):
+  // kinetyk 28,4 tys. wobec 20,4 tys. bez kompensacji (−28 %; × 1,4 / × 1,08 przestrzeliwał do 30,3 tys.) — głowa × 1,3, szerokość × 1,08;
+  // laser 351,5 tys. wobec 359,0 tys. bez kompensacji (+2 % — wiązka ma ~2,3 px, SMAA jej nie zjada; × 1,4 / × 1,08 dawało +14 %) — × 1.
+  WPN_SMAA_KIN_HEAD_K:      1.3,
+  WPN_SMAA_KIN_WIDTH_K:     1.08,
+  WPN_SMAA_BEAM_CORE_K:     1.0,
+  WPN_SMAA_BEAM_WIDTH_K:    1.0,
   WPN_MOTE_CORE:      2.6,     // wzmocnienie HDR rdzenia punktów (iskry, żar, błysk wylotu, ładowanie)
   WPN_SPARKS:         10,      // iskier na trafienie kadłuba przy budżecie High (Medium / Low — proporcjonalnie do budżetu cząstek)
   WPN_SPARK_SPEED:    3.0,     // [L / R] prędkość iskier
@@ -123,6 +137,21 @@ export const LIVE_CV_FX = {
   // `_stageWatchFit`): 1 — bitwa w widoku na scenie przy KAŻDYM zoomie (domyślnie); 0 — krzywa zoomu semantycznego CV-3a1
   // (skala prawdziwa z daleka) — wyłącznie do porównania z konsoli.
   STAGE_BLEND_FLOOR: 1,
+  // ARC CV-3c (decyzja właściciela 44 (2) 2026-11-12 — „statki w bitwie są zbyt blisko siebie”) — ROZSUNIĘCIE sceny bitwy: prawo sceny,
+  // podłogi rozsunięcia i kolizji, rozrzut pionu i koperta choreografii × to (`BattleStageLogic.spreadLaw`; renderer `_tickBattleStage`).
+  // 1 = scena CV-3a…CV-5 (odstępy par laser ~3,5 L, kinetyk ~8 L, rakiety ~13,5 L); 1,35 — o ~35 % więcej miejsca. Pasma, prowadnica
+  // i niezmiennik D-CV-6 niezmiennicze wobec skali. Czytane co klatkę (zmiana — scena przestawia się płynnie w ≤ 1 rundę).
+  STAGE_SPREAD: 1.5,
+  // ARC CV-3c (flaga `cvChoreo2`, decyzja 44 (4)) — WYLOT DYSZ zamiast stożka smugi (renderer `_nozzleGlowSet`): rozmiary w promieniach
+  // dyszy z pliku hardpointów (przestrzeń modelu), jasności — wzmocnienie barwy 0x7ff4ff (rdzeń > 1 = HDR, bloomuje). Czytane co klatkę.
+  NOZZLE_R_MUL:     1.0,   // mnożnik promienia dyszy z pliku
+  NOZZLE_CORE:      3.2,   // wzmocnienie HDR rdzenia (próg bloomu 1,0) przy pełnym ciągu; jałowy ciąg — 35 %
+  NOZZLE_CORE_K:    2.0,   // średnica rdzenia [promienie dyszy]
+  NOZZLE_HALO:      0.5,   // jasność poświaty (poniżej progu bloomu)
+  NOZZLE_HALO_K:    5.5,   // średnica poświaty [promienie dyszy]
+  NOZZLE_FLARE:     0.6,   // jasność krótkiego błysku ciągu
+  NOZZLE_FLARE_LEN: 3.2,   // długość błysku przy pełnym ciągu [promienie dyszy] (∝ ciąg² — przy małym ciągu znika)
+  NOZZLE_FLARE_W:   1.6,   // szerokość błysku [promienie dyszy]
   // ARC CV-1a (flaga `cvModels`) — statki w ramie kanonicznej (renderer `_addVesselModelCv`, `_applyExhaust`, `_tickCvModels`).
   // Wszystkie czytane CO KLATKĘ — zmiana w konsoli działa od następnej klatki, bez przebudowy statków. Strojenie, bez pinów.
   MODEL_PLUME_LEN:    0.8,   // długość smugi silnika w długościach statku (dawniej podłoga 0,03 WU ≈ 1,9 L — Finding 619)
@@ -157,6 +186,9 @@ export const LIVE_CV_FX = {
   // okres wzoru [s] (prędkość kątowa = 2π / okres), sufit skrętu [°/s], pion [L], jasność silnika w walce, przechył. Czytane
   // CO KLATKĘ. Strojenie, bez pinów (wartości domyślne — `CHOREO_TUNING`).
   ...CHOREO_TUNING,
+  // ARC CV-3c (flaga `cvChoreo2`) — lot wzdłuż kursu (`ChoreographyLogic.stepChoreo2*`): okres pętli klasy [s], głębokość ku celowi,
+  // sufit pochylenia płaszczyzny pętli [°], próg prędkości kursu (× szczyt pętli). Czytane CO KLATKĘ. Strojenie, bez pinów.
+  ...CHOREO2_TUNING,
   // ARC CV-2b (flaga `cvPresets`) — pula świateł efektów (`LightPool`: jasność, zasięg, obwiednia błysku) i szyna sygnałów walki
   // (`CombatCueBus`: najwyżej sygnałów na klatkę, okno scalania). Czytane co klatkę / przy błysku. Strojenie, bez pinów.
   ...LIVE_LIGHT_POOL,
@@ -200,6 +232,8 @@ class FxPool {
       geo.setAttribute('position', baseGeometry.getAttribute('position'));
       const nrm = baseGeometry.getAttribute('normal');
       if (nrm) geo.setAttribute('normal', nrm);
+      // ARC CV-3c — atrybuty wierzchołków geometrii bazowej poza położeniem i normalną (wariant odłamka `aVar`, krawędź `aEdge`)
+      for (const [k, a] of Object.entries(baseGeometry.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') geo.setAttribute(k, a);
       if (baseGeometry.index) geo.setIndex(baseGeometry.index);
     } else {
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(corners), 3));
@@ -267,6 +301,7 @@ class FxPool {
   }
 
   set1(key, slot, a) { this.f[key].array[slot] = a; }
+  set2(key, slot, a, b) { const f = this.f[key], i = slot * 2; f.array[i] = a; f.array[i + 1] = b; }   // ARC CV-3c — `aShape` odłamka
 
   /** Zwolnij slot: ostatni aktywny wchodzi na jego miejsce (aktywne zawsze w [0, n)). */
   free(slot) {
@@ -355,6 +390,10 @@ class WpnPool extends FxPool {
 /**
  * ARC CV-5 — bryłka odłamka: ośmiościan z wierzchołkami przesuniętymi deterministycznie (skrót z położenia — ten sam wierzchołek
  * w każdej ścianie dostaje to samo przesunięcie, bryła zostaje zamknięta), płaskie normalne. Budowana RAZ przy silniku.
+ * ARC CV-3c (decyzja właściciela 44 (7) — „odłamki na początku duże i bardzo kwadratowe”) — do tej samej geometrii dochodzą 4 ODŁAMKI
+ * BLACHY: nieregularne wypukłe wielokąty (4–6 wierzchołków, wydłużone, ostre rogi) o małej grubości, z lekko pochyloną górą (fasety).
+ * Wariant każdego wierzchołka w atrybucie `aVar` (0 — ośmiościan CV-5, 1–4 — odłamki), ściany boczne (krawędź blachy) w `aEdge` = 1;
+ * instancja wybiera wariant atrybutem `aShape.x` (shader odrzuca wierzchołki innych wariantów), `aShape.y` = 1 — żar tylko na krawędziach.
  */
 function buildDebrisGeometry(THREE) {
   const g = new THREE.OctahedronGeometry(1, 0);
@@ -367,8 +406,41 @@ function buildDebrisGeometry(THREE) {
     const v = (h & 0xffff) / 65535;
     pos.setXYZ(i, x * (0.62 + 0.55 * u), y * (0.55 + 0.6 * v), z * (0.6 + 0.5 * ((u + v) % 1)));
   }
-  g.computeVertexNormals();
-  return g;
+  // ARC CV-3c — odłamki blachy (warianty 1–4) dopisane za ośmiościanem; niezindeksowane trójkąty jak ośmiościan
+  const P = [...pos.array];
+  const VAR = new Array(pos.count).fill(0), EDGE = new Array(pos.count).fill(1);
+  const hashU = (k) => { let h = Math.imul((k + 1) * 0x27d4eb2d ^ 0x165667b1, 0x9e3779b1) >>> 0; h ^= h >>> 15; h = Math.imul(h, 0x85ebca6b) >>> 0; h ^= h >>> 13; return (h >>> 0) / 4294967296; };
+  const tri = (a, b, c, variant, edge) => { P.push(...a, ...b, ...c); for (let k = 0; k < 3; k++) { VAR.push(variant); EDGE.push(edge); } };
+  const SHARDS = [   // [wierzchołki obrysu, wydłużenie (z / x), grubość]
+    [4, 0.42, 0.13], [5, 0.55, 0.15], [3, 0.6, 0.14], [6, 0.38, 0.12],
+  ];
+  SHARDS.forEach(([n, elong, thick], si) => {
+    const variant = si + 1;
+    const ring = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (hashU(si * 31 + i) - 0.5) * (Math.PI / n) * 0.9;
+      const r = 0.62 + 0.5 * hashU(si * 57 + i * 3 + 1);
+      const up = (hashU(si * 91 + i * 7 + 2) - 0.5) * thick * 0.7;   // pochylenie górnej ściany (fasety)
+      ring.push([Math.cos(a) * r, thick / 2 + up, Math.sin(a) * r * elong]);
+    }
+    const top = ring, bot = ring.map(([x, , z], i) => [x, -thick / 2 + (hashU(si * 13 + i * 5 + 3) - 0.5) * thick * 0.4, z]);
+    const cT = top.reduce((s, p) => [s[0] + p[0] / n, s[1] + p[1] / n, s[2] + p[2] / n], [0, 0, 0]);
+    const cB = bot.reduce((s, p) => [s[0] + p[0] / n, s[1] + p[1] / n, s[2] + p[2] / n], [0, 0, 0]);
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      tri(cT, top[j], top[i], variant, 0);          // góra (odwrotnie do ruchu wskazówek — normalna w +Y)
+      tri(cB, bot[i], bot[j], variant, 0);          // dół
+      tri(top[i], top[j], bot[j], variant, 1);      // bok — krawędź blachy (żar)
+      tri(top[i], bot[j], bot[i], variant, 1);
+    }
+  });
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  out.setAttribute('aVar', new THREE.Float32BufferAttribute(VAR, 1));
+  out.setAttribute('aEdge', new THREE.Float32BufferAttribute(EDGE, 1));
+  out.computeVertexNormals();
+  g.dispose();
+  return out;
 }
 
 export class FxEngine {
@@ -452,7 +524,7 @@ export class FxEngine {
       uniforms: { uTime: { value: 0 }, uCore: { value: 2.5 } },
       vertexShader: src.debris.vertexShader, fragmentShader: src.debris.fragmentShader,
     });
-    const DEBRIS_FIELDS = [['aP0', 3], ['aVel', 3], ['aAxis', 4], ['aParams', 4], ['aStretch', 3], ['aColor', 3]];
+    const DEBRIS_FIELDS = [['aP0', 3], ['aVel', 3], ['aAxis', 4], ['aParams', 4], ['aStretch', 3], ['aColor', 3], ['aShape', 2]];   // CV-3c — aShape
     this.debris = new FxPool(THREE, { name: 'debris', capacity: cap.debris, fields: DEBRIS_FIELDS, material: debrisMat, parent: this.root,
       baseGeometry: this._debrisGeo });
     this.dmgPools = [this.smokes, this.blasts, this.debris];
@@ -636,7 +708,8 @@ export class FxEngine {
   /**
    * Odłamek kadłuba: start w punkcie świata, prędkość [WU/ms], oś i prędkość obrotu [rad/ms], rozmiar, rozciągnięcie, jasność, barwa.
    * @param {{ t0:number, life:number, x:number, y:number, z:number, vx:number, vy:number, vz:number, ax:number, ay:number, az:number,
-   *           spin:number, size:number, sx?:number, sy?:number, sz?:number, shade?:number, color?:number }} p
+   *           spin:number, size:number, sx?:number, sy?:number, sz?:number, shade?:number, color?:number, shape?:number, edgeHot?:boolean }} p
+   *   shape — ARC CV-3c: wariant bryłki (0 — ośmiościan CV-5, 1–4 — odłamki blachy); edgeHot — żar tylko na krawędziach (CV-3c)
    */
   spawnDebris(p) {
     this._dmgEpochFor(p.t0);
@@ -650,6 +723,7 @@ export class FxEngine {
     pool.set3('aStretch', s, p.sx ?? 1, p.sy ?? 1, p.sz ?? 1);
     const c = this._rgb(p.color ?? 0x6a6f78);
     pool.set3('aColor', s, c.r, c.g, c.b);
+    pool.set2('aShape', s, Number.isFinite(p.shape) ? p.shape : 0, p.edgeHot ? 1 : 0);
     pool.death[s] = p.t0 + life;
     this.dmgSpawned++;
     return s;
@@ -744,7 +818,7 @@ export class FxEngine {
    *   nowMs — czas ZEGARA PREZENTACJI (stoi w pauzie); viewportH — wysokość widoku w CSS px; stage — scena bitwy (flaga
    *   `cvStage`, ARC CV-3a3): błysk i pierścień osłony z pokręteł `STAGE_*` (bez sceny — dzisiejsze, co do bitu).
    */
-  update({ nowMs, dmgNowMs = undefined, camera = null, viewportH = 1, visible = true, stage = false } = {}) {
+  update({ nowMs, dmgNowMs = undefined, camera = null, viewportH = 1, visible = true, stage = false, smaa = false } = {}) {
     if (Number.isFinite(nowMs)) this.nowMs = nowMs;
     const now = this.nowMs;
     for (let i = 0; i < this.pools.length; i++) this.pools[i].retire(now);
@@ -766,8 +840,10 @@ export class FxEngine {
     // ARC CV-4a — pule języka broni: śledzenie końców (gdy coś w nich jest) i pokrętła `WPN_*` co klatkę.
     if ((this.wbeams.n + this.bolts.n + this.motes.n) > 0 && (this._resolve || this._resolveLocal)) this._followWpn(now);
     const wu = this.wbeams.material.uniforms, ou = this.bolts.material.uniforms, mu = this.motes.material.uniforms;
-    wu.uTime.value = tRel; wu.uPxToWorld.value = pxToWorld; wu.uWidth.value = T.WPN_BEAM_WIDTH ?? T.BEAM_WIDTH;
-    wu.uMinPx.value = T.WPN_BEAM_MIN_PX ?? T.MIN_PX; wu.uCore.value = T.WPN_BEAM_CORE ?? T.BEAM_CORE;
+    // ARC CV-3c (decyzja 45 (5)) — wiązka pod SMAA (High; renderer podaje `smaa` przy fladze `cvChoreo2`): rdzeń i szerokość z kompensacją
+    const bk = smaa ? 1 : 0;
+    wu.uTime.value = tRel; wu.uPxToWorld.value = pxToWorld; wu.uWidth.value = (T.WPN_BEAM_WIDTH ?? T.BEAM_WIDTH) * (bk ? (T.WPN_SMAA_BEAM_WIDTH_K ?? 1) : 1);
+    wu.uMinPx.value = T.WPN_BEAM_MIN_PX ?? T.MIN_PX; wu.uCore.value = (T.WPN_BEAM_CORE ?? T.BEAM_CORE) * (bk ? (T.WPN_SMAA_BEAM_CORE_K ?? 1) : 1);
     ou.uTime.value = tRel; ou.uPxToWorld.value = pxToWorld; ou.uWidth.value = T.WPN_BOLT_WIDTH ?? T.TRACER_WIDTH;
     ou.uMinPx.value = T.WPN_BOLT_MIN_PX ?? T.MIN_PX; ou.uCore.value = T.WPN_BOLT_CORE ?? T.TRACER_CORE;
     mu.uTime.value = tRel; mu.uPxToWorld.value = pxToWorld; mu.uCore.value = T.WPN_MOTE_CORE ?? T.FLASH_CORE;

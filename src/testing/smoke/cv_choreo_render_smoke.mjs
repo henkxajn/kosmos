@@ -31,6 +31,10 @@
 //      zegar stoi ⇒ smuga stoi; KONTROLA bez `cvStage`: ta sama para wywołań migocze (czas realny)
 //   R15 (Finding 622) sprite odtworzony W TRAKCIE bitwy (przełączenie układu, `cvModels`, nowy model) staje z kursem 0 — od
 //      następnej klatki ma kurs z choreografii (dziób = kurs stanu); ŚWIADEK: przed tą klatką dziób daleko od kursu stanu
+// ⚠ PRZECELOWANIE ŚWIADOME (CV-3c, decyzja właściciela 44): keeper pinuje choreografię CV-3b na scenie BEZ rozsunięcia — świat ustawia
+//   `cvChoreo2` = false (lot wzdłuż kursu ma własny keeper `cv_choreo2_render_smoke`) i `STAGE_SPREAD` = 1 (progi koperty, ciągłości
+//   i krawędzie pasm w L sceny CV-3b; rozsunięcie pinuje `cv_choreo2_logic_smoke` — niezmienniczość skali). Lista nazw wolnych
+//   uzupełniona o funkcje CV-3c (metody kleju sięgają po nie przy przenikaniu trybów).
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -78,7 +82,8 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'VESSEL_TARGET_SIZE', 'WORLD_SCALE', '_STAGE_V', 'centroidOf', 'fitWatchFrameOffset', 'viewOffsetFrame', 'watchSafeRect', 'getMapInsets', 'COSMIC',
   'glideRetarget', 'glideStep', 'encounterClusters', 'encounterParticipants', 'pickStageField', 'stagePointLogical', 'stagePointDrawn', 'shellBaseAt',
   'simClockMs', 'exhaustIntensityRaw', 'vesselSizeClass', 'createChoreo', 'choreoSeed', 'choreoClassOf', 'choreoEnvelope', 'postureOf', 'pickFacingTarget',
-  'stepChoreoOffset', 'constrainChoreo', 'stepChoreoFacing', 'stepChoreoEngine', 'quatFromYawPitchRoll', '_CHQ_A', '_CHQ_C', '_CHQ_D', '_CHV'];
+  'stepChoreoOffset', 'constrainChoreo', 'stepChoreoFacing', 'stepChoreoEngine', 'quatFromYawPitchRoll', '_CHQ_A', '_CHQ_C', '_CHQ_D', '_CHV',
+  'stepChoreo2Offset', 'stepChoreo2Facing', 'stepChoreo2Engine', 'NOZZLE_KEY_HEX'];   // CV-3c
 const METHODS = ['_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_setSpriteBase', '_stageClusters', '_tickBattleStage', 'getVesselStageBlend',
   '_stageWatchFit', '_placeFreeVessel', '_tickCombatGlide', '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease',
   '_choreoEnd', '_choreoExhaust', '_applyExhaust'];
@@ -97,7 +102,8 @@ function makeMethod(name, over = {}) {
     createChoreo: CH?.createChoreo, choreoSeed: CH?.choreoSeed, choreoClassOf: CH?.choreoClassOf, choreoEnvelope: CH?.choreoEnvelope,
     postureOf: CH?.postureOf, pickFacingTarget: CH?.pickFacingTarget, stepChoreoOffset: CH?.stepChoreoOffset, constrainChoreo: CH?.constrainChoreo,
     stepChoreoFacing: CH?.stepChoreoFacing, stepChoreoEngine: CH?.stepChoreoEngine, quatFromYawPitchRoll: CH?.quatFromYawPitchRoll,
-    _CHQ_A: new THREE.Quaternion(), _CHQ_C: new THREE.Quaternion(), _CHQ_D: new THREE.Quaternion(), _CHV: new THREE.Vector3(), ...over,
+    _CHQ_A: new THREE.Quaternion(), _CHQ_C: new THREE.Quaternion(), _CHQ_D: new THREE.Quaternion(), _CHV: new THREE.Vector3(),
+    stepChoreo2Offset: CH?.stepChoreo2Offset, stepChoreo2Facing: CH?.stepChoreo2Facing, stepChoreo2Engine: CH?.stepChoreo2Engine, NOZZLE_KEY_HEX: 0x7ff4ff, ...over,
   };
   try {
     return new Function(...NAMES, `return function (${m.params}) {\n${m.body}\n};`)(...NAMES.map((n) => vals[n]));
@@ -126,6 +132,7 @@ function rigEntry(yaw) {
 
 function world({ encId = 'enc_1', doctrineA = null, retreatIdx = -1, choreo = true, stub = null } = {}) {
   GAME_CONFIG.FEATURES.cvChoreo = choreo;
+  GAME_CONFIG.FEATURES.cvChoreo2 = false;   // CV-3c — keeper pinuje CV-3b (przecelowanie świadome, nagłówek)
   const layout = ST?.cvBattleLayout?.({ nA: 10, nB: 10 })?.ships ?? [];
   const vessels = new Map(), logical = new Map();
   for (const s of layout) {
@@ -157,7 +164,7 @@ function world({ encId = 'enc_1', doctrineA = null, retreatIdx = -1, choreo = tr
   const R = { camera: cam, scene: new THREE.Scene(), _vessels: new Map(), _galaxyActive: false, _galaxyFlight: false,
     _stageMarks: new Map(), _stageState: new Map(), _stageClock: PC ? new PC.PresentationClock() : null, _stageFrame: null,
     _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _stageFitCache: new Map(), _stageFitFrame: -1, _frameNo: 0, _glideLastMs: null,
-    cvTuning: ENG?.LIVE_CV_FX ?? {}, missing: [], choreoCalls: 0 };
+    cvTuning: { ...(ENG?.LIVE_CV_FX ?? {}), STAGE_SPREAD: 1 }, missing: [], choreoCalls: 0 };   // CV-3c — scena bez rozsunięcia (nagłówek)
   for (const n of METHODS) { const fn = makeMethod(n, stub && n === '_choreoCluster' ? { constrainChoreo: stub } : {}); if (fn) R[n] = fn; else R.missing.push(n); }
   if (R._choreoCluster) { const f = R._choreoCluster; R._choreoCluster = function (...a) { R.choreoCalls++; return f.apply(this, a); }; }
   for (const v of vessels.values()) {

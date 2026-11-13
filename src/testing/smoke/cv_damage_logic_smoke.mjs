@@ -29,6 +29,11 @@
 //   D13 wstawka wierzchołka do prawdziwego `ShaderLib.standard` (kotwice, głośny wyjątek bez kotwicy); gałąź trybu 0 = wyrażenia CV-1a;
 //       matowy wrak (szorstkość / metaliczność) wyłącznie w trybie 1 — tryb 0 i statki żywe nietknięte
 //   D14 źródło: zero Math.random w ExplosionLogic / FxEngine / FxShaders / metodach `_cvDmg*`; rozgrzewka pul w `_ensureFxEngine`
+//   D15 (CV-3c, `cvChoreo2`) dryf wraku po bitwie: zwykły wrak rusza po zbieżności; zniszczenie ODROCZONE do trafienia w locie (rejestr
+//       'pending') — bez dryfu, dopóki statek wygląda na żywy; dryf rusza z wybuchem, z bieżącego obrotu i miejsca (bez skoku); KONTROLA —
+//       flaga OFF: bez dryfu (CV-5). Pomiar w grze przed poprawką: 2 z 14 wraków bez dryfu (stan wraku odtwarzany przy wybuchu)
+//   D16 (CV-3c) pokazane zniszczenie (`_cvWpnKillLook`) gasi wyloty dysz OD RAZU — nie czeka na `_applyExhaust` (statek, który stanął,
+//       nie dostaje aktualizacji pozycji; pomiar w grze: wylot świecił na wraku `cvExplode` przez cały wybuch)
 //       (Finding 644) i prawdziwy `FxEngine.prewarm` rysuje każdą pulę raz
 // ⚠ Fail-first: moduł `ExplosionLogic` i metody `_cvDmg*` powstają w tym kroku — import dynamiczny w try/catch, sekcje DEGRADUJĄ.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -228,19 +233,19 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'isEnemyVessel', 'isEndpointVisibleInCombat', 'isPlayerEngagement', 'quatFromYawPitchRoll', 'WRECK_EMISSIVE_COLOR', 'FX_HDR_WRECK', 'document',
   'LEDGER_INFO_LEGEND', 'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION', 'KC_SHARED', 'setKeyColourWreckState', 'STAGE',
   'explosionPlan', 'explosionBudget', 'explosionClassOf', 'explosionSeed', 'damageStateOf', 'wreckHeatAt', 'wreckBurnColor', 'wreckFireWindow',
-  'wreckDrift', 'wreckConverge', 'sputterGate', 'emitterTicks', 'expSeedUnit'];
+  'wreckDrift', 'wreckConverge', 'sputterGate', 'emitterTicks', 'expSeedUnit', 'wreckAfterDrift'];   // CV-3c — dryf po bitwie (D15)
 const VALUES = () => [THREE, S, GAME_CONFIG, globalThis.window, globalThis.performance, FX.isEngagementInView, LEDGER?.CombatLedger, LEDGER?.pickTurret, LEDGER?.ledgerRng,
   VMR.VESSEL_TARGET_SIZE, VMR.vesselTargetSize, VMR.vesselSizeClass, FXC.weaponColor, FXC.FX_SHIELD_COLOR, CUEBUS?.cueWeaponOfCategory, CUEBUS?.cueSizeOfClass,
   CUEBUS?.screenPan, CUEBUS?.CombatCueBus, EventBus, RIG?.paintRigMaterials, RRNG.rendererRandom, HPTS?.wreckTiltQuaternion, ENGINE?.FxEngine, () => true,
   VES.isEnemyVessel, FX.isEndpointVisibleInCombat, FX.isPlayerEngagement, CHOREO?.quatFromYawPitchRoll, FX.WRECK_EMISSIVE_COLOR, 2.2, globalThis.document,
   LEDGER?.LEDGER_INFO_LEGEND, FX.EXPLOSION_RING_COLOR, 2.5, KC?.KC_SHARED, KC?.setKeyColourWreckState, { SHELL_FLOOR_L: 2, JOIN_MS: 500 },
   X?.explosionPlan, X?.explosionBudget, X?.explosionClassOf, X?.explosionSeed, X?.damageStateOf, X?.wreckHeatAt, X?.wreckBurnColor, X?.wreckFireWindow,
-  X?.wreckDrift, X?.wreckConverge, X?.sputterGate, X?.emitterTicks, X?.seedUnit];
+  X?.wreckDrift, X?.wreckConverge, X?.sputterGate, X?.emitterTicks, X?.seedUnit, X?.wreckAfterDrift];
 const METHODS = ['_cvWpnRoundFx', '_cvWpnSpawn', '_cvWpnImpact', '_cvWpnResolveLocal', '_cvWpnMuzzle', '_cvWpnTick', '_cvWpnPresentKill', '_cvWpnKillLook',
   '_cvWpnWreckGate', 'cvPresentedState', 'cvEventShown', '_ensureFxEngine', '_tickCvFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
   '_ensureCueBus', '_cueDestroyed', '_flushCues', '_cvTiltWreck', '_spawnExplosion', '_lightClockMs', '_setSpriteBase', '_spriteBase', '_stageMark', '_stagePlace',
   '_cvDmgOn', '_cvDmgState', '_cvDmgTick', '_cvDmgExplode', '_cvDmgPoint', '_cvDmgRunSeq', '_cvDmgWreckLook', '_cvDmgPaintHeat', '_cvDmgWrecks',
-  '_cvDmgStates', '_cvDmgDrift', '_cvDmgTumble', '_cvDmgConverge', 'cvExplodeVessel', 'cvDamageInfo'];
+  '_cvDmgStates', '_cvDmgDrift', '_cvDmgTumble', '_cvDmgConverge', 'cvExplodeVessel', 'cvDamageInfo', '_cvWreckAfterStep'];   // CV-3c (D15)
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -538,6 +543,75 @@ guard('D14', () => {
   const r = eng.prewarm(fakeRend, new THREE.PerspectiveCamera());
   const names = [...eng.pools, ...eng.dmgPools].map((p) => p.mesh.name);
   assert(r.ok && names.every((n) => seen.has(n)) && [...eng.pools, ...eng.dmgPools].every((p) => p.mesh.visible === false), `D14c prewarm: ${names.length} pul narysowanych raz, potem ukrytych (puste)`);
+});
+
+
+// ── D15 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+header('D15 — CV-3c: dryf wraku po bitwie; zniszczenie odroczone do trafienia w locie — dryf dopiero od wybuchu');
+const d15Run = (choreo2) => withFlags({ ...ON, cvChoreo2: choreo2 }, () => {
+  const R = fakeR();
+  R.cvTuning = { ...R.cvTuning, WRECK_CONVERGE_MS: 300 };   // zbieżność krótsza od lotu rakiety (~1,2 R) — trafienie przychodzi PO niej
+  const ships = [addShip(R, 'a1', { x: -0.05 }), addShip(R, 'b1', { x: 0.05, enemy: true }), addShip(R, 'b2', { x: 0.09, z: 0.03, enemy: true })];
+  kosmosFor(ships);
+  // b2 — rakieta zabijająca w locie (rejestr: 'pending' do chwili trafienia); b1 — wrak bez zapisu w rejestrze (pokazany od razu)
+  R._cvWpnRoundFx(payload(2, [pev('a1', 'b2', 'long', { killed: true, hpAfter: -4 })]));
+  runFrames(R, 32);
+  const killAt = R._cvLedger?.killAt?.('b2') ?? null;
+  for (const v of ships.slice(1)) { v.isWreck = true; v.wreckLocation = { x: v.position.x, y: v.position.y }; }
+  R._onWrecked?.call(R, { vesselId: 'b1', vessel: ships[1] });
+  R._onWrecked?.call(R, { vesselId: 'b2', vessel: ships[2] });
+  const e1 = R._vessels.get('b1'), e2 = R._vessels.get('b2');
+  const convMs = (R.cvTuning?.WRECK_CONVERGE_MS ?? 1200) + 100;
+  runFrames(R, convMs);
+  const nowConv = R._presClock?.nowMs ?? 0;
+  const st = { killAt, nowConv, pendingAtConv: R._cvLedger?.killState?.('b2') === 'pending' && !e2?.cvKilled, conv1Done: !e1?.cvWreck?.conv, conv2Done: !e2?.cvWreck?.conv,
+    after1: !!e1?.cvWreck?.after, after1Rot: e1?.cvWreck?.after?.rotate === true, after2AtConv: !!e2?.cvWreck?.after };
+  // po trafieniu zabijającym (wybuch odroczony) — dryf rusza; pierwszy krok łapie bieżący obrót (bez skoku)
+  const toKill = Math.max(0, (killAt ?? 0) - nowConv) + 120;
+  runFrames(R, toKill);
+  st.killed2 = !!e2?.cvKilled;
+  st.after2 = !!e2?.cvWreck?.after;
+  st.after2Rot = e2?.cvWreck?.after?.rotate === true;
+  const q0 = e2?.cvWreck?.after?.q0 ? [...e2.cvWreck.after.q0] : null;
+  const p0 = e2?.sprite?.position?.clone?.() ?? null;
+  const qNow = e2?.sprite?.quaternion ? [e2.sprite.quaternion.x, e2.sprite.quaternion.y, e2.sprite.quaternion.z, e2.sprite.quaternion.w] : null;
+  runFrames(R, 32);
+  const p1 = e2?.sprite?.position ?? null;
+  st.jumpL = p0 && p1 ? p0.distanceTo(p1) / L : NaN;
+  st.qDelta = q0 && qNow ? Math.max(...q0.map((v, i) => Math.abs(Math.abs(v) - Math.abs(qNow[i])))) : NaN;
+  // dryf idzie dalej i staje (koniec po 5 τ)
+  const pA = e2?.sprite?.position?.clone?.() ?? null;
+  runFrames(R, 4000);
+  st.moved4s = pA && e2?.sprite ? pA.distanceTo(e2.sprite.position) / L : NaN;
+  return st;
+});
+{
+  const on = d15Run(true), off = d15Run(false);
+  console.log(`     ON: rakieta zabija w ${on?.killAt?.toFixed?.(0)} ms, zbieżność w ${on?.nowConv?.toFixed?.(0)} ms; b1 dryf ${on?.after1} (obrót ${on?.after1Rot}); b2 przy zbieżności: oczekuje ${on?.pendingAtConv}, dryf ${on?.after2AtConv}; po wybuchu: dryf ${on?.after2} (obrót ${on?.after2Rot}), skok ${on?.jumpL?.toExponential?.(2)} L, Δq ${on?.qDelta?.toExponential?.(2)}, ruch przez 4 s ${on?.moved4s?.toFixed?.(3)} L`);
+  console.log(`     OFF: b1 dryf ${off?.after1}, b2 dryf ${off?.after2}`);
+  assert(!!on && on.conv1Done && on.after1 && on.after1Rot, 'D15a zwykły wrak: po zbieżności do miejsca śmierci rusza dryf z pokrzywionym obrotem');
+  assert(!!on && on.after1 && on.conv2Done && on.pendingAtConv && on.after2AtConv === false,
+    'D15b SEDNO: zniszczenie odroczone (rakieta jeszcze w locie przy końcu zbieżności) — bez dryfu, dopóki statek wygląda na żywy (ŚWIADKOWIE: dryf działa — b1, zbieżność skończona, rejestr „pending”)');
+  assert(!!on && on.killed2 && on.after2 && on.after2Rot && on.jumpL < 0.02 && on.qDelta < 0.02 && on.moved4s > 0,
+    'D15c wybuch odroczony: dryf rusza od wybuchu — z bieżącego miejsca i obrotu (bez skoku), wrak płynie dalej');
+  assert(!!off && off.after1 === false && off.after2 === false, 'D15d KONTROLA: `cvChoreo2` OFF — bez dryfu po bitwie (wraki CV-5 stoją w pozycjach logicznych)');
+}
+
+
+// ── D16 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+header('D16 — CV-3c: pokazane zniszczenie gasi wyloty dysz od razu');
+withFlags({ ...ON, cvChoreo2: true }, () => {
+  const R = fakeR();
+  const ships = [addShip(R, 'a1', { x: -0.05 }), addShip(R, 'b1', { x: 0.05, enemy: true })];
+  kosmosFor(ships);
+  const e = R._vessels.get('b1');
+  const gl = e?.rig?.glows ?? [];
+  for (const g of gl) g.group.visible = true;   // stan „w locie” (wylot zapalony)
+  const litBefore = gl.filter((g) => g.group.visible).length;
+  R._cvWpnKillLook('b1', e);
+  const litAfter = gl.filter((g) => g.group.visible).length;
+  console.log(`     wyloty: ${gl.length}, zapalone przed ${litBefore}, po pokazanym zniszczeniu ${litAfter}`);
+  assert(gl.length > 0 && litBefore === gl.length && litAfter === 0, 'D16 SEDNO: pokazane zniszczenie gasi wszystkie wyloty dysz od razu (ŚWIADEK: wyloty istnieją i świeciły przed wywołaniem)');
 });
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

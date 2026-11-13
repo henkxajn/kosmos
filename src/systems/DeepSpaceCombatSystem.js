@@ -743,8 +743,13 @@ export class DeepSpaceCombatSystem {
             const effectiveArmor = Math.max(0, tState.armor - (weapon.armorPierce ?? 0));
             const armorReduction = effectiveArmor * 0.4;
             const netDamage = Math.max(1, damage - armorReduction);
+            const hpWas = tState.hp;
             tState.hp -= netDamage;
             damage = netDamage;
+            // ARC CV-3c (decyzja właściciela 44 (5) — zatwierdzone dotknięcie mechaniki, wyłącznie MIEJSCE wraku): pozycja LOGICZNA okrętu
+            // w chwili śmierci → wrak tam, gdzie zginął (dawniej każdy wrak w punkcie środkowym starcia — „kula jeża” po bitwie; rodzina
+            // Findingu 460). Mapa przejściowa na starciu — POZA `serialize()` i rekordem bitwy (zapis, `round.events`, wynik bez zmian).
+            if (hpWas > 0 && tState.hp <= 0) this._noteDeath(encounter, tid);
           } else {
             damage = 0;
           }
@@ -1386,10 +1391,12 @@ export class DeepSpaceCombatSystem {
     };
 
     // Per-vessel wreck pass (always — dead vessel z każdej strony).
+    // ARC CV-3c (decyzja właściciela 44 (5)) — wrak w miejscu śmierci okrętu (`_deathPointOf`: pozycja z chwili zestrzelenia; bez zapisu
+    // z tej sesji — np. starcie wczytane w trakcie — bieżąca pozycja okrętu, a dopiero bez niej punkt środkowy jak dawniej).
     for (const [vid, state] of encounter.vesselStates) {
       if (state.hp <= 0) {
         const vessel = this._vm?._vessels?.get(vid);
-        if (vessel && !vessel.isWreck) this._wreckOne(vessel, mid, year);
+        if (vessel && !vessel.isWreck) this._wreckOne(vessel, this._deathPointOf(encounter, vessel) ?? mid, year);
       }
     }
 
@@ -1737,6 +1744,30 @@ export class DeepSpaceCombatSystem {
     vessel.wreckLocation = { x: mid.x, y: mid.y };
     if (vessel.fuel) vessel.fuel.current = 0;
     EventBus.emit('vessel:wrecked', { vesselId: vessel.id, vessel });
+  }
+
+  /**
+   * ARC CV-3c (decyzja właściciela 44 (5)) — zapamiętaj pozycję LOGICZNĄ okrętu w chwili śmierci (hp przeszło przez 0). Mapa przejściowa
+   * `encounter._deathPos` — nie należy do `serialize()` (lista pól) ani do rekordu bitwy; zwykła liczba z pozycji, bez losowania.
+   * @private
+   */
+  _noteDeath(encounter, vid) {
+    const p = this._vm?._vessels?.get(vid)?.position;
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+    (encounter._deathPos ??= new Map()).set(vid, { x: p.x, y: p.y });
+  }
+
+  /**
+   * ARC CV-3c — punkt wraku okrętu: pozycja z chwili śmierci (`_noteDeath`), inaczej bieżąca pozycja okrętu (martwy okręt w wolnej
+   * przestrzeni nie rusza się w starciu — `_closeToWeaponRange` i `_advanceFleeing` pomijają hp ≤ 0), inaczej null (wołający: punkt
+   * środkowy, jak przed CV-3c).
+   * @private
+   */
+  _deathPointOf(encounter, vessel) {
+    const d = encounter?._deathPos?.get?.(vessel?.id);
+    if (d && Number.isFinite(d.x) && Number.isFinite(d.y)) return { x: d.x, y: d.y };
+    const p = vessel?.position;
+    return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null;
   }
 
   /** @private */

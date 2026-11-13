@@ -44,10 +44,11 @@ import { STAGE, solveStage, bandEdgesWU, apparentEdges, pairKey, encounterCluste
 import { stageBlend, stageBlendFloored, lengthPx } from './combat/SemanticZoomLogic.js';            // ARC CV-3a1 — zoom semantyczny (CV-6b — podłoga, decyzja 20)
 import { motionSegment, motionAt, targetVelocity } from './combat/StageMotionLogic.js';            // ARC CV-6b — ruch sceny ciągły w prędkości
 import { createChoreo, choreoSeed, choreoClassOf, choreoEnvelope, postureOf, pickFacingTarget, stepChoreoOffset, constrainChoreo,
-  stepChoreoFacing, stepChoreoEngine, quatFromYawPitchRoll } from './combat/ChoreographyLogic.js';   // ARC CV-3b — choreografia w kopercie
+  stepChoreoFacing, stepChoreoEngine, quatFromYawPitchRoll,
+  stepChoreo2Offset, stepChoreo2Facing, stepChoreo2Engine } from './combat/ChoreographyLogic.js';   // ARC CV-3b — choreografia w kopercie; CV-3c — lot wzdłuż kursu
 import { ShipHardpointsCache, slotOfModelPath, yawToward, orbitYaw, bankRoll, INCOMING_DIR, SHIP_MODEL_DIR,
   REST_YAW_CANONICAL, wreckTiltQuaternion, has1kVariant, modelPath1k } from './ShipHardpoints.js';   // ARC CV-1a — hardpointy, rama kanoniczna (kurs spoczynkowy i wrak jak OFF); CV-2b — wariant 1K
-import { buildShipRig, disposeShipRig, paintRigMaterials, paintRigRim, lightTestPattern } from './ShipModelRig.js';      // ARC CV-1a — statek w ramie kanonicznej
+import { buildShipRig, disposeShipRig, paintRigMaterials, paintRigRim, lightTestPattern, NOZZLE_KEY_HEX } from './ShipModelRig.js';      // ARC CV-1a — statek w ramie kanonicznej; CV-3c — wylot dysz
 import { LightPointPool } from './ShipLightPoints.js';                                                // ARC CV-1a — punkty świetlne `lights[]`
 import { LIGHT_POOL_MAX, bloomInputSize } from '../data/CombatFxPresets.js';                          // ARC CV-2b — presety jakości (tabela §2.10); CV-5 — bloom w px CSS
 import { initialGfxLevel, normalizeGfxLevel, nextGfxLevelInCycle, readRendererString, resolveGfxSettings, writeStoredGfxLevel,
@@ -59,7 +60,7 @@ import { KC_SHARED, KC_SCORCH_MAX, setKeyColourWreckState, setKeyColourScorch, s
 import { ShieldStates, bubbleAxes, ellipsoidPoint, hullPoint, scorchEnabled, allocScorch, scorchHeat, SHIELD_RIPPLES_MAX, SCORCH_MAX } from './combat/ShieldLogic.js';   // ARC CV-4b — osłony i pancerz
 import { ShieldBubblePool } from './combat/ShieldBubbles.js';                                         // ARC CV-4b — pula baniek osłon
 import { explosionPlan, explosionBudget, explosionClassOf, explosionSeed, damageStateOf, wreckHeatAt, wreckBurnColor, wreckFireWindow,
-  wreckDrift, wreckConverge, sputterGate, emitterTicks, seedUnit as expSeedUnit } from './combat/ExplosionLogic.js';   // ARC CV-5 — wybuchy, uszkodzenia, wraki
+  wreckDrift, wreckConverge, sputterGate, emitterTicks, seedUnit as expSeedUnit, wreckAfterDrift } from './combat/ExplosionLogic.js';   // ARC CV-5 — wybuchy, uszkodzenia, wraki; CV-3c — dryf po bitwie
 import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
   centroidOf, fitWatchFrameOffset, viewOffsetFrame } from './CombatWatchLogic.js';
@@ -5330,6 +5331,10 @@ export class ThreeRenderer {
       this._vessels.set(vessel.id, entry);
       if (killedLook) { entry.cvKilled = true; this._cvWpnKillLook(vessel.id, entry); }   // ARC CV-4a — przechył i zgaszenie jak w chwili zniszczenia
       else if (isWreck && this._cvDmgOn?.()) this._cvDmgWreckLook?.(vessel.id, entry);   // ARC CV-5 — wrak odbudowany: od razu wystygły (bez powtórki wybuchu)
+      // ARC CV-3c (Finding 709) — wyloty startują ukryte, a poza walką zapala je `_applyExhaust` dopiero przy aktualizacji pozycji (gra
+      // w ruchu): model, który dochodzi na PAUZIE (parada `cvParade`, wczytanie, przebudowa po zmianie presetu, zmiana układu), nie miał
+      // wylotu do wznowienia — statek warp ratował pierścień emisji w teksturze, niewarpowy nie miał nic. Stan wylotu od razu po rigu.
+      else if (GAME_CONFIG.FEATURES?.cvChoreo2) this._applyExhaust?.(vessel, entry);
       this._cvShdReapplyScorch?.(vessel.id, entry);   // ARC CV-4b — osmalenia kadłuba po przebudowie (High)
       if (isEnemy && !isWreck && GAME_CONFIG.FEATURES.m4EnemyGhosts) this._applyVesselIntelVisibility(vessel, entry);
       this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
@@ -7128,12 +7133,13 @@ export class ThreeRenderer {
       state:   vessel?.position?.state,
       isWreck: !!(vessel?.isWreck || entry.isWreck || entry.cvKilled),   // ARC CV-4a — zniszczenie pokazane: smuga zgaszona
     });
-    if (intensity <= 0) { cone.visible = false; return; }
-    cone.visible = true;
     // Lekki flicker (throb silnika) — desync per statek przez _exhaustPhase. ARC CV-3b (Finding 677): faza z zegara prezentacji,
     // gdy prowadzi go scena bitwy (`cvStage`) — pauza zatrzymuje także smugi poza walką (§2.12-4); bez sceny — czas realny jak dawniej.
     const flickMs = GAME_CONFIG.FEATURES?.cvStage && this._stageClock ? this._stageClock.nowMs : performance.now();
     const flick = 0.8 + 0.2 * Math.sin(flickMs * 0.02 + (entry._exhaustPhase ?? 0));
+    if (this._nozzleGlowSet?.(entry, intensity, flick)) return;   // ARC CV-3c (`cvChoreo2`) — wylot dysz zamiast stożka (także w locie)
+    if (intensity <= 0) { cone.visible = false; return; }
+    cone.visible = true;
     if (cone.material) cone.material.opacity = 0.35 * intensity * flick;  // subtelne (było 0.5)
     // ARC CV-1a (Finding 619) — rama kanoniczna: smuga jednostkowa z czubkiem w dyszy z pliku hardpointów — długość i promień
     // z pokręteł `cvTuning.MODEL_PLUME_*` CO KLATKĘ (dawniej podłogi 0,03 × 0,024 WU — 1,9 L — wygrywały zawsze), migotanie
@@ -7318,7 +7324,7 @@ export class ThreeRenderer {
     if (!events.length || payload.encounterId == null || !Number.isFinite(payload.round)) return;
     const eng = this._ensureFxEngine();
     const led = this._cvLedger ?? (this._cvLedger = new CombatLedger({ tuning: this.cvTuning }));
-    const R = window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000;
+    const R = window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1150;   // zapas = domyślna klucza (CV-3c, decyzja 44 (1))
     const L = VESSEL_TARGET_SIZE.frigate;
     const gapL = (ev) => {
       const a = this._vessels.get(ev.attacker)?.sprite, t = this._vessels.get(ev.target)?.sprite;
@@ -7388,9 +7394,14 @@ export class ThreeRenderer {
       const ux = px, uy = py + 0.6, uz = pz;   // łuk rakiety: w bok z ziarna i w górę
       const ul = Math.hypot(ux, uy, uz) || 1;
       const flight = x.hit ? x.flight : x.flight * (1 + Math.max(0, T.WPN_MISS_OVERSHOOT ?? 0.6));
+      // ARC CV-3c (decyzja 44 (7), `cvChoreo2`) — rakieta pod SMAA (High): kompensacja cienkiej smugi (głowa, szerokość — pokrętła
+      // `WPN_SMAA_MISSILE_*`); bez SMAA albo przy fladze OFF — wartości CV-4a co do bitu
+      // decyzja 45 (5) — także pocisk kinetyczny (`WPN_SMAA_KIN_*`)
+      const smaaK = !!GAME_CONFIG.FEATURES?.cvChoreo2 && !!this._smaaPass?.enabled;
       eng.spawnBolt({ t0: x.fireAt, flight, trail: Math.max(1, (missile ? (T.WPN_MISSILE_TRAIL ?? 0.18) : (T.WPN_TRACER_LEN ?? 0.08)) * R),
         ax: mx, ay: my, az: mzz, bx, by, bz, cx: ux / ul * arc, cy: uy / ul * arc, cz: uz / ul * arc, color, alpha,
-        widthMul: missile ? (T.WPN_MISSILE_WIDTH_MUL ?? 1.25) : 1, head: missile ? (T.WPN_MISSILE_HEAD ?? 2.5) : (T.WPN_KIN_HEAD ?? 1.2),
+        widthMul: missile ? (T.WPN_MISSILE_WIDTH_MUL ?? 1.25) * (smaaK ? (T.WPN_SMAA_MISSILE_WIDTH_K ?? 1) : 1) : (smaaK ? (T.WPN_SMAA_KIN_WIDTH_K ?? 1) : 1),
+        head: missile ? (T.WPN_MISSILE_HEAD ?? 2.5) * (smaaK ? (T.WPN_SMAA_MISSILE_HEAD_K ?? 1) : 1) : (T.WPN_KIN_HEAD ?? 1.2) * (smaaK ? (T.WPN_SMAA_KIN_HEAD_K ?? 1) : 1),
         miss: !x.hit, aId: x.attacker, aMode: mMode, aox: mox, aoy: moy, aoz: moz, bId: x.target, bMode: endMode, box: ox, boy: oy, boz: oz });
     }
     if (x.hit) this._cvWpnImpact(eng, x, bx, by, bz, ox, oy, oz, -dx, -dy, -dz, tSize, R, endMode);
@@ -7439,23 +7450,27 @@ export class ThreeRenderer {
     const base = Math.max(0, T.WPN_SPARKS ?? 10) * (missile ? 1.5 : 1) * (hull ? 1 : 0.5);
     const n = base > 0 ? Math.max(1, Math.round(base * Math.min(1, budget / 16000))) : 0;
     const rnd = ledgerRng(x.seed);
-    const speed = Math.max(0, T.WPN_SPARK_SPEED ?? 3) * L / Math.max(1, R);
+    // ARC CV-3c (decyzja właściciela 44 (9) — „iskry i żar w zwolnionym tempie znikają dość szybko”) — skutki trafienia (iskry, żar, błysk)
+    // to efekty uszkodzeń: idą w tempie `FX_TIME_SCALE` jak wybuchy (zegar efektów CV-5). Chwila trafienia zostaje w czasie prezentacji
+    // (rejestr salw), życie × 1 / skala, prędkość iskier × skala — ten sam tor w zwolnionym tempie (ruch motka: p₀ + v·wiek·(1 − p / 2)).
+    const fxS = Math.min(4, Math.max(0.05, Number(T.FX_TIME_SCALE ?? 1) || 1)), lifeK = 1 / fxS;
+    const speed = Math.max(0, T.WPN_SPARK_SPEED ?? 3) * L / Math.max(1, R) * fxS;
     const sparkCol = hull ? 0xffd8a0 : FX_SHIELD_COLOR;
     for (let i = 0; i < n; i++) {
       let vx = nx + (rnd() * 2 - 1) * 0.9, vy = ny + (rnd() * 2 - 1) * 0.9, vz = nz + (rnd() * 2 - 1) * 0.9;
       const vl = Math.hypot(vx, vy, vz) || 1;
       const sp = speed * (0.5 + 0.7 * rnd()) / vl;
-      eng.spawnMote({ t0, life: Math.max(1, (T.WPN_SPARK_LIFE ?? 0.35) * R * (0.6 + 0.4 * rnd())), x: bx, y: by, z: bz,
+      eng.spawnMote({ t0, life: Math.max(1, (T.WPN_SPARK_LIFE ?? 0.35) * R * (0.6 + 0.4 * rnd()) * lifeK), x: bx, y: by, z: bz,
         vx: vx * sp, vy: vy * sp, vz: vz * sp, color: sparkCol, alpha: 1, size: (T.WPN_SPARK_SIZE ?? 0.18) * L, kind: 0, grow: 0.5,
         minPx: 1.5, maxPx: 6, id: x.target, mode, ox, oy, oz });
     }
     if (hull) {
-      eng.spawnMote({ t0, life: Math.max(1, (T.WPN_GLOW_LIFE ?? 0.5) * R), x: bx, y: by, z: bz, color: 0xff6a20, alpha: 0.9,
+      eng.spawnMote({ t0, life: Math.max(1, (T.WPN_GLOW_LIFE ?? 0.5) * R * lifeK), x: bx, y: by, z: bz, color: 0xff6a20, alpha: 0.9,
         size: (T.WPN_GLOW_K ?? 0.8) * tSize * (missile ? 1.4 : 1), kind: 1, grow: 1.3, minPx: 3, maxPx: 48, id: x.target, mode, ox, oy, oz });
-      eng.spawnMote({ t0, life: Math.max(1, 0.08 * R), x: bx, y: by, z: bz, color: 0xffffff, alpha: 1, size: 0.5 * tSize * (missile ? 1.5 : 1),
+      eng.spawnMote({ t0, life: Math.max(1, 0.08 * R * lifeK), x: bx, y: by, z: bz, color: 0xffffff, alpha: 1, size: 0.5 * tSize * (missile ? 1.5 : 1),
         kind: 1, grow: 1.6, minPx: 4, maxPx: 32, id: x.target, mode, ox, oy, oz });
     } else {
-      eng.spawnMote({ t0, life: Math.max(1, 0.2 * R), x: bx, y: by, z: bz, color: FX_SHIELD_COLOR, alpha: 0.8, size: 0.6 * tSize,
+      eng.spawnMote({ t0, life: Math.max(1, 0.2 * R * lifeK), x: bx, y: by, z: bz, color: FX_SHIELD_COLOR, alpha: 0.8, size: 0.6 * tSize,
         kind: 1, grow: 1.4, minPx: 3, maxPx: 36, id: x.target, mode, ox, oy, oz });
     }
   }
@@ -7563,6 +7578,9 @@ export class ThreeRenderer {
     if (!(e.canonical && e.rig)) return;
     paintRigMaterials(THREE, e.rig.materials, 'wreck', { burnHot: !!GAME_CONFIG.FEATURES?.fcCombatFx });
     if (e.rig.exhaust) e.rig.exhaust.visible = false;
+    // ARC CV-3c — wyloty dysz gasną w chwili pokazanego zniszczenia (nie czekają na `_applyExhaust`: statek, który stanął — orbita, dryf —
+    // nie dostaje już aktualizacji pozycji; pomiar w grze: wylot `cvExplode` świecił na wraku przez cały wybuch)
+    for (const g of e.rig.glows ?? []) g.group.visible = false;
     if (e.rig.lights) { this._shipLightPool?.release(e.rig.lights); e.rig.lights = null; }
     const rz = (rendererRandom() - 0.5) * 0.6;   // ±0,3 rad — jak `_cvTiltWreck`
     const rx = (rendererRandom() - 0.5) * 0.4;
@@ -7909,7 +7927,7 @@ export class ThreeRenderer {
     const before = d.sh;
     d.sh = Math.max(0, d.sh - blocked);
     const now = this._presClock?.nowMs ?? 0;
-    const R = window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000;
+    const R = window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1150;
     const x = { encounterId: null, round: d.n, index: 0, attacker: null, target: id, kind: 'kinetic', category: 'medium', hit: true,
       dmg, blocked, shieldAfter: d.sh, killed: false, fireAt: now, impactAt: now, seed: ledgerHash('cv4b-hit-fx', id, d.n), u1: rnd(), u2: rnd(), u3: rnd() };
     st.states.planRound([x], () => ({ presented: before, max: d.max }));
@@ -8082,7 +8100,9 @@ export class ThreeRenderer {
         case 'debris':
           eng.spawnDebris({ t0: at, life: r.life, x: cx + r.ox, y: cy + r.oy, z: cz + r.oz, vx: r.vx, vy: r.vy, vz: r.vz,
             ax: r.axis[0], ay: r.axis[1], az: r.axis[2], spin: r.spin, size: r.size, sx: r.stretch[0], sy: r.stretch[1], sz: r.stretch[2],
-            shade: r.shade, color: seq.enemy ? 0x5c4844 : 0x50565e });
+            shade: r.shade, color: seq.enemy ? 0x5c4844 : 0x50565e,
+            // ARC CV-3c (`cvChoreo2`, decyzja 44 (7)) — nieregularne odłamki blachy (wariant z ziarna wpisu), żar tylko na krawędziach
+            shape: GAME_CONFIG.FEATURES?.cvChoreo2 ? 1 + ((r.seed >>> 0) % 4) : 0, edgeHot: !!GAME_CONFIG.FEATURES?.cvChoreo2 });
           st.stats.debris++;
           break;
         case 'light': {
@@ -8121,6 +8141,16 @@ export class ThreeRenderer {
     let fireEnd = 0;
     for (let i = 0; i < 3; i++) { const w = wreckFireWindow(i, cls, seed, this.cvTuning); if (w) fireEnd = Math.max(fireEnd, w.end); }
     e.cvWreck = { t0, tDrift, seed, cls, heat: -1, fireEnd, last: t0 ?? st.now, conv: e.cvWreck?.conv ?? null, tumbleBaked: false };
+    // ARC CV-3c — wrak odbudowany po dryfie z tej sesji: to samo przesunięcie od pozycji logicznej (bez powtórki obrotu)
+    // (podstawa — pozycja sprite'a przy pierwszym kroku: odbudowa stawia go na pozycji logicznej PO tym wywołaniu)
+    if (Number.isFinite(ep?.afterT0) && GAME_CONFIG.FEATURES?.cvChoreo2 && e.sprite && !e.cvWreck.conv) {
+      e.cvWreck.after = { t0: ep.afterT0, base: null, q0: null, rotate: false, done: false };
+    } else if (t0 != null && e.isWreck && e.cvWreckPending && GAME_CONFIG.FEATURES?.cvChoreo2 && e.sprite && !e.cvWreck.conv) {
+      // ARC CV-3c — zniszczenie odroczone do trafienia w locie, pokazane PO zbieżności (wrak stoi już w miejscu śmierci): dryf rusza od
+      // wybuchu — z bieżącej pozycji i obrotu (przechył wraku; obrót łapany przy pierwszym kroku), łagodnie od zera
+      e.cvWreck.after = { t0: st.now, base: null, q0: null, rotate: true, done: false };
+      if (ep) ep.afterT0 = st.now;
+    }
     this._cvDmgPaintHeat(e, t0 == null ? wreckHeatAt(Infinity, this.cvTuning) : 1);
     st.stats.wrecksBurning++;
   }
@@ -8151,10 +8181,21 @@ export class ThreeRenderer {
       const heat = wreckHeatAt(tK, T);
       if (Math.abs(heat - w.heat) > 1e-4) this._cvDmgPaintHeat(e, heat);
       if (w.conv) {
-        const c = wreckConverge(w.conv.from, w.conv.to, st.now - w.conv.t0, T?.WRECK_CONVERGE_MS ?? 1200);
+        const c = wreckConverge(w.conv.from, w.conv.to, st.now - w.conv.t0, T?.WRECK_CONVERGE_MS ?? 5000);
         this._setSpriteBase(id, e, c.x, c.y, c.z);
-        if (c.done) { w.conv = null; st.stats.converged++; }
-      }
+        if (c.done) {
+          w.conv = null; st.stats.converged++;
+          // ARC CV-3c (decyzja 44 (5), `cvChoreo2`) — dryf po bitwie od pozycji logicznej (miejsce śmierci), pokrzywiony obrót, staje.
+          // Zniszczenie odroczone do trafienia w locie i jeszcze niepokazane (`cvWreckPending` bez `cvKilled`) — statek wygląda na żywy:
+          // bez dryfu; rusza z wybuchem (`_cvDmgWreckLook`). Pomiar w grze: 2 z 14 wraków traciły dryf (stan wraku odtworzony przy wybuchu).
+          if (GAME_CONFIG.FEATURES?.cvChoreo2 && e.sprite && !(e.cvWreckPending && !e.cvKilled)) {
+            const q = e.sprite.quaternion;
+            w.after = { t0: st.now, base: { x: c.x, y: c.y, z: c.z }, q0: [q.x, q.y, q.z, q.w], rotate: true, done: false };
+            const ep = this._cvWreckEpoch?.get(id);
+            if (ep) ep.afterT0 = st.now;
+          }
+        }
+      } else if (w.after && !w.after.done && GAME_CONFIG.FEATURES?.cvChoreo2) this._cvWreckAfterStep(id, e, w, st);
       if (!on || !B?.dmgFire || w.t0 == null || !(tK < w.fireEnd) || !e.sprite?.visible || this._galaxyActive) { w.last = st.now; continue; }
       const Ls = (window.KOSMOS?.vesselManager?.getVessel?.(id) ? vesselTargetSize(window.KOSMOS.vesselManager.getVessel(id)) : VESSEL_TARGET_SIZE.frigate);
       const t0 = st.prev - w.t0, t1 = st.now - w.t0;
@@ -8289,6 +8330,28 @@ export class ThreeRenderer {
     return q.setFromAxisAngle(ax.set(d.ax, d.ay, d.az), d.angle);
   }
 
+  /**
+   * ARC CV-3c (decyzja właściciela 44 (5), flaga `cvChoreo2`) — krok dryfu wraku PO BITWIE (`ExplosionLogic.wreckAfterDrift`): pozycja =
+   * pozycja logiczna z końca zbieżności + przesunięcie gasnące, kurs wrappera = kurs z końca zbieżności × obrót gasnący; na zegarze efektów
+   * (pauza = pauza, `FX_TIME_SCALE`). Po ustaniu — koniec kroków (wrak zostaje tam, gdzie stanął). Wrak odbudowany w tej sesji (zmiana
+   * układu, przebudowa) wraca na to samo przesunięcie (`_cvWreckEpoch.afterT0`), bez obrotu.
+   */
+  _cvWreckAfterStep(id, e, w, st) {
+    if (!e?.sprite) return;
+    const a = w.after;
+    if (!a.base) { const p = this._spriteBase(id, e); a.base = { x: p.x, y: p.y, z: p.z }; }
+    if (a.rotate && !a.q0) { const q0 = e.sprite.quaternion; a.q0 = [q0.x, q0.y, q0.z, q0.w]; }   // start przy wybuchu odroczonym — obrót bieżący
+    const d = wreckAfterDrift({ seed: w.seed, tMs: st.now - a.t0, L: VESSEL_TARGET_SIZE.frigate, tuning: this.cvTuning });
+    this._setSpriteBase(id, e, a.base.x + d.x, a.base.y + d.y, a.base.z + d.z);
+    if (a.rotate && a.q0) {
+      const q = this._cvAfterQ ?? (this._cvAfterQ = new THREE.Quaternion());
+      const ax = this._cvAfterAx ?? (this._cvAfterAx = new THREE.Vector3());
+      q.setFromAxisAngle(ax.set(d.ax, d.ay, d.az), d.angle);
+      e.sprite.quaternion.set(a.q0[0], a.q0[1], a.q0[2], a.q0[3]).multiply(q);
+    }
+    if (d.done) a.done = true;
+  }
+
   /** Wrak w wolnej przestrzeni po końcu bitwy → pozycja logiczna (`wreckLocation`, wysokość jak przy odbudowie) przez `WRECK_CONVERGE_MS`. */
   _cvDmgConverge(id, e, v) {
     if (!this._cvDmgOn?.() || !e?.sprite || !v?.wreckLocation || v.position?.dockedAt) return;
@@ -8323,7 +8386,9 @@ export class ThreeRenderer {
   cvDamageInfo() {
     const st = this._cvDmg;
     const wrecks = [];
-    for (const [id, e] of this._vessels) if (e.cvWreck) wrecks.push({ id, heat: Number((e.cvWreck.heat ?? 0).toFixed(3)), conv: !!e.cvWreck.conv });
+    // ARC CV-3c — `dryf`: dryf i obrót wraku po końcu sceny (`cvChoreo2`) — w toku / stoi; '—' bez dryfu
+    for (const [id, e] of this._vessels) if (e.cvWreck) wrecks.push({ id, heat: Number((e.cvWreck.heat ?? 0).toFixed(3)), conv: !!e.cvWreck.conv,
+      dryf: e.cvWreck.after ? (e.cvWreck.after.done ? 'stoi' : 'w toku') : '—' });
     const levels = { 1: 0, 2: 0, 3: 0 };
     for (const [, e] of this._vessels) if (!e.cvKilled && !e.isWreck && e.cvDmgLevel > 0) levels[e.cvDmgLevel] = (levels[e.cvDmgLevel] ?? 0) + 1;
     const ps = this._fxEngine?.stats()?.pools;
@@ -8414,7 +8479,8 @@ export class ThreeRenderer {
     // ARC CV-5 — zegar efektów uszkodzeń, sekwencje wybuchów, stany uszkodzeń, wraki (przed przesłaniem pul — nowe cząstki w tej klatce)
     if (this._cvDmg || this._cvDmgOn?.()) this._cvDmgTick?.();
     this._fxEngine?.update({ nowMs: this._presClock.nowMs, dmgNowMs: this._cvDmg?.now, camera: this.camera, viewportH: window.innerHeight || 1,
-      visible: !this._galaxyActive, stage: !!GAME_CONFIG.FEATURES?.cvStage });   // ARC CV-3a3 (653 (b)(c)) — łata sceny bitwy
+      visible: !this._galaxyActive, stage: !!GAME_CONFIG.FEATURES?.cvStage,   // ARC CV-3a3 (653 (b)(c)) — łata sceny bitwy
+      smaa: !!GAME_CONFIG.FEATURES?.cvChoreo2 && !!this._smaaPass?.enabled });   // ARC CV-3c (decyzja 45 (5)) — wiązki pod SMAA
     if (this._cvLedger) this._cvWpnTick?.();   // ARC CV-4a — rejestr salw: trafienia (HP pokazywane), zniszczenia w swojej chwili
     if (this._cvShd || this._cvShdOn?.()) this._cvShdTick?.();   // ARC CV-4b — osłony: próbki, bańki (po przekształceniach sceny), osmalenia
     if (this._cueBus) this._flushCues();   // ARC CV-2b — sygnały walki, których czas nadszedł (zegar prezentacji)
@@ -8717,7 +8783,7 @@ export class ThreeRenderer {
     }
     // ARC CV-3a1 — start ruchu z pozycji BEZ sceny (`_spriteBase`): między klatkami sprite uczestnika sceny trzyma pozycję
     // rysowaną, a ruch płynny żyje w przestrzeni logicznej.
-    entry.glide = glideRetarget(g, to, this._spriteBase(vid, entry), window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1000);   // zapas = domyślna klucza
+    entry.glide = glideRetarget(g, to, this._spriteBase(vid, entry), window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 1150);   // zapas = domyślna klucza
   }
 
   // Co klatkę (także w pauzie gry — wtedy ruch stoi, jak starcie): sprite'y w ruchu o krok czasu realnego klatki.
@@ -8887,7 +8953,11 @@ export class ThreeRenderer {
     const H = window.innerHeight || 1;
     const vm = window.KOSMOS?.vesselManager;
     const orbital = window.KOSMOS?.orbitalSpaceSystem;
-    const roundMs = ts?.combatRoundMs?.() ?? 1000;   // zapas = domyślna klucza
+    const roundMs = ts?.combatRoundMs?.() ?? 1150;   // zapas = domyślna klucza
+    // ARC CV-3c (decyzja 44 (2)) — rozsunięcie sceny: prawo, podłogi i koperta choreografii razem (`BattleStageLogic.spreadLaw`);
+    // pokrętło czytane CO KLATKĘ — zmiana wchodzi w klucz rozwiązania, więc scena przestawia się odcinkiem ruchu (bez skoku).
+    const spreadK = Number(this.cvTuning?.STAGE_SPREAD);
+    const spread = Number.isFinite(spreadK) && spreadK > 0 ? Math.min(4, Math.max(0.25, spreadK)) : 1;
     const seen = new Set();
     const frame = { clusters: 0, staged: 0, fallback: 0, misbanded: 0, solves: 0, list: [] };
     for (const cl of clusters) {
@@ -8939,7 +9009,7 @@ export class ThreeRenderer {
       const origin = shellBody ? { x: shellBody.x, y: Number.isFinite(shellBody.y) ? shellBody.y : 0, z: shellBody.z } : { x: 0, y: 0, z: 0 };
       let key = '';
       for (const enc of cl.encs ?? []) key += `${enc.id}:${enc.currentRound ?? 0};`;
-      key += '#' + keyIds.join(',') + (shellBody ? `@${cl.shellBodyId}` : '');
+      key += '#' + keyIds.join(',') + (shellBody ? `@${cl.shellBodyId}` : '') + (spread !== 1 ? `|s${spread}` : '');
       let st = this._stageState.get(cl.id);
       if (!st) {
         st = { key: null, sol: null, offsets: null, from: new Map(), to: new Map(), seg: new Map(), el: 0, dur: 1, frame: -1, solves: 0, stagePos: new Map() };
@@ -8959,7 +9029,7 @@ export class ThreeRenderer {
         for (const q of inp) { cIn.x += q.x; cIn.z += q.z; }
         cIn.x /= inp.length; cIn.z /= inp.length;
         st.sol = solveStage({ points: inp, centre: cIn, L, edges, prevOffsets: st.offsets, priority,
-          shell: shellBody ? { body: shellBody, pinned: cl.pinnedIds } : null });
+          shell: shellBody ? { body: shellBody, pinned: cl.pinnedIds } : null, opts: spread !== 1 ? { SPREAD: spread } : {} });
         st.offsets = st.sol.offsets;
         // ARC CV-6b — RUCH CIĄGŁY W PRĘDKOŚCI: każdy statek dostaje odcinek Hermite'a od pozycji i prędkości wyświetlanej TERAZ
         // (odcinek tego klastra; po zmianie id klastra — cel i prędkość z poprzedniej klatki; nowy uczestnik — od razu w celu)
@@ -9031,6 +9101,7 @@ export class ThreeRenderer {
       const fieldShift = shellOn ? st.shift
         : (st.stagePos.size ? { x: dcm.x - fieldCentre.x, z: dcm.z - fieldCentre.z } : null);
       Object.assign(info, { blend, curve, pxL, fallback: sol.fallback, misbanded: sol.misbanded, misbandedBefore: sol.misbandedBefore,
+        law: sol.law ?? null, spread: sol.spread ?? 1,   // ARC CV-3c — prawo użyte (pole kliku, pasma choreografii)
         passes: sol.passes, centre: fieldCentre, rIn: sol.rIn, shift: fieldShift, scale: sol.fallback ? (sol.scale ?? null) : null,
         solves: st.solves, shell: shellOn ? { bodyR: sol.shell.bodyR, source: sol.shell.u.source, excluded: sol.shell.excluded, pinned: sol.shell.pinned } : null });
       let wSum = 0, wN = 0, kPin = 0;   // ARC CV-3a2 — średnie wejście uczestników w scenę (pole kliku: stopień × wejście)
@@ -9038,8 +9109,10 @@ export class ThreeRenderer {
       const avoid = shellOn ? { x: shellBody.x, y: origin.y, z: shellBody.z, r: shellBody.r + STAGE.SHELL_FLOOR_L * L } : null;
       // ARC CV-3b — choreografia: przesunięcia w kopercie klasy na kotwicach sceny (rzut pasm — D-CV-6); bez flagi i bez stanu — null.
       // Wołane przy fladze ON albo gdy statek klastra ma jeszcze stan choreografii (wyjście po wyłączeniu flagi — JOIN_MS).
+      // ARC CV-3c — choreografia w jednostkach sceny ROZSUNIĘTEJ (L × spread: koperta, sufit pionu, podłoga kolizji, margines pasm).
+      const Lc = L * (sol.spread ?? 1);
       const choreo = (GAME_CONFIG.FEATURES?.cvChoreo || pts.some((q) => this._stageMarks.get(q.id)?.ch))
-        ? this._choreoCluster(cl, st, pts, dt, L, avoid, info, vel) : null;
+        ? this._choreoCluster(cl, st, pts, dt, Lc, avoid, info, vel) : null;
       for (const q of pts) {
         const target = st.stagePos.get(q.id);
         if (!target) continue;
@@ -9052,7 +9125,7 @@ export class ThreeRenderer {
         // przypięto): baza tuż za skorupą w kierunku grupy; wchodzi na nią z ostatniej pozycji sprite'a przez JOIN_MS.
         if (shellOn && cl.pinnedIds?.has?.(q.id) && !orbital?.getOrbit?.(q.id)) {
           if (!m.stale) m.stale = { x: q.x, y: q.y, z: q.z };
-          const vb = shellBaseAt(shellBody, sol.shell.u, kPin++, L);
+          const vb = shellBaseAt(shellBody, sol.shell.u, kPin++, L, { latticeL: STAGE.DECONFLICT_L * (sol.spread ?? 1) });
           base = { x: m.stale.x + (vb.x - m.stale.x) * m.w, y: m.stale.y + (vb.y - m.stale.y) * m.w, z: m.stale.z + (vb.z - m.stale.z) * m.w };
         }
         // ARC CV-3b — cel rysowany = kotwica + przesunięcie choreografii; `m.tgt` zostaje kotwicą (ciągłość ruchu sceny przy zmianie
@@ -9068,7 +9141,7 @@ export class ThreeRenderer {
         seen.add(q.id);
       }
       info.join = wN ? wSum / wN : 0;
-      if (choreo) this._choreoPose(st, choreo, dt, L, info);   // ARC CV-3b — kurs (dziób ku celowi) i silnik po zapisie pozycji
+      if (choreo) this._choreoPose(st, choreo, dt, Lc, info);   // ARC CV-3b — kurs (dziób ku celowi) i silnik po zapisie pozycji
       frame.clusters++; frame.staged += pts.length;
       if (sol.fallback) frame.fallback++;
       frame.misbanded = Math.max(frame.misbanded, sol.misbanded);
@@ -9146,6 +9219,23 @@ export class ThreeRenderer {
     const ids = [], offsets = new Map(), env = new Map();
     const postures = {};
     let allKept = paused;   // pauza: wszystkie przesunięcia z poprzedniej klatki — bez kroku i bez rzutu (poza co do bitu)
+    // ARC CV-3c (decyzja 44 (3), flaga `cvChoreo2`) — lot wzdłuż kursu zamiast tańca w kopercie; przełączenie flagi przenika przez JOIN_MS
+    // (`m.c2w`): przy 0 — wyłącznie CV-3b co do bitu, przy 1 — wyłącznie CV-3c. Krawędzie pasm z prawa UŻYTEGO (rozsunięcie — CV-3c).
+    const on2 = !!GAME_CONFIG.FEATURES?.cvChoreo2;
+    const app = apparentEdges(this._stageEdges, st.sol?.law ?? undefined);
+    // ARC CV-3c — podłoga kolizji w L PRAWDZIWYCH (modele nie rosną z rozsunięciem — rośnie tylko odstęp): 1 / rozsunięcie w jednostkach
+    // sceny `L`; najbliższy odstęp kotwic każdego statku (ciasnota pętli CV-3c — gęsty szyk dostaje mniejsze pętle).
+    const floorScale = 1 / Math.max(1e-6, st.sol?.spread ?? 1);
+    const nearest = new Map();
+    {
+      const list = pts.map((q) => [q.id, anchors.get(q.id)]).filter(([, a]) => !!a);
+      for (let i = 0; i < list.length; i++) {
+        let mn = Infinity;
+        const a = list[i][1];
+        for (let j = 0; j < list.length; j++) if (j !== i) { const b = list[j][1]; mn = Math.min(mn, Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)); }
+        nearest.set(list[i][0], mn);
+      }
+    }
     for (const q of pts) {
       const A = anchors.get(q.id);
       if (!A) continue;
@@ -9154,8 +9244,9 @@ export class ThreeRenderer {
       if (!on && m.cw <= 0) { if (m.ch) this._choreoEnd(q.id, this._vessels.get(q.id), m); continue; }
       const v = vm?.getVessel?.(q.id);
       const enc = encOf.get(q.id);
-      if (!m.ch) m.ch = createChoreo(choreoSeed(enc?.id ?? cl.id, q.id), choreoClassOf(v ? vesselSizeClass(v) : null));
+      if (!m.ch) { m.ch = createChoreo(choreoSeed(enc?.id ?? cl.id, q.id), choreoClassOf(v ? vesselSizeClass(v) : null)); m.c2w = on2 ? 1 : 0; }
       const ch = m.ch;
+      m.c2w = Math.max(0, Math.min(1, (m.c2w ?? (on2 ? 1 : 0)) + (on2 ? 1 : -1) * dt / STAGE.JOIN_MS));
       const mo = v?.movementOrder;
       const posture = postureOf({ alive: aliveOf(q.id), retreating: mo?._retreatFromCombat === true || mo?.retreatFromBattleId != null,
         doctrine: fs?.getVesselFleet?.(q.id)?.doctrine ?? null, preferMaxRange: mo?.preferMaxRange === true });
@@ -9181,8 +9272,33 @@ export class ThreeRenderer {
         const n = Math.max(1, Math.ceil(ahead / 100));
         for (let i = 1; i <= n; i++) { const w = motionAt(seg, (st.el ?? 0) + ahead * i / n).v; vPeak = Math.max(vPeak, Math.hypot(w.x, w.y, w.z)); }
       }
-      const o = stepChoreoOffset(ch, { dtMs: dt, posture, threat: g > 1e-9 ? { dir: { x: dx / g, y: dy / g, z: dz / g }, gap: g } : null, L,
-        anchorSpeedL: vPeak * 1000 / L }, T);
+      const cin = { dtMs: dt, posture, threat: g > 1e-9 ? { dir: { x: dx / g, y: dy / g, z: dz / g }, gap: g } : null, L,
+        anchorSpeedL: vPeak * 1000 / L };
+      const c2 = m.c2w;
+      let o;
+      if (!(c2 > 0)) o = stepChoreoOffset(ch, cin, T);
+      else {
+        // ARC CV-3c — rama pętli od NAJBLIŻSZEGO żywego przeciwnika (histereza 15 %), nie od celu strzału: cel zmienia się co rundę, a pętla
+        // przypięta do niego obracała się wokół kotwicy (zmierzone na prawdziwym kleju: statek jechał bokiem). Strzela wieżyczka (CV-4a).
+        let lt = null, ld = Infinity;
+        for (const r of enemies) if (r.alive) { const d = Math.hypot(r.x - A.x, r.y - A.y, r.z - A.z); if (d < ld) { ld = d; lt = r; } }
+        const cur = ch.loopTgt != null ? enemies.find((r) => r.id === ch.loopTgt && r.alive) : null;
+        if (cur && lt && cur.id !== lt.id) {
+          const dc = Math.hypot(cur.x - A.x, cur.y - A.y, cur.z - A.z);
+          if (!(ld < 0.85 * dc)) { lt = cur; ld = dc; }
+        }
+        ch.loopTgt = lt?.id ?? null;
+        const lThreat = lt && ld > 1e-9 ? { dir: { x: (lt.x - A.x) / ld, y: (lt.y - A.y) / ld, z: (lt.z - A.z) / ld }, gap: ld } : cin.threat;
+        const c2in = { ...cin, app, nearestGap: nearest.get(q.id) ?? Infinity, floorScale };
+        if (c2 >= 1) o = stepChoreo2Offset(ch, { ...c2in, threat: lThreat }, T);
+        else {   // przenikanie trybów: wspólny krok raz (w CV-3b — rama od celu strzału), wzór CV-3c bez niego
+          const o1 = stepChoreoOffset(ch, cin, T), o2 = stepChoreo2Offset(ch, { ...c2in, skipCommon: true }, T);
+          o = { x: o1.x + (o2.x - o1.x) * c2, y: o1.y + (o2.y - o1.y) * c2, z: o1.z + (o2.z - o1.z) * c2 };
+        }
+      }
+      ch.mode2 = c2 > 0.5;
+      ch.c2 = c2;
+      ch.anchorVel = va ?? null;   // [j./ms] prędkość kotwicy (odcinek sceny) — kurs CV-3c idzie za kotwicą + wzorem
       if (!m.choreo) allKept = false;
       // ARC CV-5 — wrak dryfuje w kopercie klasy (deterministycznie z ziarna statku, od zera w chwili zniszczenia; pauza — klatka niżej
       // bierze przesunięcia poprzedniej klatki co do bitu)
@@ -9193,7 +9309,7 @@ export class ThreeRenderer {
     let res = null;
     if (allKept) for (const id of ids) offsets.set(id, this._stageMarks.get(id).choreo);
     else {
-      res = constrainChoreo({ ids, anchors, offsets, app: this._stageApp ?? (this._stageApp = apparentEdges(this._stageEdges)), L,
+      res = constrainChoreo({ ids, anchors, offsets, app, L, floorScale,
         weights: env, envelopes: env, vertMax: Math.max(0, T?.CHOREO_VERT ?? 0.6) * L, shell,
         warm: st.choreoWarm ?? (st.choreoWarm = new Map()), warmDecay: paused ? 1 : undefined });
     }
@@ -9203,7 +9319,8 @@ export class ThreeRenderer {
       const prev = info.choreo;
       info.choreo = { ships: ids.length, meanL: sum / ids.length, maxL: max, postures,
         clamped: res ? res.clamped : (prev?.clamped ?? 0), halved: res ? res.halved : (prev?.halved ?? 0), zeroed: res ? res.zeroed : (prev?.zeroed ?? 0),
-        bowDeg: prev?.bowDeg ?? null };
+        bowDeg: prev?.bowDeg ?? null, flightDeg: prev?.flightDeg ?? null,
+        mode2: ids.filter((id) => this._stageMarks.get(id)?.ch?.mode2).length };
     }
     return offsets;
   }
@@ -9214,6 +9331,7 @@ export class ThreeRenderer {
     const anchors = st.stagePos;
     const vm = window.KOSMOS?.vesselManager;
     const errs = [];
+    let flight = null;   // ARC CV-3c — kąt dziób ↔ ruch rysowany
     for (const [id, o] of offsets) {
       const e = this._vessels.get(id), m = this._stageMarks.get(id), ch = m?.ch;
       if (!e?.sprite || !ch) continue;
@@ -9230,7 +9348,34 @@ export class ThreeRenderer {
           _CHV.set(0, 0, 1).applyQuaternion(e.sprite.quaternion);
           initYaw = Math.atan2(_CHV.x, _CHV.z); initPitch = Math.asin(Math.max(-1, Math.min(1, _CHV.y)));
         }
-        const f = stepChoreoFacing(ch, { dtMs: dt, posture: ch.posture, aim, initYaw, initPitch }, T);
+        let f;
+        if (ch.mode2) {
+          // ARC CV-3c — dziób za RUCHEM RYSOWANYM (prędkość sprite'a z tej klatki: kotwica, pętla i poprawka rzutu pasm), wygładzonym
+          // `CHOREO2_VEL_TAU` × mnożnik klasy (`CHOREO2_CLASS.velTauK`): statek nie jedzie bokiem także wtedy, gdy rzut odchyla pętlę w gęstym
+          // szyku, a kotwice błądzą z rundy na rundę (~0,2 L — prowadnica sceny, CV-6b) — duży okręt uśrednia to błądzenie dłużej, zamiast gonić
+          // każdy zwrot (pomiar na prawdziwym kleju: pancernik 30 °/s z wygładzeniem 120 ms stał w nasyceniu skrętu połowę czasu). Pierwsza
+          // klatka — prędkość zamierzona (kotwica + wzór pętli).
+          const k2 = (m.cw ?? 1) * (ch.c2 ?? 1), va = ch.anchorVel, vp = ch.f2?.vel;
+          const vInt = { x: (va?.x ?? 0) + (vp?.x ?? 0) * k2, y: (va?.y ?? 0) + (vp?.y ?? 0) * k2, z: (va?.z ?? 0) + (vp?.z ?? 0) * k2 };
+          const p = e.sprite.position, lp = ch.lastDrawn;
+          const a = dt > 0 ? 1 - Math.exp(-dt / Math.max(1, (T?.CHOREO2_VEL_TAU ?? 120) * (ch.velTauK ?? 1))) : 0;
+          if (ch.headLoop) {
+            // pancernik (`CHOREO2_CLASS.headLoop`): własna pętla (~0,1 L/s) jest wolniejsza od błądzenia kotwic, którego 30 °/s nie dogoni —
+            // dziób za pętlą (postać zamknięta) i za przestawianiem szyku od `CHOREO2_DRIFT_V0` [L/s sceny] (podchodzenie, odwrót)
+            const sA = va ? Math.hypot(va.x, va.y, va.z) * 1000 / L : 0;
+            const d0 = T?.CHOREO2_DRIFT_V0 ?? 0.35, d1 = Math.max(d0 + 1e-6, T?.CHOREO2_DRIFT_V1 ?? 1.0);
+            const u = Math.max(0, Math.min(1, (sA - d0) / (d1 - d0))), wA = u * u * (3 - 2 * u);
+            const vl = { x: (va?.x ?? 0) * wA + (vp?.x ?? 0) * k2, y: (va?.y ?? 0) * wA + (vp?.y ?? 0) * k2, z: (va?.z ?? 0) * wA + (vp?.z ?? 0) * k2 };
+            const s0 = ch.velDrawnS ?? vl;
+            ch.velDrawnS = { x: s0.x + (vl.x - s0.x) * a, y: s0.y + (vl.y - s0.y) * a, z: s0.z + (vl.z - s0.z) * a };
+          } else if (lp && dt > 0) {
+            const vd = { x: (p.x - lp.x) / dt, y: (p.y - lp.y) / dt, z: (p.z - lp.z) / dt };
+            const s0 = ch.velDrawnS ?? vd;
+            ch.velDrawnS = { x: s0.x + (vd.x - s0.x) * a, y: s0.y + (vd.y - s0.y) * a, z: s0.z + (vd.z - s0.z) * a };
+          } else if (!ch.velDrawnS) ch.velDrawnS = vInt;
+          ch.velInt = ch.velDrawnS;
+          f = stepChoreo2Facing(ch, { dtMs: dt, posture: ch.posture, vel: ch.velDrawnS, aim, L, initYaw, initPitch }, T);
+        } else f = stepChoreoFacing(ch, { dtMs: dt, posture: ch.posture, aim, initYaw, initPitch }, T);
         ch.q = f.q;
         this._choreoOrient(id, e, m, m.cw ?? 1);
         if (aim && ch.posture !== 'retreat' && ch.posture !== 'disabled') {
@@ -9238,9 +9383,18 @@ export class ThreeRenderer {
           const bx = Math.sin(f.yaw) * Math.cos(f.pitch), by = Math.sin(f.pitch), bz = Math.cos(f.yaw) * Math.cos(f.pitch);
           const ang = Math.acos(Math.max(-1, Math.min(1, (bx * aim.x + by * aim.y + bz * aim.z) / al))) / Math.PI * 180;
           errs.push(ch.cls === 'battleship' ? Math.abs(90 - ang) : ang);
+          // ARC CV-3c — kąt dziób ↔ ruch RYSOWANY (różnica pozycji sprite'a między klatkami; przy prędkości > 0,05 L/s)
+          const p = e.sprite.position, lp = ch.lastDrawn;
+          if (lp && dt > 0) {
+            const vx = (p.x - lp.x) / dt, vy = (p.y - lp.y) / dt, vz = (p.z - lp.z) / dt, vl = Math.hypot(vx, vy, vz);
+            if (vl * 1000 / L > 0.05) (flight ??= []).push(Math.acos(Math.max(-1, Math.min(1, (bx * vx + by * vy + bz * vz) / vl))) / Math.PI * 180);
+          }
         }
+        if (dt > 0) ch.lastDrawn = { x: e.sprite.position.x, y: e.sprite.position.y, z: e.sprite.position.z };
       }
-      const lvl = stepChoreoEngine(ch, { dtMs: dt, posture: ch.posture, L }, T);
+      const vi = ch.velInt;
+      const lvl = ch.mode2 ? stepChoreo2Engine(ch, { dtMs: dt, posture: ch.posture, L, speed: vi ? Math.hypot(vi.x, vi.y, vi.z) : 0 }, T)
+        : stepChoreoEngine(ch, { dtMs: dt, posture: ch.posture, L }, T);
       ch.engineOut = lvl;
       const v = vm?.getVessel?.(id);
       const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!(v?.isWreck || e.isWreck || e.cvKilled) });
@@ -9249,6 +9403,10 @@ export class ThreeRenderer {
     if (info?.choreo && errs.length) {
       errs.sort((a, b) => a - b);
       info.choreo.bowDeg = { median: errs[Math.floor(errs.length / 2)], max: errs[errs.length - 1] };
+    }
+    if (info?.choreo && flight?.length) {
+      flight.sort((a, b) => a - b);
+      info.choreo.flightDeg = { median: flight[Math.floor(flight.length / 2)], max: flight[flight.length - 1], n: flight.length };
     }
   }
 
@@ -9329,7 +9487,7 @@ export class ThreeRenderer {
       e._choreoExhaust = false;
       const v = window.KOSMOS?.vesselManager?.getVessel?.(id);
       if (v) this._applyExhaust(v, e);
-      else if (e.exhaust) e.exhaust.visible = false;
+      else { if (e.exhaust) e.exhaust.visible = false; for (const g of e.rig?.glows ?? []) g.group.visible = false; }
     }
     if (m) { m.ch = null; m.choreo = null; m.cw = 0; }
   }
@@ -9340,9 +9498,11 @@ export class ThreeRenderer {
     if (!cone) return;
     e._choreoExhaust = true;
     if (e.cvDmgSputter != null && GAME_CONFIG.FEATURES?.cvDamage) intensity *= e.cvDmgSputter;   // ARC CV-5 — krztuszący się silnik (≤ 25 % HP)
+    const flick = 0.8 + 0.2 * Math.sin(this._stageClock.nowMs * 0.02 + (e._exhaustPhase ?? 0));
+    // ARC CV-3c (`cvChoreo2`) — wylot dysz zamiast stożka: jasność z choreografii, zakrztuszenie migocze wylotem (iskry z dyszy — CV-5)
+    if (this._nozzleGlowSet?.(e, intensity, flick)) return;
     if (!GAME_CONFIG.FEATURES?.fcCombatFx || e.isWreck || !(intensity > 0.002)) { cone.visible = false; return; }
     cone.visible = true;
-    const flick = 0.8 + 0.2 * Math.sin(this._stageClock.nowMs * 0.02 + (e._exhaustPhase ?? 0));
     if (cone.material) cone.material.opacity = 0.35 * intensity * flick;
     if (e.canonical) {
       const T = this.cvTuning;
@@ -9351,6 +9511,45 @@ export class ThreeRenderer {
       return;
     }
     cone.scale.x = intensity * (0.85 + 0.3 * flick);
+  }
+
+  /**
+   * ARC CV-3c (decyzja właściciela 44 (4), flaga `cvChoreo2`) — WYLOT DYSZ zamiast stożka smugi: rdzeń HDR w otworze dyszy (ponad
+   * progiem bloomu), miękka poświata i krótki słaby błysk ciągu (długość ∝ ciąg²), cyjan statków warp. Jasność `intensity` (0..1 —
+   * choreografia w walce, `exhaustIntensityRaw` w locie; zakrztuszenie już wliczone), migotanie `flick` na zegarze prezentacji
+   * (pauza = pauza). Zwraca true, gdy rysuje wylot (stożek schowany); false — flaga OFF albo statek bez wylotów (ścieżka stożka bez
+   * zmian, wyloty schowane). Pokrętła `cvTuning.NOZZLE_*` czytane co klatkę.
+   */
+  _nozzleGlowSet(e, intensity, flick = 1) {
+    const gl = e?.rig?.glows;
+    if (!gl?.length) return false;
+    const F = GAME_CONFIG.FEATURES;
+    if (!F?.cvChoreo2) { for (const g of gl) g.group.visible = false; return false; }
+    if (e.exhaust) e.exhaust.visible = false;
+    const I = !F?.fcCombatFx || e.isWreck || e.cvKilled ? 0 : Math.max(0, Math.min(1.5, Number(intensity) || 0));
+    const on = I > 0.002;
+    const T = this.cvTuning ?? {};
+    const k = Math.min(1, I);
+    // decyzja właściciela 45 (4) — preset Niska: sam rdzeń wylotu (bez poświaty i błysku ciągu); Wysoka / Średnia — pełny wylot
+    const coreOnly = !!F?.cvPresets && this._gfx?.level === 'low';
+    for (const g of gl) {
+      g.group.visible = on;
+      if (!on) continue;
+      g.halo.visible = !coreOnly;
+      const r = g.r * (T.NOZZLE_R_MUL ?? 1);
+      const cs = (T.NOZZLE_CORE_K ?? 2.0) * r * (0.85 + 0.25 * I) * (0.94 + 0.06 * flick);
+      g.core.scale.set(cs, cs, 1);
+      g.core.material.color.setHex(NOZZLE_KEY_HEX).multiplyScalar((T.NOZZLE_CORE ?? 3.2) * (0.35 + 0.65 * k) * (0.9 + 0.1 * flick));
+      const hs = (T.NOZZLE_HALO_K ?? 5.5) * r * (0.7 + 0.45 * I);
+      g.halo.scale.set(hs, hs, 1);
+      g.halo.material.color.setHex(NOZZLE_KEY_HEX).multiplyScalar((T.NOZZLE_HALO ?? 0.5) * k);
+      const fl = (T.NOZZLE_FLARE_LEN ?? 3.2) * r * k * k * (0.85 + 0.3 * flick);
+      g.flare.visible = !coreOnly && fl > r * 0.05;
+      const fw = (T.NOZZLE_FLARE_W ?? 1.6) * r;
+      g.flare.scale.set(fw, fw, Math.max(1e-6, fl));
+      g.flare.material.color.setHex(NOZZLE_KEY_HEX).multiplyScalar((T.NOZZLE_FLARE ?? 0.6) * k);
+    }
+    return true;
   }
 
   // ── ARC CV-3a2 (D-CV-5) — POLE KLIKU SCENY: punkt pod kursorem (rysowany) ↔ punkt bez sceny (logiczny) ─────────────────
@@ -9367,7 +9566,8 @@ export class ThreeRenderer {
       const blend = (c.blend ?? 0) * (c.join ?? 0);
       if (!c.centre || !(c.rIn > 0) || !(blend > 0)) continue;
       out.push({ id: c.id, centre: { x: c.centre.x, z: c.centre.z }, rIn: c.rIn, blend, scale: c.scale ?? null,
-        shift: c.shift ? { x: c.shift.x, z: c.shift.z } : null });   // CV-3a3 — przy skorupie: pole przesunięte (D-CV-5)
+        shift: c.shift ? { x: c.shift.x, z: c.shift.z } : null,   // CV-3a3 — przy skorupie: pole przesunięte (D-CV-5)
+        ...(c.law ? { law: c.law } : {}) });   // CV-3c — pole z prawem ROZSUNIĘTEJ sceny (klik pod kursorem przy każdym `STAGE_SPREAD`)
     }
     return out;
   }
@@ -9426,11 +9626,14 @@ export class ThreeRenderer {
         choreo: c.choreo ? `${c.choreo.ships} · ${c.choreo.meanL.toFixed(2)} / ${c.choreo.maxL.toFixed(2)} L` : '—',
         postawy: c.choreo ? Object.entries(c.choreo.postures).map(([k, n]) => `${k} ${n}`).join(' · ') : '—',
         dziob: c.choreo?.bowDeg ? `${c.choreo.bowDeg.median.toFixed(0)}° / ${c.choreo.bowDeg.max.toFixed(0)}°` : '—',
+        // ARC CV-3c — tryb choreografii (lot wzdłuż kursu — statki w trybie 2) i kąt dziób ↔ ruch rysowany mediana / max [°]
+        lot: c.choreo ? `${c.choreo.mode2 ?? 0} / ${c.choreo.ships}` + (c.choreo.flightDeg ? ` · dziób↔ruch ${c.choreo.flightDeg.median.toFixed(1)}° / ${c.choreo.flightDeg.max.toFixed(0)}°` : '') : '—',
+        rozsuniecie: +(c.spread ?? 1).toFixed(2),
         rzut: c.choreo ? `${c.choreo.clamped} par` + (c.choreo.halved || c.choreo.zeroed ? ` · awaryjnie ${c.choreo.halved} / ${c.choreo.zeroed}` : '') : '—',
       });
     }
     console.table(rows);
-    return { cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo, clusters: rows };
+    return { cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo, cvChoreo2: !!GAME_CONFIG.FEATURES?.cvChoreo2, clusters: rows };
   }
 
   // ARC CV-3a1 (Finding 643) — kadr walki z osią NA bitwie: cel = środek RYSOWANYCH żywych, widocznych uczestników klastra

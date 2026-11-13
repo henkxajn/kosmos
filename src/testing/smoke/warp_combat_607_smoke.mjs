@@ -19,6 +19,10 @@
 // T11  pomocniki bramki: `probe603Battle(1)`, `fleetWarpBattle(i)`.
 //
 // Nagranie baseline'u (TYLKO na drzewie sprzed naprawy): … --record  z F607_BASELINE_COMMIT=<hash>
+// ⚠ PRZECELOWANIE CV-3c (decyzja właściciela 44 (5), 2026-11-12): wrak leży w miejscu śmierci okrętu, nie w punkcie środkowym starcia.
+//   Dwa ślady z wrakiem AI (`ai_lost_battle`, `ai_wrecked_mid_flight`) porównujemy z nagraniem CV-3c (`--record-cv3c`, osobny plik);
+//   ŚWIADEK: po podstawieniu starej współrzędnej x wraku ślad CV-3c jest co do bajtu starym nagraniem (M1 / eca9a3b) — zmienił się
+//   wyłącznie punkt wraku, nic więcej (zdarzenia, stany, misje, paliwo, stempel układu).
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { reseed } from '../headless/env.js';
@@ -224,6 +228,17 @@ if (process.argv.includes('--record-m1')) {
   logOut(`nagrano ${FIXTURE_M1}`);
   process.exit(0);
 }
+// ⚠ PRZECELOWANIE CV-3c (decyzja 44 (5)): wrak w miejscu śmierci okrętu. Dwa ślady z wrakiem AI — nagranie CV-3c (osobny plik). Stare
+//   nagrania zostają: świadek T0 sprawdza, że różnica to WYŁĄCZNIE współrzędna x wiersza wraku (pole 4).
+const CV3C_RETRACED = ['ai_lost_battle', 'ai_wrecked_mid_flight'];
+const FIXTURE_CV3C = join(SRC, 'testing', 'fixtures', 'traces', 'CV3c-warp-combat-wreck-baseline.json');
+if (process.argv.includes('--record-cv3c')) {
+  mkdirSync(dirname(FIXTURE_CV3C), { recursive: true });
+  writeFileSync(FIXTURE_CV3C, JSON.stringify({ step: 'CV-3c', recordedFrom: process.env.CV3C_BASELINE_COMMIT ?? 'unknown', flightTicks: FLIGHT,
+    traces: Object.fromEntries(CV3C_RETRACED.map((n) => [n, recorded[n]])) }));
+  logOut(`nagrano ${FIXTURE_CV3C}`);
+  process.exit(0);
+}
 
 section('T0 — ślad AI i kontroli gracza jak na eca9a3b');
 let BASE = null;
@@ -232,9 +247,31 @@ assert(BASE?.recordedFrom === 'eca9a3b', 'T0 nagranie z eca9a3b istnieje');
 let BASE_M1 = null;
 try { BASE_M1 = JSON.parse(readFileSync(FIXTURE_M1, 'utf8')); } catch { BASE_M1 = null; }
 assert(BASE_M1?.step === 'M1', 'T0 nagranie M1 (dwa ślady odwrotu AI) istnieje');
+let BASE_CV3C = null;
+try { BASE_CV3C = JSON.parse(readFileSync(FIXTURE_CV3C, 'utf8')); } catch { BASE_CV3C = null; }
+assert(BASE_CV3C?.step === 'CV-3c', 'T0 nagranie CV-3c (dwa ślady z wrakiem AI) istnieje');
+const oldRefOf = (name) => (M1_RETRACED.includes(name) ? BASE_M1?.traces?.[name] : BASE?.traces?.[name]);
 for (const name of Object.keys(TRACES)) {
-  const ref = M1_RETRACED.includes(name) ? BASE_M1?.traces?.[name] : BASE?.traces?.[name];
-  assert(ref != null && recorded[name] === ref, `T0 ślad ${name} === nagranie${M1_RETRACED.includes(name) ? ' (M1)' : ''}`);
+  const cv3c = CV3C_RETRACED.includes(name);
+  const ref = cv3c ? BASE_CV3C?.traces?.[name] : oldRefOf(name);
+  assert(ref != null && recorded[name] === ref, `T0 ślad ${name} === nagranie${cv3c ? ' (CV-3c)' : M1_RETRACED.includes(name) ? ' (M1)' : ''}`);
+}
+// ŚWIADEK przecelowania CV-3c: podstawienie starej współrzędnej x wiersza wraku (pole 4) daje co do bajtu stare nagranie, a różnica
+// istnieje (ślad bez podstawienia ≠ stare nagranie) — zmienił się wyłącznie punkt wraku.
+for (const name of CV3C_RETRACED) {
+  let now = null, old = null;
+  try { now = JSON.parse(recorded[name]); old = JSON.parse(oldRefOf(name)); } catch { now = old = null; }
+  let wreckRows = 0, onlyX = !!(now && old) && now.samples?.length === old.samples?.length;
+  if (onlyX) {
+    const patched = { ...now, samples: now.samples.map((sample, i) => sample.map((row, j) => {
+      const a = row.split('|'), b = String(old.samples[i]?.[j] ?? '').split('|');
+      if (a[14] === 'true' && b[14] === 'true' && a[4] !== b[4]) { wreckRows++; a[4] = b[4]; }
+      return a.join('|');
+    })) };
+    onlyX = JSON.stringify(patched) === oldRefOf(name);
+  }
+  assert(onlyX && wreckRows > 0 && recorded[name] !== oldRefOf(name),
+    `T0 ŚWIADEK CV-3c ${name}: różnica wobec starego nagrania to wyłącznie x wraku (${wreckRows} wierszy), reszta co do bajtu`);
 }
 {
   const arrivals = (rec) => rec.events.filter((e) => e.name === 'interstellar:arrived').length;

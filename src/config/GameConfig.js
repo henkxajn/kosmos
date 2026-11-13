@@ -563,6 +563,15 @@ export const GAME_CONFIG = {
     //   żadna para nie zmienia pasma odległości na scenie (rzut par). Deterministyczna (ziarno: id starcia + id statku), zegar
     //   prezentacji (pauza = pauza). Wyłącznie rysunek. Wyłączenie: KOSMOS.debug.cvChoreo(0) (statki wracają do kotwic w 0,5 s).
     cvChoreo: true,
+    // `cvChoreo2` (CV-3c, decyzja właściciela 44) — LOT WZDŁUŻ KURSU zamiast tańca w kopercie (`ChoreographyLogic.stepChoreo2*`): prędkość
+    //   ≈ kierunek dziobu (nigdy bokiem), skręt z sufitem klasy i przechyłem; fregata — ósemka (przeloty i szerokie pętle), niszczyciel —
+    //   krążenie w zasięgu broni, pancernik — powolne koło burtą; do celu strzelają wieżyczki (CV-4a). Pętla na sferze wokół celu (odstęp
+    //   do celu bez zmian), ku celowi tylko w przedziale pary — niezmiennik D-CV-6 (rzut par) bez zmian. Do tego WYLOT DYSZ zamiast
+    //   stożków smugi (cyjanowy rdzeń HDR w dyszy, poświata, krótki słaby błysk ciągu; zakrztuszenie ≤ 25 % HP — migotanie i iskry),
+    //   nieregularne odłamki z żarem tylko na krawędziach i dryf wraków po bitwie. Wymaga `cvChoreo` (choreografia) i `cvStage`.
+    //   Czytana CO KLATKĘ; przełączenie przenika przez 0,5 s czasu prezentacji. OFF = choreografia CV-3b, stożki smugi, odłamki CV-5
+    //   co do bitu (dla porównania). Wyłączenie: KOSMOS.debug.cvChoreo2(0).
+    cvChoreo2: true,
     // `cvPresets` (CV-2b) — PRESETY JAKOŚCI High / Medium / Low (`src/data/CombatFxPresets.js`, `QualityPreset.js`): gęstość
     //   pikseli renderera, bloom, stała pula świateł efektów (4 / 2 / 0 — w spoczynku jasność 0, D-CV-18), tekstury statków 2K / 1K
     //   (`<slot>@1k.glb`; sloty bez wariantu 1K zostają przy 2K), budżety efektów drugorzędnych dla CV-4b / CV-5 i dławienie

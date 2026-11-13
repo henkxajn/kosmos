@@ -371,7 +371,13 @@ export class VesselCombatSystem {
   // w testach headless.
 
   _wreckGroup(group, mid, year) {
-    for (const v of group) this._wreckOne(v, mid, year);
+    // ARC CV-3c (decyzja właściciela 44 (5)) — bliźniak DSCS (ścieżka wycofania przy `m4DeepSpaceCombat` OFF): wrak w miejscu okrętu, nie
+    // w punkcie środkowym starcia (bitwa rozstrzygana od razu — pozycja w chwili rozstrzygnięcia = miejsce śmierci); bez pozycji — punkt
+    // środkowy jak dawniej.
+    for (const v of group) {
+      const p = v?.position;
+      this._wreckOne(v, p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : mid, year);
+    }
   }
 
   _wreckOne(vessel, mid, year) {
