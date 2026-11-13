@@ -73,6 +73,7 @@ import { STATION_MODULES } from '../data/StationModuleData.js';
 // ARKUSZ HUD paczka B (B-1, B-2) — model uwagi, nawiasy statku jako przeszkoda, alerty.
 import { labelAttentionTarget, makeAttentionMemory, bracketBox } from './HudAttentionLogic.js';
 import { HUD_ALERT } from './HudAlertLogic.js';
+import { tacActive } from './HudCombatLogic.js';   // ARC CV-6a — uczestnicy bitwy w widoku bez etykiet nazw (flaga `cvTactical`)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const q = (v) => Math.round(v * 1000);          // klucz klatki — położenie z dokładnością 0,001 j.
@@ -246,7 +247,14 @@ export class HudLabelLayer {
         });
         this._ptsCache = { key: ckey, t: F.now, points: all };
       }
-      for (const p of all) { const w = visibleWorld(p.id); if (w) { vworld.set(p.id, w); points.push(p); } }
+      // ARC CV-6a (flaga `cvTactical`) — uczestnik bitwy w widoku: bez etykiety nazwy (ikona warstwy taktycznej, nazwa przy
+      // najechaniu w linii warstwy); zaznaczony — etykieta zostaje. OFF — jak dziś.
+      const tacPart = tacActive(F.features) ? (tr?._stageParticipants ?? null) : null;
+      const tacKeep = tacPart?.size ? new Set([...(sel.vesselIds ?? []), sel.leadId].filter((x) => x != null).map(String)) : null;
+      for (const p of all) {
+        if (tacKeep && tacPart.has(p.id) && !tacKeep.has(String(p.id))) continue;
+        const w = visibleWorld(p.id); if (w) { vworld.set(p.id, w); points.push(p); }
+      }
     }
     let key = `l:1:${fontStatus}:${F.tactical ? 1 : 0}:${getLocale()}:${sel.stationId ?? ''}:${hover.bodyId ?? ''}:${hover.vesselId ?? ''}:${hover.labelKey ?? ''}`;
     for (const b of bodies) key += `|${b.key}:${q(b.world.x)},${q(b.world.y)},${q(b.world.z)}:${b.name}:${b.pop ?? ''}:${b.free ?? ''}:${b.cap ?? ''}:${(b.badges ?? []).join('')}`;

@@ -3418,6 +3418,14 @@ export default {
   'combatStrip.watchHint':  'Kamera na tę bitwę',
   'combatStrip.expand':     'Szczegóły bitwy',
   'combatStrip.collapse':   'Zwiń szczegóły',
+  'combatTac.hp':              'HP {0}%',
+  'combatTac.unknown':         'nieznany kontakt',
+  'combatTac.wreck':           'zniszczony',
+  'combatTac.class.frigate':   'fregata',
+  'combatTac.class.destroyer': 'niszczyciel',
+  'combatTac.class.battleship': 'pancernik',
+  'combatTac.class.civilian':  'statek cywilny',
+  'combatTac.class.unknown':   'nieznany',
 
   // === DiplomacyOverlay ===
   'diplo.state.peace':      'POKÓJ',

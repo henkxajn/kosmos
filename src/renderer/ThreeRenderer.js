@@ -74,6 +74,7 @@ import { GalaxyPlate } from './GalaxyPlate.js';   // ARC GALAXY G1 — płyta ga
 import { GALAXY_K, GALAXY_LAYER, CAMERA_FAR, GALAXY_FADE_MS, GALAXY_PICK_HALF_PX, LIVE_GALAXY, pickGalaxyStar }
   from '../ui/GalaxyModeLogic.js';
 import { makeHudProjector } from '../ui/HudProjection.js';   // ARC GALAXY G1 — rzut gwiazd płyty (ten sam co warstwa HUD)
+import { tacActive } from '../ui/HudCombatLogic.js';         // ARC CV-6a — warstwa taktyczna (flaga `cvTactical`): koniec pasków HP 3D
 import { GalaxyTerritory } from './GalaxyTerritory.js';     // ARC GALAXY G2-3 — terytorium na płycie (rozlane światło, zasłony)
 import { buildPlateTerritoryPayload, plateTerritoryVisibility, plateOwnerHalos, plateRiserIds } from '../ui/GalaxyTerritoryLogic.js';
 import { subPixelHidden } from '../ui/GalaxyFlightLogic.js'; // ARC GALAXY G2-1 — siatki poniżej 0,5 px chowane w trakcie lotu
@@ -96,7 +97,7 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
   isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS, ENGAGEMENT_RING, engagementRingBand,
   isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR, HIT_GLOW, hitGlowWorldSize,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
-  EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
+  EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR, rumorGhostHold }
   from '../utils/VesselFxLogic.js';
 import { orbitClockSec, simClockMs } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika); paczka B — puls celownika
 import { planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
@@ -4066,6 +4067,21 @@ export class ThreeRenderer {
     return out;
   }
 
+  // ARC CV-6a — kierunek DZIOBU statku w świecie (jednostkowy) z macierzy sprite'a: rama kanoniczna (`entry.canonical`, CV-1a) —
+  // dziób w lokalnym +Z, ścieżka OFF / billboard — dziób w lokalnym −X (dawna orientacja modeli). Choreografia (kurs, pochylenie)
+  // jest w macierzy, więc to kurs RYSOWANY. `null` bez sprite'a albo dla billboardu (bez modelu — kurs nieznany).
+  getVesselBowWorld(vesselId) {
+    const e = this._vessels.get(vesselId);
+    const sp = e?.sprite;
+    if (!sp || !e.isModel3D) return null;
+    sp.updateMatrixWorld?.();
+    const m = sp.matrixWorld?.elements;
+    if (!m) return null;
+    const x = e.canonical ? m[8] : -m[0], y = e.canonical ? m[9] : -m[1], z = e.canonical ? m[10] : -m[2];
+    const l = Math.hypot(x, y, z);
+    return l > 1e-9 ? { x: x / l, y: y / l, z: z / l } : null;
+  }
+
   // ARKUSZ HUD paczka A (493) — środek stacji (j.) i promień jej modelu (j.; sfera prostopadłościanu modelu w świecie,
   // liczona raz na model — stacja nie obraca się; placeholder → GLB przelicza). `null`, gdy stacji nie ma w scenie.
   getStationWorldInfo(stationId) {
@@ -4137,7 +4153,11 @@ export class ThreeRenderer {
     }
     // Statki (żywe + wraki, różne kolory)
     const vMgr = window.KOSMOS?.vesselManager;
+    // ARC CV-6a, decyzja właściciela 46 (1) — uczestników bitwy w widoku nazywa przy CTRL warstwa taktyczna (przy ich ikonach, rozkład bez
+    // kupy); tu ich pomijamy. Flaga OFF — etykiety CTRL jak dziś.
+    const tacPart = tacActive(GAME_CONFIG.FEATURES) ? this._stageParticipants : null;
     for (const [id, entry] of this._vessels) {
+      if (tacPart?.has?.(id)) continue;
       const p = project(entry.sprite);
       if (!p || !entry.sprite.visible) continue;
       const vessel = vMgr?.getVessel(id);
@@ -5705,6 +5725,9 @@ export class ThreeRenderer {
       // prawdy: bodyId ⇒ orbita, null ⇒ wolna przestrzeń. Wraki pomijamy (mają graveyard-
       // orbit lub wreckLocation w _syncVesselPositions).
       const v = vm?.getVessel?.(id);
+      // ARC CV-6a (Finding 633) — duch `rumor` stoi w położeniu ostatnio znanym (bez zapisu żywego — orbita ciała i wolna przestrzeń).
+      const ghost = v ? this._rumorGhostPos(v, entry) : null;
+      if (ghost) { if (ghost.hold !== true) entry.sprite.position.set(S(ghost.x), 0.3, S(ghost.y)); continue; }
       if (v && !v.isWreck && v.position?.state === 'orbiting' && v.position?.dockedAt == null) {
         const vx = isNaN(v.position.x) ? 0 : v.position.x;
         const vy = isNaN(v.position.y) ? 0 : v.position.y;
@@ -6057,7 +6080,10 @@ export class ThreeRenderer {
           // Spójność z _tickOrbitingVessels: orbiting w wolnej przestrzeni (engage/drift,
           // dockedAt=null) — pozycja z real x,y, NIE z nieaktualnej orbity macierzystej.
           // POLISH P2b (D3, Finding 461) — uczestnik oglądanego starcia: płynnie (`_placeFreeVessel`).
-          this._placeFreeVessel(vessel.id, entry, vx, vy);
+          // ARC CV-6a (Finding 633) — duch `rumor` zostaje w położeniu ostatnio znanym (bez zapisu żywego).
+          const ghost = this._rumorGhostPos(vessel, entry);
+          if (ghost) { if (ghost.hold !== true) entry.sprite.position.set(S(ghost.x), 0.3, S(ghost.y)); }
+          else this._placeFreeVessel(vessel.id, entry, vx, vy);
         }
         continue;
       }
@@ -6171,6 +6197,17 @@ export class ThreeRenderer {
   //   detailed → pełny sprite (opacity 1.0)
   // Fallback gdy FEATURES.m4EnemyGhosts=false: legacy fog-of-war via
   // ObservatorySystem.isVesselDetected (binary visible).
+
+  // ARC CV-6a (Finding 633) — położenie DUCHA `rumor` (ostatnio znane) dla statku, którego sprite ma je trzymać, także w stanie
+  // `orbiting` (orbita ciała, wolna przestrzeń); `{ hold: true }` — trzymaj bez położenia (wywiad bez `positionLastKnown` — nie
+  // śledzimy żywego); `null` — zwykły zapis żywego położenia (własny, `contact` / `detailed`, ujawniony w starciu, flaga duchów OFF).
+  _rumorGhostPos(vessel, entry) {
+    if (!entry || entry.isWreck || entry.intelQuality !== 'rumor') return null;
+    if (!rumorGhostHold({ isEnemy: isEnemyVessel(vessel), quality: entry.intelQuality, revealed: this._isCombatRevealed(vessel.id),
+      ghostsOn: !!GAME_CONFIG.FEATURES.m4EnemyGhosts })) return null;
+    const lk = window.KOSMOS?.intelSystem?.getVesselContact?.(vessel.id)?.positionLastKnown ?? null;
+    return lk && Number.isFinite(lk.x) && Number.isFinite(lk.y) ? { x: lk.x, y: lk.y } : { hold: true };
+  }
 
   _applyVesselIntelVisibility(vessel, entry) {
     if (!entry || entry.isWreck) return;
@@ -8961,7 +8998,7 @@ export class ThreeRenderer {
     const seen = new Set();
     const frame = { clusters: 0, staged: 0, fallback: 0, misbanded: 0, solves: 0, list: [] };
     for (const cl of clusters) {
-      const info = { id: cl.id, encounterIds: cl.encounterIds, encs: cl.encs, members: 0, pinned: cl.pinned, shellBodyId: cl.shellBodyId ?? null,
+      const info = { id: cl.id, encounterIds: cl.encounterIds, encs: cl.encs, ids: cl.ids, members: 0, pinned: cl.pinned, shellBodyId: cl.shellBodyId ?? null,
         blend: 0, curve: 0, pxL: 0, fallback: false, misbanded: 0, misbandedBefore: 0, passes: 0, centre: null, rIn: 0, scale: null, join: 0,
         solves: 0, shell: null };
       for (const eid of cl.encounterIds) this._stageClusterOf.set(eid, info);
@@ -9799,6 +9836,12 @@ export class ThreeRenderer {
   // właściciela, stały rozmiar EKRANOWY `HP_BAR` (40 × 5 px), odstęp od krawędzi modelu `HP_BAR.GAP_PX`; poległy w trakcie
   // starcia — pusty pasek; koniec starcia — paski znikają. Billboardy w scenie 3D (ten sam kadr co modele, co klatkę).
   _syncCombatHpBars() {
+    // ARC CV-6a (flaga `cvTactical`, §3.2-16) — koniec podkładki: HP uczestników bitwy w widoku pokazują mikropaski warstwy taktycznej
+    // (HUD 2D, wartości pokazywane), a w kinie — pasek walki; paski 3D zdjęte (także te, które już stoją). OFF — dzisiejsze paski.
+    if (tacActive(GAME_CONFIG.FEATURES)) {
+      if (this._hpBars.size) for (const id of [...this._hpBars.keys()]) this._disposeHpBar(id);
+      return;
+    }
     const list = window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [];
     if (!list.length && !this._hpBars.size) return;
     const plan = planCombatHpBars({ encounters: list, activeSystemId: window.KOSMOS?.activeSystemId });

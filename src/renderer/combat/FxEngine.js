@@ -35,6 +35,7 @@ import { LIVE_CUE } from './CombatCueBus.js';              // ARC CV-2b — pokr
 import { LEDGER_TUNING } from './CombatLedgerLogic.js';    // ARC CV-4a — pokrętła harmonogramu salw (rejestr)
 import { EXP_TUNING } from './ExplosionLogic.js';          // ARC CV-5 — pokrętła wybuchów, wraków i stanów uszkodzeń
 import { SHIELD_TUNING } from './ShieldLogic.js';          // ARC CV-4b — pokrętła osłon (bańka, fale, rozpad) i osmaleń
+import { TAC_TUNING } from '../../ui/HudCombatLogic.js';   // ARC CV-6a — pokrętła warstwy taktycznej (`TAC_*`, podwarstwa HUD)
 
 /** Pojemności pul (instancje). Pamięć: 13 / 11 liczb float na instancję — razem ok. 0,5 MB. Iskry ×2 względem szczytu
  *  zmierzonego przy górnej granicy (100 strzałów co 50 ms, wszystkie trafione na osłonie: ~4 070 żywych — keeper T4).
@@ -203,6 +204,9 @@ export const LIVE_CV_FX = {
   // ARC CV-4b (flaga `cvShields`) — osłony i pancerz (`ShieldLogic`: `SHD_*` — dopasowanie bańki, fale, siła, rozpad, regeneracja;
   // `SCORCH_*` — osmalenia kadłuba). Czytane co klatkę i przy trafieniu. Strojenie, bez pinów.
   ...SHIELD_TUNING,
+  // ARC CV-6a (flaga `cvTactical`) — warstwa taktyczna (`HudCombatLogic`: `TAC_*` — przekazanie zoomu ikon, próg znaku bitwy
+  // z histerezą, anti-overlap, linie ognia, mikropaski, ramka, pasma). Czytane CO KLATKĘ przez podwarstwę HUD. Strojenie, bez pinów.
+  ...TAC_TUNING,
 };
 
 const MISSILE_WIDTH_MUL = 1.4;        // smuga rakiety szersza od kinetyka (atrybut instancji)

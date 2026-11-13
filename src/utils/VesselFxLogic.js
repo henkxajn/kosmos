@@ -59,6 +59,17 @@ export function isEndpointVisibleInCombat({ isEnemy, quality, inPlayerEngagement
   return isEndpointVisibleByQuality(isEnemy, quality);
 }
 
+// ARC CV-6a (Finding 633) — DUCH `rumor` trzyma położenie OSTATNIO ZNANE także wtedy, gdy statek jest w stanie `orbiting`. Dawniej
+// nadpis ducha (`_applyVesselIntelVisibility`, `positionLastKnown`) działał tylko dla lotu, a statek na orbicie ciała albo w wolnej
+// przestrzeni (`dockedAt: null` — postój AI po „Zaangażuj”, dryf) dostawał co klatkę położenie ŻYWE (`_tickOrbitingVessels`,
+// `_syncVesselPositions`) — gracz widział, gdzie niewykryty wróg jest TERAZ (zmierzone w grze: sprite w położeniu żywym, 2,5 AU od
+// ostatnio znanego, przy `detected: false`). Trzymamy: wróg z wywiadem `rumor` narysowany przez renderer, nie ujawniony w starciu
+// z graczem (wtedy żywe położenie jest jawne — panel walki nazywa go od pierwszej rundy), przy ŻYWEJ ścieżce duchów (`m4EnemyGhosts`).
+// in: { isEnemy, quality (jakość narysowana — `entry.intelQuality`), revealed, ghostsOn }   out: bool
+export function rumorGhostHold({ isEnemy, quality, revealed = false, ghostsOn = true }) {
+  return ghostsOn === true && isEnemy === true && quality === 'rumor' && revealed !== true;
+}
+
 // POLISH P2a (Finding 457) — znacznik starcia (pierścień) żyje wg STANU starcia, nie wg czasu realnego. Dawniej odświeżała
 // go wyłącznie salwa, a po 1600 ms CZASU REALNEGO bez strzału znikał — przy 400 ms na rundę także w trakcie starcia
 // (rundy bez strzału: zbliżanie, odliczanie broni) i w pauzie (P2 §10.6: luki 416 ms i 1808 ms). Teraz: znacznik jest,

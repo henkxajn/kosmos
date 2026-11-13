@@ -14,6 +14,7 @@ import { areAtWar } from '../utils/WarGate.js';
 import { orbitClockSec } from '../utils/SimClock.js';
 import { routeSpec, warpSpec } from './HudRouteLogic.js';
 import { makeAttentionMemory } from './HudAttentionLogic.js';
+import { tacActive } from './HudCombatLogic.js';   // ARC CV-6a — uczestnik bitwy w widoku: ikona warstwy taktycznej zamiast znacznika
 import {
   HUD_SHIP_MARKER, shipMarkerRelation, shipMarkerRole, shipMarkerVisible, classifyMotion,
   screenDirection, screenAngleDeg, markerGeometry, markerZoomFade, markerAttentionTarget, markerAlpha, routeMotionPoint,
@@ -68,7 +69,10 @@ export class HudShipMarkerLayer {
       return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null;
     };
     const items = [];
+    // ARC CV-6a (flaga `cvTactical`) — uczestników bitwy w widoku oznacza warstwa taktyczna (sylwetki klas); OFF — jak dziś.
+    const tacPart = tacActive(F.features) ? (tr?._stageParticipants ?? null) : null;
     for (const [vid, entry] of tr?._vessels ?? []) {
+      if (tacPart?.has?.(vid)) continue;
       const v = vm?.getVessel?.(vid);
       if (!v) continue;
       const isEnemy = isEnemyVessel(v);

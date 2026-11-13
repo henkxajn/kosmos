@@ -35,6 +35,7 @@ import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
 import { HudFocusLayer } from './HudFocusLayer.js';   // paczka B (B-1, B-2) — nawiasy zaznaczenia, pierścienie i wektor alertu
 import { HudShipMarkerLayer } from './HudShipMarkerLayer.js';   // znacznik statku (D-SM-1…6) — zamiast insygnium frakcji 3D
+import { HudCombatLayer } from './HudCombatLayer.js';           // ARC CV-6a — warstwa taktyczna bitwy (flaga `cvTactical`)
 import { HudSkyLabelLayer } from './HudSkyLabelLayer.js';       // NIEBO (ARC GALAXY, O1) — etykiety nieba przy CTRL
 import { HudGalaxyLabelLayer } from './HudGalaxyLabelLayer.js'; // ARC GALAXY G1 — nazwy płyty (lista trybu galaktyki, S0/S3)
 import { HudGalaxyRouteLayer } from './HudGalaxyRouteLayer.js'; // ARC GALAXY G2-2 — szlaki i trasy płyty (chip [T])
@@ -128,11 +129,12 @@ export class HudLayer {
   }
 
   /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, znacznik statku (pod etykietami),
+   *  warstwa taktyczna bitwy (ARC CV-6a — przed etykietami: ich anti-overlap omija znak bitwy i linię najechania),
    *  etykiety (ich anti-overlap czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify
    *  warp, znaczniki statków), nawiasy i alerty (na wierzchu — czytają etykiety tej klatki: narożnik pod przypiętą etykietą
    *  pominięty); NIEBO — etykiety nieba (zbierane ostatnie: omijają etykiety tej klatki; rysowane pierwsze — `drawFirst`). */
   _defaultSublayers() {
-    return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudLabelLayer(this), new HudFocusLayer(this), new HudSkyLabelLayer(this)];
+    return [new HudRouteLayer(this), new HudRadarLayer(this), new HudShipMarkerLayer(this), new HudCombatLayer(this), new HudLabelLayer(this), new HudFocusLayer(this), new HudSkyLabelLayer(this)];
   }
 
   /** ARC GALAXY G1 — podwarstwy trybu galaktyki: nazwy płyty. G2-2:

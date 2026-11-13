@@ -452,7 +452,9 @@ header('L7  montaż (piny źródłowe): plakietek MapLabelLayer brak; klik HUD p
   //   — też zbierany przed etykietami (jego prostokąty są przeszkodami etykiet).
   // PRZECELOWANE 2026-10-30 (NIEBO): po nawiasach może stać podwarstwa etykiet nieba (`HudSkyLabelLayer`) — zbierana po
   //   etykietach (omija ich prostokąty), rysowana pierwsza (`drawFirst`).
-  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), (?:new HudShipMarkerLayer\(this\), )?new HudLabelLayer\(this\)(?:, new HudFocusLayer\(this\))?(?:, new HudSkyLabelLayer\(this\))?\];/.test(hl),
+  // PRZECELOWANE 2026-11-13 (ARC CV-6a): po znaczniku może stać warstwa taktyczna bitwy (`HudCombatLayer`) — zbierana przed etykietami
+  //   (jej znak bitwy i linia najechania są przeszkodami etykiet).
+  ok(/_defaultSublayers\(\)\s*\{\s*return \[[^\]]*new HudRadarLayer\(this\), (?:new HudShipMarkerLayer\(this\), )?(?:new HudCombatLayer\(this\), )?new HudLabelLayer\(this\)(?:, new HudFocusLayer\(this\))?(?:, new HudSkyLabelLayer\(this\))?\];/.test(hl),
     'L7e: podwarstwy gry — radar (i znacznik statku), potem etykiety (zbierane po nich — czytają przeszkody warstw zebranych wcześniej); paczka B — nawiasy po etykietach');
 }
 

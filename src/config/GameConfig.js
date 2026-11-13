@@ -613,6 +613,16 @@ export const GAME_CONFIG = {
     //   wynik bitwy nietknięty. Zwolnione tempo: KOSMOS.threeRenderer.cvTuning.FX_TIME_SCALE. OFF = rysunek CV-4a / CV-5 co do bitu.
     //   Wyłączenie: KOSMOS.debug.cvShields(0).
     cvShields: true,
+    // `cvTactical` (CV-6a) — WARSTWA TAKTYCZNA bitwy i zoom semantyczny (`src/ui/HudCombatLayer.js`, `HudCombatLogic.js` — podwarstwa
+    //   HUD 2D, D-CV-20): daleko — sylwetki klas (fregata / niszczyciel / pancernik / cywilny / nieznany) w położeniach RYSOWANYCH
+    //   (scena + choreografia) z kursem i wektorem prędkości, linie ognia w chwilach rejestru salw, mikropaski HP / osłony z wartości
+    //   pokazywanych, ramka starcia z rundą, pasma zasięgu zaznaczonego / najechanego statku (prawo sceny); bardzo daleko — JEDEN znak
+    //   bitwy „⚔ 10 : 9” z paskami siły i rundą (zamiast stosu „⚠ ×N”, Finding 674); blisko — kino bez ikon (krycie ikon =
+    //   1 − smoothstep(8, 24, px_L), to samo px_L co scena). Uczestnicy bitwy w widoku: bez etykiet nazw (nazwa przy najechaniu
+    //   i dla zaznaczonego), bez znaczników statku SM-1 (zastępują je ikony), bez pasków HP 3D (koniec podkładki §3.2-16).
+    //   Kolory z ról motywu (D-CV-22), mgła wojny = `isEndpointVisibleInCombat`. Wymaga `cvStage`. Czytana CO KLATKĘ.
+    //   OFF = etykiety, znaczniki i paski HP 3D jak dziś co do bitu. Wyłączenie: KOSMOS.debug.cvTactical(0).
+    cvTactical: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

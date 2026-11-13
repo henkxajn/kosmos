@@ -140,7 +140,9 @@ header('M0  API, bez flagi, miejsce podwarstwy, macierz kamery w pętli renderu'
   ok(!!LG && LG.isHudShipMarkerOn === undefined && !('hudShipMarker' in FEATURES) && !('fcInsignia' in FEATURES),
     'M0c: bez flagi — `FEATURES` bez kluczy `hudShipMarker` i `fcInsignia`, moduł bez `isHudShipMarkerOn` (krok na stałe ON, SM-Z)');
   const hl = strip(src('../../ui/HudLayer.js'));
-  ok(/new HudRadarLayer\(this\), new HudShipMarkerLayer\(this\), new HudLabelLayer\(this\)/.test(hl),
+  // PRZECELOWANE 2026-11-13 (ARC CV-6a): między znacznikiem a etykietami może stać warstwa taktyczna bitwy (`HudCombatLayer`) —
+  //   też zbierana przed etykietami; znacznik dalej po radarze i przed etykietami.
+  ok(/new HudRadarLayer\(this\), new HudShipMarkerLayer\(this\), (?:new HudCombatLayer\(this\), )?new HudLabelLayer\(this\)/.test(hl),
     'M0d: podwarstwa znacznika po radarze, PRZED etykietami (zbierana przed nimi — przeszkody etykiet; rysowana pod nimi)');
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
   const i0 = tr.indexOf('  _startLoop() {'), loop = i0 >= 0 ? tr.slice(i0, tr.indexOf('\n  }\n', i0)) : '';

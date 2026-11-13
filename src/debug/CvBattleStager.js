@@ -52,6 +52,12 @@
 //                                         3 = krztuszący się silnik ≤ 25 % HP — wylot dysz migocze i sypie iskrami); null, gdy nikt
 //                                         nie jest uszkodzony
 //   cvStrip(1) / cvStrip(0)             — ARC CV-6b2: flaga `cvStrip` (pasek walki zamiast karty walki) ON / OFF, od następnej klatki
+//   cvTactical(1) / cvTactical(0)       — ARC CV-6a: flaga `cvTactical` (warstwa taktyczna: ikony klas, znak bitwy z daleka, linie
+//                                         ognia, mikropaski, ramka, pasma zasięgu; uczestnicy bez etykiet, znaczników i pasków HP 3D)
+//                                         ON / OFF, od następnej klatki; OFF = etykiety, znaczniki i paski HP 3D jak dziś
+//   tacticalInfo()                      — ARC CV-6a: per bitwa w widoku — stopień zoomu (`zoom`: glyph / icons / handover / cinema),
+//                                         px_L, krycie ikon, ikony i mikrostosy, linie ognia teraz i w ostatniej sekundzie, ukryte
+//                                         mgłą, najmniejszy odstęp ikon, pasma zasięgu, najechanie
 //   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
 //   cvModels(1) / cvModels(0)           — ARC CV-1a: flaga `cvModels` (statki w ramie kanonicznej z plików hardpointów) ON / OFF;
 //                                         statki aktywnego układu przebudowane od razu
@@ -968,6 +974,24 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       const F = GAME_CONFIG.FEATURES;
       F.cvStrip = on === undefined ? !F.cvStrip : !!on;
       return { cvStrip: F.cvStrip };
+    },
+
+    /** ARC CV-6a — flaga `cvTactical` (warstwa taktyczna bitwy): cvTactical(1) — ON, cvTactical(0) — OFF, cvTactical() — przełącz.
+     *  Czytana co klatkę (warstwa HUD, etykiety, znaczniki, paski HP 3D). */
+    cvTactical(on) {
+      const F = GAME_CONFIG.FEATURES;
+      F.cvTactical = on === undefined ? !F.cvTactical : !!on;
+      const hud = (typeof window !== 'undefined') ? window.KOSMOS?.hudLayer : null;
+      hud?.wake?.();
+      return { cvTactical: F.cvTactical, cvStage: !!F.cvStage };
+    },
+
+    /** ARC CV-6a — warstwa taktyczna z ostatniej klatki HUD: per bitwa stopień zoomu, ikony, znak, linie ognia, mgła, pasma. */
+    tacticalInfo() {
+      const hud = (typeof window !== 'undefined') ? window.KOSMOS?.hudLayer : null;
+      const layer = hud?._sublayers?.find?.((s) => s?.debug && s.debug()?.id === 'combat') ?? null;
+      if (!layer) return { ok: false, reason: 'no_layer' };
+      return { ok: true, cvTactical: !!GAME_CONFIG.FEATURES.cvTactical, ...layer.debug() };
     },
 
     /** ARC CV-3a1 — scena bitwy z tej klatki: klastry, stopień sceny, prowadnica, odstępy strzelec → cel w długościach fregaty. */

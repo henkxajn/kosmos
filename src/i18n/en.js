@@ -3415,6 +3415,14 @@ export default {
   'combatStrip.watchHint':  'Camera to this battle',
   'combatStrip.expand':     'Battle details',
   'combatStrip.collapse':   'Hide details',
+  'combatTac.hp':              'HP {0}%',
+  'combatTac.unknown':         'unknown contact',
+  'combatTac.wreck':           'destroyed',
+  'combatTac.class.frigate':   'frigate',
+  'combatTac.class.destroyer': 'destroyer',
+  'combatTac.class.battleship': 'battleship',
+  'combatTac.class.civilian':  'civilian ship',
+  'combatTac.class.unknown':   'unknown',
 
   // === DiplomacyOverlay ===
   'diplo.state.peace':      'PEACE',
