@@ -529,58 +529,16 @@ export const GAME_CONFIG = {
     //   ON od ARKUSZA HUD B-Z — wpis wyżej); przestawienie dawnych kluczy w konsoli nie ma już skutku.
 
     // ── ARC COMBAT VISUALS (docs/design/COMBAT_VISUALS_PLAN.md) — flaga na krok, czytana W CHWILI UŻYCIA ──
-    // `cvFxEngine` (CV-2a) — salwy oglądanego starcia przez silnik FX z pulami (`src/renderer/combat/FxEngine.js`): wiązki
-    //   i smugi HDR z podłogą szerokości na ekranie, zegar prezentacji (pauza zatrzymuje każdy efekt), zero alokacji THREE po
-    //   rozgrzewce; tempo jak dziś (`combatFxPace`). OFF = dzisiejsza ścieżka `_spawnCombatTracer` co do bitu.
-    //   Domyślnie ON od bramki CV-2a (decyzja właściciela 2026-11-08); powrót do dzisiejszej ścieżki: KOSMOS.debug.cvFx(0).
-    cvFxEngine: true,
-    // `cvStage` (CV-3a1) — SCENA BITWY: przybliżona bitwa w oglądanym układzie rysowana z odległościami ściśniętymi prawem
-    //   sceny (laser ~3,5 / kinetyk ~8 / rakiety ~13,5 długości fregaty), zoom semantyczny (4 → 24 px fregaty), jedna scena
-    //   na klaster starć w jednym miejscu (Finding 638), kamera „Obserwuj” / auto-fokus z osią na bitwie i kompozycją
-    //   przesunięciem ekranowym (643), bez pierścienia starcia (642) i płaskiego pierścienia eksplozji wraku (641), pierścień
-    //   radaru ukryty przy scenie. Wyłącznie rysunek — pozycji logicznych nie pisze nikt. OFF = dzisiejsza ścieżka.
-    //   Domyślnie ON od commitu CV-3a1 (decyzja właściciela 2026-11-08); wyłączenie: KOSMOS.debug.cvStage(0).
-    cvStage: true,
+    // CV-Z (metoda T4) — flagi kroków na stałe ON, klucze zdjęte, ścieżki OFF usunięte: `cvFxEngine` (silnik FX z pulami), `cvStage`
+    //   (scena bitwy), `cvChoreo` i `cvChoreo2` (choreografia — lot wzdłuż kursu CV-3c jedynym trybem), `cvModels` (rama kanoniczna
+    //   z plików hardpointów), `cvPresets` (presety jakości High / Medium / Low, pula świateł, szyna sygnałów walki). Przestawienie
+    //   dawnych kluczy w konsoli nie ma skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
     // `cvStrip` (CV-6b2) — PASEK WALKI zamiast karty walki (`CombatStrip` / `CombatStripLogic`): linia na bitwę (klaster starć),
     //   idiom HUD (ciemny pasek, font motywu, role palety, cyfry w kratce), rozwinięcie na żądanie (okręty, log rund), położenie
     //   z `MapInsets` (#629) pod górną belką; jedna linia Dziennika i jedna linia potyczki na klaster (#639); bez karty, bez
     //   pierścienia starcia i bez białego błysku trafienia (3D paski HP zostają do CV-6a). OFF = dzisiejsza karta co do bitu.
     //   Wyłączenie: KOSMOS.debug.cvStrip(0).
     cvStrip: true,
-    // `cvModels` (CV-1a) — statki w RAMIE KANONICZNEJ z plików hardpointów (`assets/models/ships/hardpoints/<slot>.json`):
-    //   dziób każdego modelu → +Z jednym kwaternionem na slot (`nonwarp_large_science` przestaje lecieć rufą — Finding 621),
-    //   kurs na orbicie zgodny z ruchem (Finding 622), smuga w dyszy z pliku (Finding 619), klony materiałów dla KAŻDEGO statku
-    //   (szarość utrzymania tylko na swoim — Finding 624), emisja z koloru-klucza tekstury + tint wroga i żar wraku jako uniformy
-    //   (Finding 620), punkty świetlne `lights[]` (rysowane, gdy są — niezależnie od trybu maski). Po kontroli właściciela
-    //   (2026-11-11): światło czytelności (wypełnienie neutralne + obwódka w kolorze strony, pokrętła `cvTuning.MODEL_*`) i kurs
-    //   spoczynkowy jak na ścieżce OFF (wróg bez misji nie staje burtą). Czytana przy STAWIANIU statku;
-    //   KOSMOS.debug.cvModels(0) / cvModels(1) przełącza i przebudowuje statki aktywnego układu. OFF = dzisiejsza ścieżka.
-    cvModels: true,
-    // `cvChoreo` (CV-3b) — CHOREOGRAFIA statków na scenie bitwy (`src/renderer/combat/ChoreographyLogic.js`): przesunięcie w kopercie
-    //   klasy (fregata przeloty 1 L, niszczyciel łuki 0,7 L, pancernik zwrot burtą 0,4 L; pion — scena 3D), dziób ku celowi albo
-    //   środkowi przeciwnika (Finding 681 — obie strony od pierwszych rund; pancernik burtą) ze skrętem ograniczonym i przechyłem,
-    //   silnik zapalony w walce, postawa z doktryny (D-CV-7 — tylko ustawienie, nigdy udawana odległość). Niezmiennik D-CV-6:
-    //   żadna para nie zmienia pasma odległości na scenie (rzut par). Deterministyczna (ziarno: id starcia + id statku), zegar
-    //   prezentacji (pauza = pauza). Wyłącznie rysunek. Wyłączenie: KOSMOS.debug.cvChoreo(0) (statki wracają do kotwic w 0,5 s).
-    cvChoreo: true,
-    // `cvChoreo2` (CV-3c, decyzja właściciela 44) — LOT WZDŁUŻ KURSU zamiast tańca w kopercie (`ChoreographyLogic.stepChoreo2*`): prędkość
-    //   ≈ kierunek dziobu (nigdy bokiem), skręt z sufitem klasy i przechyłem; fregata — ósemka (przeloty i szerokie pętle), niszczyciel —
-    //   krążenie w zasięgu broni, pancernik — powolne koło burtą; do celu strzelają wieżyczki (CV-4a). Pętla na sferze wokół celu (odstęp
-    //   do celu bez zmian), ku celowi tylko w przedziale pary — niezmiennik D-CV-6 (rzut par) bez zmian. Do tego WYLOT DYSZ zamiast
-    //   stożków smugi (cyjanowy rdzeń HDR w dyszy, poświata, krótki słaby błysk ciągu; zakrztuszenie ≤ 25 % HP — migotanie i iskry),
-    //   nieregularne odłamki z żarem tylko na krawędziach i dryf wraków po bitwie. Wymaga `cvChoreo` (choreografia) i `cvStage`.
-    //   Czytana CO KLATKĘ; przełączenie przenika przez 0,5 s czasu prezentacji. OFF = choreografia CV-3b, stożki smugi, odłamki CV-5
-    //   co do bitu (dla porównania). Wyłączenie: KOSMOS.debug.cvChoreo2(0).
-    cvChoreo2: true,
-    // `cvPresets` (CV-2b) — PRESETY JAKOŚCI High / Medium / Low (`src/data/CombatFxPresets.js`, `QualityPreset.js`): gęstość
-    //   pikseli renderera, bloom, stała pula świateł efektów (4 / 2 / 0 — w spoczynku jasność 0, D-CV-18), tekstury statków 2K / 1K
-    //   (`<slot>@1k.glb`; sloty bez wariantu 1K zostają przy 2K), budżety efektów drugorzędnych dla CV-4b / CV-5 i dławienie
-    //   automatyczne (czas klatki > 20 ms przez 2 s w walce — wyłącznie efekty drugorzędne, strzały nigdy). Preset NA MASZYNIE
-    //   (localStorage `kosmos_gfx_quality`), domyślny z napisu renderera WebGL, ☰ „Grafika”. Do tego szyna sygnałów walki
-    //   `combatfx:cue` (`CombatCueBus`; słuchacz `AudioSystem` bez dźwięku — D-CV-19 (a)). Czytana CO KLATKĘ (zmiana w konsoli
-    //   działa od następnej klatki). OFF = dzisiejsza ścieżka: gęstość min(dpr × 1,5, 2), bloom, tekstury 2K, bez puli świateł,
-    //   bez sygnałów, bez wiersza ☰. Wyłączenie: KOSMOS.debug.cvPresets(0).
-    cvPresets: true,
     // `cvWeapons` (CV-4a) — JĘZYK BRONI i REJESTR SALW (`src/renderer/combat/CombatLedgerLogic.js`): każda runda oglądanego
     //   starcia dostaje harmonogram w czasie prezentacji (salwy obu stron przeplecione — ogień jednoczesny M1; laser: ładowanie
     //   → wiązka, kinetyk: błysk wylotu → pocisk → iskry, rakieta: start → tor łukiem; pudło leci dalej za cel), strzały

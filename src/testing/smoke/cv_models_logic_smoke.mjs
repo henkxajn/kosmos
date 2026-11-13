@@ -335,9 +335,9 @@ await block('T10 źródło: bez Math.random, ścieżka OFF zachowana, flaga przy
   const tr = strip(read('src/renderer/ThreeRenderer.js'));
   const body = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
   const add = body('  _addVesselModel3D(vessel, modelPath) {');
-  assert(/^\s*_addVesselModel3D\(vessel, modelPath\) \{\s*if \(GAME_CONFIG\.FEATURES\?\.cvModels\) \{ this\._addVesselModelCv\(vessel, modelPath\); return; \}/.test(add)
-    && /if \(isEnemy\) \{|\} else if \(isEnemy\) \{/.test(add) && /wrapper\.rotation\.y = Math\.atan2\(dx, dy\) \+ Math\.PI \/ 2;/.test(add),
-    'T10b `_addVesselModel3D`: flaga czytana przy stawianiu (pierwsza instrukcja), dalej dawna ścieżka bez zmian');
+  // CV-Z — przecelowane świadomie: dawna ścieżka modeli bez ramy usunięta razem z flagą `cvModels`.
+  assert(/^\s*_addVesselModel3D\(vessel, modelPath\) \{\s*this\._addVesselModelCv\(vessel, modelPath\);\s*$/.test(add) && !/FEATURES\?\.cvModels/.test(tr),
+    'T10b `_addVesselModel3D`: wyłącznie rama kanoniczna (`_addVesselModelCv`), bez flagi i bez dawnej ścieżki');
   assert(/entry\.canonical \? yawToward\(dx, dy, true\) : Math\.atan2\(dx, dy\) \+ Math\.PI \/ 2/.test(tr)
     && /entry\.canonical \? orbitYaw\(pos\.theta, orb\.omega, true\) : pos\.theta \+ Math\.PI/.test(tr)
     && /cone\.scale\.x = intensity \* \(0\.85 \+ 0\.3 \* flick\);/.test(tr),

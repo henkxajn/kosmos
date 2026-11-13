@@ -224,7 +224,8 @@ else {
   assert([Eoff.beams.material, Eoff.sparks.material].every(m => !hasLogDepth(m.vertexShader) && !hasLogDepth(m.fragmentShader)), 'T6b logDepth: false — bez chunków');
   assert(E.beams.material.vertexShader === E.tracers.material.vertexShader && E.beams.material.fragmentShader === E.tracers.material.fragmentShader,
     'T6c wiązka i smuga — ten sam tekst programu (jeden program, różne uniformy)');
-  const tuned = { ...ENGINE.LIVE_CV_FX, BEAM_CORE: 9, MIN_PX: 7, FLASH_K: 11 };
+  // CV-Z — przecelowane świadomie: pokrętło błysku sceny `STAGE_FLASH_K` (dawne `FLASH_K` bez sceny usunięte z silnika razem z `stage`).
+  const tuned = { ...ENGINE.LIVE_CV_FX, BEAM_CORE: 9, MIN_PX: 7, STAGE_FLASH_K: 11 };
   const E2 = engineOf({ tuning: tuned });
   assert(mats.every((m, i) => m.vertexShader === [E2.beams, E2.tracers, E2.sparks][i].material.vertexShader), 'T6d inne pokrętła — identyczne teksty (wartości uniformami, nie w GLSL)');
   E2.update({ nowMs: 0, camera, viewportH: 1041 });
@@ -273,8 +274,10 @@ header('T8 — źródło modułów CV-2a: zero Math.random, gorąca ścieżka si
   assert(/\bnew\s+[A-Z]/.test(mutated), 'T8c KONTROLA: kopia `update` z konstrukcją Vector3 — pin ją wykrywa');
 }
 
-// ── T9 — flaga: OFF = dzisiejsza ścieżka co do bitu, ON = silnik ──────────────────────────────────────────────────
-header('T9 — flaga cvFxEngine: OFF nic nie zmienia (wykonanie + odcisk źródła), ON kieruje salwę do silnika');
+// ── T9 — CV-Z: silnik FX jedyną ścieżką salw (flaga `cvFxEngine` zdjęta, dawne smugi usunięte) ─────────────────────
+// ⚠ PRZECELOWANE ŚWIADOMIE (CV-Z): dawne T9a–T9e / T9g / T9h pinowały ścieżkę OFF (odcisk `0eabc4f` dawnych smug `THREE.Line`,
+//   błysku na modelu i zegara bez silnika). Ścieżka usunięta ⇒ T9 pinuje SKIEROWANIE salwy (wykonanie) i BRAK dawnych metod (źródło).
+header('T9 — CV-Z: salwa zawsze do silnika FX; dawnych smug i błysku na modelu nie ma');
 const TR = read('src/renderer/ThreeRenderer.js');
 function fullBody(name) { const i = TR.indexOf(`\n  ${name}(`); if (i < 0) return null; const sigEnd = TR.indexOf(') {\n', i); const end = TR.indexOf('\n  }\n', sigEnd); return TR.slice(i, end + 5); }
 function methodOf(name) {
@@ -285,67 +288,35 @@ function methodOf(name) {
 }
 const S = (v) => v / 10;
 const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngagementInView', 'combatFxPace', 'fxWeaponColor', 'FX_MAX_ACTIVE',
-  'FX_TRACER_MS', 'FX_SHIELD_COLOR', 'isEnemyVessel', 'isEndpointVisibleInCombat', 'isPlayerEngagement', 'vesselTargetSize', 'HIT_GLOW',
-  'hitGlowWorldSize', 'ThreeRenderer', 'rendererRandom', 'FxEngine', 'logDepthOn'];
+  'FX_TRACER_MS', 'FX_SHIELD_COLOR', 'isEnemyVessel', 'isEndpointVisibleInCombat', 'isPlayerEngagement', 'vesselTargetSize',
+  'rendererRandom', 'FxEngine', 'logDepthOn'];
 const make = (name) => {
   const m = methodOf(name);
   return m ? new Function(...NAMES, `return function (${m.params}) {\n${m.body}\n};`)(THREE, S, GAME_CONFIG, globalThis.window, globalThis.performance,
     FX.isEngagementInView, FXC.combatFxPace, FXC.weaponColor, FXC.FX_MAX_ACTIVE, FXC.FX_TRACER_MS, FXC.FX_SHIELD_COLOR, isEnemyVessel,
-    FX.isEndpointVisibleInCombat, FX.isPlayerEngagement, vesselTargetSize, FX.HIT_GLOW, FX.hitGlowWorldSize,
-    { _hitGlowTexture: () => new THREE.Texture() }, rendererRandom, ENGINE?.FxEngine ?? null, () => true) : null;
+    FX.isEndpointVisibleInCombat, FX.isPlayerEngagement, vesselTargetSize, rendererRandom, ENGINE?.FxEngine ?? null, () => true) : null;
 };
 {
   globalThis.window = globalThis.window ?? {};
-  const flag = GAME_CONFIG.FEATURES.cvFxEngine;
-  // `_tickCvFx` przy fladze OFF i bez silnika — nie rusza zegara, nie buduje silnika.
+  // `_tickCvFx` — zegar prezentacji tyka zawsze (bez wyjścia „flaga OFF i nic w locie”).
   const tick = make('_tickCvFx');
   const R0 = { _presClock: CLOCK ? new CLOCK.PresentationClock() : null, _fxEngine: null, camera, _galaxyActive: false };
-  GAME_CONFIG.FEATURES.cvFxEngine = false;
   window.KOSMOS = { timeSystem: { isPaused: false, multiplier: 1 } };
   if (tick) for (let i = 0; i < 5; i++) tick.call(R0);
-  assert(!!tick && R0._fxEngine === null && R0._presClock?._lastRealMs === null && R0._presClock?.nowMs === 0,
-    'T9a flaga OFF, nic w locie: `_tickCvFx` nie dotyka zegara ani silnika (pętla renderu jak dziś)');
-  // `_onCombatRoundFx`: OFF → dzisiejsze `_spawnCombatTracer`, ON → `_cvFxRoundFx`.
+  assert(!!tick && R0._fxEngine === null && R0._presClock?._lastRealMs !== null,
+    'T9a `_tickCvFx` tyka zegar prezentacji zawsze (bez gałęzi flagi); silnik nie powstaje w ticku (buduje go start renderera)');
   const route = make('_onCombatRoundFx');
-  const calls = { legacy: 0, engine: 0, pace: null };
-  const R = { _combatEndpointWorld: () => ({ x: 0, y: 0.3, z: 0 }),
-    _spawnCombatTracer: () => { calls.legacy++; }, _cvFxRoundFx: (evs, pace) => { calls.engine += evs.length; calls.pace = pace; } };
+  const calls = { engine: 0, pace: null };
+  const R = { _combatEndpointWorld: () => ({ x: 0, y: 0.3, z: 0 }), _cvFxRoundFx: (evs, pace) => { calls.engine += evs.length; calls.pace = pace; } };
   const payload = { systemId: 'sys_v', events: [{ attacker: 'a', target: 'b', category: 'short', hit: true, blockedByShield: 0, aPos: { x: 0, y: 0 }, tPos: { x: 1, y: 0 } },
     { attacker: 'b', target: 'a', category: 'long', hit: false, blockedByShield: 0, aPos: { x: 1, y: 0 }, tPos: { x: 0, y: 0 } }] };
   window.KOSMOS = { activeSystemId: 'sys_v', uiPrefs: {}, timeSystem: { combatRoundMs: () => 400 } };
-  GAME_CONFIG.FEATURES.cvFxEngine = false;
   route?.call(R, payload);
-  const off = { ...calls };
-  GAME_CONFIG.FEATURES.cvFxEngine = true;
-  route?.call(R, payload);
-  GAME_CONFIG.FEATURES.cvFxEngine = flag;
-  assert(off.legacy === 2 && off.engine === 0, `T9b flaga OFF: dzisiejsza ścieżka (${off.legacy} × _spawnCombatTracer), silnik nietknięty`);
-  assert(calls.engine === 2 && calls.legacy === 2 && calls.pace?.tracerMs === FXC.combatFxPace(400).tracerMs,
-    'T9c flaga ON (czytana w chwili salwy): salwa do `_cvFxRoundFx` z dzisiejszym tempem `combatFxPace`, bez dzisiejszej ścieżki');
-  // Odcisk ścieżki OFF: ciała metod dzisiejszego silnika FX (i `_onCombatRoundFx` bez gałęzi CV-2a) == `0eabc4f`.
-  const LEGACY = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer', '_spawnFx',
-    '_disposeFx', '_updateActiveEffects', '_spawnHitGlow', '_followTracerEnds', '_followFxTarget'];
-  const stripCv = (s) => s.replace(/\n    \/\/ ARC CV-2a — flaga `cvFxEngine`[^\n]*\n[^\n]*\n    if \(GAME_CONFIG\.FEATURES\?\.cvFxEngine\) \{ this\._cvFxRoundFx\(events, pace\); return; \}/, '');
-  // ARC CV-6b2 — DWIE świadome zmiany ścieżki OFF (przecelowanie T9d: odcisk `0eabc4f` liczony po ich COFNIĘCIU, więc reszta ścieżki
-  // nadal co do bitu): (1) Finding 630, decyzja właściciela §3.2-23 — czytelnik `uiPrefs.combatFxVisible` usunięty z `_onCombatRoundFx`;
-  // (2) biały błysk trafienia P2b pod flagą `cvStrip` — bramka przy `_spawnHitGlow` w `_spawnCombatTracer` (§4 CV-6b2). T9g — ŚWIADEK
-  // przecelowania (nie kontrola: na kodzie sprzed CV-6b2 pada, bo cofać nie ma czego), że obie zmiany są w źródle dokładnie tam.
-  const undo6b2 = (s) => s
-    .replace(/\n    \/\/ ARC CV-6b2 \(Finding 630, decyzja właściciela §3\.2-23\)[^\n]*\n    \/\/[^\n]*\n/, '\n    if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;\n')
-    .replace(/\n    \/\/ ARC CV-6b2 — biały błysk na modelu[^\n]*\n    \/\/[^\n]*\n    if \(ids\?\.target && !GAME_CONFIG\.FEATURES\?\.cvStrip\) this\._spawnHitGlow\(/, '\n    if (ids?.target) this._spawnHitGlow(');
-  // Krok #663 (decyzja właściciela 37, 2026-11-11) — świadoma zmiana wspólnego `_updateActiveEffects`: usunięta gałąź animacji
-  // rodzaju 'pulse' (pierścienie ruchu statku). Odcisk liczony po jej PRZYWRÓCENIU (wzór CV-6b2) — reszta ścieżki OFF co do bitu;
-  // T9h — świadek, że gałęzi nie ma w źródle.
-  const PULSE_CASE = "        case 'pulse':\n          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);\n          ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 2));\n          break;";
-  const undo663 = (m, s) => (m === '_updateActiveEffects' ? s.replace("\n        case 'ping':", "\n" + PULSE_CASE + "\n        case 'ping':") : s);
-  const fp = createHash('sha256').update(LEGACY.map(m => stripCv(undo6b2(undo663(m, fullBody(m) ?? `<brak ${m}>`)))).join('\n')).digest('hex');
-  assert(!/case 'pulse'/.test(fullBody('_updateActiveEffects') ?? '') && undo663('_updateActiveEffects', fullBody('_updateActiveEffects') ?? '') !== (fullBody('_updateActiveEffects') ?? ''),
-    "T9h ŚWIADEK przecelowania T9d (#663): gałęzi 'pulse' nie ma w `_updateActiveEffects` — odcisk liczony po jej przywróceniu");
-  assert(['_onCombatRoundFx', '_spawnCombatTracer'].every((m) => undo6b2(fullBody(m) ?? '') !== (fullBody(m) ?? '')),
-    'T9g ŚWIADEK przecelowania T9d: obie zmiany CV-6b2 ścieżki OFF są w źródle (`combatFxVisible` wycofany, biały błysk pod `cvStrip`) — odcisk liczony po ich cofnięciu');
-  const FP_0EABC4F = '3c19a2433dbfa33e85b22cb2a98b1f51a0797955c56738816fca46b73143b3ae';
-  assert(fp === FP_0EABC4F, `T9d ścieżka OFF co do bitu jak w 0eabc4f (odcisk ${fp.slice(0, 12)}…)`);
-  assert(stripCv(fullBody('_onCombatRoundFx') ?? '') !== (fullBody('_onCombatRoundFx') ?? ''), 'T9e KONTROLA: gałąź CV-2a jest w `_onCombatRoundFx` (odcisk liczony bez niej, nie z pliku sprzed zmiany)');
+  assert(calls.engine === 2 && calls.pace?.tracerMs === FXC.combatFxPace(400).tracerMs,
+    'T9b salwa do `_cvFxRoundFx` z tempem `combatFxPace` (bez przełącznika)');
+  const gone = ['_spawnCombatTracer', '_spawnHitGlow', '_followTracerEnds', '_followFxTarget', '_hitGlowTexture'].filter((m) => fullBody(m) != null);
+  assert(gone.length === 0 && !/cvFxEngine/.test(fullBody('_onCombatRoundFx') ?? 'cvFxEngine') && !/explosionRing/.test(TR),
+    `T9c dawnych smug \`THREE.Line\`, błysku na modelu i pierścienia uderzeniowego nie ma w \`ThreeRenderer\`${gone.length ? ' — są: ' + gone.join(', ') : ''}`);
   assert((fullBody('_ensureFxEngine') ?? '').includes('logDepth: logDepthOn()'),
     'T9f renderer buduje silnik z flagą logarytmicznej głębi mapy (`logDepth: logDepthOn()`) — chunki V-267 w programach FX (T6a)');
 }

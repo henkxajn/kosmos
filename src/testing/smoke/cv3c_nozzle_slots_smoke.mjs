@@ -117,7 +117,7 @@ function makeMethod(name) {
 // Parada na pauzie: każdy slot stawiany prawdziwym `_addVesselModelCv` (model i hardpointy z pliku dochodzą asynchronicznie), bez żadnej
 // aktualizacji pozycji potem — odczyt wylotów zaraz po dojściu modelu.
 async function paradeRun(choreo2) {
-  const F = GAME_CONFIG.FEATURES; const keep = { cvModels: F.cvModels, fcCombatFx: F.fcCombatFx, cvChoreo2: F.cvChoreo2 };
+  const F = GAME_CONFIG.FEATURES; const keep = { cvModels: F.cvModels, fcCombatFx: F.fcCombatFx };
   const tick = () => new Promise((r) => (globalThis.__origSetTimeout ?? setTimeout)(r, 1));
   const R = {
     THREE, scene: new THREE.Scene(), _vessels: new Map(), _missingModelPaths: new Set(), _shipLightPool: null, _cvLightTest: false,
@@ -133,7 +133,7 @@ async function paradeRun(choreo2) {
   window.KOSMOS = { observatorySystem: { isVesselDetected: () => true }, vesselManager: { isImmobilized: () => false } };
   const out = [];
   try {
-    F.cvModels = true; F.fcCombatFx = true; F.cvChoreo2 = choreo2;
+    F.cvModels = true; F.fcCombatFx = true;
     SLOTS.forEach((slot, i) => {
       const v = { id: `p${i}`, name: `CV-P${String(i + 1).padStart(2, '0')}`, shipId: 'hull_frigate', position: { x: 100 + i, y: 50, state: 'in_transit' },
         mission: { targetX: 400, targetY: 50, phase: 'outbound' } };
@@ -149,13 +149,13 @@ async function paradeRun(choreo2) {
   return out;
 }
 await block('N3 — SEDNO 709: prawdziwe `_addVesselModelCv` na PAUZIE — każdy slot ma widoczny wylot od razu', async () => {
-  const on = await paradeRun(true), off = await paradeRun(false);
+  const on = await paradeRun(true);
   const noGlow = on.filter((s) => !(s.glows >= 1 && s.minR > 0)), hidden = on.filter((s) => s.visible < 1);
-  console.log(`     ON: sloty ${on.length}, bez wylotu ${noGlow.length}, ukryte ${hidden.length}; OFF: widoczne ${off.filter((s) => s.visible > 0).length}`);
+  console.log(`     sloty ${on.length}, bez wylotu ${noGlow.length}, ukryte ${hidden.length}`);
   assert(on.length === 24 && noGlow.length === 0, `N3a każdy z 24 slotów ma ≥ 1 wylot o promieniu > 0${noGlow.length ? ' — brak: ' + noGlow.map((s) => s.slot).join(', ') : ''}`);
   assert(on.length === 24 && hidden.length === 0 && on.every((s) => !s.cone),
     `N3b SEDNO: wylot WIDOCZNY od razu po dojściu modelu na pauzie (bez aktualizacji pozycji), stożek schowany${hidden.length ? ' — ukryte: ' + hidden.map((s) => s.slot).join(', ') : ''}`);
-  assert(off.length === 24 && off.every((s) => s.visible === 0), 'N3c KONTROLA: `cvChoreo2` OFF — wyloty schowane (ścieżka CV-5 bez zmian)');
+  // CV-Z — N3c (KONTROLA „`cvChoreo2` OFF — wyloty schowane”) wycofane razem z flagą; wylot jest jedyną ścieżką statków z dyszami.
 });
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

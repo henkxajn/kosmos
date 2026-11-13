@@ -59,7 +59,7 @@ export const TAC = { ...TAC_TUNING };
  * podwarstwy, etykiet i znaczników uczestników (HUD) i pasków HP 3D (renderer): przy OFF wszystko jak dziś.
  */
 export function tacActive(features) {
-  return !!(features?.cvTactical && features?.cvStage);
+  return !!features?.cvTactical;
 }
 
 /** Bieżące pokrętła: alias `cvTuning` (gdy jest) nad domyślnymi; brak / zła wartość — domyślna. */

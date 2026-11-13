@@ -540,15 +540,10 @@ guard('T10 ustawienia', () => {
   const flag = GAME_CONFIG.FEATURES.cvPresets;
   try {
     localStorage.removeItem(lsKey);
-    GAME_CONFIG.FEATURES.cvPresets = false;
-    const off = fakeRenderer();
-    assert(off.R.missing.length === 0, `T10a metody renderera wyciągnięte ze źródła${off.R.missing.length ? ' — brak: ' + off.R.missing.join(', ') : ''}`);
-    off.R._applyGfx('init');
-    assert(off.calls.setPR.length === 0 && off.R._bloomPass.enabled === true && off.R._fxLightPool === null && off.R._gfxApplied?.on === false
-      && off.R._gfxApplied.pixelRatio === Math.min(1.25 * 1.5, 2) && off.R._gfxApplied.textures === '2k',
-      'T10b flaga OFF przy starcie: bez `setPixelRatio` (dzisiejsza gęstość zostaje), bloom, bez puli świateł, tekstury 2K');
-    GAME_CONFIG.FEATURES.cvPresets = true;
+    // CV-Z — PRZECELOWANE ŚWIADOMIE: flaga `cvPresets` zdjęta — dawne T10b / T10h / T10i / T10l (ścieżka bez presetów i przełączanie
+    //   flagi w konsoli) i część „bez presetów” T10u wycofane; presety są jedyną ścieżką.
     const on = fakeRenderer();
+    assert(on.R.missing.length === 0, `T10a metody renderera wyciągnięte ze źródła${on.R.missing.length ? ' — brak: ' + on.R.missing.join(', ') : ''}`);
     on.R._applyGfx('init');
     const pool = on.R._fxLightPool;
     // ARC CV-5 (decyzja 41) — PRZECELOWANE ŚWIADOMIE: High = gęstość natywna 1,25 (było: bez zmiany = 1,875) + SMAA (pass tworzony raz).
@@ -571,17 +566,9 @@ guard('T10 ustawienia', () => {
       'T10f High: gęstość natywna 1,25, SMAA ten sam pass (stworzony raz), bloom, 4 światła, tekstury 2K — przebudowa');
     assert(on.R.applyGfxPreset('ultra').ok === false && on.R._gfx.level === 'high', 'T10g poziom niepoprawny — odmowa, preset bez zmian');
     on.R.applyGfxPreset(0);
-    on.R._ensureCueBus();
-    on.R._cueBus.schedule(1e9, 'fire', 'laser', null, 0, 0, 0);
-    GAME_CONFIG.FEATURES.cvPresets = false;
     on.R._tickGfx();
-    assert(on.R._gfxApplied.on === false && on.R._pixelRatio === 1.875 && on.R._bloomPass.enabled === true && pool.count === 0
-      && on.R._cueBus.n === 0 && on.calls.rebuild === 4 && on.R._smaaPass?.enabled === false && on.R._bloomCssPx === false,
-      'T10h flaga przełączona w konsoli (OFF): dzisiejsza gęstość i bloom wracają, 0 świateł, szyna sygnałów wyczyszczona, tekstury 2K (przebudowa)');
-    GAME_CONFIG.FEATURES.cvPresets = true;
-    on.R._tickGfx();
-    assert(on.R._gfxApplied.on === true && on.R._gfxApplied.level === 'low' && on.R._pixelRatio === 1 && on.R._bloomPass.enabled === false,
-      'T10i flaga z powrotem ON: preset gracza (Low) wraca');
+    assert(on.R._gfxApplied.on === true && on.R._gfxApplied.level === 'low' && on.R._pixelRatio === 1 && on.R._bloomPass.enabled === false && on.R._bloomCssPx === true,
+      'T10i pętla (`_tickGfx`) nie przestawia presetu gracza (Low zostaje; bloom w px CSS)');
     // Dławienie przez `_tickGfx`: w walce klatki 30 ms → budżety drugorzędne, gęstość / bloom / światła bez zmian.
     on.R.applyGfxPreset(2);
     const setBefore = on.calls.setPR.length;
@@ -593,20 +580,15 @@ guard('T10 ustawienia', () => {
     const info = on.R.cvGfxInfo();
     assert(info.level === 'high' && info.throttle.level === 1 && JSON.stringify(info.budgets.throttled) === '["smoke"]' && info.lights === 4,
       'T10k odczyt `gfx()`: poziom, dławienie, zdjęte efekty, światła');
-    GAME_CONFIG.FEATURES.cvPresets = false;
+    // ARC CV-5 (Finding 704) — prawdziwa `_bloomInputSize`: CSS × min(DPR, 1,5) niezależnie od gęstości composera
     const off2 = fakeRenderer();
     off2.R._applyGfx('init');
-    for (let i = 0; i < 80; i++) { clock.now += 30; off2.R._tickGfx(); }
-    assert(off2.R._gfx.throttle.samples === 0 && off2.R._fxLightPool === null, 'T10l flaga OFF: pętla nie próbkuje czasu klatki i nie buduje puli');
-    // ARC CV-5 (Finding 704) — prawdziwa `_bloomInputSize`: presety — CSS × min(DPR, 1,5) niezależnie od gęstości composera; bez — bufor
     off2.R._composer._pixelRatio = 1.875;
-    const offSize = off2.R._bloomInputSize(1600 * 1.875, 1041 * 1.875);
-    off2.R._bloomCssPx = true;
     const onSize = off2.R._bloomInputSize(1600 * 1.875, 1041 * 1.875);
     off2.R._composer._pixelRatio = 1.25;
     const onSize2 = off2.R._bloomInputSize(1600 * 1.25, 1041 * 1.25);
-    assert(Math.abs(offSize.w - 3000) < 1e-9 && Math.abs(onSize.w - 2000) < 1e-9 && Math.abs(onSize2.w - 2000) < 1e-9,
-      `T10u \`_bloomInputSize\`: bez presetów — bufor (${offSize.w}), z presetami — px CSS × 1,25 przy gęstości 1,875 i 1,25 (${onSize.w} / ${onSize2.w})`);
+    assert(off2.R._bloomCssPx === true && Math.abs(onSize.w - 2000) < 1e-9 && Math.abs(onSize2.w - 2000) < 1e-9,
+      `T10u \`_bloomInputSize\`: px CSS × 1,25 przy gęstości 1,875 i 1,25 (${onSize.w} / ${onSize2.w})`);
   } finally { GAME_CONFIG.FEATURES.cvPresets = flag; localStorage.removeItem(lsKey); }
 });
 guard('T10 salwa', () => {
@@ -664,8 +646,7 @@ guard('T10 salwa', () => {
     const st = ON.audio?.cueStats();
     assert(!!st && st.received === ON.got.length && st.cues === ON.got.reduce((s, c) => s + c.count, 0),
       `T10o słuchacz \`AudioSystem\` (po clear + attach) odebrał każdy sygnał (${st?.received} / ${ON.got.length})`);
-    const OFF = run(false);
-    assert(OFF.shots === 3 && OFF.got.length === 0 && OFF.R._cueBus === null, 'T10p salwa OFF: te same 3 strzały, szyna nie powstała, zero sygnałów');
+    // CV-Z — T10p (salwa bez presetów: szyna nie powstaje) wycofane razem z flagą `cvPresets`.
     const P = run(true, { pausedFrames: 60 });
     // Pauza tuż po salwie: zegar prezentacji stoi na chwili salwy — wychodzi WYŁĄCZNIE strzał z opóźnieniem 0 (jego chwila już
     // nadeszła; efekt jest na ekranie), reszta czeka; po wznowieniu — w swoich chwilach.
@@ -705,8 +686,9 @@ header('T11 — źródło: wiersz ☰ tylko z flagą, klucze PL + EN, zero Math.
 await (async () => {
   try {
     const BB = strip(read('src/ui/BottomBar.js'));
-    assert(/const gfxLevel = GAME_CONFIG\.FEATURES\?\.cvPresets \?/.test(BB) && /\.\.\.\(gfxLevel \? \[\{ id: 'gfx'/.test(BB)
-      && /case 'gfx':[\s\S]{0,200}cycleGfxPreset/.test(BB), 'T11a ☰ „Grafika”: wiersz WYŁĄCZNIE z flagą `cvPresets` (OFF — menu jak dziś), klik → cykl presetu');
+    // CV-Z — przecelowane świadomie: wiersz bez flagi (presety na stałe); bez renderera (headless) — bez wiersza.
+    assert(/const gfxLevel = window\.KOSMOS\?\.threeRenderer\?\.gfxLevel \?\? null;/.test(BB) && !/cvPresets/.test(BB) && /\.\.\.\(gfxLevel \? \[\{ id: 'gfx'/.test(BB)
+      && /case 'gfx':[\s\S]{0,200}cycleGfxPreset/.test(BB), 'T11a ☰ „Grafika”: wiersz z poziomem renderera (bez flagi), klik → cykl presetu');
     const pl = (await import('../../i18n/pl.js')).default ?? (await import('../../i18n/pl.js'));
     const en = (await import('../../i18n/en.js')).default ?? (await import('../../i18n/en.js'));
     const dict = (m) => m.PL ?? m.EN ?? m.pl ?? m.en ?? m.default ?? m;
@@ -725,7 +707,7 @@ await (async () => {
     for (const [mod, src, names] of hot) for (const n of names) { const b = body(src, n); if (b == null || /\bnew\s+[A-Z]/.test(b)) withNew.push(`${mod}.${n}`); }
     assert(withNew.length === 0, `T11d gorąca ścieżka puli i szyny bez \`new\`${withNew.length ? ' — ' + withNew.join(', ') : ''}`);
     const GC = strip(read('src/config/GameConfig.js'));
-    assert(/cvPresets:\s*true/.test(GC), 'T11f `FEATURES.cvPresets` w GameConfig (domyślnie ON; wyłączenie: KOSMOS.debug.cvPresets(0))');
+    assert(!/cvPresets:\s*(true|false)/.test(GC), 'T11f CV-Z: klucz `FEATURES.cvPresets` zdjęty z GameConfig (presety na stałe)');
     assert(!!HP && HP.has1kVariant({ source: { normalizer: 'normalize-ship@1' } }) && !HP.has1kVariant({ source: { normalizer: 'legacy-textures@1' } })
       && !HP.has1kVariant(null) && HP.modelPath1k('assets/models/ships/warp_frigate.glb') === 'assets/models/ships/warp_frigate@1k.glb'
       && HP.modelPath1k('assets/models/ships/incoming/warp_frigate.glb') === null,

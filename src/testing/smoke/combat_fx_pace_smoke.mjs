@@ -199,14 +199,10 @@ header('T5  źródło `ThreeRenderer`');
   const body = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
   const fx = body('  _onCombatRoundFx(payload) {');
   const g = fx.indexOf('isEngagementInView('); const pc = fx.indexOf('combatFxPace(window.KOSMOS?.timeSystem?.combatRoundMs?.()');
-  assert(g > 0 && pc > g && /\(stagger\+\+ % 8\) \* pace\.staggerMs/.test(fx) && /, pace\);/.test(fx),
-    'T5a salwa (po regule widoku): tempo z `combatRoundMs()`, rozrzut z planu, plan przekazany smudze');
-  const ct = tr.slice(tr.indexOf('  _spawnCombatTracer('), tr.indexOf('\n  }\n', tr.indexOf('  _spawnCombatTracer(')));
-  assert(/lifetime: pace\.tracerMs/.test(ct) && /lifetime: pace\.flashMs/.test(ct) && /lifetime: pace\.shieldMs/.test(ct)
-    && /delay: delay \+ pace\.flashDelayMs/.test(ct) && !/FX_TRACER_MS|FX_FLASH_MS|FX_SHIELD_MS|FX_FLASH_DELAY_MS/.test(ct),
-    'T5b smuga / błysk / tarcza / uderzenie — czasy z planu tempa (bez dawnych stałych w salwie)');
-  assert(/onTick: ids \? \(\) => this\._followTracerEnds\(line, ids\) : null/.test(ct) && /_followFxTarget\(ef\.mesh, ids\.target\)/.test(ct),
-    'T5c końce smug i błyski idą za sprite\'ami statków');
+  // CV-Z — PRZECELOWANE ŚWIADOMIE (plan §4 CV-Z: „combat_fx_pace T5” do wycofania): dawne smugi `_spawnCombatTracer` usunięte —
+  //   T5a pinuje plan tempa przekazany silnikowi FX (`_cvFxRoundFx`), T5b / T5c (czasy i końce dawnych smug) wycofane.
+  assert(g > 0 && pc > g && /this\._cvFxRoundFx\(events, pace\)/.test(fx) && !/_spawnCombatTracer/.test(tr),
+    'T5a salwa (po regule widoku): tempo z `combatRoundMs()`, plan przekazany silnikowi FX; dawnych smug nie ma');
   const tov = body('  _tickOrbitingVessels() {');
   const svp = body('  _syncVesselPositions(vessels) {');
   assert(/this\._placeFreeVessel\(id, entry, vx, vy\)/.test(tov) && /this\._placeFreeVessel\(vessel\.id, entry, vx, vy\)/.test(svp)

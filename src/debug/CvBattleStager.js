@@ -60,9 +60,7 @@
 //   cvRetreat(1)                        — ARC CV-3b: rozkaz „Wycofaj się z bitwy” dla statku nr 1 strony A (żywego, w starciu) — ten sam
 //                                         rozkaz co PPM; choreografia obraca go od zagrożenia i zapala pełny ciąg; M1 — PRAWDZIWY lot
 //                                         na zegarze starcia (~0,03 AU na rundę), starcie kończy się, gdy strona wyjdzie poza 0,5 AU
-//   cvChoreo(1) / cvChoreo(0)           — ARC CV-3b: flaga `cvChoreo` (choreografia na scenie bitwy) ON / OFF; przejście 0,5 s
-//   cvChoreo2(1) / cvChoreo2(0)         — ARC CV-3c: flaga `cvChoreo2` (lot wzdłuż kursu, wylot dysz, odłamki, dryf wraków) ON / OFF;
-//                                         OFF = obraz CV-3b / CV-5 do porównania; ruch przenika przez 0,5 s
+//   cvChoreo() / cvChoreo2()            — CV-Z: wycofane (choreografia CV-3c na stałe) — zwracają { retired: true }
 //   cvFocusDamaged()                    — ARC CV-3c: kamera na najbardziej uszkodzony żywy statek oglądanej bitwy (stan uszkodzeń CV-5:
 //                                         3 = krztuszący się silnik ≤ 25 % HP — wylot dysz migocze i sypie iskrami); null, gdy nikt
 //                                         nie jest uszkodzony
@@ -82,15 +80,13 @@
 //   tacticalInfo()                      — ARC CV-6a: per bitwa w widoku — stopień zoomu (`zoom`: glyph / icons / handover / cinema),
 //                                         px_L, krycie ikon, ikony i mikrostosy, linie ognia teraz i w ostatniej sekundzie, ukryte
 //                                         mgłą, najmniejszy odstęp ikon, pasma zasięgu, najechanie
-//   cvFx(1) / cvFx(0)                   — flaga `cvFxEngine` (silnik FX z pulami) ON / OFF, od następnej salwy
-//   cvModels(1) / cvModels(0)           — ARC CV-1a: flaga `cvModels` (statki w ramie kanonicznej z plików hardpointów) ON / OFF;
-//                                         statki aktywnego układu przebudowane od razu
+//   cvFx() / cvStage()                  — CV-Z: wycofane (silnik FX z pulami i scena bitwy na stałe) — zwracają { retired: true }
+//   cvModels() / cvPresets()            — CV-Z: wycofane (rama kanoniczna, presety jakości i sygnały walki na stałe) — { retired: true }
 //   cvIncoming(1) / cvIncoming(0)       — ARC CV-1a: sloty z `hardpoints/incoming/index.json` biorą model z `incoming/` (podgląd
 //                                         modeli właściciela PRZED podmianą slotu — CV-1b); zwraca Promise (await w konsoli)
 //   cvLightTest(1) / cvLightTest(0)     — ARC CV-1a: testowy wzór punktów świetlnych na slotach bez `lights[]` (do CV-1c)
 //   modelInfo()                         — ARC CV-1a: statki w ramie kanonicznej, hardpointy (plik / zapas), pula świateł
 //   fxStats()                           — pomiar 300 klatek: czas klatki p50 / p95, wywołania i trójkąty renderera, pule
-//   cvPresets(1) / cvPresets(0)         — ARC CV-2b: flaga `cvPresets` (presety jakości + sygnały walki) ON / OFF, od następnej klatki
 //   gfx() / gfx(2) / gfx(1) / gfx(0)    — ARC CV-2b: odczyt presetu / High / Medium / Low (zapis na maszynie, jak ☰ „Grafika”)
 //   cvLightFlash()                      — ARC CV-2b: błysk światła puli w środku oglądanej bitwy (High 4 / Medium 2 / Low 0 świateł)
 //   cueStats() / cueStats(0)            — ARC CV-2b: sygnały walki odebrane przez słuchacza `AudioSystem` / wyzerowanie licznika
@@ -141,6 +137,14 @@ import { mixSeed } from '../utils/SeedMath.js';                              // 
 import { vesselSizeClass } from '../renderer/VesselModelResolver.js';        // ARC CV-5 — `cvExplode`: klasa kadłuba
 import { explosionClassOf } from '../renderer/combat/ExplosionLogic.js';     // ARC CV-5 — `cvExplode`: klasa wybuchu
 import { SHIP_MODULES } from '../data/ShipModulesData.js';                   // ARC CV-4b — `cvShieldHit`: osłona statku z modułów
+
+/**
+ * ARC CV-Z — przełącznik flagi wycofanej (flaga na stałe ON, ścieżka OFF usunięta): niczego nie zmienia, mówi to wprost.
+ * @param {string} flag — klucz dawnej flagi `FEATURES`
+ */
+export function retiredFlag(flag) {
+  return { retired: true, flag, note: 'CV-Z — flaga na stałe ON, ścieżka OFF usunięta; przełącznik niczego nie zmienia' };
+}
 
 export const CV_BATTLE = Object.freeze({
   MAX_PER_SIDE: 10,
@@ -538,8 +542,8 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
           enemyPinned: sideB.filter((v) => v.position?.dockedAt === body.id).length,
           sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
           doctrine: doc, doctrineRejected: eng.rejected,
-          empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
-          cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo, autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
+          empire: empire.name ?? empire.id, paused: !!ts.isPaused,
+          autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
         };
       }
 
@@ -639,7 +643,6 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
           ok: members === made.length && encs.length >= Math.min(2, pairs), encounters: encs.map((e) => e.id), split: true, system: sys, star: sw.info, seed, ...rolled,
           centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear, sideA: sideA.length, sideB: sideB.length, members,
           engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`, empire: empire.name ?? empire.id, paused: !!ts.isPaused,
-          cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, cvStage: !!GAME_CONFIG.FEATURES?.cvStage,
           autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
         };
       }
@@ -667,8 +670,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))], clear: c.clear,
         sideA: sideA.length, sideB: sideB.length, members, engageOrders: `${orders.filter((o) => o?.ok).length}/${orders.length}`,
         doctrine: doc, doctrineRejected: eng.rejected, engage: Number(engage),
-        empire: empire.name ?? empire.id, paused: !!ts.isPaused, cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine,
-        cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo,
+        empire: empire.name ?? empire.id, paused: !!ts.isPaused,
         autosave: ss ? 'off (do F5)' : 'n/a', warning: CV_BATTLE.WARNING,
       };
     },
@@ -721,32 +723,21 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       console.warn(CV_BATTLE.WARNING);
       return { ok: orders.every((o) => o === 'ok'), ships: made.length, orders: orders.filter((o) => o === 'ok').length + '/' + orders.length,
         refused: [...new Set(orders.filter((o) => o !== 'ok'))], system: sys, star: sw.info, centerAU: [Number((c.x / AU).toFixed(3)), Number((c.y / AU).toFixed(3))],
-        dir: Number(dir) || 0, paused: !!ts.isPaused, cvModels: !!GAME_CONFIG.FEATURES?.cvModels, warning: CV_BATTLE.WARNING };
+        dir: Number(dir) || 0, paused: !!ts.isPaused, warning: CV_BATTLE.WARNING };
     },
 
-    /** Flaga `cvFxEngine`: cvFx(1) — ON, cvFx(0) — OFF, cvFx() — przełącz. Czytana w chwili salwy. */
-    cvFx(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvFxEngine = on === undefined ? !F.cvFxEngine : !!on;
-      return { cvFxEngine: F.cvFxEngine };
-    },
+    /** CV-Z — flaga `cvFxEngine` wycofana (silnik FX z pulami na stałe). */
+    cvFx() { return retiredFlag('cvFxEngine'); },
 
-    /** ARC CV-2b — flaga `cvPresets` (presety jakości + sygnały walki): cvPresets(1) — ON, cvPresets(0) — OFF (dzisiejsza gęstość,
-     *  bloom, tekstury 2K, bez świateł puli i sygnałów), cvPresets() — przełącz. Renderer stosuje zmianę od następnej klatki. */
-    cvPresets(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvPresets = on === undefined ? !F.cvPresets : !!on;
-      const r = getRenderer();
-      r?._applyGfx?.('flag');
-      return { cvPresets: F.cvPresets, ...(r?.cvGfxInfo?.() ?? {}) };
-    },
+    /** CV-Z — flaga `cvPresets` wycofana (presety jakości i sygnały walki na stałe; poziom — gfx()). */
+    cvPresets() { return retiredFlag('cvPresets'); },
 
     /** ARC CV-4a — flaga `cvWeapons` (język broni + rejestr salw): cvWeapons(1) — ON, cvWeapons(0) — OFF (salwy CV-2a), cvWeapons() —
      *  przełącz. Czytana w chwili salwy i co klatkę. */
     cvWeapons(on) {
       const F = GAME_CONFIG.FEATURES;
       F.cvWeapons = on === undefined ? !F.cvWeapons : !!on;
-      return { cvWeapons: F.cvWeapons, cvFxEngine: !!F.cvFxEngine };
+      return { cvWeapons: F.cvWeapons };
     },
 
     /** ARC CV-4a — rejestr salw: liczniki per starcie i od wczytania strony, ostatnie rundy, HP pokazywane vs logiczne (`ThreeRenderer.cvLedgerInfo`). */
@@ -760,7 +751,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
     cvDamage(on) {
       const F = GAME_CONFIG.FEATURES;
       F.cvDamage = on === undefined ? !F.cvDamage : !!on;
-      return { cvDamage: F.cvDamage, cvFxEngine: !!F.cvFxEngine, fcCombatFx: !!F.fcCombatFx };
+      return { cvDamage: F.cvDamage, fcCombatFx: !!F.fcCombatFx };
     },
 
     /**
@@ -800,7 +791,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
     cvShields(on) {
       const F = GAME_CONFIG.FEATURES;
       F.cvShields = on === undefined ? !F.cvShields : !!on;
-      return { cvShields: F.cvShields, cvWeapons: !!F.cvWeapons, cvFxEngine: !!F.cvFxEngine };
+      return { cvShields: F.cvShields, cvWeapons: !!F.cvWeapons };
     },
 
     /**
@@ -857,17 +848,11 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
     cueStats(reset) {
       const a = window.KOSMOS?.audioSystem;
       const listener = reset === 0 ? (a?.resetCueStats?.() ?? null) : (a?.cueStats?.() ?? null);
-      return { listener, bus: getRenderer()?._cueBus?.stats?.() ?? null, cvPresets: !!GAME_CONFIG.FEATURES?.cvPresets };
+      return { listener, bus: getRenderer()?._cueBus?.stats?.() ?? null };
     },
 
-    /** ARC CV-1a — flaga `cvModels` (rama kanoniczna): cvModels(1) — ON, cvModels(0) — OFF, cvModels() — przełącz. Czytana przy
-     *  stawianiu statku — statki aktywnego układu przebudowane od razu. */
-    cvModels(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvModels = on === undefined ? !F.cvModels : !!on;
-      const rb = getRenderer()?.cvRebuildVesselSprites?.() ?? null;
-      return { cvModels: F.cvModels, ...(rb ?? { rebuilt: 0 }) };
-    },
+    /** CV-Z — flaga `cvModels` wycofana (rama kanoniczna na stałe). */
+    cvModels() { return retiredFlag('cvModels'); },
 
     /** ARC CV-1a — modele z `incoming/` dla slotów z indeksu: cvIncoming(1) / cvIncoming(0) / cvIncoming() — przełącz. Promise. */
     cvIncoming(on) {
@@ -889,28 +874,10 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       return r?.cvModelInfo ? r.cvModelInfo() : { ok: false, reason: 'no_renderer' };
     },
 
-    /** ARC CV-3a1 — flaga `cvStage` (scena bitwy): cvStage(1) — ON, cvStage(0) — OFF, cvStage() — przełącz. Czytana co klatkę. */
-    cvStage(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvStage = on === undefined ? !F.cvStage : !!on;
-      return { cvStage: F.cvStage };
-    },
-
-    /** ARC CV-3b — flaga `cvChoreo` (choreografia): cvChoreo(1) — ON, cvChoreo(0) — OFF, cvChoreo() — przełącz. Czytana co klatkę
-     *  (przesunięcia i kurs wchodzą / schodzą w 0,5 s czasu prezentacji). */
-    cvChoreo(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvChoreo = on === undefined ? !F.cvChoreo : !!on;
-      return { cvChoreo: F.cvChoreo };
-    },
-
-    /** ARC CV-3c — flaga `cvChoreo2` (lot wzdłuż kursu, wylot dysz zamiast stożków, odłamki, dryf wraków): cvChoreo2(1) — ON,
-     *  cvChoreo2(0) — OFF (obraz CV-3b / CV-5), cvChoreo2() — przełącz. Czytana co klatkę (ruch przenika przez 0,5 s). */
-    cvChoreo2(on) {
-      const F = GAME_CONFIG.FEATURES;
-      F.cvChoreo2 = on === undefined ? !F.cvChoreo2 : !!on;
-      return { cvChoreo2: F.cvChoreo2 };
-    },
+    /** CV-Z — flagi `cvStage` (scena bitwy), `cvChoreo` i `cvChoreo2` (choreografia CV-3c) wycofane — na stałe. */
+    cvStage() { return retiredFlag('cvStage'); },
+    cvChoreo() { return retiredFlag('cvChoreo'); },
+    cvChoreo2() { return retiredFlag('cvChoreo2'); },
 
     /**
      * ARC CV-3c — kamera (`vessel:focus`) na najbardziej uszkodzony żywy statek na scenie bitwy: najwyższy stan uszkodzeń CV-5
@@ -1076,7 +1043,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
         ok: true, system: sys, body: body.id, bodyName: body.name ?? body.id, empire: empire.name ?? empire.id,
         attackers: made.A.length, defenders: made.B.length, hangar: NH, tower: TW, grid: GR, viewNow: view ?? sys,
         ...(RAID ? { raid: true, raidOrders } : {}),
-        flags: { cvOrbital: !!GAME_CONFIG.FEATURES?.cvOrbital, cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons },
+        flags: { cvOrbital: !!GAME_CONFIG.FEATURES?.cvOrbital, cvWeapons: !!GAME_CONFIG.FEATURES?.cvWeapons },
         note: RAID === 1 ? 'rajd: wznow czas — starcie DSCS na orbicie, w jego trakcie bitwa przy kolonii (powtorka po starciu) — jeden baner'
           : RAID === 2 ? 'rajd z lotem: wznow czas (1 t/s); starcie DSCS w podejsciu, ocaleli gonia kolonie (sufit czekania 15 s)'
           : 'rozstrzygniecie za ~0,5 s czasu realnego; wznow czas, zeby obejrzec powtorke (orbitalInfo())', paused: !!ts.isPaused,
@@ -1159,7 +1126,7 @@ export function cvBattleDebugHelpers({ getRenderer = () => window.KOSMOS?.threeR
       F.cvTactical = on === undefined ? !F.cvTactical : !!on;
       const hud = (typeof window !== 'undefined') ? window.KOSMOS?.hudLayer : null;
       hud?.wake?.();
-      return { cvTactical: F.cvTactical, cvStage: !!F.cvStage };
+      return { cvTactical: F.cvTactical };
     },
 
     /** ARC CV-7 — kamera reżysera: cvDirector(1) — włączona (jak chip), cvDirector(0) — wyłączona, cvDirector() — przełącz. */

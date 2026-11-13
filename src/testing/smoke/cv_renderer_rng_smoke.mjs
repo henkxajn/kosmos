@@ -217,8 +217,11 @@ const TR_STATIC = { _hitGlowTexture: () => (glowTex ??= new THREE.Texture()) };
 const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngagementInView', 'combatFxPace', 'fxWeaponColor',
   'FX_MAX_ACTIVE', 'FX_TRACER_MS', 'FX_SHIELD_COLOR', 'isEnemyVessel', 'isEndpointVisibleInCombat', 'isPlayerEngagement',
   'vesselTargetSize', 'HIT_GLOW', 'hitGlowWorldSize', 'ThreeRenderer', 'EXPLOSION_RING_COLOR', 'FX_HDR_EXPLOSION', 'rendererRandom'];
-const FX_METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
-  '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_spawnExplosion', 'debugRngCheck'];
+// CV-Z — PRZECELOWANE ŚWIADOMIE: dawne smugi `THREE.Line` (`_spawnCombatTracer`, `_spawnHitGlow`, `_follow*`) usunięte — salwa idzie do
+//   silnika FX z pulami (`_cvFxRoundFx`, zero alokacji THREE po rozgrzewce; neutralność pinuje `cv_fx_results_smoke`). Tu salwa trafia do
+//   zaślepki liczącej salwy; KONTROLA emuluje dawny UUID w każdej salwie (12 losowań — jak obiekty THREE dawnych smug).
+const FX_METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
+  '_spawnFx', '_disposeFx', '_spawnExplosion', 'debugRngCheck'];
 function makeMethod(name) {
   const m = methodOf(name);
   if (!m) return null;
@@ -231,8 +234,12 @@ function makeMethod(name) {
 /** Atrapa renderera z PRAWDZIWYMI metodami FX; `oldUuid` — emulacja dawnego `generateUUID` (KONTROLA). */
 function fakeRenderer({ oldUuid = false } = {}) {
   const R = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(55, 1600 / 1041, 0.001, 5000),
-    _fxGroup: null, _activeEffects: [], _vessels: new Map(), spawned: 0, explosions: 0, missing: [] };
+    _fxGroup: null, _activeEffects: [], _vessels: new Map(), spawned: 0, explosions: 0, salvos: 0, missing: [] };
   for (const n of FX_METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
+  R._cvFxRoundFx = function (events) {
+    R.salvos++;
+    if (oldUuid) for (let k = 0; k < 12 * Math.max(1, events?.length ?? 0); k++) Math.random();
+  };
   const spawn = R._spawnFx;
   R._spawnFx = function (mesh, cfg) {
     R.spawned++;
@@ -314,13 +321,6 @@ const encActive = () => dscs.listActive().length > 0;
 /** Przebieg: 'off' (FX wyłączone), 'on' (prawdziwe metody FX), 'control' (FX + emulacja dawnego UUID). */
 function run(mode) {
   const flag = GAME_CONFIG.FEATURES.fcCombatFx;
-  // CV-2a — ten keeper pinuje DZISIEJSZĄ ścieżkę FX (metody `_spawnCombatTracer` / `_spawnFx` …), czyli ścieżkę OFF flagi
-  // `cvFxEngine` (od CV-2a domyślnie ON). Neutralność silnika z pulami wobec strumienia gry pinuje `cv_fx_results_smoke`.
-  const cvFlag = GAME_CONFIG.FEATURES.cvFxEngine;
-  GAME_CONFIG.FEATURES.cvFxEngine = false;
-  // ARC CV-3a1 — `cvStage` (od CV-3a1 domyślnie ON) też OFF: dzisiejsza eksplozja wraku ma płaski pierścień (641).
-  const stFlag = GAME_CONFIG.FEATURES.cvStage;
-  GAME_CONFIG.FEATURES.cvStage = false;
   reseed('cv0b-battle'); reseedRendererRandom();
   let R = null;
   const arrivals = [];
@@ -348,8 +348,6 @@ function run(mode) {
     return { sig: { battles: rec.battles, wrecks: rec.wrecks }, slots };
   });
   GAME_CONFIG.FEATURES.fcCombatFx = flag;
-  GAME_CONFIG.FEATURES.cvFxEngine = cvFlag;
-  GAME_CONFIG.FEATURES.cvStage = stFlag;
   return { ...out.result, draws: out.draws, R };
 }
 
@@ -360,7 +358,7 @@ const CTL = run('control');
 {
   assert(ON.R && ON.R.missing.length === 0, `T5a metody FX wyciągnięte ze źródła renderera${ON.R?.missing?.length ? ' — brak: ' + ON.R.missing.join(', ') : ''}`);
   assert(OFF.sig.battles.length > 0 && OFF.draws.length > 0, `T5b KONTROLA sceny: starcie rozstrzygnięte, gra losowała w oknie (${OFF.draws.length} losowań)`);
-  assert(ON.R.spawned >= 30 && ON.R.explosions >= 1, `T5c FX realnie działały: ${ON.R.spawned} efektów, ${ON.R.explosions} eksplozji (obiekty THREE w oknie pomiaru)`);
+  assert(ON.R.salvos >= 10 && ON.R.explosions >= 1 && ON.R.spawned >= 1, `T5c FX realnie działały: ${ON.R.salvos} salw do silnika, ${ON.R.explosions} eksplozji (${ON.R.spawned} obiektów THREE w oknie pomiaru)`);
   assert(same(ON.draws, OFF.draws), `T5d sekwencja losowań gry ON == OFF (${ON.draws.length} == ${OFF.draws.length}, wartości identyczne)`);
   assert(!same(CTL.draws, OFF.draws), `T5e KONTROLA: emulacja dawnego UUID zmienia sekwencję (${CTL.draws.length} ≠ ${OFF.draws.length}) — przyrząd czuły`);
 }

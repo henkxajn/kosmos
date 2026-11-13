@@ -717,7 +717,8 @@ header('T17 WYKONANIE vessel:focus (wycięty słuchacz) — statek bez sprite\'a
   out.length = 0; R._pendingVesselFocus = { vesselId: 'vA', goal: { x: 1, y: 2, z: 3 } }; cc._goalTarget = { x: 9, y: 9, z: 9 };
   ap?.call(R, 'vA');
   ok(!!ap && out.length === 0 && R._pendingVesselFocus === null, 'T17d kamerę w międzyczasie przejął ktoś inny → fokus przepada (bez szarpnięcia)');
-  ok(/this\._applyPendingVesselFocus\(vessel\.id\);/.test(methodBody(TR_SRC, '  _addVesselModel3D(vessel, modelPath) {'))
+  // CV-Z — przecelowane świadomie: model GLB stawia wyłącznie `_addVesselModelCv` (dawna ścieżka `_addVesselModel3D` usunięta z flagą `cvModels`).
+  ok(/this\._applyPendingVesselFocus\(vessel\.id\);/.test(methodBody(TR_SRC, '  _addVesselModelCv(vessel, modelPath) {'))
     && /this\._applyPendingVesselFocus\(vessel\.id\);/.test(methodBody(TR_SRC, '  _addVesselSpriteFallback(vessel) {')),
     'T17e źródło: dokończenie wołane, gdy stanie model GLB i gdy stanie sprite zapasowy');
   globalThis.KOSMOS.activeSystemId = 'sys_home';

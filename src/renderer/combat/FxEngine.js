@@ -127,8 +127,8 @@ export const LIVE_CV_FX = {
   GLOW_MAX_PX:  96,
   FLASH_GROW:   3.0,     // błysk trafienia rośnie w czasie życia ×1 → ×GROW (jak dziś)
   RING_GROW:    3.0,     // pierścień osłony — j.w.
-  // ARC CV-3a3 (Finding 653, decyzja właściciela §3.2-11 — ŁATA do CV-4 / CV-4b / CV-5 / CV-6a) — pod flagą `cvStage` (scena
-  // bitwy): błysk i pierścień osłony mniejsze i wolniej rosnące (silnik: `update({ stage })`), kula wybuchu wraku w skali
+  // ARC CV-3a3 (Finding 653, decyzja właściciela §3.2-11 — ŁATA do CV-4 / CV-4b / CV-5 / CV-6a) — scena bitwy: błysk
+  // i pierścień osłony mniejsze i wolniej rosnące (silnik: `update`), kula wybuchu wraku w skali
   // kadłuba i celownik wroga gasnący na scenie (renderer: `_spawnExplosion`, `_syncEnemyAlertMarkers`). Strojenie, bez pinów.
   STAGE_FLASH_K:    1.2,   // średnica błysku = rozmiar modelu × K (bez sceny — FLASH_K)
   STAGE_FLASH_GROW: 1.5,
@@ -826,11 +826,11 @@ export class FxEngine {
 
   /**
    * Raz na klatkę pętli renderu.
-   * @param {{ nowMs:number, camera?:{fov:number}, viewportH?:number, visible?:boolean, stage?:boolean }} frame
-   *   nowMs — czas ZEGARA PREZENTACJI (stoi w pauzie); viewportH — wysokość widoku w CSS px; stage — scena bitwy (flaga
-   *   `cvStage`, ARC CV-3a3): błysk i pierścień osłony z pokręteł `STAGE_*` (bez sceny — dzisiejsze, co do bitu).
+   * @param {{ nowMs:number, camera?:{fov:number}, viewportH?:number, visible?:boolean }} frame
+   *   nowMs — czas ZEGARA PREZENTACJI (stoi w pauzie); viewportH — wysokość widoku w CSS px. Błysk i pierścień osłony z pokręteł
+   *   `STAGE_*` (ARC CV-3a3 — scena bitwy; CV-Z — jedyna ścieżka, dawne `FLASH_K` / `RING_K` bez sceny usunięte).
    */
-  update({ nowMs, dmgNowMs = undefined, camera = null, viewportH = 1, visible = true, stage = false, smaa = false } = {}) {
+  update({ nowMs, dmgNowMs = undefined, camera = null, viewportH = 1, visible = true, smaa = false } = {}) {
     if (Number.isFinite(nowMs)) this.nowMs = nowMs;
     const now = this.nowMs;
     for (let i = 0; i < this.pools.length; i++) this.pools[i].retire(now);
@@ -844,15 +844,15 @@ export class FxEngine {
     bu.uTime.value = tRel; bu.uPxToWorld.value = pxToWorld; bu.uWidth.value = T.BEAM_WIDTH; bu.uMinPx.value = T.MIN_PX; bu.uCore.value = T.BEAM_CORE;
     tu.uTime.value = tRel; tu.uPxToWorld.value = pxToWorld; tu.uWidth.value = T.TRACER_WIDTH; tu.uMinPx.value = T.MIN_PX; tu.uCore.value = T.TRACER_CORE;
     su.uTime.value = tRel; su.uPxToWorld.value = pxToWorld; su.uCore.value = T.FLASH_CORE;
-    const st = stage === true;   // ARC CV-3a3 (Finding 653 (b)(c)) — łata sceny bitwy
-    su.uSizeK.value.set(st ? T.STAGE_FLASH_K : T.FLASH_K, st ? T.STAGE_RING_K : T.RING_K, T.GLOW_K);
+    // ARC CV-3a3 (Finding 653 (b)(c)) — błysk i pierścień osłony w skali sceny bitwy
+    su.uSizeK.value.set(T.STAGE_FLASH_K, T.STAGE_RING_K, T.GLOW_K);
     su.uMinPx.value.set(T.FLASH_MIN_PX, T.RING_MIN_PX, T.GLOW_MIN_PX);
     su.uMaxPx.value.set(T.FLASH_MAX_PX, T.RING_MAX_PX, T.GLOW_MAX_PX);
-    su.uGrow.value.set(st ? T.STAGE_FLASH_GROW : T.FLASH_GROW, st ? T.STAGE_RING_GROW : T.RING_GROW, 1);
+    su.uGrow.value.set(T.STAGE_FLASH_GROW, T.STAGE_RING_GROW, 1);
     // ARC CV-4a — pule języka broni: śledzenie końców (gdy coś w nich jest) i pokrętła `WPN_*` co klatkę.
     if ((this.wbeams.n + this.bolts.n + this.motes.n) > 0 && (this._resolve || this._resolveLocal)) this._followWpn(now);
     const wu = this.wbeams.material.uniforms, ou = this.bolts.material.uniforms, mu = this.motes.material.uniforms;
-    // ARC CV-3c (decyzja 45 (5)) — wiązka pod SMAA (High; renderer podaje `smaa` przy fladze `cvChoreo2`): rdzeń i szerokość z kompensacją
+    // ARC CV-3c (decyzja 45 (5)) — wiązka pod SMAA (High; renderer podaje `smaa`): rdzeń i szerokość z kompensacją
     const bk = smaa ? 1 : 0;
     wu.uTime.value = tRel; wu.uPxToWorld.value = pxToWorld; wu.uWidth.value = (T.WPN_BEAM_WIDTH ?? T.BEAM_WIDTH) * (bk ? (T.WPN_SMAA_BEAM_WIDTH_K ?? 1) : 1);
     wu.uMinPx.value = T.WPN_BEAM_MIN_PX ?? T.MIN_PX; wu.uCore.value = (T.WPN_BEAM_CORE ?? T.BEAM_CORE) * (bk ? (T.WPN_SMAA_BEAM_CORE_K ?? 1) : 1);

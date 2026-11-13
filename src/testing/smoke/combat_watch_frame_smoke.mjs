@@ -291,7 +291,8 @@ header('T11 źródło `ThreeRenderer`');
     && /if \(w\.fitDist\) cc\.setTargetDist\(fit\.dist\)/.test(upd),
     'T11c2 cel — szybkie śledzenie (`focusOnSmooth`, jak kamera na wybranym statku), nie sam lerp 0,08 (`flyTo`)');
   const sw = body('  _startWatch(encounterId, x, y) {');
-  const swActive = sw.indexOf('if (!enc?.isActive) {'); const swWatch = sw.indexOf('this._watch = {'); const swFit = sw.indexOf('this._computeWatchFit(enc)');
+  // CV-Z — przecelowane świadomie: kadr startu „Obserwuj” = kadr sceny (`_stageWatchFit`; dawny `_computeWatchFit` bez sceny usunięty z obserwacji).
+  const swActive = sw.indexOf('if (!enc?.isActive) {'); const swWatch = sw.indexOf('this._watch = {'); const swFit = sw.indexOf('this._stageWatchFit(enc)');
   assert(swActive > 0 && swWatch > swActive && swFit > swWatch && /\} else \{[\s\S]*focusOnInstant\(S\(x\), S\(y\), 0\.3\)/.test(sw.slice(swFit)),
     'T11c3 aktywne starcie bez sprite\'ów (po przełączeniu układu — model GLB wstawia się asynchronicznie): obserwacja startuje, kadr dopasuje pierwsza klatka ze sprite\'ami');
   const end = body('  _endWatch() {');
@@ -340,7 +341,9 @@ header('T12 efekty walki przy „Obserwuj” — limit rozmiaru na ekranie');
     'T12d pętla efektów: limit tylko przy „Obserwuj”, PO ustawieniu skali rodzaju, macierz widoku bieżąca');
   const set = /const FX_WATCH_CAPPED = new Set\(\[([^\]]*)\]\)/.exec(tr)?.[1] ?? '';
   const kinds = set.split(',').map((s) => s.trim().replace(/'/g, '')).filter(Boolean).sort();
-  assert(kinds.join(',') === 'explosion,explosionRing,flash,shieldRing', `T12e rodzaje z limitem: błysk, pierścień osłony, wybuch (kula i pierścień) — jest [${kinds.join(', ')}]; smugi bez zmian`);
+  // CV-Z — PRZECELOWANE ŚWIADOMIE (plan §4 CV-Z: „combat_watch_frame T12d-e”): dawne błyski, pierścienie osłony i pierścień uderzeniowy usunięte —
+  //   limit ekranowy zostaje dla kuli ognia (łata wybuchu bez sceny — np. obrońca z hangaru, Finding 716).
+  assert(kinds.join(',') === 'explosion', `T12e rodzaje z limitem: kula ognia — jest [${kinds.join(', ')}]`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

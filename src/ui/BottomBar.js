@@ -16,7 +16,6 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 import { buildSaveFileName, downloadSave, pickSaveFile, markPendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
 // ARKUSZ HUD paczka B (B-3) — ☰ „Radar” i chip [R] czytają i piszą ten sam stan (`uiPrefs.hudLayers.radar`).
 import { readHudLayers, setHudLayer } from './HudLayerChipsLogic.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';   // ARC CV-2b — flaga `cvPresets` (wiersz ☰ „Grafika”)
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -472,8 +471,8 @@ export class BottomBar {
     const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
     const randomEventsOn = window.KOSMOS?.uiPrefs?.randomEventsEnabled !== false;
     const autoFocusOn = window.KOSMOS?.uiPrefs?.battleAutoFocus !== false;   // ARC CV-6b2 (#630) — domyślnie ON
-    // ARC CV-2b — ☰ „Grafika” wyłącznie z flagą `cvPresets` (OFF — menu jak dziś); poziom z renderera (zapis na maszynie).
-    const gfxLevel = GAME_CONFIG.FEATURES?.cvPresets ? (window.KOSMOS?.threeRenderer?.gfxLevel ?? null) : null;
+    // ARC CV-2b — ☰ „Grafika”: poziom z renderera (zapis na maszynie); bez renderera (headless) — bez wiersza.
+    const gfxLevel = window.KOSMOS?.threeRenderer?.gfxLevel ?? null;
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },

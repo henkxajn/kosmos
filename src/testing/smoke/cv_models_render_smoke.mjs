@@ -342,19 +342,11 @@ await block('R8 integracja — prawdziwe metody renderera: flaga ON / OFF, kurs,
     const e3 = R._vessels.get('v3');
     assert(e3?.canonical && e3.isWreck && e3.enemyTint === true && e3._orbiting?.bodyId === 'p1' && e3.exhaust === null && KC.keyColourUniformsOf(e3.rig.materials[0]).uKcBurn.value.x > 0,
       'R8e wrak przy ciele (flaga ON): pamięć orbity cmentarzyska, żar, bez smugi');
-    // Finding 625 — ścieżka OFF: wrak przy ciele bez ReferenceError (dawniej `entry` poza zakresem → „GLB load failed (retry)”).
-    F.cvModels = false;
-    const warnOrig = console.warn; const warns = []; console.warn = (...a) => { warns.push(String(a[0])); };
-    const wreckOff = trap({ id: 'v4', name: 'wreckOff', shipId: 'hull_frigate', isWreck: true, position: trap({ x: 0, y: 0, state: 'orbiting', dockedAt: 'p1' }), warpFuel: { max: 0 } });
-    R._addVesselModel3D(wreckOff, 'assets/models/ships/warp_frigate.glb');
-    await tick(); await tick();
-    console.warn = warnOrig;
-    const e4 = R._vessels.get('v4');
-    assert(e4 && !e4.canonical && e4._orbiting?.bodyId === 'p1' && !warns.some((w) => /GLB load failed/.test(w)),
-      `R8f flaga OFF: dawna ścieżka (bez ramy kanonicznej); wrak przy ciele bez wyjątku — Finding 625 (ostrzeżeń „GLB load failed”: ${warns.filter((w) => /GLB load failed/.test(w)).length})`);
+    // CV-Z — R8f (dawna ścieżka bez ramy kanonicznej, Finding 625 na ścieżce OFF) wycofane razem z flagą `cvModels`; wrak przy ciele
+    //   w ramie kanonicznej pinuje R8e.
     // Model z `incoming/` niedostępny → model slotu (bez czekania i bez DEFAULT).
-    F.cvModels = true;
     failPaths.add('assets/models/ships/incoming/warp_frigate.glb');
+    const warnOrig = console.warn;
     console.warn = () => {};
     const inc = trap({ id: 'v5', name: 'inc', shipId: 'hull_frigate', position: trap({ x: 0, y: 0, state: 'orbiting', dockedAt: null }), warpFuel: { max: 5 } });
     R._addVesselModel3D(inc, 'assets/models/ships/incoming/warp_frigate.glb');
@@ -431,112 +423,21 @@ await block('R11 światło czytelności — uniformy strony własne dla materia�
   }
 });
 
-// ── R12 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-// Kontrola właściciela CV-1a (2026-11-11) — kurs statków w bitwie. Zmierzone na żywym silniku (fixture GATE-S4, `cvBattle`):
-// wróg (bez misji) burtą przy ON, dziobem do gracza przy OFF i przed CV-1a — kurs 0 ramy kanonicznej to dziób +Z, nie −X.
-// Naprawa: kurs spoczynkowy + pochylenie wraku równoważne OFF. Tu: prawdziwe metody stawiania przy ON i OFF dla tego samego
-// statku — orientacja dziobu i góry modelu w świecie identyczna. Statki gracza z rozkazem „Zaangażuj” (misja zastępcza bez
-// współrzędnych) patrzą na początek układu (gwiazdę) — identycznie ON i OFF, zachowanie sprzed CV-1a (zwrot ku celowi — CV-3b).
-await block('R12 kurs ON == OFF przy stawianiu — stojący, „Zaangażuj” bez współrzędnych, w locie, wrak; kontrola: dziób +X (621)', async () => {
+// ── R12 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ⚠ PRZECELOWANE ŚWIADOMIE (CV-Z): dawne R12b / R12c / R12e porównywały kurs i pochylenie ramy kanonicznej z dawną ścieżką bez ramy
+//   (ON == OFF przy stawianiu), a R10 — Finding 625 na ścieżce OFF. Ścieżka usunięta razem z flagą `cvModels`, porównanie nie ma
+//   drugiej strony; zostaje pin metod stawiania (R12a) i gałęzi kanonicznej zamiany żywego statku we wrak (R12d — `_cvTiltWreck`, bez
+//   zapisów Eulera), a dziób +X (621) i kurs spoczynkowy pinuje `cv_models_logic_smoke` (T5r / T5rk, T11).
+await block('R12 stawianie w ramie kanonicznej i zamiana żywego statku we wrak', async () => {
   const add3d = makeMethod('_addVesselModel3D'), addCv = makeMethod('_addVesselModelCv'), pool = makeMethod('_cvLightPool');
   const ltd = makeMethod('_cvLightTestDoc'), tilt = makeMethod('_cvTiltWreck');
   assert(!!(add3d && addCv && pool && ltd && tilt), 'R12a metody stawiania wyciągnięte ze źródła (w tym `_cvTiltWreck`)');
-  const RR = await import(new URL('../../renderer/RendererRng.js', import.meta.url).href);
-  const mkR = (tpl, frame) => {
-    const R = {
-      THREE, scene: new THREE.Scene(), _vessels: new Map(), _missingModelPaths: new Set(), _shipLightPool: null, _cvLightTest: false,
-      _planets: new Map([['p1', { mesh: { uuid: 'u1' }, group: { position: { x: 0, z: 0 } } }]]), _moons: new Map(), _planetoids: new Map(), _entityByUUID: new Map(),
-      _getEntityRadius: () => 0.05, cvTuning: ENG?.LIVE_CV_FX ?? {},
-      _shipHardpoints: new HP.ShipHardpointsCache({ fetchJson: async () => docOf({ frame }), warn: () => {} }),
-      _loadShipModel: () => Promise.resolve(tpl.g), _applyVesselIntelVisibility: () => {}, _applyPendingVesselFocus: () => {}, _addVesselSpriteFallback: () => {},
-    };
-    Object.assign(R, { _addVesselModelCv: addCv, _cvLightPool: pool, _cvLightTestDoc: ltd, _addVesselModel3D: add3d, _cvTiltWreck: tilt });
-    return R;
-  };
-  window.KOSMOS = { observatorySystem: { isVesselDetected: () => true } };
-  const F = GAME_CONFIG.FEATURES; const keep = { cvModels: F.cvModels, fcCombatFx: F.fcCombatFx, m4EnemyGhosts: F.m4EnemyGhosts };
-  const tick = () => new Promise((r) => (globalThis.__origSetTimeout ?? setTimeout)(r, 1));
-  // Orientacja modelu w świecie: ON — grupa ramy (wrapper × kwaternion ramy), OFF — wrapper (model bez obrotu); wektory z przestrzeni modelu.
-  const axes = (e, v) => {
-    e.sprite.updateMatrixWorld(true);
-    const q = (e.canonical ? e.rig.canon : e.sprite).getWorldQuaternion(new THREE.Quaternion());
-    return new THREE.Vector3(...v).applyQuaternion(q);
-  };
-  const place = async (R, on, vessel) => {
-    F.cvModels = on;
-    RR.reseedRendererRandom('r12');
-    R._addVesselModel3D(vessel, 'assets/models/ships/warp_frigate.glb');
-    await tick(); await tick();
-    return R._vessels.get(vessel.id);
-  };
-  try {
-    F.fcCombatFx = true; F.m4EnemyGhosts = true;
-    const tpl = makeTemplate();   // model z dziobem −X (jak 26/27 starych modeli i sześć modeli właściciela)
-    const Ron = mkR(tpl, { bow: [-1, 0, 0], up: [0, 1, 0] }), Roff = mkR(tpl, { bow: [-1, 0, 0], up: [0, 1, 0] });
-    const cases = [
-      ['stojący swój (bez misji)', { shipId: 'hull_frigate', position: { x: 300, y: -5, state: 'orbiting', dockedAt: null }, warpFuel: { max: 5 } }],
-      ['stojący wróg (bez misji)', { shipId: 'hull_frigate', isEnemy: true, ownerEmpireId: 'emp_x', position: { x: 320, y: 5, state: 'orbiting', dockedAt: null }, warpFuel: { max: 5 } }],
-      ['„Zaangażuj” — misja zastępcza bez współrzędnych', { shipId: 'hull_frigate', position: { x: 280, y: -4, state: 'orbiting', dockedAt: null }, warpFuel: { max: 5 },
-        mission: { type: 'engage', targetId: 'x', managedByOrder: true } }],
-      ['w locie (misja z celem)', { shipId: 'hull_frigate', position: { x: 100, y: 50, state: 'in_transit' }, warpFuel: { max: 5 }, mission: { targetX: 400, targetY: -250, phase: 'outbound' } }],
-      ['wrak w wolnej przestrzeni (pochylenie)', { shipId: 'hull_frigate', isWreck: true, wreckLocation: { x: 10, y: 20 }, position: { x: 10, y: 20, state: 'orbiting', dockedAt: null }, warpFuel: { max: 0 } }],
-      ['wrak przy ciele (pochylenie)', { shipId: 'hull_frigate', isWreck: true, position: { x: 0, y: 0, state: 'orbiting', dockedAt: 'p1' }, warpFuel: { max: 0 } }],
-    ];
-    const rows = [];
-    let k = 0;
-    for (const [name, base] of cases) {
-      k++;
-      const eOn = await place(Ron, true, { ...base, id: 'on' + k, name: 'on' + k });
-      const eOff = await place(Roff, false, { ...base, id: 'off' + k, name: 'off' + k });
-      const ok = !!(eOn?.canonical && eOff && !eOff.canonical);
-      const bow = ok ? axes(eOn, [-1, 0, 0]).dot(axes(eOff, [-1, 0, 0])) : NaN;
-      const up = ok ? axes(eOn, [0, 1, 0]).dot(axes(eOff, [0, 1, 0])) : NaN;
-      rows.push({ name, bow, up });
-    }
-    for (const r of rows) assert(r.bow > 1 - 1e-9 && r.up > 1 - 1e-9, `R12b ${r.name}: dziób i góra w świecie ON == OFF (cos dziobu ${Number(r.bow).toFixed(12)}, góry ${Number(r.up).toFixed(12)})`);
-    // KONTROLA — model z dziobem +X (Finding 621: `nonwarp_large_science`): ścieżka OFF stawia go RUFĄ do kursu dziobów −X, rama
-    // kanoniczna — dziobem; różnica ZAMIERZONA, a instrument musi ją widzieć (inaczej piny R12b mogłyby przechodzić jałowo).
-    const tplX = makeTemplate();
-    const RonX = mkR(tplX, { bow: [1, 0, 0], up: [0, 1, 0] }), RoffX = mkR(tplX, { bow: [1, 0, 0], up: [0, 1, 0] });
-    const sx = { shipId: 'hull_frigate', position: { x: 300, y: 0, state: 'orbiting', dockedAt: null }, warpFuel: { max: 5 } };
-    const xOn = await place(RonX, true, { ...sx, id: 'xon', name: 'xon' }), xOff = await place(RoffX, false, { ...sx, id: 'xoff', name: 'xoff' });
-    const xBow = axes(xOn, [1, 0, 0]).dot(axes(xOff, [1, 0, 0]));
-    assert(xBow < 0.5, `R12c KONTROLA (zielona po obu stronach zmiany): instrument widzi różnicę orientacji ON / OFF dla modelu z dziobem +X (cos ${xBow.toFixed(9)})`);
-    assert(xBow < -1 + 1e-9, `R12e dziób +X (621): ON stoi dziobem tam, gdzie reszta (−X świata), OFF — rufą (cos ${xBow.toFixed(9)}); różnica ZAMIERZONA`);
-  } finally { Object.assign(F, keep); }
-  // Zamiana ŻYWEGO statku we wrak (handler `vessel:wrecked`, nie do wyciągnięcia): gałąź kanoniczna woła `_cvTiltWreck` (to samo
-  // pochylenie co wyżej), gałąź OFF zostaje przy dawnych zapisach Eulera.
   const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\'"`])\/\/.*$/gm, '$1');
   const i0 = TR.indexOf("EventBus.on('vessel:wrecked'");
   const h = i0 >= 0 ? strip(TR.slice(i0, TR.indexOf('} else if (entry.sprite.material)', i0))) : '';
-  const cvBranch = h.slice(h.indexOf('if (entry.canonical && entry.rig)'), h.indexOf('} else if (entry.isModel3D)'));
-  const offBranch = h.slice(h.indexOf('} else if (entry.isModel3D)'));
-  assert(cvBranch.includes('this._cvTiltWreck(entry.sprite)') && !/rotation\.[zx]\s*=/.test(cvBranch) && /entry\.sprite\.rotation\.z\s*=/.test(offBranch),
-    'R12d zamiana żywego statku we wrak: gałąź kanoniczna przez `_cvTiltWreck` (bez zapisów Eulera), ścieżka OFF bez zmian');
-});
-
-// ── R10 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-// Finding 625 na ścieżce OFF — blok NIEZALEŻNY od modułów CV-1a (pin naprawy z prawdziwym fail-first: na drzewie sprzed CV-1a
-// `entry` poza zakresem rzuca ReferenceError w `placeModel`, połykany przez `.catch` jako „GLB load failed (retry)”).
-await block('R10 Finding 625 — wrak przy ciele na ścieżce OFF stawiany bez wyjątku, z pamięcią orbity', async () => {
-  const add3d = makeMethod('_addVesselModel3D');
-  assert(!!add3d, 'R10a `_addVesselModel3D` wyciągnięty ze źródła');
-  const tpl = makeTemplate();
-  const R = { scene: new THREE.Scene(), _vessels: new Map(), _missingModelPaths: new Set(),
-    _planets: new Map([['p1', { mesh: { uuid: 'u1' }, group: { position: { x: 0, z: 0 } } }]]), _moons: new Map(), _planetoids: new Map(), _entityByUUID: new Map(),
-    _getEntityRadius: () => 0.05, _loadShipModel: () => Promise.resolve(tpl.g), _applyVesselIntelVisibility: () => {}, _applyPendingVesselFocus: () => {},
-    _addVesselSpriteFallback: () => {} };
-  window.KOSMOS = {};
-  const F = GAME_CONFIG.FEATURES; const keep = F.cvModels; F.cvModels = false;
-  const warnOrig = console.warn; const warns = []; console.warn = (...a) => { warns.push(String(a[0])); };
-  try {
-    add3d.call(R, { id: 'w1', name: 'w', shipId: 'hull_frigate', isWreck: true, position: { x: 0, y: 0, state: 'orbiting', dockedAt: 'p1' }, warpFuel: { max: 0 } },
-      'assets/models/ships/nonwarp_frigate.glb');
-    await new Promise((r) => (globalThis.__origSetTimeout ?? setTimeout)(r, 5));
-  } finally { console.warn = warnOrig; F.cvModels = keep; }
-  const e = R._vessels.get('w1');
-  const failed = warns.filter((w) => /GLB load failed/.test(w)).length;
-  assert(e && e.isWreck && e._orbiting?.bodyId === 'p1' && failed === 0, `R10b wrak stoi, pamięć orbity cmentarzyska ustawiona, ostrzeżeń „GLB load failed”: ${failed}`);
+  const cvBranch = h.slice(h.indexOf('if (entry.canonical && entry.rig)'));
+  assert(cvBranch.includes('this._cvTiltWreck(entry.sprite)') && !/rotation\.[zx]\s*=/.test(cvBranch) && !/entry\.isModel3D/.test(h),
+    'R12d zamiana żywego statku we wrak: gałąź kanoniczna przez `_cvTiltWreck` (bez zapisów Eulera); gałęzi modeli bez ramy nie ma');
 });
 
 // ── R9 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -121,8 +121,6 @@ function rigEntry(yaw) {
 }
 
 function world({ encId = 'enc_1', doctrineA = null, retreatIdx = -1, choreo = true, stub = null, choreo2 = true } = {}) {
-  GAME_CONFIG.FEATURES.cvChoreo = choreo;
-  GAME_CONFIG.FEATURES.cvChoreo2 = choreo2;   // CV-3c — lot wzdłuż kursu (świadek: false — CV-3b)
   const layout = ST?.cvBattleLayout?.({ nA: 10, nB: 10 })?.ships ?? [];
   const vessels = new Map(), logical = new Map();
   for (const s of layout) {
@@ -220,8 +218,7 @@ function facingErrors(w, ids = [...w.A, ...w.B]) {
   }
   return out;
 }
-const FLAG0 = GAME_CONFIG.FEATURES.cvStage, CHO0 = GAME_CONFIG.FEATURES.cvChoreo, CHO2_0 = GAME_CONFIG.FEATURES.cvChoreo2, FX0 = GAME_CONFIG.FEATURES.fcCombatFx;
-GAME_CONFIG.FEATURES.cvStage = true;
+const FX0 = GAME_CONFIG.FEATURES.fcCombatFx;
 GAME_CONFIG.FEATURES.fcCombatFx = true;
 const pctl = (arr, q) => { const b = [...arr].sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.floor(b.length * q))] : NaN; };
 const glowSig = (e) => (e.rig.glows ?? []).map((g) => [g.group.visible, g.core.scale.x, g.core.material.color.r, g.core.material.color.g, g.flare.scale.z]);
@@ -331,14 +328,8 @@ block('G4 — SEDNO LOT (cele stałe): dziób ↔ ruch rysowany w oknie 0,5 s; p
   assert(c.battleship.intent.length > 300 && pctl(c.battleship.intent, 0.5) <= 3,
     `G4c pancerniki: dziób za własną pętlą (ruch zamierzony) mediana ${pctl(c.battleship.intent, 0.5).toFixed(2)}° ≤ 3° — błądzenie kotwic sceny (~0,2 L / rundę) zostaje dryfem (do decyzji właściciela)`);
 });
-block('G4d / G6b — ŚWIADEK i KONTROLA: flaga `cvChoreo2` OFF — CV-3b (dziób ku celowi, ruch bokiem), stożki zamiast wylotów', () => {
-  OFF = battleRun({ choreo2: false, stable: true });
-  const o = OFF.out;
-  const fw = o.cls.frigate.win;
-  console.log(`     OFF: fregaty dziób ↔ ruch mediana ${pctl(fw, 0.5).toFixed(1)}° (n ${fw.length}); wyloty ${o.glowLit}/${o.glowN}, stożki ${o.coneLit}`);
-  assert(fw.length > 300 && pctl(fw, 0.5) >= 30, `G4d ŚWIADEK: CV-3b — fregaty: mediana kąta dziób ↔ ruch ${pctl(fw, 0.5).toFixed(1)}° ≥ 30° (pin G4a nie jest jałowy)`);
-  assert(o.glowLit === 0 && o.coneLit === o.glowN, `G6b KONTROLA: OFF — stożki smugi (${o.coneLit}/${o.glowN}), wyloty schowane (${o.glowLit})`);
-});
+// CV-Z — PRZECELOWANE ŚWIADOMIE: dawne G4d (ŚWIADEK — CV-3b ze swoim kursem ku celowi) i G6b (KONTROLA — stożki przy OFF) mierzyły
+//   tryb usunięty razem z flagą `cvChoreo2`; G7 (przełączenie w trakcie) — tak samo. KONTROLA stożka zostaje w G9b (statek bez wylotów).
 block('G1c — ŚWIADEK: rzut wyłączony zmienia pasma (lot CV-3c)', () => {
   const r = battleRun({ choreo2: true, stub: ({ offsets }) => ({ pairs: 0, clamped: 0, passes: 0, halved: 0, zeroed: 0, residual: 0, offsets }) });
   assert(r.out.bandViol > 0, `G1c bez rzutu pary zmieniają pasmo (${r.out.bandViol}) — rzut potrzebny także dla lotu`);
@@ -384,22 +375,6 @@ block('G6c / G6d — zniszczony: wylot ciemny; zakrztuszenie (≤ 25 % HP): rdze
   assert(dark, 'G6d zniszczony (pokazane trafienie zabijające) — wyloty dysz zgaszone');
 });
 
-// ═══ G7 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
-block('G7 — przełączenie `cvChoreo2` w trakcie bitwy: ruch ciągły, tryb przechodzi w obie strony', () => {
-  const w = world({ choreo2: true });
-  const { R } = w;
-  placeCamera(R, 0.4);
-  for (let f = 0; f < 4 * 64; f++) { if (f % 64 === 0) round(w); frame(R); }
-  const ids = [...w.A, ...w.B];
-  let prev = drawnOf(R), maxStep = 0;
-  const run = (n) => { for (let k = 0; k < n; k++) { frame(R); const d = drawnOf(R); for (const id of ids) maxStep = Math.max(maxStep, Math.hypot(d.get(id).x - prev.get(id).x, d.get(id).y - prev.get(id).y, d.get(id).z - prev.get(id).z) / L); prev = d; } };
-  GAME_CONFIG.FEATURES.cvChoreo2 = false; run(64);
-  const off2 = ids.filter((id) => R._stageMarks.get(id)?.ch?.mode2).length;
-  GAME_CONFIG.FEATURES.cvChoreo2 = true; run(64);
-  const on2 = ids.filter((id) => R._stageMarks.get(id)?.ch?.mode2).length;
-  assert(maxStep <= EPS_L && off2 === 0 && on2 === ids.length, `G7 krok maks. ${maxStep.toFixed(4)} L ≤ ε ${EPS_L}; po OFF w trybie 2 ${off2} statków, po ON ${on2}/${ids.length}`);
-});
-
 // ═══ G8 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
 block('G8 — `_cvWpnImpact`: iskry, żar i błysk trafienia w tempie FX_TIME_SCALE (0,25 — życie × 4, prędkość iskier × 0,25)', () => {
   const w = world({ choreo2: true });
@@ -429,14 +404,15 @@ block('G9 — lot poza walką (`_applyExhaust`): tranzyt — wylot zapalony, dok
   const transitOn = e.rig.glows.length > 0 && e.rig.glows.every((g) => g.group.visible) && !e.exhaust.visible;
   R._applyExhaust(vD, e);
   const dockOff = e.rig.glows.every((g) => !g.group.visible) && !e.exhaust.visible;
-  GAME_CONFIG.FEATURES.cvChoreo2 = false;
-  R._applyExhaust(vT, e);
-  const offCone = e.exhaust.visible && e.rig.glows.every((g) => !g.group.visible);
-  GAME_CONFIG.FEATURES.cvChoreo2 = true;
+  // CV-Z — przecelowane świadomie: KONTROLA „`cvChoreo2` OFF” → statek BEZ wylotów (rig bez `glows`) — ścieżka stożka CV-1a zostaje
+  //   dla modeli bez dysz w pliku hardpointów.
+  const bare = rigEntry(0); bare.rig.glows = [];
+  R._applyExhaust(vT, bare);
+  const offCone = bare.exhaust.visible;
   assert(transitOn && dockOff, `G9a tranzyt — wylot zapalony, stożek schowany (${transitOn}); dok — wszystko zgaszone (${dockOff})`);
-  assert(offCone, 'G9b KONTROLA: `cvChoreo2` OFF — stożek smugi w tranzycie (ścieżka CV-1a), wyloty schowane');
+  assert(offCone, 'G9b KONTROLA: statek bez wylotów — stożek smugi w tranzycie (ścieżka CV-1a)');
 });
 
-GAME_CONFIG.FEATURES.cvStage = FLAG0; GAME_CONFIG.FEATURES.cvChoreo = CHO0; GAME_CONFIG.FEATURES.cvChoreo2 = CHO2_0; GAME_CONFIG.FEATURES.fcCombatFx = FX0;
+GAME_CONFIG.FEATURES.fcCombatFx = FX0;
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

@@ -184,8 +184,9 @@ header('T6  źródło `ThreeRenderer` — cztery wejścia przez regułę');
   const fx = methodBody('  _onCombatRoundFx(payload) {');
   const g = fx.indexOf('isEngagementInView(');
   const up = fx.indexOf('_upsertEngagementMarker(');
-  assert(fx.length > 0 && fx.includes('_spawnCombatTracer('), 'T6-0 KONTROLA: `_onCombatRoundFx` znaleziony (smugi w tym ciele)');
-  assert(g > 0 && g < fx.indexOf('_spawnCombatTracer(') && (up < 0 || g < up)
+  // CV-Z — przecelowane świadomie: salwa idzie do silnika FX (`_cvFxRoundFx`; dawne smugi `_spawnCombatTracer` usunięte).
+  assert(fx.length > 0 && fx.includes('_cvFxRoundFx('), 'T6-0 KONTROLA: `_onCombatRoundFx` znaleziony (salwa w tym ciele)');
+  assert(g > 0 && g < fx.indexOf('_cvFxRoundFx(') && (up < 0 || g < up)
     && /encounterSystemId:\s*payload\?\.systemId/.test(fx) && /activeSystemId:\s*window\.KOSMOS\?\.activeSystemId/.test(fx),
     'T6a salwa: reguła na wejściu (układ z ładunku, układ widoku), PRZED smugami (i znacznikiem, jeśli salwa go stawia)');
   // znacznik starcia: albo stawia go bramkowana salwa (krok P2-1), albo synchronizacja ze STANEM starcia przez tę samą

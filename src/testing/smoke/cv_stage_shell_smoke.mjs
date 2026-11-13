@@ -361,6 +361,9 @@ function world({ mixed = false, bodyDrawn = true, r: bodyR = 0.1 } = {}) {
     _stageFrame: null, _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _stageFitCache: new Map(), _stageFitFrame: -1, _frameNo: 0, _glideLastMs: null,
     missing: [] };
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
+  // CV-Z — choreografia na stałe (flaga `cvChoreo` zdjęta): keeper pinuje warstwę SCENY, choreografia zaślepiona (`null` — jak dawniej
+  //   przy `cvChoreo = false`); jej niezmienniki sceny pinuje `cv_choreo_render_smoke`.
+  R._choreoCluster = () => null;
   R.getBodyWorldInfo = (id) => (bodyDrawn && id === 'p_x' ? { x: body.x, y: body.y, z: body.z, r: body.r } : null);
   for (const s of sprites) {
     const sp = new THREE.Object3D(); sp.visible = true; sp.position.set(s.sprite.x, s.sprite.y, s.sprite.z);
@@ -382,12 +385,7 @@ const stageCentre = (R) => {
   return { x: c.x / sp.size, y: c.y / sp.size, z: c.z / sp.size };
 };
 const drawn = (R, id) => R._vessels.get(id).sprite.position;
-const FLAG0 = GAME_CONFIG.FEATURES.cvStage;
-GAME_CONFIG.FEATURES.cvStage = true;
-// ARC CV-3b — ten keeper pinuje warstwę SCENY (CV-3a / CV-6b) przy choreografii WYŁĄCZONEJ: choreografia to osobna warstwa
-//   za flagą `cvChoreo` (przesunięcia w kopercie, kurs, silnik), pinowana z tymi samymi niezmiennikami sceny (pasma, ciągłość,
-//   pauza, zero zapisów) w `cv_choreo_render_smoke` / `cv_choreo_logic_smoke`.
-GAME_CONFIG.FEATURES.cvChoreo = false;
+// ARC CV-3b — keeper pinuje warstwę SCENY przy choreografii zaślepionej (`world()`); niezmienniki choreografii — `cv_choreo_render_smoke`.
 
 // ═══ R1 / R2 ══════════════════════════════════════════════════════════════════════════════════════════════════════
 block('R1 / R2 — renderer: obie strony przy ciele (skorupa, kierunek, pasma, zoom bez przelotu przez ciało)', () => {
@@ -657,8 +655,7 @@ block('R11 — bitwa przy ciele: uczestnicy bez celownika przy każdym zoomie (6
     R._vessels.set(xs.id, { sprite: spX, glide: null });
     // ⚠ ARC CV-6b (decyzja właściciela 20): „z daleka” przy podłodze 0 (krzywa CV-3a1, skala prawdziwa) — świadek, że celownika
     //   nie gasi stopień sceny, tylko reguła 666 (b); przy podłodze domyślnej z daleka też jest scena (stopień 1).
-    const at = (target, d, on, floor = null) => {
-      GAME_CONFIG.FEATURES.cvStage = on;
+    const at = (target, d, floor = null) => {
       if (floor != null) R.cvTuning = { STAGE_BLEND_FLOOR: floor }; else delete R.cvTuning;
       cameraAt(R, target, d);
       for (let f = 0; f < 60; f++) frame(R);
@@ -668,19 +665,19 @@ block('R11 — bitwa przy ciele: uczestnicy bez celownika przy każdym zoomie (6
     };
     cameraAt(R, { x: body.x, y: 0.3, z: body.z }, 6); frame(R);
     const sc = stageCentre(R) ?? { x: body.x, y: 0.3, z: body.z };
-    const cinema = at(sc, 0.4, true), far = at({ x: body.x, y: 0.3, z: body.z }, 30, true, 0), off = at(sc, 0.4, false);
-    GAME_CONFIG.FEATURES.cvStage = FLAG0 ?? true;
-    return { cinema, far, off, n: w.B.length };
+    const cinema = at(sc, 0.4), far = at({ x: body.x, y: 0.3, z: body.z }, 30, 0);
+    return { cinema, far, n: w.B.length };
   };
   const drawnB = run({ bodyDrawn: true }), bare = run({ bodyDrawn: false });
   GAME_CONFIG.FEATURES.fcEnemyAlertMarker = prevFeat;
-  console.log(`     przy ciele: kino ${drawnB.cinema.foes}/${drawnB.n} (stopień ${drawnB.cinema.k.toFixed(2)}), z daleka ${drawnB.far.foes}/${drawnB.n} (stopień ${drawnB.far.k.toFixed(2)}), flaga OFF ${drawnB.off.foes}/${drawnB.n}; `
-    + `ciało bez rysunku: ${bare.cinema.foes} / ${bare.far.foes} / OFF ${bare.off.foes}; wróg poza starciem ${[drawnB.cinema.other, drawnB.far.other, bare.cinema.other].join(' / ')}`);
+  console.log(`     przy ciele: kino ${drawnB.cinema.foes}/${drawnB.n} (stopień ${drawnB.cinema.k.toFixed(2)}), z daleka ${drawnB.far.foes}/${drawnB.n} (stopień ${drawnB.far.k.toFixed(2)}); `
+    + `ciało bez rysunku: ${bare.cinema.foes} / ${bare.far.foes}; wróg poza starciem ${[drawnB.cinema.other, drawnB.far.other, bare.cinema.other].join(' / ')}`);
   assert(drawnB.cinema.k > 0.99 && drawnB.far.k < 0.01, `R11a świadek: kino — stopień ${drawnB.cinema.k.toFixed(3)}, z daleka — ${drawnB.far.k.toFixed(3)}`);
   assert(drawnB.cinema.foes === 0 && drawnB.far.foes === 0 && bare.cinema.foes === 0 && bare.far.foes === 0,
     `R11b SEDNO: uczestnicy bitwy przy ciele w widoku — 0 celowników w kinie i z daleka, także przy ciele bez rysunku (${drawnB.cinema.foes} / ${drawnB.far.foes} / ${bare.cinema.foes} / ${bare.far.foes})`);
-  assert(drawnB.cinema.other && drawnB.far.other && bare.cinema.other && drawnB.off.foes === drawnB.n && bare.off.foes === bare.n,
-    `R11c KONTROLA: wróg w widoku poza starciem — celownik jak dotąd; flaga OFF — celownik u wszystkich ${drawnB.n} uczestników (${drawnB.off.foes} / ${bare.off.foes})`);
+  // CV-Z — przecelowane świadomie: KONTROLA „flaga OFF — celownik u wszystkich” usunięta razem z flagą `cvStage`.
+  assert(drawnB.cinema.other && drawnB.far.other && bare.cinema.other,
+    'R11c KONTROLA: wróg w widoku poza starciem — celownik jak dotąd (reguła 666 (b) gasi tylko uczestników)');
 });
 
 // ═══ R12 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -688,7 +685,6 @@ block('R11 — bitwa przy ciele: uczestnicy bez celownika przy każdym zoomie (6
 // statek w skorupie, żadna linia gracz → wróg (tor wiązki) nie przechodzi przez ciało. KONTROLA: podłoga 0 (krzywa CV-3a1) —
 // z daleka statki na orbitach dookoła ciała (także za planetą), linie przecinają ciało (skarga właściciela).
 block('R12 — decyzja 20: bitwa przy ciele z daleka — węzeł za skorupą, żadna linia przez planetę', () => {
-  GAME_CONFIG.FEATURES.cvStage = true;
   const segHitsSphere = (p, q, c, r) => {
     const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, ll = dx * dx + dy * dy + dz * dz;
     const t = ll > 0 ? Math.max(0, Math.min(1, ((c.x - p.x) * dx + (c.y - p.y) * dy + (c.z - p.z) * dz) / ll)) : 0;
@@ -770,6 +766,5 @@ block('S1 — stager `cvBattle({ atBody })` z prawdziwym DSCS', () => {
   assert(st3?.ok === true && cv3.length === 20 && cv3.every((v) => v.position.dockedAt == null), 'S1d KONTROLA: zwykłe cvBattle — nikt przy ciele');
 });
 
-GAME_CONFIG.FEATURES.cvStage = FLAG0;
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

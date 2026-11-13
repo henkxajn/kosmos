@@ -31,10 +31,11 @@
 //      zegar stoi ⇒ smuga stoi; KONTROLA bez `cvStage`: ta sama para wywołań migocze (czas realny)
 //   R15 (Finding 622) sprite odtworzony W TRAKCIE bitwy (przełączenie układu, `cvModels`, nowy model) staje z kursem 0 — od
 //      następnej klatki ma kurs z choreografii (dziób = kurs stanu); ŚWIADEK: przed tą klatką dziób daleko od kursu stanu
-// ⚠ PRZECELOWANIE ŚWIADOME (CV-3c, decyzja właściciela 44): keeper pinuje choreografię CV-3b na scenie BEZ rozsunięcia — świat ustawia
-//   `cvChoreo2` = false (lot wzdłuż kursu ma własny keeper `cv_choreo2_render_smoke`) i `STAGE_SPREAD` = 1 (progi koperty, ciągłości
-//   i krawędzie pasm w L sceny CV-3b; rozsunięcie pinuje `cv_choreo2_logic_smoke` — niezmienniczość skali). Lista nazw wolnych
-//   uzupełniona o funkcje CV-3c (metody kleju sięgają po nie przy przenikaniu trybów).
+// ⚠ PRZECELOWANIE ŚWIADOME (CV-3c, decyzja właściciela 44): `STAGE_SPREAD` = 1 (progi koperty, ciągłości i krawędzie pasm w L sceny;
+//   rozsunięcie pinuje `cv_choreo2_logic_smoke` — niezmienniczość skali).
+// ⚠ PRZECELOWANIE ŚWIADOME (CV-Z): taniec w kopercie CV-3b i flagi `cvChoreo` / `cvChoreo2` / `cvStage` usunięte — klej biegnie lotem
+//   wzdłuż kursu (CV-3c, jedyny tryb). Niezmienniki niezależne od trybu (R1–R4, R7–R9, R11, R13–R15) zostają na prawdziwym kleju;
+//   R5 (dziób ku celowi — reguła CV-3b), R6b / R12 i R10 (flaga OFF) wycofane; kurs CV-3c pinuje `cv_choreo2_render_smoke` G4.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -131,8 +132,6 @@ function rigEntry(yaw) {
 }
 
 function world({ encId = 'enc_1', doctrineA = null, retreatIdx = -1, choreo = true, stub = null } = {}) {
-  GAME_CONFIG.FEATURES.cvChoreo = choreo;
-  GAME_CONFIG.FEATURES.cvChoreo2 = false;   // CV-3c — keeper pinuje CV-3b (przecelowanie świadome, nagłówek)
   const layout = ST?.cvBattleLayout?.({ nA: 10, nB: 10 })?.ships ?? [];
   const vessels = new Map(), logical = new Map();
   for (const s of layout) {
@@ -228,8 +227,6 @@ function facingErrors(w, ids = [...w.A, ...w.B]) {
   }
   return out;
 }
-const FLAG0 = GAME_CONFIG.FEATURES.cvStage, CHO0 = GAME_CONFIG.FEATURES.cvChoreo;
-GAME_CONFIG.FEATURES.cvStage = true;
 
 // ═══ R1 / R2 / R3 / R6 / R7 ═══════════════════════════════════════════════════════════════════════════════════════
 const RUN = { frames: 0, pairs: 0, bandViol: 0, misDrawn: 0, misAnchor: 0, envViol: 0, envMax: 0, maxStepL: 0, writes: 0, stops: 0, checks: 0, minRatio: Infinity,
@@ -364,40 +361,18 @@ block('R4 — (d) pauza: pozycje, kwaterniony i smugi stoją co do bitu', () => 
 });
 
 // ═══ R5 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
-block('R5 — (Finding 681) po czasie zwrotu obie strony dziobem ku celowi (pancernik burtą); KONTROLA flaga OFF', () => {
-  const run = (choreo) => {
-    const w = world({ choreo });
-    const { R } = w;
-    placeCamera(R, 0.4);
-    const e0 = facingErrors(w);
-    for (let f = 0; f < 7 * 64; f++) { if (f % 64 === 0) round(w, { stable: true }); frame(R); }   // 7 s: pancernik 90° przy suficie + ustalenie; cele stałe
-    return { w, start: e0, end: facingErrors(w) };
-  };
-  const on = run(true), off = run(false);
-  const by = (arr, pred) => arr.filter(pred).map((x) => x.err);
-  const max = (a) => Math.max(...a), med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
-  const bowOn = by(on.end, (x) => x.cls !== 'battleship'), broad = by(on.end, (x) => x.cls === 'battleship');
-  const startA = by(on.start, (x) => x.side === 'A' && x.cls !== 'battleship'), offA = by(off.end, (x) => x.side === 'A' && x.cls !== 'battleship');
-  console.log(`     ON po 7 s: fregaty / niszczyciele odchyłka mediana ${med(bowOn).toFixed(1)}°, maks. ${max(bowOn).toFixed(1)}° (${bowOn.length}); pancerniki burta maks. ${max(broad).toFixed(1)}° (${broad.length}); `
-    + `start strony A ${med(startA).toFixed(0)}°; OFF strona A po 7 s ${med(offA).toFixed(0)}°`);
-  assert(bowOn.length >= 12 && max(bowOn) <= 30 && broad.length >= 6 && max(broad) <= 20,
-    'R5a SEDNO: po 7 s każdy walczący obu stron ma dziób ku celowi (≤ 30° z wyprzedzeniem przelotu) albo burtę (pancernik ≤ 20°)');
-  assert(med(startA) > 150, `R5b strona A startuje rufą do wroga (odchyłka mediana ${med(startA).toFixed(0)}° — scena Findingu 681)`);
-  assert(med(offA) > 150, `R5c KONTROLA: flaga OFF — strona A po 7 s nadal rufą do wroga (${med(offA).toFixed(0)}°)`);
-});
-
-// ═══ R6b / R12 ════════════════════════════════════════════════════════════════════════════════════════════════════
-block('R6b / R12 — flaga OFF od początku: smugi zgaszone, `_choreoCluster` nie wołane, canon nietknięty', () => {
-  const w = world({ choreo: false });
+// ═══ R12 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// CV-Z — PRZECELOWANE ŚWIADOMIE: dawne R6b / R12 pinowały flagę `cvChoreo` OFF (smugi zgaszone, klej niewołany). Flaga zdjęta:
+//   R12 pinuje, że klej choreografii biegnie zawsze — każdy znacznik sceny dostaje stan (świadek: scena stoi, 20 znaczników).
+block('R12 — CV-Z: choreografia zawsze (bez flagi) — klej wołany, każdy znacznik ze stanem', () => {
+  const w = world();
   const { R } = w;
   placeCamera(R, 0.4);
   for (let f = 0; f < 4 * 64; f++) { if (f % 64 === 0) round(w); frame(R); }
-  let lit = 0, canonTouched = 0, withState = 0;
-  for (const [, e] of R._vessels) { if (e.exhaust.visible) lit++; const q = e.rig.canon.quaternion; if (q.x || q.y || q.z || q.w !== 1) canonTouched++; }
-  for (const m of R._stageMarks.values()) if (m.ch || m.choreo) withState++;
-  assert(lit === 0, `R6b KONTROLA: flaga OFF — smugi zgaszone (${lit} zapalonych)`);
-  assert(R.choreoCalls === 0 && withState === 0 && canonTouched === 0 && R._stageMarks.size === 20,
-    `R12 flaga OFF: wywołań _choreoCluster ${R.choreoCalls}, znaczników ze stanem ${withState}, canon ruszony ${canonTouched} (scena jest — ${R._stageMarks.size} znaczników)`);
+  let withState = 0;
+  for (const m of R._stageMarks.values()) if (m.ch) withState++;
+  assert(R.choreoCalls > 0 && withState === 20 && R._stageMarks.size === 20,
+    `R12 wywołań _choreoCluster ${R.choreoCalls}, znaczników ze stanem ${withState}/${R._stageMarks.size}`);
 });
 
 // ═══ R8 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -460,28 +435,6 @@ block('R9 — koniec bitwy: canon = rama, smuga oddana, stan zdjęty; statek wol
 });
 
 // ═══ R10 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
-block('R10 — flaga OFF w trakcie bitwy: płynne zejście, stan zdjęty; ON z powrotem — płynne wejście', () => {
-  const w = world();
-  const { R } = w;
-  placeCamera(R, 0.4);
-  for (let f = 0; f < 3 * 64; f++) { if (f % 64 === 0) round(w); frame(R); }
-  let maxStep = 0, prev = drawnOf(R);
-  const step = () => { const d = drawnOf(R); for (const [id, p] of d) maxStep = Math.max(maxStep, Math.hypot(p.x - prev.get(id).x, p.y - prev.get(id).y, p.z - prev.get(id).z) / L); prev = d; };
-  GAME_CONFIG.FEATURES.cvChoreo = false;
-  for (let i = 0; i < 45; i++) { frame(R); step(); }
-  let withState = 0, canonOk = 0;
-  for (const m of R._stageMarks.values()) if (m.ch || m.choreo) withState++;
-  for (const [, e] of R._vessels) { const q = e.rig.canon.quaternion; if (q.x === 0 && q.y === 0 && q.z === 0 && q.w === 1) canonOk++; }
-  const offStep = maxStep;
-  GAME_CONFIG.FEATURES.cvChoreo = true;
-  maxStep = 0;
-  for (let i = 0; i < 60; i++) { frame(R); step(); }
-  let back = 0;
-  for (const m of R._stageMarks.values()) if (m.ch && m.cw > 0.99) back++;
-  assert(offStep <= EPS_L && withState === 0 && canonOk === 20, `R10a OFF w trakcie: krok maks. ${offStep.toFixed(4)} L, po 0,7 s stan zdjęty (${withState}), canon = rama ${canonOk}/20`);
-  assert(maxStep <= EPS_L && back === 20, `R10b ON z powrotem: krok maks. ${maxStep.toFixed(4)} L, choreografia z pełną wagą ${back}/20`);
-});
-
 // ═══ R11 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
 block('R11 — postawy przez prawdziwy klej: hold — mniejsza amplituda; odwrót — dziób od zagrożenia, pełny ciąg', () => {
   const amp = (doctrineA) => {
@@ -497,7 +450,8 @@ block('R11 — postawy przez prawdziwy klej: hold — mniejsza amplituda; odwró
     return s / Math.max(1, n);
   };
   const aEng = amp(null), aHold = amp('hold_position');
-  assert(aHold < 0.5 * aEng && aEng > 0.2, `R11a flota hold_position — amplituda strony A ${aHold.toFixed(3)} L < 0,5 × angażuj (${aEng.toFixed(3)} L)`);
+  // CV-Z — przecelowane świadomie: świadek ruchu „angażuj” > 0,1 L (był 0,2 L — taniec CV-3b; pętle CV-3c przy rozsunięciu 1 są mniejsze).
+  assert(aHold < 0.5 * aEng && aEng > 0.1, `R11a flota hold_position — amplituda strony A ${aHold.toFixed(3)} L < 0,5 × angażuj (${aEng.toFixed(3)} L)`);
   const w = world({ retreatIdx: 0 });
   const { R } = w;
   placeCamera(R, 0.4);
@@ -535,19 +489,21 @@ block('R14 — (Finding 677) smuga w locie poza walką: pod sceną faza migotani
   const R = { cvTuning: ENG?.LIVE_CV_FX ?? {}, _stageClock: PC ? new PC.PresentationClock() : null };
   const e = rigEntry(0);
   const v = { id: 'T1', position: { state: 'in_transit' } };
-  const F = GAME_CONFIG.FEATURES, keepStage = F.cvStage, keepFx = F.fcCombatFx;
+  const F = GAME_CONFIG.FEATURES, keepFx = F.fcCombatFx, clock0 = R._stageClock;
   const pair = (stage) => {
-    F.cvStage = stage; F.fcCombatFx = true;
+    R._stageClock = stage ? clock0 : null; F.fcCombatFx = true;
     now = 1000; exh.call(R, v, e); const a = { len: e.exhaust.scale.y, op: e.exhaust.material.opacity };
     now = 1037; exh.call(R, v, e); const b = { len: e.exhaust.scale.y, op: e.exhaust.material.opacity };
     return { a, b, same: a.len === b.len && a.op === b.op, lit: e.exhaust.visible };
   };
   try {
     const on = pair(true), off = pair(false);
-    console.log(`     cvStage ON: długość ${on.a.len.toFixed(5)} → ${on.b.len.toFixed(5)} (czas realny +37 ms, zegar stoi); cvStage OFF: ${off.a.len.toFixed(5)} → ${off.b.len.toFixed(5)}`);
-    assert(!!exh && on.lit && on.same, 'R14a SEDNO: pod `cvStage` czas realny płynie, zegar prezentacji stoi — smuga w locie stoi co do bitu (długość i krycie)');
-    assert(off.lit && !off.same, 'R14b KONTROLA: bez `cvStage` ta sama para wywołań migocze (faza z czasu realnego — ścieżka sprzed zmiany)');
-  } finally { F.cvStage = keepStage; F.fcCombatFx = keepFx; }
+    console.log(`     zegar sceny: długość ${on.a.len.toFixed(5)} → ${on.b.len.toFixed(5)} (czas realny +37 ms, zegar stoi); bez zegara sceny: ${off.a.len.toFixed(5)} → ${off.b.len.toFixed(5)}`);
+    assert(!!exh && on.lit && on.same, 'R14a SEDNO: czas realny płynie, zegar prezentacji sceny stoi — smuga w locie stoi co do bitu (długość i krycie)');
+    // CV-Z — przecelowane świadomie: KONTROLA „bez `cvStage`” → „bez zegara sceny” (flaga zdjęta; gałąź czasu realnego zostaje dla
+    //   renderera bez zegara).
+    assert(off.lit && !off.same, 'R14b KONTROLA: bez zegara sceny ta sama para wywołań migocze (faza z czasu realnego)');
+  } finally { R._stageClock = clock0; F.fcCombatFx = keepFx; }
 });
 
 // ═══ R15 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -573,7 +529,5 @@ block('R15 — (Finding 622) sprite odtworzony w trakcie bitwy: kurs z choreogra
   assert(before > 20, `R15b ŚWIADEK: sprite odtworzony z kursem 0 stał ${before.toFixed(1)}° od kursu stanu (pin R15a nie jest jałowy)`);
 });
 
-GAME_CONFIG.FEATURES.cvStage = FLAG0;
-GAME_CONFIG.FEATURES.cvChoreo = CHO0;
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

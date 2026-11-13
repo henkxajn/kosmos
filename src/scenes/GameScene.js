@@ -2865,8 +2865,8 @@ export class GameScene {
 
       // ARC CV-3a2 (Finding 638, decyzja właściciela §3.2-3) — JEDEN baner na klaster starć: wynik starcia, którego klaster
       // jeszcze trwa (inne aktywne starcie w tym samym miejscu), czeka; baner wychodzi po OSTATNIM `battle:resolved` klastra,
-      // z wynikiem scalonym (`BattleClusterLogic`). Dziennik bez zmian — linia na starcie do CV-6b (#639). Pod flagą `cvStage`.
-      const banners = (battleData.source === 'dscs' && GAME_CONFIG.FEATURES?.cvStage)
+      // z wynikiem scalonym (`BattleClusterLogic`).
+      const banners = (battleData.source === 'dscs')
         ? this._clusterBattleBanners(battleData) : [battleData];
       for (const b of banners) this._queueBanner(b);
     });
@@ -4386,7 +4386,7 @@ export class GameScene {
     return clusterGraceMs(ts?.combatRoundMs?.() ?? 1150);
   }
 
-  // #675 — raz na klatkę: bitwy, którym minęło okno łaski bez dołączonego starcia — baner (pod `cvStage`) i linie Dziennika
+  // #675 — raz na klatkę: bitwy, którym minęło okno łaski bez dołączonego starcia — baner i linie Dziennika
   // (pod `cvStrip`). Starcie nieaktywne (np. po wczytaniu zapisu) przestaje wstrzymywać grupę — jej okno zaczyna się teraz.
   _releaseBattleGrace(nowMs) {
     if (!this._battleClusterHold?.length && !this._clusterNarrator?.holding) return;   // nic nie czeka — bez pracy na klatkę

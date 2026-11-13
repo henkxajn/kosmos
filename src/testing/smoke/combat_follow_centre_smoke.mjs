@@ -218,9 +218,10 @@ header('T5  źródło `ThreeRenderer`');
     && /this\._autoFocusTarget\(enc\)/.test(upd) && /watching:\s*!!this\._watch/.test(upd) && /isEngagementInView\(/.test(upd),
     'T5d krok przez `autoFocusFollowStep` (Obserwuj / koniec / widok / przejęcie), cel `focusOnSmooth` z `_autoFocusTarget`');
   const aft = body('  _autoFocusTarget(enc) {');
-  assert(/watchTargetAt\(\{ points: fit\.points, d: cc\._targetDist,/.test(aft) && /safe: fit\.safe/.test(aft) && /this\._engagementFit\(enc\)/.test(aft)
-    && !/setTargetDist|fitWatchFrame/.test(aft),
-    'T5e cel auto-fokusu: `watchTargetAt` przy BIEŻĄCYM dystansie, punkty i prostokąt z kadru — bez dopasowania dystansu');
+  // CV-Z — przecelowane świadomie: cel auto-fokusu = oś kadru sceny bitwy (`_stageWatchFit`, CV-3a1 643); dawny cel bez sceny
+  //   (`watchTargetAt` z `_engagementFit`) usunięty razem z flagą `cvStage`. Regułę `watchTargetAt` dalej wyprowadza T6.
+  assert(/this\._stageWatchFit\(enc\)\?\.target/.test(aft) && !/setTargetDist|fitWatchFrame|watchTargetAt/.test(aft),
+    'T5e cel auto-fokusu: oś kadru sceny bitwy (`_stageWatchFit`) — bez dopasowania dystansu');
   const fitM = body('  _engagementFit(enc) {');
   assert(/this\._computeWatchFit\(enc\)/.test(fitM) && /_centreFrame !== this\._frameNo/.test(fitM)
     && /this\._engagementFit\(enc\)\?\.centroid/.test(body('  _engagementCentre(enc) {')),
@@ -231,7 +232,7 @@ header('T5  źródło `ThreeRenderer`');
   assert(up > 0 && mv > up && /e\.mesh\.position\.set\(c\.x, c\.y, c\.z\)/.test(mk) && /visible = !this\._watch/.test(mk),
     'T5h znacznik starcia DSCS co klatkę w środku uczestników (po synchronizacji ze stanem); ukryty przy „Obserwuj” jak dotąd');
   const imp = tr.slice(0, tr.indexOf('export class ThreeRenderer'));
-  assert(/autoFocusFollowStep/.test(imp) && /watchTargetAt/.test(imp), 'T5i reguły importowane z `CombatWatchLogic`');
+  assert(/autoFocusFollowStep/.test(imp) && /viewOffsetFrame/.test(imp), 'T5i reguły importowane z `CombatWatchLogic` (CV-Z — `watchTargetAt` bez czytelnika w rendererze)');
 }
 
 // ═══ T6 ═══════════════════════════════════════════════════════════════════════

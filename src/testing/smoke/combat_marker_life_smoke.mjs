@@ -178,7 +178,8 @@ header('T6  źródło `ThreeRenderer`');
   const tr = strip(readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf8'));
   const body = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
   const mk = body('  _tickEngagementMarkers(nowMs) {');
-  assert(mk.length > 0 && body('  _onCombatRoundFx(payload) {').includes('_spawnCombatTracer('), 'T6-0 KONTROLA: obie metody znalezione');
+  // CV-Z — przecelowane świadomie: salwa idzie do silnika FX (`_cvFxRoundFx`; dawne smugi `_spawnCombatTracer` usunięte).
+  assert(mk.length > 0 && body('  _onCombatRoundFx(payload) {').includes('_cvFxRoundFx('), 'T6-0 KONTROLA: obie metody znalezione');
   assert(/planEngagementMarkers\(/.test(mk) && /listActive\?\.\(\)/.test(mk) && /activeSystemId:\s*window\.KOSMOS\?\.activeSystemId/.test(mk),
     'T6a synchronizacja: plan ze `listActive()` i układem widoku');
   assert(!/\b1600\b/.test(mk) && !/ENGAGEMENT_BURST_TTL_MS|burstTtlMs/.test(mk), 'T6b (CV-8b) bez stałej 1600 i bez czasu życia w synchronizacji');

@@ -217,15 +217,15 @@ function makeMethod(name) {
   return m ? new Function('GAME_CONFIG', 'window', 'pickStageField', 'stagePointLogical', 'stagePointDrawn',
     `return function (${m.params}) {\n${m.body}\n};`)(GAME_CONFIG, globalThis.window, SL.pickStageField, SL.stagePointLogical, SL.stagePointDrawn) : null;
 }
-block('N7 — umowa flagi `cvStage`: ON — klik w scenie = punkt; OFF — jak dziś (planeta)', () => {
-  const flag0 = GAME_CONFIG.FEATURES.cvStage;
+// CV-Z — przecelowane świadomie: KONTROLA „flaga `cvStage` OFF” zastąpiona KONTROLĄ „brak sceny w tej klatce” (flaga zdjęta) —
+//   ten sam skutek dla rozkazu (planeta jak dziś), bez przełącznika.
+block('N7 — scena bitwy: klik w scenie = punkt; bez sceny — jak dziś (planeta)', () => {
   const chain = (on) => {
     scene();
-    GAME_CONFIG.FEATURES.cvStage = on;
     const a = ship('Alfa'); select(a);
     // Scena bitwy przy planecie w tej klatce: pole kliku wokół środka bitwy (świat [j.] = px / 10), stopień 1.
     const R = { _galaxyActive: false, _galaxyFlight: false,
-      _stageFrame: { list: [{ id: 'c1', centre: { x: BODY.x / 10, z: BODY.y / 10 }, rIn: 1.2, blend: 1, join: 1, scale: null, shift: null }] } };
+      _stageFrame: on ? { list: [{ id: 'c1', centre: { x: BODY.x / 10, z: BODY.y / 10 }, rIn: 1.2, blend: 1, join: 1, scale: null, shift: null }] } : null };
     R._stageFields = makeMethod('_stageFields'); R.stageLogicalOf = makeMethod('stageLogicalOf');
     // Klik rysowany 0,02 j. od środka sceny → odwrotność pola; cel jak w `GameScene._resolveClickTarget` (stempel z odpowiedzi).
     const wp = { x: BODY.x / 10 + 0.02, z: BODY.y / 10 + 0.01 };
@@ -236,10 +236,9 @@ block('N7 — umowa flagi `cvStage`: ON — klik w scenie = punkt; OFF — jak d
     return { staged: !!lp.staged, targetId: a.mission?.targetId ?? null, distAU: Math.hypot(t.worldPoint.x - BODY.x, t.worldPoint.y - BODY.y) / AU };
   };
   const on = chain(true), off = chain(false);
-  GAME_CONFIG.FEATURES.cvStage = flag0;
   assert(on.staged && on.targetId == null && on.distAU < 0.5,
-    `N7a SEDNO: \`cvStage\` ON — klik w polu sceny \`staged\`, punkt ${on.distAU.toFixed(3)} AU od planety, misja bez ciała (${on.targetId ?? 'null'})`);
-  assert(!off.staged && off.targetId === 'p_x', `N7b KONTROLA: \`cvStage\` OFF — scena nie odpowiada \`staged\`, rozkaz do planety jak dziś (${off.targetId ?? 'null'})`);
+    `N7a SEDNO: scena bitwy — klik w polu sceny \`staged\`, punkt ${on.distAU.toFixed(3)} AU od planety, misja bez ciała (${on.targetId ?? 'null'})`);
+  assert(!off.staged && off.targetId === 'p_x', `N7b KONTROLA: bez sceny w tej klatce — brak \`staged\`, rozkaz do planety jak dziś (${off.targetId ?? 'null'})`);
 });
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

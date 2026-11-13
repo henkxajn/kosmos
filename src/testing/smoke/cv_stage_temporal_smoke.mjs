@@ -150,6 +150,9 @@ function world({ split = false, spread = undefined } = {}) {
     _stageClusterOf: new Map(), _stageParticipants: new Set(), _stageEdges: null, _stageFitCache: new Map(), _stageFitFrame: -1, _frameNo: 0, _glideLastMs: null,
     cvTuning: spread !== undefined ? { ...(ENG?.LIVE_CV_FX ?? {}), STAGE_SPREAD: spread } : (ENG?.LIVE_CV_FX ?? {}), missing: [] };   // CV-3c — T9
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
+  // CV-Z — choreografia na stałe (flaga `cvChoreo` zdjęta): keeper pinuje warstwę SCENY, choreografia zaślepiona (`null` — jak dawniej
+  //   przy `cvChoreo = false`); jej niezmienniki sceny pinuje `cv_choreo_render_smoke`.
+  R._choreoCluster = () => null;
   for (const v of vessels.values()) {
     const sp = new THREE.Object3D(); sp.visible = true;
     sp.position.set(S(v.position.x), 0.3, S(v.position.y));
@@ -186,12 +189,9 @@ function round(w, encs = w.list) {
 }
 const drawnOf = (R) => new Map([...R._vessels].map(([id, e]) => [id, { x: e.sprite.position.x, y: e.sprite.position.y, z: e.sprite.position.z }]));
 const maxStep = (a, b) => { let m = 0; for (const [id, p] of a) { const q = b.get(id); if (q) m = Math.max(m, Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z)); } return m; };
-const FLAG0 = GAME_CONFIG.FEATURES.cvStage;
-GAME_CONFIG.FEATURES.cvStage = true;
 // ARC CV-3b — ten keeper pinuje warstwę SCENY (CV-3a / CV-6b) przy choreografii WYŁĄCZONEJ: choreografia to osobna warstwa
 //   za flagą `cvChoreo` (przesunięcia w kopercie, kurs, silnik), pinowana z tymi samymi niezmiennikami sceny (pasma, ciągłość,
 //   pauza, zero zapisów) w `cv_choreo_render_smoke` / `cv_choreo_logic_smoke`.
-GAME_CONFIG.FEATURES.cvChoreo = false;
 
 // ═══ T1 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
 block('T1 — (654) stager: uzbrojenie lustrzane', () => {
@@ -347,8 +347,7 @@ block('T8 — (653) łaty pod flagą `cvStage` — umowa flagi (bez pinów na wa
   // ⚠ ARC CV-6b (decyzja właściciela 20): „z daleka” przy podłodze 0 (krzywa CV-3a1, skala prawdziwa) — świadek, że celownika nie
   //   gasi stopień sceny, tylko reguła 666 (b); przy podłodze domyślnej z daleka też jest scena (stopień 1).
   const tuning0 = R.cvTuning;
-  const at = (d, on, floor = null) => {
-    GAME_CONFIG.FEATURES.cvStage = on;
+  const at = (d, floor = null) => {
     R.cvTuning = floor != null ? { ...tuning0, STAGE_BLEND_FLOOR: floor } : tuning0;
     placeCamera(R, d);
     for (let f = 0; f < 40; f++) frame(R);
@@ -356,44 +355,33 @@ block('T8 — (653) łaty pod flagą `cvStage` — umowa flagi (bez pinów na wa
     R.cvTuning = tuning0;
     return { foe: R._enemyAlertMarkers.has(foe), other: R._enemyAlertMarkers.has(xs.id), k: R._stageMarks.get(foe)?.k ?? 0 };
   };
-  const cinema = at(0.4, true), far = at(60, true, 0), off = at(0.4, false);
-  GAME_CONFIG.FEATURES.cvStage = true;
+  const cinema = at(0.4), far = at(60, 0);
   GAME_CONFIG.FEATURES.fcEnemyAlertMarker = prevFeat;
   assert(cinema.k > 0.99 && far.k < 0.01, `T8a-0 świadek: kino — stopień statku ${cinema.k.toFixed(3)}, z daleka — ${far.k.toFixed(3)} (skala prawdziwa)`);
-  assert(cinema.foe === false && far.foe === false && off.foe === true,
-    `T8a SEDNO (666 (b)): uczestnik bitwy w widoku — celownik w kinie ${cinema.foe ? 'jest' : 'brak'}, w skali prawdziwej ${far.foe ? 'jest' : 'brak'}; flaga OFF — ${off.foe ? 'jest' : 'brak'}`);
-  assert(cinema.other && far.other && off.other, `T8a KONTROLA: wróg w widoku poza starciem — celownik jak dotąd (${cinema.other} / ${far.other} / ${off.other})`);
+  // CV-Z — przecelowane świadomie: przypadek „flaga OFF” usunięty razem z flagą `cvStage`.
+  assert(cinema.foe === false && far.foe === false,
+    `T8a SEDNO (666 (b)): uczestnik bitwy w widoku — celownik w kinie ${cinema.foe ? 'jest' : 'brak'}, w skali prawdziwej ${far.foe ? 'jest' : 'brak'}`);
+  assert(cinema.other && far.other, `T8a KONTROLA: wróg w widoku poza starciem — celownik jak dotąd (${cinema.other} / ${far.other})`);
   // (b) silnik FX
   const T = ENG?.LIVE_CV_FX;
   const E = ENG ? new ENG.FxEngine({ THREE, parent: new THREE.Scene(), logDepth: true }) : null;
   const cam = new THREE.PerspectiveCamera(55, 1600 / 1041, 0.001, 5000);
+  // CV-Z — przecelowane świadomie: silnik FX zawsze w skali sceny (parametr `stage` i dawne `FLASH_K` / `RING_K` bez sceny usunięte).
   E?.update({ nowMs: 0, camera: cam, viewportH: 1041 });
   const u = E?.sparks?.material?.uniforms;
-  const offSel = u && u.uSizeK.value.x === T.FLASH_K && u.uSizeK.value.y === T.RING_K && u.uGrow?.value?.x === T.FLASH_GROW && u.uGrow?.value?.y === T.RING_GROW && u.uGrow?.value?.z === 1;
-  E?.update({ nowMs: 16, camera: cam, viewportH: 1041, stage: true });
-  const onSel = u && u.uSizeK.value.x === T.STAGE_FLASH_K && u.uSizeK.value.y === T.STAGE_RING_K && u.uGrow?.value?.x === T.STAGE_FLASH_GROW && u.uGrow?.value?.y === T.STAGE_RING_GROW;
+  const onSel = u && u.uSizeK.value.x === T.STAGE_FLASH_K && u.uSizeK.value.y === T.STAGE_RING_K && u.uGrow?.value?.x === T.STAGE_FLASH_GROW && u.uGrow?.value?.y === T.STAGE_RING_GROW && u.uGrow?.value?.z === 1;
   const vs = E?.sparks?.material?.vertexShader ?? '';
-  // Wzrost iskry w shaderze: dziś `1 + (uGrow[kind] − 1) · p`; ścieżka bez sceny (uGrow = (FLASH_GROW, RING_GROW, 1)) = dawne
-  // `kind < 1,5 ? 1 + 2p : 1` co do wartości (wzór liczony tu dla p ∈ [0, 1] i trzech rodzajów).
-  let ident = /1\.0 \+ \(pickKind\(uGrow, aKind\) - 1\.0\) \* p/.test(vs);
-  for (let p = 0; p <= 1.0001; p += 0.05) for (const [k, g] of [[0, T?.FLASH_GROW], [1, T?.RING_GROW], [2, 1]]) {
-    const old = k < 1.5 ? 1 + 2 * p : 1, now = 1 + (g - 1) * p;
-    if (Math.abs(old - now) > 1e-12) ident = false;
-  }
-  assert(!!E && offSel && onSel && ident,
-    'T8b silnik FX: bez sceny — dzisiejsze pokrętła (wzrost iskry = dawne 1 + 2p co do wartości), ze sceną — pokrętła `STAGE_*` (wybór, nie wartości)');
+  const ident = /1\.0 \+ \(pickKind\(uGrow, aKind\) - 1\.0\) \* p/.test(vs);
+  assert(!!E && onSel && ident,
+    'T8b silnik FX: pokrętła `STAGE_*` bez przełącznika sceny (wybór, nie wartości); wzrost iskry w shaderze `1 + (uGrow − 1) · p`');
   // (c) kula wybuchu wraku
   const radii = [];
   R._spawnFx = (mesh, cfg) => { radii.push({ r: mesh.geometry?.parameters?.radius, kind: cfg.kind, onTick: typeof cfg.onTick === 'function' }); };
-  GAME_CONFIG.FEATURES.cvStage = true;
   R._spawnExplosion(new THREE.Vector3(0, 0.3, 0), 0.016); R._spawnExplosion(new THREE.Vector3(0, 0.3, 0), 0.028);
-  GAME_CONFIG.FEATURES.cvStage = false;
-  R._spawnExplosion(new THREE.Vector3(0, 0.3, 0), 0.016); R._spawnExplosion(new THREE.Vector3(0, 0.3, 0), 0.028);
-  GAME_CONFIG.FEATURES.cvStage = true;
-  const on = radii.filter((x) => x.kind === 'explosion').slice(0, 2), offR = radii.filter((x) => x.kind === 'explosion').slice(2, 4);
-  assert(on.length === 2 && Math.abs(on[1].r / on[0].r - 0.028 / 0.016) < 1e-9 && on.every((x) => x.onTick)
-    && offR.length === 2 && offR[0].r === offR[1].r && offR[0].r === Math.max(0.2, 0.016) * 0.4,
-    `T8c kula wybuchu wraku: pod flagą promień ∝ rozmiar kadłuba (${on.map((x) => x.r?.toFixed?.(5)).join(' / ')} j.), bez flagi dzisiejsza podłoga (${offR.map((x) => x.r).join(' / ')} j.)`);
+  // CV-Z — przecelowane świadomie: dawna podłoga bez sceny (KONTROLA) usunięta razem z flagą `cvStage`.
+  const on = radii.filter((x) => x.kind === 'explosion').slice(0, 2);
+  assert(on.length === 2 && Math.abs(on[1].r / on[0].r - 0.028 / 0.016) < 1e-9 && on.every((x) => x.onTick) && on[0].r < Math.max(0.2, 0.016) * 0.4,
+    `T8c kula wybuchu wraku: promień ∝ rozmiar kadłuba (${on.map((x) => x.r?.toFixed?.(5)).join(' / ')} j.), poniżej dawnej podłogi 0,08 j.`);
 });
 
 // ═══ T9 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -555,6 +543,5 @@ block('T12 — (CV-5, Finding 706) przebudowa sprite\'ów w zatrzymanej bitwie: 
   assert(c.d > 1 && c.staged < 20, `T12c KONTROLA: bez wpisów oczekiwania statki wypadają ze sceny w zatrzymanej bitwie (przesunięcie ${c.d.toFixed(2)} L, na scenie ${c.staged}/20)`);
 });
 
-GAME_CONFIG.FEATURES.cvStage = FLAG0;
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

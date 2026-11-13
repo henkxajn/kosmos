@@ -665,10 +665,10 @@ block('P7k — parytet z kartą (G5-C): prostokąt HUD nad paskiem (otwarty pick
 // ═══ P8 — źródło, i18n, stała rund ═══════════════════════════════════════════════════════════════════════════════
 block('P8 — źródło: pierścień i biały błysk pod flagą — nie, paski HP 3D zostają; Esc w kaskadzie; routing Dziennika; i18n', () => {
   const tr = strip(TR), gs = strip(GS), ui = strip(UI);
-  assert(/if \(GAME_CONFIG\.FEATURES\?\.cvStage \|\| GAME_CONFIG\.FEATURES\?\.cvStrip\) this\._hideEncounterRings\(\);/.test(tr)
-    && /if \(ids\?\.target && !GAME_CONFIG\.FEATURES\?\.cvStrip\) this\._spawnHitGlow\(/.test(tr)
+  // CV-Z — przecelowane świadomie: pierścień starcia ukrywany bez flagi, biały błysk P2b usunięty razem z dawnymi smugami.
+  assert((/\n\s+this\._hideEncounterRings\(\);/.test(tr) || !/_tickEngagementMarkers\(/.test(tr)) && !/_spawnHitGlow/.test(tr)
     && /\n\s+this\._syncCombatHpBars\(\);/.test(tr),
-    'P8a pod flagą bez pierścienia starcia i białego błysku (P2b); paski HP 3D bez bramki (zostają do CV-6a)');
+    'P8a bez pierścienia starcia i białego błysku (P2b — kod usunięty); paski HP 3D bez bramki (zostają do CV-6a)');
   const iEsc = gs.indexOf('um?.combatStripEscape?.()'), iModal = gs.indexOf('escapeHeldByModal('), iFleet = gs.indexOf('escapeClosesFleetPanel(');
   assert(iEsc > iModal && iEsc < iFleet && iModal > 0,
     'P8b Esc: rozwinięty pasek zwija się po oknie DOM, przed panelem floty i zaznaczeniem (`GameScene`)');

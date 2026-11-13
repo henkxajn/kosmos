@@ -188,14 +188,10 @@ block('A4 — (638) klastry z pozycji logicznych, karta: jeden wiersz na klaster
   window.KOSMOS = { civMode: true, activeSystemId: 'sys_v', deepSpaceCombatSystem: { listActive: () => [e1, e2] },
     vesselManager: { _vessels: vessels, getVessel: (id) => vessels.get(id) ?? null }, starSystemManager: { getAllSystems: () => [] },
     tacticalDock: { getReservedHeight: () => 0 }, empireRegistry: { get: () => ({ name: 'Liga' }) } };
-  const flag = GAME_CONFIG.FEATURES.cvStage;
-  GAME_CONFIG.FEATURES.cvStage = true;
+  // CV-Z — przecelowane świadomie: wariant „bez flagi `cvStage`” (karta na starcie) usunięty razem z flagą.
   const hudOn = new HUD.CombatHUD(); hudOn.draw(ctx, 1600, 1041);
-  GAME_CONFIG.FEATURES.cvStage = false;
-  const hudOff = new HUD.CombatHUD(); hudOff.draw(ctx, 1600, 1041);
-  GAME_CONFIG.FEATURES.cvStage = flag;
-  assert(hudOn._watchBtns.length === 1 && hudOn._watchBtns[0].encounterId === 'encounter_a' && hudOff._watchBtns.length === 2,
-    `A4d \`CombatHUD\`: dwa starcia w jednym miejscu — pod flagą ${hudOn._watchBtns.length} „Watch” (klaster, kamera kadruje oba), bez flagi ${hudOff._watchBtns.length} (dzisiejsza karta)`);
+  assert(hudOn._watchBtns.length === 1 && hudOn._watchBtns[0].encounterId === 'encounter_a',
+    `A4d \`CombatHUD\`: dwa starcia w jednym miejscu — ${hudOn._watchBtns.length} „Watch” (klaster, kamera kadruje oba)`);
 });
 
 // ═══ A5 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -226,9 +222,9 @@ block('A5 — (638) jeden baner na klaster', () => {
   const k3 = BC.clusterBannerStep(h3, { encounterId: 'encounter_r', battleData: bd('encounter_r', 'A', 0, 0, 2), peerIds: [], isActive: () => false });
   assert(k3.length === 2 && h3.length === 0, `A5d grupa czekająca na starcie zakończone inną drogą wychodzi przy następnym kroku (${k3.length} banery, czekających ${h3.length})`);
   const gs = strip(read('src/scenes/GameScene.js'));
-  assert(/battleData\.source === 'dscs' && GAME_CONFIG\.FEATURES\?\.cvStage\)\s*\?\s*this\._clusterBattleBanners\(battleData\)\s*:\s*\[battleData\]/.test(gs)
+  assert(/battleData\.source === 'dscs'\)\s*\?\s*this\._clusterBattleBanners\(battleData\)\s*:\s*\[battleData\]/.test(gs) && !/FEATURES\?\.cvStage/.test(gs)
     && /_clusterBattleBanners\(battleData\) \{[\s\S]*?clusterPeerIds\([\s\S]*?clusterBannerStep\(this\._battleClusterHold/.test(gs),
-    'A5e źródło: ścieżka B (deep-space) pod flagą `cvStage` przez `_clusterBattleBanners` (`clusterPeerIds` + `clusterBannerStep`); bez flagi — baner na starcie');
+    'A5e źródło: ścieżka B (deep-space) przez `_clusterBattleBanners` (`clusterPeerIds` + `clusterBannerStep`); CV-Z — bez flagi `cvStage`');
 });
 
 // ═══ A6 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════

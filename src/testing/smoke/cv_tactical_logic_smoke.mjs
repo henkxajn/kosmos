@@ -329,15 +329,13 @@ header('K9 — flaga OFF: dzisiejsza ścieżka');
     const w = mkWorld({ feats: { cvTactical: false } });
     const L = new LY.HudCombatLayer(null);
     const key = L.prepare(w.F), c = L.collect(w.F, proj);
-    const w2 = mkWorld({ feats: { cvStage: false } });
-    const L2 = new LY.HudCombatLayer(null);
-    const key2 = L2.prepare(w2.F), c2 = L2.collect(w2.F, proj);
-    res = { key, count: c.count, obst: L.labelObstacles().length, key2, count2: c2.count };
+    // CV-Z — przecelowane świadomie: przypadek `cvStage` OFF usunięty razem z flagą (scena na stałe).
+    res = { key, count: c.count, obst: L.labelObstacles().length };
   } catch (e) { res = 'ERR ' + e.message; }
-  ok(res?.key === 'tc:0' && res?.count === 0 && res?.obst === 0 && res?.key2 === 'tc:0' && res?.count2 === 0,
-    `K9a: \`cvTactical\` OFF albo \`cvStage\` OFF — warstwa bez elementów i bez przeszkód ${JSON.stringify(res)}`);
-  ok(call('tacActive', { cvTactical: true, cvStage: true }) === true && call('tacActive', { cvTactical: false, cvStage: true }) === false
-    && call('tacActive', { cvTactical: true, cvStage: false }) === false && call('tacActive', null) === false, 'K9b: `tacActive` — flaga i scena');
+  ok(res?.key === 'tc:0' && res?.count === 0 && res?.obst === 0,
+    `K9a: \`cvTactical\` OFF — warstwa bez elementów i bez przeszkód ${JSON.stringify(res)}`);
+  ok(call('tacActive', { cvTactical: true }) === true && call('tacActive', { cvTactical: false }) === false && call('tacActive', null) === false,
+    'K9b: `tacActive` — flaga (CV-Z — scena na stałe)');
   const lbl = strip(src('../../ui/HudLabelLayer.js')), sm = strip(src('../../ui/HudShipMarkerLayer.js')), tr = strip(src('../../renderer/ThreeRenderer.js'));
   const iHp = tr.indexOf('  _syncCombatHpBars() {'), hpBody = iHp >= 0 ? tr.slice(iHp, iHp + 600) : '';
   ok(/const tacPart = tacActive\(F\.features\) \? \(tr\?\._stageParticipants \?\? null\) : null;/.test(lbl) && /if \(tacKeep && tacPart\.has\(p\.id\) && !tacKeep\.has\(String\(p\.id\)\)\) continue;/.test(lbl),

@@ -43,9 +43,8 @@ import { STAGE, solveStage, bandEdgesWU, apparentEdges, pairKey, encounterCluste
   pickStageField, stagePointLogical, stagePointDrawn, shellBaseAt } from './combat/BattleStageLogic.js';   // ARC CV-3a1 — scena bitwy; CV-3a2 — klik i klastry; CV-3a3 — skorupa
 import { stageBlend, stageBlendFloored, lengthPx } from './combat/SemanticZoomLogic.js';            // ARC CV-3a1 — zoom semantyczny (CV-6b — podłoga, decyzja 20)
 import { motionSegment, motionAt, targetVelocity } from './combat/StageMotionLogic.js';            // ARC CV-6b — ruch sceny ciągły w prędkości
-import { createChoreo, choreoSeed, choreoClassOf, choreoEnvelope, postureOf, pickFacingTarget, stepChoreoOffset, constrainChoreo,
-  stepChoreoFacing, stepChoreoEngine, quatFromYawPitchRoll,
-  stepChoreo2Offset, stepChoreo2Facing, stepChoreo2Engine } from './combat/ChoreographyLogic.js';   // ARC CV-3b — choreografia w kopercie; CV-3c — lot wzdłuż kursu
+import { createChoreo, choreoSeed, choreoClassOf, choreoEnvelope, postureOf, pickFacingTarget, constrainChoreo, quatFromYawPitchRoll,
+  stepChoreo2Offset, stepChoreo2Facing, stepChoreo2Engine } from './combat/ChoreographyLogic.js';   // ARC CV-3b / CV-3c — choreografia (lot wzdłuż kursu)
 import { ShipHardpointsCache, slotOfModelPath, yawToward, orbitYaw, bankRoll, INCOMING_DIR, SHIP_MODEL_DIR,
   REST_YAW_CANONICAL, wreckTiltQuaternion, has1kVariant, modelPath1k } from './ShipHardpoints.js';   // ARC CV-1a — hardpointy, rama kanoniczna (kurs spoczynkowy i wrak jak OFF); CV-2b — wariant 1K
 import { buildShipRig, disposeShipRig, paintRigMaterials, paintRigRim, lightTestPattern, NOZZLE_KEY_HEX } from './ShipModelRig.js';      // ARC CV-1a — statek w ramie kanonicznej; CV-3c — wylot dysz
@@ -64,7 +63,7 @@ import { ShieldBubblePool } from './combat/ShieldBubbles.js';                   
 import { explosionPlan, explosionBudget, explosionClassOf, explosionSeed, damageStateOf, wreckHeatAt, wreckBurnColor, wreckFireWindow,
   wreckDrift, wreckConverge, sputterGate, emitterTicks, seedUnit as expSeedUnit, wreckAfterDrift } from './combat/ExplosionLogic.js';   // ARC CV-5 — wybuchy, uszkodzenia, wraki; CV-3c — dryf po bitwie
 import { isStationInActiveSystem } from './StationRenderLogic.js';
-import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep,
+import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, glideRetarget, glideStep,
   centroidOf, fitWatchFrameOffset, viewOffsetFrame } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
@@ -97,9 +96,9 @@ import {
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
   isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_RING, engagementRingBand,
-  isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR, HIT_GLOW, hitGlowWorldSize,
+  isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
-  EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR, rumorGhostHold }
+  rumorGhostHold }
   from '../utils/VesselFxLogic.js';
 import { orbitClockSec, simClockMs } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika); paczka B — puls celownika
 import { planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
@@ -119,8 +118,7 @@ const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
 // Zastąpiło warstwę selektywnego bloomu (BLOOM_LAYER) i 2 composery.
 // Wzmocnienia HDR emiterów FX (dobrane pod próg 1.0 z uwzgl. opacity/flicker):
 const FX_HDR_EXHAUST   = 4.5;  // gain vertex-colors smugi (opacity 0.35 × flicker ~0.8 → apex ~1.3)
-const FX_HDR_EXPLOSION = 2.5;  // gain kuli ognia i pierścienia uderzeniowego
-const FX_HDR_WRECK     = 2.2;  // emissiveIntensity żarzącego się wraku
+const FX_HDR_EXPLOSION = 2.5;  // gain kuli ognia
 // ARC CV-5 (Finding 706) — [ms czasu realnego] jak długo znacznik sceny przebudowywanego statku czeka na nowy sprite (model GLB
 // po zmianie presetu tekstur wstawia się asynchronicznie; pierwszy wariant 1K bywa pobierany setki ms).
 const STAGE_REBUILD_KEEP_MS = 10000;
@@ -206,7 +204,7 @@ const ALERT_MARKER_REF_DIST = 60;           // dystans kamery [WU] dający skal�
 const ALERT_MARKER_PULSE_MAX = 1.16;        // szczyt pulsu celownika (1 + 0,16 · puls) — limit ekranowy liczony dla szczytu
 // POLISH P2a (CP14 — limit ekranowy także dla efektów walki przy „Obserwuj”): rodzaje efektów w rozmiarze świata,
 // które z bliska zakrywały kadr (sonda P2a, scena 3 na 2: pierścień osłony rośnie do 0,30 j. promienia).
-const FX_WATCH_CAPPED = new Set(['flash', 'shieldRing', 'explosion', 'explosionRing']);
+const FX_WATCH_CAPPED = new Set(['explosion']);   // CV-Z — dawne smugi, błyski i pierścienie walki usunięte
 const _WATCH_V = new THREE.Vector3();       // POLISH P2a — wektor roboczy głębi widoku (`_viewDepth`)
 const _HP_R = new THREE.Vector3();          // POLISH P2b (D2) — oś „w prawo” ekranu w świecie (paski HP)
 const _HP_U = new THREE.Vector3();          // POLISH P2b (D2) — oś „w górę” ekranu w świecie (paski HP)
@@ -215,7 +213,6 @@ const _STAGE_V = new THREE.Vector3();       // ARC CV-3a1 — środek sceny bitw
 // ARC CV-3b — choreografia: kwaterniony i wektor tymczasowe (kurs na węźle `canon` rigu — bez alokacji THREE co klatkę)
 const _CHQ_A = new THREE.Quaternion(), _CHQ_C = new THREE.Quaternion(), _CHQ_D = new THREE.Quaternion();
 const _CHV = new THREE.Vector3();
-let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstura białego błysku trafienia (jedna, współdzielona)
 // F4 Dok: ping-FX kliku wiersza — ARKUSZ HUD paczka B (D-HUD-16): kolor w roli `primary` (dawniej 0x66ddff, `_spawnFx`).
 const TACTICAL_PING_THROTTLE_MS = 180;     // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
 // ARC CV-2a — zdarzenia, którymi `fxStats` etykietuje długie klatki (subskrypcja tylko na czas pomiaru).
@@ -749,10 +746,8 @@ export class ThreeRenderer {
     this._buildLights();
     this._setupEventBus();
     // ARC CV-5 (Finding 644) — silnik FX walki budowany i ROZGRZEWANY przy starcie (programy wszystkich pul, bufory atrybutów):
-    // pierwsza salwa i pierwszy wybuch nie płacą kompilacji w klatce gry. Flaga `cvFxEngine` OFF — silnik leniwie, jak dziś.
-    if (GAME_CONFIG.FEATURES?.cvFxEngine) {
-      try { this._ensureFxEngine(); } catch (err) { console.warn('[ThreeRenderer] cvFxEngine prewarm failed:', err); }
-    }
+    // pierwsza salwa i pierwszy wybuch nie płacą kompilacji w klatce gry.
+    try { this._ensureFxEngine(); } catch (err) { console.warn('[ThreeRenderer] FX engine prewarm failed:', err); }
     this._startLoop();
   }
 
@@ -766,40 +761,30 @@ export class ThreeRenderer {
       lastFrameT: null, base: null, eff: null };
   }
 
-  // Zastosuj stan: flaga ON — preset (gęstość pikseli, bloom, liczba świateł puli, wariant tekstur statków); flaga OFF —
-  // dzisiejsze ustawienia (gęstość min(dpr × 1,5, 2), bloom, bez świateł puli, tekstury 2K). Zmienia WYŁĄCZNIE to, co się
-  // różni od stanu renderera (gęstość ustawiana tylko przy zmianie — przypisanie rozmiaru kanwy ją czyści); zmiana wariantu
+  // Zastosuj preset (gęstość pikseli, bloom, liczba świateł puli, wariant tekstur statków, wygładzanie). CV-Z — dawne ustawienia
+  // bez presetów (gęstość min(dpr × 1,5, 2), bloom w px bufora, bez świateł puli) usunięte z flagą `cvPresets`. Zmienia WYŁĄCZNIE
+  // to, co się różni od stanu renderera (gęstość ustawiana tylko przy zmianie — przypisanie rozmiaru kanwy ją czyści); zmiana wariantu
   // tekstur przebudowuje statki aktywnego układu (`cvRebuildVesselSprites`).
   _applyGfx(reason = 'apply') {
-    const on = !!GAME_CONFIG.FEATURES?.cvPresets;
     const g = this._gfx;
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
     const prev = this._gfxApplied;
-    let pr, bloom, lights, textures, aa;
-    if (on) {
-      g.base = resolveGfxSettings(g.level, { dpr });
-      g.eff = resolveGfxSettings(g.level, { dpr, throttle: g.throttle.level });
-      ({ pixelRatio: pr, bloom, lights, textures } = g.eff);
-      aa = g.eff.aa ?? 'none';
-      if (!this._fxLightPool && this.scene) {
-        this._fxLightPool = new CombatLightPool({ THREE, parent: this.scene, capacity: LIGHT_POOL_MAX, tuning: this.cvTuning });
-      }
-    } else {
-      pr = Math.min(dpr * 1.5, 2); bloom = true; lights = 0; textures = '2k'; aa = 'none';
-      g.base = null; g.eff = null;
-      g.throttle.reset();
-      this._cueBus?.clear();
+    g.base = resolveGfxSettings(g.level, { dpr });
+    g.eff = resolveGfxSettings(g.level, { dpr, throttle: g.throttle.level });
+    const { pixelRatio: pr, bloom, lights, textures } = g.eff;
+    const aa = g.eff.aa ?? 'none';
+    if (!this._fxLightPool && this.scene) {
+      this._fxLightPool = new CombatLightPool({ THREE, parent: this.scene, capacity: LIGHT_POOL_MAX, tuning: this.cvTuning });
     }
-    // ARC CV-5 (pozycja 0 — Finding 704) — bloom w px CSS przy presetach (przed zmianą gęstości: composer przelicza rozmiary passów)
-    const cssBloom = on;
-    const bloomModeChanged = this._bloomCssPx !== cssBloom;
-    this._bloomCssPx = cssBloom;
+    // ARC CV-5 (pozycja 0 — Finding 704) — bloom w px CSS (przed zmianą gęstości: composer przelicza rozmiary passów)
+    const bloomModeChanged = this._bloomCssPx !== true;
+    this._bloomCssPx = true;
     if (pr !== this._pixelRatio) this._setRendererPixelRatio(pr);
     else if (bloomModeChanged) this._syncBloomSize?.();
     if (this._bloomPass && this._bloomPass.enabled !== bloom) this._bloomPass.enabled = bloom;
     this._syncSmaa?.(aa === 'smaa');   // ARC CV-5 (decyzja 41) — SMAA wyłącznie na High (pass tworzony przy pierwszym użyciu)
     this._fxLightPool?.setCount(lights);
-    this._gfxApplied = { on, level: on ? g.level : null, pixelRatio: pr, bloom, lights, textures, aa, reason };
+    this._gfxApplied = { on: true, level: g.level, pixelRatio: pr, bloom, lights, textures, aa, reason };
     if (prev && prev.textures !== textures) this.cvRebuildVesselSprites();
     if (prev) window.KOSMOS?.hudLayer?.wake?.();   // kanwa HUD bierze gęstość renderera (`hudPixelRatio`)
     return this._gfxApplied;
@@ -825,7 +810,7 @@ export class ThreeRenderer {
     return bloomInputSize({ cssW: w / pr, cssH: h / pr, dpr, pixelRatio: pr, cssPx: !!this._bloomCssPx });
   }
 
-  // ARC CV-5 (704) — przelicz rozmiar mipów bloomu bez zmiany gęstości (przełączenie trybu: flaga `cvPresets`).
+  // ARC CV-5 (704) — przelicz rozmiar mipów bloomu bez zmiany gęstości (pierwsze zastosowanie presetu).
   _syncBloomSize() {
     const b = this._bloomPass, c = this._composer;
     if (!b || !c) return;
@@ -853,8 +838,8 @@ export class ThreeRenderer {
     if (this._smaaPass) this._smaaPass.enabled = !!on;
   }
 
-  /** Poziom presetu (☰ „Grafika”) albo `null`, gdy flaga `cvPresets` jest wyłączona. */
-  get gfxLevel() { return GAME_CONFIG.FEATURES?.cvPresets ? this._gfx.level : null; }
+  /** Poziom presetu (☰ „Grafika”). */
+  get gfxLevel() { return this._gfx.level; }
 
   /**
    * ARC CV-2b — ustaw preset (☰ „Grafika”, `KOSMOS.debug.gfx(0|1|2)`): zapis na maszynie (try / catch), zastosowanie od razu.
@@ -874,13 +859,9 @@ export class ThreeRenderer {
   /** ☰ „Grafika”: High → Medium → Low → High. */
   cycleGfxPreset() { return this.applyGfxPreset(nextGfxLevelInCycle(this._gfx.level)); }
 
-  // Raz na klatkę (po `_tickCvFx`): przełączenie flagi w konsoli — ponowne zastosowanie; dławienie automatyczne (czas klatki
-  // w walce) i obwiednia świateł puli na zegarze prezentacji. Flaga OFF — tylko porównanie flagi.
+  // Raz na klatkę (po `_tickCvFx`): dławienie automatyczne (czas klatki w walce) i obwiednia świateł puli na zegarze prezentacji.
   _tickGfx() {
-    const on = !!GAME_CONFIG.FEATURES?.cvPresets;
-    if (on !== (this._gfxApplied?.on === true)) this._applyGfx('flag');
     const g = this._gfx;
-    if (!on) { g.lastFrameT = null; return; }
     const now = performance.now();
     const dt = g.lastFrameT == null ? 0 : now - g.lastFrameT;
     g.lastFrameT = now;
@@ -903,7 +884,7 @@ export class ThreeRenderer {
   cvGfxInfo() {
     const g = this._gfx, e = g.eff;
     return {
-      cvPresets: !!GAME_CONFIG.FEATURES?.cvPresets, level: g.level, source: g.source, renderer: g.rendererString,
+      level: g.level, source: g.source, renderer: g.rendererString,
       pixelRatio: this._pixelRatio, bloom: this._bloomPass ? this._bloomPass.enabled !== false : false,
       // ARC CV-5 (pozycja 0) — wygładzanie (SMAA na High) i szerokości mipów bloomu w pikselach bufora (px CSS × gęstość odniesienia)
       aa: this._smaaPass?.enabled ? 'smaa' : 'none', bloomMips: this._bloomPass?.renderTargetsHorizontal?.map?.((rt) => rt.width) ?? null,
@@ -947,7 +928,6 @@ export class ThreeRenderer {
    * (High i Medium: kadłuby wokół rozjaśniają się na ~0,6 s; Low: odmowa — 0 świateł). Zegar prezentacji: w pauzie błysk stoi.
    */
   cvLightFlash() {
-    if (!GAME_CONFIG.FEATURES?.cvPresets) return { ok: false, reason: 'cvPresets_off' };
     const pool = this._fxLightPool;
     if (!pool) return { ok: false, reason: 'no_pool' };
     let x = 0, y = 0.3, z = 0, n = 0;
@@ -1690,7 +1670,7 @@ export class ThreeRenderer {
       // żywa). Gated fcCombatFx. Kula ognia + pierścień uderzeniowy (_spawnExplosion).
       if (GAME_CONFIG.FEATURES?.fcCombatFx && !cvKill?.skipBoom) {
         this._spawnExplosion(entry.sprite.position, vesselTargetSize(vessel), { id: vesselId, vessel });   // ARC CV-5 — kontekst wybuchu warstwowego
-        if (GAME_CONFIG.FEATURES?.cvPresets) this._cueDestroyed(vesselId, vessel, entry);   // ARC CV-2b — sygnał „zniszczony”
+        this._cueDestroyed(vesselId, vessel, entry);   // ARC CV-2b — sygnał „zniszczony”
       }
       entry.isWreck = true;
       entry.sprite.visible = true;
@@ -1734,31 +1714,6 @@ export class ThreeRenderer {
           if (this._cvDmgOn?.()) this._cvDmgWreckLook?.(vesselId, entry);   // ARC CV-5 — szwy stygnące zamiast czerwieni całego kadłuba
         }
         entry.enemyTint = true;   // jak ścieżka OFF — etykiety CTRL (kolor wraku); zwalnianie rozstrzyga `canonical`
-      } else if (entry.isModel3D) {
-        entry.sprite.traverse(child => {
-          if (!child.isMesh || !child.material) return;
-          const mat = child.material.clone();
-          if (mat.color)    mat.color.copy(wreckCol);
-          if (mat.emissive) {
-            if (GAME_CONFIG.FEATURES?.fcCombatFx) {
-              // Żarzący się wrak — dogorywające reaktory. emissiveIntensity >1 (HDR)
-              // → przekracza próg bloomu 1.0 i świeci naturalnie (pipeline HDR).
-              mat.emissive.setHex(WRECK_EMISSIVE_COLOR);
-              if (mat.emissiveIntensity != null) mat.emissiveIntensity = FX_HDR_WRECK;
-            } else {
-              mat.emissive.setHex(0x110000);  // legacy: ledwo widoczna czerwień
-            }
-          }
-          if (mat.metalness != null) mat.metalness = 0.3;
-          if (mat.roughness != null) mat.roughness = 1.0;
-          if (mat.opacity != null)   mat.opacity   = 1.0;
-          mat.transparent = false;
-          child.material = mat;
-        });
-        // Losowy tilt — wrak przechylony, sygnalizuje uszkodzony kadłub
-        entry.sprite.rotation.z = (rendererRandom() - 0.5) * 0.6;
-        entry.sprite.rotation.x = (rendererRandom() - 0.5) * 0.4;
-        entry.enemyTint = true;  // dispose cloned materials on remove
       } else if (entry.sprite.material) {
         // Sprite billboard — podmień teksturę na ikonę wraku (ciemnoszara + rdza)
         const canvas = document.createElement('canvas');
@@ -4584,7 +4539,7 @@ export class ThreeRenderer {
         this._tickEngagementMarkers(performance.now());
         // ARC CV-3a1 (Finding 642) — scena oznacza bitwę sama; ARC CV-6b2 — pod flagą `cvStrip` pierścień starcia odchodzi razem z kartą
         // (pasek walki nazywa bitwy; pierścienie „imitacji” bitew orbitalnych — CV-8b).
-        if (GAME_CONFIG.FEATURES?.cvStage || GAME_CONFIG.FEATURES?.cvStrip) this._hideEncounterRings();
+        this._hideEncounterRings();
         this._syncCombatReveal();        // POLISH P2a (CP17) — koniec starcia z graczem: widoczność wg wywiadu
         // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
@@ -5053,9 +5008,9 @@ export class ThreeRenderer {
     // (poprzedni load 404) — od razu DEFAULT, bez ponownego nieudanego fetcha.
     const resolved = vesselModelPath(vessel);
     const modelPath = this._missingModelPaths.has(resolved) ? VESSEL_MODEL_DEFAULT : resolved;
-    // ARC CV-1a — przełącznik deweloperski `KOSMOS.debug.cvIncoming(1)` (tylko z flagą `cvModels`): slot z indeksu
-    // `hardpoints/incoming/index.json` bierze model z `incoming/` (podgląd modelu właściciela PRZED podmianą slotu — CV-1b).
-    const incoming = GAME_CONFIG.FEATURES?.cvModels ? this._cvIncomingPathFor(modelPath) : null;
+    // ARC CV-1a — przełącznik deweloperski `KOSMOS.debug.cvIncoming(1)`: slot z indeksu `hardpoints/incoming/index.json` bierze
+    // model z `incoming/` (podgląd modelu właściciela PRZED podmianą slotu — CV-1b).
+    const incoming = this._cvIncomingPathFor(modelPath);
     this._addVesselModel3D(vessel, incoming ?? modelPath);
   }
 
@@ -5069,243 +5024,15 @@ export class ThreeRenderer {
   }
 
   /**
-   * Dodaj model 3D statku (GLB) na mapie.
+   * Dodaj model 3D statku (GLB) na mapie — ARC CV-1a: rama kanoniczna z pliku hardpointów (CV-Z — dawna ścieżka modeli bez ramy,
+   * ze wspólnymi materiałami szablonu i zwalnianiem jego geometrii, usunięta razem z flagą `cvModels`).
    */
   _addVesselModel3D(vessel, modelPath) {
-    // ARC CV-1a — flaga `cvModels` (czytana przy stawianiu statku): rama kanoniczna z pliku hardpointów. OFF — niżej, jak dziś.
-    if (GAME_CONFIG.FEATURES?.cvModels) { this._addVesselModelCv(vessel, modelPath); return; }
-    const isEnemy = isEnemyVessel(vessel);
-    const color = isEnemy ? 0xff4466 : 0x44cc66;  // crimson dla wroga, cargo-green dla gracza
-
-    // Pozycja startowa
-    const px = S(vessel.position?.x ?? 0);
-    const pz = S(vessel.position?.y ?? 0);
-
-    const placeModel = (template) => {
-      // Nie duplikuj jeśli async callback przyszedł za późno
-      if (this._vessels.has(vessel.id)) return;
-
-      // Wrapper Group — pozycja i obrót aplikowane na wrapperze,
-      // model wewnątrz wycentrowany przez offset
-      const wrapper = new THREE.Group();
-      // M3 P1.2 — userData dla raycaster (walk-up parent z child mesh GLB).
-      wrapper.userData = { kosmosType: 'vessel', vesselId: vessel.id };
-
-      const model = template.clone();
-
-      // Normalizacja rozmiaru: skaluj model tak, by jego największy wymiar
-      // odpowiadał docelowemu rozmiarowi klasy (VESSEL_TARGET_SIZE). Robi to
-      // dowolny model gracza o nieznanej skali natywnej spójnym wizualnie.
-      const rawBox = new THREE.Box3().setFromObject(model);
-      const rawSize = rawBox.getSize(new THREE.Vector3());
-      const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z) || 1;
-      const vScale = vesselTargetSize(vessel) / maxDim;
-      model.scale.set(vScale, vScale, vScale);
-
-      // Wycentruj geometrię modelu (GLB może mieć offset) — po przeskalowaniu
-      const box = new THREE.Box3().setFromObject(model);
-      const center = box.getCenter(new THREE.Vector3());
-      model.position.sub(center); // przesunięcie do centrum (0,0,0)
-
-      wrapper.add(model);
-
-      // ── Exhaust cone (plume silnika) — child wrappera, NIE modelu ──────────
-      // Dziedziczy yaw + banking (aplikowane na wrapperze co klatkę).
-      // Live-test: dziób modeli jest w lokalnym −X, więc RUFA = lokalne +X
-      // (box.max.x − center.x = +halfWidthX). Stożek obrócony rotation.z=+π/2:
-      // apex(+Y)→−X (ku kadłubowi), szeroka podstawa(−Y)→+X (plume za rufą).
-      // Apex przy krawędzi rufy (rearX), baza trailing coneLen w tył.
-      // Rozmiar zmniejszony ~60% (radius) / do ~połowy kadłuba (length) po live-teście.
-      // Modulacja opacity/scale.x w _syncVesselPositions → _applyExhaust.
-      let exhaustCone = null;
-      if (GAME_CONFIG.FEATURES?.fcCombatFx && !vessel.isWreck) {
-        const size = box.getSize(new THREE.Vector3());
-        const rearX = box.max.x - center.x;                // rufa w układzie wrappera (+halfWidthX)
-        const coneRadius = Math.max(0.012, size.y * 0.04); // ujście dyszy (było 0.08)
-        const coneLen    = Math.max(0.03, size.x * 0.02);  // krótka, ~2% kadłuba (było 0.04)
-        // 32 segmenty (gładkie krawędzie) + gradient wierzchołkowy RGBA:
-        // apex(+Y, przy rufie) jasny + alpha 1, baza(−Y, koniec smugi) alpha 0 →
-        // zanikająca smuga plazmowa zamiast twardego stożka.
-        const geo = new THREE.ConeGeometry(coneRadius, coneLen, 32, 1, true);
-        const grad = exhaustGradientColors({ isEnemy });
-        const posAttr = geo.attributes.position;
-        const colAttr = new Float32Array(posAttr.count * 4);
-        for (let i = 0; i < posAttr.count; i++) {
-          const t = (posAttr.getY(i) + coneLen / 2) / coneLen;  // 0=baza(−Y), 1=apex(+Y)
-          // ×FX_HDR_EXHAUST: apex przekracza próg bloomu 1.0 mimo opacity 0.35
-          // i flickera (pipeline HDR — smuga świeci naturalnie, bez warstw)
-          colAttr[i * 4 + 0] = (grad.base.r + (grad.apex.r - grad.base.r) * t) * FX_HDR_EXHAUST;
-          colAttr[i * 4 + 1] = (grad.base.g + (grad.apex.g - grad.base.g) * t) * FX_HDR_EXHAUST;
-          colAttr[i * 4 + 2] = (grad.base.b + (grad.apex.b - grad.base.b) * t) * FX_HDR_EXHAUST;
-          colAttr[i * 4 + 3] = t;                                // alpha apex1 → baza0
-        }
-        geo.setAttribute('color', new THREE.BufferAttribute(colAttr, 4));
-        const exMat = new THREE.MeshBasicMaterial({
-          vertexColors: true, transparent: true, opacity: 0.35, // subtelne (było 0.5)
-          blending: THREE.AdditiveBlending, depthWrite: false,
-        });
-        exhaustCone = new THREE.Mesh(geo, exMat);
-        exhaustCone.rotation.z = Math.PI / 2;              // baza(−Y) → +X (plume za rufą)
-        exhaustCone.position.set(rearX + coneLen / 2, 0, 0); // apex przy rufie, baza w tył
-        exhaustCone.renderOrder = 2;
-        exhaustCone.visible = false;                        // domyślnie zgaszony (idle)
-        wrapper.add(exhaustCone);
-      }
-
-      // Pozycja — lekko nad płaszczyzną orbitalną
-      wrapper.position.set(px, 0.3, pz);
-
-      // Obrót dziobem w kierunku celu
-      if (vessel.mission) {
-        const m = vessel.mission;
-        const isReturn = m.phase === 'returning';
-        let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
-        let ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
-        const dx = tx - (vessel.position?.x ?? 0);
-        const dy = ty - (vessel.position?.y ?? 0);
-        if (dx !== 0 || dy !== 0) {
-          // atan2 na płaszczyźnie XZ + korekta osi modelu (dziób wzdłuż +X w GLB)
-          wrapper.rotation.y = Math.atan2(dx, dy) + Math.PI / 2;
-        }
-      }
-
-      // Materiały: zachowaj oryginalne z GLB (gracz) / crimson (wróg) / szary (wrak).
-      // Klonujemy, bo materiały GLB są współdzielone z template cache — bez klonu tint
-      // rozlałby się na wszystkie statki tego samego modelu (także gracza).
-      const isWreck = (this._cvVisWreck?.(vessel) ?? !!vessel?.isWreck);   // ARC CV-8a — wrak powtórki bitwy orbitalnej dopiero po zniszczeniu
-      const redTint  = new THREE.Color(0xff4466);
-      // Wrak — wypalony czarny (kontrast z naturalnym pomarańczowym cargo3d.glb).
-      // Wcześniejszy rdzawy #554438 był zbyt podobny do żywych statków.
-      // Emissive ciemnoczerwony (0x110000) — ledwo widoczna poświata dogorywających
-      // reaktorów, nie ognista aura.
-      const wreckColor = new THREE.Color(0x1a1a1a);
-      model.traverse((child) => {
-        if (!child.isMesh) return;
-        child.castShadow = false;
-        child.receiveShadow = false;
-        if (!child.material) return;
-        if (isWreck) {
-          const mat = child.material.clone();
-          if (mat.color)    mat.color.copy(wreckColor);
-          if (mat.emissive) mat.emissive.setHex(0x110000);  // ledwo widoczna czerwień
-          if (mat.metalness != null)  mat.metalness  = 0.3;
-          if (mat.roughness != null)  mat.roughness  = 1.0;  // zupełnie matowy (spalony)
-          if (mat.opacity != null)    mat.opacity    = 1.0;
-          mat.transparent = false;
-          child.material = mat;
-        } else if (isEnemy) {
-          const mat = child.material.clone();
-          if (mat.color)    mat.color.lerp(redTint, 0.55);
-          if (mat.emissive) mat.emissive.setHex(0x880022);
-          child.material = mat;
-        }
-      });
-
-      // Wrak — lekki tilt (przechylony kadłub — sygnalizuje uszkodzenie).
-      // Bez scale-up — rdzawy kolor wystarczy żeby odróżnić od żywego statku.
-      if (isWreck) {
-        wrapper.rotation.z = (rendererRandom() - 0.5) * 0.6;  // ±0.3 rad ≈ ±17°
-        wrapper.rotation.x = (rendererRandom() - 0.5) * 0.4;
-      }
-
-      this.scene.add(wrapper);
-      // Trasę statku rysuje warstwa HUD 2D (`HudRouteLayer`; dawne linie tras 3D usunięte w ARKUSZU HUD B-Z).
-
-      // Wrogi statek: początkowa widoczność. Wrak jest widoczny ZAWSZE.
-      // M4 P2: jeśli m4EnemyGhosts ON, wywołamy _applyVesselIntelVisibility po
-      // _vessels.set — uwzględnia intel quality (rumor/contact/detailed).
-      // W przeciwnym wypadku legacy fog-of-war z ObservatorySystem (binarne).
-      if (isWreck) {
-        wrapper.visible = true;
-      } else if (isEnemy && !GAME_CONFIG.FEATURES.m4EnemyGhosts) {
-        const obs = window.KOSMOS?.observatorySystem;
-        const detected = obs?.isVesselDetected?.(vessel.id) ?? false;
-        wrapper.visible = detected;
-      }
-
-      this._vessels.set(vessel.id, {
-        sprite: wrapper, color, isModel3D: true,
-        enemyTint: isEnemy || isWreck,  // wszystkie sklonowane materiały do dispose
-        isWreck,
-        exhaust: exhaustCone,           // stożek wydechu (może być null) — modulowany co tick
-        _exhaustPhase: rendererRandom() * Math.PI * 2,  // desync flickeru między statkami
-      });
-
-      // M4 P2 — po set: apply intel visibility (rumor ghost / contact dim / detailed)
-      if (isEnemy && !isWreck && GAME_CONFIG.FEATURES.m4EnemyGhosts) {
-        const entry = this._vessels.get(vessel.id);
-        this._applyVesselIntelVisibility(vessel, entry);
-      }
-      this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
-
-      // Wrak — ustaw orbit cache natychmiast, na wyższej warstwie Y niż żywe statki.
-      // Flag `isWreck` + `initAngle` pozwalają _calcVisualOrbitFromCache użyć
-      // wolnej orbity i wysokiej warstwy cmentarzyska.
-      if (isWreck && vessel.position?.dockedAt) {
-        // ARC CV-1a (Finding 625) — `entry` był tu POZA ZAKRESEM (zadeklarowany w bloku wyżej) ⇒ ReferenceError połykany przez
-        // `.catch` ładowania jako „GLB load failed (retry)”: wrak stał, ale bez pamięci orbity i z fałszywym ostrzeżeniem w
-        // konsoli. Naprawa także na ścieżce OFF — flaga nie ma prawa przywracać defektu (precedens V-260 / D-V2z).
-        const entry = this._vessels.get(vessel.id);
-        entry.isWreck = true;
-        const bodyId = vessel.position.dockedAt;
-        let bodyR = 0.06;
-        const pE = this._planets.get(bodyId);
-        if (pE) {
-          const ent = this._entityByUUID.get(pE.mesh.uuid);
-          bodyR = ent ? this._getEntityRadius(ent) : 0.1;
-        } else if (this._moons.has(bodyId)) {
-          bodyR = 0.03;
-        } else if (this._planetoids.has(bodyId)) {
-          bodyR = 0.02;
-        }
-        entry._orbiting = {
-          bodyId,
-          orbitR: Math.max(0.5, bodyR * 6.0),
-          isWreck: true,
-          initAngle: rendererRandom() * Math.PI * 2,  // losowa faza startowa
-        };
-      } else if (isWreck && vessel.wreckLocation && vessel.position.dockedAt == null) {
-        // M2a deep-space wrak — brak orbity, sprite zamrożony w wreckLocation.
-        // Ustawiamy pozycję natychmiast (save/load — sprite inaczej ląduje w (0,0,0)).
-        const wx = isNaN(vessel.wreckLocation.x) ? 0 : vessel.wreckLocation.x;
-        const wy = isNaN(vessel.wreckLocation.y) ? 0 : vessel.wreckLocation.y;
-        wrapper.position.set(S(wx), 0.45, S(wy));
-      }
-    };
-
-    // Użyj promise-based cache — gwarantuje że równoległe wywołania dla tego
-    // samego path dzielą JEDEN request (bez podwójnego pobierania 18 MB pliku)
-    this._loadShipModel(modelPath)
-      .then(template => placeModel(template))
-      .catch(err => {
-        console.warn(`[ThreeRenderer] GLB load failed (retry za 400ms): ${modelPath}`, err);
-        // Retry po delayu — przeglądarka mogła zwolnić zasoby
-        setTimeout(() => {
-          this._loadShipModel(modelPath)
-            .then(template => placeModel(template))
-            .catch(err2 => {
-              // Konkretny model klasy nie istnieje (np. gracz nie wgrał pliku) →
-              // oznacz jako brakujący i spróbuj DEFAULT, dopiero potem sprite.
-              this._missingModelPaths.add(modelPath);
-              if (modelPath !== VESSEL_MODEL_DEFAULT) {
-                console.warn(`[ThreeRenderer] Brak modelu ${modelPath} — fallback na DEFAULT (${VESSEL_MODEL_DEFAULT})`);
-                this._loadShipModel(VESSEL_MODEL_DEFAULT)
-                  .then(template => placeModel(template))
-                  .catch(err3 => {
-                    console.error(`[ThreeRenderer] DEFAULT GLB też nie wczytany — sprite dla ${vessel.name}`, err3);
-                    this._addVesselSpriteFallback(vessel);
-                  });
-              } else {
-                console.error(`[ThreeRenderer] DEFAULT GLB nie wczytany — sprite dla ${vessel.name}`, err2);
-                this._addVesselSpriteFallback(vessel);
-              }
-            });
-        }, 400);
-      });
+    this._addVesselModelCv(vessel, modelPath);
   }
 
   /**
-   * ARC CV-1a (flaga `cvModels`) — statek w RAMIE KANONICZNEJ (`ShipModelRig`): model obrócony kwaternionem ramy z pliku
+   * ARC CV-1a — statek w RAMIE KANONICZNEJ (`ShipModelRig`): model obrócony kwaternionem ramy z pliku
    * hardpointów (dziób → +Z, D-CV-11), smuga w dyszy z pliku (Finding 619), WŁASNE klony materiałów z maską koloru-klucza
    * (Finding 624; tint wroga i żar wraku uniformami — Finding 620), punkty świetlne `lights[]`. Wrapper, pozycja, widoczność,
    * wywiad, fokus i pamięć orbity wraku — jak ścieżka OFF (`_addVesselModel3D`). Hardpointy wczytywane RÓWNOLEGLE z GLB;
@@ -5374,7 +5101,7 @@ export class ThreeRenderer {
       // ARC CV-3c (Finding 709) — wyloty startują ukryte, a poza walką zapala je `_applyExhaust` dopiero przy aktualizacji pozycji (gra
       // w ruchu): model, który dochodzi na PAUZIE (parada `cvParade`, wczytanie, przebudowa po zmianie presetu, zmiana układu), nie miał
       // wylotu do wznowienia — statek warp ratował pierścień emisji w teksturze, niewarpowy nie miał nic. Stan wylotu od razu po rigu.
-      else if (GAME_CONFIG.FEATURES?.cvChoreo2) this._applyExhaust?.(vessel, entry);
+      else this._applyExhaust?.(vessel, entry);
       this._cvShdReapplyScorch?.(vessel.id, entry);   // ARC CV-4b — osmalenia kadłuba po przebudowie (High)
       if (isEnemy && !isWreck && GAME_CONFIG.FEATURES.m4EnemyGhosts) this._applyVesselIntelVisibility(vessel, entry);
       this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
@@ -5395,11 +5122,11 @@ export class ThreeRenderer {
       }
     };
     const place = (res) => {
-      try { placeModel(res); } catch (e) { console.error(`[ThreeRenderer] cvModels: błąd stawiania statku ${vessel.id} (${modelPath})`, e); }
+      try { placeModel(res); } catch (e) { console.error(`[ThreeRenderer] model: błąd stawiania statku ${vessel.id} (${modelPath})`, e); }
     };
     const load = (path) => {
       const s = slotOfModelPath(path) ?? { slot: 'default', variant: 'slot' };
-      // ARC CV-2b (flaga `cvPresets`) — tekstury 1K (presety Medium / Low): najpierw hardpointy slotu (z pamięci po pierwszym
+      // ARC CV-2b — tekstury 1K (presety Medium / Low): najpierw hardpointy slotu (z pamięci po pierwszym
       // statku), bo to one mówią, czy wariant `<slot>@1k.glb` istnieje (`has1kVariant`); bez wariantu — model 2K jak dziś.
       if (!this._gfxWants1k?.() || s.variant !== 'slot') return Promise.all([this._loadShipModel(path), this._shipHardpoints.load(s.slot, s.variant)]);
       return this._shipHardpoints.load(s.slot, s.variant).then((hp) => this._loadShipModelVariant(path, hp).then((tpl) => [tpl, hp]));
@@ -5486,14 +5213,14 @@ export class ThreeRenderer {
     this._cvIncoming = !!on;
     if (this._cvIncoming && !this._cvIncomingSlots) this._cvIncomingSlots = await this._shipHardpoints.loadIncomingIndex();
     const rb = this.cvRebuildVesselSprites();
-    return { cvIncoming: this._cvIncoming, slots: [...(this._cvIncomingSlots ?? [])], cvModels: !!GAME_CONFIG.FEATURES?.cvModels, ...rb };
+    return { cvIncoming: this._cvIncoming, slots: [...(this._cvIncomingSlots ?? [])], ...rb };
   }
 
   /** ARC CV-1a — `KOSMOS.debug.cvLightTest(1|0)`: testowy wzór punktów świetlnych na slotach bez `lights[]`. */
   cvSetLightTest(on) {
     this._cvLightTest = !!on;
     const rb = this.cvRebuildVesselSprites();
-    return { cvLightTest: this._cvLightTest, cvModels: !!GAME_CONFIG.FEATURES?.cvModels, ...rb };
+    return { cvLightTest: this._cvLightTest, ...rb };
   }
 
   /** ARC CV-1a — `KOSMOS.debug.modelInfo()`: statki w ramie kanonicznej, hardpointy (plik / zapas), pula świateł. */
@@ -5504,7 +5231,7 @@ export class ThreeRenderer {
         lights: e.rig?.lights ? e.rig.lights.geometry?.instanceCount ?? 0 : 0, exhaust: !!e.exhaust, wreck: !!e.isWreck });
     }
     return {
-      cvModels: !!GAME_CONFIG.FEATURES?.cvModels, cvIncoming: this._cvIncoming, cvLightTest: this._cvLightTest,
+      cvIncoming: this._cvIncoming, cvLightTest: this._cvLightTest,
       canonical: ships.filter((s) => s.canonical).length, legacy: ships.filter((s) => !s.canonical).length,
       hardpoints: this._shipHardpoints.stats(), lightPool: this._shipLightPool?.stats() ?? null, ships,
     };
@@ -5512,9 +5239,8 @@ export class ThreeRenderer {
 
   // ARC CV-1a — raz na klatkę: pokrętła modeli (`cvTuning.MODEL_*`) do wspólnych uniformów maski (wzmocnienie, tint, żar,
   // światło czytelności: wypełnienie, obwódka, sufit) i puli punktów świetlnych (rozmiar piksela, wzmocnienie, podłoga); po
-  // zmianie motywu — obwódka wrogów w nowej roli `alert`. Flaga OFF i brak puli — nic (ścieżka OFF co do bitu).
+  // zmianie motywu — obwódka wrogów w nowej roli `alert`.
   _tickCvModels() {
-    if (!GAME_CONFIG.FEATURES?.cvModels && !this._shipLightPool) return;
     const T = this.cvTuning;
     KC_SHARED.uKcGainMul.value = T.MODEL_KC_GAIN ?? 1;
     KC_SHARED.uKcTintMul.value = T.MODEL_ENEMY_TINT ?? 1;
@@ -5539,8 +5265,8 @@ export class ThreeRenderer {
       gain: T.MODEL_LIGHT_GAIN, minPx: T.MODEL_LIGHT_MIN_PX, fadePx: T.MODEL_LIGHT_FADE_PX, fadeEndPx: T.MODEL_LIGHT_FADE_END_PX });
   }
 
-  // ARC CV-2b — czy statki dostają tekstury 1K (flaga `cvPresets` i preset Medium / Low).
-  _gfxWants1k() { return !!GAME_CONFIG.FEATURES?.cvPresets && this._gfxApplied?.textures === '1k'; }
+  // ARC CV-2b — czy statki dostają tekstury 1K (preset Medium / Low).
+  _gfxWants1k() { return this._gfxApplied?.textures === '1k'; }
 
   // ARC CV-2b — model w wariancie 1K, gdy slot go ma (`has1kVariant` — stempel normalizatora); błąd wczytania wariantu ⇒ model 2K
   // (ścieżka 1K zapamiętana jako brakująca — bez ponownych żądań). Szablon oznaczony wariantem (`_shipTexVariant`).
@@ -5694,23 +5420,13 @@ export class ThreeRenderer {
       // WSPÓLNA dla wszystkich statków slotu — bez `dispose` (dawne zwalnianie na klonie wymuszało ponowne wgranie bufora).
       disposeShipRig(entry.rig, this._shipLightPool);
       entry.exhaust = null;
-    } else if (entry.isModel3D) {
-      // Model 3D — dispose geometrii klonów (materiały współdzielone z templatem,
-      // chyba że to wrogi statek, gdzie każdy mesh dostał sklonowany materiał z tintem).
-      const disposeMats = !!entry.enemyTint;
-      entry.sprite.traverse((child) => {
-        if (!child.isMesh) return;
-        child.geometry?.dispose();
-        if (disposeMats && child.material) child.material.dispose();
-      });
     } else {
       // Sprite billboard — dispose materiału i tekstury
       entry.sprite.material.dispose();
       if (entry.tex) entry.tex.dispose();
     }
 
-    // Stożek wydechu — materiał additive statku GRACZA nie jest kryty warunkiem
-    // enemyTint w traverse wyżej (disposeMats=false), więc dispose jawnie.
+    // Stożek wydechu (statek bez rigu) — dispose jawnie.
     if (entry.exhaust) {
       entry.exhaust.geometry?.dispose();
       entry.exhaust.material?.dispose();
@@ -7137,23 +6853,13 @@ export class ThreeRenderer {
       const progress = age / ef.lifetime;
       const mat = ef.mesh.material;
       switch (ef.kind) {
-        case 'tracer':
         case 'beam':
           if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
           break;
-        case 'flash':
-          if (mat) mat.opacity = 0.9 * (1 - progress);
-          ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 2));
-          break;
-        case 'shieldRing':
         case 'ring':
         case 'ping':
           if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
           ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 3));
-          break;
-        case 'trail':  // smuga silnika — gaśnie i lekko się kurczy (zostaje za statkiem)
-          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
-          ef.mesh.scale.setScalar(ef.baseScale * (1 - 0.5 * progress));
           break;
         case 'explosion': {  // kula ognia: scale 0→3, kolor biały→pomarańcz→czerwony
           const c = explosionColorRaw(progress);
@@ -7165,10 +6871,6 @@ export class ThreeRenderer {
           ef.mesh.scale.setScalar(ef.baseScale * (0.001 + progress * 3));
           break;
         }
-        case 'explosionRing':  // pierścień uderzeniowy: radius 0→target (scale)
-          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
-          ef.mesh.scale.setScalar(ef.baseScale * Math.max(0.001, progress));
-          break;
         default:
           if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
       }
@@ -7192,8 +6894,8 @@ export class ThreeRenderer {
       isWreck: !!((this._cvVisWreck?.(vessel) ?? !!vessel?.isWreck) || entry.isWreck || entry.cvKilled),   // ARC CV-4a — zniszczenie pokazane: smuga zgaszona (CV-8a — wrak powtórki dopiero po zniszczeniu)
     });
     // Lekki flicker (throb silnika) — desync per statek przez _exhaustPhase. ARC CV-3b (Finding 677): faza z zegara prezentacji,
-    // gdy prowadzi go scena bitwy (`cvStage`) — pauza zatrzymuje także smugi poza walką (§2.12-4); bez sceny — czas realny jak dawniej.
-    const flickMs = GAME_CONFIG.FEATURES?.cvStage && this._stageClock ? this._stageClock.nowMs : performance.now();
+    // sceny bitwy — pauza zatrzymuje także smugi poza walką (§2.12-4).
+    const flickMs = this._stageClock ? this._stageClock.nowMs : performance.now();
     const flick = 0.8 + 0.2 * Math.sin(flickMs * 0.02 + (entry._exhaustPhase ?? 0));
     if (this._nozzleGlowSet?.(entry, intensity, flick)) return;   // ARC CV-3c (`cvChoreo2`) — wylot dysz zamiast stożka (także w locie)
     if (intensity <= 0) { cone.visible = false; return; }
@@ -7219,13 +6921,10 @@ export class ThreeRenderer {
   _spawnExplosion(pos, bboxSize, ctx = null) {
     if (!pos) return;
     if (ctx && this._cvDmgOn?.() && this._cvDmgExplode?.(ctx.id, ctx.vessel ?? null, pos, bboxSize)) return;
-    const b = Math.max(0.2, bboxSize || 0.5);
-    // ARC CV-3a3 (Finding 653 (d), decyzja właściciela §3.2-11 — ŁATA do CV-5) — pod flagą `cvStage` kula ognia w skali
-    // KADŁUBA: szczyt promienia (po wzroście ×3) = rozmiar kadłuba × `cvTuning.STAGE_FIREBALL_K`, bez podłogi 0,2 j. (≥ 5 L
-    // promienia na start, 15 L u szczytu — 13 dysków nad sceną na końcu bitwy) i bez limitu ekranowego „Obserwuj” (kula idzie
-    // za statkiem na ekranie — limit liczony dla stałej podłogi zmniejszałby ją w kinie do ułamka L).
-    const stage = !!GAME_CONFIG.FEATURES?.cvStage;
-    const r0 = stage ? Math.max(1e-4, (this.cvTuning?.STAGE_FIREBALL_K ?? 1.5) * (bboxSize || VESSEL_TARGET_SIZE.frigate) / 3) : b * 0.4;
+    // ARC CV-3a3 (Finding 653 (d), decyzja właściciela §3.2-11) — kula ognia w skali KADŁUBA: szczyt promienia (po wzroście ×3)
+    // = rozmiar kadłuba × `cvTuning.STAGE_FIREBALL_K`, bez podłogi 0,2 j. i bez limitu ekranowego „Obserwuj” (kula idzie za statkiem
+    // na ekranie). CV-Z — dawna podłoga i płaski pierścień uderzeniowy usunięte razem ze ścieżką bez sceny.
+    const r0 = Math.max(1e-4, (this.cvTuning?.STAGE_FIREBALL_K ?? 1.5) * (bboxSize || VESSEL_TARGET_SIZE.frigate) / 3);
     // Kula ognia — MeshBasicMaterial + additive. Kolor HDR (×FX_HDR_EXPLOSION,
     // per-frame w _updateActiveEffects) przekracza próg bloomu → świeci naturalnie.
     const sph = new THREE.Mesh(
@@ -7237,23 +6936,7 @@ export class ThreeRenderer {
     );
     sph.position.copy(pos);
     this._spawnFx(sph, { kind: 'explosion', lifetime: 600, baseScale: 1, baseOpacity: 1,
-      onTick: stage ? (ef, p) => { ef.mesh.scale.setScalar(ef.baseScale * (0.001 + p * 3)); } : null });
-    // ARC CV-3a1 (Finding 641) — pod flagą `cvStage` bez płaskiego pomarańczowego pierścienia (22–25 długości fregaty nad
-    // sceną bitwy); reszta eksplozji zostaje do CV-5 (wybuch warstwowy w chwili trafienia).
-    if (stage) return;
-    // Pierścień uderzeniowy — płasko w płaszczyźnie orbitalnej, radius 0→b×2.
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(b * 1.75, b * 2.0, 32),
-      new THREE.MeshBasicMaterial({
-        color: EXPLOSION_RING_COLOR, transparent: true, opacity: 0.8,
-        side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
-      }),
-    );
-    // HDR: pierścień ponad progiem bloomu (kolor bazowy ×FX_HDR_EXPLOSION)
-    ring.material.color.multiplyScalar(FX_HDR_EXPLOSION);
-    ring.position.copy(pos);
-    ring.rotation.x = -Math.PI / 2;
-    this._spawnFx(ring, { kind: 'explosionRing', lifetime: 800, baseScale: 1, baseOpacity: 0.8 });
+      onTick: (ef, p) => { ef.mesh.scale.setScalar(ef.baseScale * (0.001 + p * 3)); } });
   }
 
   // ── Slice 1 — smugi walki na żywej mapie (FX-only, z combat:roundFx) ─────
@@ -7268,19 +6951,8 @@ export class ThreeRenderer {
     // POLISH P2b (D3, A7) — czasy efektów z czasu realnego rundy oglądanego starcia (`combatRoundMs()`, CP2): salwa trzyma
     // się do następnej rundy zamiast gasnąć po 260 ms (stałe strojone pod dawne 110 ms na rundę).
     const pace = combatFxPace(window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? null);
-    // ARC CV-2a — flaga `cvFxEngine` (czytana w chwili salwy): salwa przez silnik FX z pulami — to samo tempo, ten sam rozrzut
-    // salwy, ta sama bramka mgły wojny. OFF — dzisiejsza ścieżka niżej, co do bitu.
-    if (GAME_CONFIG.FEATURES?.cvFxEngine) { this._cvFxRoundFx(events, pace); return; }
-    let stagger = 0;
-    for (const ev of events) {
-      const aw = this._combatEndpointWorld(ev.attacker, ev.aPos);
-      const tw = this._combatEndpointWorld(ev.target, ev.tPos);
-      if (!aw || !tw) continue;  // któryś endpoint fog-gated (wróg unknown) → skip, brak przecieku
-      const delay = (stagger++ % 8) * pace.staggerMs;  // rozłóż salwę (czytelność, nie 1-frame)
-      this._spawnCombatTracer(aw, tw, ev.category, ev.hit, ev.blockedByShield, delay, { attacker: ev.attacker, target: ev.target }, pace);
-    }
-    // Znacznik starcia (midpoint) — POLISH P2a (Finding 457): stawia go i zdejmuje `_tickEngagementMarkers` wg STANU
-    // starcia (nie salwa z czasem życia — gasł między salwami i w pauzie).
+    // ARC CV-2a — salwa przez silnik FX z pulami (CV-Z — dawne smugi `THREE.Line` z błyskami usunięte).
+    this._cvFxRoundFx(events, pace);
   }
 
   // ── ARC CV-2a — silnik FX walki (pule, HDR, zegar prezentacji; flaga `cvFxEngine`) ──────────────────────────────
@@ -7292,9 +6964,9 @@ export class ThreeRenderer {
     if (GAME_CONFIG.FEATURES?.cvWeapons) return;   // ARC CV-4a — salwę rysuje język broni (`_cvWpnRoundFx`, rejestr salw)
     const eng = this._ensureFxEngine();
     const vm = window.KOSMOS?.vesselManager;
-    // ARC CV-2b (flaga `cvPresets`, F8) — sygnały walki w chwili, w której efekt pojawi się na ekranie (strzał po rozrzucie salwy,
+    // ARC CV-2b (F8) — sygnały walki w chwili, w której efekt pojawi się na ekranie (strzał po rozrzucie salwy,
     // trafienie po opóźnieniu błysku); tylko strzały, które się rysują (ta sama bramka mgły wojny).
-    const cues = GAME_CONFIG.FEATURES?.cvPresets ? this._ensureCueBus?.() ?? null : null;
+    const cues = this._ensureCueBus?.() ?? null;
     const encId = cues ? this._cueEncounterId(events) : null;
     let stagger = 0;
     for (const ev of events) {
@@ -7309,7 +6981,7 @@ export class ThreeRenderer {
     }
   }
 
-  // ── ARC CV-2b — szyna sygnałów walki (flaga `cvPresets`; plan §2.9, F8, D-CV-19) ─────────────────────────────────────────
+  // ── ARC CV-2b — szyna sygnałów walki (plan §2.9, F8, D-CV-19) ─────────────────────────────────────────
   // Szyna leniwie, przy pierwszej salwie / pierwszym wraku pod flagą; funkcje rzutu i wysyłki zbudowane RAZ (bez alokacji THREE
   // w klatce). Pozycja sygnału = pozycja RYSOWANA statku w chwili wysyłki (scena bitwy), panorama z przestrzeni kamery.
   _ensureCueBus() {
@@ -7376,7 +7048,7 @@ export class ThreeRenderer {
   // HP pokazywane). Wymaga silnika FX (`cvFxEngine`); flaga OFF — salwa CV-2a co do bitu.
   _cvWpnRoundFx(payload) {
     const F = GAME_CONFIG.FEATURES;
-    if (!F?.fcCombatFx || !F?.cvFxEngine || !F?.cvWeapons) return;
+    if (!F?.fcCombatFx || !F?.cvWeapons) return;
     if (!isEngagementInView({ encounterSystemId: payload?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
     const events = payload?.events ?? [];
     if (!events.length || payload.encounterId == null || !Number.isFinite(payload.round)) return;
@@ -7393,7 +7065,7 @@ export class ThreeRenderer {
     if (!rec) return;
     this._cvWpnStats.rounds++;
     if (this._cvShdOn?.()) this._cvShdPlanRound(rec, events);   // ARC CV-4b — bańka czy poszycie, rozpad (przed rysunkiem strzałów)
-    const cues = F.cvPresets ? (this._ensureCueBus?.() ?? null) : null;
+    const cues = this._ensureCueBus?.() ?? null;
     for (const x of rec.entries) this._cvWpnSpawn(eng, x, events[x.index], rec, cues, led);
   }
 
@@ -7459,9 +7131,9 @@ export class ThreeRenderer {
       const ul = Math.hypot(ux, uy, uz) || 1;
       const flight = x.hit ? x.flight : x.flight * (1 + Math.max(0, T.WPN_MISS_OVERSHOOT ?? 0.6));
       // ARC CV-3c (decyzja 44 (7), `cvChoreo2`) — rakieta pod SMAA (High): kompensacja cienkiej smugi (głowa, szerokość — pokrętła
-      // `WPN_SMAA_MISSILE_*`); bez SMAA albo przy fladze OFF — wartości CV-4a co do bitu
+      // `WPN_SMAA_MISSILE_*`); bez SMAA — wartości CV-4a co do bitu
       // decyzja 45 (5) — także pocisk kinetyczny (`WPN_SMAA_KIN_*`)
-      const smaaK = !!GAME_CONFIG.FEATURES?.cvChoreo2 && !!this._smaaPass?.enabled;
+      const smaaK = !!this._smaaPass?.enabled;
       eng.spawnBolt({ t0: x.fireAt, flight, trail: Math.max(1, (missile ? (T.WPN_MISSILE_TRAIL ?? 0.18) : (T.WPN_TRACER_LEN ?? 0.08)) * R),
         ax: mx, ay: my, az: mzz, bx, by, bz, cx: ux / ul * arc, cy: uy / ul * arc, cz: uz / ul * arc, color, alpha,
         widthMul: missile ? (T.WPN_MISSILE_WIDTH_MUL ?? 1.25) * (smaaK ? (T.WPN_SMAA_MISSILE_WIDTH_K ?? 1) : 1) : (smaaK ? (T.WPN_SMAA_KIN_WIDTH_K ?? 1) : 1),
@@ -7510,7 +7182,7 @@ export class ThreeRenderer {
     const t0 = x.impactAt + tShift;
     const missile = x.kind === 'missile';
     const hull = x.dmg > 0;
-    const budget = GAME_CONFIG.FEATURES?.cvPresets ? (this._gfx?.eff?.particles ?? 16000) : 16000;
+    const budget = this._gfx?.eff?.particles ?? 16000;
     const base = Math.max(0, T.WPN_SPARKS ?? 10) * (missile ? 1.5 : 1) * (hull ? 1 : 0.5);
     const n = base > 0 ? Math.max(1, Math.round(base * Math.min(1, budget / 16000))) : 0;
     const rnd = ledgerRng(x.seed);
@@ -7631,7 +7303,7 @@ export class ThreeRenderer {
     const v = window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null;
     if (e.sprite?.visible && GAME_CONFIG.FEATURES?.fcCombatFx) {
       this._spawnExplosion(e.sprite.position, v ? vesselTargetSize(v) : VESSEL_TARGET_SIZE.frigate, { id, vessel: v });   // ARC CV-5 — kontekst
-      if (GAME_CONFIG.FEATURES?.cvPresets) this._cueDestroyed(id, v, e);
+      this._cueDestroyed(id, v, e);
     }
     this._cvWpnKillLook(id, e);
     this._cvWpnStats.killsShown++;
@@ -7689,7 +7361,7 @@ export class ThreeRenderer {
   /** Czy ścieżka CV-4b działa: `cvShields` + rejestr salw (`cvWeapons`) + silnik FX (`cvFxEngine`) + efekty walki (`fcCombatFx`). */
   _cvShdOn() {
     const F = GAME_CONFIG.FEATURES;
-    return !!(F?.cvShields && F?.cvWeapons && F?.cvFxEngine && F?.fcCombatFx);
+    return !!(F?.cvShields && F?.cvWeapons && F?.fcCombatFx);
   }
 
   _cvShdState() {
@@ -7721,7 +7393,7 @@ export class ThreeRenderer {
 
   /** Budżet fal na bańkę z presetu (High 8 / Medium 4 / Low 1; presety OFF — High). */
   _cvShdRipples() {
-    const n = GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff?.shieldRipples : null;
+    const n = this._gfx?.eff?.shieldRipples ?? null;
     return Number.isFinite(n) ? Math.max(1, Math.min(SHIELD_RIPPLES_MAX, n)) : SHIELD_RIPPLES_MAX;
   }
 
@@ -7900,7 +7572,7 @@ export class ThreeRenderer {
 
   // Osmalenie kadłuba w punkcie modelu (High): pula statku (najstarsza zastępowana), na wszystkie materiały rigu (przestrzeń geometrii siatki).
   _cvShdScorch(id, p) {
-    if (!scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null)) return;
+    if (!scorchEnabled(this._gfx?.eff ?? null)) return;
     const st = this._cvShdState();
     const e = this._vessels.get(id);
     if (!(e?.canonical && e.rig?.scorchXf?.length)) return;
@@ -7933,7 +7605,7 @@ export class ThreeRenderer {
   // Żar plam stygnie (tylko dopóki coś jest ciepłe); preset bez osmaleń (Medium / Low) — plamy zdjęte; statek usunięty — zapis zdjęty.
   _cvShdScorchTick(st) {
     if (!st.scorchOn) return;
-    const on = scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null) && GAME_CONFIG.FEATURES?.cvShields;
+    const on = scorchEnabled(this._gfx?.eff ?? null) && GAME_CONFIG.FEATURES?.cvShields;
     const T = this.cvTuning;
     const cool = Math.max(1, T.SCORCH_COOL_MS ?? 1800);
     for (const [id, list] of st.scorch) {
@@ -7956,7 +7628,7 @@ export class ThreeRenderer {
   _cvShdReapplyScorch(id, e) {
     const list = this._cvShd?.scorch?.get?.(id);
     if (!list?.length || !(e?.canonical && e.rig?.scorchXf?.length)) return;
-    if (!scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null)) return;
+    if (!scorchEnabled(this._gfx?.eff ?? null)) return;
     this._cvShdApplyScorch(e, list, this._cvShd.now);
   }
 
@@ -8003,7 +7675,7 @@ export class ThreeRenderer {
     const ep = this._cvShdEndPoint(x, sp, dx, dy, dz, tSize);
     this._cvWpnImpact(eng, x, ep.x, ep.y, ep.z, ep.ox, ep.oy, ep.oz, -dx, -dy, -dz, tSize, R, ep.mode);
     this._cvShdImpacts([x]);
-    if (GAME_CONFIG.FEATURES?.cvPresets) {
+    {
       const cues = this._ensureCueBus?.();
       const size = v ? cueSizeOfClass(vesselSizeClass(v)) : null;
       cues?.schedule(now, x.shd.onBubble ? 'shieldHit' : 'impact', 'kinetic', size, ep.x, ep.y, ep.z, null, id);
@@ -8029,7 +7701,7 @@ export class ThreeRenderer {
       }
     }
     return { cvShields: !!GAME_CONFIG.FEATURES?.cvShields, on: this._cvShdOn(), fxTimeScale: this.cvTuning?.FX_TIME_SCALE ?? 1,
-      faleNaBanke: this._cvShdRipples(), osmaleniaWlaczone: scorchEnabled(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null),
+      faleNaBanke: this._cvShdRipples(), osmaleniaWlaczone: scorchEnabled(this._gfx?.eff ?? null),
       zegarMs: st ? Math.round(st.now) : null, statki: ships, liczniki: st ? { ...st.stats, plan: { ...st.states.stats } } : null,
       pula: this._shieldBubbles?.stats() ?? null, rozgrzewka: this._shieldBubblesPrewarm ?? null };
   }
@@ -8047,7 +7719,7 @@ export class ThreeRenderer {
   /** Czy ścieżka CV-5 działa: `cvDamage` (wymaga silnika FX z pulami — `cvFxEngine` — i efektów walki `fcCombatFx`). */
   _cvDmgOn() {
     const F = GAME_CONFIG.FEATURES;
-    return !!(F?.cvDamage && F?.cvFxEngine && F?.fcCombatFx);
+    return !!(F?.cvDamage && F?.fcCombatFx);
   }
 
   _cvDmgState() {
@@ -8089,7 +7761,7 @@ export class ThreeRenderer {
     const cls = explosionClassOf(vessel ? vesselSizeClass(vessel) : null);
     const Ls = size > 0 ? size : (vessel ? vesselTargetSize(vessel) : VESSEL_TARGET_SIZE.frigate);
     const seed = explosionSeed(id, vessel?.lastBattleId ?? '');
-    const budget = explosionBudget(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null);
+    const budget = explosionBudget(this._gfx?.eff ?? null);
     const plan = explosionPlan({ cls, lengthWU: Ls, seed, budget, tuning: this.cvTuning });
     const seq = { id, plan, t0: st.now, next: 0, cls, Ls, enemy: vessel ? isEnemyVessel(vessel) : false,
       last: { x: pos?.x ?? e.sprite.position.x, y: pos?.y ?? e.sprite.position.y, z: pos?.z ?? e.sprite.position.z },
@@ -8170,7 +7842,7 @@ export class ThreeRenderer {
             ax: r.axis[0], ay: r.axis[1], az: r.axis[2], spin: r.spin, size: r.size, sx: r.stretch[0], sy: r.stretch[1], sz: r.stretch[2],
             shade: r.shade, color: seq.enemy ? 0x5c4844 : 0x50565e,
             // ARC CV-3c (`cvChoreo2`, decyzja 44 (7)) — nieregularne odłamki blachy (wariant z ziarna wpisu), żar tylko na krawędziach
-            shape: GAME_CONFIG.FEATURES?.cvChoreo2 ? 1 + ((r.seed >>> 0) % 4) : 0, edgeHot: !!GAME_CONFIG.FEATURES?.cvChoreo2 });
+            shape: 1 + ((r.seed >>> 0) % 4), edgeHot: true });
           st.stats.debris++;
           break;
         case 'light': {
@@ -8180,13 +7852,12 @@ export class ThreeRenderer {
           if (slot >= 0) st.stats.lights++; else st.stats.lightsRefused++;
           break;
         }
-        case 'cue':
-          if (GAME_CONFIG.FEATURES?.cvPresets) {
-            const cues = this._ensureCueBus?.();
-            cues?.schedule((this._presClock?.nowMs ?? 0) + Math.max(0, at - now) / scale, 'explosion', null, r.size, cx, cy, cz, seq.encId, seq.id);
-            st.stats.cues++;
-          }
+        case 'cue': {
+          const cues = this._ensureCueBus?.();
+          cues?.schedule((this._presClock?.nowMs ?? 0) + Math.max(0, at - now) / scale, 'explosion', null, r.size, cx, cy, cz, seq.encId, seq.id);
+          st.stats.cues++;
           break;
+        }
         default: break;
       }
     }
@@ -8211,9 +7882,9 @@ export class ThreeRenderer {
     e.cvWreck = { t0, tDrift, seed, cls, heat: -1, fireEnd, last: t0 ?? st.now, conv: e.cvWreck?.conv ?? null, tumbleBaked: false };
     // ARC CV-3c — wrak odbudowany po dryfie z tej sesji: to samo przesunięcie od pozycji logicznej (bez powtórki obrotu)
     // (podstawa — pozycja sprite'a przy pierwszym kroku: odbudowa stawia go na pozycji logicznej PO tym wywołaniu)
-    if (Number.isFinite(ep?.afterT0) && GAME_CONFIG.FEATURES?.cvChoreo2 && e.sprite && !e.cvWreck.conv) {
+    if (Number.isFinite(ep?.afterT0) && e.sprite && !e.cvWreck.conv) {
       e.cvWreck.after = { t0: ep.afterT0, base: null, q0: null, rotate: false, done: false };
-    } else if (t0 != null && e.isWreck && e.cvWreckPending && GAME_CONFIG.FEATURES?.cvChoreo2 && e.sprite && !e.cvWreck.conv) {
+    } else if (t0 != null && e.isWreck && e.cvWreckPending && e.sprite && !e.cvWreck.conv) {
       // ARC CV-3c — zniszczenie odroczone do trafienia w locie, pokazane PO zbieżności (wrak stoi już w miejscu śmierci): dryf rusza od
       // wybuchu — z bieżącej pozycji i obrotu (przechył wraku; obrót łapany przy pierwszym kroku), łagodnie od zera
       e.cvWreck.after = { t0: st.now, base: null, q0: null, rotate: true, done: false };
@@ -8241,7 +7912,7 @@ export class ThreeRenderer {
   // Wraki: żar (tylko gdy się zmienia), pożary w punktach uszkodzeń (gasną), zbieżność do pozycji logicznej (Finding 627).
   _cvDmgWrecks(eng, st, on) {
     const T = this.cvTuning;
-    const B = on ? explosionBudget(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null) : null;
+    const B = on ? explosionBudget(this._gfx?.eff ?? null) : null;
     for (const [id, e] of this._vessels) {
       const w = e.cvWreck;
       if (!w) continue;
@@ -8256,14 +7927,14 @@ export class ThreeRenderer {
           // ARC CV-3c (decyzja 44 (5), `cvChoreo2`) — dryf po bitwie od pozycji logicznej (miejsce śmierci), pokrzywiony obrót, staje.
           // Zniszczenie odroczone do trafienia w locie i jeszcze niepokazane (`cvWreckPending` bez `cvKilled`) — statek wygląda na żywy:
           // bez dryfu; rusza z wybuchem (`_cvDmgWreckLook`). Pomiar w grze: 2 z 14 wraków traciły dryf (stan wraku odtworzony przy wybuchu).
-          if (GAME_CONFIG.FEATURES?.cvChoreo2 && e.sprite && !(e.cvWreckPending && !e.cvKilled)) {
+          if (e.sprite && !(e.cvWreckPending && !e.cvKilled)) {
             const q = e.sprite.quaternion;
             w.after = { t0: st.now, base: { x: c.x, y: c.y, z: c.z }, q0: [q.x, q.y, q.z, q.w], rotate: true, done: false };
             const ep = this._cvWreckEpoch?.get(id);
             if (ep) ep.afterT0 = st.now;
           }
         }
-      } else if (w.after && !w.after.done && GAME_CONFIG.FEATURES?.cvChoreo2) this._cvWreckAfterStep(id, e, w, st);
+      } else if (w.after && !w.after.done) this._cvWreckAfterStep(id, e, w, st);
       if (!on || !B?.dmgFire || w.t0 == null || !(tK < w.fireEnd) || !e.sprite?.visible || this._galaxyActive) { w.last = st.now; continue; }
       const Ls = (window.KOSMOS?.vesselManager?.getVessel?.(id) ? vesselTargetSize(window.KOSMOS.vesselManager.getVessel(id)) : VESSEL_TARGET_SIZE.frigate);
       const t0 = st.prev - w.t0, t1 = st.now - w.t0;
@@ -8300,7 +7971,7 @@ export class ThreeRenderer {
     const encs = this._cvEncList();
     if (!encs.length || this._galaxyActive) return;
     const T = this.cvTuning;
-    const B = explosionBudget(GAME_CONFIG.FEATURES?.cvPresets ? this._gfx?.eff : null);
+    const B = explosionBudget(this._gfx?.eff ?? null);
     const led = GAME_CONFIG.FEATURES?.cvWeapons ? this._cvLedger : null;
     const vm = K?.vesselManager;
     for (const enc of encs) {
@@ -8517,7 +8188,7 @@ export class ThreeRenderer {
   }
 
   // Silnik budowany RAZ (pule = rozgrzewka); potem zero obiektów THREE na strzał. Końce wiązek i iskry idą za sprite'ami
-  // statków (widocznymi) — jak dzisiejsze `_followTracerEnds` / `_followFxTarget`.
+  // statków (widocznymi).
   _ensureFxEngine() {
     if (this._fxEngine) return this._fxEngine;
     if (!this._fxGroup) {
@@ -8541,15 +8212,13 @@ export class ThreeRenderer {
   // Raz na klatkę: zegar prezentacji (krok klatki czasu realnego tylko, gdy gra biegnie — pauza = pauza, po wznowieniu bez
   // nadrabiania) i silnik. Flaga OFF i nic w locie — wyjście (dzisiejsza pętla co do bitu). Tryb galaktyki — efekty ukryte.
   _tickCvFx() {
-    // ARC CV-2b — także, gdy czekają sygnały walki (`_cueBus`; wrak przy fladze `cvFxEngine` OFF).
-    if (!GAME_CONFIG.FEATURES?.cvFxEngine && !this._fxEngine?.hasActive() && !(this._cueBus?.pending() > 0)) return;
     const ts = window.KOSMOS?.timeSystem;
     this._presClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0, rate: this._presRate ?? 1 });   // CV-7 — mnożnik tempa
     // ARC CV-5 — zegar efektów uszkodzeń, sekwencje wybuchów, stany uszkodzeń, wraki (przed przesłaniem pul — nowe cząstki w tej klatce)
     if (this._cvDmg || this._cvDmgOn?.()) this._cvDmgTick?.();
     this._fxEngine?.update({ nowMs: this._presClock.nowMs, dmgNowMs: this._cvDmg?.now, camera: this.camera, viewportH: window.innerHeight || 1,
-      visible: !this._galaxyActive, stage: !!GAME_CONFIG.FEATURES?.cvStage,   // ARC CV-3a3 (653 (b)(c)) — łata sceny bitwy
-      smaa: !!GAME_CONFIG.FEATURES?.cvChoreo2 && !!this._smaaPass?.enabled });   // ARC CV-3c (decyzja 45 (5)) — wiązki pod SMAA
+      visible: !this._galaxyActive,
+      smaa: !!this._smaaPass?.enabled });   // ARC CV-3c (decyzja 45 (5)) — wiązki pod SMAA
     this._cvOrb?.tick?.();   // ARC CV-8a — rundy powtórek bitew orbitalnych do rejestru salw (zegar prezentacji), koniec, przerwanie
     if (this._cvLedger) this._cvWpnTick?.();   // ARC CV-4a — rejestr salw: trafienia (HP pokazywane), zniszczenia w swojej chwili
     if (this._cvShd || this._cvShdOn?.()) this._cvShdTick?.();   // ARC CV-4b — osłony: próbki, bańki (po przekształceniach sceny), osmalenia
@@ -8678,10 +8347,10 @@ export class ThreeRenderer {
       callsAvg: Math.round(avg(r.calls)), callsMax: Math.max(...r.calls), trisAvg: Math.round(avg(r.tris)), trisMax: Math.max(...r.tris),
       peakActive: r.peak, pools: this._fxEngine?.stats()?.pools ?? null, longest,
       windowGaps: r.windowGaps, stage: { ...r.stage, solvesPerSec: r2(r.stage.solves / Math.max(1e-9, Array.from(r.frameMs).reduce((a, b) => a + b, 0) / 1000)) },
-      cvFxEngine: !!GAME_CONFIG.FEATURES?.cvFxEngine, cvStage: !!GAME_CONFIG.FEATURES?.cvStage, pixelRatio: this._pixelRatio,
+      pixelRatio: this._pixelRatio,
       // ARC CV-2b — preset jakości: poziom, bloom, światła puli, tekstury, stan dławienia (poziom i zdjęte efekty), sygnały walki.
       gfx: {
-        cvPresets: !!GAME_CONFIG.FEATURES?.cvPresets, level: this._gfx?.level ?? null,
+        level: this._gfx?.level ?? null,
         bloom: this._bloomPass ? this._bloomPass.enabled !== false : false, lights: this._fxLightPool?.count ?? 0,
         textures: this._gfxApplied?.textures ?? '2k', throttle: this._gfx?.throttle?.stats() ?? null,
         lightPool: this._fxLightPool?.stats() ?? null, cues: this._cueBus?.stats() ?? null,
@@ -8699,9 +8368,9 @@ export class ThreeRenderer {
       + `; przerwy okna (ukryte / bez fokusu): ${r.windowGaps}; `
       + `scena: klatki ${r.stage.framesStaged}, skala awaryjna ${r.stage.framesFallback}, klastry maks. ${r.stage.clustersMax}, złe pasma maks. ${r.stage.misbandedMax}, `
       + `rozwiązania prowadnicy ${r.stage.solves} (${rep.stage.solvesPerSec}/s)`
-      + (rep.gfx.cvPresets ? `; grafika ${rep.gfx.level} (gęstość ${r2(rep.pixelRatio)}, bloom ${rep.gfx.bloom ? 'tak' : 'nie'}, światła ${rep.gfx.lights}, `
-        + `tekstury ${rep.gfx.textures}), dławienie: poziom ${rep.gfx.throttle?.level ?? 0}${rep.gfx.throttle?.dropped?.length ? ' — ' + rep.gfx.throttle.dropped.join(', ') : ''}, `
-        + `sygnały wysłane ${rep.gfx.cues?.emitted ?? 0}` : ''));
+      + `; grafika ${rep.gfx.level} (gęstość ${r2(rep.pixelRatio)}, bloom ${rep.gfx.bloom ? 'tak' : 'nie'}, światła ${rep.gfx.lights}, `
+      + `tekstury ${rep.gfx.textures}), dławienie: poziom ${rep.gfx.throttle?.level ?? 0}${rep.gfx.throttle?.dropped?.length ? ' — ' + rep.gfx.throttle.dropped.join(', ') : ''}, `
+      + `sygnały wysłane ${rep.gfx.cues?.emitted ?? 0}`);
     console.table(longest);
     if (rep.pools) console.table(rep.pools);
   }
@@ -8722,59 +8391,6 @@ export class ThreeRenderer {
       return { x: S(snapPos.x), y: 0.3, z: S(snapPos.y) };  // vessel zginął — snapshot
     }
     return null;
-  }
-
-  _spawnCombatTracer(aw, tw, category, hit, blockedByShield, delay = 0, ids = null, pace = combatFxPace(null)) {
-    const color = fxWeaponColor(category);
-    const ay = aw.y ?? 0.3, ty = tw.y ?? 0.3;  // poziom RYSOWANEGO statku (fix#3)
-    const pts = [ new THREE.Vector3(aw.x, ay, aw.z), new THREE.Vector3(tw.x, ty, tw.z) ];
-    const geom = new THREE.BufferGeometry().setFromPoints(pts);
-    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: hit ? 0.9 : 0.4 });
-    const line = new THREE.Line(geom, mat);
-    line.frustumCulled = false;   // końce idą za statkami (D3) — sfera ograniczająca z chwili utworzenia nie obowiązuje
-    // POLISH P2b (D3, Finding 461) — końce smugi, błysk i pierścień tarczy idą za sprite'ami statków (płynne zbliżenie):
-    // smuga żyje ~1,2 rundy, a statek w tym czasie podlatuje — bez tego koniec smugi wisiałby w miejscu startu salwy.
-    this._spawnFx(line, {
-      kind: 'tracer', lifetime: pace.tracerMs, baseOpacity: hit ? 0.9 : 0.4, delay,
-      onTick: ids ? () => this._followTracerEnds(line, ids) : null,
-    });
-    if (!hit) return;
-    const followTarget = ids?.target ? (ef) => this._followFxTarget(ef.mesh, ids.target) : null;
-    // Błysk trafienia (expand 1→3, fade) — na celu, mniejszy (fix#4: za mocne).
-    const fMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
-    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), fMat);
-    flash.position.set(tw.x, ty, tw.z);
-    this._spawnFx(flash, { kind: 'flash', lifetime: pace.flashMs, baseScale: 1, baseOpacity: 0.85, delay: delay + pace.flashDelayMs,
-      onTick: followTarget });
-    // POLISH P2b (D2, CP18) — biały błysk NA MODELU trafionego statku (200 ms), w chwili uderzenia.
-    // ARC CV-6b2 — biały błysk na modelu (P2b) odchodzi pod flagą `cvStrip` razem z kartą (§4 CV-6b2); błysk trafienia silnika FX
-    // (`cvFxEngine`) to osobna ścieżka i zostaje.
-    if (ids?.target && !GAME_CONFIG.FEATURES?.cvStrip) this._spawnHitGlow(ids.target, tw, delay + pace.flashDelayMs);
-    // Pierścień tarczy gdy trafienie zablokowane.
-    if (blockedByShield > 0) {
-      const sMat = new THREE.MeshBasicMaterial({ color: FX_SHIELD_COLOR, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.10, 18), sMat);
-      ring.position.set(tw.x, ty, tw.z); ring.rotation.x = -Math.PI / 2;
-      this._spawnFx(ring, { kind: 'shieldRing', lifetime: pace.shieldMs, baseScale: 1, baseOpacity: 0.8, delay: delay + pace.flashDelayMs,
-        onTick: followTarget });
-    }
-  }
-
-  // POLISH P2b (D3) — końce smugi za sprite'ami strzelca i celu (widocznymi); niewidoczny / zniszczony — koniec zostaje.
-  _followTracerEnds(line, ids) {
-    const a = this._vessels.get(ids.attacker); const b = this._vessels.get(ids.target);
-    const arr = line.geometry?.attributes?.position;
-    if (!arr) return;
-    let moved = false;
-    if (a?.sprite?.visible) { const p = a.sprite.position; arr.setXYZ(0, p.x, p.y, p.z); moved = true; }
-    if (b?.sprite?.visible) { const p = b.sprite.position; arr.setXYZ(1, p.x, p.y, p.z); moved = true; }
-    if (moved) arr.needsUpdate = true;
-  }
-
-  // POLISH P2b (D3) — efekt w pozycji celu (sprite widoczny); inaczej zostaje tam, gdzie powstał.
-  _followFxTarget(mesh, vesselId) {
-    const e = this._vessels.get(vesselId);
-    if (e?.sprite?.visible) mesh.position.copy(e.sprite.position);
   }
 
   // ── POLISH P2b (D3, Finding 461) — płynne zbliżenie w starciu (wyłącznie rysowanie) ─────────────────────────────
@@ -8984,15 +8600,6 @@ export class ThreeRenderer {
   _tickBattleStage() {
     this._stageClusterOf.clear();
     this._stageParticipants.clear();
-    if (!GAME_CONFIG.FEATURES?.cvStage) {
-      // Flaga OFF: sprite'y już na bazie (`_unstageVessels` na początku klatki) — tylko porządek.
-      // ARC CV-3b — choreografia oddaje kurs (węzeł `canon`) i smugę silnika, zanim znaczniki znikną.
-      for (const [id, m] of this._stageMarks) if (m.ch) this._choreoEnd(id, this._vessels.get(id), m);
-      if (this._stageMarks.size) this._stageMarks.clear();
-      if (this._stageState.size) this._stageState.clear();
-      this._stageFrame = null;
-      return;
-    }
     const ts = window.KOSMOS?.timeSystem;
     const dt = this._stageClock.tick(performance.now(), { paused: !!ts?.isPaused || ts?.multiplier === 0, rate: this._presRate ?? 1 });   // CV-7 — mnożnik tempa
     const clusters = (this._galaxyActive || this._galaxyFlight) ? [] : this._stageClusters();
@@ -9159,12 +8766,10 @@ export class ThreeRenderer {
       let wSum = 0, wN = 0, kPin = 0;   // ARC CV-3a2 — średnie wejście uczestników w scenę (pole kliku: stopień × wejście)
       // ARC CV-3a3 — kula skorupy (ciało + podłoga): żaden punkt pośredni zoomu nie wchodzi w ciało (`_stagePlace`, `avoid`).
       const avoid = shellOn ? { x: shellBody.x, y: origin.y, z: shellBody.z, r: shellBody.r + STAGE.SHELL_FLOOR_L * L } : null;
-      // ARC CV-3b — choreografia: przesunięcia w kopercie klasy na kotwicach sceny (rzut pasm — D-CV-6); bez flagi i bez stanu — null.
-      // Wołane przy fladze ON albo gdy statek klastra ma jeszcze stan choreografii (wyjście po wyłączeniu flagi — JOIN_MS).
-      // ARC CV-3c — choreografia w jednostkach sceny ROZSUNIĘTEJ (L × spread: koperta, sufit pionu, podłoga kolizji, margines pasm).
+      // ARC CV-3b / CV-3c — choreografia: lot wzdłuż kursu na kotwicach sceny (rzut pasm — D-CV-6), w jednostkach sceny ROZSUNIĘTEJ
+      // (L × spread: koperta, sufit pionu, podłoga kolizji, margines pasm).
       const Lc = L * (sol.spread ?? 1);
-      const choreo = (GAME_CONFIG.FEATURES?.cvChoreo || pts.some((q) => this._stageMarks.get(q.id)?.ch))
-        ? this._choreoCluster(cl, st, pts, dt, Lc, avoid, info, vel) : null;
+      const choreo = this._choreoCluster(cl, st, pts, dt, Lc, avoid, info, vel);
       for (const q of pts) {
         const target = st.stagePos.get(q.id);
         if (!target) continue;
@@ -9250,19 +8855,16 @@ export class ThreeRenderer {
     return this._stageMarks.get(vesselId)?.k ?? 0;
   }
 
-  // ── ARC CV, krok CV-3b — CHOREOGRAFIA W KOPERCIE (F4, D-CV-6, D-CV-7; Findingi 622, 681; flaga `cvChoreo`) ────────────────
+  // ── ARC CV, kroki CV-3b / CV-3c — CHOREOGRAFIA (F4, D-CV-6, D-CV-7; Findingi 622, 681; decyzja 44 (3)) ───────────────────
   // Na kotwicy sceny (cel wyświetlany — `st.stagePos`) statek dostaje przesunięcie w kopercie klasy, kurs ku celowi (pancernik
   // burtą) i jasność silnika (`ChoreographyLogic`). Niezmiennik D-CV-6: rzut par (`constrainChoreo`) — żadna para nie zmienia
   // pasma odległości na scenie. Przesunięcie dokładane do celu sceny przed `_stagePlace` (jedyna ścieżka zapisu pozycji
   // rysowanej). Kurs — na węźle `canon` rigu: wrapper zostaje tym, kto kurs pisze (lot z misją, orbita ciała, wrak); statek
   // wolny w przestrzeni (nikt mu kursu nie pisze — Finding 622) dostaje na wrapperze kurs pokazywany, więc po bitwie zostaje
-  // tak, jak stał. Silnik — smuga rigu co klatkę na zegarze prezentacji. Wejście i wyjście (flaga, koniec bitwy) przez
-  // `JOIN_MS`; pauza — wszystko stoi (przesunięcia z poprzedniej klatki co do bitu).
+  // tak, jak stał. Silnik — smuga rigu co klatkę na zegarze prezentacji. Wejście (dołączenie do sceny) przez `JOIN_MS`; pauza —
+  // wszystko stoi (przesunięcia z poprzedniej klatki co do bitu). CV-Z — taniec w kopercie CV-3b usunięty: lot wzdłuż kursu (CV-3c)
+  // jest jedynym trybem.
   _choreoCluster(cl, st, pts, dt, L, shell, info, vel = null) {
-    const on = !!GAME_CONFIG.FEATURES?.cvChoreo;
-    let any = on;
-    if (!on) for (const q of pts) if (this._stageMarks.get(q.id)?.ch) { any = true; break; }
-    if (!any) return null;   // flaga OFF i żadnego stanu — ścieżka sprzed CV-3b
     const K = window.KOSMOS;
     const vm = K?.vesselManager, fs = K?.fleetSystem;
     const T = this.cvTuning;
@@ -9292,9 +8894,7 @@ export class ThreeRenderer {
     const ids = [], offsets = new Map(), env = new Map();
     const postures = {};
     let allKept = paused;   // pauza: wszystkie przesunięcia z poprzedniej klatki — bez kroku i bez rzutu (poza co do bitu)
-    // ARC CV-3c (decyzja 44 (3), flaga `cvChoreo2`) — lot wzdłuż kursu zamiast tańca w kopercie; przełączenie flagi przenika przez JOIN_MS
-    // (`m.c2w`): przy 0 — wyłącznie CV-3b co do bitu, przy 1 — wyłącznie CV-3c. Krawędzie pasm z prawa UŻYTEGO (rozsunięcie — CV-3c).
-    const on2 = !!GAME_CONFIG.FEATURES?.cvChoreo2;
+    // ARC CV-3c (decyzja 44 (3)) — lot wzdłuż kursu; krawędzie pasm z prawa UŻYTEGO (rozsunięcie).
     const app = apparentEdges(this._stageEdges, st.sol?.law ?? undefined);
     // ARC CV-3c — podłoga kolizji w L PRAWDZIWYCH (modele nie rosną z rozsunięciem — rośnie tylko odstęp): 1 / rozsunięcie w jednostkach
     // sceny `L`; najbliższy odstęp kotwic każdego statku (ciasnota pętli CV-3c — gęsty szyk dostaje mniejsze pętle).
@@ -9313,13 +8913,11 @@ export class ThreeRenderer {
       const A = anchors.get(q.id);
       if (!A) continue;
       const m = this._stageMarks.get(q.id) ?? this._stageMark(q.id);
-      m.cw = Math.max(0, Math.min(1, (m.cw ?? 0) + (on ? 1 : -1) * dt / STAGE.JOIN_MS));
-      if (!on && m.cw <= 0) { if (m.ch) this._choreoEnd(q.id, this._vessels.get(q.id), m); continue; }
+      m.cw = Math.max(0, Math.min(1, (m.cw ?? 0) + dt / STAGE.JOIN_MS));
       const v = vm?.getVessel?.(q.id);
       const enc = encOf.get(q.id);
-      if (!m.ch) { m.ch = createChoreo(choreoSeed(enc?.id ?? cl.id, q.id), choreoClassOf(v ? vesselSizeClass(v) : null)); m.c2w = on2 ? 1 : 0; }
+      if (!m.ch) m.ch = createChoreo(choreoSeed(enc?.id ?? cl.id, q.id), choreoClassOf(v ? vesselSizeClass(v) : null));
       const ch = m.ch;
-      m.c2w = Math.max(0, Math.min(1, (m.c2w ?? (on2 ? 1 : 0)) + (on2 ? 1 : -1) * dt / STAGE.JOIN_MS));
       const mo = v?.movementOrder;
       const posture = postureOf({ alive: aliveOf(q.id), retreating: mo?._retreatFromCombat === true || mo?.retreatFromBattleId != null,
         doctrine: fs?.getVesselFleet?.(q.id)?.doctrine ?? null, preferMaxRange: mo?.preferMaxRange === true });
@@ -9347,30 +8945,20 @@ export class ThreeRenderer {
       }
       const cin = { dtMs: dt, posture, threat: g > 1e-9 ? { dir: { x: dx / g, y: dy / g, z: dz / g }, gap: g } : null, L,
         anchorSpeedL: vPeak * 1000 / L };
-      const c2 = m.c2w;
-      let o;
-      if (!(c2 > 0)) o = stepChoreoOffset(ch, cin, T);
-      else {
-        // ARC CV-3c — rama pętli od NAJBLIŻSZEGO żywego przeciwnika (histereza 15 %), nie od celu strzału: cel zmienia się co rundę, a pętla
-        // przypięta do niego obracała się wokół kotwicy (zmierzone na prawdziwym kleju: statek jechał bokiem). Strzela wieżyczka (CV-4a).
-        let lt = null, ld = Infinity;
-        for (const r of enemies) if (r.alive) { const d = Math.hypot(r.x - A.x, r.y - A.y, r.z - A.z); if (d < ld) { ld = d; lt = r; } }
-        const cur = ch.loopTgt != null ? enemies.find((r) => r.id === ch.loopTgt && r.alive) : null;
-        if (cur && lt && cur.id !== lt.id) {
-          const dc = Math.hypot(cur.x - A.x, cur.y - A.y, cur.z - A.z);
-          if (!(ld < 0.85 * dc)) { lt = cur; ld = dc; }
-        }
-        ch.loopTgt = lt?.id ?? null;
-        const lThreat = lt && ld > 1e-9 ? { dir: { x: (lt.x - A.x) / ld, y: (lt.y - A.y) / ld, z: (lt.z - A.z) / ld }, gap: ld } : cin.threat;
-        const c2in = { ...cin, app, nearestGap: nearest.get(q.id) ?? Infinity, floorScale };
-        if (c2 >= 1) o = stepChoreo2Offset(ch, { ...c2in, threat: lThreat }, T);
-        else {   // przenikanie trybów: wspólny krok raz (w CV-3b — rama od celu strzału), wzór CV-3c bez niego
-          const o1 = stepChoreoOffset(ch, cin, T), o2 = stepChoreo2Offset(ch, { ...c2in, skipCommon: true }, T);
-          o = { x: o1.x + (o2.x - o1.x) * c2, y: o1.y + (o2.y - o1.y) * c2, z: o1.z + (o2.z - o1.z) * c2 };
-        }
+      // ARC CV-3c — rama pętli od NAJBLIŻSZEGO żywego przeciwnika (histereza 15 %), nie od celu strzału: cel zmienia się co rundę, a pętla
+      // przypięta do niego obracała się wokół kotwicy (zmierzone na prawdziwym kleju: statek jechał bokiem). Strzela wieżyczka (CV-4a).
+      let lt = null, ld = Infinity;
+      for (const r of enemies) if (r.alive) { const d = Math.hypot(r.x - A.x, r.y - A.y, r.z - A.z); if (d < ld) { ld = d; lt = r; } }
+      const cur = ch.loopTgt != null ? enemies.find((r) => r.id === ch.loopTgt && r.alive) : null;
+      if (cur && lt && cur.id !== lt.id) {
+        const dc = Math.hypot(cur.x - A.x, cur.y - A.y, cur.z - A.z);
+        if (!(ld < 0.85 * dc)) { lt = cur; ld = dc; }
       }
-      ch.mode2 = c2 > 0.5;
-      ch.c2 = c2;
+      ch.loopTgt = lt?.id ?? null;
+      const lThreat = lt && ld > 1e-9 ? { dir: { x: (lt.x - A.x) / ld, y: (lt.y - A.y) / ld, z: (lt.z - A.z) / ld }, gap: ld } : cin.threat;
+      const o = stepChoreo2Offset(ch, { ...cin, app, nearestGap: nearest.get(q.id) ?? Infinity, floorScale, threat: lThreat }, T);
+      ch.mode2 = true;
+      ch.c2 = 1;
       ch.anchorVel = va ?? null;   // [j./ms] prędkość kotwicy (odcinek sceny) — kurs CV-3c idzie za kotwicą + wzorem
       if (!m.choreo) allKept = false;
       // ARC CV-5 — wrak dryfuje w kopercie klasy (deterministycznie z ziarna statku, od zera w chwili zniszczenia; pauza — klatka niżej
@@ -9421,8 +9009,7 @@ export class ThreeRenderer {
           _CHV.set(0, 0, 1).applyQuaternion(e.sprite.quaternion);
           initYaw = Math.atan2(_CHV.x, _CHV.z); initPitch = Math.asin(Math.max(-1, Math.min(1, _CHV.y)));
         }
-        let f;
-        if (ch.mode2) {
+        {
           // ARC CV-3c — dziób za RUCHEM RYSOWANYM (prędkość sprite'a z tej klatki: kotwica, pętla i poprawka rzutu pasm), wygładzonym
           // `CHOREO2_VEL_TAU` × mnożnik klasy (`CHOREO2_CLASS.velTauK`): statek nie jedzie bokiem także wtedy, gdy rzut odchyla pętlę w gęstym
           // szyku, a kotwice błądzą z rundy na rundę (~0,2 L — prowadnica sceny, CV-6b) — duży okręt uśrednia to błądzenie dłużej, zamiast gonić
@@ -9447,8 +9034,8 @@ export class ThreeRenderer {
             ch.velDrawnS = { x: s0.x + (vd.x - s0.x) * a, y: s0.y + (vd.y - s0.y) * a, z: s0.z + (vd.z - s0.z) * a };
           } else if (!ch.velDrawnS) ch.velDrawnS = vInt;
           ch.velInt = ch.velDrawnS;
-          f = stepChoreo2Facing(ch, { dtMs: dt, posture: ch.posture, vel: ch.velDrawnS, aim, L, initYaw, initPitch }, T);
-        } else f = stepChoreoFacing(ch, { dtMs: dt, posture: ch.posture, aim, initYaw, initPitch }, T);
+        }
+        const f = stepChoreo2Facing(ch, { dtMs: dt, posture: ch.posture, vel: ch.velDrawnS, aim, L, initYaw, initPitch }, T);
         ch.q = f.q;
         this._choreoOrient(id, e, m, m.cw ?? 1);
         if (aim && ch.posture !== 'retreat' && ch.posture !== 'disabled') {
@@ -9466,8 +9053,7 @@ export class ThreeRenderer {
         if (dt > 0) ch.lastDrawn = { x: e.sprite.position.x, y: e.sprite.position.y, z: e.sprite.position.z };
       }
       const vi = ch.velInt;
-      const lvl = ch.mode2 ? stepChoreo2Engine(ch, { dtMs: dt, posture: ch.posture, L, speed: vi ? Math.hypot(vi.x, vi.y, vi.z) : 0 }, T)
-        : stepChoreoEngine(ch, { dtMs: dt, posture: ch.posture, L }, T);
+      const lvl = stepChoreo2Engine(ch, { dtMs: dt, posture: ch.posture, L, speed: vi ? Math.hypot(vi.x, vi.y, vi.z) : 0 }, T);
       ch.engineOut = lvl;
       const v = vm?.getVessel?.(id);
       const raw = exhaustIntensityRaw({ state: v?.position?.state, isWreck: !!((this._cvVisWreck?.(v) ?? !!v?.isWreck) || e.isWreck || e.cvKilled) });
@@ -9597,14 +9183,13 @@ export class ThreeRenderer {
     const gl = e?.rig?.glows;
     if (!gl?.length) return false;
     const F = GAME_CONFIG.FEATURES;
-    if (!F?.cvChoreo2) { for (const g of gl) g.group.visible = false; return false; }
     if (e.exhaust) e.exhaust.visible = false;
     const I = !F?.fcCombatFx || e.isWreck || e.cvKilled ? 0 : Math.max(0, Math.min(1.5, Number(intensity) || 0));
     const on = I > 0.002;
     const T = this.cvTuning ?? {};
     const k = Math.min(1, I);
     // decyzja właściciela 45 (4) — preset Niska: sam rdzeń wylotu (bez poświaty i błysku ciągu); Wysoka / Średnia — pełny wylot
-    const coreOnly = !!F?.cvPresets && this._gfx?.level === 'low';
+    const coreOnly = this._gfx?.level === 'low';
     for (const g of gl) {
       g.group.visible = on;
       if (!on) continue;
@@ -9632,7 +9217,7 @@ export class ThreeRenderer {
   // bez zmian. ARC CV-3a3 — bitwa przy ciele: pole wokół środka LOGICZNEGO grupy przesunięte o przesunięcie skorupy (`shift`)
   // — grupa rysowana obok ciała (ciało bez rysunku — bez sceny, bez pola).
   _stageFields(systemId) {
-    if (!GAME_CONFIG.FEATURES?.cvStage || this._galaxyActive || this._galaxyFlight) return [];
+    if (this._galaxyActive || this._galaxyFlight) return [];
     if (systemId != null && systemId !== (window.KOSMOS?.activeSystemId ?? null)) return [];
     const out = [];
     for (const c of this._stageFrame?.list ?? []) {
@@ -9706,7 +9291,7 @@ export class ThreeRenderer {
       });
     }
     console.table(rows);
-    return { cvStage: !!GAME_CONFIG.FEATURES?.cvStage, cvChoreo: !!GAME_CONFIG.FEATURES?.cvChoreo, cvChoreo2: !!GAME_CONFIG.FEATURES?.cvChoreo2, clusters: rows };
+    return { clusters: rows };
   }
 
   // ARC CV-3a1 (Finding 643) — kadr walki z osią NA bitwie: cel = środek RYSOWANYCH żywych, widocznych uczestników klastra
@@ -9800,14 +9385,14 @@ export class ThreeRenderer {
 
   // ARC CV-3a1 (Finding 643) — kompozycja kadru walki przesunięciem EKRANOWYM (statki nad kartą walki), bez przesuwania
   // celu kamery: kółko jedzie do środka bitwy. Co klatkę po `update()` kontrolera, przy „Obserwuj” albo auto-fokusie pod
-  // flagą `cvStage`; wygaszane płynnie. Podgląd obserwatorium ma własne przesunięcie — wtedy nic tu nie robimy.
+  // scenie bitwy; wygaszane płynnie. Podgląd obserwatorium ma własne przesunięcie — wtedy nic tu nie robimy.
   _syncCombatViewOffset() {
     const cam = this.camera;
     if (!cam?.setViewOffset || this._observatoryPreviewActive) { this._combatViewOffset = null; return; }
     const cc = this._cameraController;
     let goal = null;
     const encId = this._watch?.encounterId ?? this._autoFocus?.encounterId ?? null;
-    if (GAME_CONFIG.FEATURES?.cvStage && cc && encId && !this._galaxyActive && !this._galaxyFlight) {
+    if (cc && encId && !this._galaxyActive && !this._galaxyFlight) {
       const enc = this._cvEncById(encId);
       const fit = enc?.isActive ? this._stageWatchFit(enc) : null;
       if (fit) {
@@ -9825,45 +9410,10 @@ export class ThreeRenderer {
     cam.setViewOffset(W, H, -nx, -ny, W, H);
   }
 
-  // ARC CV-3a1 (Finding 642) — pod flagą `cvStage` pierścień starcia DSCS ukryty (stały promień 0,026 AU był mniejszy od
+  // ARC CV-3a1 (Finding 642) — pierścień starcia DSCS ukryty (stały promień 0,026 AU był mniejszy od
   // bitwy — każdy statek 10 na 10 stał poza nim); znacznik imitacji bitwy orbitalnej (`burst`) bez zmian (CV-8).
   _hideEncounterRings() {
     for (const [, e] of this._engagementMarkers) if (e.mesh) e.mesh.visible = false;
-  }
-
-  // ── POLISH P2b (D2, CP18) — biały błysk trafienia NA MODELU ───────────────────────────────────────────────────
-  // Addytywny billboard w pozycji trafionego statku, 200 ms (stałe), rozmiar dopasowany do modelu (× `HIT_GLOW.MODEL_K`)
-  // z podłogą `HIT_GLOW.MIN_PX` na ekranie (przy kadrze auto-fokusu model ma ~2 px); co klatkę idzie za sprite'em celu.
-  _spawnHitGlow(vesselId, tw, delay = 0) {
-    const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
-    const modelSize = vessel ? vesselTargetSize(vessel) : 0.016;
-    const mat = new THREE.SpriteMaterial({ map: ThreeRenderer._hitGlowTexture(), color: HIT_GLOW.COLOR, transparent: true,
-      opacity: 1, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false });
-    const glow = new THREE.Sprite(mat);
-    glow.renderOrder = 995;
-    glow.position.set(tw.x, tw.y ?? 0.3, tw.z);
-    glow.scale.setScalar(modelSize * HIT_GLOW.MODEL_K);
-    this._spawnFx(glow, { kind: 'hitGlow', lifetime: HIT_GLOW.MS, baseOpacity: 1, delay, onTick: (ef) => {
-      const e = this._vessels.get(vesselId);
-      if (e?.sprite?.visible) ef.mesh.position.copy(e.sprite.position);
-      const size = hitGlowWorldSize({ modelSize, depth: this._viewDepth(ef.mesh.position), fovDeg: this.camera.fov,
-        H: window.innerHeight || 1 });
-      ef.mesh.scale.setScalar(size);
-    } });
-  }
-
-  static _hitGlowTexture() {
-    if (_HIT_GLOW_TEX) return _HIT_GLOW_TEX;
-    const sz = 64;
-    const cv = document.createElement('canvas'); cv.width = cv.height = sz;
-    const g = cv.getContext('2d');
-    const grad = g.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
-    grad.addColorStop(0, 'rgba(255,255,255,1)');
-    grad.addColorStop(0.35, 'rgba(255,255,255,0.75)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grad; g.fillRect(0, 0, sz, sz);
-    _HIT_GLOW_TEX = new THREE.CanvasTexture(cv);
-    return _HIT_GLOW_TEX;
   }
 
   // ── POLISH P2b (D2, Finding 451, CP16) — paski HP uczestników AKTYWNEGO starcia ───────────────────────────────
@@ -9970,8 +9520,8 @@ export class ThreeRenderer {
     }
     cc.setMinDist(Math.min(minDistBefore, COMBAT_WATCH.ZOOM_MIN_DIST));
     this._watch = { encounterId, fitDist: true, minDistBefore, minDistSet: cc._minDist, goal: null, dist: null, clusterIds: null };
-    // ARC CV-3a1 (Finding 643) — pod flagą `cvStage` kadr z osią na bitwie (`_stageWatchFit`); OFF — dzisiejszy kadr.
-    const fit = GAME_CONFIG.FEATURES?.cvStage ? this._stageWatchFit(enc) : this._computeWatchFit(enc);
+    // ARC CV-3a1 (Finding 643) — kadr z osią na bitwie (`_stageWatchFit`).
+    const fit = this._stageWatchFit(enc);
     if (fit) {
       cc.focusOnInstant(fit.target.x, fit.target.z, fit.target.y);
       cc.setTargetDist(fit.dist);
@@ -9996,15 +9546,14 @@ export class ThreeRenderer {
     }
     if (w.fitDist && w.dist != null && Math.abs(cc._targetDist - w.dist) > 1e-6) w.fitDist = false;   // kółko gracza
     let enc = this._cvEncById(w.encounterId);
-    if (GAME_CONFIG.FEATURES?.cvStage) {   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
-      if (!enc?.isActive) { const nx = this._stageSuccessor(w.encounterId, w.clusterIds); if (nx) { w.encounterId = nx.id; enc = nx; } }
-      w.clusterIds = this._stageClusterOf.get(enc?.id)?.encounterIds ?? null;
-    }
+    // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
+    if (!enc?.isActive) { const nx = this._stageSuccessor(w.encounterId, w.clusterIds); if (nx) { w.encounterId = nx.id; enc = nx; } }
+    w.clusterIds = this._stageClusterOf.get(enc?.id)?.encounterIds ?? null;
     if (!enc?.isActive || !isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) {
       this._endWatch();
       return;
     }
-    const fit = GAME_CONFIG.FEATURES?.cvStage ? this._stageWatchFit(enc) : this._computeWatchFit(enc);   // ARC CV-3a1 (643)
+    const fit = this._stageWatchFit(enc);   // ARC CV-3a1 (643)
     if (!fit) return;
     // Cel — szybkie śledzenie (`focusOnSmooth`, jak kamera na wybranym statku): sam lerp 0,08 na klatkę (`flyTo`) zostawiał
     // kamerę ~12 klatek ruchu za walką — przy dystansie rzędu 0,4 j. formacja wyjeżdżała z kadru, a statek lecący ku
@@ -10034,7 +9583,7 @@ export class ThreeRenderer {
     const cc = this._cameraController;
     if (!a || !cc) { this._autoFocus = null; return; }
     let enc = a.encounterId ? this._cvEncById(a.encounterId) : null;
-    if (GAME_CONFIG.FEATURES?.cvStage && a.encounterId) {   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
+    if (a.encounterId) {   // ARC CV-3a1 (Finding 638) — jedna bitwa = klaster starć
       if (!enc?.isActive) { const nx = this._stageSuccessor(a.encounterId, a.clusterIds); if (nx) { a.encounterId = nx.id; enc = nx; } }
       a.clusterIds = this._stageClusterOf.get(enc?.id)?.encounterIds ?? null;
     }
@@ -10071,13 +9620,7 @@ export class ThreeRenderer {
   // (sonda P2b w prawdziwej grze, scena 3 na 2: obaj strażnicy pod kartą we wszystkich klatkach auto-fokusu).
   // Bez sprite'ów — null (cel bez zmian).
   _autoFocusTarget(enc) {
-    if (GAME_CONFIG.FEATURES?.cvStage) return this._stageWatchFit(enc)?.target ?? null;   // ARC CV-3a1 (643) — oś na bitwie
-    const fit = this._engagementFit(enc);
-    const cc = this._cameraController;
-    if (!fit || !cc) return null;
-    const r = watchTargetAt({ points: fit.points, d: cc._targetDist, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
-      aspect: this.camera.aspect, W: fit.W, H: fit.H, safe: fit.safe });
-    return r.ok ? r.target : fit.centroid;
+    return this._stageWatchFit(enc)?.target ?? null;   // ARC CV-3a1 (643) — oś na bitwie
   }
 
   // Kadr walki: pozycje sprite'ów żywych, widocznych uczestników (wróg ukryty mgłą nie wchodzi — bez przecieku), kąty
@@ -10839,13 +10382,12 @@ export class ThreeRenderer {
     const alertHex = this._hud3dHex('alert');   // paczka B (D-HUD-16) — rola `alert` motywu
     const camPos = this.camera?.position;            // skala wg dystansu → stały rozmiar EKRANOWY
     const active = new Set();
-    // ARC CV-3a3 (Finding 653 (a), decyzja właściciela §3.2-11 — ŁATA do CV-6a) — pod flagą `cvStage` celownik statku NA SCENIE
+    // ARC CV-3a3 (Finding 653 (a), decyzja właściciela §3.2-11 — ŁATA do CV-6a) — celownik statku NA SCENIE
     // gaśnie ze stopniem sceny statku (w skali prawdziwej — jak dotąd), w kinie go nie ma: znacznik zdjęty, więc pierścienie
     // alertu rysuje wtedy warstwa HUD sama (`HudLayer` — `crosshair` = znacznik istnieje).
     // Finding 666 (b) (decyzja właściciela 2026-11-09): uczestnik klastra starć W WIDOKU (`_stageParticipants`, z `_tickBattleStage`)
     // nie dostaje celownika przy ŻADNYM zoomie — wroga oznaczają romby warstwy HUD; ostateczne oznaczenie — CV-6a. Wygaszanie ze
     // stopniem zostaje tylko dla statków schodzących ze sceny po końcu starcia (już nie uczestnicy, znacznik jeszcze wraca).
-    const stageOn = !!GAME_CONFIG.FEATURES?.cvStage;
     const fadeK = this.cvTuning?.STAGE_RETICLE_FADE_K ?? 0.25;
     for (const [vid, entry] of this._vessels) {
       if (!entry?.sprite?.visible) continue;          // ukryty/wyblakły ghost → brak markera
@@ -10853,8 +10395,8 @@ export class ThreeRenderer {
       if (!v || v.isWreck) continue;
       if (!isEnemyVessel(v)) continue;                // tylko wrogowie (NIE własne statki)
       if (!this._isEnemyTargetable(vid)) continue;    // intel ≥ rumor (gate quality)
-      if (stageOn && this._stageParticipants.has(vid)) continue;   // Finding 666 (b) — uczestnik bitwy w widoku: bez celownika
-      const stageFade = stageOn ? 1 - Math.min(1, (this._stageMarks.get(vid)?.k ?? 0) / Math.max(1e-6, fadeK)) : 1;
+      if (this._stageParticipants.has(vid)) continue;   // Finding 666 (b) — uczestnik bitwy w widoku: bez celownika
+      const stageFade = 1 - Math.min(1, (this._stageMarks.get(vid)?.k ?? 0) / Math.max(1e-6, fadeK));
       if (stageFade <= 1e-3) continue;
       active.add(vid);
       let m = this._enemyAlertMarkers.get(vid);

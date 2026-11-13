@@ -131,6 +131,9 @@ function world({ encs = null } = {}) {
     _frameNo: 0, _watch: null, _autoFocus: null, _observatoryPreviewActive: false, _engagementMarkers: new Map(), _activeEffects: [],
     spawned: [], missing: [] };
   R._spawnFx = (mesh, cfg) => { R.spawned.push(cfg?.kind); };
+  // CV-Z — choreografia jest na stałe (flaga `cvChoreo` zdjęta): ten keeper pinuje warstwę SCENY, więc choreografia jest tu
+  //   zaślepiona (`null` — jak dawniej przy `cvChoreo = false`); jej niezmienniki sceny pinuje `cv_choreo_render_smoke`.
+  R._choreoCluster = () => null;
   for (const n of METHODS) { const fn = makeMethod(n); if (fn) R[n] = fn; else R.missing.push(n); }
   for (const v of vessels.values()) {
     const sp = new THREE.Object3D(); sp.visible = true;
@@ -160,7 +163,6 @@ const misbandedDrawn = (R, vessels) => {
   const drawn = new Map([...R._vessels].map(([id, e]) => [id, { x: e.sprite.position.x, y: e.sprite.position.y, z: e.sprite.position.z }]));
   return SL.countMisbanded(pts, drawn, SL.bandEdgesWU([GAME_CONFIG.WEAPON_SHORT_AU, GAME_CONFIG.WEAPON_MED_AU, GAME_CONFIG.WEAPON_LONG_AU], AUWU));
 };
-const FLAG0 = GAME_CONFIG.FEATURES.cvStage;
 
 // ═══ R0 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
 block('R0 — KONTROLA: metody sceny wyciągnięte ze źródła i wykonywalne na prawdziwym Three.js', () => {
@@ -170,22 +172,17 @@ block('R0 — KONTROLA: metody sceny wyciągnięte ze źródła i wykonywalne na
 });
 
 // ═══ R1 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
-block('R1 — flaga OFF: zero znaczników, sprite\'y nietknięte co do bitu', () => {
-  GAME_CONFIG.FEATURES.cvStage = false;
-  const { R, cc } = world();
-  placeCamera(R, cc, 0.4);
-  const before = JSON.stringify(snapSprites(R));
-  for (let i = 0; i < 60; i++) frame(R);
-  assert(R._stageMarks.size === 0 && R._stageFrame === null && JSON.stringify(snapSprites(R)) === before,
-    'R1 flaga OFF (kamera 0,4 j. od bitwy): zero znaczników sceny, pozycje sprite\'ów identyczne co do bitu');
+// CV-Z — PRZECELOWANE ŚWIADOMIE: dawne R1 pinowało ścieżkę OFF (`cvStage = false` — zero znaczników). Flaga zdjęta, ścieżka OFF
+//   usunięta: R1 pinuje BRAK gałęzi flagi w scenie (źródło bez komentarzy).
+block('R1 — CV-Z: scena bez gałęzi flagi (ścieżki OFF nie ma)', () => {
+  const tb = methodOf('_tickBattleStage')?.body ?? '';
+  assert(tb.length > 200 && !/FEATURES\?\.cvStage/.test(tb) && !/FEATURES\?\.cvChoreo/.test(tb) && !/cvStage|cvChoreo/.test(strip(TR).replace(/\/\/[^\n]*/g, '')),
+    'R1 `_tickBattleStage` i cały `ThreeRenderer` bez odczytu `cvStage` / `cvChoreo` (świadek: ciało metody wyciągnięte)');
 });
 
 // ═══ R2 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
-GAME_CONFIG.FEATURES.cvStage = true;
-// ARC CV-3b — ten keeper pinuje warstwę SCENY (CV-3a / CV-6b) przy choreografii WYŁĄCZONEJ: choreografia to osobna warstwa
-//   za flagą `cvChoreo` (przesunięcia w kopercie, kurs, silnik), pinowana z tymi samymi niezmiennikami sceny (pasma, ciągłość,
-//   pauza, zero zapisów) w `cv_choreo_render_smoke` / `cv_choreo_logic_smoke`.
-GAME_CONFIG.FEATURES.cvChoreo = false;
+// ARC CV-3b — ten keeper pinuje warstwę SCENY (CV-3a / CV-6b) przy choreografii zaślepionej (`world()`): choreografia ma te same
+//   niezmienniki sceny (pasma, ciągłość, pauza, zero zapisów) w `cv_choreo_render_smoke` / `cv_choreo_logic_smoke`.
 block('R2 — flaga ON, kamera blisko: rysowane = scena, każda para w swoim paśmie; (b) pozycje logiczne nietknięte', () => {
   const { R, cc, vessels } = world();
   placeCamera(R, cc, 0.4);
@@ -298,13 +295,11 @@ block('R9 / R10 — (642) pierścień starcia ukryty; (641) eksplozja wraku bez 
   R._hideEncounterRings();
   assert(R._engagementMarkers.get('enc_1').mesh.visible === false && R._engagementMarkers.get('enc_2').mesh.visible === false && other.visible === true,
     'R9 pierścienie starć DSCS ukryte (każdy znacznik to starcie — CV-8b), obiekt spoza znaczników — bez zmian');
-  R.spawned = []; GAME_CONFIG.FEATURES.cvStage = true; R._spawnExplosion(new THREE.Vector3(1, 0.3, 1), 0.016);
+  // CV-Z — przecelowane świadomie: KONTROLA ścieżki OFF (płaski pierścień `explosionRing`) usunięta razem z kodem pierścienia.
+  R.spawned = []; R._spawnExplosion(new THREE.Vector3(1, 0.3, 1), 0.016);
   const on = [...R.spawned];
-  R.spawned = []; GAME_CONFIG.FEATURES.cvStage = false; R._spawnExplosion(new THREE.Vector3(1, 0.3, 1), 0.016);
-  const off = [...R.spawned];
-  GAME_CONFIG.FEATURES.cvStage = true;
-  assert(JSON.stringify(on) === JSON.stringify(['explosion']) && JSON.stringify(off) === JSON.stringify(['explosion', 'explosionRing']),
-    `R10 eksplozja wraku: ON ${JSON.stringify(on)}, OFF ${JSON.stringify(off)} (KONTROLA — dzisiejszy pierścień)`);
+  assert(JSON.stringify(on) === JSON.stringify(['explosion']) && !/explosionRing/.test(methodOf('_spawnExplosion')?.body ?? 'explosionRing'),
+    `R10 eksplozja wraku: ${JSON.stringify(on)} — sama kula ognia; kodu pierścienia uderzeniowego nie ma`);
 });
 
 // ═══ R11 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -368,9 +363,8 @@ block('R15 — (CV-3a2, D-CV-5) pole kliku sceny: `stageLogicalOf` / `stageWorld
   const far = R.stageLogicalOf(SYS, p.x + 30, p.z);
   const other = R.stageLogicalOf('sys_inny', p.x, p.z);
   R._galaxyActive = true; const gal = R.stageLogicalOf(SYS, p.x, p.z); R._galaxyActive = false;
-  GAME_CONFIG.FEATURES.cvStage = false; const off = R.stageLogicalOf(SYS, p.x, p.z); GAME_CONFIG.FEATURES.cvStage = FLAG0;
-  assert(far?.staged === false && far.x === p.x + 30 && other?.staged === false && gal?.staged === false && off?.staged === false && off.x === p.x,
-    'R15b daleko od bitwy, inny układ, tryb galaktyki, flaga OFF — punkt bez zmian (staged: false)');
+  assert(far?.staged === false && far.x === p.x + 30 && other?.staged === false && gal?.staged === false,
+    'R15b daleko od bitwy, inny układ, tryb galaktyki — punkt bez zmian (staged: false); CV-Z — przypadek „flaga OFF” usunięty z flagą');
   // pauza od startu: wejście w scenę stoi (stopień × wejście = 0) — brak pola
   const w2 = world(); placeCamera(w2.R, w2.cc, 0.4); w2.ts.isPaused = true;
   for (let i = 0; i < 30; i++) frame(w2.R);
@@ -413,14 +407,14 @@ block('R14 — źródło: tripwire (b), kolejność w pętli renderu, bramki fla
     && at('this._tickBattleStage()') < at('this._updateWatchCamera()') && at('this._cameraController.update()') < at('this._syncCombatViewOffset()')
     && at('this._syncCombatViewOffset()') < at('this._updateActiveEffects('),
     'R14b pętla renderu: powrót na bazę → ruch płynny → scena → kamera walki → `update()` kontrolera → przesunięcie ekranowe → efekty');
-  // ARC CV-6b2 — przecelowane świadomie: pierścień ukrywa także flaga `cvStrip` (pierścień odchodzi razem z kartą, §4 CV-6b2).
-  assert(/this\._tickEngagementMarkers\(performance\.now\(\)\);\s*if \(GAME_CONFIG\.FEATURES\?\.cvStage \|\| GAME_CONFIG\.FEATURES\?\.cvStrip\) this\._hideEncounterRings\(\);/.test(loop),
-    'R14c (642) pierścień ukrywany przy wywołaniu, pod flagą `cvStage` albo `cvStrip` (ciało `_tickEngagementMarkers` nietknięte — piny ścieżki OFF)');
+  // CV-Z — przecelowane świadomie: pierścień starcia ukrywany zawsze (flagi `cvStage` / `cvStrip` zdjęte).
+  assert(/this\._tickEngagementMarkers\(performance\.now\(\)\);\s*this\._hideEncounterRings\(\);/.test(loop) || !/_tickEngagementMarkers/.test(loop),
+    'R14c (642) pierścień starcia nie rysuje się (ukryty bez flagi albo znaczników nie ma)');
   const pf = methodOf('_placeFreeVessel'); const sw = methodOf('_startWatch'); const uw = methodOf('_updateWatchCamera');
   assert(/glideRetarget\(g, to, this\._spriteBase\(vid, entry\),/.test(pf?.body ?? '')
-    && /GAME_CONFIG\.FEATURES\?\.cvStage \? this\._stageWatchFit\(enc\) : this\._computeWatchFit\(enc\)/.test(sw?.body ?? '')
-    && /GAME_CONFIG\.FEATURES\?\.cvStage \? this\._stageWatchFit\(enc\) : this\._computeWatchFit\(enc\)/.test(uw?.body ?? ''),
-    'R14d ruch płynny od `_spriteBase`; „Obserwuj” (start i śledzenie) — kadr sceny pod flagą, dzisiejszy kadr bez flagi');
+    && /const fit = this\._stageWatchFit\(enc\);/.test(sw?.body ?? '') && !/_computeWatchFit/.test(sw?.body ?? '')
+    && /const fit = this\._stageWatchFit\(enc\);/.test(uw?.body ?? '') && !/_computeWatchFit/.test(uw?.body ?? ''),
+    'R14d ruch płynny od `_spriteBase`; „Obserwuj” (start i śledzenie) — kadr sceny (CV-Z: dawny kadr bez sceny usunięty)');
 });
 
 // ═══ R17 ══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -428,7 +422,6 @@ block('R14 — źródło: tripwire (b), kolejność w pętli renderu, bramki fla
 // 85 j.) rysowane = cel sceny (stopień 1), każda para w swoim paśmie, pole kliku odwraca punkt i wraca co do 1e-9.
 // KONTROLA: podłoga 0 (krzywa CV-3a1) — z daleka skala prawdziwa (rysowane = baza), pary w złych pasmach, brak pola kliku.
 block('R17 — decyzja 20: bitwa ściśnięta przy KAŻDYM zoomie (pasma, pole kliku, nikt w skali prawdziwej)', () => {
-  GAME_CONFIG.FEATURES.cvStage = true;
   const run = (floor) => {
     const { R, cc, vessels } = world();
     if (floor != null) R.cvTuning = { STAGE_BLEND_FLOOR: floor };
@@ -473,6 +466,5 @@ block('R17 — decyzja 20: bitwa ściśnięta przy KAŻDYM zoomie (pasma, pole k
     `R17d KONTROLA podłoga 0 (krzywa CV-3a1) przy 85 j.: skala prawdziwa (na bazie ${k0[85].onBase}/20), ${k0[85].mis} par w złych pasmach, brak pola kliku`);
 });
 
-GAME_CONFIG.FEATURES.cvStage = FLAG0;
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

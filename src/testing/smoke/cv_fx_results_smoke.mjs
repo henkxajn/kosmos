@@ -63,6 +63,11 @@
 //      ON == bez renderera (sygnatura, ślad, losowania, sloty); świadek — sekwencje wybuchów i emitery stanów uszkodzeń naprawdę
 //      szły. Tryby A1–A7 — `cvDamage` OFF jawnie (flaga domyślnie ON od CV-5)
 //
+// ⚠ PRZECELOWANE ŚWIADOMIE (CV-Z — flagi kroków CV na stałe ON, ścieżki OFF usunięte): tryby „OFF” i warstwowe porównania A1–A10
+//   (ON z jedną flagą więcej == ON bez niej) straciły przedmiot — każda warstwa jest na stałe. Zostaje to, o co keeper pyta: wynik
+//   z PEŁNĄ warstwą wizualną (scena, choreografia CV-3c, sygnały, rejestr salw, wybuchy, osłony) == bez renderera (A2), KONTROLA
+//   przyrządu (A3), tempo (A4), bitwa przy ciele (A5), reżyser ze spowolnieniem (A11); świadkowie warstw (A1, A6–A10) — na jednym
+//   przebiegu ON. Tryb `mode: 'off'` usunięty.
 // ⚠ Fail-first: moduły CV-2a (stager, silnik, zegar) powstają w tym kroku — import dynamiczny w try/catch, piny DEGRADUJĄ
 //   (czerwone), suita się nie przerywa. A2 jest STRAŻNIKIEM (wynik nie zależał od FX także przed CV-2a, od CV-0b).
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -164,8 +169,8 @@ const NAMES = ['THREE', 'S', 'GAME_CONFIG', 'window', 'performance', 'isEngageme
   'ShieldBubblePool', 'KC_SCORCH_MAX', 'setKeyColourScorch', 'setKeyColourScorchHeat', 'setKeyColourScorchCount', 'ledgerHash',
   // ARC CV-3c — lot wzdłuż kursu, wylot dysz, dryf wraków (tryb A10: flaga `cvChoreo2`)
   'stepChoreo2Offset', 'stepChoreo2Facing', 'stepChoreo2Engine', 'NOZZLE_KEY_HEX', 'wreckAfterDrift'];
-const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed', '_spawnCombatTracer',
-  '_spawnFx', '_disposeFx', '_followTracerEnds', '_followFxTarget', '_spawnHitGlow', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
+const METHODS = ['_onCombatRoundFx', '_combatEndpointWorld', '_isEnemyEndpointVisible', '_isCombatRevealed',
+  '_spawnFx', '_disposeFx', '_cvFxRoundFx', '_ensureFxEngine', '_tickCvFx',
   '_unstageVessels', '_spriteBase', '_stageMark', '_stagePlace', '_stageClusters', '_stageClustersDscs', '_cvEncList', '_cvEncById', '_cvEncOf', '_cvVisWreck', '_tickBattleStage', 'getVesselStageBlend',
   '_choreoCluster', '_choreoPose', '_choreoOrient', '_choreoHeadingOwned', '_choreoRelease', '_choreoEnd', '_choreoExhaust', '_applyExhaust',
   '_ensureCueBus', '_cueEncounterId', '_cueShot', '_cueDestroyed', '_flushCues',   // ARC CV-2b — sygnały walki (A6)
@@ -344,24 +349,22 @@ const helpers = () => STAGER?.cvBattleDebugHelpers?.({ getRenderer: () => null, 
  * Starcie ze stagera, rozegrane do końca. mode: 'none' (bez renderera) · 'off' (renderer, flaga OFF) · 'on' (flaga ON);
  * `control` — słuchacz salwy losujący z `Math.random` (KONTROLA przyrządu).
  */
-function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, presets = false, weapons = false, damage = false, shields = false, choreo2 = false, director = false } = {}) {
+function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10, roundMs = null, atBody = null, director = false } = {}) {
+  const on = mode === 'on';
+  // CV-Z — tryb ON = pełna warstwa wizualna (flagi kroków, które jeszcze istnieją, ustawione jawnie; reszta na stałe).
   const dirFlag = GAME_CONFIG.FEATURES.cvDirector;   // ARC CV-7 — A11: reżyser i spowolnienie tylko w trybie `director`
   GAME_CONFIG.FEATURES.cvDirector = director === true;
-  const damageFlag = GAME_CONFIG.FEATURES.cvDamage;   // ARC CV-5 — A8: wybuchy i stany uszkodzeń tylko w trybie `damage` (A1–A7 — OFF jawnie)
-  GAME_CONFIG.FEATURES.cvDamage = damage === true;
-  const shieldsFlag = GAME_CONFIG.FEATURES.cvShields;   // ARC CV-4b — A9: osłony tylko w trybie `shields` (A1–A8 — OFF jawnie)
-  GAME_CONFIG.FEATURES.cvShields = shields === true;
+  const damageFlag = GAME_CONFIG.FEATURES.cvDamage;
+  GAME_CONFIG.FEATURES.cvDamage = on;
+  const shieldsFlag = GAME_CONFIG.FEATURES.cvShields;
+  GAME_CONFIG.FEATURES.cvShields = on;
   const T5 = ENGINE?.LIVE_CV_FX ?? null;
   const fxScale0 = T5?.FX_TIME_SCALE;
-  if (damage && T5) T5.FX_TIME_SCALE = 0.25;   // zwolnione tempo efektów — tylko prezentacja (pinuje A8b)
-  const flag = GAME_CONFIG.FEATURES.cvFxEngine;
-  const presetsFlag = GAME_CONFIG.FEATURES.cvPresets;   // ARC CV-2b — A6: sygnały walki tylko w trybie `presets`
-  GAME_CONFIG.FEATURES.cvPresets = presets === true;
-  const weaponsFlag = GAME_CONFIG.FEATURES.cvWeapons;   // ARC CV-4a — A7: język broni tylko w trybie `weapons` (reszta pinuje salwy CV-2a)
-  GAME_CONFIG.FEATURES.cvWeapons = weapons === true;
-  const stageFlag = GAME_CONFIG.FEATURES.cvStage;
-  const choreoFlag = GAME_CONFIG.FEATURES.cvChoreo;
-  const choreo2Flag = GAME_CONFIG.FEATURES.cvChoreo2;   // ARC CV-3c (A10)
+  if (on && T5) T5.FX_TIME_SCALE = 0.25;   // zwolnione tempo efektów — tylko prezentacja (A2 obejmuje i je)
+  const presetsFlag = GAME_CONFIG.FEATURES.cvPresets;
+  GAME_CONFIG.FEATURES.cvPresets = on;
+  const weaponsFlag = GAME_CONFIG.FEATURES.cvWeapons;
+  GAME_CONFIG.FEATURES.cvWeapons = on;
   reseed('cv2a-battle'); reseedRendererRandom();
   let R = null, st = null, outsider = null, recallList = null, recallNoEnc = null, ctlAi = null;
   const arrivals = [];
@@ -369,10 +372,6 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     world();
     if (roundMs != null) ts.combatRoundMs = () => roundMs;   // A4 — tempo oglądanego starcia (jak `combat_pace_smoke`)
     if (mode !== 'none') {
-      GAME_CONFIG.FEATURES.cvFxEngine = mode === 'on';
-      GAME_CONFIG.FEATURES.cvStage = mode === 'on';   // CV-3a1 — scena bitwy w trybie ON, dzisiejszy rysunek w OFF
-      GAME_CONFIG.FEATURES.cvChoreo = mode === 'on';  // CV-3b — choreografia na scenie w trybie ON
-      GAME_CONFIG.FEATURES.cvChoreo2 = mode === 'on' && choreo2;   // CV-3c — lot wzdłuż kursu (A10); A1–A9 — CV-3b jawnie
       window.innerWidth = 1600; window.innerHeight = 1041;
       R = fakeRenderer();
       if (director && CVDIR?.CvDirector) {   // ARC CV-7 (A11) — prawdziwy reżyser; spowolnienie wymuszane przy każdej okazji
@@ -393,10 +392,10 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
         };
       }
       EventBus.on('combat:roundFx', (p) => R._onCombatRoundFx(p));
-      if (weapons) EventBus.on('combat:roundFx', (p) => R._cvWpnRoundFx(p));   // ARC CV-4a — drugi słuchacz renderera (pełny ładunek)
+      EventBus.on('combat:roundFx', (p) => R._cvWpnRoundFx(p));   // ARC CV-4a — drugi słuchacz renderera (pełny ładunek)
       // ARC CV-2b (A6) — wybuch wraku → sygnał „destroyed” (jak słuchacz `vessel:wrecked` renderera) i słuchacz `AudioSystem` po
       // `EventBus.clear()` świata (jak `GameScene.start`). Bez flagi `cvPresets` — szyna nie powstaje (metody i tak w atrapie).
-      if (presets) {
+      {
         EventBus.on('vessel:wrecked', ({ vesselId, vessel }) => R._cueDestroyed?.(vesselId, vessel, R._vessels.get(vesselId)));
         AUDIO_SYS?.resetCueStats?.();
         AUDIO_SYS?.attach?.();
@@ -427,17 +426,13 @@ function runBattle({ mode = 'none', seed = 1, control = false, nA = 10, nB = 10,
     const realMs = rec.clock.length > 1 ? rec.clock[rec.clock.length - 1] - rec.clock[0] : 0;
     return { scene, sig: { battles: rec.battles, wrecks: rec.wrecks }, trace: rec.rounds, slots, realMs };
   });
-  GAME_CONFIG.FEATURES.cvFxEngine = flag;
-  GAME_CONFIG.FEATURES.cvStage = stageFlag;
-  GAME_CONFIG.FEATURES.cvChoreo = choreoFlag;
-  GAME_CONFIG.FEATURES.cvChoreo2 = choreo2Flag;
   GAME_CONFIG.FEATURES.cvPresets = presetsFlag;
   GAME_CONFIG.FEATURES.cvWeapons = weaponsFlag;
   GAME_CONFIG.FEATURES.cvDamage = damageFlag;
   GAME_CONFIG.FEATURES.cvShields = shieldsFlag;
   GAME_CONFIG.FEATURES.cvDirector = dirFlag;
   if (T5 && fxScale0 !== undefined) T5.FX_TIME_SCALE = fxScale0;
-  const audio = presets ? (AUDIO_SYS?.cueStats?.() ?? null) : null;
+  const audio = mode === 'on' ? (AUDIO_SYS?.cueStats?.() ?? null) : null;
   return { ...out.result, draws: out.draws, R, st, recallList, recallNoEnc, outsiderName: outsider?.name, audio };
 }
 
@@ -538,34 +533,46 @@ const OTHER = runBattle({ mode: 'none', seed: 2 });
   assert(OTHER.scene?.seedBase !== NONE.scene?.seedBase && OTHER.st?.ok === true, `S6b ziarno 2: inne seedBase (${OTHER.scene?.seedBase} ≠ ${NONE.scene?.seedBase})`);
 }
 
-// ═══ A — wynik ON == OFF == bez renderera ═════════════════════════════════════════════════════════════════════════
-header('A1 — tryby naprawdę rysowały: ON przez silnik z pulami, OFF dzisiejszą ścieżką');
-const OFF = runBattle({ mode: 'off', seed: 1 });
+// ═══ A — wynik z pełną warstwą wizualną == bez renderera ══════════════════════════════════════════════════════════════
+header('A1 / A6–A10 — świadkowie: tryb ON naprawdę rysował każdą warstwę (jeden przebieg, pełna warstwa wizualna)');
 const ON  = runBattle({ mode: 'on', seed: 1 });
 {
-  assert(ON.R && ON.R.missing.length === 0, `A1a metody renderera wyciągnięte ze źródła${ON.R?.missing?.length ? ' — brak: ' + ON.R.missing.join(', ') : ''}`);
-  const es = ON.R?._fxEngine?.stats?.();
-  console.log(`     ON: silnik ${es ? `strzały ${es.shots}, szczyt wiązki ${es.pools.beam.peak} / smugi ${es.pools.tracer.peak} / iskry ${es.pools.spark.peak}` : 'BRAK'}, dzisiejsze efekty ${ON.R?.legacySpawned}; OFF: dzisiejsze efekty ${OFF.R?.legacySpawned}, silnik ${OFF.R?._fxEngine ? 'jest' : 'brak'}`);
-  assert(!!es && es.shots >= 50 && es.pools.beam.spawned > 0 && es.pools.tracer.spawned > 0 && es.pools.spark.spawned > 0 && ON.R.legacySpawned === 0,
-    'A1b ON: salwy przez silnik (wiązki, smugi, iskry), zero dzisiejszych efektów');
-  assert(OFF.R && OFF.R.legacySpawned >= 50 && OFF.R._fxEngine === null, 'A1c OFF: dzisiejsza ścieżka (efekty _spawnFx), silnik nie powstał');
-  assert(!!ON.R?._presClock && ON.R._presClock.nowMs > 0, `A1d zegar prezentacji płynął w trybie ON (${ON.R?._presClock?.nowMs ?? 0} ms)`);
-  console.log(`     CV-3a1 scena: ON — klatek ze sceną ${ON.R?.stagedFrames}, stopień maks. ${ON.R?.stageMaxK?.toFixed?.(3)}; OFF — klatek ${OFF.R?.stagedFrames}`);
-  assert((ON.R?.stagedFrames ?? 0) > 100 && (ON.R?.stageMaxK ?? 0) > 0.99 && OFF.R?.stagedFrames === 0,
-    'A1e CV-3a1: tryb ON rysował scenę bitwy (pełny stopień przy kamerze 0,4 j.), tryb OFF — bez sceny');
-  console.log(`     CV-3b choreografia: ON — klatek z przesunięciem ${ON.R?.choreoFrames}, największe ${ON.R?.choreoMaxL?.toFixed?.(3)} L; OFF — klatek ${OFF.R?.choreoFrames}`);
-  assert((ON.R?.choreoFrames ?? 0) > 100 && (ON.R?.choreoMaxL ?? 0) > 0.05 && OFF.R?.choreoFrames === 0,
-    'A1f CV-3b: tryb ON choreografował statki sceny (przesunięcia w kopercie), tryb OFF — bez choreografii (A2 obejmuje więc i tę warstwę)');
+  const R = ON.R;
+  assert(R && R.missing.length === 0, `A1a metody renderera wyciągnięte ze źródła${R?.missing?.length ? ' — brak: ' + R.missing.join(', ') : ''}`);
+  const es = R?._fxEngine?.stats?.();
+  const ls = R?._cvLedger?.stats ?? null;
+  console.log(`     język broni: strzały ${es?.wpnShots ?? 0} (wiązki ${es?.pools?.wbeam?.spawned ?? 0}, pociski ${es?.pools?.bolt?.spawned ?? 0}, punkty ${es?.pools?.mote?.spawned ?? 0}), `
+    + `salwy CV-2a ${es?.shots ?? 0}; rejestr: rund ${ls?.rounds ?? 0}, zniszczeń pokazanych ${R?._cvWpnStats?.killsShown ?? 0}, strzały po zniszczeniu ${ls?.violations ?? '?'}`);
+  assert(!!es && es.wpnShots >= 50 && es.pools.wbeam.spawned > 0 && es.pools.bolt.spawned > 0 && es.pools.mote.spawned > 0 && es.shots === 0
+    && (R?._cvWpnStats?.killsShown ?? 0) >= 1 && ls?.violations === 0 && R.legacySpawned === 0,
+    'A1b / A7a świadek: strzały pulami języka broni, rejestr pokazał zniszczenia (bez strzału po zniszczeniu), zero dawnych efektów `_spawnFx` z salw');
+  assert(!!R?._presClock && R._presClock.nowMs > 0, `A1d zegar prezentacji płynął (${R?._presClock?.nowMs ?? 0} ms)`);
+  console.log(`     scena: klatek ${R?.stagedFrames}, stopień maks. ${R?.stageMaxK?.toFixed?.(3)}; choreografia: klatek ${R?.choreoFrames}, lot CV-3c ${R?.choreo2Frames ?? 0}, największe ${R?.choreoMaxL?.toFixed?.(3)} L`);
+  assert((R?.stagedFrames ?? 0) > 100 && (R?.stageMaxK ?? 0) > 0.99, 'A1e świadek: scena bitwy (pełny stopień przy kamerze 0,4 j.)');
+  assert((R?.choreoFrames ?? 0) > 100 && (R?.choreoMaxL ?? 0) > 0.05 && (R?.choreo2Frames ?? 0) > 100,
+    'A1f / A10a świadek: choreografia — lot wzdłuż kursu CV-3c (statki w trybie 2, przesunięcia od kotwic)');
+  const cs = R?._cueBus?.stats?.() ?? null;
+  assert(!!cs && cs.emitted >= 20 && cs.byKind.fire > 0 && cs.byKind.impact + cs.byKind.shieldHit > 0 && cs.byKind.destroyed > 0
+    && cs.byKind.kill > 0 && ON.audio?.received === cs.emitted,
+    // CV-Z — przecelowane świadomie: „destroyed” == straty obu stron mierzyło przebieg BEZ rejestru salw (dawny tryb A6); z rejestrem
+    //   zniszczenie pokazuje się w chwili trafienia (`kill`), a atrapa dokłada sygnał wraku bez bramki rejestru — liczba nie jest 1:1.
+    `A6a świadek: sygnały walki szły (${cs?.emitted ?? 0}: ${JSON.stringify(cs?.byKind ?? {})}) i słuchacz AudioSystem odebrał każdy`);
+  const ds = R?._cvDmg?.stats ?? null;
+  assert(!!ds && ds.explosions >= 1 && (es?.pools?.blast?.spawned ?? 0) > 0 && (es?.pools?.debris?.spawned ?? 0) > 0 && (ds.dmgSmoke + ds.dmgFire) > 0,
+    `A8a świadek: wybuchy (${ds?.explosions ?? 0}) i emitery stanów uszkodzeń szły — przy zegarze efektów 0,25×`);
+  const ss = R?._cvShd ?? null, pl = ss?.states?.stats ?? null;
+  assert(!!ss && (pl?.onBubble ?? 0) > 0 && (pl?.collapsesPlanned ?? 0) > 0 && (ss.stats.ripples ?? 0) > 0 && (ss.stats.collapses ?? 0) > 0
+    && (ss.stats.hullHits ?? 0) > 0 && (R?._shieldBubbles?.stats?.().acquired ?? 0) > 0,
+    'A9a świadek: plan osłon szedł (trafienia na bańce, rozpady), pokaz — fale, rozpady, trafienia w kadłub, bańki z puli');
 }
 
-header('A2 — (a) wynik starcia ON == OFF == bez renderera');
+header('A2 — (a) wynik starcia z pełną warstwą wizualną == bez renderera');
 {
-  assert(NONE.sig.battles.length >= 1 && same(ON.sig, OFF.sig) && same(OFF.sig, NONE.sig), `A2a sygnatura identyczna ${JSON.stringify(NONE.sig.battles)}`);
-  assert(NONE.trace.length >= 5 && same(ON.trace, OFF.trace) && same(OFF.trace, NONE.trace),
+  assert(NONE.sig.battles.length >= 1 && same(ON.sig, NONE.sig), `A2a sygnatura (z wrakami) identyczna ${JSON.stringify(NONE.sig.battles)}`);
+  assert(NONE.trace.length >= 5 && same(ON.trace, NONE.trace),
     `A2b ślad każdej rundy identyczny (${NONE.trace.length} rund: zdarzenia, HP, osłona, pozycje logiczne)`);
-  assert(NONE.draws.length > 0 && same(ON.draws, OFF.draws) && same(OFF.draws, NONE.draws),
-    `A2c sekwencja losowań gry identyczna (${NONE.draws.length} losowań, wartości)`);
-  assert(NONE.slots.length === ARRIVAL_ROUNDS.length && NONE.slots.every(s => s && s.every(Number.isFinite)) && same(ON.slots, OFF.slots) && same(OFF.slots, NONE.slots),
+  assert(NONE.draws.length > 0 && same(ON.draws, NONE.draws), `A2c sekwencja losowań gry identyczna (${NONE.draws.length} losowań, wartości)`);
+  assert(NONE.slots.length === ARRIVAL_ROUNDS.length && NONE.slots.every(s => s && s.every(Number.isFinite)) && same(ON.slots, NONE.slots),
     `A2d sloty orbit statków przylatujących W TRAKCIE starcia (rundy ${ARRIVAL_ROUNDS.join(', ')}) identyczne`);
 }
 
@@ -595,112 +602,31 @@ const K1150 = runBattle({ mode: 'none', seed: 1, roundMs: 1150 });
     `A4e świadek: czas realny starcia = (rundy − 1) × klucz ± kwant (${K400.realMs} / ${K1000.realMs} / ${K1150.realMs} ms) — klucz działa`);
 }
 
-header('A5 — (CV-3a3) bitwa przy ciele: wynik ON (skorupa) == OFF == bez renderera');
+header('A5 — (CV-3a3) bitwa przy ciele: wynik z pełną warstwą (skorupa) == bez renderera');
 const BN  = runBattle({ mode: 'none', seed: 1, atBody: 'p_home' });
-const BOF = runBattle({ mode: 'off', seed: 1, atBody: 'p_home' });
 const BON = runBattle({ mode: 'on', seed: 1, atBody: 'p_home' });
 {
   console.log(`     przy ciele: cvBattle ${JSON.stringify(BN.st && { ok: BN.st.ok, body: BN.st.body, docked: BN.st.docked, enemyPinned: BN.st.enemyPinned })}, `
     + `sygnatura ${JSON.stringify(BN.sig.battles)}, rund ${BN.trace.length}; ON — klatek ze skorupą ${BON.R?.shellFrames}`);
   assert(BN.st?.ok === true && BN.st.docked === 10 && BN.st.enemyPinned === 10 && BN.sig.battles.length >= 1 && BN.trace.length >= 3,
     `A5-0 PRZESŁANKA: bitwa przy ciele rozegrana (gracz ${BN.st?.docked}/10 na orbitach, wróg ${BN.st?.enemyPinned}/10 przypięty, ${BN.trace.length} rund)`);
-  assert(same(BON.sig, BOF.sig) && same(BOF.sig, BN.sig) && same(BON.trace, BOF.trace) && same(BOF.trace, BN.trace),
-    'A5a sygnatura i ślad każdej rundy identyczne ON == OFF == bez renderera');
-  assert(BN.draws.length > 0 && same(BON.draws, BOF.draws) && same(BOF.draws, BN.draws) && same(BON.slots, BOF.slots) && same(BOF.slots, BN.slots),
-    `A5b sekwencja losowań gry (${BN.draws.length}) i sloty orbit identyczne`);
-  assert((BON.R?.shellFrames ?? 0) > 100 && BOF.R?.shellFrames === 0, `A5c świadek: tryb ON rysował skorupę (${BON.R?.shellFrames} klatek), OFF — nie`);
-}
-
-header('A6 — (CV-2b) sygnały walki: wynik ON z szyną `combatfx:cue` i słuchaczem AudioSystem == ON bez flagi == bez renderera');
-const PRS = runBattle({ mode: 'on', seed: 1, presets: true });
-{
-  const cs = PRS.R?._cueBus?.stats?.() ?? null;
-  console.log(`     ON + cvPresets: sygnały wysłane ${cs?.emitted ?? 0} (scalone ${cs?.merged ?? 0}; per rodzaj ${JSON.stringify(cs?.byKind ?? {})}), `
-    + `słuchacz AudioSystem: wywołań ${PRS.audio?.received ?? 0}, sygnałów ${PRS.audio?.cues ?? 0}; ON bez flagi — szyna ${ON.R?._cueBus ? 'jest' : 'brak'}`);
-  assert(!!cs && cs.emitted >= 20 && cs.byKind.fire > 0 && cs.byKind.impact + cs.byKind.shieldHit > 0 && cs.byKind.destroyed > 0
-    && PRS.audio?.received === cs.emitted && !ON.R?._cueBus && PRS.sig.battles[0]?.[5] + PRS.sig.battles[0]?.[6] === cs.byKind.destroyed,
-    'A6a świadek: tryb `cvPresets` naprawdę wysyłał sygnały (fire, trafienia, „destroyed” = straty obu stron) i słuchacz AudioSystem odebrał każdy; bez flagi szyna nie powstaje');
-  assert(same(PRS.sig, NONE.sig) && same(PRS.trace, NONE.trace) && same(PRS.sig, ON.sig) && same(PRS.trace, ON.trace),
-    `A6b sygnatura i ślad każdej rundy identyczne ON + cvPresets == ON == bez renderera ${JSON.stringify(PRS.sig.battles)}`);
-  assert(NONE.draws.length > 0 && same(PRS.draws, NONE.draws) && same(PRS.slots, NONE.slots),
-    `A6c sekwencja losowań gry (${PRS.draws.length}) i sloty orbit identyczne — szyna sygnałów i słuchacz nie dotykają strumienia gry`);
-}
-
-header('A7 — (CV-4a) język broni i rejestr salw: wynik ON z rejestrem == ON bez flagi (salwy CV-2a) == bez renderera');
-const WPN = runBattle({ mode: 'on', seed: 1, weapons: true });
-{
-  const es = WPN.R?._fxEngine?.stats?.();
-  const ls = WPN.R?._cvLedger?.stats ?? null;
-  console.log(`     ON + cvWeapons: strzały języka broni ${es?.wpnShots ?? 0} (wiązki ${es?.pools?.wbeam?.spawned ?? 0}, pociski ${es?.pools?.bolt?.spawned ?? 0}, punkty ${es?.pools?.mote?.spawned ?? 0}), `
-    + `salwy CV-2a ${es?.shots ?? 0}; rejestr: rund ${ls?.rounds ?? 0}, zdarzeń ${ls?.events ?? 0}, zniszczeń pokazanych ${WPN.R?._cvWpnStats?.killsShown ?? 0}, strzały po zniszczeniu ${ls?.violations ?? '?'}`);
-  assert(!!es && es.wpnShots >= 50 && es.pools.wbeam.spawned > 0 && es.pools.bolt.spawned > 0 && es.pools.mote.spawned > 0 && es.shots === 0
-    && (WPN.R?._cvWpnStats?.killsShown ?? 0) >= 1 && ls?.violations === 0 && WPN.R.missing.length === 0,
-    'A7a świadek: strzały pulami języka broni (wiązki, pociski, punkty), salwa CV-2a ustąpiła, rejestr pokazał zniszczenia (bez strzału po zniszczeniu)');
-  assert(same(WPN.sig, NONE.sig) && same(WPN.trace, NONE.trace) && same(WPN.sig, ON.sig) && same(WPN.trace, ON.trace),
-    `A7b sygnatura i ślad każdej rundy identyczne ON + cvWeapons == ON == bez renderera ${JSON.stringify(WPN.sig.battles)}`);
-  assert(NONE.draws.length > 0 && same(WPN.draws, NONE.draws) && same(WPN.slots, NONE.slots),
-    `A7c sekwencja losowań gry (${WPN.draws.length}) i sloty orbit identyczne — rejestr i język broni nie dotykają strumienia gry`);
-}
-
-header('A8 — (CV-5) wybuchy, stany uszkodzeń, wraki, zwolnione tempo efektów: wynik ON + cvDamage == ON + cvWeapons == ON == bez renderera');
-const DMG = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true });
-{
-  const ds = DMG.R?._cvDmg?.stats ?? null;
-  const es = DMG.R?._fxEngine?.stats?.();
-  console.log(`     ON + cvDamage (FX_TIME_SCALE 0,25): wybuchy ${ds?.explosions ?? 0} (fregaty ${ds?.frigate ?? 0}, niszczyciele ${ds?.destroyer ?? 0}, `
-    + `pancerniki ${ds?.battleship ?? 0}, wtórne ${ds?.secondaries ?? 0}), dym uszkodzeń ${ds?.dmgSmoke ?? 0}, ogień ${ds?.dmgFire ?? 0}, iskry silnika ${ds?.sputterSparks ?? 0}; `
-    + `pule: wybuch ${es?.pools?.blast?.spawned ?? 0}, dym ${es?.pools?.smoke?.spawned ?? 0}, odłamki ${es?.pools?.debris?.spawned ?? 0}; brak metod: ${JSON.stringify(DMG.R?.missing ?? null)}`);
-  assert(!!ds && ds.explosions >= 1 && (es?.pools?.blast?.spawned ?? 0) > 0 && (es?.pools?.debris?.spawned ?? 0) > 0 && (ds.dmgSmoke + ds.dmgFire) > 0
-    && DMG.R.missing.length === 0,
-    'A8a świadek: sekwencje wybuchów (błysk, kula ognia, odłamki) i emitery stanów uszkodzeń naprawdę szły — przy zegarze efektów 0,25×');
-  assert(same(DMG.sig, NONE.sig) && same(DMG.trace, NONE.trace) && same(DMG.sig, WPN.sig) && same(DMG.trace, WPN.trace),
-    `A8b sygnatura i ślad każdej rundy identyczne ON + cvDamage (0,25×) == ON + cvWeapons == bez renderera ${JSON.stringify(DMG.sig.battles)}`);
-  assert(NONE.draws.length > 0 && same(DMG.draws, NONE.draws) && same(DMG.slots, NONE.slots),
-    `A8c sekwencja losowań gry (${DMG.draws.length}) i sloty orbit identyczne — wybuchy, wraki i zegar efektów nie dotykają strumienia gry`);
-}
-
-header('A9 — (CV-4b) osłony: bańki, fale, rozpad, punkt trafienia na bańce / poszyciu, osmalenia: wynik ON + cvShields == ON + cvDamage == bez renderera');
-const SHD = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true, shields: true });
-{
-  const ss = SHD.R?._cvShd ?? null;
-  const pl = ss?.states?.stats ?? null;
-  console.log(`     ON + cvShields: plan ${pl?.planned ?? 0} trafień (na bańce ${pl?.onBubble ?? 0}, rozpady w planie ${pl?.collapsesPlanned ?? 0}); pokaz: fale ${ss?.stats?.ripples ?? 0}, `
-    + `rozpady ${ss?.stats?.collapses ?? 0}, regeneracje ${ss?.stats?.regens ?? 0}, trafienia w kadłub ${ss?.stats?.hullHits ?? 0}; pula ${JSON.stringify(SHD.R?._shieldBubbles?.stats?.() ?? null)}; `
-    + `brak metod: ${JSON.stringify(SHD.R?.missing ?? null)}`);
-  assert(!!ss && (pl?.onBubble ?? 0) > 0 && (pl?.collapsesPlanned ?? 0) > 0 && (ss.stats.ripples ?? 0) > 0 && (ss.stats.collapses ?? 0) > 0
-    && (ss.stats.hullHits ?? 0) > 0 && (SHD.R?._shieldBubbles?.stats?.().acquired ?? 0) > 0 && SHD.R.missing.length === 0,
-    'A9a świadek: plan osłon szedł (trafienia na bańce, rozpady), pokaz — fale, rozpady, trafienia w kadłub, bańki z puli');
-  assert(same(SHD.sig, NONE.sig) && same(SHD.trace, NONE.trace) && same(SHD.sig, DMG.sig) && same(SHD.trace, DMG.trace),
-    `A9b sygnatura i ślad każdej rundy identyczne ON + cvShields == ON + cvDamage == bez renderera ${JSON.stringify(SHD.sig.battles)}`);
-  assert(NONE.draws.length > 0 && same(SHD.draws, NONE.draws) && same(SHD.slots, NONE.slots),
-    `A9c sekwencja losowań gry (${SHD.draws.length}) i sloty orbit identyczne — osłony nie dotykają strumienia gry`);
-}
-
-header('A10 — (CV-3c) lot wzdłuż kursu, wylot dysz, odłamki blachy, dryf wraków, scena rozsunięta: wynik ON + cvChoreo2 == ON (CV-3b) == bez renderera');
-const CH2 = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true, shields: true, choreo2: true });
-{
-  console.log(`     ON + cvChoreo2: klatek z lotem CV-3c ${CH2.R?.choreo2Frames ?? 0}, z choreografią ${CH2.R?.choreoFrames ?? 0}, największe przesunięcie ${CH2.R?.choreoMaxL?.toFixed?.(3)} L; `
-    + `ON (CV-3b, A9): klatek z lotem CV-3c ${SHD.R?.choreo2Frames ?? 0}; rozsunięcie ${CH2.R?.cvTuning?.STAGE_SPREAD}; brak metod: ${JSON.stringify(CH2.R?.missing ?? null)}`);
-  assert((CH2.R?.choreo2Frames ?? 0) > 100 && !(SHD.R?.choreo2Frames > 0) && CH2.R.missing.length === 0,
-    'A10a świadek: tryb ON + cvChoreo2 naprawdę leciał pętlami CV-3c (statki w trybie 2); A9 (cvChoreo2 OFF) — ani klatki');
-  assert(same(CH2.sig, NONE.sig) && same(CH2.trace, NONE.trace) && same(CH2.sig, SHD.sig) && same(CH2.trace, SHD.trace),
-    `A10b sygnatura (z wrakami) i ślad każdej rundy identyczne ON + cvChoreo2 == ON (CV-3b) == bez renderera ${JSON.stringify(CH2.sig.battles)}`);
-  assert(NONE.draws.length > 0 && same(CH2.draws, NONE.draws) && same(CH2.slots, NONE.slots),
-    `A10c sekwencja losowań gry (${CH2.draws.length}) i sloty orbit identyczne — lot, wyloty, odłamki i dryf wraków nie dotykają strumienia gry`);
+  assert(same(BON.sig, BN.sig) && same(BON.trace, BN.trace), 'A5a sygnatura i ślad każdej rundy identyczne ON == bez renderera');
+  assert(BN.draws.length > 0 && same(BON.draws, BN.draws) && same(BON.slots, BN.slots), `A5b sekwencja losowań gry (${BN.draws.length}) i sloty orbit identyczne`);
+  assert((BON.R?.shellFrames ?? 0) > 100, `A5c świadek: tryb ON rysował skorupę (${BON.R?.shellFrames} klatek)`);
 }
 
 header('A11 — (CV-7) kamera reżysera i spowolnienie bohatera (wymuszane przez całą bitwę): wynik == bez renderera');
-const DIRB = runBattle({ mode: 'on', seed: 1, weapons: true, damage: true, shields: true, choreo2: true, director: true });
+const DIRB = runBattle({ mode: 'on', seed: 1, director: true });
 {
   console.log(`     reżyser: klatek z tempem ≠ 1: ${DIRB.R?.warpFrames ?? 0}, najmniejsze tempo ${DIRB.R?.warpMinRate}, największe opóźnienie `
     + `${DIRB.R?.warpMaxLag?.toFixed?.(1)} ms, bohaterów ${DIRB.R?._cvDir?.warp?.heroes ?? 0}; brak modułu: ${!CVDIR}`);
   assert(!!CVDIR && (DIRB.R?.warpFrames ?? 0) > 100 && Math.abs((DIRB.R?.warpMinRate ?? 1) - 0.35) < 1e-9 && (DIRB.R?.warpMaxLag ?? 0) > 100
     && (DIRB.R?._cvDir?.warp?.heroes ?? 0) >= 2,
     'A11a świadek: spowolnienie naprawdę szło — tempo prezentacji 0,35× / 1,25× przez setki klatek, zegar prezentacji za realnym, ≥ 2 bohaterów');
-  assert((DIRB.R?.lingerFrames ?? 0) > 10 && !(CH2.R?.lingerFrames > 0),
-    `A11d (Finding 711) scena zostaje po końcu logiki, dopóki rejestr ma zniszczenia do pokazania (${DIRB.R?.lingerFrames ?? 0} klatek); bez flagi — ani klatki (${CH2.R?.lingerFrames ?? 0})`);
-  assert(same(DIRB.sig, NONE.sig) && same(DIRB.trace, NONE.trace) && same(DIRB.sig, CH2.sig) && same(DIRB.trace, CH2.trace),
-    `A11b sygnatura (z wrakami) i ślad każdej rundy identyczne reżyser + spowolnienie == ON (CV-3c) == bez renderera ${JSON.stringify(DIRB.sig.battles)}`);
+  assert((DIRB.R?.lingerFrames ?? 0) > 10 && !(ON.R?.lingerFrames > 0),
+    `A11d (Finding 711) scena zostaje po końcu logiki, dopóki rejestr ma zniszczenia do pokazania (${DIRB.R?.lingerFrames ?? 0} klatek); bez flagi — ani klatki (${ON.R?.lingerFrames ?? 0})`);
+  assert(same(DIRB.sig, NONE.sig) && same(DIRB.trace, NONE.trace),
+    `A11b sygnatura (z wrakami) i ślad każdej rundy identyczne reżyser + spowolnienie == bez renderera ${JSON.stringify(DIRB.sig.battles)}`);
   assert(NONE.draws.length > 0 && same(DIRB.draws, NONE.draws) && same(DIRB.slots, NONE.slots),
     `A11c sekwencja losowań gry (${DIRB.draws.length}) i sloty orbit identyczne — tempo prezentacji nie dotyka logiki ani strumienia gry`);
 }

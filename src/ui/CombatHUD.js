@@ -126,7 +126,6 @@ export class CombatHUD extends BaseOverlay {
   // ARC CV-3a2 (Finding 638) — wiersze karty: pod flagą `cvStage` jeden na klaster starć (widok scalony), inaczej jeden na
   // starcie (jak dotąd). Etykieta strony scalonej: „Gracz (N)” / „imperium (N)” z tłumaczenia.
   _cardRows(encounters) {
-    if (!GAME_CONFIG.FEATURES?.cvStage) return encounters;
     const K = window.KOSMOS;
     const vm = K?.vesselManager;
     return combatCardRows(encounters, {

@@ -592,15 +592,14 @@ const d15Run = (choreo2) => withFlags({ ...ON, cvChoreo2: choreo2 }, () => {
   return st;
 });
 {
-  const on = d15Run(true), off = d15Run(false);
+  const on = d15Run(true);
   console.log(`     ON: rakieta zabija w ${on?.killAt?.toFixed?.(0)} ms, zbieżność w ${on?.nowConv?.toFixed?.(0)} ms; b1 dryf ${on?.after1} (obrót ${on?.after1Rot}); b2 przy zbieżności: oczekuje ${on?.pendingAtConv}, dryf ${on?.after2AtConv}; po wybuchu: dryf ${on?.after2} (obrót ${on?.after2Rot}), skok ${on?.jumpL?.toExponential?.(2)} L, Δq ${on?.qDelta?.toExponential?.(2)}, ruch przez 4 s ${on?.moved4s?.toFixed?.(3)} L`);
-  console.log(`     OFF: b1 dryf ${off?.after1}, b2 dryf ${off?.after2}`);
   assert(!!on && on.conv1Done && on.after1 && on.after1Rot, 'D15a zwykły wrak: po zbieżności do miejsca śmierci rusza dryf z pokrzywionym obrotem');
   assert(!!on && on.after1 && on.conv2Done && on.pendingAtConv && on.after2AtConv === false,
     'D15b SEDNO: zniszczenie odroczone (rakieta jeszcze w locie przy końcu zbieżności) — bez dryfu, dopóki statek wygląda na żywy (ŚWIADKOWIE: dryf działa — b1, zbieżność skończona, rejestr „pending”)');
   assert(!!on && on.killed2 && on.after2 && on.after2Rot && on.jumpL < 0.02 && on.qDelta < 0.02 && on.moved4s > 0,
     'D15c wybuch odroczony: dryf rusza od wybuchu — z bieżącego miejsca i obrotu (bez skoku), wrak płynie dalej');
-  assert(!!off && off.after1 === false && off.after2 === false, 'D15d KONTROLA: `cvChoreo2` OFF — bez dryfu po bitwie (wraki CV-5 stoją w pozycjach logicznych)');
+  // CV-Z — D15d (KONTROLA „`cvChoreo2` OFF — bez dryfu”) wycofane razem z flagą; dryf po bitwie jest jedyną ścieżką.
 }
 
 

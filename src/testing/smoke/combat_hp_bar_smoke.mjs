@@ -167,15 +167,11 @@ header('T6  źródło `ThreeRenderer` — biały błysk trafienia');
 {
   const tr = strip(readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf8'));
   const body = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
+  // CV-Z — PRZECELOWANE ŚWIADOMIE (plan §4 CV-Z: „combat_hp_bar T4-T6” do wycofania): biały błysk trafienia P2b (`_spawnHitGlow`)
+  //   i dawne smugi (`_spawnCombatTracer`) usunięte razem ze ścieżką bez silnika FX; trafienie pokazuje rejestr salw (CV-4a).
   const fx = body('  _onCombatRoundFx(payload) {');
-  assert(/_spawnCombatTracer\([^;]*\{ attacker: ev\.attacker, target: ev\.target \}[,)]/.test(fx), 'T6a salwa przekazuje id strzelca i celu');
-  const ct = tr.slice(tr.indexOf('  _spawnCombatTracer('), tr.indexOf('\n  }\n', tr.indexOf('  _spawnCombatTracer(')));
-  const ret = ct.indexOf('if (!hit) return;'); const gl = ct.indexOf('this._spawnHitGlow(ids.target');
-  assert(ret > 0 && gl > ret, 'T6b każde trafienie (z id celu) → biały błysk na modelu celu');
-  const hg = body('  _spawnHitGlow(vesselId, tw, delay = 0) {');
-  assert(/kind: 'hitGlow', lifetime: HIT_GLOW\.MS/.test(hg) && /color: HIT_GLOW\.COLOR/.test(hg) && /AdditiveBlending/.test(hg),
-    'T6c rodzaj `hitGlow`, 200 ms, biały, addytywnie');
-  assert(/ef\.mesh\.position\.copy\(e\.sprite\.position\)/.test(hg) && /hitGlowWorldSize\(/.test(hg), 'T6d za sprite\'em celu, rozmiar dopasowany do modelu (z podłogą)');
+  assert(!/_spawnCombatTracer|_spawnHitGlow/.test(tr) && /this\._cvFxRoundFx\(events, pace\)/.test(fx),
+    'T6 CV-Z: błysku na modelu i dawnych smug nie ma w źródle; salwa idzie do silnika FX');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
