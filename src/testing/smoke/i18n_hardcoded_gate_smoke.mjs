@@ -75,8 +75,9 @@ console.log('\nT2 — zapadka PŁONIE, gdy baseline nie pokrywa stanu');
 
 console.log('\nT3 — ubytek długu jest raportowany (zapadka w obie strony)');
 {
-  const { out } = run({ KOSMOS_I18N_BASELINE: JSON.stringify({ 'src/ui/WarOverlay.js': 99 }) });
-  assert(/Baseline do obniżenia/.test(out) && /WarOverlay\.js: 1 \(baseline 99/.test(out),
+  // K2: plik-wzorzec POIModal (1 literał DOM, stabilny) — WarOverlay spłacił swój dług (Finding 725) i wypadł z baseline.
+  const { out } = run({ KOSMOS_I18N_BASELINE: JSON.stringify({ 'src/ui/POIModal.js': 99 }) });
+  assert(/Baseline do obniżenia/.test(out) && /POIModal\.js: 1 \(baseline 99/.test(out),
     'T3: spłacony dług podpowiada obniżenie progu (baseline nie rośnie po cichu)');
 }
 

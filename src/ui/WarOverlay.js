@@ -13,6 +13,13 @@ import { t, getName, getDesc } from '../i18n/i18n.js';
 // binarny (D-WPR-4), więc gracz dostaje dokładnie tyle lat, ile nałoży silnik. Precedens
 // importu pokrętła balansu do UI: `DiplomacyOverlay` i `NAP_RENEW_WINDOW_YEARS` (DS-2/C2).
 import { REPARATIONS_YEARS } from '../data/OpinionModifierData.js';
+// ARC KONSOLE K2 — Wojny na zestawie konsoli (FEATURES.consoleDiplomacy); OFF = dzisiejszy rysunek niżej.
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { isKitScreen } from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo } from './ConsoleKit.js';
+import { drawWarConsole } from './WarConsoleView.js';
+// Finding 735 — jedyny kod dźwigni «wymuś starcie / desant» (woła je ta ścieżka OFF i KOSMOS.debug.war.*).
+import { forceWarBattle, forceWarInvasion } from './WarConsoleLogic.js';
 
 const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -22,6 +29,8 @@ const MASK   = '???';
 const ROW_H       = 15;   // wiersz listy ciał
 const MARK_RECAP   = '↩';  // zwrot zdobyczy — legenda pod listami (brak miejsca na pełny opis w wierszu)
 const MARK_LOCKED  = '🔒'; // ciało domowe — nie podlega negocjacji
+
+const kitOn = () => isKitScreen('war', GAME_CONFIG.FEATURES);
 
 export class WarOverlay extends BaseOverlay {
   constructor() {
@@ -43,6 +52,12 @@ export class WarOverlay extends BaseOverlay {
     // Wysokość treści prawej kolumny z POPRZEDNIEJ klatki — pozwala sklampować scroll
     // PRZED rysowaniem (patrz `_drawRight`). `null` = jeszcze nie rysowano.
     this._contentHRight = null;
+    // K2 — konsola: strefy ostatniej klatki, tryb bohatera (null = wybór automatyczny: stół, gdy na stole są warunki)
+    this.consoleZones = null;
+    this._consoleListRect = null;
+    this._consoleTableRect = null;
+    this._consoleTooltip = null;
+    this._heroMode = null;
   }
 
   show(opts = {}) {
@@ -60,6 +75,8 @@ export class WarOverlay extends BaseOverlay {
       this._evalKey = null;
       this._scrollRight = 0;
     }
+    // K2 — depesza „Kontrpropozycja” to negocjacje: konsola otwiera bohatera na stole pokoju
+    if (opts?.warId) this._heroMode = 'table';
     if (!this._selectedId && ws) {
       const active = ws.listActive();
       if (active.length > 0) this._selectedId = active[0].id;
@@ -71,6 +88,14 @@ export class WarOverlay extends BaseOverlay {
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    if (kitOn()) {
+      // K2 — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawWarConsole(this, ctx, W, H); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
 
     ctx.fillStyle = bgAlpha(0.40);
@@ -257,7 +282,7 @@ export class WarOverlay extends BaseOverlay {
     // Casus belli
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Casus Belli', x + pad, iy);
+    ctx.fillText(t('warOverlay.casusBelli'), x + pad, iy);   // Finding 725 — przez t() (PL/EN bez zmian)
     iy += 16;
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
@@ -671,8 +696,18 @@ export class WarOverlay extends BaseOverlay {
           this._tableKey = null;
           this._evalKey = null;
           this._scrollRight = 0;
+          this._heroMode = null;   // K2 — nowa wojna: tryb bohatera znów automatyczny
         }
         this._selectedId = zone.data.warId;
+        break;
+      case 'tab':   // K2 — czip podzakładki w nagłówku konsoli (jak klik w pas subnav: przełącz overlay grupy)
+        if (zone.data.id && zone.data.id !== 'war') window.KOSMOS?.overlayManager?.openPanel?.(zone.data.id);
+        break;
+      case 'hero_mode':   // K2 — [ PRZEBIEG WOJNY ] / [ STÓŁ POKOJU ] w bohaterze konsoli
+        this._heroMode = zone.data?.mode === 'table' ? 'table' : 'status';
+        this._scrollRight = 0;
+        break;
+      case 'action_blocked':   // K2 — wyłączony czip (blokada po odmowie): strefa tylko dla podpowiedzi, bez skutku
         break;
       case 'peace_toggle': {
         const id = zone.data?.bodyId;
@@ -703,39 +738,29 @@ export class WarOverlay extends BaseOverlay {
         // czyli dosłownie wywołanie sprzed tego slice'u.
         if (dipl) dipl.offerPeace(zone.data.empireId, 'player_war_panel', { terms: this._buildTerms() });
         break;
-      case 'force_battle': {
-        // Debug: rozstrzygnij bitwę natychmiast (niezależnie od tick/pauzy)
-        if (!ws) break;
-        const res = ws.forceBattle(zone.data.warId);
-        if (!res.success) {
-          console.warn('[WarOverlay] Force battle failed:', res.reason);
-        } else {
-          console.log('[WarOverlay] Bitwa rozstrzygnięta:',
-            `zwycięzca=${res.result.winner}, straty obcy=${res.result.lossesA}, straty gracz=${res.result.lossesB}`);
-        }
+      case 'force_battle':
+        // Debug: rozstrzygnij bitwę natychmiast (niezależnie od tick/pauzy). K2 — kod w `WarConsoleLogic.forceWarBattle`
+        // (ten sam woła KOSMOS.debug.war.forceBattle); konsola tego przycisku nie rysuje (Finding 735).
+        if (ws) forceWarBattle(zone.data.warId);
         break;
-      }
-      case 'force_invasion': {
-        // Debug: od razu desantuj wrogie jednostki na planecie gracza (pomija bitwę kosmiczną)
-        const invSys = window.KOSMOS?.invasionSystem;
-        const homePlanet = window.KOSMOS?.homePlanet;
-        if (!invSys || !homePlanet) {
-          console.warn('[WarOverlay] Force invasion: brak invasionSystem lub homePlanet');
-          break;
-        }
-        const result = invSys.launchInvasion(zone.data.empireId, homePlanet.id, 3);
-        if (!result.success) {
-          console.warn('[WarOverlay] Force invasion failed:', result.reason);
-        } else {
-          console.log('[WarOverlay] Desant wykonany:', result.landed.length, 'jednostek');
-        }
+      case 'force_invasion':
+        // Debug: od razu desantuj wrogie jednostki na planecie gracza (pomija bitwę kosmiczną). K2 — `forceWarInvasion`.
+        forceWarInvasion(zone.data.empireId);
         break;
-      }
     }
   }
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (kitOn()) {
+      // K2 — geometria wyłącznie ze stref ostatniej klatki (bez window.inner*): lista → _scrollLeft, stół pokoju → _scrollRight.
+      const f = this.consoleZones?.frame;
+      if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+      const inR = (r) => !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+      if (inR(this._consoleListRect)) this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
+      else if (inR(this._consoleTableRect)) this._scrollRight = Math.max(0, this._scrollRight + delta * 0.5);
+      return true;
+    }
     const { ox, oy, ow, oh } = this._getOverlayBounds(
       Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
       Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))

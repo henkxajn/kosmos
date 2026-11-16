@@ -13,6 +13,9 @@
 // parytet i18n wszystkich diplo.mod.* + nowych kluczy.
 
 import '../headless/env.js';   // MUST be first
+// ARC KONSOLE K2 — keeper przypina DZISIEJSZY panel (flaga OFF); konsolę pinuje console_diplomacy_smoke.
+import { GAME_CONFIG } from '../../config/GameConfig.js';
+GAME_CONFIG.FEATURES.consoleDiplomacy = false;
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };

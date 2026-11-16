@@ -3,7 +3,8 @@
 // Wiersz dwulinijkowy: kropka archetypu (barwa tożsamości imperium — dana z `EmpireData`, tylko od `contact`; poniżej rola dim),
 // nazwa w mgle, pod nią etykieta poziomu wywiadu, archetyp po prawej (od `contact`). Zaznaczenie, hover, przycięcie, przewijanie
 // i strefy — `ConsoleKit.drawList` (podkreślenie primary + nawiasy narożne). Reguły mgły i treść wiersza — `EmpireListLogic`.
-// Hak `extra(ctx, view, rect, state)` — Dyplomacja dorysuje w K2 swój stan relacji / napięcie w tym samym wierszu.
+// Hak `extra(ctx, view, rect, state)` — dorysowanie w wierszu. K2: `line1Right(view)` → `{ text, tone }` — prawy napis pierwszej
+// linii (Dyplomacja: stan relacji · napięcie); nazwa jest skracana o jego szerokość. Bez opcji — wiersz jak w K0b.
 
 import { THEME } from '../config/ThemeConfig.js';
 import { drawList, revealScroll } from './ConsoleKit.js';
@@ -19,9 +20,9 @@ const font = (size, bold = false) => `${bold ? 'bold ' : ''}${size}px ${THEME.fo
  * Lista imperiów w prostokącie. `views` — `EmpireListLogic.empireRowView` (id, name, masked, levelKey, levelTone, archName,
  * archColor). Zwraca wynik `drawList` (`zones` typu 'row' z id imperium, `contentH`, `scroll` po klamrze).
  * @param {{ selectedId?:string|null, hoverId?:string|null, scroll?:number, levelLabel:(view)=>string,
- *           extra?:(ctx, view, rect, state)=>void }} o
+ *           extra?:(ctx, view, rect, state)=>void, line1Right?:(view)=>({text:string,tone?:string}|null) }} o
  */
-export function drawEmpireList(ctx, rect, views, roles, { selectedId = null, hoverId = null, scroll = 0, levelLabel, extra = null } = {}) {
+export function drawEmpireList(ctx, rect, views, roles, { selectedId = null, hoverId = null, scroll = 0, levelLabel, extra = null, line1Right = null } = {}) {
   const renderRow = (c, v, r, st) => {
     const cy1 = r.y + 13, cy2 = r.y + 26;
     c.textBaseline = 'middle';
@@ -38,11 +39,22 @@ export function drawEmpireList(ctx, rect, views, roles, { selectedId = null, hov
       archW = c.measureText(a).width + 8;
       c.textAlign = 'left';
     }
+    // K2 — prawy napis pierwszej linii (opcjonalny)
+    let rightW = 0;
+    const r1 = line1Right ? line1Right(v) : null;
+    if (r1?.text) {
+      c.font = font(THEME.fontSizeSmall);
+      c.fillStyle = roles[r1.tone] ?? roles.dim; c.textAlign = 'right';
+      const s1 = truncateText(String(r1.text), Math.floor(r.w * 0.5), (s) => c.measureText(s).width);
+      c.fillText(s1, r.x + r.w - PAD_X, cy1);
+      rightW = c.measureText(s1).width + 8;
+      c.textAlign = 'left';
+    }
     // nazwa (mgła: „???” w roli dim)
     c.font = font(THEME.fontSizeNormal, true);
     c.fillStyle = v.masked ? roles.dim : roles.primary;
     c.globalAlpha = st.sel || st.hov || v.masked ? 1 : 0.9;
-    c.fillText(truncateText(v.name, r.w - 2 * PAD_X - 10, (s) => c.measureText(s).width), r.x + PAD_X + 10, cy1);
+    c.fillText(truncateText(v.name, r.w - 2 * PAD_X - 10 - rightW, (s) => c.measureText(s).width), r.x + PAD_X + 10, cy1);
     c.globalAlpha = 1;
     // poziom wywiadu
     c.font = font(THEME.fontSizeSmall);

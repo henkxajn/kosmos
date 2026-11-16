@@ -47,6 +47,9 @@ import { GameCore } from '../headless/GameCore.js';
 import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
 import EntityManager from '../../core/EntityManager.js';
 import { TERRITORIAL_MAX_SHARE, TERRITORIAL_BASE_VALUE } from '../../data/AcceptanceWeightData.js';
+// ARC KONSOLE K2 — keeper przypina DZISIEJSZY panel Wojen (flaga OFF); konsolę pinuje console_diplomacy_smoke.
+import { GAME_CONFIG as GC_K2 } from '../../config/GameConfig.js';
+GC_K2.FEATURES.consoleDiplomacy = false;
 
 // Klasa panelu — dynamicznie, żeby brak/awaria importu nie zabiła kolorów pinów.
 let WarOverlayMod = null;

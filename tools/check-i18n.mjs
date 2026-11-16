@@ -390,7 +390,7 @@ const HARDCODED_BASELINE = process.env.KOSMOS_I18N_BASELINE
   'src/ui/POIModal.js':              1,  // DOM (269): „[unsupported field: …]" — komunikat dev w DOM.
   'src/ui/PopulationOverlay.js':     1,
   'src/ui/UnitCardPanel.js':         4,
-  'src/ui/WarOverlay.js':            1,
+  // ARC KONSOLE K2 (2026-11-16): 'src/ui/WarOverlay.js' 1 → 0 i WYPADA — Finding 725 (nagłówek „Casus Belli” przez t()).
 };
 
 const hardcodedNew = [];

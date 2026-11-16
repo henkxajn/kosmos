@@ -54,6 +54,9 @@ import {
   VERB_ACCEPTANCE, RECENT_REFUSAL_YEARS, ACCEPTANCE_TERMS, TERM_STATUS,
 } from '../../data/AcceptanceWeightData.js';
 import { resolveWeights } from '../../utils/AcceptanceMath.js';
+// ARC KONSOLE K2 — keeper przypina DZISIEJSZE panele Dyplomacji / Wojen (flaga OFF); konsolę pinuje console_diplomacy_smoke.
+import { GAME_CONFIG as GC_K2 } from '../../config/GameConfig.js';
+GC_K2.FEATURES.consoleDiplomacy = false;
 
 // Symbole rodzące się w C4 — dynamicznie, żeby brak importu nie zabił kolorów pinów.
 let MathMod = null, WarOverlayMod = null, RefusalMod = null;

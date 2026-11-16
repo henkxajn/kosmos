@@ -183,6 +183,7 @@ import { rngWatchToggle, countGameDraws } from '../debug/RngWatch.js';   // ARC 
 import { printStrikeWaves, printSquadronNeeds, squadronMaxShips } from '../utils/StrikeWavePlanner.js';   // AI STRIKES BACK S3 (SB53) — fala desantu AI (odczyt konsoli)
 import { consoleKitDebugHelpers } from '../debug/ConsoleKitDebug.js';   // ARC KONSOLE K0a — pomocniki konsoli przeglądarki
 import { shipHologramDebugHelpers } from '../debug/ShipHologramDebug.js'; // ARC KONSOLE K1a — podgląd hologramu statku
+import { warDebugHelpers } from '../debug/WarDebug.js';   // ARC KONSOLE K2 (Finding 735) — wymuś starcie / desant tylko z konsoli przeglądarki
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -631,6 +632,9 @@ export class GameScene {
       // ARC KONSOLE K1a — KOSMOS.debug.holo.open() / next() / prev() / plan() / spin() / silhouette() / info() / close(),
       //   pokrętła KOSMOS.debug.holo.tune.edgeAngle = 50 (edgeAlpha, rim, scan, spin, budgetMs, xray) — src/debug/ShipHologramDebug.js.
       ...shipHologramDebugHelpers({ getUIManager: () => this.uiManager }),
+      // ARC KONSOLE K2 (Finding 735) — KOSMOS.debug.war.forceBattle() / forceInvasion() / target() — zaznaczona wojna panelu Wojen
+      //   (bez zaznaczenia: pierwsza aktywna); dawne przyciski «(debug)» nie są rysowane na konsoli — src/debug/WarDebug.js.
+      ...warDebugHelpers({ getUIManager: () => this.uiManager }),
       // #640 / #675 — okna ogłoszeń (bez cudzysłowów; pokrętła na sesję — F5 przywraca wartości domyślne):
       //   KOSMOS.debug.battleGrace(1.5)   — okno łaski przed banerem i linią bitwy w rundach oglądanego starcia (0 = bez okna,
       //                                     ogłoszenie od razu — jak przed krokiem); bez argumentu — odczyt (rundy i ms).

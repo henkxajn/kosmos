@@ -229,7 +229,10 @@ try {
       safe(() => CPD.drawSubNav(r.ctx, W, active));
       return { h: safe(() => CPD.getSubNavHeight()), hit: safe(() => CPD.hitTestSubNav(10, 60, W, active)), drew: r.fills.length > 0 || r.texts.length > 0 };
     };
+    // K2: Dyplomacja jest ekranem zestawu przy consoleDiplomacy — kontrola „bez zestawu” wyłącza tę flagę jawnie
+    const prevDip = F.consoleDiplomacy; F.consoleDiplomacy = false;
     const kit = sub('intel', true), dip = sub('diplomacy', true), offI = sub('intel', false);
+    F.consoleDiplomacy = prevDip;
     assert(kit.h === 0 && kit.hit === null && !kit.drew, `S2 Wywiad (zestaw): wysokość 0, trafienie null, nic nie rysuje`);
     assert(dip.h > 0 && dip.drew && offI.h > 0 && offI.drew,
       `S3 KONTROLA: Dyplomacja (bez zestawu) i Wywiad przy fladze OFF — pas jak dziś (wys. ${dip.h} / ${offI.h})`);

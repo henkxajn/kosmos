@@ -13,6 +13,11 @@ import { treatyExpiryYear } from '../systems/diplomacy/RelationsModel.js';
 // DS-2 / C2 — okno odnowienia paktu. Panel liczy z niego „ile jeszcze do otwarcia okna”,
 // czytając JEDNO źródło wartości (pin P14 trzyma poza UI katalog `Acceptance*`, nie ten plik).
 import { NAP_RENEW_WINDOW_YEARS } from '../data/OpinionModifierData.js';
+// ARC KONSOLE K2 — Dyplomacja na zestawie konsoli (FEATURES.consoleDiplomacy); OFF = dzisiejszy rysunek niżej.
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { isKitScreen } from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo } from './ConsoleKit.js';
+import { drawDiplomacyConsole } from './DiplomacyConsoleView.js';
 
 const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -94,11 +99,17 @@ const TREATY_NAME_KEY = {
   alliance:        'treaty.alliance',
 };
 
+const kitOn = () => isKitScreen('diplomacy', GAME_CONFIG.FEATURES);
+
 export class DiplomacyOverlay extends BaseOverlay {
   constructor() {
     super(null);
     this._selectedId = null;
     this._scrollLeft = 0;
+    this.consoleZones = null;      // K2 — strefy konsoli z ostatniego draw() (wejście i gniazdo paska walki czytają je stąd)
+    this._consoleListRect = null;
+    this._consoleTooltip = null;
+    this._revealPending = false;
     this._flash = null;   // S3.4 — transient komunikat akcji dyplomatycznej
 
     // S3.4 — flash przy odpowiedzi AI na propozycję traktatu.
@@ -125,11 +136,20 @@ export class DiplomacyOverlay extends BaseOverlay {
       const visible = dipl.listPlayerRelations().find(r => intelSys.isAtLeast(r.empireId, 'rumor'));
       if (visible) this._selectedId = visible.empireId;
     }
+    this._revealPending = true;    // K2 — konsola odsłania zaznaczony wiersz przy otwarciu
   }
 
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    if (kitOn()) {
+      // K2 — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawDiplomacyConsole(this, ctx, W, H, { treatyNameKey: TREATY_NAME_KEY }); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
 
     ctx.fillStyle = bgAlpha(0.40);
@@ -711,11 +731,23 @@ export class DiplomacyOverlay extends BaseOverlay {
       case 'propose_alliance':
         if (dipl) dipl.proposeTreaty(zone.data.empireId, 'alliance');
         break;
+      case 'tab':   // K2 — czip podzakładki w nagłówku konsoli (jak klik w pas subnav: przełącz overlay grupy)
+        if (zone.data.id && zone.data.id !== 'diplomacy') window.KOSMOS?.overlayManager?.openPanel?.(zone.data.id);
+        break;
+      case 'action_blocked':   // K2 — wyłączony czip akcji: strefa tylko dla podpowiedzi z powodem (bez skutku, jak dziś szary przycisk)
+        break;
     }
   }
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (kitOn()) {
+      // K2 — geometria wyłącznie ze stref ostatniej klatki (bez window.inner*); klamra przewijania w drawList.
+      const f = this.consoleZones?.frame, r = this._consoleListRect;
+      if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
+      return true;
+    }
     const { ox, oy, ow, oh } = this._getOverlayBounds(
       Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
       Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))

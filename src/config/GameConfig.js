@@ -563,6 +563,14 @@ export const GAME_CONFIG = {
     //     [ WYCZYŚĆ ]), pas (budowy + Surge, oczekujące, rezerwa). Te same typy stref i handlery co dziś.
     //   OFF = dzisiejsza Stocznia co do bitu.
     consoleShipyard: true,
+    //   consoleDiplomacy (K2, D-K-20; Findingi 724, 725-wojny, 727, 735): ON (razem z consoleKit) = Dyplomacja i Wojny na szablonie
+    //     4-strefowym — cała grupa [ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ] ma czipy w nagłówku (pasa subnav już nie ma). Dyplomacja: wspólna
+    //     lista imperiów (EmpireListLogic, jak Wywiad), bohater = opinia i napięcie jako instrumenty + status + mini-mapa (ta sama mgła),
+    //     inspektor = rozbicie opinii, traktaty, pamięć (etykiety zamiast id silnika), czipy akcji z dzisiejszymi regułami; pas =
+    //     ultimatum / komunikat. Wojny: lista wojen, bohater = stół pokoju albo przeciąganie liny wyczerpania, inspektor = casus belli,
+    //     bitwy, [ ZAPROPONUJ POKÓJ ]; przyciski debug WYMUŚ STARCIE / DESANT tylko jako KOSMOS.debug.war.forceBattle() / forceInvasion().
+    //   OFF = dzisiejsza Dyplomacja i Wojny co do bitu (z przyciskami debug — do KZ).
+    consoleDiplomacy: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

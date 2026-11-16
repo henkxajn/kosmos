@@ -330,6 +330,45 @@ export function drawChipRow(ctx, x, y, maxW, chips, roles, { hoverId = null } = 
   return { zones, h: rows.length ? rows.length * (K.CHIP_H + K.CHIP_GAP) - K.CHIP_GAP : 0 };
 }
 
+/**
+ * K2 — pojedynczy czip akcji „[ LABEL ]” na pełną szerokość `w` (inspektor): normal (primary) / danger (alert) / wyłączony (dim).
+ * Zwraca prostokąt czipu — ekran sam dokłada strefę (dzisiejszy typ akcji albo strefę podpowiedzi wyłączonego czipu).
+ * @param {{ label:string, enabled?:boolean, danger?:boolean, hover?:boolean }} c
+ */
+export function drawActionChip(ctx, x, y, w, roles, { label, enabled = true, danger = false, hover = false } = {}) {
+  const K = CONSOLE_KIT;
+  const r = { x, y, w, h: K.CHIP_H };
+  const col = !enabled ? roles.dim : danger ? roles.alert : roles.primary;
+  ctx.save();
+  ctx.font = font(THEME.fontSizeSmall);
+  ctx.textBaseline = 'middle';
+  if (hover && enabled) { ctx.globalAlpha = K.HOVER_ALPHA; ctx.fillStyle = col; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.globalAlpha = 1; }
+  ctx.fillStyle = col;
+  ctx.fillText(truncateText(chipLabel(label), Math.max(0, w - 2 * K.CHIP_PAD_X), (s) => ctx.measureText(s).width), r.x + K.CHIP_PAD_X, r.y + r.h / 2);
+  ctx.restore();
+  return r;
+}
+
+/**
+ * K2 — podpowiedź konsoli (np. powód wyłączonej akcji): tło motywu, ramka 1 px dim, tekst w roli `tone`; pod / nad kotwicą
+ * `{x, y}` w klamrze prostokąta `frame` (ramy ekranu). Bez cienia poświaty.
+ */
+export function drawConsoleTooltip(ctx, tip, frame, roles, { tone = 'alert' } = {}) {
+  if (!tip?.text) return;
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.font = font(THEME.fontSizeSmall);
+  ctx.textBaseline = 'middle';
+  const pad = 6, h = 20, w = Math.ceil(ctx.measureText(tip.text).width) + 2 * pad;
+  const x = Math.max(frame.x, Math.min(tip.x, frame.x + frame.w - w));
+  const y = tip.y + h > frame.y + frame.h ? tip.y - h - (tip.above ?? 22) : tip.y;
+  ctx.globalAlpha = 0.94; ctx.fillStyle = THEME.bgPrimary; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
+  ctx.strokeStyle = roles.dim; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = toneColor(roles, tone);
+  ctx.fillText(tip.text, x + pad, y + h / 2);
+  ctx.restore();
+}
+
 // ── Lista ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
