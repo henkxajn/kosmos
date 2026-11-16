@@ -658,7 +658,6 @@ export class WarOverlay extends BaseOverlay {
   _onHit(zone) {
     const dipl = window.KOSMOS?.diplomacySystem;
     const ws = window.KOSMOS?.warSystem;
-    const reg = window.KOSMOS?.empireRegistry;
 
     switch (zone.type) {
       case 'close':
