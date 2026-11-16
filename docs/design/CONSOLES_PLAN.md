@@ -1,8 +1,9 @@
 # CONSOLES — visual reform of the full-screen tabs (plan and findings registry)
 
-Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); next step K0b (Intel).** Phase A
+Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
+owner PASS 2026-11-16 — §9); next step K1a (ship hologram renderer).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
-the K0a gate). Register: findings #723–#735 filed; **next free finding number: 736**.
+the K0a gate). Register: findings #723–#736 filed; **next free finding number: 737**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
 allowlist, not game code); 41 untracked files, all older than 2026-11-02, none from the combat-visuals arc.
 Handover: `C:\Users\Komputer\kosmos-handover\consoles-phase-a\` (`STOP_A.md`, `kontakt_now.html`, `shots_now/`,
@@ -317,13 +318,13 @@ Hit zones stay per screen (first-hit-wins in BaseOverlay; Command keeps its own 
 
 ## 5. Findings (next free number verified: **723**; the brief expected 612 — the CV arc filed #612–#722)
 
-This plan files **#723–#735**. **Next free finding number: 736.**
+This plan files **#723–#736**. **Next free finding number: 737.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
 | **723** | 🟠 | **The Shipyard ignores the 4-zone idea entirely**: one centred 560 px column (`ShipyardOverlay.js:82`) with build list, reserve and the ship designer stacked in one scroll; the designer (hull picker, slots, module picker, stats, SAVE) is reachable only by scrolling past the reserve, and its pinned action bar floats at the bottom of an otherwise empty screen | `shots_now/*/2x_shipyard_*.jpg`; `ShipyardOverlay.js:91-154` | K1 |
 | **724** | 🟠 | **Diplomacy shows raw engine ids**: the AI stance prints `fsm.state` (`NEGOTIATING`, `IDLE`…) verbatim and the relation memory prints event keys (`research_intrusion`, `peace_offered`) | `DiplomacyOverlay.js:266-270`; `shots_now/amber_noir/30_diplomacy.jpg` | K2 |
-| **725** | ⚪ | **Hard-coded literals bypassing i18n on tab screens**: Intel `(wymaga skanu naziemnego)` `:333`, `Ostatnie incydenty` ~`:346`, `(brak)` ~`:356`; Production demand headers `Źródło/Towar/Potrzeba` `EconomyOverlay.js:1774-1776`; Trade `Kr/rok` `:603` and local prices shown as raw resource ids `:696/:706`; War heading `Casus Belli`; Budget tax-effect labels inline PL/EN `:3105` | files as listed | the step that touches each screen |
+| **725** | ⚪ (Intel part ✅ K0b) | **Hard-coded literals bypassing i18n on tab screens**: Intel `(wymaga skanu naziemnego)` `:333`, `Ostatnie incydenty` ~`:346`, `(brak)` ~`:356`; Production demand headers `Źródło/Towar/Potrzeba` `EconomyOverlay.js:1774-1776`; Trade `Kr/rok` `:603` and local prices shown as raw resource ids `:696/:706`; War heading `Casus Belli`; Budget tax-effect labels inline PL/EN `:3105` | files as listed | the step that touches each screen |
 | **726** | ⚪ | **Module picker shows raw keys for two module groups**: `UnitDesignOverlay` category labels are a local PL/EN map (`:37-68`) with no `shield` / `troop` entries → those groups render their raw slotType with no icon (`catLabel ?? cat`, `:436-439`) | `UnitDesignOverlay.js:37-68, 436-439` | K1 |
 | **727** | ⚪ | **Diplomacy action band collides with the clock cluster**: the bottom-right action button («Zaproponuj sojusz») sits under the always-on clock/bell cluster drawn over every tab | `shots_now/amber_noir/30_diplomacy.jpg` | K2 (console frame reserves the clock rect) |
 | **728** | ⚪ | **Medium and Large cargo hulls show the same model**: `nonwarp_medium_cargo.glb` ≡ `nonwarp_large_cargo.glb` (identical md5 `43be8bba…`); also `cargo3d.glb` ≡ `default.glb` (unused) | `md5sum assets/models/ships/*.glb` | art / model pipeline (no step) |
@@ -333,6 +334,7 @@ This plan files **#723–#735**. **Next free finding number: 736.**
 | **732** | ⚪ | **Production colony chips silently drop colonies that do not fit** (`if (cx + cw > x + w - pad) break;` `EconomyOverlay.js:1086`) — with enough colonies + stations the rest cannot be selected | `EconomyOverlay.js:1080-1090` | K4 (list replaces the chips) |
 | **733** | ⚪ | **Economy tile alert and Budget disagree on «net»**: the nav alert uses trade + tax − fleet upkeep (`NavPeekProviders.js:33-36`), Budget subtracts labor and unit upkeep too (`EconomyOverlay.js:2974`) — the tile can stay calm while Budget shows a deficit | files as listed | mechanics/UI (owner: K3 or separate) |
 | **734** | ⚪ | **Dead and dormant tab code** (do not reskin): `FleetTabPanel.js` 2678 + `FleetPanel.js` 474 (zero importers outside tests); Command flag-OFF map ~1200 LOC + `_drawLeftFleets`; EconomyOverlay priority/manual modes ~700 LOC; ColonyOverlay V1 workforce + `_stationMode`; `UIManager._drawCivPanel` never called, so `CIV_TABS[].key` hints are stale data (Civ `V`, Dyson `D`, Diplomacy `Y`, Trade `H`, Colonies `C`); PopulationOverlay unreachable | agents' call-site greps; `UIManager.js:2663` | D-K-18 (refactor before each K step) |
+| **736** | ⚪ | **Combat strip overflows its console header slot with 2–3 simultaneous battles**: one battle line (21 px) fits the 30 px header slot (D-K-17), but each extra battle adds a line (`MAX_LINES` 3, `stripLayout`), so the block grows below the header over the top of the inspector | `combatSlotInsets` (`CombatStripLogic.js`), `stripLayout`; K0b review (not staged) | later (owner: collapse to one «⚔ N ▼» chip in the slot) |
 | **735** | 🟠 | **War screen ships two debug actions to the player, unconditionally**: «⚡ WYMUŚ STARCIE (debug)» → `warSystem.forceBattle` and «🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)» are drawn and clickable for every active war (`WarOverlay.js:380-386`, `:707`; i18n `warOverlay.btnForceBattle/btnForceInvasion`) — a cheat in the player UI | `shots_now/*/32_war.jpg`; files as listed | K2 (owner: hide behind a debug flag or `KOSMOS.debug.*`) |
 
 ## 6. Proposed cut, decisions, effort
@@ -460,3 +462,44 @@ two tuning rounds (handover `C:\Users\Komputer\kosmos-handover\consoles-k0a\`: `
 - **Deviations**: the combat strip is not moved into its header slot yet (slot reserved; first kit screen moves it); the
   reel recorder (F10) captures no frames while the composer is skipped (glass / opaque only); `tune.scrim` is the default
   scrim — a per-screen `scrimAlpha` in `CONSOLE_SCREEN_SPECS` would override it.
+
+## 9. K0b — delivered (Intel on the console template)
+
+**Commits `c36ac18` refactor(K-pre Intel)** (D-K-18: IntelOverlay's two empty `EventBus.on` listeners + import removed) **and
+`b4b71a4` feat(K0b)** · flag `FEATURES.consoleIntel` (ON; works only together with `consoleKit` — `isKitScreen`; OFF = today's
+Intel) · owner PASS 2026-11-16 after one review round (handover `C:\Users\Komputer\kosmos-handover\consoles-k0b\`: `STOP_K0b.md`,
+`kontakt_k0b.html`, `probes/{k0b,toggle_check}.mjs`, `shots/{before,after,after_1280,after_r2}`; trees outside the repo in
+`E:\kosmos-work\consoles-k0b\{before,after}`).
+
+- **Template**: header WYWIAD/INTEL + group chips `[ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ]` (click = `openPanel`, like the subnav) +
+  `[ x ]`. `ConsoleLayoutLogic.CONSOLE_KIT_SCREENS` / `isKitScreen(id, features)` gate `CivPanelDrawer.drawSubNav` / `hitTestSubNav` /
+  `getSubNavHeight` — no 24 px strip over a kit screen (Diplomacy and War keep it until K2). Hit zones keep today's types
+  (`close`, `select_empire`) plus `tab`; geometry only from `consoleZones` (wheel handler reads the last frame's zones).
+- **D-K-17 (deferred from K0a)**: `UIManager._combatStripInsets` seats the combat strip in `zones.combatSlot` on kit screens only
+  (`CombatStripLogic.combatSlotInsets`); map and other screens unchanged. **Slot 280 → 520 px** (approved deviation 1: the line
+  with [ Reżyser ] [ Obserwuj ] [ ▼ ] is ≈ 510 px). 2–3 battles overflow the slot → **Finding 736**.
+- **Shared empire list** (for K2 Diplomacy): `EmpireListLogic` (rank, mask, `empireRowView`, sort, default selection,
+  `intelDossier` — every foreign field behind today's gates, `pairFractions`, `systemMapPoints`, `fitMapPoints`) +
+  `ConsoleEmpireList` (two-line rows on `ConsoleKit.drawList`, which gains `rowH` / `renderRow`, backward compatible).
+- **Hero**: dossier (name, archetype + description, 4 intel steps), balance of power as YOU | THEM pairs (combat strength,
+  systems — theirs = length of today's known-systems list) with centre bars, verdict at `detailed` only, and (owner choice b)
+  a **fog-safe mini-map**: only the dossier's known systems and the player's systems, galaxy x/y plane, theme roles.
+  Own values are shown at every intel level (approved deviation 2 — not intel).
+- **Inspector AKTA/FILE** (owner review): known systems (capital), armed / fleet limit, reserve, recent incidents; the hero's
+  strength is not repeated and the full-width bar under «Jednostki bojowe» is gone.
+- **Readability (owner choice C+A)**: console-only roles `ConsoleRolesLogic.consoleRoles` (dim mixed towards `textPrimary`,
+  kit knob `DIM_LIFT` 0.35) and a theme-bg halo `applyConsoleHalo` (kit knob `HALO_BLUR` 2 px), both via
+  `KOSMOS.debug.consoleKit.tuneKit({...})`; map and HUD roles unchanged.
+- **Finding 725 (Intel part ✅)**: «(wymaga skanu naziemnego)», «Ostatnie incydenty», «(brak)» via `t()` (`intel.needsGroundScan`,
+  `intel.recentIncidents`, `intel.none`) on both paths; PL text identical, EN now translated; i18n baseline IntelOverlay 2 → 0.
+- **Keepers**: `console_intel_smoke` 39/0 — list logic, fog-of-war subset per level (new screen's text ⊆ today's on the same
+  sentinel data; below `detailed` military numbers present in the record change neither text nor fills; a system outside the
+  known list never drawn), chips, subnav gating, strip slot (method executed from its source), wheel without `window.inner*`,
+  725, roles/halo/inspector/mini-map. Fail-first on a `git worktree` at `c36ac18`: 30 red, 9 green = named controls; three leak
+  mutations (name at rumor, military at contact, whole galaxy into the mini-map) turn the fog pins red. K0a keepers green
+  (kit 25/0, layout 33/0); sweep 410/410, `check-i18n` PASS.
+- **Measured / viewed**: contact sheet 5 themes × (high intel, low intel, scrolled list, battle in the header slot), before/after
+  pairs and a 1280×833 control in Amber Noir; no page errors. Owner A/B one-liners validated on the engine:
+  `KOSMOS.debug.consoleKit.off()` → today's Intel, `.on()` → console.
+- **Deviations / notes**: no strip zone on this screen (nothing natural); the scrolled-list frame used 24 synthetic intel records
+  and the battle frame a synthetic encounter fed only to the strip instance (probe-only staging).

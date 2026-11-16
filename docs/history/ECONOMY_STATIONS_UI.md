@@ -988,3 +988,14 @@ GPU. Pomiar: scena pod zakładką 5,7–5,8 ms (live), 0 w glass/opaque; filtr �
 `console_layout` 33/0, `console_scene` 46/0, `console_kit` 25/0; sweep 409/409, `check-i18n` PASS. Następny krok: K0b (Wywiad).
 
 ---
+
+## ARC KONSOLE — K0b: Wywiad na szablonie konsoli (`c36ac18` + `b4b71a4`, bramka właściciela PASS 2026-11-16)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §9. Flaga `FEATURES.consoleIntel` (ON, tylko razem z `consoleKit`). Pierwszy prawdziwy
+ekran zestawu: nagłówek z czipami grupy zamiast pasa subnav (`isKitScreen`), wspólna lista imperiów (`EmpireListLogic` +
+`ConsoleEmpireList` — Dyplomacja w K2), bohater = dossier + układ sił TY | ONI + mini-mapa znanych układów pod mgłą, inspektor AKTA;
+pasek walki w gnieździe nagłówka tylko na ekranach zestawu (D-K-17, gniazdo 520 px); czytelność C+A (rola dim konsoli `DIM_LIFT`,
+poświata `HALO_BLUR`). Finding 725 (część Wywiadu) ✅; NOWE ⚪ 736 (2–3 bitwy wychodzą z gniazda nagłówka). Keeper
+`console_intel_smoke` 39/0 (fail-first: 30 czerwonych, 9 kontroli); sweep 410/410, `check-i18n` PASS. Następny krok: K1a.
+
+---
