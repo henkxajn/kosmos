@@ -7,7 +7,6 @@
 import { BaseOverlay, HEADER_H }   from './BaseOverlay.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ARCHETYPES }     from '../data/EmpireData.js';
-import EventBus           from '../core/EventBus.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
 // W1-3c — czysty opis układu sił (pasmo + procent); logika poza widokiem, żeby dała się testować.
 import { describePowerBalance } from '../utils/ThreatMath.js';
@@ -36,10 +35,6 @@ export class IntelOverlay extends BaseOverlay {
     super(null);
     this._selectedId = null;
     this._scrollLeft = 0;
-
-    // Live refresh — każda zmiana intel odświeża overlay
-    EventBus.on('intel:levelChanged', () => {});   // force re-render w kolejnym tick
-    EventBus.on('empire:created', () => {});
   }
 
   show() {
