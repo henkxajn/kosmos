@@ -2,7 +2,8 @@
 
 Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
 owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); K1b delivered (`574ee3f`, owner PASS
-2026-11-16 after three review rounds — §11); next step K1c (Shipyard on the console template: hologram layer, anchor labels).** Phase A
+2026-11-16 after three review rounds — §11); K1c-A delivered (`301b66b`, owner PASS 2026-11-16 — §12); next step K1c-B (hologram
+canvas layer, spin + drag rotate, row chip [ BUDUJ ], U key → Shipyard designer, tuning).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
 the K0a gate). Register: findings #723–#737 filed; **next free finding number: 738**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
@@ -323,10 +324,10 @@ This plan files **#723–#737**. **Next free finding number: 738.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
-| **723** | 🟠 | **The Shipyard ignores the 4-zone idea entirely**: one centred 560 px column (`ShipyardOverlay.js:82`) with build list, reserve and the ship designer stacked in one scroll; the designer (hull picker, slots, module picker, stats, SAVE) is reachable only by scrolling past the reserve, and its pinned action bar floats at the bottom of an otherwise empty screen | `shots_now/*/2x_shipyard_*.jpg`; `ShipyardOverlay.js:91-154` | K1 |
+| **723** | ✅ K1c-A | **The Shipyard ignores the 4-zone idea entirely**: one centred 560 px column (`ShipyardOverlay.js:82`) with build list, reserve and the ship designer stacked in one scroll; the designer (hull picker, slots, module picker, stats, SAVE) is reachable only by scrolling past the reserve, and its pinned action bar floats at the bottom of an otherwise empty screen | `shots_now/*/2x_shipyard_*.jpg`; `ShipyardOverlay.js:91-154` | K1 |
 | **724** | 🟠 | **Diplomacy shows raw engine ids**: the AI stance prints `fsm.state` (`NEGOTIATING`, `IDLE`…) verbatim and the relation memory prints event keys (`research_intrusion`, `peace_offered`) | `DiplomacyOverlay.js:266-270`; `shots_now/amber_noir/30_diplomacy.jpg` | K2 |
 | **725** | ⚪ (Intel part ✅ K0b) | **Hard-coded literals bypassing i18n on tab screens**: Intel `(wymaga skanu naziemnego)` `:333`, `Ostatnie incydenty` ~`:346`, `(brak)` ~`:356`; Production demand headers `Źródło/Towar/Potrzeba` `EconomyOverlay.js:1774-1776`; Trade `Kr/rok` `:603` and local prices shown as raw resource ids `:696/:706`; War heading `Casus Belli`; Budget tax-effect labels inline PL/EN `:3105` | files as listed | the step that touches each screen |
-| **726** | ⚪ | **Module picker shows raw keys for two module groups**: `UnitDesignOverlay` category labels are a local PL/EN map (`:37-68`) with no `shield` / `troop` entries → those groups render their raw slotType with no icon (`catLabel ?? cat`, `:436-439`) | `UnitDesignOverlay.js:37-68, 436-439` | K1 |
+| **726** | ⚪ (console part ✅ K1c-A; U screen → K1c-B) | **Module picker shows raw keys for two module groups**: `UnitDesignOverlay` category labels are a local PL/EN map (`:37-68`) with no `shield` / `troop` entries → those groups render their raw slotType with no icon (`catLabel ?? cat`, `:436-439`) | `UnitDesignOverlay.js:37-68, 436-439` | K1 |
 | **727** | ⚪ | **Diplomacy action band collides with the clock cluster**: the bottom-right action button («Zaproponuj sojusz») sits under the always-on clock/bell cluster drawn over every tab | `shots_now/amber_noir/30_diplomacy.jpg` | K2 (console frame reserves the clock rect) |
 | **728** | ⚪ | **Medium and Large cargo hulls show the same model**: `nonwarp_medium_cargo.glb` ≡ `nonwarp_large_cargo.glb` (identical md5 `43be8bba…`); also `cargo3d.glb` ≡ `default.glb` (unused) | `md5sum assets/models/ships/*.glb` | art / model pipeline (no step) |
 | **729** | ⚪ | **15 building/icon textures referenced but absent from `assets/`** (404 in the live game): e.g. `assets/buildings/{geothermal,synthesized_food_plant,terraformer,orbital_mine,ai_core,…}.png`, `assets/icons/building_autonomous_spaceport.png` | probe server `notFound` list (`shots/scout_amber/scout.json`); `ls` in the repo | art (no step) |
@@ -657,3 +658,46 @@ since removed; Chrome profiles are in `E:\kosmos-work\consoles-k1b\work`).
   `projectPoints`.
 - Anchor files are missing for 18 keys. Each one costs a 404 when its anchors are first requested. Saving any model in mode 6
   writes a file, an empty one included.
+
+## 12. K1c-A — delivered (Shipyard on the console template)
+
+**Commit `301b66b` feat(K1c-A)** · flag `FEATURES.consoleShipyard` (default ON, works with `consoleKit`; OFF = today's Shipyard bit
+for bit). Owner PASS 2026-11-16 (handover `C:\Users\Komputer\kosmos-handover\consoles-k1c\`: `STOP_K1c-A.md`, `kontakt_k1c_a.html`,
+`shots/{after/<5 themes>, before/amber_noir, after_1280/amber_noir}`, `probes/{k1c, oneliners, sheet}.mjs`; the before/after
+`git worktree` copies were removed at commit time).
+
+- **Files:** new `ShipyardConsoleLogic.js` (pure: delta, role stacks, build state, build target, gates, hull rows, category icons) and
+  `ShipyardConsoleView.js` (four zones + strip, wheel scroll). `ShipyardOverlay.js` gains a console branch in draw / `_onHit` /
+  `handleScroll` / `hide`, a lazy hologram released on close, and `isAnimating` (frames driven from `UIManager`).
+  `ShipAnchorOverlay.drawDesignAnchors` is new (`drawShipAnchors` untouched); `ShipAnchorOverlayLogic` items accept `subs` (stacked
+  lines, backward compatible). `CONSOLE_KIT_SCREENS.shipyard` puts the CombatStrip in the header slot. `UnitDesignOverlay.js` is
+  untouched: its zones are identical with the flag ON and OFF, so the U key and Command Ground keep working.
+- **What moved where:**
+  - header ⚓ + ✕ → STOCZNIA · colony · facility · [ x ]; gates S0/S1 → banner line in the header, same texts and rules;
+  - build cards + the designer's saved list → **designs list** (hull, module count, key stats, build state with reason, [ EDYTUJ ]
+    [ USUŃ ]; select = load);
+  - hull buttons → **hull list** (slot layout «1P+2U», mass, 🔒 tech, 🛰 orbital-only — still selectable for design, as today);
+  - slots, picker, stats preview, SAVE/CLEAR → **inspector** (slots + picker scroll; 2 instruments + kv rows; delta = stats(with) −
+    stats(without) on hover, raw damage / shieldHP for weapons and shields; [ BUDUJ ] [ ZAPISZ ] [ WYCZYŚĆ ] with today's rules and
+    reasons);
+  - builds + surge, pending + cancel, reserve + deploy → **strip** (3 columns 30/30/40 %, each scrolls; pending tooltip kept);
+  - hero = K1a hologram of the current design (D-K-10 live civil swap), one label per non-empty role on the K1b anchors with the
+    stacked module list, [ 3D ] / [ PLAN ].
+- **Findings:** 723 ✅ closed by this layout. 726 fixed in the console picker (`unitDesign.cat.*` PL/EN + icons); the U screen gets it
+  with U → Shipyard (K1c-B, D-K-12).
+- **Keepers:** `console_shipyard_smoke` **71/0** (delta vs independent calc, role stacks, locked hull, 16-case build-state matrix vs
+  today, hit-zone inventory ON ⊇ OFF with handler effects, OFF = today, U screen identical ON/OFF, 726, geometry from `consoleZones`,
+  gate banner in the header band, scroll pruning). Fail-first on a `git worktree` at `1275823`: 46 red / 25 green (named controls and
+  witnesses). Mutations 6/6 red. `w2_deploy_ui_smoke` and `design_action_bar_smoke` set the flag OFF (they pin today's path). K1b 93/0,
+  K1a 58/0, K0 33/25/49; sweep 413/413, `check-i18n` PASS. Live engine (headless Chrome, GPU): 7 frames × 5 themes + before/after +
+  1280×833, 0 console errors; one-liners checked.
+- **Deviations:** 3–5 approved (726 console part only; under a gate the strip hides builds and pending as today; strip 158 px and the
+  hologram still composited in `#ui-canvas`). 1–2 (BUILD = two clicks via the loaded saved design; row select duplicates
+  [ EDYTUJ ]) are resolved in K1c-B: a row chip **[ BUDUJ ]** replaces [ EDYTUJ ].
+
+### 12.1 Inputs for K1c-B
+
+- Hologram on its own canvas layer (§10.1), slow spin + drag rotate, optional local dim (labels over small hulls — Neon Cyber,
+  freighter).
+- Designs row: chip [ BUDUJ ] (today's build rule via `templateBuildState`) replaces [ EDYTUJ ]; row select keeps loading.
+- U key → Shipyard designer (D-K-12), which brings 726 to the U path; tuning from the owner's look.

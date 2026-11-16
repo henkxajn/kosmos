@@ -1040,3 +1040,21 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §11. Bez flagi (gracz bez zmian;
 Następny krok: K1c (Stocznia na szablonie konsoli: warstwa hologramu, etykiety kotwic z listą modułów).
 
 ---
+
+## ARC KONSOLE — K1c-A: Stocznia na szablonie konsoli (`301b66b`, PASS właściciela 2026-11-16)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §12. Flaga `FEATURES.consoleShipyard` (domyślnie ON; OFF = dzisiejsza Stocznia).
+- **Nagłówek:** STOCZNIA · kolonia · stocznia naziemna · [ x ]; bramki S0/S1 jako linia banera; pasek walki w gnieździe nagłówka.
+- **Lista:** zapisane projekty (kadłub, moduły, staty, stan budowy z powodem, [ EDYTUJ ] [ USUŃ ]) i kadłuby («1P+2U», masa, 🔒, 🛰).
+- **Bohater:** hologram projektu (model cywilny zmienia się na żywo), etykieta na rolę z listą modułów na kotwicach K1b, [ 3D ] / [ PLAN ].
+- **Inspektor:** sloty + picker (726: etykiety i ikony tarcz i desantu), instrumenty + wiersze, delta przy najechaniu modułu,
+  [ BUDUJ ] [ ZAPISZ ] [ WYCZYŚĆ ] z dzisiejszymi regułami i powodami.
+- **Pas:** budowy + Surge, oczekujące + anulowanie, rezerwa + Rozmieść — nic nie zginęło.
+- **Findingi:** 723 ✅; 726 naprawiony w pickerze konsoli (ekran U w K1c-B). Ekran U (`UnitDesignOverlay`) nietknięty.
+- **Testy:** keeper `console_shipyard_smoke` 71/0; fail-first 46 czerwonych / 25 zielonych; 6/6 mutacji czerwonych; sweep 413/413,
+  `check-i18n` PASS.
+- **Odstępstwa:** 3–5 zatwierdzone; 1–2 (budowa dwoma kliknięciami, wiersz = [ EDYTUJ ]) rozwiązuje K1c-B czipem [ BUDUJ ] w wierszu.
+
+Następny krok: K1c-B (osobna warstwa hologramu, obrót i przeciąganie, czip [ BUDUJ ], U → projektant Stoczni, strojenie).
+
+---
