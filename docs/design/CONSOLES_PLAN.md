@@ -504,6 +504,11 @@ Intel) · owner PASS 2026-11-16 after one review round (handover `C:\Users\Kompu
   `KOSMOS.debug.consoleKit.off()` → today's Intel, `.on()` → console.
 - **Deviations / notes**: no strip zone on this screen (nothing natural); the scrolled-list frame used 24 synthetic intel records
   and the battle frame a synthetic encounter fed only to the strip instance (probe-only staging).
+- **K0b-1 (`34f030c` fix, owner PASS 2026-11-16)** — mini-map readability, same flag: player capital diamond + name, empire
+  capital only if known (fog) with a dashed distance line in ly; names via the galaxy label rule (capitals > own > theirs;
+  approved deviation: ordinary labels only adjacent to the marker, capitals may move further; distance label padded); split-ring
+  merge (both sets or < 10 px); auto-fit with 12 ly minimum span + scale bar. Keeper M1–M10 (49/0), fail-first 8 red / 1 control,
+  3 leak mutations red; sweep 411/411; contact sheet `kosmos-handover/consoles-k0b1/kontakt_k0b1.html`.
 
 ## 10. K1a — delivered (ShipHologramRenderer) + inputs for K1c
 
