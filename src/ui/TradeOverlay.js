@@ -9,7 +9,6 @@ import { ALL_RESOURCES }  from '../data/ResourcesData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { BASE_PRICE, scarcityMultiplier, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
 import EventBus           from '../core/EventBus.js';
-import EntityManager      from '../core/EntityManager.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 
 const LEFT_W  = 320;
@@ -1021,18 +1020,6 @@ export class TradeOverlay extends BaseOverlay {
       }
     }
     return results;
-  }
-
-  // ── Pomocnik: szukaj ciała w EntityManager ──────────────────────────────
-
-  _findBody(id) {
-    if (!id) return null;
-    for (const t of ['planet', 'moon', 'asteroid', 'comet', 'planetoid']) {
-      for (const b of EntityManager.getByType(t)) {
-        if (b.id === id) return b;
-      }
-    }
-    return null;
   }
 
   // ── Obsługa kliknięć ───────────────────────────────────────────────────
