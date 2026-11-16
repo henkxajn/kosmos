@@ -546,6 +546,12 @@ export const GAME_CONFIG = {
     //     tiki biegną) i `opaque` — kandydaci na ustawienie wydajności dla słabszych GPU; zestaw `ConsoleKit` / `ConsoleLayoutLogic`.
     //   OFF = dzisiejsze zachowanie co do bitu (półprzezroczyste tła, scena renderowana pod każdą zakładką).
     consoleKit: true,
+    //   consoleIntel (K0b, D-K-6): ON (razem z consoleKit) = Wywiad na szablonie 4-strefowym zestawu — nagłówek z czipami grupy
+    //     Dyplomacja/Wywiad/Wojny zamiast pasa subnav, lista imperiów (wspólna z Dyplomacją od K2), dossier i układ sił w strefie
+    //     bohatera, inspektor (znane systemy, wojsko, incydenty); tekst bez wypełnionych paneli na żywej scenie; pasek walki
+    //     w gnieździe nagłówka (D-K-17). Mgła wojny jak dziś (keeper `console_intel_smoke`).
+    //   OFF = dzisiejszy Wywiad co do bitu (poza Findingiem 725 — trzy napisy przez t(), polski tekst bez zmian).
+    consoleIntel: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

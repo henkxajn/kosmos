@@ -39,6 +39,9 @@ export const CONSOLE_KIT_DEFAULTS = Object.freeze({
   SPAN_H: 12,           // odcinek na torze (etykieta w środku, gdy się mieści)
   LANE_LABEL_W: 96,
   OFF_ALPHA: 0.55,      // czip „off” (przekreślony) — krycie tekstu
+  // K0b — czytelność na żywej, przyciemnionej scenie (decyzja właściciela C+A; tylko konsole):
+  DIM_LIFT: 0.35,       // (C) rola dim konsoli podniesiona w stronę tekstu głównego (0 = dim jak na mapie, 1 = textPrimary)
+  HALO_BLUR: 2,         // (A) ciemna poświata za tekstem konsoli: shadowBlur w kolorze tła motywu (px; 0 = bez poświaty)
 });
 export const CONSOLE_KIT = { ...CONSOLE_KIT_DEFAULTS };
 
@@ -95,6 +98,19 @@ const tabularWidth = (ctx, text) =>
   layoutTabular(String(text ?? ''), { measure: (s) => ctx.measureText(s).width, cell: digitCell(ctx) }).w;
 
 // ── Tło i rama ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * K0b (A) — ciemna poświata za wszystkim, co ekran konsoli narysuje do najbliższego `ctx.restore()`: cień bez przesunięcia,
+ * rozmycie `HALO_BLUR`, kolor tła motywu. Wołać po `ctx.save()` na początku rysowania konsoli; 0 — bez poświaty.
+ */
+export function applyConsoleHalo(ctx) {
+  const b = CONSOLE_KIT.HALO_BLUR;
+  if (!(b > 0)) return;
+  ctx.shadowColor = THEME.bgPrimary;
+  ctx.shadowBlur = b;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
 
 /** Nieprzezroczyste tło konsoli (D-K-5) — token `bgPrimary` motywu na prostokącie (domyślnie całe płótno). */
 export function drawConsoleBackground(ctx, rect) {
@@ -320,12 +336,15 @@ export function drawChipRow(ctx, x, y, maxW, chips, roles, { hoverId = null } = 
  * Lista w prostokącie: wiersze `{id, label, value?, tone?}` i nagłówki grup `{group:true, label}`; zaznaczenie = podkreślenie
  * primary + nawias z lewej, hover = wypełnienie HOVER_ALPHA; przycięcie do prostokąta, przewijanie (klamra `clampScroll`) i
  * pasek 2 px (`scrollThumb`); strefy poza pasmem przycięte (`pruneZones`).
+ * K0b: `rowH` — wysokość wiersza zamiast ROW_H (wiersze dwulinijkowe listy imperiów); `renderRow(ctx, row, rect, { sel, hov })`
+ * — treść wiersza rysuje ekran (zestaw dalej rysuje hover, podkreślenie, nawiasy, strefy i przewijanie).
  * @returns {{ zones:Array<{type:'row',id,x,y,w,h}>, contentH:number, scroll:number }} `scroll` — po klamrze (ekran go zapisuje)
  */
-export function drawList(ctx, rect, rows, roles, { selectedId = null, hoverId = null, scroll = 0 } = {}) {
+export function drawList(ctx, rect, rows, roles, { selectedId = null, hoverId = null, scroll = 0, rowH = null, renderRow = null } = {}) {
   const K = CONSOLE_KIT;
+  const RH = Number.isFinite(rowH) && rowH > 0 ? rowH : K.ROW_H;
   let contentH = 0;
-  for (const r of rows ?? []) contentH += r.group ? K.GROUP_H : K.ROW_H;
+  for (const r of rows ?? []) contentH += r.group ? K.GROUP_H : RH;
   const sc = clampScroll(scroll, contentH, rect.h);
   const zones = [];
   ctx.save();
@@ -334,24 +353,30 @@ export function drawList(ctx, rect, rows, roles, { selectedId = null, hoverId = 
   const textW = rect.w - 2 * K.ROW_PAD_X - K.SCROLLBAR_W - 2;
   let y = rect.y - sc;
   for (const r of rows ?? []) {
-    const h = r.group ? K.GROUP_H : K.ROW_H;
+    const h = r.group ? K.GROUP_H : RH;
     if (y + h >= rect.y && y <= rect.y + rect.h) {
       if (r.group) {
         drawEyebrow(ctx, rect.x + 2, y + 1, rect.w - K.SCROLLBAR_W - 6, r.label, roles);
       } else {
         const sel = r.id === selectedId, hov = r.id === hoverId;
         if (hov && !sel) { ctx.globalAlpha = K.HOVER_ALPHA; ctx.fillStyle = roles.primary; ctx.fillRect(rect.x, y, rect.w - K.SCROLLBAR_W - 2, h); ctx.globalAlpha = 1; }
-        const cy = y + h / 2;
-        ctx.font = font(THEME.fontSizeNormal);
-        let vw = 0;
-        if (r.value != null && r.value !== '') {
-          ctx.fillStyle = toneColor(roles, r.tone ?? (sel ? 'primary' : 'dim'));
-          vw = drawTabular(ctx, r.value, rect.x + rect.w - K.SCROLLBAR_W - 2 - K.ROW_PAD_X, cy, 'right') + 8;
+        if (renderRow) {
+          ctx.save();
+          renderRow(ctx, r, { x: rect.x, y, w: rect.w - K.SCROLLBAR_W - 2, h }, { sel, hov });
+          ctx.restore();
+        } else {
+          const cy = y + h / 2;
+          ctx.font = font(THEME.fontSizeNormal);
+          let vw = 0;
+          if (r.value != null && r.value !== '') {
+            ctx.fillStyle = toneColor(roles, r.tone ?? (sel ? 'primary' : 'dim'));
+            vw = drawTabular(ctx, r.value, rect.x + rect.w - K.SCROLLBAR_W - 2 - K.ROW_PAD_X, cy, 'right') + 8;
+          }
+          ctx.fillStyle = sel ? roles.primary : (r.dimmed ? roles.dim : roles.primary);
+          ctx.globalAlpha = sel || hov ? 1 : 0.85;
+          ctx.fillText(truncateText(String(r.label ?? ''), textW - vw, (s) => ctx.measureText(s).width), rect.x + K.ROW_PAD_X, cy);
+          ctx.globalAlpha = 1;
         }
-        ctx.fillStyle = sel ? roles.primary : (r.dimmed ? roles.dim : roles.primary);
-        ctx.globalAlpha = sel || hov ? 1 : 0.85;
-        ctx.fillText(truncateText(String(r.label ?? ''), textW - vw, (s) => ctx.measureText(s).width), rect.x + K.ROW_PAD_X, cy);
-        ctx.globalAlpha = 1;
         if (sel) {
           ctx.strokeStyle = roles.primary; ctx.lineWidth = 1;
           strokeLine(ctx, rect.x + K.ROW_PAD_X, y + h - 1.5, rect.x + rect.w - K.SCROLLBAR_W - 2 - K.ROW_PAD_X, y + h - 1.5);
@@ -376,12 +401,13 @@ export function drawList(ctx, rect, rows, roles, { selectedId = null, hoverId = 
   return { zones, contentH, scroll: sc };
 }
 
-/** Czysta: odsunięcie przewijania tak, by wiersz `id` był w pasie widoku (odsłoń zaznaczony). */
-export function revealScroll(rows, id, scroll, viewH) {
+/** Czysta: odsunięcie przewijania tak, by wiersz `id` był w pasie widoku (odsłoń zaznaczony). `rowH` — jak w `drawList`. */
+export function revealScroll(rows, id, scroll, viewH, rowH = null) {
   const K = CONSOLE_KIT;
+  const RH = Number.isFinite(rowH) && rowH > 0 ? rowH : K.ROW_H;
   let y = 0;
   for (const r of rows ?? []) {
-    const h = r.group ? K.GROUP_H : K.ROW_H;
+    const h = r.group ? K.GROUP_H : RH;
     if (!r.group && r.id === id) {
       if (y < scroll) return y;
       if (y + h > scroll + viewH) return y + h - viewH;

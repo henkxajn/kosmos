@@ -29,7 +29,8 @@ export const CONSOLE_LAYOUT_DEFAULTS = Object.freeze({
   GAP: 10,             // odstęp między strefami
   PAD: 12,             // margines wewnętrzny ramy konsoli
   CLOSE_W: 34,         // gniazdo [ x ] w nagłówku
-  COMBAT_SLOT_W: 280,  // gniazdo paska walki w nagłówku (= COMBAT_STRIP.MIN_W; 0 = bez gniazda)
+  COMBAT_SLOT_W: 520,  // gniazdo paska walki w nagłówku (0 = bez gniazda). K0b: 280 (= COMBAT_STRIP.MIN_W) → 520 — linia paska
+                       //   z czipami [ Obserwuj ] / [ Reżyser ] / [ ▼ ] ma naturalnie ≈ 510 px; w 280 tekst nachodził na siebie
   MIN_HERO_W: 240,     // poniżej — lista i inspektor kurczą się proporcjonalnie
   MIN_TITLE_W: 160,    // gniazdo walki nie zjada tytułu i czipów poniżej tej szerokości
   ZONE_INSET: 6,       // wcięcie treści wewnątrz ramy strefy (`insetRect`)
@@ -40,6 +41,17 @@ export const CONSOLE_LAYOUT = { ...CONSOLE_LAYOUT_DEFAULTS };
 // wartości domyślne (`CONSOLE_LAYOUT`, `CONSOLE_GLASS.scrim`). Ekrany dopisują tu swoje wymiary w krokach K0b+.
 // (Nadpisanie zasłony Cywilizacji 0,25 zdjęte po bramce K0a — zasłona 0 wszędzie, świat ostry i przyciemniony.)
 export const CONSOLE_SCREEN_SPECS = {};
+
+// Ekrany przebudowane na zestawie konsoli (id overlayu → klucz flagi `FEATURES`, D-K-20). Ekran zestawu rysuje własny nagłówek
+// z czipami podzakładek — pas subnav grupy nie jest wtedy rysowany ani trafiany, a overlay zaczyna się tuż pod górną belką;
+// pasek walki siada w gnieździe nagłówka (D-K-17). Każdy wpis wymaga też `consoleKit` (żywa, przyciemniona scena za tekstem).
+export const CONSOLE_KIT_SCREENS = Object.freeze({ intel: 'consoleIntel' });
+
+/** Czy overlay `id` rysuje się teraz jako ekran zestawu konsoli (flagi czytane w chwili wywołania). */
+export function isKitScreen(id, features) {
+  const key = id ? CONSOLE_KIT_SCREENS[id] : null;
+  return !!key && features?.consoleKit === true && features?.[key] === true;
+}
 
 /** Strojenie stałych układu: nieznane klucze i nie-liczby pominięte; zwraca bieżące wartości. */
 export function tuneConsoleLayout(patch = {}) {

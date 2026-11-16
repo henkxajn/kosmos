@@ -60,6 +60,24 @@ export function tuneCombatStrip(patch = {}) {
 }
 export function resetCombatStrip() { Object.assign(COMBAT_STRIP, COMBAT_STRIP_DEFAULTS); return { ...COMBAT_STRIP }; }
 
+/**
+ * ARC KONSOLE K0b (D-K-17) — wcięcia `stripLayout`, przy których blok paska leży w gnieździe nagłówka konsoli: obszar w poziomie =
+ * gniazdo (szerokość klamrowana do gniazda), jedna linia wyśrodkowana w pionie w paśmie gniazda; dół z `base` (rozwinięcie rośnie
+ * w dół nad konsolą jak dziś). Brak gniazda → `base` bez zmian. Czysta.
+ * @param {{x:number,y:number,w:number,h:number}|null} slot @param {number} W @param {{left,right,top,bottom}} base
+ */
+export function combatSlotInsets(slot, W, base, S = COMBAT_STRIP) {
+  if (!slot || !(slot.w > 0) || !(slot.h > 0)) return base;
+  const lineH = 2 * S.PAD_Y + S.LINE_H;
+  const y = slot.y + Math.max(0, (slot.h - lineH) / 2);
+  return {
+    left: Math.max(0, slot.x - S.SIDE_MARGIN),
+    right: Math.max(0, W - (slot.x + slot.w) - S.SIDE_MARGIN),
+    top: Math.max(0, Math.round(y - S.GAP)),
+    bottom: Math.max(0, base?.bottom ?? 0),
+  };
+}
+
 // M1 „bitwy do końca” (decyzja 33) — starcie nie ma limitu rund, więc pasek pokazuje samą rundę („R n”). Dawniej tu stało
 // `ROUND_CAP = 20` (lustro `DeepSpaceCombatSystem.MAX_ROUNDS`) i pole `maxRounds` w linii bitwy („R n/20”).
 

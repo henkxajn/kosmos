@@ -386,7 +386,7 @@ const HARDCODED_BASELINE = process.env.KOSMOS_I18N_BASELINE
   'src/ui/EconomyOverlay.js':        1,
   'src/ui/FleetManagerOverlay.js':   5,
   'src/ui/GroundUnitPanel.js':       1,
-  'src/ui/IntelOverlay.js':          2,
+  // ARC KONSOLE K0b (2026-11-16): 'src/ui/IntelOverlay.js' 2 → 0 i WYPADA — Finding 725 (napisy przez t()).
   'src/ui/POIModal.js':              1,  // DOM (269): „[unsupported field: …]" — komunikat dev w DOM.
   'src/ui/PopulationOverlay.js':     1,
   'src/ui/UnitCardPanel.js':         4,

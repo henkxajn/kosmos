@@ -95,7 +95,8 @@ import {
   NAV_GROUPS,
 } from '../ui/CivPanelDrawer.js';
 import { consoleTabIds, consoleSceneActive, consoleBgMode, consoleScrimAlpha, CONSOLE_GLASS } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a (D-K-5)
-import { CONSOLE_SCREEN_SPECS } from '../ui/ConsoleLayoutLogic.js';
+import { CONSOLE_SCREEN_SPECS, isKitScreen } from '../ui/ConsoleLayoutLogic.js';
+import { combatSlotInsets } from '../ui/CombatStripLogic.js';   // ARC KONSOLE K0b (D-K-17) — pasek walki w gnieździe nagłówka konsoli
 
 // Odstęp między toastami o awarii/rozmiarze zapisu (lata gry). Quota to błąd TRWAŁY —
 // autosave leci co rok gry, więc bez throttlingu alarm zalałby ekran i wypłukał Dziennik.
@@ -476,6 +477,18 @@ export class UIManager {
   skirmishLineText(empireId) {
     const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);
     return t('log.skirmish', emp?.namePL ?? emp?.name ?? empireId ?? '?');
+  }
+
+  /**
+   * ARC KONSOLE K0b (D-K-17) — wcięcia paska walki: nad ekranem zestawu konsoli pasek siada w gnieździe nagłówka
+   * (`consoleZones.combatSlot`, policzone w draw() overlayu tej klatki); mapa i pozostałe ekrany — `getMapInsets` jak dziś.
+   */
+  _combatStripInsets(W) {
+    const insets = getMapInsets(window.KOSMOS);
+    const id = this.overlayManager?.active ?? null;
+    if (!id || !isKitScreen(id, GAME_CONFIG.FEATURES)) return insets;
+    const slot = this.overlayManager.overlays[id]?.consoleZones?.combatSlot ?? null;
+    return slot ? combatSlotInsets(slot, W, insets) : insets;
   }
 
   // ── ARC KONSOLE K0a (D-K-5, Finding 730) — konsola zasłania scenę ──
@@ -2553,7 +2566,7 @@ export class UIManager {
     //    lista zakrywa pasek), dolnymi paskami i pływającymi panelami; położenie z `MapInsets` (#629), pod banerem pickera, gdy ten
     //    wisi u góry. ──
     if (civMode && !globeOpen) {
-      this.combatStrip.draw(ctx, W, H, { insets: getMapInsets(window.KOSMOS),
+      this.combatStrip.draw(ctx, W, H, { insets: this._combatStripInsets(W),
         pointer: { x: this._tooltipMouseX, y: this._tooltipMouseY }, banner: this._pickerBannerRect() });
     } else this.combatStrip?.clear?.();
     if (civMode && !globeOpen) this._topResourceDrawer.draw(ctx, W, H);

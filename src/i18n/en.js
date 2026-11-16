@@ -3556,6 +3556,23 @@ export default {
   'intel.powerBalanceWeaker':     'they are stronger (+{0}%)',
   'intel.powerBalanceOutmatched': 'they dominate (+{0}%)',
   'intel.powerBalanceYours':      'your strength: {0}',
+  // ARC KONSOLE K0b — Finding 725 (hard-coded literals) + Intel console labels
+  'intel.needsGroundScan':        '(requires a ground scan)',
+  'intel.recentIncidents':        'Recent incidents',
+  'intel.console.dossier':        'Dossier',
+  'intel.console.level':          'Intel level',
+  'intel.console.balance':        'Balance of power',
+  'intel.console.you':            'You',
+  'intel.console.them':           'Them',
+  'intel.console.strength':       'Combat strength',
+  'intel.console.systems':        'Systems (theirs: known)',
+  'intel.console.empires':        'Empires',
+  'intel.console.reserve':        'Reserve (uncrewed)',
+  'intel.console.armedLimit':     'Armed / fleet limit',
+  'intel.console.file':           'File',
+  'intel.console.map':            'Map of known systems',
+  'intel.console.mapYours':       'your systems',
+  'intel.console.mapTheirs':      'their known systems',
 
   // === WarOverlay ===
   'warOverlay.title':            '⚔ WARS',

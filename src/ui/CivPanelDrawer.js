@@ -8,6 +8,7 @@ import { THEME, bgAlpha, hexToRgb, GLASS_BORDER_SIDE, GLASS_BORDER } from '../co
 import { COSMIC } from '../config/LayoutConfig.js';
 import { t } from '../i18n/i18n.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';   // C7 — bramka kill-switcha PopulationOverlay
+import { isKitScreen } from './ConsoleLayoutLogic.js';   // ARC KONSOLE K0b — ekran zestawu ma czipy grupy we własnym nagłówku
 
 // ── Stałe ──────────────────────────────────────────────────
 export const CIV_SIDEBAR_W    = 0;    // Slice 4 — pionowy sidebar usunięty (nav na górze); lewa krawędź = 0
@@ -195,6 +196,7 @@ export function isGroupedId(id) {
 // zawsze-grupowe (Fleet/Tech/Observatory) używają COSMIC.SUBNAV_H statycznie.
 export function getSubNavHeight() {
   const active = window.KOSMOS?.overlayManager?.active;
+  if (isKitScreen(active, GAME_CONFIG.FEATURES)) return 0;   // K0b — bez pasa subnav nad ekranem zestawu
   return isGroupedId(active) ? COSMIC.SUBNAV_H : 0;
 }
 
@@ -206,6 +208,7 @@ export const SUBNAV_TAB_W = 112;   // stała szerokość zakładki (draw i hit-t
 export function drawSubNav(ctx, W, activeId) {
   const grp = getNavGroup(activeId);
   if (!grp || grp.members.length <= 1) return;
+  if (isKitScreen(activeId, GAME_CONFIG.FEATURES)) return;   // K0b — czipy grupy rysuje nagłówek konsoli
 
   const y0    = COSMIC.TOP_BAND_H;   // stykaj subnav z dolną krawędzią górnej belki (UI v3)
   const h     = COSMIC.SUBNAV_H;
@@ -254,6 +257,7 @@ export function drawSubNav(ctx, W, activeId) {
 export function hitTestSubNav(x, y, W, activeId) {
   const grp = getNavGroup(activeId);
   if (!grp || grp.members.length <= 1) return null;
+  if (isKitScreen(activeId, GAME_CONFIG.FEATURES)) return null;   // K0b — pasa nie ma; klik idzie do nagłówka konsoli
   const y0 = COSMIC.TOP_BAND_H;   // patrz drawSubNav — subnav styka się z górną belką
   const h  = COSMIC.SUBNAV_H;
   if (y < y0 || y >= y0 + h) return null;

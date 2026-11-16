@@ -3559,6 +3559,23 @@ export default {
   'intel.powerBalanceWeaker':     'są silniejsi (+{0}%)',
   'intel.powerBalanceOutmatched': 'miażdżą cię (+{0}%)',
   'intel.powerBalanceYours':      'twoja siła: {0}',
+  // ARC KONSOLE K0b — Finding 725 (napisy wpisane w kod) + etykiety konsoli Wywiadu
+  'intel.needsGroundScan':        '(wymaga skanu naziemnego)',
+  'intel.recentIncidents':        'Ostatnie incydenty',
+  'intel.console.dossier':        'Dossier',
+  'intel.console.level':          'Poziom wywiadu',
+  'intel.console.balance':        'Układ sił',
+  'intel.console.you':            'Ty',
+  'intel.console.them':           'Oni',
+  'intel.console.strength':       'Siła bojowa',
+  'intel.console.systems':        'Układy (ich: znane)',
+  'intel.console.empires':        'Imperia',
+  'intel.console.reserve':        'Rezerwa (bez załóg)',
+  'intel.console.armedLimit':     'Uzbrojone / limit floty',
+  'intel.console.file':           'Akta',
+  'intel.console.map':            'Mapa znanych układów',
+  'intel.console.mapYours':       'twoje układy',
+  'intel.console.mapTheirs':      'ich znane układy',
 
   // === WarOverlay ===
   'warOverlay.title':            '⚔ WOJNY',
