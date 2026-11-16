@@ -19,6 +19,7 @@
 
 import { validateHardpoints, KEY_COLOUR_DEFAULTS, KEY_COLOUR_LIMITS, KEY_COLOUR_MODES, LIGHT_DEFAULTS } from '../../src/data/ShipHardpointsSchema.js';
 import { VESSEL_MODEL_KEYS } from '../../src/renderer/VesselModelResolver.js';
+import { ANCHOR_ROLES, ANCHORS_VERSION, validateAnchors } from '../../src/data/ShipAnchorsSchema.js';
 
 // 2 — od poprawki po kontroli właściciela (2026-11-11): stan sprzed niej mógł nieść ramę z „górą” przestawioną przez klik dziobu
 // w punkt z przewagą osi Y (statek w grze na boku) — sesja v1 nie jest przywracana.
@@ -445,6 +446,7 @@ export function revertPart(edit, fileEdit, part) {
   if (part === 'keyColour') return { ...edit, keyColour: f.keyColour };
   if (part === 'weapons') { const w = renum(f.weapons); return { ...edit, weapons: w, nextUid: next }; }
   if (part === 'lights') { const l = renum(f.lights); return { ...edit, lights: l, nextUid: next }; }
+  if (part === 'anchors') return { ...edit, anchors: { ...(f.anchors ?? {}) } };   // K1b — kotwice z pliku anchors/<slot>.json
   return edit;
 }
 
@@ -594,7 +596,8 @@ export function sessionSnapshot({ slot, variant = 'slot', history, fileSig = nul
 }
 
 const isEditShape = (e) => !!e && typeof e === 'object' && e.v === WORKSHOP_VERSION && e.frame && Array.isArray(e.weapons)
-  && Array.isArray(e.lights) && e.keyColour && Number.isFinite(e.nextUid);
+  && Array.isArray(e.lights) && e.keyColour && Number.isFinite(e.nextUid)
+  && (e.anchors === undefined || (!!e.anchors && typeof e.anchors === 'object' && !Array.isArray(e.anchors)));   // K1b — opcjonalne
 
 /** Odczyt sesji; cokolwiek niezgodnego ⇒ null (strona startuje od zera, zamiast się wywrócić). */
 export function restoreSession(text) {
@@ -638,3 +641,81 @@ export const isWarshipSlot = (slot) => WARSHIP_CLASSES.some((c) => String(slot).
 /** Sloty do wyboru: 24 sloty resolvera gry + `default` — ta sama kompozycja co `tools/ship-models/lib/slots.mjs` (`SHIP_SLOTS`;
  *  keeper porównuje). Strona Workshopu nie importuje `.mjs` (typ MIME z Live Server), więc lista składa się tu z tego samego źródła. */
 export const WORKSHOP_SLOTS = Object.freeze([...VESSEL_MODEL_KEYS, 'default']);
+
+// ── K1b: kotwice modułów (tryb «kotwice»; plik `assets/models/ships/anchors/<slot>.json`, schemat `ShipAnchorsSchema.js`) ──
+//
+// Stan edycji niesie `anchors` = { rola: [x, y, z] } — TYLKO role postawione przez właściciela (przestrzeń znormalizowana, jak
+// hardpointy). Rola nieobecna = wartość domyślna liczona przez grę (`computeDefaultAnchors`) — «przywróć domyślną» usuwa rolę.
+// Zapis pisze dokładnie postawione role (także gdy właściciel postawił rolę w miejscu domyślnej — to jego decyzja); dokument
+// hardpointów i jego zapis tego pola NIE widzą (`buildDoc` / `editSignature` nietknięte) — wspólna jest tylko historia cofania.
+
+export const ANCHOR_ROLE_PL = Object.freeze({
+  drive: 'napęd', weapons: 'uzbrojenie', defence: 'obrona', hold: 'ładownia', mission: 'misja', habitat: 'habitat',
+});
+
+const isFiniteVec3 = (p) => Array.isArray(p) && p.length === 3 && p.every((c) => typeof c === 'number' && Number.isFinite(c));
+
+/** Postawione role z dokumentu pliku kotwic (niepoprawny / brak ⇒ {}). */
+export function anchorsFromDoc(doc, slot = null) {
+  if (!doc || !validateAnchors(doc, { slot }).ok) return {};
+  const out = {};
+  for (const a of doc.anchors) out[a.role] = [...a.p];
+  return out;
+}
+
+/** Stan edycji z kotwicami z pliku (reszta stanu bez zmian). */
+export function withAnchors(edit, anchorsDoc, slot = null) {
+  return { ...edit, anchors: anchorsFromDoc(anchorsDoc, slot) };
+}
+
+/** Postaw / przesuń kotwicę roli (punkt w przestrzeni znormalizowanej). Rola nieznana albo punkt nieskończony ⇒ ten sam stan. */
+export function placeAnchor(edit, role, p) {
+  if (!ANCHOR_ROLES.includes(role) || !isFiniteVec3(p)) return edit;
+  return { ...edit, anchors: { ...(edit.anchors ?? {}), [role]: [...p] } };
+}
+export const moveAnchor = placeAnchor;
+
+/** Przywróć rolę do wartości domyślnej (usuń z pliku). Rola niepostawiona ⇒ ten sam stan (bez pustego kroku cofania). */
+export function resetAnchor(edit, role) {
+  const a = edit.anchors ?? {};
+  if (!Object.prototype.hasOwnProperty.call(a, role)) return edit;
+  const next = { ...a };
+  delete next[role];
+  return { ...edit, anchors: next };
+}
+
+/** Przywróć wszystkie role do domyślnych. */
+export function resetAllAnchors(edit) {
+  return Object.keys(edit.anchors ?? {}).length ? { ...edit, anchors: {} } : edit;
+}
+
+/** Dokument pliku kotwic ze stanu (role w kolejności `ANCHOR_ROLES`, punkty zaokrąglone jak hardpointy); niepoprawny ⇒ ok:false. */
+export function anchorsDocFromEdit(slot, edit) {
+  const a = edit?.anchors ?? {};
+  const doc = { v: ANCHORS_VERSION, slot, anchors: ANCHOR_ROLES.filter((r) => Object.prototype.hasOwnProperty.call(a, r)).map((role) => ({ role, p: r4v(a[role]) })) };
+  const unknown = Object.keys(a).filter((r) => !ANCHOR_ROLES.includes(r));
+  const v = validateAnchors(doc, { slot });
+  const errors = [...unknown.map((r) => `nieznana rola «${r}»`), ...v.errors];
+  return errors.length ? { ok: false, doc: null, errors } : { ok: true, doc, errors: [] };
+}
+
+/** Podpis kotwic (czy są niezapisane zmiany kotwic) — niezależny od podpisu hardpointów. */
+export function anchorsSignature(slot, edit) {
+  const r = anchorsDocFromEdit(slot, edit);
+  return r.ok ? JSON.stringify(r.doc.anchors) : 'invalid:' + r.errors.join('|');
+}
+
+/**
+ * Wiersze podglądu: 6 ról (kolejność `ANCHOR_ROLES`) — punkt wyświetlany (postawiony albo domyślny), źródło i punkt domyślny.
+ * @param {object} edit
+ * @param {{ role:string, p:number[] }[]} defaults — `computeDefaultAnchors(...)`
+ */
+export function anchorRows(edit, defaults) {
+  const a = edit?.anchors ?? {};
+  const def = new Map((defaults ?? []).map((d) => [d.role, d.p]));
+  return ANCHOR_ROLES.map((role) => {
+    const placed = Object.prototype.hasOwnProperty.call(a, role) ? a[role] : null;
+    const dp = def.get(role) ?? null;
+    return { role, p: placed ?? dp, src: placed ? 'file' : 'default', def: dp };
+  });
+}

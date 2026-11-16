@@ -687,6 +687,13 @@ export default {
   // Fog-of-war tożsamości — ghost wrogiego statku (detekcja obserwatorium = pozycja bez tożsamości)
   'intel.unidentifiedContact': 'Niezidentyfikowany kontakt',
   'intel.unknownEmpire': 'Nieznane imperium',
+  // ARC KONSOLE K1b — role kotwic modułów na hologramie statku (etykiety odnośników)
+  'shipAnchor.drive': 'Napęd',
+  'shipAnchor.weapons': 'Uzbrojenie',
+  'shipAnchor.defence': 'Obrona',
+  'shipAnchor.hold': 'Ładownia',
+  'shipAnchor.mission': 'Misja',
+  'shipAnchor.habitat': 'Habitat',
   'intel.unidentifiedHint': 'Wykryty przez obserwatorium — brak identyfikacji. Zbliż statek dla pełnych danych.',
   // Notification Center (silent alerts — dzwonek 🔔 w BottomBar)
   'notif.title': 'Powiadomienia',

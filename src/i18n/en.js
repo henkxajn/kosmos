@@ -687,6 +687,13 @@ export default {
   // Identity fog-of-war — enemy vessel ghost (observatory detection = position without identity)
   'intel.unidentifiedContact': 'Unidentified contact',
   'intel.unknownEmpire': 'Unknown empire',
+  // ARC KONSOLE K1b — ship module anchor roles on the hologram (leader labels)
+  'shipAnchor.drive': 'Drive',
+  'shipAnchor.weapons': 'Weapons',
+  'shipAnchor.defence': 'Defence',
+  'shipAnchor.hold': 'Hold',
+  'shipAnchor.mission': 'Mission',
+  'shipAnchor.habitat': 'Habitat',
   'intel.unidentifiedHint': 'Detected by observatory — no identification. Bring a vessel closer for full data.',
   // Notification Center (silent alerts — bell 🔔 in BottomBar)
   'notif.title': 'Notifications',

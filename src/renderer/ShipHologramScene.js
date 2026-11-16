@@ -147,6 +147,12 @@ export function buildHoloModel(THREE, template, { frame = null, edgeAngle = 50, 
     model.tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
   }
   model.tris = Math.round(model.tris);
+  // K1b — bbox modelu w PRZESTRZENI ZNORMALIZOWANEJ (środek 0, najdłuższy wymiar 1 — przestrzeń hardpointów i kotwic): wejście
+  // domyślnych kotwic (`computeDefaultAnchors`). Ten sam bbox szablonu co skala `norm` (bez dotykania szablonu).
+  model.normBox = box.isEmpty() ? null : {
+    min: [(box.min.x - c.x) / m, (box.min.y - c.y) / m, (box.min.z - c.z) / m],
+    max: [(box.max.x - c.x) / m, (box.max.y - c.y) / m, (box.max.z - c.z) / m],
+  };
   // Zasięg modelu w ramie wyświetlania (kadr rysunku technicznego — sylwetka i plan; krawędzie nie wyznaczają obrysu gładkich burt).
   const disp = displayMatrix(THREE, model), mm = new THREE.Matrix4(), v = new THREE.Vector3();
   const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
@@ -162,6 +168,44 @@ export function buildHoloModel(THREE, template, { frame = null, edgeAngle = 50, 
   model.extent = Number.isFinite(mn[0]) ? { min: mn, max: mx } : null;
   rebuildHoloEdges(THREE, model, edgeAngle, mats);
   return model;
+}
+
+// K1b — trójkąty w PRZESTRZENI ZNORMALIZOWANEJ (hardpointów i kotwic): wejście przyciągania domyślnych kotwic do kadłuba.
+function normTriangles(THREE, parts, c, m) {
+  const mm = new THREE.Matrix4(), v = new THREE.Vector3();
+  const nm = new THREE.Matrix4().compose(new THREE.Vector3(-c[0] / m, -c[1] / m, -c[2] / m), new THREE.Quaternion(), new THREE.Vector3(1 / m, 1 / m, 1 / m));
+  let n = 0;
+  for (const p of parts) n += (p.geometry.index ? p.geometry.index.count : p.geometry.attributes.position.count);
+  const out = new Float32Array(n * 3); let o = 0;
+  for (const p of parts) {
+    mm.copy(nm).multiply(p.matrix);
+    const pos = p.geometry.attributes.position, idx = p.geometry.index;
+    const cnt = idx ? idx.count : pos.count;
+    for (let i = 0; i < cnt; i++) {
+      v.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(mm);
+      out[o++] = v.x; out[o++] = v.y; out[o++] = v.z;
+    }
+  }
+  return out;
+}
+
+/** K1b — trójkąty modelu hologramu w przestrzeni znormalizowanej (leniwie, w pamięci modelu; zwalniane z modelem). */
+export function modelNormTriangles(THREE, model) {
+  if (!model._ntri) model._ntri = normTriangles(THREE, model.parts, model.bounds.c, model.bounds.m);
+  return model._ntri;
+}
+
+/**
+ * K1b — te same trójkąty prosto z szablonu GLB (Model Workshop): ten sam zbiór siatek, macierze i bbox co `buildHoloModel`,
+ * więc domyślne kotwice w Workshopie = domyślne w grze. Szablon tylko czytany.
+ */
+export function templateNormTriangles(THREE, template) {
+  const parts = collectMeshes(THREE, template);
+  const box = new THREE.Box3(), tmp = new THREE.Box3();
+  for (const p of parts) { tmp.setFromBufferAttribute(p.geometry.attributes.position).applyMatrix4(p.matrix); box.union(tmp); }
+  if (box.isEmpty()) return new Float32Array(0);
+  const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  return normTriangles(THREE, parts, [c.x, c.y, c.z], Math.max(size.x, size.y, size.z) || 1);
 }
 
 /** Macierz ramy wyświetlania (bez auto-obrotu): yaw(−π/2) · canon · norm — przestrzeń szablonu → dziób −X, góra +Y. */

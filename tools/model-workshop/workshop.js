@@ -25,6 +25,10 @@ import { KC_SHARED, setKeyColourParams, keyColourMask, keyColourUniformsOf } fro
 import { LightPointPool } from '../../src/renderer/ShipLightPoints.js';
 import { defaultHardpoints, hardpointsUrl, INCOMING_INDEX, SHIP_MODEL_DIR, INCOMING_DIR } from '../../src/renderer/ShipHardpoints.js';
 import { validateHardpoints, formatHardpointsJson } from '../../src/data/ShipHardpointsSchema.js';
+import { validateAnchors, formatAnchorsJson, ANCHOR_ROLES } from '../../src/data/ShipAnchorsSchema.js';   // K1b
+import { computeDefaultAnchors, anchorsUrl } from '../../src/renderer/ShipAnchors.js';                       // K1b
+import { templateNormTriangles } from '../../src/renderer/ShipHologramScene.js';                             // K1b — siatka jak w grze
+import { VESSEL_MODEL_KEYS } from '../../src/renderer/VesselModelResolver.js';
 import { exhaustGradientColors } from '../../src/utils/VesselFxLogic.js';
 import { LIVE_CV_FX } from '../../src/renderer/combat/FxEngine.js';
 import * as WL from './WorkshopLogic.js';
@@ -33,6 +37,7 @@ import * as WL from './WorkshopLogic.js';
 const ROOT = '../../';                                  // strona leży w tools/model-workshop/
 const SESSION_KEY = 'kosmos-model-workshop-v1';
 const IDB = { name: 'kosmos-model-workshop', store: 'handles', key: 'hardpointsDir' };
+const IDB_ANCHORS_KEY = 'anchorsDir';                   // K1b — uchwyt folderu assets/models/ships/anchors (osobny od hardpointów)
 const DEFAULT_SLOT = 'warp_frigate';
 // Kopie stałych modułu ThreeRenderer (nieeksportowane — strona nie może importować całej gry):
 const FX_HDR_EXHAUST = 4.5;                             // `FX_HDR_EXHAUST` — wzmocnienie kolorów smugi
@@ -48,7 +53,10 @@ const MODE_HINT = Object.freeze({
   weapons: '<b>Wieżyczki</b> — klikaj działa na kadłubie (W1, W2…). LUSTRO stawia bliźniaka po drugiej burcie.',
   lights: '<b>Światła</b> — klikaj okna i światła pozycyjne w wybranym kolorze. LUSTRO jak przy wieżyczkach.',
   select: '<b>Wybierz</b> — kliknij punkt, przeciągnij go po kadłubie albo usuń <b>Del</b>. Pusty klik odznacza.',
+  anchors: '<b>Kotwice</b> — wybierz rolę (lista po lewej albo klik w znacznik), klik w kadłub = postaw, przeciągnij znacznik = przesuń, <b>R</b> = domyślna. Blade kółka = wartości domyślne gry.',
 });
+// K1b — kolory znaczników ról (tylko narzędzie; w grze kotwice rysują role motywu).
+const ANCHOR_COLOURS = Object.freeze({ drive: 0xff9a5a, weapons: 0xffb000, defence: 0x6fd8ff, hold: 0x5ee08a, mission: 0xc58bff, habitat: 0xff6fae });
 const CLICK_PX = 5;          // [px] dłuższe przesunięcie myszy = obrót kamery, nie klik
 const PICK_PX = 14;          // [px] promień wyboru istniejącego punktu
 const TWIN_SNAP_MAX = 0.05;  // [przestrzeń znormalizowana] bliźniak „przyklejony" do kadłuba, jeśli kadłub jest tak blisko odbicia
@@ -65,6 +73,8 @@ const S = {
   sel: null,                       // { cat: 'weapons'|'lights'|'nozzle', uid }
   template: null, bboxN: null, rig: null, rigKind: null, texData: null,
   down: null, drag: null, saving: false, savedAt: null, dirHandle: null, loadToken: 0, occl: new Map(),
+  // K1b — kotwice: wybrana rola, dokument pliku kotwic (albo null), podpis pliku, ostrzeżenie, uchwyt folderu, znacznik zapisu
+  anchorRole: 'drive', anchorsDoc: null, anchorsFileSig: null, anchorsWarn: null, anchorsDirHandle: null, anchorsSavedAt: null,
 };
 const edit = () => S.transient ?? S.history?.present ?? null;
 
@@ -122,6 +132,17 @@ const hoverB = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), overlayMat(0xf
 hoverA.renderOrder = hoverB.renderOrder = 11;
 markerRoot.add(bowArrow, nozzleRing, selRing, hoverA, hoverB);
 hoverA.visible = hoverB.visible = selRing.visible = false;
+// K1b — kotwice: pełne kule (postawione), blade kule (domyślne gry), pierścień wybranej roli; tylko w trybie «kotwice»
+const anchorGeo = new THREE.SphereGeometry(1, 16, 12);
+const anchorSolid = new Map(), anchorGhost = new Map();
+for (const role of ANCHOR_ROLES) {
+  const s = new THREE.Mesh(anchorGeo, overlayMat(ANCHOR_COLOURS[role], 1));
+  const g = new THREE.Mesh(anchorGeo, overlayMat(ANCHOR_COLOURS[role], 0.28));
+  s.renderOrder = 13; g.renderOrder = 12;
+  s.visible = g.visible = false;
+  anchorSolid.set(role, s); anchorGhost.set(role, g);
+  markerRoot.add(s, g);
+}
 
 // ── wczytanie slotu ─────────────────────────────────────────────────────────────────────────────────────────────────────
 function modelUrl(slot, variant) { return ROOT + (variant === 'incoming' ? INCOMING_DIR : SHIP_MODEL_DIR) + slot + '.glb'; }
@@ -138,6 +159,24 @@ async function fetchDoc(slot, variant) {
     return { doc: defaultHardpoints(slot), warn: 'Nie udało się wczytać pliku hardpointów: ' + (e?.message ?? e) };
   }
 }
+
+/** K1b — plik kotwic klucza modelu: { doc | null, warn }. Brak pliku = same domyślne (bez ostrzeżenia). */
+async function fetchAnchorsDoc(slot, variant) {
+  if (variant !== 'slot' || !VESSEL_MODEL_KEYS.includes(slot)) return { doc: null, warn: null };
+  try {
+    const res = await fetch(ROOT + anchorsUrl(slot), { cache: 'no-store' });
+    if (!res.ok) return { doc: null, warn: null };
+    const doc = await res.json();
+    const v = validateAnchors(doc, { slot });
+    if (!v.ok) return { doc: null, warn: 'Plik kotwic niepoprawny — pokazuję domyślne: ' + v.errors.slice(0, 3).join('; ') };
+    return { doc, warn: null };
+  } catch (e) {
+    return { doc: null, warn: 'Nie udało się wczytać pliku kotwic: ' + (e?.message ?? e) };
+  }
+}
+
+/** K1b — czy slot przyjmuje kotwice (24 klucze modeli gry, slot gry — nie kandydat z incoming/). */
+const anchorsAllowed = () => S.variant === 'slot' && VESSEL_MODEL_KEYS.includes(S.slot);
 
 function loadGlb(url) {
   return new Promise((resolve, reject) => loader.load(url, (g) => resolve(g.scene), undefined, reject));
@@ -168,9 +207,10 @@ async function loadSlot(slot, variant = 'slot', { session = null } = {}) {
   $('loading').classList.remove('hidden');
   $('loading').textContent = `Wczytywanie ${slot}…`;
   clearNotes();
-  const [{ doc, warn }, tpl] = await Promise.all([
+  const [{ doc, warn }, tpl, anc] = await Promise.all([
     fetchDoc(slot, variant),
     loadGlb(modelUrl(slot, variant)).catch((e) => { console.error(e); return null; }),
+    fetchAnchorsDoc(slot, variant),
   ]);
   if (token !== S.loadToken) { disposeTemplate(tpl); return; }   // w międzyczasie wybrano inny slot
   if (!tpl) {
@@ -180,15 +220,28 @@ async function loadSlot(slot, variant = 'slot', { session = null } = {}) {
   if (S.rig) { S.rig.root.removeFromParent(); disposeShipRig(S.rig, pool); S.rig = null; }
   disposeTemplate(S.template);
   S.slot = slot; S.variant = variant; S.baseDoc = doc; S.fileWarn = warn;
-  S.fileEdit = WL.editFromDoc(doc);
+  S.fileEdit = WL.withAnchors(WL.editFromDoc(doc), anc.doc, slot);
   S.fileSig = WL.editSignature(doc, S.fileEdit);
+  S.anchorsDoc = anc.doc; S.anchorsWarn = anc.warn;
+  S.anchorsFileSig = WL.anchorsSignature(slot, S.fileEdit);
   S.template = tpl; S.bboxN = normalizedBounds(tpl); S.texData = null;
+  S.trisN = templateNormTriangles(THREE, tpl); S.anchorDefMemo = null;   // K1b — przyciąganie domyślnych kotwic do kadłuba
   S.sel = null; S.transient = null; S.shown = null;
   S.history = WL.createHistory(S.fileEdit);
   S.savedAt = null;
   if (session && session.slot === slot && session.variant === variant) {
     S.history = session.history;
     S.savedAt = session.savedAt;
+    // K1b — sesja sprzed trybu kotwic nie ma pola `anchors`: kotwice z pliku
+    if (S.history.present.anchors === undefined) S.history = { ...S.history, present: { ...S.history.present, anchors: { ...S.fileEdit.anchors } } };
+    const ancSaved = Number.isFinite(session.ui?.anchorsSavedAt) ? session.ui.anchorsSavedAt : null;
+    if (WL.anchorsSignature(slot, S.history.present) === S.anchorsFileSig) {
+      if (ancSaved && Date.now() - ancSaved < 120000) note(`✔ Zapisano kotwice <b>anchors/${slot}.json</b> — plik wczytany ponownie, kotwice się zgadzają.`, 'ok', { ttl: 8000 });
+    } else {
+      note('Przywrócono <b>niezapisane kotwice</b> z tej karty.', 'warn', {
+        buttons: [{ label: 'Odrzuć zmiany kotwic (wczytaj plik)', onClick: () => commit(WL.revertPart(S.history.present, S.fileEdit, 'anchors')) }],
+      });
+    }
     const curSig = WL.editSignature(doc, S.history.present);
     if (curSig === S.fileSig) {
       if (session.savedAt && Date.now() - session.savedAt < 120000) note(`✔ Zapisano <b>${slot}.json</b> — plik wczytany ponownie z dysku, punkty się zgadzają.`, 'ok', { ttl: 8000 });
@@ -199,6 +252,7 @@ async function loadSlot(slot, variant = 'slot', { session = null } = {}) {
     }
   }
   if (warn) note(warn, 'warn');
+  if (anc.warn) note(anc.warn, 'warn');
   $('slotSel').value = (variant === 'incoming' ? 'incoming/' : '') + slot;
   $('slotInfo').innerHTML = `${WL.slotLabelPL(slot)} · <span class="muted">${variant === 'incoming' ? 'kandydat z incoming/' : 'slot gry'}`
     + ` · ${doc.source?.normalizer ?? 'bez normalizatora'}</span>`;
@@ -290,6 +344,7 @@ function updateMarkers() {
     m.scale.setScalar(sel ? 0.018 : 0.013);
     m.material.color.setHex(sel ? 0xffffff : 0xffb000);
   });
+  updateAnchorMarkers(e);
   // pierścień zaznaczenia
   const sp = selectedPoint();
   selRing.visible = !!sp;
@@ -297,6 +352,30 @@ function updateMarkers() {
     selRing.position.set(...sp.p);
     const s = sp.cat === 'lights' ? Math.max(0.012, sp.size * 0.9) : (sp.cat === 'nozzle' ? Math.max(0.02, (e.nozzle?.r ?? 0.04) * 1.3) : 0.024);
     selRing.scale.setScalar(s);
+  }
+}
+
+/** K1b — domyślne kotwice z BIEŻĄCEGO stanu hardpointów (rama, dysza) i bbox modelu — ta sama funkcja co w grze. */
+function anchorDefaults(e = edit()) {
+  const hp = e && S.baseDoc ? WL.buildDoc(S.baseDoc, e) : null;
+  // przyciąganie przegląda całą siatkę — wynik w pamięci, przeliczany tylko przy zmianie ramy / dyszy / wieżyczek
+  const key = JSON.stringify([S.slot, hp?.frame ?? null, hp?.nozzles ?? null, hp?.weapons ?? null]);
+  if (S.anchorDefMemo?.key !== key) S.anchorDefMemo = { key, defs: computeDefaultAnchors({ hardpoints: hp, bbox: S.bboxN, triangles: S.trisN }) };
+  return S.anchorDefMemo.defs;
+}
+function anchorRowsNow(e = edit()) { return e ? WL.anchorRows(e, anchorDefaults(e)) : []; }
+
+function updateAnchorMarkers(e) {
+  const on = S.mode === 'anchors' && anchorsAllowed();
+  const rows = on ? anchorRowsNow(e) : [];
+  for (const role of ANCHOR_ROLES) {
+    const s = anchorSolid.get(role), g = anchorGhost.get(role);
+    const row = rows.find((r) => r.role === role);
+    const sel = role === S.anchorRole;
+    g.visible = on && !!row?.def;
+    if (g.visible) { g.position.set(...row.def); g.scale.setScalar(sel ? 0.016 : 0.012); }
+    s.visible = on && row?.src === 'file';
+    if (s.visible) { s.position.set(...row.p); s.scale.setScalar(sel ? 0.02 : 0.014); }
   }
 }
 
@@ -336,6 +415,13 @@ function updateLabels() {
     });
     const sp = selectedPoint();
     if (sp && sp.cat === 'lights') want.set('selL', { p: sp.p, text: '💡', cls: 'sel' });
+    if (S.mode === 'anchors' && anchorsAllowed()) {
+      for (const r of anchorRowsNow(e)) {
+        if (!r.p) continue;
+        want.set('a_' + r.role, { p: r.p, text: WL.ANCHOR_ROLE_PL[r.role].toUpperCase() + (r.src === 'file' ? '' : ' · dom.'),
+          cls: 'anc' + (r.role === S.anchorRole ? ' sel' : '') + (r.src === 'file' ? '' : ' ghost') });
+      }
+    }
   }
   for (const [k, el] of labelEls) if (!want.has(k)) { el.remove(); labelEls.delete(k); }
   for (const [k, w] of want) {
@@ -478,6 +564,9 @@ function placeAt(clientX, clientY) {
     commit(WL.setNozzle(e, op ? op.centre : p, d, op ? op.r : (e.nozzle?.r ?? 0.04)));
     S.sel = { cat: 'nozzle', uid: 0 };
     if (op) note(`Dysza w środku otworu (promień ${op.r.toFixed(3)}). Smuga wychodzi ze środka wylotu.`, 'ok', { ttl: 4000 });
+  } else if (S.mode === 'anchors') {
+    if (!anchorsAllowed()) { note('Kotwice tylko dla 24 modeli gry (slot gry, nie kandydat z incoming/).', 'warn', { ttl: 3500 }); return; }
+    commit(WL.placeAnchor(e, S.anchorRole, p));
   } else if (S.mode === 'weapons' || S.mode === 'lights') {
     const cat = S.mode;
     const mirror = S.mirror && !WL.onMirrorPlane(p, e.frame);
@@ -515,9 +604,30 @@ function pickAt(clientX, clientY) {
   return i >= 0 ? items[i] : null;
 }
 
+/** K1b — rola kotwicy pod kursorem (znacznik postawiony albo domyślny; bez testu zasłonięcia — znaczniki rysowane na wierzchu). */
+function pickAnchorAt(clientX, clientY) {
+  if (!S.rig || !anchorsAllowed()) return null;
+  const r = canvas.getBoundingClientRect();
+  const x = clientX - r.left, y = clientY - r.top;
+  const rows = anchorRowsNow();
+  const pts = rows.map((row) => (row.p ? screenOf(row.p) : null));
+  const i = WL.pickNearest(pts, x, y, PICK_PX);
+  return i >= 0 ? rows[i].role : null;
+}
+
 canvas.addEventListener('pointerdown', (ev) => {
   if (ev.button !== 0 || !S.rig) return;
   S.down = { x: ev.clientX, y: ev.clientY, moved: false };
+  if (S.mode === 'anchors') {
+    const role = pickAnchorAt(ev.clientX, ev.clientY);
+    if (role) {
+      S.anchorRole = role;
+      S.drag = { cat: 'anchor', role, started: false };
+      controls.enabled = false;
+      refresh();
+    }
+    return;
+  }
   if (S.mode === 'select') {
     const hit = pickAt(ev.clientX, ev.clientY);
     if (hit) {
@@ -538,7 +648,8 @@ window.addEventListener('pointermove', (ev) => {
     if (!hit) return;
     const base = S.history.present;
     let next;
-    if (S.drag.cat === 'nozzle') next = WL.setNozzle(base, hit.p, WL.nozzleDirection(S.nozzleDir, base.frame, hit.n), base.nozzle?.r);
+    if (S.drag.cat === 'anchor') next = WL.moveAnchor(base, S.drag.role, hit.p);
+    else if (S.drag.cat === 'nozzle') next = WL.setNozzle(base, hit.p, WL.nozzleDirection(S.nozzleDir, base.frame, hit.n), base.nozzle?.r);
     else {
       const list = S.drag.cat === 'weapons' ? base.weapons : base.lights;
       const it = list.find((x) => x.uid === S.drag.uid);
@@ -580,7 +691,8 @@ function applyHover() {
   hoverA.visible = !!hit;
   hoverB.visible = false;
   if (!hit) return;
-  const col = S.mode === 'lights' ? WL.LIGHT_COLOURS[S.lightColour] : (S.mode === 'weapons' ? '#ffb000' : (S.mode === 'nozzle' ? '#ff9a5a' : '#fff36a'));
+  const col = S.mode === 'lights' ? WL.LIGHT_COLOURS[S.lightColour] : (S.mode === 'weapons' ? '#ffb000' : (S.mode === 'nozzle' ? '#ff9a5a'
+    : (S.mode === 'anchors' ? '#' + ANCHOR_COLOURS[S.anchorRole].toString(16).padStart(6, '0') : '#fff36a')));
   hoverA.material.color.set(col);
   hoverA.position.set(...hit.p);
   const s = S.mode === 'lights' ? Math.max(0.006, S.lightSize * 0.5) : 0.012;
@@ -606,6 +718,7 @@ function undo() { S.history = WL.historyUndo(S.history); S.transient = null; fix
 function redo() { S.history = WL.historyRedo(S.history); S.transient = null; fixSelection(); refresh(); }
 function fixSelection() { if (S.sel && !selectedPoint()) S.sel = null; }
 const isDirty = () => !!S.history && WL.editSignature(S.baseDoc, S.history.present) !== S.fileSig;
+const isAnchorsDirty = () => !!S.history && anchorsAllowed() && WL.anchorsSignature(S.slot, S.history.present) !== S.anchorsFileSig;   // K1b
 
 function refresh(force = false) {
   if (!S.history) return;
@@ -624,7 +737,9 @@ function updatePanel() {
   for (const b of document.querySelectorAll('[data-col]')) b.classList.toggle('on', b.dataset.col === S.lightColour);
   $('optNozzle').classList.toggle('hidden', S.mode !== 'nozzle');
   $('optLights').classList.toggle('hidden', S.mode !== 'lights' && !(S.mode === 'select' && S.sel?.cat === 'lights'));
-  $('optMirror').classList.toggle('hidden', S.mode === 'bow' || S.mode === 'nozzle');
+  $('optMirror').classList.toggle('hidden', S.mode === 'bow' || S.mode === 'nozzle' || S.mode === 'anchors');
+  $('optAnchors').classList.toggle('hidden', S.mode !== 'anchors');
+  updateAnchorPanel(e);
   $('mirrorChk').checked = S.mirror;
   $('swapNavChk').checked = S.swapNav;
   $('hint').innerHTML = MODE_HINT[S.mode];
@@ -689,6 +804,37 @@ function updatePanel() {
   $('errBox').textContent = v.ok ? '' : 'Dokument niepoprawny — zapis zablokowany:\n' + v.errors.slice(0, 5).join('\n');
   $('saveBtn').disabled = !v.ok;
   $('dlBtn').disabled = !v.ok;
+}
+
+/** K1b — panel trybu «kotwice»: wybór roli ze stanem, przywracanie, zapis pliku kotwic. */
+function updateAnchorPanel(e) {
+  const box = $('anchorRoles');
+  if (!box) return;
+  const allowed = anchorsAllowed();
+  const rows = anchorRowsNow(e);
+  box.innerHTML = '';
+  for (const r of rows) {
+    const b = document.createElement('button');
+    b.className = 'role' + (r.role === S.anchorRole ? ' on' : '');
+    b.innerHTML = `<i style="background:#${ANCHOR_COLOURS[r.role].toString(16).padStart(6, '0')}"></i>${WL.ANCHOR_ROLE_PL[r.role]}`
+      + ` <span class="${r.src === 'file' ? 'st-file' : 'muted'}">${r.src === 'file' ? '✔ postawiona' : 'domyślna'}</span>`;
+    b.title = r.p ? `(${fmt(r.p)})` : '';
+    b.onclick = () => { S.anchorRole = r.role; refresh(); };
+    box.appendChild(b);
+  }
+  const placed = rows.filter((r) => r.src === 'file').length;
+  const selPlaced = rows.find((r) => r.role === S.anchorRole)?.src === 'file';
+  $('ancResetOne').disabled = !allowed || !selPlaced;
+  $('ancResetAll').disabled = !allowed || !placed;
+  $('ancRevert').disabled = !allowed || !isAnchorsDirty();
+  const v = WL.anchorsDocFromEdit(S.slot, e);
+  const dirty = isAnchorsDirty();
+  $('ancSaveBtn').disabled = !allowed || !v.ok;
+  $('ancSaveBtn').classList.toggle('dirty', dirty);
+  $('ancInfo').innerHTML = !allowed
+    ? '<span style="color:var(--warn)">Kotwice tylko dla 24 modeli gry (slot gry, nie kandydat z incoming/).</span>'
+    : `postawione ${placed} / ${ANCHOR_ROLES.length} · ` + (dirty ? '<span style="color:var(--warn)">● niezapisane kotwice</span>'
+      : (S.anchorsDoc ? '✔ zgodne z plikiem' : '<span class="muted">plik jeszcze nie istnieje</span>'));
 }
 
 function buildSliders() {
@@ -856,12 +1002,99 @@ async function save() {
   }
   // Plik na dysku = ten dokument. Live Server za chwilę przeładuje stronę (i grę) — sesja niesie stan i znacznik zapisu.
   S.baseDoc = r.doc;
-  S.fileEdit = WL.editFromDoc(r.doc);
+  S.fileEdit = WL.withAnchors(WL.editFromDoc(r.doc), S.anchorsDoc, S.slot);   // K1b — kotwice pliku zostają w stanie pliku
   S.fileSig = WL.editSignature(r.doc, S.fileEdit);
   persistNow();
   note(`✔ Zapisano <b>${S.slot}.json</b> (${r.doc.weapons.length} wieżyczek, ${r.doc.lights.length} świateł). Strona przeładuje się sama.`, 'ok', { ttl: 10000 });
   updatePanel();
   setTimeout(() => { S.saving = false; }, 4000);
+}
+
+// ── K1b: zapis kotwic (osobny folder assets/models/ships/anchors; zapis hardpointów bez zmian) ────────────────────────
+async function idbGetKey(key) {
+  try { const db = await idbOpen(); return await new Promise((res) => { const q = db.transaction(IDB.store).objectStore(IDB.store).get(key); q.onsuccess = () => res(q.result ?? null); q.onerror = () => res(null); }); } catch { return null; }
+}
+async function idbPutKey(key, handle) {
+  try { const db = await idbOpen(); await new Promise((res) => { const t = db.transaction(IDB.store, 'readwrite'); t.objectStore(IDB.store).put(handle, key); t.oncomplete = res; t.onerror = res; }); } catch { /* zapyta przy następnym zapisie */ }
+}
+
+/** Folder kotwic z wybranego folderu: `anchors` (wprost) albo `ships` (ma `hardpoints/`) → jego `anchors/` (tworzony). */
+async function resolveAnchorsDir(dir) {
+  if (!dir) return null;
+  if (dir.name === 'anchors') return dir;
+  try { await dir.getDirectoryHandle('hardpoints'); return await dir.getDirectoryHandle('anchors', { create: true }); } catch { return null; }
+}
+
+async function getAnchorsDir() {
+  let dir = S.anchorsDirHandle ?? (await idbGetKey(IDB_ANCHORS_KEY));
+  if (dir && !(await ensurePermission(dir))) dir = null;
+  if (!dir) {
+    if (typeof window.showDirectoryPicker !== 'function') return { dir: null, why: 'unsupported' };
+    let picked;
+    try { picked = await window.showDirectoryPicker({ id: 'kosmos-anchors', mode: 'readwrite' }); } catch { return { dir: null, why: 'cancel' }; }
+    dir = await resolveAnchorsDir(picked);
+    if (!dir) return { dir: null, why: 'wrongdir', name: picked?.name };
+  }
+  S.anchorsDirHandle = dir;
+  await idbPutKey(IDB_ANCHORS_KEY, dir);
+  return { dir, why: null };
+}
+
+async function writeAnchorsTo(dir, slot, text) {
+  const fh = await dir.getFileHandle(slot + '.json', { create: true });
+  const w = await fh.createWritable();
+  await w.write(text);
+  await w.close();
+  const back = await (await fh.getFile()).text();
+  if (back !== text) throw new Error('odczyt kontrolny różni się od zapisu');
+  return true;
+}
+
+function afterAnchorsSaved(doc) {
+  S.anchorsDoc = doc;
+  S.fileEdit = { ...S.fileEdit, anchors: WL.anchorsFromDoc(doc, S.slot) };
+  S.anchorsFileSig = WL.anchorsSignature(S.slot, S.fileEdit);
+}
+
+async function saveAnchors() {
+  if (!anchorsAllowed()) { note('Kotwice tylko dla 24 modeli gry.', 'warn'); return; }
+  const r = WL.anchorsDocFromEdit(S.slot, edit());
+  if (!r.ok) { note('Kotwice niepoprawne — nic nie zapisano: ' + r.errors.slice(0, 3).join('; '), 'bad'); return; }
+  const text = formatAnchorsJson(r.doc);
+  const { dir, why, name } = await getAnchorsDir();
+  if (!dir) {
+    if (why === 'wrongdir') note(`Wybrany folder „${name ?? '?'}" to nie <b>assets/models/ships/anchors</b> ani <b>assets/models/ships</b> — nic nie zapisano.`, 'bad');
+    else if (why === 'unsupported') { note('Ta przeglądarka nie zapisuje plików bezpośrednio — pobieram plik (zapas).', 'warn'); downloadAnchors(text); }
+    else note('Nie wybrano folderu — nic nie zapisano. Możesz też „Pobierz plik kotwic".', 'warn');
+    return;
+  }
+  S.saving = true;
+  S.anchorsSavedAt = Date.now();
+  persistNow();
+  try {
+    await writeAnchorsTo(dir, S.slot, text);
+  } catch (e) {
+    S.saving = false;
+    note('Zapis kotwic nie powiódł się: ' + (e?.message ?? e), 'bad');
+    return;
+  }
+  afterAnchorsSaved(r.doc);
+  persistNow();
+  note(`✔ Zapisano <b>anchors/${S.slot}.json</b> (postawione role: ${r.doc.anchors.length}). Strona przeładuje się sama.`, 'ok', { ttl: 10000 });
+  updatePanel();
+  setTimeout(() => { S.saving = false; }, 4000);
+}
+
+function downloadAnchors(text) {
+  const blob = new Blob([text], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = S.slot + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  note(`Plik kotwic <b>${S.slot}.json</b> pobrany. Przenieś go do <b>assets/models/ships/anchors/</b>.`, 'ok', { ttl: 12000 });
 }
 
 function download(text) {
@@ -883,6 +1116,7 @@ function persistNow() {
   if (!S.history || !S.slot) return;
   const ui = { mode: S.mode, mirror: S.mirror, swapNav: S.swapNav, nozzleDir: S.nozzleDir, nozzleCentre: S.nozzleCentre, lightColour: S.lightColour, lightSize: S.lightSize,
     enemy: S.enemy, engine: S.engine, star: S.star, gameFrame: S.gameFrame, markers: S.markers,
+    anchorRole: S.anchorRole, anchorsSavedAt: S.anchorsSavedAt,
     cam: { p: camera.position.toArray(), t: controls.target.toArray() } };
   const txt = WL.sessionSnapshot({
     slot: S.slot, variant: S.variant, history: S.history, fileSig: S.fileSig, ui, savedAt: S.savedAt,
@@ -898,6 +1132,7 @@ function applyUi(ui) {
   if (WL.LIGHT_COLOURS[ui.lightColour]) S.lightColour = ui.lightColour;
   if (Number.isFinite(ui.lightSize)) S.lightSize = ui.lightSize;
   if (STAR_PRESETS[ui.star]) S.star = ui.star;
+  if (ANCHOR_ROLES.includes(ui.anchorRole)) S.anchorRole = ui.anchorRole;
 }
 
 // ── komunikaty ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -950,7 +1185,7 @@ async function buildSlotSelect() {
     const v = sel.value;
     const variant = v.startsWith('incoming/') ? 'incoming' : 'slot';
     const slot = v.replace(/^incoming\//, '');
-    if (isDirty()) {
+    if (isDirty() || isAnchorsDirty()) {
       sel.value = (S.variant === 'incoming' ? 'incoming/' : '') + S.slot;
       note(`Masz niezapisane zmiany w <b>${S.slot}</b>.`, 'warn', { buttons: [{ label: `Porzuć i otwórz ${slot}`, onClick: () => loadSlot(slot, variant) }] });
       return;
@@ -1002,6 +1237,12 @@ function bindUi() {
   $('camNear').onclick = () => frameCamera('near');
   $('camBattle').onclick = () => frameCamera('battle');
   $('saveBtn').onclick = () => save();
+  // K1b — kotwice
+  $('ancResetOne').onclick = () => commit(WL.resetAnchor(S.history.present, S.anchorRole));
+  $('ancResetAll').onclick = () => commit(WL.resetAllAnchors(S.history.present));
+  $('ancRevert').onclick = () => commit(WL.revertPart(S.history.present, S.fileEdit, 'anchors'));
+  $('ancSaveBtn').onclick = () => saveAnchors();
+  $('ancDlBtn').onclick = () => { const r = WL.anchorsDocFromEdit(S.slot, edit()); if (r.ok && anchorsAllowed()) downloadAnchors(formatAnchorsJson(r.doc)); };
   $('dlBtn').onclick = () => { const r = WL.docFromEdit(S.baseDoc, edit(), { date: today() }); if (r.ok) download(formatHardpointsJson(r.doc)); };
   window.addEventListener('keydown', (ev) => {
     const tag = (ev.target?.tagName ?? '').toLowerCase();
@@ -1014,11 +1255,12 @@ function bindUi() {
     if (k === 'delete' || k === 'backspace') { if (S.sel) { ev.preventDefault(); deleteSelected(); } return; }
     if (k === 'escape') { S.sel = null; refresh(); return; }
     if (k === 'm') { S.mirror = !S.mirror; refresh(); return; }
-    const mode = { 1: 'bow', 2: 'nozzle', 3: 'weapons', 4: 'lights', 5: 'select' }[k];
+    if (k === 'r' && S.mode === 'anchors') { commit(WL.resetAnchor(S.history.present, S.anchorRole)); return; }
+    const mode = { 1: 'bow', 2: 'nozzle', 3: 'weapons', 4: 'lights', 5: 'select', 6: 'anchors' }[k];
     if (mode) setMode(mode);
   });
   window.addEventListener('beforeunload', (ev) => {
-    if (S.saving || !isDirty()) return;
+    if (S.saving || (!isDirty() && !isAnchorsDirty())) return;
     ev.preventDefault();
     ev.returnValue = '';   // niezapisane zmiany: zamknięcie karty je zgubi (przeładowanie — nie, sesja je niesie)
   });
@@ -1110,6 +1352,7 @@ async function start() {
 window.WS = {
   ready: start().catch((e) => { console.error('[Workshop] start:', e); note('Błąd startu strony: ' + (e?.message ?? e), 'bad'); throw e; }),
   state: () => ({ slot: S.slot, variant: S.variant, mode: S.mode, mirror: S.mirror, sel: S.sel, edit: edit(), dirty: isDirty(),
+    anchorsDirty: isAnchorsDirty(), anchorRole: S.anchorRole,
     canUndo: WL.canUndo(S.history), canRedo: WL.canRedo(S.history), lightsMesh: !!S.rig?.lights,
     lightCount: S.rig?.lights?.geometry?.instanceCount ?? 0, plume: !!S.rig?.exhaust?.visible }),
   setMode, loadSlot, undo, redo, frameCamera,
@@ -1138,13 +1381,29 @@ window.WS = {
     if (!r.ok) return { ok: false, errors: r.errors };
     const text = formatHardpointsJson(r.doc);
     await writeDocTo(dir, S.slot, S.variant, text);
-    S.baseDoc = r.doc; S.fileEdit = WL.editFromDoc(r.doc); S.fileSig = WL.editSignature(r.doc, S.fileEdit);
+    S.baseDoc = r.doc; S.fileEdit = WL.withAnchors(WL.editFromDoc(r.doc), S.anchorsDoc, S.slot); S.fileSig = WL.editSignature(r.doc, S.fileEdit);
     S.savedAt = Date.now();
     persistNow();
     updatePanel();
     return { ok: true, text };
   },
   looksLikeHardpointsDir,
+  // K1b — kotwice (test: zapis do katalogu OPFS bez okien)
+  anchorRows: () => anchorRowsNow(),
+  setAnchorRole: (role) => { if (ANCHOR_ROLES.includes(role)) { S.anchorRole = role; refresh(); } return S.anchorRole; },
+  anchorsText: () => { const r = WL.anchorsDocFromEdit(S.slot, edit()); return r.ok ? formatAnchorsJson(r.doc) : null; },
+  saveAnchorsTo: async (dir) => {
+    const r = WL.anchorsDocFromEdit(S.slot, edit());
+    if (!r.ok || !anchorsAllowed()) return { ok: false, errors: r.errors };
+    const text = formatAnchorsJson(r.doc);
+    await writeAnchorsTo(dir, S.slot, text);
+    afterAnchorsSaved(r.doc);
+    S.anchorsSavedAt = Date.now();
+    persistNow();
+    updatePanel();
+    return { ok: true, text };
+  },
+  resolveAnchorsDir,
   maskStat: () => $('maskStat').textContent,
   /** Wartości uniformów maski pierwszego materiału rigu (test: suwak dociera do shadera gry). */
   kcUniforms: () => { const m = S.rig?.materials?.[0]; const u = m ? keyColourUniformsOf(m) : null; return u ? { hue: u.uKcHue.value, hueTol: u.uKcHueTol.value, satMin: u.uKcSatMin.value, valMin: u.uKcValMin.value, soft: u.uKcSoft.value, gain: u.uKcGain.value } : null; },

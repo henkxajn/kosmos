@@ -8,12 +8,15 @@
 //   KOSMOS.debug.holo.tune.edgeAngle = 50 — pokrętła: edgeAngle, edgeAlpha, rim, scan, spin, budgetMs, xray (liczby; skutek od następnej klatki)
 //   KOSMOS.debug.holo.info()        — { model, mode, gpuMsMedian, fallback, reason, … }
 //   KOSMOS.debug.holo.reset()       — pokrętła domyślne · KOSMOS.debug.holo.close() — zamknij i zwolnij kontekst WebGL
+//   KOSMOS.debug.holo.anchors()     — K1b: przełącz znaczniki kotwic modułów (rola + odnośnik; jasne = plik właściciela,
+//                                     przygaszone = domyślne gry); KOSMOS.debug.holo.anchorsInfo() — kotwice bieżącego modelu
 // Etykieta to napis debug (bez i18n).
 
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { resolveHudRoles } from '../ui/HudPalette.js';
 import { ShipHologramRenderer } from '../renderer/ShipHologramRenderer.js';
+import { drawShipAnchors } from '../ui/ShipAnchorOverlay.js';
 import { HOLO_TUNING, HOLO_KNOB_RANGES, tuneHologram, resetHologramTuning, cycleModelKey, debugViewerRect } from '../renderer/ShipHologramLogic.js';
 
 /** Gospodarz podglądu: rysowany przez UIManager (`_holoDebug`) na końcu `_draw`, gdy otwarty. */
@@ -24,6 +27,8 @@ export class HologramDebugViewer {
     this.renderer = new ShipHologramRenderer({ onChange, ...rendererOpts });
     this._key = 'warp_frigate';
     this.lastRect = null;
+    this.showAnchors = false;         // K1b
+    this.lastAnchors = null;
   }
   open() { this.isOpen = true; this.renderer.setModel(this._key); this._onChange(); }
   close() { this.isOpen = false; this.renderer.release(); this._onChange(); }
@@ -44,6 +49,11 @@ export class HologramDebugViewer {
       .filter(Boolean).join('  ');
     ctx.fillText(label, r.x + 8, r.y + 6);
     ctx.restore();
+    if (this.showAnchors) {
+      this.lastAnchors = drawShipAnchors(ctx, this.renderer, r, {
+        roles, font: `${THEME.fontSizeSmall ?? 10}px ${THEME.fontFamily ?? 'monospace'}`,
+      });
+    }
   }
 }
 
@@ -76,6 +86,13 @@ export function shipHologramDebugHelpers({ getUIManager = null } = {}) {
       info: () => viewer ? { open: viewer.isOpen, ...viewer.renderer.info(), tune: { ...HOLO_TUNING } } : 'closed',
       tune,
       reset: () => { const r = resetHologramTuning(); viewer?.renderer.markDirty(); dirty(); return r; },
+      anchors: () => need() ?? (viewer.showAnchors = !viewer.showAnchors, dirty(), viewer.showAnchors ? 'anchors on' : 'anchors off'),
+      anchorsInfo: () => {
+        if (need()) return need();
+        const a = viewer.renderer.anchors();
+        if (!a) return 'loading';
+        return { model: a.slot, fromFile: a.fromFile, fileOk: a.fileOk, anchors: a.anchors.map((x) => x.role + ' ' + x.src + ' ' + x.p.join(' ')) };
+      },
       _viewer: () => viewer,
     },
   };

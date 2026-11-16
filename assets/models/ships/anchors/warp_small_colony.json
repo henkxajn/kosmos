@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "slot": "warp_small_colony",
+  "anchors": [
+    { "role": "habitat", "p": [-0.0547, -0.1267, -0.0046] }
+  ]
+}

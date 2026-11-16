@@ -30,6 +30,10 @@
 // ⚠ PRZECELOWANE ŚWIADOMIE po łącznej kontroli właściciela CV-1b + CV-1c (2026-11-11): N11f wymagał dyszy = pomiar normalizatora
 //   dla KAŻDEGO slotu. Od CV-1c dyszę może ustawić właściciel w Workshopie (dopisek „Model Workshop <data>:” w notes) — taki slot
 //   ma dyszę w prostopadłościanie modelu, w rufowej połowie; reszta slotów — równość jak dotąd, ze świadkiem (≥ 1 slot równością).
+// ⚠ Finding 737 (K1b, 2026-11-16): dopisek stempluje KAŻDY zapis Workshopu (np. same wieżyczki) — po doklikaniu wieżyczek wszystkie
+//   sześć slotów miało dopisek i świadek równości opustoszał przy poprawnych dyszach. Klasyfikacja po DYSZY, nie po dopisku: dysza
+//   równa pomiarowi liczy się do równości zawsze; reguła «rufowa połowa» tylko dla dyszy przesuniętej w Workshopie; bez dopisku
+//   i bez równości — błąd (jak dotąd). Kontrola pinu bierze pierwszy slot z dopiskiem niezależnie od gałęzi.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -315,13 +319,14 @@ await block('N11 round-trip: sześć modeli właściciela w slotach + rig gry na
     // w rufowej połowie. Pozostałe sloty — równość jak dotąd (świadek: co najmniej jeden slot sprawdzony równością).
     const pos = accessorArray(glb, prim.attributes.POSITION), nz = G.measureNozzle(pos);
     const clicked = /Model Workshop \d{4}-\d{2}-\d{2}:/.test(hp.notes ?? '');
-    if (clicked) {
+    if (clicked && !nozCtl) nozCtl = hp;
+    if (vnear(nz.p, hp.nozzles[0].p, 1e-9)) {
+      nozMeasured++;                                   // dysza nieruszona (także po zapisie Workshopu z samymi wieżyczkami)
+    } else if (clicked) {
       if (!workshopNozzleOk(hp)) nozBad.push(`${slot} (Workshop): dysza poza rufową połową modelu ${hp.nozzles[0].p}`);
-      if (!nozCtl) nozCtl = hp;
       nozClicked++;
     } else {
-      nozMeasured++;
-      if (!vnear(nz.p, hp.nozzles[0].p, 1e-9)) nozBad.push(`${slot}: ${nz.p} ≠ ${hp.nozzles[0].p}`);
+      nozBad.push(`${slot}: ${nz.p} ≠ ${hp.nozzles[0].p}`);
     }
   }
   assert(bad.length === 0, `N11a sześć slotów: sha256 = hardpointy, źródło zapisane, tylko EXT_texture_webp (bez Draco / meshopt / KTX2), obrazy dekodowalne, kolor bazowy JPEG, węzeł bez transformacji, geometria wyśrodkowana o długości 1,0 wzdłuż X (złe: ${bad.join('; ') || '—'})`);

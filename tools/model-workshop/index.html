@@ -58,6 +58,13 @@
     #labels { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
     .lbl { position: absolute; transform: translate(-50%, -150%); font-size: 11px; font-weight: 600; padding: 0 4px; border-radius: 3px;
       background: rgba(7, 9, 13, 0.75); color: #ffd28a; white-space: nowrap; }
+    .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 4px 0; }
+    .roles button { text-align: left; padding: 4px 6px; font-size: 12px; }
+    .roles button i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+    .roles .st-file { color: var(--ok); }
+    #ancSaveBtn { background: #183a24; border-color: #2e6b45; font-weight: 600; }
+    #ancSaveBtn.dirty { background: #3d2e0e; border-color: var(--accent); }
+    .lbl.anc { color: #e8f2ff; } .lbl.anc.ghost { opacity: 0.55; font-weight: 400; }
     .lbl.bow { color: #fff36a; } .lbl.noz { color: #ff9a5a; } .lbl.dim { opacity: 0.35; } .lbl.sel { color: #fff; outline: 1px solid #fff; }
     #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 6; background: rgba(7, 9, 13, 0.6); font-size: 15px; }
     #loading.hidden { display: none; }
@@ -97,6 +104,24 @@
       <button data-mode="weapons"><b>3</b>⚙ Wieżyczki</button>
       <button data-mode="lights"><b>4</b>💡 Światła</button>
       <button data-mode="select" style="grid-column: span 2"><b>5</b>🖐 Wybierz / przesuń / usuń</button>
+      <button data-mode="anchors" style="grid-column: span 2" title="Kotwice modułów dla hologramu stoczni (K1b)"><b>6</b>⚓ Kotwice modułów</button>
+    </div>
+    <div class="opt hidden" id="optAnchors">
+      <div class="muted">Rola (klik = wybierz; klik w kadłub stawia wybraną rolę):</div>
+      <div class="roles" id="anchorRoles"></div>
+      <div class="row">
+        <button id="ancResetOne" title="Wybrana rola wraca do wartości domyślnej gry (R)">↺ Domyślna <kbd>R</kbd></button>
+        <button id="ancResetAll" title="Wszystkie role wracają do domyślnych">↺ Wszystkie domyślne</button>
+        <button id="ancRevert" title="Kotwice jak w pliku">Z pliku</button>
+      </div>
+      <div class="row">
+        <button id="ancSaveBtn">💾 Zapisz kotwice</button>
+        <button id="ancDlBtn" title="Pobierz plik .json (zapas)">⬇ Pobierz plik kotwic</button>
+      </div>
+      <div class="muted" id="ancInfo">—</div>
+      <div class="muted">Plik <code>assets/models/ships/anchors/&lt;model&gt;.json</code> zawiera tylko role <b>postawione</b> przez Ciebie;
+        reszta to wartości domyślne liczone przez grę (blade kółka). Za pierwszym razem wskaż folder <code>anchors</code>
+        (albo <code>assets/models/ships</code>).</div>
     </div>
     <div class="opt" id="optMirror">
       <label class="chk"><input type="checkbox" id="mirrorChk" checked /> <span><b>LUSTRO</b> — klik po jednej burcie stawia bliźniaka po drugiej <kbd>M</kbd></span></label>
@@ -193,7 +218,7 @@
       <div><b>Pomyłka?</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd> cofa, <kbd>Ctrl</kbd>+<kbd>Y</kbd> ponawia. Tryb 5 (Wybierz) — kliknij punkt,
         przeciągnij go po kadłubie albo usuń <kbd>Del</kbd>. <kbd>Esc</kbd> odznacza.</div>
       <div><b>Mysz:</b> lewy przycisk — obrót (krótki klik = postaw punkt), kółko — zoom, prawy — przesuwanie widoku.
-        Klawisze <kbd>1</kbd>–<kbd>5</kbd> zmieniają tryb.</div>
+        Klawisze <kbd>1</kbd>–<kbd>6</kbd> zmieniają tryb (<kbd>6</kbd> — kotwice modułów, K1b).</div>
       <div class="muted">Sprawdzenie w grze: <code>KOSMOS.debug.cvBattle()</code> albo <code>KOSMOS.debug.cvParade()</code> w konsoli gry (F12), potem F5 bez zapisu.</div>
     </details>
   </aside>

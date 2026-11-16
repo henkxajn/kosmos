@@ -30,5 +30,5 @@
     "gain": 3.5
   },
   "damagePoints": "auto",
-  "notes": "CV-1a: wartości z pomiaru (audyt Q6 + 2026-11-10): dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości (27/27), dysza = środek bbox przekroju 3 % przy rufie. Bez maski (model sprzed standardu F10); wieżyczki i światła klika Workshop (CV-1c)."
+  "notes": "CV-1a: wartości z pomiaru (audyt Q6 + 2026-11-10): dziób = koniec o mniejszej liczbie wierzchołków w ostatnich 8 % długości (27/27), dysza = środek bbox przekroju 3 % przy rufie. Bez maski (model sprzed standardu F10); wieżyczki i światła klika Workshop (CV-1c). · Model Workshop 2026-11-16: wieżyczki 0, światła 0."
 }

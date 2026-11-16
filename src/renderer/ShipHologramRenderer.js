@@ -17,13 +17,14 @@ import * as THREE_NS from 'three';
 import { THEME, themeEpoch } from '../config/ThemeConfig.js';
 import { resolveHudRoles } from '../ui/HudPalette.js';
 import { ShipHardpointsCache, slotOfModelPath } from './ShipHardpoints.js';
+import { ShipAnchorsCache, anchorsFor, computeDefaultAnchors } from './ShipAnchors.js';   // K1b — kotwice modułów (podgląd właściciela, K1c — odnośniki)
 import {
   HOLO_TUNING, modelLoadPaths, fallbackState, median, pushSample, budgetExceeded, shouldSyncSample, shouldRender,
   fadeProgress, HOLO_FADE_MS, holoCameraSpec, holoYaw, technicalLayout, planViewCamera,
 } from './ShipHologramLogic.js';
 import {
   createHoloMaterials, recolorHoloMaterials, setHoloXray, disposeHoloMaterials, buildHoloModel, rebuildHoloEdges,
-  disposeHoloModel, drawSilhouette, modelTriangles,
+  disposeHoloModel, drawSilhouette, modelTriangles, modelNormTriangles,
 } from './ShipHologramScene.js';
 
 const SCAN_LINE_PX = 3;          // okres linii skanowania [px urządzenia]
@@ -32,6 +33,7 @@ const MAX_DT_S = 0.1;            // klamra kroku obrotu [s] (po przerwie w rysow
 
 let _ownHardpoints = null;
 let _ownLoader = null;
+let _ownAnchors = null;
 
 function defaultCreateCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -78,6 +80,17 @@ async function defaultLoadFrame(slot) {
   return doc?.frame ?? null;
 }
 
+// K1b — kontekst kotwic modelu: pełny dokument hardpointów (rama, dysza — domyślne) + plik kotwic klucza (albo null).
+// Wczytywany LENIWIE (dopiero gdy gospodarz poprosi o kotwice) — bez żądań plików przy samym hologramie.
+async function defaultLoadAnchors(key, hpSlot) {
+  const tr = window.KOSMOS?.threeRenderer;
+  const fetchJson = (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const hp = tr?._shipHardpoints ?? (_ownHardpoints ??= new ShipHardpointsCache({ fetchJson }));
+  _ownAnchors ??= new ShipAnchorsCache({ fetchJson });
+  const [hardpoints, file] = await Promise.all([hp.load(hpSlot), _ownAnchors.load(key)]);
+  return { hardpoints, file };
+}
+
 export class ShipHologramRenderer {
   /**
    * @param {object} [o]
@@ -86,6 +99,7 @@ export class ShipHologramRenderer {
    * @param {(w:number, h:number) => object} [o.createCanvas]
    * @param {(key:string) => Promise<{template:object, path:string, cached?:boolean}>} [o.loadTemplate]
    * @param {(slot:string) => Promise<object|null>} [o.loadFrame] — rama (dziób / góra) z hardpointów
+   * @param {(key:string, hpSlot:string) => Promise<{hardpoints:object|null, file:object|null}>} [o.loadAnchors] — K1b, kontekst kotwic
    * @param {() => string} [o.getColor] — kolor CSS roli `primary`
    * @param {() => number} [o.getEpoch] — epoka motywu
    * @param {() => number} [o.now] — zegar [ms]
@@ -98,6 +112,8 @@ export class ShipHologramRenderer {
     this._createCanvas = o.createCanvas ?? defaultCreateCanvas;
     this._loadTemplate = o.loadTemplate ?? defaultLoadTemplate;
     this._loadFrame = o.loadFrame ?? defaultLoadFrame;
+    this._loadAnchors = o.loadAnchors ?? defaultLoadAnchors;
+    this._anchorCtx = new Map();       // K1b: klucz → { hardpoints, file } | 'pending' | 'failed'
     this._getColor = o.getColor ?? (() => resolveHudRoles(THEME).primary);
     this._getEpoch = o.getEpoch ?? themeEpoch;
     this._now = o.now ?? (() => performance.now());
@@ -150,6 +166,7 @@ export class ShipHologramRenderer {
       if (!this._mats) this._mats = createHoloMaterials(this._THREE, this._getColor());
       const b0 = this._now();
       const model = buildHoloModel(this._THREE, res.template, { frame, edgeAngle: this.tuning.edgeAngle, mats: this._mats });
+      model.hpSlot = slot;             // K1b — slot pliku hardpointów (kotwice domyślne z jego ramy i dyszy)
       this._loadTimes[key] = { templateMs: +templateMs.toFixed(1), buildMs: +(this._now() - b0).toFixed(1), path: res.path,
         cached: !!res.cached, tris: model.tris, edges: model.edgeCount };
       this._models.set(key, model);
@@ -210,6 +227,87 @@ export class ShipHologramRenderer {
     }
     this._composite(ctx, rect, t);
     return { rendered, fallback: false, animating: spinning || this._fading(t) };
+  }
+
+  // ── K1b: kotwice modułów ──────────────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Kotwice bieżącego modelu (`anchorsFor` — plik nad domyślnymi) albo null, gdy kontekst jeszcze się wczytuje (pierwsze
+   * wywołanie zaczyna wczytywanie; po nim — `onChange`). Nigdy nie rzuca; błąd wczytania ⇒ same domyślne.
+   */
+  anchors() {
+    const model = this._model, key = this._key;
+    if (!model || !key) return null;
+    const c = this._anchorCtx.get(key);
+    if (c === 'pending') return null;
+    if (c === undefined) {
+      this._anchorCtx.set(key, 'pending');
+      Promise.resolve().then(() => this._loadAnchors(key, model.hpSlot ?? key))
+        .then((ctx) => { this._anchorCtx.set(key, ctx ?? 'failed'); })
+        .catch(() => { this._anchorCtx.set(key, 'failed'); })
+        .finally(() => this._onChange());
+      return null;
+    }
+    const ctx = c === 'failed' ? {} : c;
+    // domyślne przyciągnięte do kadłuba — liczone RAZ na model i kontekst (przegląd całej siatki), potem z pamięci modelu
+    if (!model._anchorDefaults || model._anchorDefaultsCtx !== ctx) {
+      let tris = null;
+      try { tris = modelNormTriangles(this._THREE, model); } catch (e) { tris = null; }
+      model._anchorDefaults = computeDefaultAnchors({ hardpoints: ctx.hardpoints ?? null, bbox: model.normBox ?? null, triangles: tris });
+      model._anchorDefaultsCtx = ctx;
+    }
+    return anchorsFor(key, { file: ctx.file ?? null, defaults: model._anchorDefaults });
+  }
+
+  /** Zapomnij kontekst kotwic (wszystkich kluczy) — następne `anchors()` wczyta pliki ponownie. */
+  forgetAnchors() { this._anchorCtx.clear(); }
+
+  /**
+   * Rzut punktów przestrzeni znormalizowanej (kotwice) na prostokąt gospodarza — w TEJ SAMEJ pozie co ostatnia klatka:
+   * 3/4 — kamera perspektywiczna i bieżący obrót; plan i sylwetka — rysunek techniczny (`technicalLayout`), każdy punkt
+   * dwa razy: widok `side` (u góry) i `top` (u dołu). Wynik w jednostkach logicznych kontekstu.
+   * @param {number[][]} points
+   * @param {{x:number,y:number,w:number,h:number}} rect
+   * @param {object} [ctx] — kontekst 2D (skala urządzenia z transformacji)
+   * @returns {{ i:number, view:'3q'|'side'|'top', x:number, y:number, depth:number|null }[]}
+   */
+  projectPoints(points, rect, ctx = null) {
+    const model = this._model;
+    if (!model || !Array.isArray(points) || !rect) return [];
+    const T = this._THREE;
+    const scale = (typeof ctx?.getTransform === 'function' ? Math.abs(ctx.getTransform().a) : 1) || 1;
+    const devW = Math.max(1, Math.round(rect.w * scale)), devH = Math.max(1, Math.round(rect.h * scale));
+    const sx = rect.w / devW, sy = rect.h / devH;
+    const plan = this._mode === 'plan' || this.fallback().fallback;
+    const yaw = -Math.PI / 2 + (plan ? 0 : holoYaw(this._mode, this._spinOn, 1, this._spinT));
+    const M = new T.Matrix4().makeRotationY(yaw).multiply(new T.Matrix4().makeRotationFromQuaternion(model.canon.quaternion));
+    const out = [];
+    const v = new T.Vector3();
+    if (plan) {
+      const lay = technicalLayout(devW, devH, model.extent);
+      points.forEach((p, i) => {
+        if (!Array.isArray(p) || p.length !== 3) return;
+        v.set(p[0], p[1], p[2]).applyMatrix4(M);
+        const s = lay.sideXY(v.x, v.y), t = lay.topXZ(v.x, v.z);
+        out.push({ i, view: 'side', x: rect.x + s[0] * sx, y: rect.y + s[1] * sy, depth: -v.z });
+        out.push({ i, view: 'top', x: rect.x + t[0] * sx, y: rect.y + t[1] * sy, depth: v.y });
+      });
+      return out;
+    }
+    const spec = holoCameraSpec('3q', devW / devH);
+    const cam = new T.PerspectiveCamera(spec.fov, devW / devH, spec.near, spec.far);
+    cam.position.set(spec.pos[0], spec.pos[1], spec.pos[2]);
+    cam.up.set(spec.up[0], spec.up[1], spec.up[2]);
+    cam.lookAt(spec.target[0], spec.target[1], spec.target[2]);
+    cam.updateMatrixWorld(true);
+    points.forEach((p, i) => {
+      if (!Array.isArray(p) || p.length !== 3) return;
+      v.set(p[0], p[1], p[2]).applyMatrix4(M);
+      const depth = v.clone().applyMatrix4(cam.matrixWorldInverse).z * -1;
+      v.project(cam);
+      out.push({ i, view: '3q', x: rect.x + (v.x + 1) / 2 * devW * sx, y: rect.y + (1 - v.y) / 2 * devH * sy, depth });
+    });
+    return out;
   }
 
   /** Zwalnia kontekst WebGL i własne zasoby (geometria szablonów i scena główna nietknięte). Bezpieczne wielokrotnie. */

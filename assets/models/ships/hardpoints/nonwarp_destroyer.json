@@ -25,7 +25,33 @@
       "r": 0.033
     }
   ],
-  "weapons": [],
+  "weapons": [
+    {
+      "id": "W1",
+      "p": [0.3969, 0.0565, -0.0002],
+      "d": null
+    },
+    {
+      "id": "W2",
+      "p": [0.3012, 0.0643, 0],
+      "d": null
+    },
+    {
+      "id": "W3",
+      "p": [0.0331, 0.0571, 0.001],
+      "d": null
+    },
+    {
+      "id": "W4",
+      "p": [-0.0892, 0.0625, 0.0007],
+      "d": null
+    },
+    {
+      "id": "W5",
+      "p": [0.0603, -0.0642, -0.0012],
+      "d": null
+    }
+  ],
   "lights": [],
   "keyColour": {
     "mode": "mask",
@@ -37,5 +63,5 @@
     "gain": 3.5
   },
   "damagePoints": "auto",
-  "notes": "normalize-ship@1 (2026-11-11 10:36): model właściciela w slocie; dziób, dysza i maska przeniesione z hardpoints/incoming/ (pomiar CV-1a / Workshop). Wieżyczki i światła klika Model Workshop (CV-1c)."
+  "notes": "normalize-ship@1 (2026-11-11 10:36): model właściciela w slocie; dziób, dysza i maska przeniesione z hardpoints/incoming/ (pomiar CV-1a / Workshop). Wieżyczki i światła klika Model Workshop (CV-1c). · Model Workshop 2026-11-16: wieżyczki 5, światła 0."
 }
