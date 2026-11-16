@@ -976,3 +976,15 @@ na wyraźne polecenie właściciela.
 
 ---
 
+
+## ARC KONSOLE — K0a: zestaw konsoli + żywa, przyciemniona scena za zakładkami (`8a820d2`, bramka właściciela PASS 2026-11-16)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` (§6.2 D-K-5 poprawione na bramce, §8 K0a). Flaga `FEATURES.consoleKit` (ON).
+`ConsoleLayoutLogic` (strefy 4/3, rezerwa zegara — #727, gniazdo paska walki — D-K-17, `uiViewport`), `ConsoleKit` (rysowanie
+wyłącznie na rolach HudPalette; nawiasy narożne tylko na bohaterze i zaznaczeniu), `ConsoleSceneLogic` (jeden predykat dla UI
+i renderera; tryby live / glass / opaque). D-K-5 po bramce: świat za konsolą żywy, ostry, przyciemniony (`brightness(0.4)`,
+bez rozmycia i zasłony, ≈ 5,5 ms/klatkę przyjęte); glass i opaque — tryby debug, kandydaci na ustawienie wydajności dla słabszych
+GPU. Pomiar: scena pod zakładką 5,7–5,8 ms (live), 0 w glass/opaque; filtr ≈ +0,4 ms GPU w najgorszym przypadku. Keepery
+`console_layout` 33/0, `console_scene` 46/0, `console_kit` 25/0; sweep 409/409, `check-i18n` PASS. Następny krok: K0b (Wywiad).
+
+---

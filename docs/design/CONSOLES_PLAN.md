@@ -1,7 +1,8 @@
 # CONSOLES — visual reform of the full-screen tabs (plan and findings registry)
 
-Status: **Phase A closed; K0a in progress.** Phase A (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20
-signed by the owner 2026-11-16 (§6.2). Register: findings #723–#735 filed; **next free finding number: 736**.
+Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); next step K0b (Intel).** Phase A
+(read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
+the K0a gate). Register: findings #723–#735 filed; **next free finding number: 736**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
 allowlist, not game code); 41 untracked files, all older than 2026-11-02, none from the combat-visuals arc.
 Handover: `C:\Users\Komputer\kosmos-handover\consoles-phase-a\` (`STOP_A.md`, `kontakt_now.html`, `shots_now/`,
@@ -368,6 +369,13 @@ value, mid effort), then the two biggest files (Colonies, Command) once the kit 
 - **D-K-5 Console background and the scene behind it.** (a) **Opaque `bgPrimary` + skip the main composer pass while a
   console is open** (ticks keep running; saves the measured 5.3 ms/frame; Observatory exempt) · (b) opaque, keep
   rendering · (c) keep translucent. **Rec (a)**, flagged with K0a.
+  **⚖ AMENDED by the owner at the K0a gate (2026-11-16):** no separate opaque window — the world stays visible and
+  **moving** behind every console: **live** scene (keeps rendering; the ~5.5 ms/frame is accepted for the moving
+  background), **sharp, only dimmed** — CSS filter on the main WebGL canvas `brightness(0.4)`, **no blur, no scrim**
+  (`blur 0`, `sat 1`, `scrim 0`, no per-screen scrim override). Observatory unchanged (no filter). The full «no separate
+  window» feel arrives as each screen drops its filled panels in its own K step. Modes **glass** (scene frozen after one
+  fresh frame, composer skipped, ticks keep running) and **opaque** stay as debug modes (`KOSMOS.debug.consoleKit.glass()`
+  / `.opaque()`) — **candidates for a future performance setting for weaker GPUs**; no settings UI now.
 - **D-K-6 First screen for K0.** (a) **Intel** · (b) Dyson (few actions, needs a new hero diagram) · (c) Budget (shared
   Economy frame is heavier). **Rec (a)**.
 - **D-K-7 Hologram render path.** (a) **dedicated offscreen WebGLRenderer → `drawImage` into the hero rect** · (b) DOM
@@ -413,3 +421,42 @@ Command 4 sub-pages + vessel inspector, Trade Rynek, Observatory catalog/threats
 status/designs, pending/reserve, designer without hull, hull selected, module picker, loaded design + stats, propulsion
 picker) + Production (GLOBAL and one colony) in all 5 themes; each frame captioned with the measured outliner state
 (D-K-2). Probe: `probes/sheet.mjs`; scout + cost: `probes/scout.mjs`; hologram prototype: `probes/holo.mjs`.
+
+## 8. K0a — delivered (console kit + scene behind consoles)
+
+**Commit `8a820d2` feat(K0a)** · flag `FEATURES.consoleKit` (ON; OFF = pre-K0a bit for bit) · owner PASS 2026-11-16 after
+two tuning rounds (handover `C:\Users\Komputer\kosmos-handover\consoles-k0a\`: `STOP_K0a.md`, `kontakt_k0a.html`,
+`probes/{k0a,modes,modes_damage,specimen,live_check}.mjs`, specimen page in the clone `E:\kosmos-work\consoles-k0a\after`).
+
+- **`ConsoleLayoutLogic`** (pure): `consoleZones(bounds, spec)` → header / title / close / combatSlot (D-K-17) / list / hero /
+  inspector / strip, variants 4-zone and 3-zone, strip optional; zones under the clock/bell cluster end above it
+  (`consoleClockRect`, Finding 727); `uiViewport(innerW, innerH)` = the single UI-scale rule for kit screens (no
+  `window.inner*` in their input handlers); `CONSOLE_SCREEN_SPECS` per screen (empty after the gate); `insetRect`, `zoneAt`,
+  `zonesOverlap`; knobs `KOSMOS.debug.consoleKit.tuneLayout({...})`.
+- **`ConsoleKit`** (drawing, roles only — zero colour literals, pinned): zone frame with corner brackets **only on the hero
+  zone and on selected items / cards** (owner tuning 1); other zones = `drawZoneRule` (1 px dim top rule + label); header with
+  `[ chips ]` and `[ x ]`; list (selection = underline + small brackets, hover .18, clip, 2 px scrollbar, `revealScroll`);
+  eyebrow; key–value rows; 2 px bars; big instrument (`THEME.fontSizeInstrument` = 2 × fontSizeLarge in every preset, D-K-19;
+  digits through `layoutTabular`); action chips normal / hover / disabled / off / danger; queue cards; timeline lanes;
+  `bracketCornersRect` added to `HudAttentionLogic`. Knobs `tuneKit({...})`. Stepper and canvas tooltip (§3) not built yet.
+- **D-K-5 (amended, §6.2)**: `ConsoleSceneLogic` decides per frame for UIManager and ThreeRenderer from one predicate
+  (`consoleSceneActive`: nav-group members + U, Observatory exempt, side panels excluded, internal close honoured);
+  `consoleBackdrop` mode table (live renders + filter; glass filter + skip after one fresh frame; opaque skip, full cover).
+  The renderer writes the canvas `style.filter` only on change (flag OFF never touches the DOM) and removes it on close;
+  `#hud-canvas` was already cleared under any overlay (`hudGate` → `overlay`, now pinned). Defaults: mode **live**,
+  `brightness(0.4)`, blur 0, sat 1, scrim 0. Debug API (quote-free): `KOSMOS.debug.consoleKit.scene()` (rendered / skipped /
+  skipping / mode / filter), `.live()`, `.glass()`, `.opaque()`, `.tune.blur / .bright / .sat / .scrim / .fadeMs = <number>`,
+  `.on()`, `.off()`, `.reset()`.
+- **Measured** (1600×1041, ZF120, RTX 3070; scene = composer render with GPU sync; GPU process = Chrome trace CrGpuMain +
+  VizCompositorThread, includes CSS filter compositing): map 5.39 ms scene / 8.14 + 0.44 ms GPU process per frame; under
+  Civilization / Production — live 5.84 / 5.69 ms scene, 9.21 / 8.84 ms GPU; glass and opaque 0 renders, ≈ 0.02 ms GPU with
+  a static UI. Worst case (UI redrawn every frame), Production: glass 4.00, live 14.17, opaque 3.61 ms GPU — the filter
+  costs ≈ 0.4 ms GPU + 0.2 ms Viz over opaque. Ticks keep running when the composer is skipped (loop frames and star breath
+  phase equal to the map); first frame after close is fresh (mean luminance 1.29 = map, 1 loop frame after close). Live
+  defaults re-checked on the engine after the gate (mode live, filter `brightness(0.4)`, scene rendering under Production,
+  Observatory unfiltered).
+- **Keepers**: `console_layout_smoke` 33/0, `console_scene_smoke` 46/0, `console_kit_smoke` 25/0 — fail-first on a
+  `git worktree` at `36e20f7`: red except the named controls / witnesses. Sweep 409/409, `check-i18n` PASS (no new labels).
+- **Deviations**: the combat strip is not moved into its header slot yet (slot reserved; first kit screen moves it); the
+  reel recorder (F10) captures no frames while the composer is skipped (glass / opaque only); `tune.scrim` is the default
+  scrim — a per-screen `scrimAlpha` in `CONSOLE_SCREEN_SPECS` would override it.
