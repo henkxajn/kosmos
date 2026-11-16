@@ -190,7 +190,10 @@ console.log('S4 — stan budowy szablonu: konsola = dzisiejsza reguła (macierz,
   const { ed } = stubWorld();
   loadTpl(ed); ed._slotAssignments[1] = 'cargo_large';
   const mod = drawSy(true);
-  assert(!mod.types.has('build_template'), 'S4c: projekt zmieniony po wczytaniu → [ BUDUJ ] bez strefy');
+  // K1c-B: czip [ BUDUJ ] w wierszu zapisanego projektu zostaje (buduje zapisany szablon) — pin dotyczy [ BUDUJ ] inspektora
+  const izc = mod.sy.consoleZones?.inspector;
+  assert(!!izc && !mod.sy._hitZones.some((z) => z.type === 'build_template' && z.x >= izc.x && z.y >= izc.y),
+    'S4c: projekt zmieniony po wczytaniu → [ BUDUJ ] inspektora bez strefy');
   assert(mod.ctx._texts.some((s) => s.includes(PL['shipyardConsole.reason.modified'])), 'S4d: powód «zmieniony» widoczny');
   assert(L.buildTarget?.({ hullId: 'hull_small', slotAssignments: ['engine_chemical'], editingId: null, templates: [] })?.reason === 'unsaved', 'S4e: niezapisany → powód unsaved');
 }
@@ -208,13 +211,15 @@ console.log('S5 — inwentarz akcji ON ⊇ OFF + te same handlery');
   for (const z of off.sy._hitZones) { off.types.add(z.type); offZones.push(z); }
   w = stubWorld(); prep(w.ed);
   const on = drawSy(true);
-  const missing = [...off.types].filter((tp) => !on.types.has(tp));
+  // K1c-B: [ EDYTUJ ] zastąpiony klikiem w wiersz (`tpl_row` → handler edytora `edit_template`, pin S5i)
+  const REPLACED = { edit_template: 'tpl_row' };
+  const missing = [...off.types].filter((tp) => !on.types.has(tp) && !(REPLACED[tp] && on.types.has(REPLACED[tp])));
   assert(off.types.size >= 14, `S5a (świadek): ścieżka OFF ma pełny inwentarz (${[...off.types].sort().join(',')})`);
   assert(missing.length === 0, `S5b: każdy typ strefy dzisiejszej Stoczni osiągalny przy ON (brak: ${missing.join(',') || '—'})`);
   assert(on.types.has('holo_view'), 'S5c: nowe czipy [ 3D ] [ PLAN ]');
   // dane stref: te same klucze co dziś
   const keys = (zones, tp) => Object.keys(zones.find((z) => z.type === tp)?.data ?? {}).sort().join();
-  const same = [...off.types].filter((tp) => !['bg', 'close'].includes(tp)).every((tp) => keys(offZones, tp) === keys(on.sy._hitZones, tp));
+  const same = [...off.types].filter((tp) => !['bg', 'close'].includes(tp) && !REPLACED[tp]).every((tp) => keys(offZones, tp) === keys(on.sy._hitZones, tp));
   assert(same, 'S5d: dane każdej strefy mają dzisiejsze klucze (te same handlery)');
   // handlery: klik ON = dzisiejszy skutek
   const click = (tp) => { const z = on.sy._hitZones.find((q) => q.type === tp); if (z) on.sy._onHit(z); return !!z; };
@@ -233,7 +238,9 @@ console.log('S5 — inwentarz akcji ON ⊇ OFF + te same handlery');
   on.sy._onHit({ type: 'holo_view', data: { mode: 'plan' } });
   assert(on.sy._holoView === 'plan', 'S5j: [ PLAN ] przełącza widok');
   click('delete_template');
-  assert(window.KOSMOS.unitDesigns.length === 0, 'S5k: [ USUŃ ] → edytor kasuje szablon');
+  const afterOne = window.KOSMOS.unitDesigns.length;
+  click('delete_template');   // K1c-B — drugi klik (w oknie potwierdzenia)
+  assert(afterOne === 1 && window.KOSMOS.unitDesigns.length === 0, 'S5k: [ USUŃ ] ×2 → edytor kasuje szablon (pierwszy klik tylko uzbraja)');
   click('close');
   assert(on.sy.visible === false, 'S5l: [ x ] zamyka');
 }
@@ -295,10 +302,14 @@ console.log('S9 — geometria ze stref konsoli');
   const inside = (q, r) => !!r && q.x >= r.x - 0.5 && q.y >= r.y - 0.5 && q.x + q.w <= r.x + r.w + 0.5 && q.y + q.h <= r.y + r.h + 0.5;
   const zs = on.sy._hitZones.filter((q) => q.type !== 'bg');
   assert(!!on.sy.consoleZones && zs.every((q) => inside(q, z.frame)), 'S9a: każda strefa w ramie konsoli');
-  const sect = { list: ['tpl_row', 'select_hull', 'edit_template', 'delete_template'], inspector: ['select_slot', 'clear_slot', 'pick_module', 'save_template', 'clear_design', 'build_template'],
+  const sect = { list: ['tpl_row', 'select_hull', 'edit_template', 'delete_template', 'build_template', 'tpl_build_blocked'], inspector: ['select_slot', 'clear_slot', 'pick_module', 'save_template', 'clear_design', 'build_template'],
     strip: ['surge_ship', 'cancel_pending_ship', 'pending_ship_hover', 'deploy_vessel'], hero: ['holo_view'] };
   const bad = [];
-  for (const [k, types] of Object.entries(sect)) for (const q of zs.filter((q) => types.includes(q.type))) if (!inside(q, z[k])) bad.push(`${q.type}∉${k}`);
+  // strefa w JEDNEJ z sekcji, które wymieniają jej typ (K1c-B: [ BUDUJ ] jest w wierszu projektu i w inspektorze)
+  for (const q of zs) {
+    const ks = Object.keys(sect).filter((k) => sect[k].includes(q.type));
+    if (ks.length && !ks.some((k) => inside(q, z[k]))) bad.push(`${q.type}∉${ks.join('|')}`);
+  }
   assert(bad.length === 0, `S9b: sekcje w swoich strefach (${bad.slice(0, 4).join(',') || 'ok'})`);
   assert(zs.filter((q) => Object.values(sect).flat().includes(q.type)).length >= 12, 'S9c (świadek): sprawdzono co najmniej 12 stref');
   const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');

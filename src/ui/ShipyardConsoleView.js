@@ -23,16 +23,17 @@ import { t, getName } from '../i18n/i18n.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { consoleZones, consoleClockRect, insetRect, CONSOLE_SCREEN_SPECS } from './ConsoleLayoutLogic.js';
 import { drawConsoleHeader, drawZoneFrame, drawZoneRule, drawEyebrow, drawKvRow, drawBar, drawInstrument, drawChipRow,
-  drawList, drawSelectBrackets, chipLabel, CONSOLE_KIT } from './ConsoleKit.js';
+  drawList, drawSelectBrackets, chipLabel, CONSOLE_KIT, applyConsoleHalo, drawTabular } from './ConsoleKit.js';
+import { consoleBgMode, consoleScrimAlpha, CONSOLE_GLASS } from './ConsoleSceneLogic.js';
 import { consoleRoles } from './ConsoleRolesLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
 import { truncateText } from './HudLabelLogic.js';
 import { clampScroll, pruneZones } from './InfoPanelLayoutLogic.js';
 import { drawDesignAnchors } from './ShipAnchorOverlay.js';
-import { designModelKey } from '../renderer/ShipHologramLogic.js';
+import { designModelKey, HOLO_TUNING } from '../renderer/ShipHologramLogic.js';
 import {
   MODULE_CATEGORY_ICONS, categoryLabelKey, designDelta, roleStacks, shipyardGate, templateBuildState, canAfford,
-  buildTarget, hullPickerRows, fittedModules, fmtDelta,
+  buildTarget, hullPickerRows, fittedModules, fmtDelta, inspectorStatLayout, ACTION_REASON_LINES, deleteArmed, statDeltaSubSlots,
 } from './ShipyardConsoleLogic.js';
 
 // Wymiary ekranu (px logiczne). Pas wyższy niż domyślny 112 — trzy kolumny z wierszami dwulinijkowymi.
@@ -46,6 +47,8 @@ export const SHIPYARD_CONSOLE = {
   STRIP_ROW_H: 44,
   HERO_PAD: 14,
   STRIP_COLS: [0.3, 0.3, 0.4],
+  REASON_H: 13,      // K1c-B — linia powodu pod czipami akcji (stała rezerwa ACTION_REASON_LINES)
+  DELTA_W: 64,       // K1c-B — stała kolumna delty bloku statystyk
 };
 
 const font = (size, bold = false) => `${bold ? 'bold ' : ''}${size}px ${THEME.fontFamily}`;
@@ -133,6 +136,7 @@ export function drawShipyardConsole(ov, ctx, W, H) {
   ov.consoleZones = z;
   ov._consoleScrollRects = {};
   ov._hoverPendingOrder = ov._hoverPendingOrder ?? null;
+  ov._tplTooltip = null;   // K1c-B — podpowiedź wyłączonego [ BUDUJ ] (ustawiana w wierszu projektu)
   const hz = ov._hoverZone;
 
   drawHeader(ov, ctx, z, roles, w, hz);
@@ -146,8 +150,22 @@ export function drawShipyardConsole(ov, ctx, W, H) {
     const r = ov._pendingColRect;
     ov._drawPendingOrderTooltip(ctx, r.x, r.y, r.w, r.h, ov._hoverPendingOrder, w.inv);
   }
+  if (ov._tplTooltip) drawTooltip(ctx, ov._tplTooltip, z.frame, roles);
   // Tło-absorber klików NA KOŃCU (first-match: konkretne strefy wygrywają) — jak dziś
   ov._addHit(z.frame.x, z.frame.y, z.frame.w, z.frame.h, 'bg');
+}
+
+/** K1c-B — podpowiedź (powód wyłączonego [ BUDUJ ]): ramka konsoli pod czipem, w klamrze ramy ekranu. */
+function drawTooltip(ctx, tip, frame, roles) {
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.font = font(THEME.fontSizeSmall);
+  const pad = 6, tw = Math.ceil(ctx.measureText(tip.text).width), w = tw + 2 * pad, h = 20;
+  const x = Math.max(frame.x, Math.min(tip.x, frame.x + frame.w - w)), y = Math.min(tip.y, frame.y + frame.h - h);
+  ctx.globalAlpha = 0.94; ctx.fillStyle = THEME.bgPrimary; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
+  ctx.strokeStyle = roles.dim; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  text(ctx, tip.text, x + pad, y + 14, roles.alert);
+  ctx.restore();
 }
 
 // ── (1) Nagłówek ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -200,7 +218,8 @@ function drawListZone(ov, ctx, lz, roles, w, ed, hz) {
     const chipZones = [];
     const res = drawList(ctx, tplRect, rows, roles, {
       selectedId: selId, hoverId: hoverIdx != null ? w.templates[hoverIdx]?.id : null, scroll: ov._designsScroll ?? 0, rowH: S.TPL_ROW_H,
-      renderRow: (c, row, r) => drawTemplateRow(c, row, r, roles, w, chipZones, hz),
+      underline: false,   // K1c-B (uwaga D) — wybrany projekt: same nawiasy, bez podkreślenia
+      renderRow: (c, row, r) => drawTemplateRow(c, row, r, roles, w, chipZones, hz, ov),
     });
     ov._designsScroll = res.scroll;
     pruneZones(chipZones, 0, tplRect.y, tplRect.y + tplRect.h);
@@ -218,33 +237,44 @@ function drawListZone(ov, ctx, lz, roles, w, ed, hz) {
   const hoverHull = hz?.type === 'select_hull' ? hz.data?.hullId : null;
   const res = drawList(ctx, hullRect, hullRows, roles, {
     selectedId: ed?._selectedHullId ?? null, hoverId: hoverHull, scroll: 0, rowH: S.HULL_ROW_H,
+    underline: false,   // K1c-B (bramka, decyzja 4) — wybrany kadłub: same nawiasy, jak lista projektów
     renderRow: (c, row, r) => drawHullRow(c, row, r, roles),
   });
   for (const r of res.zones) ov._addHit(r.x, r.y, r.w, r.h, 'select_hull', { hullId: r.id });
 }
 
-function drawTemplateRow(ctx, row, r, roles, w, chipZones, hz) {
+function drawTemplateRow(ctx, row, r, roles, w, chipZones, hz, ov) {
   const { tpl, i } = row;
   const hull = HULLS[tpl.hullId];
   const px = r.x + CONSOLE_KIT.ROW_PAD_X;
   if (!hull) { text(ctx, tpl.name, px, r.y + 14, roles.dim); return; }
   const b = tplBuild(w, tpl);
   const stats = calcShipStats(hull, b.mods);
-  // czipy [ EDYTUJ ] [ USUŃ ] (strefy przed strefą wiersza — pierwsza wygrywa)
+  // K1c-B — czipy [ BUDUJ ] (dzisiejsza reguła karty szablonu; wyłączony — podpowiedź z powodem) i [ USUŃ ] → [ POTWIERDŹ ]
+  // (drugi klik w DELETE_CONFIRM_MS). Strefy przed strefą wiersza — pierwsza wygrywa; klik w wiersz dalej wczytuje projekt.
   ctx.font = font(THEME.fontSizeSmall);
-  const hoverChip = (hz?.type === 'edit_template' || hz?.type === 'delete_template') && hz.data?.index === i ? hz.type : null;
+  const onRow = (tp) => hz?.type === tp && hz.data?.index === i;
+  const armed = deleteArmed(ov?._delArm, tpl.id, ov?._now?.() ?? 0);
+  const buildLbl = b.canQueue && !b.canBuildNow ? t('shipyardConsole.queue') : t('shipyardConsole.build');
+  const delLbl = armed ? t('shipyardConsole.confirm') : t('unitDesign.delete');
   const cw = (s) => Math.ceil(ctx.measureText(chipLabel(s)).width) + 2 * CONSOLE_KIT.CHIP_PAD_X;
-  const delW = cw(t('unitDesign.delete')), editW = cw(t('unitDesign.edit'));
-  const delX = r.x + r.w - delW - 2, editX = delX - 4 - editW;
+  const delW = cw(delLbl), buildW = cw(buildLbl);
+  const delX = r.x + r.w - delW - 2, editX = delX - 4 - buildW;
+  const canBuild = !!b.canClick;
   const chips = [
-    { type: 'edit_template', x: editX, w: editW, label: t('unitDesign.edit'), col: roles.primary },
-    { type: 'delete_template', x: delX, w: delW, label: t('unitDesign.delete'), col: roles.alert },
+    canBuild
+      ? { type: 'build_template', x: editX, w: buildW, label: buildLbl, col: roles.primary,
+        data: { templateId: tpl.id, hullId: tpl.hullId, modules: b.mods, enabled: true }, hover: hz?.type === 'build_template' && hz.x === editX && hz.y === r.y + 3 }
+      : { type: 'tpl_build_blocked', x: editX, w: buildW, label: buildLbl, col: roles.dim, data: { index: i, reason: b.reason }, hover: onRow('tpl_build_blocked') },
+    { type: 'delete_template', x: delX, w: delW, label: delLbl, col: roles.alert, data: { index: i, label: t('unitDesign.delete') }, hover: onRow('delete_template'), armed },
   ];
   for (const c of chips) {
     const cr = { x: c.x, y: r.y + 3, w: c.w, h: CONSOLE_KIT.CHIP_H };
-    if (hoverChip === c.type) { ctx.globalAlpha = CONSOLE_KIT.HOVER_ALPHA; ctx.fillStyle = c.col; ctx.fillRect(cr.x, cr.y, cr.w, cr.h); ctx.globalAlpha = 1; }
+    if (c.hover && c.type !== 'tpl_build_blocked') { ctx.globalAlpha = CONSOLE_KIT.HOVER_ALPHA; ctx.fillStyle = c.col; ctx.fillRect(cr.x, cr.y, cr.w, cr.h); ctx.globalAlpha = 1; }
+    if (c.armed) { ctx.save(); ctx.strokeStyle = c.col; ctx.lineWidth = 1; ctx.strokeRect(cr.x + 0.5, cr.y + 0.5, cr.w - 1, cr.h - 1); ctx.restore(); }
     text(ctx, chipLabel(c.label), cr.x + CONSOLE_KIT.CHIP_PAD_X, cr.y + 13, c.col);
-    chipZones.push({ ...cr, type: c.type, data: { index: i, label: c.label } });
+    chipZones.push({ ...cr, type: c.type, data: c.data });
+    if (c.type === 'tpl_build_blocked' && c.hover && ov) ov._tplTooltip = { x: cr.x, y: cr.y + cr.h + 2, text: c.data.reason };
   }
   ctx.font = font(THEME.fontSizeNormal);
   text(ctx, truncateText(`${hull.icon} ${tpl.name}`, editX - px - 6, fits(ctx)), px, r.y + 15, roles.primary, font(THEME.fontSizeNormal));
@@ -315,13 +345,53 @@ function drawHero(ov, ctx, hero, roles, ed, w) {
   ov.heroHoloRect = holoRect;
   const holo = ov._ensureHologram?.();
   if (!holo) return;
+  // K1c-B (uwaga A): bez auto-obrotu — statyczne 3/4, poza z myszy trzymana przez gospodarza (podmiana modelu jej nie zmienia)
   holo.setModel(designModelKey(hullId, mods));
   holo.setMode(view);
-  holo.draw(ctx, holoRect);
-  const stacks = roleStacks(mods, SHIP_MODULES);
-  ov.lastAnchors = drawDesignAnchors(ctx, holo, holoRect, stacks, {
-    roles, font: font(THEME.fontSizeSmall), smallFont: font(THEME.fontSizeTiny ?? THEME.fontSizeSmall - 1),
-    itemText: (it) => { const m = SHIP_MODULES[it.id]; const n = m ? getName(m) : it.id; return it.count > 1 ? `${n} ×${it.count}` : n; },
+  holo.setSpin?.(false);
+  holo.setPose?.(ov._holoPose);
+  const state = { stacks: roleStacks(mods, SHIP_MODULES), view, roles };
+  // K1c-B (§10.1): osobna kanwa pod UI — UI czyści prostokąt, warstwa maluje tło, przyciemnienie, hologram i etykiety
+  const layerRect = ov._syncHeroLayer?.(ctx, holoRect, state);
+  if (layerRect) { ov.heroHoloRect = layerRect; return; }
+  ov.lastAnchors = paintHeroContent(ctx, holoRect, holo, state, { scrim: 0 });
+}
+
+// ── K1c-B: treść bohatera (wspólna dla warstwy hologramu i ścieżki w #ui-canvas) ──────────────────────────────────────────
+
+/** Krycie zasłony konsoli, jaką UIManager maluje pod zakładką (warstwa pod UI musi ją powtórzyć w swoim prostokącie). */
+export function heroScrimAlpha() {
+  const u = window.KOSMOS?.uiManager;
+  if (!u?.isConsoleSceneActive?.()) return 0;
+  return consoleBgMode(CONSOLE_GLASS) === 'opaque' ? 1 : consoleScrimAlpha(CONSOLE_SCREEN_SPECS.shipyard, CONSOLE_GLASS);
+}
+
+/** Etykieta modułu w liście roli («Laser ×6»). */
+const moduleItemText = (it) => { const m = SHIP_MODULES[it.id]; const n = m ? getName(m) : it.id; return it.count > 1 ? `${n} ×${it.count}` : n; };
+
+/**
+ * Maluje tło (zasłona konsoli `scrim`), lokalne przyciemnienie (`HOLO_TUNING.heroDim` — miękka elipsa), hologram i etykiety ról
+ * POZA obrysem kadłuba (widok 3/4; plan — układ K1b na widoku z boku). Zwraca wynik `drawDesignAnchors`.
+ */
+export function paintHeroContent(ctx, rect, holo, state, { scrim = 0 } = {}) {
+  ctx.save();
+  if (scrim > 0) { ctx.globalAlpha = scrim; ctx.fillStyle = THEME.bgPrimary; ctx.fillRect(rect.x, rect.y, rect.w, rect.h); }
+  const dim = Number(HOLO_TUNING.heroDim) || 0;
+  if (dim > 0 && typeof ctx.createRadialGradient === 'function') {
+    // elipsa: gradient w okręgu jednostkowym, skalowany do prostokąta (pełne przyciemnienie w środku, zero na krawędzi)
+    ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
+    ctx.scale(rect.w / 2, rect.h / 2);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, THEME.bgPrimary); g.addColorStop(0.55, THEME.bgPrimary); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = dim; ctx.fillStyle = g;
+    ctx.fillRect(-1, -1, 2, 2);
+  }
+  ctx.restore();
+  holo.draw(ctx, rect);
+  return drawDesignAnchors(ctx, holo, rect, state.stacks, {
+    roles: state.roles, font: font(THEME.fontSizeSmall), smallFont: font(THEME.fontSizeTiny ?? THEME.fontSizeSmall - 1),
+    itemText: moduleItemText, halo: applyConsoleHalo,
+    hullBox: state.view === 'plan' ? undefined : (holo.projectHullBox?.(rect, ctx) ?? null),
   });
 }
 
@@ -332,33 +402,39 @@ function statRows(hull, mods, delta) {
   const { cost, commodityCost } = calcShipCost(hull, mods);
   const D = delta?.stats ?? {};
   const au = t('shipyardConsole.unit.au'), tn = t('shipyardConsole.unit.t'), pop = t('shipyardConsole.unit.pop');
-  const rows = [
-    { key: t('shipyardConsole.stat.cargo'), val: `${Math.round(s.cargo)}`, unit: tn, d: fmtDelta(D.cargo) , good: D.cargo > 0 },
-    { key: t('shipyardConsole.stat.fuel'), val: `${s.fuelCapacity.toFixed(0)} · ${s.fuelType}`, unit: '', d: fmtDelta(D.fuelCapacity), good: D.fuelCapacity > 0 },
-    { key: t('shipyardConsole.stat.warp'), val: s.warpFuelCapacity > 0 ? `${s.warpFuelCapacity.toFixed(0)} · ${s.warpSpeedLY} ${t('shipyardConsole.unit.ly')}` : '—', unit: '', d: fmtDelta(D.warpFuelCapacity), good: D.warpFuelCapacity > 0 },
-    { key: t('shipyardConsole.stat.mass'), val: `${s.totalMass.toFixed(0)}`, unit: tn, d: fmtDelta(D.totalMass), good: D.totalMass < 0 },
-    { key: t('shipyardConsole.stat.hpArmor'), val: `${Math.round(s.hp)} / ${Math.round(s.armor)}`, unit: '', d: [fmtDelta(D.hp), fmtDelta(D.armor)].filter(Boolean).join(' / '), good: (D.hp ?? 0) + (D.armor ?? 0) > 0 },
-  ];
-  const opt = (k, v, unit, dv, digits = 0, pct = false) => {
-    if (!(v > 0) && !dv) return;
-    rows.push({ key: t(k), val: pct ? `${(v * 100).toFixed(0)}%` : `${Number(v).toFixed(digits)}`, unit, d: pct ? fmtDelta(dv * 100) : fmtDelta(dv, digits), good: dv > 0 });
-  };
-  opt('shipyardConsole.stat.survival', s.survivalBonus, '', D.survivalBonus, 0, true);
-  opt('shipyardConsole.stat.discovery', s.discoveryBonus, '', D.discoveryBonus, 0, true);
-  opt('shipyardConsole.stat.colonists', s.colonistCapacity, pop, D.colonistCapacity);
-  opt('shipyardConsole.stat.troops', s.troopCapacity, '', D.troopCapacity);
+  // K1c-B (uwaga B): STAŁY zestaw wierszy (`STAT_ROW_KEYS`) — brak wartości = «—», delta pusta bez najechania; najechanie
+  // modułu zmienia wyłącznie teksty (układ: `inspectorStatLayout`).
+  const pct = (v) => `${((v > 0 ? v : 0) * 100).toFixed(0)}%`;
+  const num = (v) => `${Math.round(v > 0 ? v : 0)}`;
+  const p100 = (v) => (Number.isFinite(v) ? v * 100 : undefined);
   const raw = delta?.raw ?? {};
-  if (raw.damage != null) rows.push({ key: t('shipyardConsole.stat.moduleDamage'), val: `${raw.damage}`, unit: '', d: '', good: true, hot: true });
-  if (raw.strikeDamage != null) rows.push({ key: t('shipyardConsole.stat.moduleDamage'), val: `${raw.strikeDamage}`, unit: '', d: '', good: true, hot: true });
-  if (raw.shieldHP != null) rows.push({ key: t('shipyardConsole.stat.moduleShield'), val: `${raw.shieldHP} (+${raw.shieldRegen ?? 0})`, unit: '', d: '', good: true, hot: true });
-  rows.push({ key: t('shipyardConsole.stat.crew'), val: `${(hull.crewCost ?? 0).toFixed(1)}`, unit: pop, d: '' });
-  rows.push({ key: t('shipyardConsole.stat.upkeep'), val: `${hull.upkeepCredits ?? 0}`, unit: t('shipyardConsole.unit.krYear'), d: '' });
-  rows.push({ key: t('shipyardConsole.stat.buildTime'), val: `${hull.buildTime ?? 0}`, unit: t('shipyardConsole.unit.years'), d: '' });
+  const mod = raw.damage != null ? { key: t('shipyardConsole.stat.moduleDamage'), val: `${raw.damage}` }
+    : raw.strikeDamage != null ? { key: t('shipyardConsole.stat.moduleDamage'), val: `${raw.strikeDamage}` }
+      : raw.shieldHP != null ? { key: t('shipyardConsole.stat.moduleShield'), val: `${raw.shieldHP} (+${raw.shieldRegen ?? 0})` }
+        : { key: t('shipyardConsole.stat.module'), val: '—' };
   const costTxt = Object.entries(cost).filter(([, q]) => q > 0).map(([k, q]) => `${RESOURCE_ICONS[k] ?? k}${q}`).join(' ');
   const comTxt = Object.entries(commodityCost).filter(([, q]) => q > 0).map(([k, q]) => `${COMMODITIES[k]?.icon ?? ''}${q}`).join(' ');
   const dc = delta ? [...Object.entries(delta.cost), ...Object.entries(delta.commodity)]
     .map(([k, q]) => `${q > 0 ? '+' : '−'}${Math.abs(q)}${RESOURCE_ICONS[k] ?? COMMODITIES[k]?.icon ?? k}`).join(' ') : '';
-  return { s, rows, costTxt, comTxt, costDelta: dc, D };
+  const rows = {
+    cargo: { key: t('shipyardConsole.stat.cargo'), val: `${Math.round(s.cargo)}`, unit: tn, d: fmtDelta(D.cargo), good: D.cargo > 0 },
+    fuel: { key: t('shipyardConsole.stat.fuel'), val: `${s.fuelCapacity.toFixed(0)} · ${s.fuelType}`, unit: '', d: fmtDelta(D.fuelCapacity), good: D.fuelCapacity > 0 },
+    warp: { key: t('shipyardConsole.stat.warp'), val: s.warpFuelCapacity > 0 ? `${s.warpFuelCapacity.toFixed(0)} · ${s.warpSpeedLY} ${t('shipyardConsole.unit.ly')}` : '—', unit: '', d: fmtDelta(D.warpFuelCapacity), good: D.warpFuelCapacity > 0 },
+    mass: { key: t('shipyardConsole.stat.mass'), val: `${s.totalMass.toFixed(0)}`, unit: tn, d: fmtDelta(D.totalMass), good: D.totalMass < 0 },
+    hpArmor: { key: t('shipyardConsole.stat.hpArmor'), val: `${Math.round(s.hp)} / ${Math.round(s.armor)}`, unit: '', dPair: [fmtDelta(D.hp), fmtDelta(D.armor)], good: (D.hp ?? 0) + (D.armor ?? 0) > 0 },
+    survivalDiscovery: { key: `${t('shipyardConsole.stat.survival')} / ${t('shipyardConsole.stat.discovery')}`, val: `${pct(s.survivalBonus)} / ${pct(s.discoveryBonus)}`, unit: '',
+      dPair: [fmtDelta(p100(D.survivalBonus)), fmtDelta(p100(D.discoveryBonus))], good: (D.survivalBonus ?? 0) + (D.discoveryBonus ?? 0) > 0 },
+    colonistsTroops: { key: `${t('shipyardConsole.stat.colonists')} / ${t('shipyardConsole.stat.troops')}`, val: `${num(s.colonistCapacity)} / ${num(s.troopCapacity)}`, unit: '',
+      dPair: [fmtDelta(D.colonistCapacity), fmtDelta(D.troopCapacity)], good: (D.colonistCapacity ?? 0) + (D.troopCapacity ?? 0) > 0 },
+    module: { ...mod, unit: '', d: '', hot: mod.val !== '—' },
+    crew: { key: t('shipyardConsole.stat.crew'), val: `${(hull.crewCost ?? 0).toFixed(1)}`, unit: pop, d: '' },
+    upkeep: { key: t('shipyardConsole.stat.upkeep'), val: `${hull.upkeepCredits ?? 0}`, unit: t('shipyardConsole.unit.krYear'), d: '' },
+    buildTime: { key: t('shipyardConsole.stat.buildTime'), val: `${hull.buildTime ?? 0}`, unit: t('shipyardConsole.unit.years'), d: '' },
+    cost: { key: t('shipyardConsole.stat.cost'), text: costTxt || '—' },
+    commodities: { key: t('shipyardConsole.stat.commodities'), text: comTxt || '—' },
+    costDelta: { key: '', text: dc },
+  };
+  return { s, rows, D };
 }
 
 function drawInspector(ov, ctx, iz, roles, w, ed, hz) {
@@ -371,15 +447,14 @@ function drawInspector(ov, ctx, iz, roles, w, ed, hz) {
   const delta = hull && active >= 0 && hoverMod ? designDelta({ hull, slotAssignments: ed._slotAssignments, slotIndex: active,
     moduleId: hoverMod, calcShipStats, calcShipCost, modules: SHIP_MODULES }) : null;
 
-  // ── blok dolny (staty + akcje) — wysokość liczona przed rysowaniem ──
+  // ── blok dolny (staty + akcje) — K1c-B: układ STAŁY (`inspectorStatLayout`), niezależny od treści i od najechania ──
   const st = hull ? statRows(hull, mods, delta) : null;
   const instrH = THEME.fontSizeSmall + 8 + (THEME.fontSizeInstrument ?? 32) + 4 + THEME.fontSizeSmall;
-  const kvN = st ? st.rows.length + 1 + (st.comTxt ? 1 : 0) + (st.costDelta ? 1 : 0) : 0;
   const reasons = actionReasons(w, ed, hull, mods);
-  const actH = CONSOLE_KIT.CHIP_H + 6 + reasons.length * 13;
-  const statsH = st ? CONSOLE_KIT.EYEBROW_H + 4 + instrH + 6 + kvN * CONSOLE_KIT.KV_H + 8 : 0;
-  const bottomH = Math.min(iz.h - 60, statsH + actH);
-  const by = iz.y + iz.h - bottomH;
+  const lay = inspectorStatLayout(iz, { eyebrowH: CONSOLE_KIT.EYEBROW_H, instrH, kvH: CONSOLE_KIT.KV_H, chipH: CONSOLE_KIT.CHIP_H,
+    reasonH: S.REASON_H, deltaW: S.DELTA_W });
+  ov.lastStatLayout = hull ? lay : null;
+  const by = hull ? lay.top : iz.y + iz.h - (CONSOLE_KIT.CHIP_H + 6 + ACTION_REASON_LINES * S.REASON_H);
 
   // ── góra: sloty + picker (przewijane) ──
   const th = drawZoneRule(ctx, iz, hull ? `${t('unitDesign.slots')} · ${mods.length}/${hull.slots.length}` : t('unitDesign.slots'), roles);
@@ -401,34 +476,39 @@ function drawInspector(ov, ctx, iz, roles, w, ed, hz) {
     ov._inspScroll = clampScroll(ov._inspScroll ?? 0, contentH, top.h);
   }
 
-  // ── staty ──
-  let y = by;
+  // ── staty: każdy wiersz w swoim stałym prostokącie, delta w stałej kolumnie (cyfry tabelaryczne) ──
   if (st) {
     const hdr = delta ? t('shipyardConsole.deltaFor', getName(SHIP_MODULES[hoverMod] ?? { namePL: hoverMod, nameEN: hoverMod })) : t('unitDesign.statsPreview');
-    y += drawEyebrow(ctx, iz.x, y, iz.w, hdr, roles, { tone: delta ? 'primary' : 'dim' }) + 4;
-    const half = Math.floor(iz.w / 2);
+    drawEyebrow(ctx, lay.eyebrow.x, lay.eyebrow.y, lay.eyebrow.w, hdr, roles, { tone: delta ? 'primary' : 'dim' });
     const tone = (v, good) => (v ? (good ? 'primary' : 'alert') : 'dim');
-    drawInstrument(ctx, iz.x, y, roles, { label: t('shipyardConsole.stat.speed'), value: st.s.speed.toFixed(2), unit: t('shipyardConsole.unit.auYear'),
+    const [iS, iR] = lay.instruments;
+    drawInstrument(ctx, iS.x, iS.y, roles, { label: t('shipyardConsole.stat.speed'), value: st.s.speed.toFixed(2), unit: t('shipyardConsole.unit.auYear'),
       delta: fmtDelta(st.D.speed, 2), deltaTone: tone(st.D.speed, st.D.speed > 0) });
-    drawInstrument(ctx, iz.x + half, y, roles, { label: t('shipyardConsole.stat.range'), value: st.s.range.toFixed(0), unit: t('shipyardConsole.unit.au'),
+    drawInstrument(ctx, iR.x, iR.y, roles, { label: t('shipyardConsole.stat.range'), value: st.s.range.toFixed(0), unit: t('shipyardConsole.unit.au'),
       delta: fmtDelta(st.D.range), deltaTone: tone(st.D.range, st.D.range > 0) });
-    y += instrH + 6;
-    const DW = 64;
-    for (const r of st.rows) {
-      drawKvRow(ctx, iz.x, y, iz.w - DW, r.key, r.val, roles, { unit: r.unit, tone: r.hot ? 'primary' : 'primary' });
-      if (r.d) text(ctx, r.d, iz.x + iz.w, y + 12, r.good ? roles.primary : roles.alert, font(THEME.fontSizeSmall), 'right');
-      y += CONSOLE_KIT.KV_H;
+    for (const L of lay.rows) {
+      const r = st.rows[L.key];
+      if (r.text !== undefined) {
+        // koszt / towary / delta kosztu: etykieta po lewej, tekst do prawej krawędzi (przez kolumnę delty)
+        ctx.font = font(THEME.fontSizeSmall);
+        const kw = r.key ? ctx.measureText(r.key).width + 8 : 0;
+        if (r.key) text(ctx, r.key, L.x, L.y + 12, roles.dim);
+        if (r.text) text(ctx, truncateText(r.text, L.w + L.delta.w - kw, fits(ctx)), L.delta.x + L.delta.w, L.y + 12,
+          L.key === 'costDelta' ? roles.alert : roles.primary, font(THEME.fontSizeSmall), 'right');
+        continue;
+      }
+      drawKvRow(ctx, L.x, L.y, L.w, r.key, r.val, roles, { unit: r.unit, tone: 'primary' });
+      if (r.d || r.dPair) {
+        ctx.save(); ctx.font = font(THEME.fontSizeSmall); ctx.fillStyle = r.good ? roles.primary : roles.alert; ctx.textBaseline = 'middle';
+        if (r.d) drawTabular(ctx, truncateText(r.d, L.delta.w - 4, fits(ctx)), L.delta.x + L.delta.w, L.y + L.h / 2, 'right');
+        // pary (np. Koloniści / Desant): druga zmiana do prawej krawędzi kolumny delty (jak każdy wiersz), pierwsza do jej połowy
+        const sub = statDeltaSubSlots(L.delta);
+        (r.dPair ?? []).forEach((d, k) => { if (d) drawTabular(ctx, truncateText(d, sub[k].w - 2, fits(ctx)), sub[k].x + sub[k].w, L.y + L.h / 2, 'right'); });
+        ctx.restore();
+      }
     }
-    ctx.font = font(THEME.fontSizeSmall);
-    text(ctx, t('shipyardConsole.stat.cost'), iz.x, y + 12, roles.dim);
-    const kw = ctx.measureText(t('shipyardConsole.stat.cost')).width + 8;
-    text(ctx, truncateText(st.costTxt, iz.w - kw, fits(ctx)), iz.x + iz.w, y + 12, roles.primary, font(THEME.fontSizeSmall), 'right');
-    y += CONSOLE_KIT.KV_H;
-    if (st.comTxt) { text(ctx, truncateText(st.comTxt, iz.w - kw, fits(ctx)), iz.x + iz.w, y + 12, roles.primary, font(THEME.fontSizeSmall), 'right'); y += CONSOLE_KIT.KV_H; }
-    if (st.costDelta) { text(ctx, truncateText(st.costDelta, iz.w, fits(ctx)), iz.x + iz.w, y + 12, roles.alert, font(THEME.fontSizeSmall), 'right'); y += CONSOLE_KIT.KV_H; }
-    y += 8;
   }
-  drawActions(ov, ctx, iz, Math.max(y, iz.y + iz.h - actH), roles, w, ed, hull, mods, reasons, hz);
+  drawActions(ov, ctx, iz, hull ? lay.actions.y : by, roles, w, ed, hull, mods, reasons, hz);
 }
 
 function drawSlots(ov, ctx, top, y, roles, ed, hull, hz) {
@@ -525,7 +605,7 @@ function drawActions(ov, ctx, iz, y, roles, w, ed, hull, mods, reasons, hz) {
   }
   let ry = y + res.h + 14;
   ctx.font = font(THEME.fontSizeSmall);
-  for (const r of reasons) { text(ctx, truncateText(r.s, iz.w, fits(ctx)), iz.x, ry, r.alert ? roles.alert : roles.dim); ry += 13; }
+  for (const r of reasons.slice(0, ACTION_REASON_LINES)) { text(ctx, truncateText(r.s, iz.w, fits(ctx)), iz.x, ry, r.alert ? roles.alert : roles.dim); ry += SHIPYARD_CONSOLE.REASON_H; }
 }
 
 // ── (5) Pas: budowy · oczekujące · rezerwa ──────────────────────────────────────────────────────────────────────────────

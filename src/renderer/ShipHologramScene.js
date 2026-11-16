@@ -166,8 +166,30 @@ export function buildHoloModel(THREE, template, { frame = null, edgeAngle = 50, 
     }
   }
   model.extent = Number.isFinite(mn[0]) ? { min: mn, max: mx } : null;
+  model.hullPts = sampleDisplayPoints(THREE, model, disp);
   rebuildHoloEdges(THREE, model, edgeAngle, mats);
   return model;
+}
+
+// K1c-B — próbka wierzchołków kadłuba w RAMIE WYŚWIETLANIA (xyz kolejno, ≤ HULL_SAMPLE_MAX punktów, równy krok): kadr bohatera
+// (`heroFraming`) i obrys rzutu, którego etykiety nie mogą zasłaniać. Liczona raz na model.
+export const HULL_SAMPLE_MAX = 1500;
+function sampleDisplayPoints(THREE, model, disp) {
+  let total = 0;
+  for (const p of model.parts) total += p.geometry.attributes.position.count;
+  const step = Math.max(1, Math.ceil(total / HULL_SAMPLE_MAX));
+  const out = [], mm = new THREE.Matrix4(), v = new THREE.Vector3();
+  let k = 0;
+  for (const p of model.parts) {
+    mm.copy(disp).multiply(p.matrix);
+    const pos = p.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++, k++) {
+      if (k % step) continue;
+      v.fromBufferAttribute(pos, i).applyMatrix4(mm);
+      out.push(v.x, v.y, v.z);
+    }
+  }
+  return new Float32Array(out);
 }
 
 // K1b — trójkąty w PRZESTRZENI ZNORMALIZOWANEJ (hardpointów i kotwic): wejście przyciągania domyślnych kotwic do kadłuba.

@@ -5,6 +5,7 @@
 // Wspiera zarówno BaseOverlay (show/hide) jak i FleetManagerOverlay (open/close).
 
 import { GAME_CONFIG } from '../config/GameConfig.js';   // C7 — bramka kill-switcha PopulationOverlay
+import { routeOverlayId } from './ConsoleLayoutLogic.js';   // K1c-B (D-K-12) — U → projektant Stoczni przy konsoli Stoczni
 
 export class OverlayManager {
   constructor() {
@@ -63,7 +64,7 @@ export class OverlayManager {
     if (!entry) return false;
     // Wpis: string (legacy) lub { id, opts } (M4 P2 — klawisz K → fleet z focusSection)
     const isObj = typeof entry !== 'string';
-    const id    = isObj ? entry.id        : entry;
+    const id    = routeOverlayId(isObj ? entry.id : entry, GAME_CONFIG.FEATURES);
     const opts  = isObj ? (entry.opts ?? {}) : {};
     if (!this.overlays[id]) {
       console.log(`Panel ${id}: not yet registered`);

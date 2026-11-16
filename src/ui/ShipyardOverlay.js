@@ -28,8 +28,11 @@ import { isEnemyVessel }  from '../entities/Vessel.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
 import { isKitScreen }    from './ConsoleLayoutLogic.js';
 import { applyConsoleHalo } from './ConsoleKit.js';
-import { drawShipyardConsole, shipyardConsoleScroll } from './ShipyardConsoleView.js';
+import { drawShipyardConsole, shipyardConsoleScroll, paintHeroContent, heroScrimAlpha } from './ShipyardConsoleView.js';
 import { ShipHologramRenderer } from '../renderer/ShipHologramRenderer.js';
+import { HOLO_TUNING, HOLO_POSE_DEFAULT, dragPose, isDragMove, isDoubleTap } from '../renderer/ShipHologramLogic.js';
+import { ShipyardHoloLayer } from './ShipyardHoloLayer.js';
+import { deleteClick, DELETE_CONFIRM_MS } from './ShipyardConsoleLogic.js';
 
 // ARC KONSOLE K1c-A — Stocznia na szablonie konsoli (`FEATURES.consoleKit` + `consoleShipyard`; OFF = dzisiejsza ścieżka co do bitu).
 const kitOn = () => isKitScreen('shipyard', GAME_CONFIG.FEATURES);
@@ -58,20 +61,120 @@ export class ShipyardOverlay extends BaseOverlay {
     this._stripScroll = {};
     this._holoView = '3q';         // [ 3D ] | [ PLAN ]
     this._holo = null;             // ShipHologramRenderer — leniwie, zwalniany w hide()
+    // K1c-B — poza hologramu z myszy (zostaje po zamknięciu i przy podmianie modelu), przeciąganie, dwuklik, warstwa, USUŃ ×2
+    this._holoPose = { ...HOLO_POSE_DEFAULT };
+    this._holoDrag = null;         // { x0, y0, pose0, moved }
+    this._holoTap = null;          // ostatni klik w bohatera { t, x, y } (dwuklik)
+    this._holoLayer = null;        // ShipyardHoloLayer — leniwie, usuwany w hide()
+    this._heroState = null;        // stan bohatera z ostatniej klatki UI (malowanie warstwy poza klatką UI)
+    this._heroSig = '';
+    this._delArm = null;           // { id, until } — [ USUŃ ] uzbrojone na DELETE_CONFIRM_MS
+    this._createHoloLayer = () => (ShipyardHoloLayer.available() ? new ShipyardHoloLayer() : null);
+    this._now = () => performance.now();
   }
 
-  // K1c-A — hologram bohatera (D-K-7 a); null, gdy `FEATURES.shipHologram` wyłączone.
+  // K1c-A — hologram bohatera (D-K-7 a); null, gdy `FEATURES.shipHologram` wyłączone. K1c-B: kadr bohatera (`fit: 'hero'`);
+  // wczytany model / kotwice → malowanie samej warstwy (bez przerysowania UI), bez warstwy — przerysowanie UI jak w K1c-A.
   _ensureHologram() {
     if (GAME_CONFIG.FEATURES.shipHologram !== true) return null;
     this._holo ??= new ShipHologramRenderer({
-      onChange: () => { const u = window.KOSMOS?.uiManager; if (u) u._dirty = true; },
+      fit: 'hero',
+      onChange: () => {
+        if (this._holoLayer) { this._holoLayer.requestPaint(); return; }
+        const u = window.KOSMOS?.uiManager; if (u) u._dirty = true;
+      },
     });
     return this._holo;
   }
 
-  /** K1c-A — czy UIManager ma rysować kolejną klatkę (obrót / przenikanie hologramu). */
+  /** K1c-A — czy UIManager ma rysować kolejną klatkę. K1c-B: z warstwą przenikanie animuje sama warstwa (UI stoi). */
   isAnimating() {
-    return this.visible && kitOn() && !!this._holo && this._holo.isAnimating();
+    return this.visible && kitOn() && !!this._holo && !this._holoLayer && this._holo.isAnimating();
+  }
+
+  // ── K1c-B: warstwa hologramu (CONSOLES_PLAN.md §10.1) ─────────────────────────────────────────────────────────────
+
+  /**
+   * Wołane z rysunku bohatera w klatce UI: ustawia warstwę na prostokącie, czyści go w `#ui-canvas` i maluje warstwę, gdy stan się
+   * zmienił. Zwraca prostokąt po wyrównaniu albo null (brak warstwy → rysunek w `#ui-canvas` jak w K1c-A).
+   */
+  _syncHeroLayer(ctx, rect, state) {
+    if (!this._holoLayer) {
+      this._holoLayer = this._createHoloLayer?.() ?? null;
+      if (!this._holoLayer) return null;
+      this._holoLayer.onFrame = () => this._paintHeroLayer();
+    }
+    const L = this._holoLayer;
+    const buf = (typeof ctx.getTransform === 'function' ? Math.abs(ctx.getTransform().a) : 1) || 1;
+    const css = window.KOSMOS?.uiScale || buf;
+    const r = L.place(rect, css, buf);
+    if (!r) return null;
+    ctx.clearRect(r.x, r.y, r.w, r.h);              // UI zostawia prostokąt przezroczysty — warstwa pod spodem
+    this._heroState = { ...state, scrim: heroScrimAlpha() };
+    L.markUsed();
+    const holo = this._holo;
+    const sig = JSON.stringify([r, holo?.modelKey, holo?.mode, state.view, state.stacks, this._holoPose, this._heroState.scrim,
+      HOLO_TUNING, THEME.bgPrimary, state.roles?.primary, state.roles?.dim, window.KOSMOS?.lang ?? 'pl']);
+    if (sig !== this._heroSig) { this._heroSig = sig; this._paintHeroLayer(); }
+    return r;
+  }
+
+  /** Maluje warstwę bieżącym stanem (klatka UI, przeciąganie, przenikanie, wczytany model). */
+  _paintHeroLayer() {
+    const L = this._holoLayer, holo = this._holo, st = this._heroState;
+    if (!L || !holo || !st || !this.visible) return;
+    holo.setPose(this._holoPose);
+    L.paint((c, rect) => { this.lastAnchors = paintHeroContent(c, rect, holo, st, { scrim: st.scrim }); });
+    if (holo.isAnimating()) L.requestPaint();       // przenikanie modelu — kolejna klatka samej warstwy
+  }
+
+  /** UIManager — początek / koniec klatki UI (warstwa ukryta, gdy bohater się nie narysował). */
+  beginUiFrame() { this._holoLayer?.beginFrame(); }
+  endUiFrame() { this._holoLayer?.endFrame(); }
+
+  /** Czy trwa przeciąganie hologramu (UIManager kieruje wtedy ruch myszy tylko tutaj, bez przerysowania UI). */
+  isHoloDragging() { return !!this._holoDrag && this.visible && kitOn(); }
+
+  _inHero(x, y) {
+    const r = this.heroHoloRect;
+    return !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
+  /** Ruch myszy podczas przeciągania (px log.): poza → malowanie warstwy (albo, bez warstwy, przerysowanie UI). */
+  handleHoloDrag(x, y) {
+    const d = this._holoDrag;
+    if (!d) return;
+    const dx = x - d.x0, dy = y - d.y0;
+    if (!d.moved && !isDragMove(dx, dy)) return;
+    d.moved = true;
+    this._holoPose = dragPose(d.pose0, dx, dy);
+    this._holo?.setPose(this._holoPose);
+    if (this._holoLayer?.shown) this._holoLayer.requestPaint();
+    else { const u = window.KOSMOS?.uiManager; if (u) u._dirty = true; }
+  }
+
+  /** Dwuklik w bohatera — poza domyślna (statyczne 3/4). */
+  resetHoloPose() {
+    this._holoPose = { ...HOLO_POSE_DEFAULT };
+    this._holo?.setPose(this._holoPose);
+    if (this._holoLayer?.shown) this._holoLayer.requestPaint();
+    else { const u = window.KOSMOS?.uiManager; if (u) u._dirty = true; }
+  }
+
+  handleMouseDown(x, y, button = 0) {
+    super.handleMouseDown(x, y, button);
+    if (!this.visible || !kitOn() || button !== 0) return;
+    if (this._holoView === '3q' && this._holo && this._inHero(x, y)) this._holoDrag = { x0: x, y0: y, pose0: { ...this._holoPose }, moved: false };
+  }
+
+  handleMouseUp(x, y, button = 0) {
+    super.handleMouseUp(x, y, button);
+    const d = this._holoDrag;
+    this._holoDrag = null;
+    if (!d || d.moved || !this.visible || !kitOn()) { if (d?.moved) this._holoTap = null; return; }
+    const tap = { t: this._now(), x, y };
+    if (isDoubleTap(this._holoTap, tap)) { this._holoTap = null; this.resetHoloPose(); }
+    else this._holoTap = tap;
   }
 
   // Zarejestrowana instancja unit_design (wspólny stan z klawiszem U). Null gdy
@@ -646,6 +749,19 @@ export class ShipyardOverlay extends BaseOverlay {
         return;
       }
       if (zone.type === 'holo_view') { this._holoView = zone.data.mode === 'plan' ? 'plan' : '3q'; return; }
+      // K1c-B — czip [ BUDUJ ] wyłączony: sama podpowiedź z powodem (bez akcji)
+      if (zone.type === 'tpl_build_blocked') return;
+      // K1c-B — [ USUŃ ] wymaga drugiego kliku: pierwszy pokazuje [ POTWIERDŹ ] na DELETE_CONFIRM_MS, drugi w tym czasie kasuje
+      if (zone.type === 'delete_template') {
+        const id = window.KOSMOS?.unitDesigns?.[zone.data.index]?.id ?? null;
+        const res = deleteClick(this._delArm, { id, now: this._now() });
+        this._delArm = res.arm;
+        if (res.arm) {
+          // po wygaśnięciu — jedna klatka UI, żeby czip wrócił do [ USUŃ ]
+          setTimeout(() => { const u = window.KOSMOS?.uiManager; if (u) u._dirty = true; }, DELETE_CONFIRM_MS + 20);
+        }
+        if (!res.delete) return;
+      }
     }
     // Delegacja hitów osadzonego edytora projektów do wspólnej instancji.
     if (DESIGN_EDITOR_HIT_TYPES.has(zone.type)) {
@@ -714,5 +830,8 @@ export class ShipyardOverlay extends BaseOverlay {
     this._hoverPendingOrder = null;
     // K1c-A — zwolnij kontekst WebGL hologramu (ukryty gospodarz nie rysuje → bez pracy; zamknięcie → bez kontekstu)
     if (this._holo) { this._holo.release(); this._holo = null; }
+    // K1c-B — warstwa hologramu zdjęta z DOM; poza zostaje (model «tam, gdzie gracz go zostawił»)
+    if (this._holoLayer) { this._holoLayer.destroy(); this._holoLayer = null; }
+    this._heroSig = ''; this._heroState = null; this._holoDrag = null; this._delArm = null;
   }
 }

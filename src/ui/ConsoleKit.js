@@ -340,7 +340,7 @@ export function drawChipRow(ctx, x, y, maxW, chips, roles, { hoverId = null } = 
  * — treść wiersza rysuje ekran (zestaw dalej rysuje hover, podkreślenie, nawiasy, strefy i przewijanie).
  * @returns {{ zones:Array<{type:'row',id,x,y,w,h}>, contentH:number, scroll:number }} `scroll` — po klamrze (ekran go zapisuje)
  */
-export function drawList(ctx, rect, rows, roles, { selectedId = null, hoverId = null, scroll = 0, rowH = null, renderRow = null } = {}) {
+export function drawList(ctx, rect, rows, roles, { selectedId = null, hoverId = null, scroll = 0, rowH = null, renderRow = null, underline = true } = {}) {
   const K = CONSOLE_KIT;
   const RH = Number.isFinite(rowH) && rowH > 0 ? rowH : K.ROW_H;
   let contentH = 0;
@@ -379,7 +379,8 @@ export function drawList(ctx, rect, rows, roles, { selectedId = null, hoverId = 
         }
         if (sel) {
           ctx.strokeStyle = roles.primary; ctx.lineWidth = 1;
-          strokeLine(ctx, rect.x + K.ROW_PAD_X, y + h - 1.5, rect.x + rect.w - K.SCROLLBAR_W - 2 - K.ROW_PAD_X, y + h - 1.5);
+          // K1c-B — `underline: false`: same nawiasy wyboru (lista projektów Stoczni — uwaga właściciela D)
+          if (underline) strokeLine(ctx, rect.x + K.ROW_PAD_X, y + h - 1.5, rect.x + rect.w - K.SCROLLBAR_W - 2 - K.ROW_PAD_X, y + h - 1.5);
           drawSelectBrackets(ctx, { x: rect.x, y, w: rect.w - K.SCROLLBAR_W - 2, h }, roles);
         }
         zones.push({ type: 'row', id: r.id, x: rect.x, y, w: rect.w - K.SCROLLBAR_W - 2, h });

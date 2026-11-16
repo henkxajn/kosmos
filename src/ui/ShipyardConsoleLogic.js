@@ -10,14 +10,69 @@
 
 import { groupModulesByRole } from '../renderer/ShipAnchors.js';
 
-// Kategorie modułów (slotType) — ikona każdej z 10 grup pickera. Finding 726: `shield` i `troop` nie miały ikony ani etykiety
-// (picker rysował surowy slotType). Etykieta: klucz i18n `unitDesign.cat.<slotType>` (PL/EN).
-export const MODULE_CATEGORY_ICONS = Object.freeze({
-  propulsion: '🔥', cargo: '📦', science: '🔬', special: '🤖', habitat: '🏠',
-  armor: '🛡', fuel: '⛽', weapon: '🔫', shield: '🔰', troop: '🪖',
-});
-export const MODULE_CATEGORIES = Object.freeze(Object.keys(MODULE_CATEGORY_ICONS));
-export const categoryLabelKey = (cat) => `unitDesign.cat.${cat}`;
+// Kategorie modułów (slotType) — ikona każdej z 10 grup pickera (Finding 726). K1c-B: kanon przeniesiony do
+// `src/data/ShipModuleCategories.js` (wspólny z projektantem `UnitDesignOverlay`), tu re-eksport.
+export { MODULE_CATEGORY_ICONS, MODULE_CATEGORIES, categoryLabelKey } from '../data/ShipModuleCategories.js';
+
+// ── K1c-B: [ USUŃ ] za drugim kliknięciem ──────────────────────────────────────────────────────────────────────────────
+export const DELETE_CONFIRM_MS = 3000;   // [ms] jak długo [ POTWIERDŹ ] czeka na drugi klik
+
+/**
+ * Klik w [ USUŃ ] projektu `id` w chwili `now` [ms] przy uzbrojeniu `arm` ({ id, until } | null).
+ * @returns {{ arm: {id:string, until:number}|null, delete: boolean }} — pierwszy klik uzbraja, drugi (ten sam projekt, przed
+ *   wygaśnięciem) kasuje; klik w inny projekt albo po czasie uzbraja od nowa.
+ */
+export function deleteClick(arm, { id, now, ms = DELETE_CONFIRM_MS }) {
+  if (id == null) return { arm: null, delete: false };
+  if (arm && arm.id === id && now <= arm.until) return { arm: null, delete: true };
+  return { arm: { id, until: now + ms }, delete: false };
+}
+
+/** Czy czip projektu `id` pokazuje [ POTWIERDŹ ] w chwili `now`. */
+export function deleteArmed(arm, id, now) { return !!arm && arm.id === id && now <= arm.until; }
+
+// ── K1c-B: blok statystyk inspektora — układ stały (uwaga właściciela B) ──────────────────────────────────────────────
+// Zawsze te same wiersze w tej samej kolejności (wartość zerowa / brak = «—»), stała kolumna delty (pusta bez najechania),
+// stała liczba linii powodów pod czipami akcji. Najechanie modułu zmienia tylko TEKSTY, nigdy położenia ani rozmiary.
+export const STAT_ROW_KEYS = Object.freeze([
+  'cargo', 'fuel', 'warp', 'mass', 'hpArmor', 'survivalDiscovery', 'colonistsTroops', 'module', 'crew', 'upkeep', 'buildTime',
+  'cost', 'commodities', 'costDelta',
+]);
+export const ACTION_REASON_LINES = 2;    // linie powodów pod [ BUDUJ ] [ ZAPISZ ] [ WYCZYŚĆ ] (rezerwa stała)
+
+/** Podkolumny delty wiersza-pary (np. «Koloniści / Desant»): [0] — lewa połowa, [1] — prawa, kończy się na krawędzi kolumny delty. */
+export function statDeltaSubSlots(delta) {
+  const h = Math.floor(delta.w / 2);
+  return [{ x: delta.x, y: delta.y, w: h, h: delta.h }, { x: delta.x + h, y: delta.y, w: delta.w - h, h: delta.h }];
+}
+
+/**
+ * Prostokąty bloku statystyk (px log.) — niezależne od treści.
+ * @param {{x:number,y:number,w:number,h:number}} iz — strefa inspektora
+ * @param {{ eyebrowH:number, instrH:number, kvH:number, chipH:number, reasonH:number, deltaW:number, gap?:number }} m
+ * @returns {{ top:number, eyebrow:object, instruments:object[], rows:{key:string, x,y,w,h, delta:object}[], actions:object, reasons:object }}
+ */
+export function inspectorStatLayout(iz, m) {
+  const statsH = m.eyebrowH + 4 + m.instrH + 6 + STAT_ROW_KEYS.length * m.kvH + 8;
+  const actH = m.chipH + 6 + ACTION_REASON_LINES * m.reasonH;
+  const bottomH = Math.min(iz.h - 60, statsH + actH);
+  const top = iz.y + iz.h - bottomH;
+  let y = top;
+  const eyebrow = { x: iz.x, y, w: iz.w, h: m.eyebrowH };
+  y += m.eyebrowH + 4;
+  const half = Math.floor(iz.w / 2);
+  const instruments = [{ key: 'speed', x: iz.x, y, w: half, h: m.instrH }, { key: 'range', x: iz.x + half, y, w: iz.w - half, h: m.instrH }];
+  y += m.instrH + 6;
+  const rows = STAT_ROW_KEYS.map((key) => {
+    const r = { key, x: iz.x, y, w: iz.w - m.deltaW, h: m.kvH, delta: { x: iz.x + iz.w - m.deltaW, y, w: m.deltaW, h: m.kvH } };
+    y += m.kvH;
+    return r;
+  });
+  y += 8;
+  const actY = Math.max(y, iz.y + iz.h - actH);
+  return { top, eyebrow, instruments, rows, actions: { x: iz.x, y: actY, w: iz.w, h: m.chipH },
+    reasons: { x: iz.x, y: actY + m.chipH + 6, w: iz.w, h: ACTION_REASON_LINES * m.reasonH } };
+}
 
 // Pola delty (kolejność = kolejność wierszy inspektora). `pct` — ułamek pokazywany w procentach.
 export const DELTA_KEYS = Object.freeze([

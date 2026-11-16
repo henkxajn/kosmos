@@ -15,6 +15,7 @@ import { showRenameModal } from './ModalInput.js';
 import { t, getName }    from '../i18n/i18n.js';
 import { GroundUnitPanel } from './GroundUnitPanel.js';
 import { dropZonesInRect } from './InfoPanelLayoutLogic.js';
+import { MODULE_CATEGORY_ICONS, categoryLabelKey } from '../data/ShipModuleCategories.js';
 
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
 const PAD       = 8;
@@ -33,39 +34,8 @@ const DIVIDER_W = 1;
 const ACTION_BAR_H      = 34;   // 24 px przycisk + 2×5 px oddechu
 const ACTION_BAR_WARN_H = 48;   // + linia „⚠ brak napędu"
 
-// Ikony kategorii modułów
-const CATEGORY_ICONS = {
-  propulsion: '🔥',
-  cargo:      '📦',
-  science:    '🔬',
-  special:    '🤖',
-  habitat:    '🏠',
-  armor:      '🛡',
-  fuel:       '⛽',
-  weapon:     '🔫',
-};
-
-const CATEGORY_LABELS_PL = {
-  propulsion: 'Napęd',
-  cargo:      'Ładownia',
-  science:    'Nauka',
-  special:    'Specjalne',
-  habitat:    'Habitat',
-  armor:      'Pancerz',
-  fuel:       'Paliwo',
-  weapon:     'Broń',
-};
-
-const CATEGORY_LABELS_EN = {
-  propulsion: 'Propulsion',
-  cargo:      'Cargo',
-  science:    'Science',
-  special:    'Special',
-  habitat:    'Habitat',
-  armor:      'Armor',
-  fuel:       'Fuel',
-  weapon:     'Weapon',
-};
+// Kategorie modułów — kanon `src/data/ShipModuleCategories.js` (ikona + klucz i18n). K1c-B, Finding 726: tarcze i desant
+// miały tu surowy slotType (brak w lokalnych słownikach PL/EN).
 
 // ══════════════════════════════════════════════════════════════════════════════
 // UnitDesignOverlay
@@ -432,11 +402,10 @@ export class UnitDesignOverlay extends BaseOverlay {
 
     // Renderuj inline — scroll obsługiwany globalnie przez _scrollLeft
     for (const [cat, mods] of Object.entries(groups)) {
-      const useLang = (window.KOSMOS?.lang ?? 'pl') === 'en';
-      const catLabel = useLang ? CATEGORY_LABELS_EN[cat] : CATEGORY_LABELS_PL[cat];
+      const catLabel = t(categoryLabelKey(cat));
       ctx.fillStyle = THEME.textLabel;
       ctx.font = `bold ${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
-      ctx.fillText(`${CATEGORY_ICONS[cat] ?? ''} ${catLabel ?? cat}`, x + PAD + 4, cy + 10);
+      ctx.fillText(`${MODULE_CATEGORY_ICONS[cat] ?? ''} ${catLabel ?? cat}`, x + PAD + 4, cy + 10);
       cy += 14;
 
       for (const mod of mods) {

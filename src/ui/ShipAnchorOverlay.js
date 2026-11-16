@@ -6,7 +6,7 @@
 // Układ etykiet: `ShipAnchorOverlayLogic.layoutAnchorLabels`. K1c doda listę modułów pod etykietą (ta sama linia).
 
 import { t } from '../i18n/i18n.js';
-import { ANCHOR_OVERLAY, layoutAnchorLabels } from './ShipAnchorOverlayLogic.js';
+import { ANCHOR_OVERLAY, layoutAnchorLabels, layoutHeroLabels } from './ShipAnchorOverlayLogic.js';
 
 const DEFAULT_ALPHA = 0.5;       // krycie kotwicy domyślnej (plik właściciela = 1)
 const DEFAULT_DASH = [3, 3];     // [px log.] odnośnik kotwicy domyślnej — przerywany
@@ -67,9 +67,11 @@ export function drawShipAnchors(ctx, renderer, rect, { roles, font }) {
  * @param {object} renderer — `ShipHologramRenderer`
  * @param {{ role:string, items:{ id:string, count:number }[] }[]} stacks — `ShipyardConsoleLogic.roleStacks`
  * @param {{ roles:{ primary:string, dim:string }, font:string, smallFont:string, itemText:(it:object) => string }} style
+ *   K1c-B: `hullBox` (prostokąt rzutu kadłuba, `renderer.projectHullBox`; podany — także null) → etykiety w kolumnach POZA
+ *   obrysem (`layoutHeroLabels`); `halo(ctx)` — poświata tekstu konsoli pod napisami (czytelność nad hologramem).
  * @returns {{ drawn:number, pending:boolean, placed:object[] }}
  */
-export function drawDesignAnchors(ctx, renderer, rect, stacks, { roles, font, smallFont, itemText }) {
+export function drawDesignAnchors(ctx, renderer, rect, stacks, { roles, font, smallFont, itemText, hullBox, halo = null }) {
   const list = Array.isArray(stacks) ? stacks : [];
   if (!list.length) return { drawn: 0, pending: false, placed: [] };
   const res = renderer?.anchors?.();
@@ -86,7 +88,7 @@ export function drawDesignAnchors(ctx, renderer, rect, stacks, { roles, font, sm
     return { key: a.role + ':' + q.view, role: a.role, x: q.x, y: q.y, text: anchorRoleLabel(a.role), label: side,
       subs: side ? st.items.map((it) => itemText(it)) : [] };
   });
-  const placed = layoutAnchorLabels(items, rect, { measure });
+  const placed = hullBox !== undefined ? layoutHeroLabels(items, rect, hullBox, { measure }) : layoutAnchorLabels(items, rect, { measure });
   const o = ANCHOR_OVERLAY;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
@@ -104,11 +106,14 @@ export function drawDesignAnchors(ctx, renderer, rect, stacks, { roles, font, sm
     ctx.lineTo(lx, e.elbow[1]);
     ctx.lineTo(e.side < 0 ? e.line[0] : e.line[1], e.elbow[1]);
     ctx.stroke();
+    ctx.save();
+    if (typeof halo === 'function') halo(ctx);
     ctx.font = font;
     ctx.fillText(e.text, e.textX, e.elbow[1] - 3);
     ctx.font = smallFont;
     ctx.fillStyle = roles.dim;
     (e.subs ?? []).forEach((s, k) => ctx.fillText(s, e.textX, e.elbow[1] + (k + 1) * o.LINE_H - 1));
+    ctx.restore();
   }
   ctx.restore();
   return { drawn: placed.filter((e) => e.elbow).length, pending: false, placed };

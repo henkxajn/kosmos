@@ -53,6 +53,15 @@ export function isKitScreen(id, features) {
   return !!key && features?.consoleKit === true && features?.[key] === true;
 }
 
+/**
+ * K1c-B (D-K-12 a) — dokąd prowadzi skrót zakładki: z konsolą Stoczni klawisz U (`unit_design`) otwiera projektanta Stoczni
+ * (konsola Stoczni JEST projektantem). Projektant jednostek naziemnych zostaje w Dowództwo → Naziemne i w szkicu Kolonii.
+ * Flagi OFF → id bez zmian (dzisiejszy ekran U).
+ */
+export function routeOverlayId(id, features) {
+  return id === 'unit_design' && isKitScreen('shipyard', features) ? 'shipyard' : id;
+}
+
 /** Strojenie stałych układu: nieznane klucze i nie-liczby pominięte; zwraca bieżące wartości. */
 export function tuneConsoleLayout(patch = {}) {
   for (const [k, v] of Object.entries(patch ?? {})) {

@@ -17,9 +17,12 @@ import { resolveVesselModelKey, VESSEL_MODEL_DIR, VESSEL_MODEL_KEYS } from './Ve
 // spin [rad/s]   — prędkość auto-obrotu w widoku 3/4
 // budgetMs [ms]  — budżet mediany czasu klatki hologramu (GPU); przekroczony ⇒ sylwetka (D-K-11)
 // xray [0|1]     — 0: kadłub zasłania tylne krawędzie i wnętrze (przebieg głębi), 1: prześwit (jak prototyp fazy A)
-export const HOLO_TUNING_DEFAULTS = Object.freeze({ edgeAngle: 30, edgeAlpha: 0.22, rim: 1.0, scan: 0.22, spin: 0.25, budgetMs: 4, xray: 0 });
+// heroDim [0–1]  — K1c-B: lokalne przyciemnienie za hologramem bohatera Stoczni (miękka elipsa; 0 = bez) — poświata gwiazdy
+//                  układu nie siedzi pod modelem. Stocznia nie używa `spin` (bez auto-obrotu, obrót myszą — uwaga właściciela A).
+export const HOLO_TUNING_DEFAULTS = Object.freeze({ edgeAngle: 30, edgeAlpha: 0.22, rim: 1.0, scan: 0.22, spin: 0.25, budgetMs: 4, xray: 0,
+  heroDim: 0.45 });
 export const HOLO_KNOB_RANGES = Object.freeze({
-  edgeAngle: [1, 89], edgeAlpha: [0, 1], rim: [0, 4], scan: [0, 1], spin: [0, 6], budgetMs: [0.1, 100], xray: [0, 1],
+  edgeAngle: [1, 89], edgeAlpha: [0, 1], rim: [0, 4], scan: [0, 1], spin: [0, 6], budgetMs: [0.1, 100], xray: [0, 1], heroDim: [0, 1],
 });
 export const HOLO_TUNING = { ...HOLO_TUNING_DEFAULTS };
 
@@ -134,8 +137,11 @@ export function fadeProgress(t0, now, ms = HOLO_FADE_MS) {
 
 export const HOLO_VIEW = Object.freeze({ FOV: 30, AZIMUTH_DEG: -38, ELEVATION_DEG: 20, FIT_R: 0.62, PLAN_HALF_LEN: 0.58 });
 
-/** Parametry kamery dla trybu `'3q' | 'plan'` i proporcji obrazu. */
-export function holoCameraSpec(mode, aspect) {
+/**
+ * Parametry kamery dla trybu `'3q' | 'plan'` i proporcji obrazu. K1c-B: `elevationDeg` — wysokość kamery 3/4 po pochyleniu
+ * myszą (domyślnie `HOLO_VIEW.ELEVATION_DEG` = kadr K1a co do bitu).
+ */
+export function holoCameraSpec(mode, aspect, { elevationDeg = HOLO_VIEW.ELEVATION_DEG } = {}) {
   const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   if (mode === 'plan') {
     const halfW = Math.max(HOLO_VIEW.PLAN_HALF_LEN, HOLO_VIEW.PLAN_HALF_LEN * 0.75 * a);
@@ -145,9 +151,69 @@ export function holoCameraSpec(mode, aspect) {
   // dopasowanie w krótszym wymiarze kadru
   const tanV = Math.tan(half), tanH = tanV * a;
   const dist = HOLO_VIEW.FIT_R / Math.min(tanV, tanH);
-  const az = HOLO_VIEW.AZIMUTH_DEG * Math.PI / 180, el = HOLO_VIEW.ELEVATION_DEG * Math.PI / 180;
+  const elDeg = Number.isFinite(elevationDeg) ? elevationDeg : HOLO_VIEW.ELEVATION_DEG;
+  const az = HOLO_VIEW.AZIMUTH_DEG * Math.PI / 180, el = elDeg * Math.PI / 180;
   return { type: 'persp', fov: HOLO_VIEW.FOV, near: 0.01, far: dist * 4,
     pos: [dist * Math.sin(az) * Math.cos(el), dist * Math.sin(el), dist * Math.cos(az) * Math.cos(el)], target: [0, 0, 0], up: [0, 1, 0] };
+}
+
+// ── K1c-B: poza bohatera Stoczni — obrót myszą zamiast auto-obrotu (CONSOLES_PLAN.md §10.1; uwaga właściciela A) ──────────
+// Poza = { yaw [rad] — obrót modelu wokół pionu ponad kadr 3/4; pitch [rad] — pochylenie kamery ponad ELEVATION_DEG }.
+// Domyślna (0, 0) = statyczny widok 3/4 (dziób w lewo i ku widzowi). Przeciągnięcie w poziomie obraca, w pionie pochyla w wąskiej
+// klamrze; dwuklik wraca do domyślnej; podmiana modelu pozy nie zmienia (pozę trzyma gospodarz, nie renderer).
+export const HOLO_POSE = Object.freeze({
+  YAW_PER_PX: 0.6 * Math.PI / 180,     // [rad/px log.] obrót na piksel przeciągnięcia w poziomie
+  PITCH_PER_PX: 0.35 * Math.PI / 180,  // [rad/px log.] pochylenie na piksel w pionie (w dół = widok bardziej z góry)
+  PITCH_MIN: -12 * Math.PI / 180,      // [rad] klamra pochylenia: wysokość kamery 8°…40° przy ELEVATION_DEG 20°
+  PITCH_MAX: 20 * Math.PI / 180,
+  DRAG_SLOP_PX: 4,                     // [px log.] ruch krótszy = klik, nie przeciągnięcie
+  DOUBLE_MS: 400,                      // [ms] okno dwukliku
+  DOUBLE_PX: 8,                        // [px log.] promień dwukliku
+});
+export const HOLO_POSE_DEFAULT = Object.freeze({ yaw: 0, pitch: 0 });
+
+/** Poza po przeciągnięciu o (dx, dy) px log. od pozy `p0`: yaw zawinięty do (−π, π], pitch w klamrze. */
+export function dragPose(p0, dx, dy, o = HOLO_POSE) {
+  const y0 = Number.isFinite(p0?.yaw) ? p0.yaw : 0, q0 = Number.isFinite(p0?.pitch) ? p0.pitch : 0;
+  const raw = y0 + (Number(dx) || 0) * o.YAW_PER_PX;
+  const yaw = Math.atan2(Math.sin(raw), Math.cos(raw));
+  const pitch = Math.min(o.PITCH_MAX, Math.max(o.PITCH_MIN, q0 + (Number(dy) || 0) * o.PITCH_PER_PX));
+  return { yaw, pitch };
+}
+
+/** Czy ruch od wciśnięcia to już przeciągnięcie (nie klik). */
+export function isDragMove(dx, dy, o = HOLO_POSE) { return Math.hypot(Number(dx) || 0, Number(dy) || 0) >= o.DRAG_SLOP_PX; }
+
+/** Czy klik `cur` ({ t [ms], x, y }) razem z poprzednim `prev` tworzy dwuklik. */
+export function isDoubleTap(prev, cur, o = HOLO_POSE) {
+  if (!prev || !cur || !Number.isFinite(prev.t) || !Number.isFinite(cur.t)) return false;
+  const dt = cur.t - prev.t;
+  return dt >= 0 && dt <= o.DOUBLE_MS && Math.hypot(cur.x - prev.x, cur.y - prev.y) <= o.DOUBLE_PX;
+}
+
+// ── K1c-B: kadr bohatera — model wypełnia ~75 % szerokości (wysokość w klamrze — długie i wysokie kadłuby się mieszczą) ───
+// Skala i przesunięcie w NDC nakładane na macierz rzutu (render i rzut etykiet — ta sama macierz). Liczone z rzutu punktów kadłuba
+// w POZIE DOMYŚLNEJ: kadr stały podczas obracania (burta po obrocie ±38° wciąż mieści się w zapasie do krawędzi).
+export const HERO_FRAME = Object.freeze({ FILL_W: 0.75, FILL_H: 0.72 });
+
+/**
+ * @param {{x0:number,y0:number,x1:number,y1:number}|null} box — prostokąt rzutu kadłuba w NDC (−1…1)
+ * @returns {{ s:number, tx:number, ty:number }} ndc' = s·ndc + t: środek obrysu → 0, szerokość FILL_W albo wysokość FILL_H
+ */
+export function heroFraming(box, { fillW = HERO_FRAME.FILL_W, fillH = HERO_FRAME.FILL_H } = {}) {
+  if (!box || ![box.x0, box.y0, box.x1, box.y1].every(Number.isFinite)) return { s: 1, tx: 0, ty: 0 };
+  const bw = Math.max(1e-6, box.x1 - box.x0), bh = Math.max(1e-6, box.y1 - box.y0);
+  const s = Math.min(2 * fillW / bw, 2 * fillH / bh);
+  return { s, tx: -s * (box.x0 + box.x1) / 2, ty: -s * (box.y0 + box.y1) / 2 };
+}
+
+/** Prostokąt (px log.) wyrównany do całych px CSS przy skali `cssPerLogical` — wspólne krawędzie warstwy i okna wyczyszczonego w UI. */
+export function snapRectToCss(rect, cssPerLogical) {
+  const k = Number.isFinite(cssPerLogical) && cssPerLogical > 0 ? cssPerLogical : 1;
+  const l = Math.floor(rect.x * k), tp = Math.floor(rect.y * k);
+  const r = Math.ceil((rect.x + rect.w) * k), b = Math.ceil((rect.y + rect.h) * k);
+  const width = Math.max(0, r - l), height = Math.max(0, b - tp);
+  return { x: l / k, y: tp / k, w: width / k, h: height / k, css: { left: l, top: tp, width, height } };
 }
 
 /** Odchylenie modelu [rad] w chwili `tSec` (obrót tylko w 3/4 i tylko z włączonym spinem). */

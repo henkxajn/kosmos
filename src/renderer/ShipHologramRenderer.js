@@ -20,7 +20,7 @@ import { ShipHardpointsCache, slotOfModelPath } from './ShipHardpoints.js';
 import { ShipAnchorsCache, anchorsFor, computeDefaultAnchors } from './ShipAnchors.js';   // K1b — kotwice modułów (podgląd właściciela, K1c — odnośniki)
 import {
   HOLO_TUNING, modelLoadPaths, fallbackState, median, pushSample, budgetExceeded, shouldSyncSample, shouldRender,
-  fadeProgress, HOLO_FADE_MS, holoCameraSpec, holoYaw, technicalLayout, planViewCamera,
+  fadeProgress, HOLO_FADE_MS, holoCameraSpec, holoYaw, technicalLayout, planViewCamera, HOLO_VIEW, heroFraming,
 } from './ShipHologramLogic.js';
 import {
   createHoloMaterials, recolorHoloMaterials, setHoloXray, disposeHoloMaterials, buildHoloModel, rebuildHoloEdges,
@@ -105,6 +105,7 @@ export class ShipHologramRenderer {
    * @param {() => number} [o.now] — zegar [ms]
    * @param {() => void} [o.onChange] — prośba o przerysowanie gospodarza (wczytany model, utrata kontekstu…)
    * @param {object} [o.tuning] — pokrętła (domyślnie wspólne `HOLO_TUNING`)
+   * @param {'hero'|null} [o.fit] — K1c-B: `'hero'` = kadr bohatera Stoczni (model ~75 % szerokości, `heroFraming`); null = kadr K1a
    */
   constructor(o = {}) {
     this._THREE = o.THREE ?? THREE_NS;
@@ -122,6 +123,9 @@ export class ShipHologramRenderer {
 
     this._mode = '3q';
     this._spinOn = true;
+    this._fit = o.fit === 'hero' ? 'hero' : null;
+    this._pose = { yaw: 0, pitch: 0 };   // K1c-B — poza z myszy (yaw modelu, pochylenie kamery) ponad kadr 3/4
+    this._framing = null;                // K1c-B — { key, aspect, s, tx, ty } (kadr bohatera, liczony raz na model × proporcje)
     this._forced = false;
     this._key = null; this._pendingKey = null; this._loadToken = 0; this._loadError = null;
     this._models = new Map();          // key → model (zbudowany; zwalniany w release)
@@ -179,7 +183,14 @@ export class ShipHologramRenderer {
   }
 
   setMode(mode) { const m = mode === 'plan' ? 'plan' : '3q'; if (m !== this._mode) { this._mode = m; this._resetSamples(); this._dirty = true; } return this._mode; }
-  setSpin(on) { this._spinOn = !!on; this._dirty = true; return this._spinOn; }
+  setSpin(on) { const v = !!on; if (v !== this._spinOn) { this._spinOn = v; this._dirty = true; } return this._spinOn; }
+  /** K1c-B — poza z myszy `{ yaw, pitch }` [rad] (widok 3/4); zmiana ⇒ jeden render. Model może się zmieniać — poza zostaje. */
+  setPose(p) {
+    const yaw = Number.isFinite(p?.yaw) ? p.yaw : 0, pitch = Number.isFinite(p?.pitch) ? p.pitch : 0;
+    if (yaw !== this._pose.yaw || pitch !== this._pose.pitch) { this._pose = { yaw, pitch }; if (this._mode === '3q') this._dirty = true; }
+    return { ...this._pose };
+  }
+  get pose() { return { ...this._pose }; }
   setForcedFallback(on) { this._forced = !!on; this._dirty = true; return this._forced; }
   markDirty() { this._dirty = true; }
 
@@ -279,7 +290,7 @@ export class ShipHologramRenderer {
     const devW = Math.max(1, Math.round(rect.w * scale)), devH = Math.max(1, Math.round(rect.h * scale));
     const sx = rect.w / devW, sy = rect.h / devH;
     const plan = this._mode === 'plan' || this.fallback().fallback;
-    const yaw = -Math.PI / 2 + (plan ? 0 : holoYaw(this._mode, this._spinOn, 1, this._spinT));
+    const yaw = plan ? -Math.PI / 2 : this._yaw3q();
     const M = new T.Matrix4().makeRotationY(yaw).multiply(new T.Matrix4().makeRotationFromQuaternion(model.canon.quaternion));
     const out = [];
     const v = new T.Vector3();
@@ -294,11 +305,7 @@ export class ShipHologramRenderer {
       });
       return out;
     }
-    const spec = holoCameraSpec('3q', devW / devH);
-    const cam = new T.PerspectiveCamera(spec.fov, devW / devH, spec.near, spec.far);
-    cam.position.set(spec.pos[0], spec.pos[1], spec.pos[2]);
-    cam.up.set(spec.up[0], spec.up[1], spec.up[2]);
-    cam.lookAt(spec.target[0], spec.target[1], spec.target[2]);
+    const cam = this._cam3q(devW, devH);
     cam.updateMatrixWorld(true);
     points.forEach((p, i) => {
       if (!Array.isArray(p) || p.length !== 3) return;
@@ -309,6 +316,27 @@ export class ShipHologramRenderer {
     });
     return out;
   }
+
+  /**
+   * K1c-B — prostokąt rzutu kadłuba (próbka wierzchołków `model.hullPts`) w bieżącej pozie 3/4, w jednostkach `rect`; null w planie,
+   * w sylwetce i bez modelu. Etykiety bohatera nie mogą go zasłaniać (`layoutHeroLabels`).
+   * @returns {{x0:number,y0:number,x1:number,y1:number}|null}
+   */
+  projectHullBox(rect, ctx = null) {
+    const model = this._model;
+    if (!model?.hullPts?.length || !rect || this._mode !== '3q' || this.fallback().fallback) return null;
+    const scale = (typeof ctx?.getTransform === 'function' ? Math.abs(ctx.getTransform().a) : 1) || 1;
+    const devW = Math.max(1, Math.round(rect.w * scale)), devH = Math.max(1, Math.round(rect.h * scale));
+    const cam = this._cam3q(devW, devH);
+    cam.updateMatrixWorld(true);
+    const b = this._ndcBox(model.hullPts, this._yaw3q() + Math.PI / 2, cam);
+    if (!b) return null;
+    const X = (u) => rect.x + (u + 1) / 2 * rect.w, Y = (v) => rect.y + (1 - v) / 2 * rect.h;
+    return { x0: X(b.x0), y0: Y(b.y1), x1: X(b.x1), y1: Y(b.y0) };
+  }
+
+  /** K1c-B — kadr bohatera bieżącego modelu `{ s, tx, ty }` (null bez `fit: 'hero'`) — keeper / info. */
+  framing() { return this._fit === 'hero' && this._model ? this._heroFrame(this._devW || 1, this._devH || 1) : null; }
 
   /** Zwalnia kontekst WebGL i własne zasoby (geometria szablonów i scena główna nietknięte). Bezpieczne wielokrotnie. */
   release() {
@@ -329,6 +357,7 @@ export class ShipHologramRenderer {
     const g = median(this._samples), c = median(this._compositeMs);
     return {
       model: this._key, pending: this._pendingKey, mode: this._mode, spin: this._spinOn,
+      pose: { yaw: +this._pose.yaw.toFixed(4), pitch: +this._pose.pitch.toFixed(4) }, fit: this._fit,   // K1c-B
       gpuMsMedian: g === null ? null : +g.toFixed(3), samples: this._samples.length,
       timing: this._timer ? 'timer-query' : 'sync-sample',
       compositeCpuMsMedian: c === null ? null : +c.toFixed(3),
@@ -443,8 +472,55 @@ export class ShipHologramRenderer {
     this._ctxLost = false; this._devW = 0; this._devH = 0;
   }
 
+  // K1c-B — odchylenie modelu w widoku 3/4: kadr (−π/2) + auto-obrót (podgląd debug) + poza z myszy; plan — sam kadr.
+  _yaw3q() {
+    return -Math.PI / 2 + holoYaw(this._mode, this._spinOn, 1, this._spinT) + (this._mode === '3q' ? this._pose.yaw : 0);
+  }
+
+  // K1c-B — kamera 3/4: wysokość po pochyleniu z pozy, kadr bohatera (skala + przesunięcie NDC) w macierzy rzutu. Bez pozy i bez
+  // `fit` — kamera K1a co do bitu. Ta sama kamera dla renderu, rzutu kotwic i obrysu kadłuba.
+  _cam3q(devW, devH, { pose = true, frame = true } = {}) {
+    const T = this._THREE, aspect = devW / Math.max(1, devH);
+    const elevationDeg = HOLO_VIEW.ELEVATION_DEG + (pose ? this._pose.pitch * 180 / Math.PI : 0);
+    const spec = holoCameraSpec('3q', aspect, { elevationDeg });
+    const cam = new T.PerspectiveCamera(spec.fov, aspect, spec.near, spec.far);
+    cam.position.set(spec.pos[0], spec.pos[1], spec.pos[2]);
+    cam.up.set(spec.up[0], spec.up[1], spec.up[2]);
+    cam.lookAt(spec.target[0], spec.target[1], spec.target[2]);
+    if (frame && this._fit === 'hero' && this._model?.hullPts?.length) {
+      const f = this._heroFrame(devW, devH);
+      const F = new T.Matrix4().set(f.s, 0, 0, f.tx, 0, f.s, 0, f.ty, 0, 0, 1, 0, 0, 0, 0, 1);
+      cam.projectionMatrix.premultiply(F);
+      cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    }
+    return cam;
+  }
+
+  // K1c-B — kadr bohatera z rzutu kadłuba w pozie DOMYŚLNEJ (stały podczas obracania); pamięć: model × proporcje.
+  _heroFrame(devW, devH) {
+    const aspect = Math.round(devW / Math.max(1, devH) * 1000) / 1000;
+    const f = this._framing;
+    if (f && f.key === this._key && f.aspect === aspect) return f;
+    const cam = this._cam3q(devW, devH, { pose: false, frame: false });
+    cam.updateMatrixWorld(true);
+    this._framing = { key: this._key, aspect, ...heroFraming(this._ndcBox(this._model.hullPts, 0, cam)) };
+    return this._framing;
+  }
+
+  // K1c-B — prostokąt NDC rzutu punktów ramy wyświetlania po obrocie o `extraYaw` wokół pionu.
+  _ndcBox(pts, extraYaw, cam) {
+    const T = this._THREE, v = new T.Vector3(), R = new T.Matrix4().makeRotationY(extraYaw || 0);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i + 2 < pts.length; i += 3) {
+      v.set(pts[i], pts[i + 1], pts[i + 2]).applyMatrix4(R).project(cam);
+      if (v.x < x0) x0 = v.x; if (v.x > x1) x1 = v.x; if (v.y < y0) y0 = v.y; if (v.y > y1) y1 = v.y;
+    }
+    return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
+  }
+
   _camera() {
     const T = this._THREE;
+    if (this._mode === '3q') return { cam: this._cam3q(this._devW, this._devH), ortho: false };
     const spec = holoCameraSpec(this._mode, this._devW / Math.max(1, this._devH));
     let cam;
     if (spec.type === 'ortho') cam = new T.OrthographicCamera(-spec.halfW, spec.halfW, spec.halfH, -spec.halfH, 0.01, 10);
@@ -459,7 +535,7 @@ export class ShipHologramRenderer {
     if (!this._gl || this._ctxLost || !this._model) return false;
     try {
       const { cam, ortho } = this._camera();
-      this._model.root.rotation.y = -Math.PI / 2 + holoYaw(this._mode, this._spinOn, 1, this._spinT);
+      this._model.root.rotation.y = this._yaw3q();
       const u = this._mats.holo.uniforms;
       u.uOrtho.value = ortho ? 1 : 0;
       u.uTime.value = this._spinT;

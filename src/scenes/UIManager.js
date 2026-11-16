@@ -2384,6 +2384,10 @@ export class UIManager {
   }
 
   handleMouseMove(x, y) {
+    // ARC KONSOLE K1c-B — przeciąganie hologramu Stoczni: ruch tylko do warstwy hologramu, BEZ przerysowania całego UI
+    const om = this.overlayManager;
+    const sy = om?.active === 'shipyard' ? om.overlays.shipyard : null;
+    if (sy?.isHoloDragging?.()) { sy.handleHoloDrag(x / UI_SCALE, y / UI_SCALE); return; }
     this._dirty = true;
     // ARKUSZ HUD paczka A — kursor dla warstwy HUD (najechanie MAPY; nad UI — bez najechania, hover outlinera nie — D-HUD-5).
     window.KOSMOS?.hudLayer?.setPointer?.(x / UI_SCALE, y / UI_SCALE, x, y, this.isOverUI(x, y));
@@ -2439,7 +2443,11 @@ export class UIManager {
         this._dirty = false;
         this._lastCamEpoch = camEpoch;
         this._lastDrawTime = now;
+        // ARC KONSOLE K1c-B — warstwa hologramu Stoczni (`#holo-canvas`): klatka, w której bohater się nie narysował, chowa ją
+        const sy = this.overlayManager?.overlays?.shipyard;
+        sy?.beginUiFrame?.();
         this._draw();
+        sy?.endUiFrame?.();
       }
     };
     draw();
