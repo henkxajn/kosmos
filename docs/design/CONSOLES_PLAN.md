@@ -2,8 +2,8 @@
 
 Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
 owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); K1b delivered (`574ee3f`, owner PASS
-2026-11-16 after three review rounds — §11); K1c-A delivered (`301b66b`, owner PASS 2026-11-16 — §12); next step K1c-B (hologram
-canvas layer, spin + drag rotate, row chip [ BUDUJ ], U key → Shipyard designer, tuning).** Phase A
+2026-11-16 after three review rounds — §11); K1c-A delivered (`301b66b`, owner PASS 2026-11-16 — §12); K1c-B delivered (`eb59908`, owner PASS
+2026-11-16 — §13) — **Shipyard console DONE**; next step K2 (Diplomacy + War).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
 the K0a gate). Register: findings #723–#737 filed; **next free finding number: 738**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
@@ -701,3 +701,63 @@ for bit). Owner PASS 2026-11-16 (handover `C:\Users\Komputer\kosmos-handover\con
   freighter).
 - Designs row: chip [ BUDUJ ] (today's build rule via `templateBuildState`) replaces [ EDYTUJ ]; row select keeps loading.
 - U key → Shipyard designer (D-K-12), which brings 726 to the U path; tuning from the owner's look.
+
+## 13. K1c-B — delivered (Shipyard console polish) — Shipyard console DONE
+
+**Commit `eb59908` feat(K1c-B)** · flag `FEATURES.consoleShipyard` (OFF = today's Shipyard; the 726 label fix in the U-screen picker applies
+with the flag OFF too). Owner PASS 2026-11-16 with decisions 1–3 approved, decision 4 = yes (hull list without underline as well) and two
+label fixes before the commit (handover `C:\Users\Komputer\kosmos-handover\consoles-k1c\`: `STOP_K1c-B.md`, `kontakt_k1c_b.html`,
+`shots_b/{after/<5 themes>, after_1280/amber_noir, fix/amber_noir}`, `probes/{k1c_b, oneliners_b, sheet_b}.mjs`, `run_b.sh`, `run_c.sh`;
+the fail-first `git worktree` was removed at commit time).
+
+- **Owner note A — no auto-spin:** the hero shows a static 3/4 view. Mouse drag in the hero sets yaw (wrapped) and a small pitch (camera
+  elevation 8°…40°); the pose lives in `ShipyardOverlay`, survives model swaps and closing the tab; double-click resets it; [ PLAN ] does
+  not rotate. Pure helpers `dragPose`, `isDragMove`, `isDoubleTap`, `HOLO_POSE` in `ShipHologramLogic`; renderer `setPose` (camera and
+  anchor projection use the same pose). `setSpin` now marks the renderer dirty only on a change.
+- **Owner note B — static stats:** `inspectorStatLayout` gives 14 fixed rows (`STAT_ROW_KEYS`: pairs «Przeżywalność / Odkrycia» and
+  «Koloniści / Desant», row «Broń / tarcza modułu», a reserved cost-delta line), a fixed 64 px delta column (pair deltas in two sub-slots,
+  the second on the column's right edge), tabular digits and two reserved reason lines. Hovering a module changes texts only — measured
+  on the live engine for the troop bay, colony module and warp tank in 5 themes and at 1280×833.
+- **Owner note C — shipyard choice:** recorded only (§14), no audit or code.
+- **Owner note D + decision 4:** the design list and the hull list draw the selection with brackets only (`drawList` option `underline`).
+- **§10.1 hologram layer:** `ShipyardHoloLayer` is a `#holo-canvas` inserted right before `#ui-canvas` (z-index 1, pointer-events none),
+  sized to the hero rect on whole CSS pixels (`snapRectToCss`). The UI clears exactly that rect; the layer repeats the console scrim
+  there, then the local dim, the hologram and the labels. The layer repaints only when its state signature changes (rect, model, mode,
+  stacks, pose, scrim, knobs, theme, language), on drag (rAF-coalesced) and during the cross-fade. `UIManager` routes mouse moves to the
+  drag **before** marking the UI dirty and brackets each UI frame with `beginUiFrame` / `endUiFrame`, so a frame without the hero (clean
+  view, other tab) hides the layer in the same task. `hide()` removes the layer from the DOM. **Measured** (headless Chrome, GPU,
+  1600×1041, paused, 60 CDP mouse moves ≈ 2 s): **0 UI redraws, 58 layer paints**; control without the layer: **58 UI redraws**; map
+  camera untouched; same in all 5 themes and at 1280×833.
+- **Framing:** renderer option `fit: 'hero'` scales and centres the projection in NDC (`heroFraming`) from a hull vertex sample
+  (`model.hullPts`, ≤ 1500 points) at the default pose: the model fills ~75 % of the hero width, height clamped at 72 %; the frame stays
+  constant while rotating. Without `fit` (debug viewer) the camera is K1a bit for bit.
+- **Local dim:** soft ellipse in `bgPrimary` behind the hologram, knob `KOSMOS.debug.holo.tune.heroDim` (0..1, default **0.45**).
+- **Labels outside the hull:** `layoutHeroLabels` (with `renderer.projectHullBox`): an anchor left of the hull box centre goes to the left
+  column, right → right column (approved deviation 1: columns follow the screen side, so in the default 3/4 pose the left column is the
+  bow side; literal «aft left / fore right» would run leaders across the hull). A column that fits beside the box stands beside it;
+  otherwise its labels stand at the rect edge above / below the box (long hulls). No label rect enters the box, no overlaps. Text gets
+  the console halo. [ PLAN ] keeps the K1b layout on the side view (approved deviation 2).
+- **Design rows:** chip [ BUDUJ ] / [ DO KOLEJKI ] replaces [ EDYTUJ ] with today's template-card rule (`build_template`, same data keys); a
+  disabled chip is a `tpl_build_blocked` zone whose hover shows the reason. Row click still loads the design. [ USUŃ ] arms
+  [ POTWIERDŹ ] for 3 s (`deleteClick`, `DELETE_CONFIRM_MS`); the second click within the window deletes.
+- **U key (D-K-12 a):** `routeOverlayId` sends `unit_design` to `shipyard` when the Shipyard console is on; the ground-unit designer stays in
+  Command → Ground and the Colonies draft. **Finding 726** is fixed in the U-screen picker too: the category canon moved to
+  `src/data/ShipModuleCategories.js` (icons + `unitDesign.cat.*` keys), re-exported by `ShipyardConsoleLogic`.
+- **Keepers:** `console_shipyard_b_smoke` **76/0** (stats rects with and without hover incl. colonists / troops / warp / weapon / shield,
+  pose, drag and double-click, renderer pose + framing on three r171, UIManager source pins, layer lifecycle with a fake DOM, label
+  layout in three hull shapes, underline, 16-case [ BUDUJ ] matrix without loading the design, delete window, U routing and ground hosts,
+  726 in the U picker). Fail-first on a `git worktree` at `1990799`: 39 red / 8 green (named controls and witnesses; sections degrade
+  instead of aborting). Mutations 11/11 red. `console_shipyard_smoke` updated for the new behaviour (S4c inspector-only, S5b/S5d
+  [ EDYTUJ ] replaced by the row click, S5k two clicks, S9b [ BUDUJ ] in list or inspector) 71/0; K1a 58/0, K1b 93/0; sweep 414/414;
+  `check-i18n` PASS. One-liners checked on the live engine (U / S keys, `heroDim`, layer before `#ui-canvas`, removed on close).
+- **Approved deviations:** 1 (screen-side columns), 2 ([ PLAN ] labels as K1b), 3 (paired stat rows, zeros as 0, smaller scroll area for
+  slots and picker); halo on labels only, not on the hologram image; 726 also on the OFF path (labels only, zones unchanged).
+
+## 14. Next after the arc (recorded, not scheduled)
+
+- **Shipyard choice and build location** (owner's requirement, recorded during K1c-B, 2026-11-16; owner note C). In the Shipyard the
+  player picks **any shipyard that can build the current design**: ground shipyards and orbital stations with a shipyard module.
+  Hull rules apply (an orbital-only hull lists only orbital shipyards). The ship is built **at** that shipyard: its builds, pending
+  orders and surge live there. A finished hull can be deployed from reserve **only at the shipyard that built it**. This changes
+  mechanics (order and reserve data, possibly the save version, AI build paths), so it gets its own audit, plan and owner sign-off
+  after the CONSOLES arc closes. Until then the Shipyard keeps today's build target (the active colony's ground shipyard).

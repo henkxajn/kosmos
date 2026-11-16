@@ -1058,3 +1058,23 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §12. Flaga `FEATURES.consoleShip
 Następny krok: K1c-B (osobna warstwa hologramu, obrót i przeciąganie, czip [ BUDUJ ], U → projektant Stoczni, strojenie).
 
 ---
+
+## ARC KONSOLE — K1c-B: szlif konsoli Stoczni (`eb59908`, PASS właściciela 2026-11-16) — konsola Stoczni GOTOWA
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §13. Flaga `FEATURES.consoleShipyard`.
+- **Hologram:** osobna kanwa `#holo-canvas` pod `#ui-canvas` (UI czyści prostokąt bohatera); przeciąganie i przenikanie malują tylko
+  warstwę — 0 przerysowań UI na 2 s przeciągania (kontrola bez warstwy: 58).
+- **Bez auto-obrotu:** statyczne 3/4, obrót i lekkie pochylenie myszą, poza zostaje przy podmianie modelu, dwuklik = 3/4. Model ~75 %
+  szerokości bohatera, wyśrodkowany. Lokalne przyciemnienie (`KOSMOS.debug.holo.tune.heroDim`, 0,45).
+- **Etykiety ról** poza obrysem kadłuba (kolumny po stronach ekranu, obok albo nad / pod obrysem), bez nakładania, z poświatą.
+- **Staty:** 14 stałych wierszy, stała kolumna delty (pary w podkolumnach), cyfry tabelaryczne — najechanie zmienia tylko teksty.
+- **Listy:** wybór = same nawiasy (projekty i kadłuby); czip [ BUDUJ ] w wierszu (dzisiejsza reguła, powód w podpowiedzi);
+  [ USUŃ ] → [ POTWIERDŹ ] przez 3 s.
+- **U → Stocznia** (D-K-12); projektant naziemny w Dowództwie i w szkicu Kolonii. **726** naprawiony też w pickerze ekranu U.
+- **Wybór stoczni** (uwaga C): tylko zapisany w planie (§14) — osobny audyt po zamknięciu arcu.
+- **Testy:** `console_shipyard_b_smoke` 76/0; fail-first 39 czerwonych / 8 zielonych; 11/11 mutacji czerwonych; keeper K1c-A
+  zaktualizowany 71/0; sweep 414/414, `check-i18n` PASS.
+
+Następny krok: K2 (Dyplomacja + Wojna; 724, 727, 735).
+
+---
