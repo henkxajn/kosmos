@@ -1078,3 +1078,19 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §13. Flaga `FEATURES.consoleShip
 Następny krok: K2 (Dyplomacja + Wojna; 724, 727, 735).
 
 ---
+
+## ARC KONSOLE — K2: Dyplomacja + Wojny na szablonie konsoli (`1685293` + `1f6c960`, PASS właściciela 2026-11-16) — grupa Dyplomacji GOTOWA
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §15. Flaga `FEATURES.consoleDiplomacy` (oba ekrany; OFF = dziś, z przyciskami debug do KZ).
+- **Grupa:** czipy [ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ] w nagłówku, bez pasa subnav; pasek walki w gnieździe nagłówka.
+- **Dyplomacja:** wspólna lista imperiów K0b (status · napięcie w wierszu), bohater z opinią i napięciem jako instrumentami, statusem,
+  postawą AI (etykieta) i mini-mapą K0b-1 (wydzielona do `ConsoleEmpireMap`); inspektor: rozbicie, traktaty, pamięć, sześć czipów akcji
+  z dzisiejszymi regułami i powodem w podpowiedzi; pas: ultimatum / komunikat.
+- **Wojny:** lista wojen (wyczerpanie, lata wojny), bohater = lina wyczerpania z mini-mapą znanych układów przeciwnika albo stół pokoju
+  przy negocjacjach; inspektor: casus belli, bitwy, [ ZAPROPONUJ POKÓJ ]. Po bramce: tytuł = sama nazwa (2 linie), mapa w trybie liny.
+- **Findingi:** 724 ✅, 725 (Wojny) ✅, 727 ✅, 735 ✅ — dźwignie tylko jako `KOSMOS.debug.war.forceBattle()` / `forceInvasion()` / `target()`.
+- **Testy:** `console_diplomacy_smoke` 50/0; fail-first 33 czerwone / 14 zielonych; mutacje 6/6; sweep 415/415, `check-i18n` PASS.
+
+Następny krok: K3 (rodzina Ekonomii).
+
+---

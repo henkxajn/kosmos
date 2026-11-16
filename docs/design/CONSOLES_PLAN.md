@@ -3,7 +3,7 @@
 Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
 owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); K1b delivered (`574ee3f`, owner PASS
 2026-11-16 after three review rounds — §11); K1c-A delivered (`301b66b`, owner PASS 2026-11-16 — §12); K1c-B delivered (`eb59908`, owner PASS
-2026-11-16 — §13) — **Shipyard console DONE**; next step K2 (Diplomacy + War).** Phase A
+2026-11-16 — §13) — **Shipyard console DONE**; K2 delivered (`1685293` + `1f6c960`, owner PASS 2026-11-16 — §15) — **Diplomacy group DONE**.** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
 the K0a gate). Register: findings #723–#737 filed; **next free finding number: 738**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
@@ -325,10 +325,10 @@ This plan files **#723–#737**. **Next free finding number: 738.**
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
 | **723** | ✅ K1c-A | **The Shipyard ignores the 4-zone idea entirely**: one centred 560 px column (`ShipyardOverlay.js:82`) with build list, reserve and the ship designer stacked in one scroll; the designer (hull picker, slots, module picker, stats, SAVE) is reachable only by scrolling past the reserve, and its pinned action bar floats at the bottom of an otherwise empty screen | `shots_now/*/2x_shipyard_*.jpg`; `ShipyardOverlay.js:91-154` | K1 |
-| **724** | 🟠 | **Diplomacy shows raw engine ids**: the AI stance prints `fsm.state` (`NEGOTIATING`, `IDLE`…) verbatim and the relation memory prints event keys (`research_intrusion`, `peace_offered`) | `DiplomacyOverlay.js:266-270`; `shots_now/amber_noir/30_diplomacy.jpg` | K2 |
-| **725** | ⚪ (Intel part ✅ K0b) | **Hard-coded literals bypassing i18n on tab screens**: Intel `(wymaga skanu naziemnego)` `:333`, `Ostatnie incydenty` ~`:346`, `(brak)` ~`:356`; Production demand headers `Źródło/Towar/Potrzeba` `EconomyOverlay.js:1774-1776`; Trade `Kr/rok` `:603` and local prices shown as raw resource ids `:696/:706`; War heading `Casus Belli`; Budget tax-effect labels inline PL/EN `:3105` | files as listed | the step that touches each screen |
+| **724** | ✅ K2 | **Diplomacy shows raw engine ids**: the AI stance prints `fsm.state` (`NEGOTIATING`, `IDLE`…) verbatim and the relation memory prints event keys (`research_intrusion`, `peace_offered`) | `DiplomacyOverlay.js:266-270`; `shots_now/amber_noir/30_diplomacy.jpg` | K2 |
+| **725** | ⚪ (Intel part ✅ K0b; War part ✅ K2) | **Hard-coded literals bypassing i18n on tab screens**: Intel `(wymaga skanu naziemnego)` `:333`, `Ostatnie incydenty` ~`:346`, `(brak)` ~`:356`; Production demand headers `Źródło/Towar/Potrzeba` `EconomyOverlay.js:1774-1776`; Trade `Kr/rok` `:603` and local prices shown as raw resource ids `:696/:706`; War heading `Casus Belli`; Budget tax-effect labels inline PL/EN `:3105` | files as listed | the step that touches each screen |
 | **726** | ⚪ (console part ✅ K1c-A; U screen → K1c-B) | **Module picker shows raw keys for two module groups**: `UnitDesignOverlay` category labels are a local PL/EN map (`:37-68`) with no `shield` / `troop` entries → those groups render their raw slotType with no icon (`catLabel ?? cat`, `:436-439`) | `UnitDesignOverlay.js:37-68, 436-439` | K1 |
-| **727** | ⚪ | **Diplomacy action band collides with the clock cluster**: the bottom-right action button («Zaproponuj sojusz») sits under the always-on clock/bell cluster drawn over every tab | `shots_now/amber_noir/30_diplomacy.jpg` | K2 (console frame reserves the clock rect) |
+| **727** | ✅ K2 | **Diplomacy action band collides with the clock cluster**: the bottom-right action button («Zaproponuj sojusz») sits under the always-on clock/bell cluster drawn over every tab | `shots_now/amber_noir/30_diplomacy.jpg` | K2 (console frame reserves the clock rect) |
 | **728** | ⚪ | **Medium and Large cargo hulls show the same model**: `nonwarp_medium_cargo.glb` ≡ `nonwarp_large_cargo.glb` (identical md5 `43be8bba…`); also `cargo3d.glb` ≡ `default.glb` (unused) | `md5sum assets/models/ships/*.glb` | art / model pipeline (no step) |
 | **729** | ⚪ | **15 building/icon textures referenced but absent from `assets/`** (404 in the live game): e.g. `assets/buildings/{geothermal,synthesized_food_plant,terraformer,orbital_mine,ai_core,…}.png`, `assets/icons/building_autonomous_spaceport.png` | probe server `notFound` list (`shots/scout_amber/scout.json`); `ls` in the repo | art (no step) |
 | **730** | 🟠 | **The full 3D system scene renders at 60 fps under every tab** — 5.3 ms GPU-synced per frame at 1600×1041, the same as on the map — even under the opaque Command (`#000`) and the .92 Colonies background; under the other ten screens (`bgAlpha .38–.40`) the orbits and the star bleed through the text | `probes/scout.mjs` (180 renders / 3 s map vs tabs), `probes/holo.mjs` (`mainScene.syncMsPerFrame`); `ThreeRenderer._startLoop :4431-4563` | K0 (D-K-5) |
@@ -338,7 +338,7 @@ This plan files **#723–#737**. **Next free finding number: 738.**
 | **734** | ⚪ | **Dead and dormant tab code** (do not reskin): `FleetTabPanel.js` 2678 + `FleetPanel.js` 474 (zero importers outside tests); Command flag-OFF map ~1200 LOC + `_drawLeftFleets`; EconomyOverlay priority/manual modes ~700 LOC; ColonyOverlay V1 workforce + `_stationMode`; `UIManager._drawCivPanel` never called, so `CIV_TABS[].key` hints are stale data (Civ `V`, Dyson `D`, Diplomacy `Y`, Trade `H`, Colonies `C`); PopulationOverlay unreachable | agents' call-site greps; `UIManager.js:2663` | D-K-18 (refactor before each K step) |
 | **736** | ⚪ | **Combat strip overflows its console header slot with 2–3 simultaneous battles**: one battle line (21 px) fits the 30 px header slot (D-K-17), but each extra battle adds a line (`MAX_LINES` 3, `stripLayout`), so the block grows below the header over the top of the inspector | `combatSlotInsets` (`CombatStripLogic.js`), `stripLayout`; K0b review (not staged) | later (owner: collapse to one «⚔ N ▼» chip in the slot) |
 | **737** | ✅ K1b | **Normalizer keeper N11f classified slots by the Workshop stamp, not by the nozzle**: every Workshop save stamps `notes` (turrets only too), so after the owner clicked turrets on the five remaining warships all six slots carried the stamp and the equality witness (`nozMeasured ≥ 1`) emptied while every nozzle was correct. Fix: classify by the nozzle — a nozzle equal to the measurement always counts as equality; the aft-half rule applies only to a nozzle moved in the Workshop; unstamped and not equal is still an error; the control takes the first stamped slot. Red on a moved nozzle without the stamp | `cv_normalizer_logic_smoke.mjs` N11f (56/1 → 57/0 on the owner's files; 57/0 on the base files) | K1b |
-| **735** | 🟠 | **War screen ships two debug actions to the player, unconditionally**: «⚡ WYMUŚ STARCIE (debug)» → `warSystem.forceBattle` and «🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)» are drawn and clickable for every active war (`WarOverlay.js:380-386`, `:707`; i18n `warOverlay.btnForceBattle/btnForceInvasion`) — a cheat in the player UI | `shots_now/*/32_war.jpg`; files as listed | K2 (owner: hide behind a debug flag or `KOSMOS.debug.*`) |
+| **735** | ✅ K2 (console path; flag-OFF screen keeps the buttons until KZ) | **War screen ships two debug actions to the player, unconditionally**: «⚡ WYMUŚ STARCIE (debug)» → `warSystem.forceBattle` and «🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)» are drawn and clickable for every active war (`WarOverlay.js:380-386`, `:707`; i18n `warOverlay.btnForceBattle/btnForceInvasion`) — a cheat in the player UI | `shots_now/*/32_war.jpg`; files as listed | K2 (owner: hide behind a debug flag or `KOSMOS.debug.*`) |
 
 ## 6. Proposed cut, decisions, effort
 
@@ -761,3 +761,48 @@ the fail-first `git worktree` was removed at commit time).
   orders and surge live there. A finished hull can be deployed from reserve **only at the shipyard that built it**. This changes
   mechanics (order and reserve data, possibly the save version, AI build paths), so it gets its own audit, plan and owner sign-off
   after the CONSOLES arc closes. Until then the Shipyard keeps today's build target (the active colony's ground shipyard).
+
+## 15. K2 — delivered (Diplomacy + War on the console template) — Diplomacy group DONE
+
+**Commits `1685293` refactor(K-pre Diplomacy/War)** (D-K-18: DiplomacyOverlay had no dead code — its EventBus listeners drive the
+action flash; WarOverlay had one unused local) **and `1f6c960` feat(K2)** · flag `FEATURES.consoleDiplomacy` (both screens; ON, works
+with `consoleKit`; OFF = today's Diplomacy and War bit for bit, debug buttons included until KZ) · owner PASS 2026-11-16, deviations
+1–6 approved, two fixes before commit (War hero title = opponent name only, wrapped to two lines; shared mini-map in the tug-of-war
+hero). Handover `C:\Users\Komputer\kosmos-handover\consoles-k2\`: `STOP_K2.md`, `kontakt_k2.html`,
+`shots/{after/<5 themes>, before/amber_noir, after_1280/amber_noir, after_fix/amber_noir}`, `probes/{k2, oneliners, sheet}.mjs`;
+the before/after `git worktree` copies were removed at commit time.
+
+- **Group:** `diplomacy` and `war` join `CONSOLE_KIT_SCREENS` → `[ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ]` header chips (click = `openPanel`,
+  like the subnav), no 24 px strip over the group, CombatStrip in the header slot.
+- **Diplomacy** (`DiplomacyConsoleLogic` + `DiplomacyConsoleView`): list = the shared K0b empire list (`empireRowView` + `drawEmpireList`,
+  new optional `line1Right` = status · tension), today's entry set (intel ≥ rumor) and order (tension desc); hero = identity line as in
+  Intel, status (peace / war / truce with years / alliance) + AI stance label, opinion (−100…+100) and tension (0…100) instruments with
+  scale bars, **K0b-1 mini-map reused** (extracted to `ConsoleEmpireMap`; Intel keeps thin wrappers); inspector = opinion breakdown
+  (top 5 + more, as today), treaties + reparations, relation memory (3 newest), six action chips mirroring today's enable rules — a
+  disabled chip carries a hover tooltip with the reason (`action_blocked`, no effect; `ConsoleKit.drawActionChip` /
+  `drawConsoleTooltip`); strip = ultimatum / action flash, only when present.
+- **War** (`WarConsoleLogic` + `WarConsoleView`): list = wars in today's order (opponent, status, exhaustion mini-bars, years at war in
+  game years); hero = exhaustion tug-of-war with today's numbers (declared year, duration, battles) and the shared mini-map of the
+  opponent's known systems vs the player's, or — when negotiating — the peace table (same overlay methods and zone types:
+  `peace_toggle`, `reparations_toggle`, `peace_clear`); inspector = casus belli, recent battles, `[ ZAPROPONUJ POKÓJ ]` with today's
+  cooldown rule (reason tooltip).
+- **Approved deviations:** (1) «negotiating» = hero chip `[ STÓŁ POKOJU ]`, terms on the table, or the counter-proposal dispatch
+  (`show({ warId })`); new zone type `hero_mode`. (2) Fog basis for identity and map = today's Diplomacy ∪ Intel at the same level;
+  opinion, breakdown and stance from contact as today; no military numbers. (3) Mini-map reused. (4) Debug calls act on the war selected
+  in the War panel, else the first active; a selected ended war is refused (`war_not_active`); in the gate save `forceBattle()` returns
+  `no_fleet` (same as the old button). (5) Flag OFF keeps the debug buttons and the raw ids until KZ. (6) Memory labels for all 13 types
+  (incl. Director's `border_pressure`, `first_contact_kill`), generic fallback.
+- **Findings:** **724 ✅** (stance and memory keys through `diplo.stance.*` / `diplo.memEvent.*`, fallback label); **725 War part ✅**
+  (`warOverlay.casusBelli` on both paths, PL/EN text unchanged; i18n baseline WarOverlay 1 → 0 — the Production / Trade / Budget parts
+  stay open for K3/K4); **727 ✅** (chips end above the clock reserve at 1600×1041 and 1280×833); **735 ✅** (the console never draws
+  force battle / invasion; `KOSMOS.debug.war.forceBattle()` / `.forceInvasion()` / `.target()` call the same `forceWarBattle` /
+  `forceWarInvasion` as the old buttons).
+- **Keepers:** `console_diplomacy_smoke` **50/0** (list reuse, fog subset per level, 724 token scan + fallback + label completeness vs
+  every `addMemory` producer and `INCIDENT_CHANNELS`, action inventory ON == OFF on 96 states + handler effect + reasons, 727 at both
+  sizes with a witness, group chips and subnav, War list / hero mode / table inventory ON ⊇ OFF without debug zones, 735 debug API =
+  old button calls, 725, empty state, wheel without `window.inner*`, geometry from `consoleZones`, title wrap, tug mini-map).
+  Fail-first on a `git worktree` at `1685293`: 33 red / 14 green (named controls, scanner witness, exclusions with witnesses); the two
+  post-gate pins red on the pre-fix view (control green). Mutations 6/6 red. `diplomacy_overlay_breakdown`, `wp_peace_cooldown`,
+  `wp_peace_table` set the flag OFF (they pin today's panels); `console_intel_smoke` S3 sets `consoleDiplomacy` OFF explicitly;
+  `i18n_hardcoded_gate_smoke` T3 uses POIModal as its sample. Sweep 415/415, `check-i18n` PASS. Live engine: 7 frames × 5 themes +
+  before/after + 1280×833 + post-fix frame, 0 console errors; one-liners validated on the engine.
