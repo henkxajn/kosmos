@@ -3576,6 +3576,7 @@ export default {
   'intel.console.map':            'Mapa znanych układów',
   'intel.console.mapYours':       'twoje układy',
   'intel.console.mapTheirs':      'ich znane układy',
+  'intel.console.mapLy':          '{0} ly',   // K0b-1 — odległość / podziałka mini-mapy
 
   // === WarOverlay ===
   'warOverlay.title':            '⚔ WOJNY',

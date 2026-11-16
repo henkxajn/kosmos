@@ -11,6 +11,9 @@
 // I — Finding 725: trzy napisy przez t(), polski tekst bez zmian.
 // R — poprawki po oglądzie właściciela: role konsoli (C, `DIM_LIFT`), poświata (A, `HALO_BLUR`) tylko na konsoli; inspektor
 //     „AKTA” bez dublowania siły z bohatera; mini-mapa — wyłącznie znane układy dossier + układy gracza (mgła, układ-sekret).
+// M — K0b-1 czytelność mini-mapy: stolica gracza i znana stolica imperium (mgła: nieodsłonięta stolica nigdy nie oznaczona),
+//     linia odległości tylko przy znanej stolicy, scalanie bliskich znaczników bez odsłaniania, auto-kadr z minimalną
+//     rozpiętością, podziałka, podpisy regułą mapy galaktyki z priorytetem stolice > własne > ich.
 //
 // Bez pinów na stałych rysowania. Moduły jeszcze nieistniejące importowane dynamicznie (pin degraduje, nie przerywa).
 
@@ -81,7 +84,7 @@ const TOK = {
 };
 const MINE_STRENGTH = 1234;
 // `mil` — liczby wojskowe W REKORDZIE niezależnie od poziomu (np. zostały po spadku z `detailed`): bramka rangi musi je ukryć.
-function kosmosFor(level, { opened = [], mil = true } = {}) {
+function kosmosFor(level, { opened = [], mil = true, empHome = 'sys_sent_a', secretAt = null, extraMine = [] } = {}) {
   const rec = {
     level,
     knownColonies: ['sys_sent_a', 'sys_sent_b'],
@@ -95,26 +98,30 @@ function kosmosFor(level, { opened = [], mil = true } = {}) {
   return {
     civMode: true,
     gameState: { get: (p) => (p === 'intel' ? intel : p.startsWith('intel.') ? intel[p.slice(6)] : undefined) },
-    empireRegistry: { get: (id) => (id === E ? { id: E, name: TOK.name, archetype: 'xenophage', homeSystemId: 'sys_sent_a',
+    empireRegistry: { get: (id) => (id === E ? { id: E, name: TOK.name, archetype: 'xenophage', homeSystemId: empHome,
       colonies: ['col_secret'] } : null) },
     galaxyData: { systems: [{ id: 'sys_home', name: 'HomeStar', x: 0, y: 0 }, { id: 'sys_sent_a', name: TOK.sysA, x: 40, y: 10 },
-      { id: 'sys_sent_b', name: TOK.sysB, x: 55, y: -20 }, { id: 'sys_secret', name: TOK.secret, x: 70, y: 30 }] },
+      { id: 'sys_sent_b', name: TOK.sysB, x: 55, y: -20 }, { id: 'sys_secret', name: TOK.secret, x: secretAt?.x ?? 70, y: secretAt?.y ?? 30 }, ...extraMine] },
     threatAssessment: { getPlayerStrength: () => MINE_STRENGTH },
-    colonyManager: { getPlayerColonies: () => [{ systemId: 'sys_home' }] },
+    colonyManager: { getPlayerColonies: () => [{ systemId: 'sys_home' }, ...extraMine.map((m) => ({ systemId: m.id }))] },
     overlayManager: { active: 'intel', openPanel: (id) => opened.push(id) },
   };
 }
 const W = 1280, H = 833;
-function drawIntel(level, kitOn, { mil = true } = {}) {
+function drawIntel(level, kitOn, { mil = true, ...more } = {}) {
   setKit(kitOn);
   const opened = [];
-  globalThis.window.KOSMOS = kosmosFor(level, { opened, mil });
+  globalThis.window.KOSMOS = kosmosFor(level, { opened, mil, ...more });
   const ov = new IO.IntelOverlay();
   ov.show();
   ov._selectedId = E;
+  // K0b-1: podsłuch znaczników mini-mapy (metoda nieistniejąca na bazie → pusta lista, pin czerwony)
+  const markers = [];
+  const own = IO?.IntelOverlay?.prototype?._drawMapMarker;
+  if (typeof own === 'function') ov._drawMapMarker = function (c, m, ro) { markers.push(m); return own.call(this, c, m, ro); };
   const r = recCtx();
   safe(() => ov.draw(r.ctx, W, H));
-  return { ov, ...r, opened, text: r.texts.join('\n') };
+  return { ov, ...r, opened, markers, text: r.texts.join('\n') };
 }
 
 const savedK = globalThis.window.KOSMOS;
@@ -326,6 +333,67 @@ try {
     const leakSecret = ['unknown', 'rumor', 'contact', 'detailed'].filter((lv) => drawIntel(lv, true).text.includes(TOK.secret));
     const mapOn = kitP.text.includes(t('intel.console.map').toUpperCase());
     assert(mapOn && leakSecret.length === 0, `R8 mini-mapa rysowana (świadek ${mapOn}); układ imperium spoza listy znanych nie pojawia się na żadnym poziomie [${leakSecret}]`);
+  }
+
+  // ══ M — K0b-1 czytelność mini-mapy ══
+  console.log('\nM — K0b-1: stolice, odległość, scalanie, kadr, podziałka, podpisy (mgła bez zmian)');
+  {
+    const LEVELS = ['unknown', 'rumor', 'contact', 'detailed'];
+    const DIST = t('intel.console.mapLy', Math.hypot(40, 10).toFixed(1));   // HomeStar (0,0) → SentinelPrime (40,10)
+    const distRe = /\d+\.\d ly/;
+    const known = LEVELS.map((lv) => drawIntel(lv, true));
+    const capMine = known.map((d) => d.markers.find((m) => m.capitalMine));
+    assert(capMine.every((m) => m?.key === 'sys_home') && known.every((d) => d.text.includes('HomeStar')),
+      `M1 stolica gracza — osobny znacznik z nazwą na każdym poziomie [${capMine.map((m) => m?.key)}]`);
+    assert(known.every((d) => d.markers.some((m) => m.capital && m.key === 'sys_sent_a') && d.text.includes(DIST)),
+      `M2 znana stolica imperium oznaczona + linia stolic z odległością „${DIST}” (świadek dla M3)`);
+    const hidden = LEVELS.map((lv) => drawIntel(lv, true, { empHome: 'sys_secret' }));
+    assert(hidden.every((d) => d.markers.length > 0 && !d.markers.some((m) => m.capital) && !distRe.test(d.text) && !d.text.includes(TOK.secret)),
+      'M3 MGŁA: stolica spoza listy znanych nigdy nie oznaczona, bez linii odległości, nazwa nie wycieka (każdy poziom)');
+    const near = [{ id: 'sys_near', name: 'NearMine', x: 55.1, y: -20.05 }];
+    const merged = LEVELS.map((lv) => drawIntel(lv, true, { empHome: 'sys_secret', secretAt: { x: 40.05, y: 10.02 }, extraMine: near }));
+    const mm = merged.map((d) => d.markers.find((m) => m.ids?.includes('sys_near')));
+    assert(mm.every((m) => m && m.ids.length === 2 && m.mine && m.theirs)
+      && merged.every((d) => !d.text.includes(TOK.secret) && !d.markers.some((m) => m.ids.includes('sys_secret') || m.capital)),
+      `M4 scalanie: własny układ obok ich znanego → JEDEN znacznik (dwukolorowy pierścień) [${mm.map((m) => m?.ids)}]; sekret tuż obok znanej stolicy nie wchodzi ani nie jest oznaczony`);
+    const fitIn = [{ id: 'a', x: 0, y: 0, mine: true }, { id: 'b', x: 1, y: 0, theirs: true }, { id: 'c', x: 1.2, y: 0.1, theirs: true, capital: true },
+      { id: 'd', x: 30, y: 30, mine: true }];
+    const mk = safe(() => EL.mergeMapMarkers(EL.fitMapPoints(fitIn, { x: 0, y: 0, w: 60, h: 60 }, 5), 10), []);
+    const ids = mk.flatMap((m) => m.ids).sort().join(',');
+    assert(ids === 'a,b,c,d' && mk.length < fitIn.length && mk.find((m) => m.ids.includes('b'))?.key === 'c',
+      `M5 scalanie = podział wejścia (${ids}; ${mk.length} znaczników), głowa = stolica; nic nie dochodzi`);
+    const rect = { x: 0, y: 0, w: 300, h: 200 };
+    const f2 = safe(() => EL.mapFit([{ x: 0, y: 0 }, { x: 1, y: 0 }], rect, 28, 12), null);
+    const f0 = safe(() => EL.mapFit([{ x: 0, y: 0 }, { x: 1, y: 0 }], rect, 28, 0), null);
+    const many = [{ x: -40, y: 5 }, { x: 60, y: -30 }, { x: 10, y: 44 }];
+    const fm = safe(() => EL.fitMapPoints(many, rect, 28, 12), []);
+    assert(f2 && f0 && f2.k <= (200 - 56) / 12 + 1e-9 && f0.k > f2.k && fm.length === 3 && fm.every((q) => q.sx >= 28 - 1e-9 && q.sx <= 272 + 1e-9 && q.sy >= 28 - 1e-9 && q.sy <= 172 + 1e-9),
+      `M6 auto-kadr: minimalna rozpiętość hamuje zoom 1–2 układów (k ${f2?.k?.toFixed(1)} vs bez minimum ${f0?.k?.toFixed(1)}); suma zbiorów w kadrze z marginesem`);
+    const b3 = safe(() => EL.mapScaleBar(3, 90), null), b0 = safe(() => EL.mapScaleBar(0, 90), 'x');
+    assert(b3?.ly === 20 && b3?.px === 60 && b0 === null && known[3].texts.some((x) => /^\d+ ly$/.test(x)),
+      `M7 podziałka: okrągła długość 1/2/5×10ⁿ (k 3 → ${b3?.ly} ly, ${b3?.px} px); rysowana na mini-mapie`);
+    const crowd = [];
+    for (let i = 0; i < 40; i++) crowd.push({ id: `m${String(i).padStart(2, '0')}`, name: `Own${i}`, sx: 100 + (i % 8) * 12, sy: 70 + Math.floor(i / 8) * 12, mine: true });
+    crowd.push({ id: 'capM', name: 'CapMine', sx: 136, sy: 100, mine: true, capitalMine: true });
+    crowd.push({ id: 'capT', name: 'CapThem', sx: 160, sy: 88, theirs: true, capital: true });
+    crowd.push({ id: 'lone', name: 'Lone', sx: 30, sy: 30, theirs: true });
+    const cm = safe(() => EL.mergeMapMarkers(crowd, 10), []);
+    const DIST_X = { key: '__dist', ax: 124, ay: 94, text: '16.4 ly', essential: true, prio: 1, dist: true, pad: 4 };   // środek tłoku
+    const lay = safe(() => EL.mapLabelLayout(cm, { rect: { x: 0, y: 0, w: 320, h: 200 }, measure: (x) => x.length * 6, lineH: 12, text: (m) => m.name,
+      extra: [DIST_X] }), null);
+    const HL = await tryImport('../../ui/HudLabelLogic.js');
+    const pairs = lay ? HL.overlappingPairs(lay.placed.filter((p) => !p.essential)) : [1];
+    const keys = new Set(lay?.placed.map((p) => p.key) ?? []);
+    const lone = lay?.placed.find((p) => p.key === 'lone');
+    const dist = lay?.placed.find((p) => p.key === '__dist');
+    const distHits = dist ? HL.overlappingPairs([dist, ...lay.placed.filter((p) => p !== dist && !p.essential)]).filter(([i]) => i === 0) : [1];
+    assert(!!dist && dist.w === 7 * 6 + 2 + 8 && distHits.length === 0,
+      `M10 odległość stolic w tym samym rozkładzie, z marginesem ${dist?.pad} px — nie dotyka żadnej nazwy w tłoku (${distHits.length} styków)`);
+    assert(!!lay && keys.has('capM') && keys.has('capT') && lay.hidden.length > 0 && !lay.hidden.includes('capM') && !lay.hidden.includes('capT')
+      && pairs.length === 0 && lone?.side === 'C' && EL.mapPointPrio({ capital: true }) < EL.mapPointPrio({ mine: true }) && EL.mapPointPrio({ mine: true }) < EL.mapPointPrio({ theirs: true }),
+      `M8 podpisy (tłok): stolice zawsze, gęstość chowa resztę (${lay?.hidden.length} schowanych), brak nakładania; reguła galaktyki — samotny podpis pod gwiazdą (strona ${lone?.side}); priorytet stolice > własne > ich`);
+    assert(known[3].text.includes(t('intel.console.mapYours')) && known[3].text.includes(t('intel.console.mapTheirs')),
+      'M9 KONTROLA: legenda mini-mapy zostaje');
   }
 } finally {
   globalThis.window.KOSMOS = savedK;

@@ -11,6 +11,9 @@
 //
 // Bez DOM i canvas — testowalne pod node.
 
+import { placeLabels } from './HudLabelLogic.js';
+import { galaxyLabelCandidates } from './GalaxyModeLogic.js';
+
 export const INTEL_LEVEL_RANK = Object.freeze({ unknown: 0, rumor: 1, contact: 2, detailed: 3 });
 export const INTEL_LEVELS = Object.freeze(['unknown', 'rumor', 'contact', 'detailed']);
 export const INTEL_MASK = '???';
@@ -137,7 +140,7 @@ export function pairFractions(mine, theirs) {
  *           posOf:(id:string)=>{x:number,y:number,name?:string}|null }} p
  * @returns {Array<{ id:string, name:string, x:number, y:number, mine:boolean, theirs:boolean, capital:boolean }>}
  */
-export function systemMapPoints({ known = [], mineIds = [], posOf }) {
+export function systemMapPoints({ known = [], mineIds = [], posOf, homeId = null }) {
   const byId = new Map();
   for (const s of known) byId.set(s.id, { id: s.id, name: s.name, mine: false, theirs: true, capital: !!s.capital });
   for (const id of mineIds) {
@@ -149,22 +152,124 @@ export function systemMapPoints({ known = [], mineIds = [], posOf }) {
   for (const e of byId.values()) {
     const p = posOf ? posOf(e.id) : null;
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
-    out.push({ ...e, name: e.name ?? p.name ?? e.id, x: p.x, y: p.y });
+    // K0b-1: `capital` = stolica IMPERIUM (tylko z listy znanych — mgła); `capitalMine` = stolica gracza (jego układ domowy).
+    out.push({ ...e, name: e.name ?? p.name ?? e.id, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0,
+      capital: e.theirs && e.capital, capitalMine: e.mine && homeId != null && e.id === homeId });
   }
   return out;
 }
 
 /**
- * Czysta: punkty (x, y w ly) wpisane w prostokąt z marginesem `pad`, ta sama skala w obu osiach, środek ramki punktów na środku
- * prostokąta (oś y galaktyki w dół ekranu). Jeden punkt / zerowa rozpiętość → środek. Zwraca nowe obiekty z `sx`, `sy`.
+ * Czysta: parametry kadru — ta sama skala `k` (px/ly) w obu osiach, środek ramki punktów na środku prostokąta. `minSpan` (ly) —
+ * minimalna rozpiętość ramki (1–2 układy nie „wybuchają” na całą mapę); 0 = bez minimum (jeden punkt → k 0, środek).
  */
-export function fitMapPoints(points, rect, pad = 16) {
-  if (!points?.length) return [];
+export function mapFit(points, rect, pad = 16, minSpan = 0) {
+  if (!points?.length) return { k: 0, map: () => ({ sx: rect.x + rect.w / 2, sy: rect.y + rect.h / 2 }) };
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const span = Math.max(x1 - x0, y1 - y0);
+  const ms = Math.max(0, Number(minSpan) || 0);
+  const dx = Math.max(x1 - x0, ms), dy = Math.max(y1 - y0, ms);
   const iw = Math.max(0, rect.w - 2 * pad), ih = Math.max(0, rect.h - 2 * pad);
-  const k = span > 0 ? Math.min(iw / Math.max(x1 - x0, 1e-9), ih / Math.max(y1 - y0, 1e-9)) : 0;
+  const k = Math.max(dx, dy) > 0 ? Math.min(iw / Math.max(dx, 1e-9), ih / Math.max(dy, 1e-9)) : 0;
   const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2, mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-  return points.map((p) => ({ ...p, sx: cx + (p.x - mx) * k, sy: cy + (p.y - my) * k }));
+  return { k, map: (p) => ({ sx: cx + (p.x - mx) * k, sy: cy + (p.y - my) * k }) };
+}
+
+/**
+ * Czysta: punkty (x, y w ly) wpisane w prostokąt z marginesem `pad` (`mapFit`). Zwraca nowe obiekty z `sx`, `sy`.
+ */
+export function fitMapPoints(points, rect, pad = 16, minSpan = 0) {
+  if (!points?.length) return [];
+  const f = mapFit(points, rect, pad, minSpan);
+  return points.map((p) => ({ ...p, ...f.map(p) }));
+}
+
+// ── K0b-1: czytelność mini-mapy (stolice, scalanie, podpisy, podziałka) ─────────────────────────────────────────────────
+
+export const INTEL_MAP = Object.freeze({
+  PAD: 28,              // px — margines kadru
+  MIN_SPAN_LY: 12,      // ly — minimalna rozpiętość kadru
+  MERGE_PX: 10,         // px — znaczniki bliżej niż to → jeden znacznik
+  BAR_MAX_PX: 90,       // px — najdłuższa podziałka
+  LABEL_MAX_PX: 140,    // px — najdłuższy podpis
+});
+
+/** Priorytet znacznika / podpisu (mniej = ważniejszy): stolice, własne, ich. */
+export function mapPointPrio(p) {
+  return (p.capitalMine || p.capital) ? 0 : p.mine ? 1 : 2;
+}
+
+/**
+ * Czysta: scalanie znaczników bliższych niż `mergePx` (po kadrze — `sx`, `sy`). Zachłannie w kolejności priorytetu: głowa
+ * znacznika (stolica > własny > ich; dalej id) trzyma pozycję i nazwę, reszta dokłada flagi. MGŁA: wejście to wyłącznie
+ * punkty mini-mapy — scalanie nie dodaje żadnego układu (`ids` = podział wejścia).
+ * @returns {Array<{ key, sx, sy, name, ids:string[], mine, theirs, capitalMine, capital }>}
+ */
+export function mergeMapMarkers(fit, mergePx = INTEL_MAP.MERGE_PX) {
+  const order = [...(fit ?? [])].sort((a, b) => (mapPointPrio(a) - mapPointPrio(b)) || String(a.id).localeCompare(String(b.id)));
+  const out = [];
+  for (const p of order) {
+    const m = out.find((q) => Math.hypot(q.sx - p.sx, q.sy - p.sy) < mergePx);
+    if (m) {
+      m.ids.push(p.id);
+      m.mine ||= !!p.mine; m.theirs ||= !!p.theirs; m.capitalMine ||= !!p.capitalMine; m.capital ||= !!p.capital;
+    } else {
+      out.push({ key: p.id, sx: p.sx, sy: p.sy, name: p.name, ids: [p.id], mine: !!p.mine, theirs: !!p.theirs,
+        capitalMine: !!p.capitalMine, capital: !!p.capital });
+    }
+  }
+  return out;
+}
+
+/**
+ * Czysta: linia stolic — tylko gdy na mapie jest stolica gracza ORAZ znana stolica imperium (różne układy). Odległość 3D w ly.
+ * @returns {{ from:object, to:object, distLy:number }|null}
+ */
+export function capitalLink(points) {
+  const a = (points ?? []).find((p) => p.capitalMine);
+  const b = (points ?? []).find((p) => p.capital && p.theirs);
+  if (!a || !b || a.id === b.id) return null;
+  return { from: a, to: b, distLy: Math.hypot(b.x - a.x, b.y - a.y, (b.z ?? 0) - (a.z ?? 0)) };
+}
+
+/** Czysta: podziałka — największa „okrągła” długość (1/2/5 × 10ⁿ ly) nie dłuższa niż `maxPx`; k ≤ 0 → null. */
+export function mapScaleBar(k, maxPx = INTEL_MAP.BAR_MAX_PX) {
+  if (!(k > 0) || !(maxPx > 0)) return null;
+  const raw = maxPx / k;
+  const e = Math.pow(10, Math.floor(Math.log10(raw)));
+  const ly = [5, 2, 1].map((m) => m * e).find((v) => v <= raw) ?? e;
+  return { ly, px: ly * k };
+}
+
+/**
+ * Czysta: podpisy mini-mapy przez regułę rozkładu mapy galaktyki (`placeLabels` + `galaxyLabelCandidates` — bez forka).
+ * Znaczniki są przeszkodami (podpis nie przykrywa sąsiada); priorytet: stolice (i odległość stolic), własne, ich. Reguła
+ * gęstości: podpis, który nie znajdzie wolnego miejsca, znika — poza stolicami i odległością (zawsze kładzione). Zwykły
+ * podpis próbuje tylko kandydatów przy znaczniku (pod nim, poziom 0).
+ * @param {Array} markers — wynik `mergeMapMarkers`
+ * @param {{ rect, measure:(s:string)=>number, lineH:number, text:(m)=>string, extra?:Array, obstacles?:Array }} o — `extra`:
+ *   dodatkowe podpisy `{ key, ax, ay, text, essential, prio }` (np. odległość stolic)
+ * @returns {{ placed:Array, hidden:string[] }}
+ */
+export function mapLabelLayout(markers, { rect, measure, lineH, text, extra = [], obstacles = [] }) {
+  const obs = [...obstacles];
+  const items = [];
+  for (const m of markers ?? []) {
+    const r = (m.mine && m.theirs) || m.capital || m.capitalMine ? 6 : 4;
+    const own = { cx: m.sx, cy: m.sy, r };
+    obs.push(own);
+    const s = text(m);
+    const essential = !!(m.capital || m.capitalMine);
+    items.push({ key: m.key, ax: m.sx, ay: m.sy, w: measure(s) + 2, h: lineH, clear: r, text: s, marker: m, essential,
+      prio: mapPointPrio(m) * 10, ownObstacle: own });
+  }
+  // `pad` (px) — margines podpisu dodatkowego w rozkładzie (odległość stolic nie dotyka nazw sąsiadów)
+  for (const e of extra) {
+    const pad = Math.max(0, e.pad ?? 0);
+    items.push({ ...e, pad, w: measure(e.text) + 2 + 2 * pad, h: lineH + 2 * pad, clear: 0, prio: e.prio ?? 5 });
+  }
+  // Mała mapa: zwykły podpis tylko tuż przy znaczniku (pod nim albo poziom 0 kandydatów galaktyki) — dalsze poziomy z długą
+  // nitką zaśmiecały tłok; stolice i odległość — pełna lista kandydatów (zawsze kładzione, nitka wskazuje znacznik).
+  const near = (it) => galaxyLabelCandidates(it).filter((c) => it.essential === true || c.side === 'C' || c.level === 0);
+  return placeLabels(items, { rect, obstacles: obs, candidatesOf: near, hideOnOverlap: (it) => it.essential !== true });
 }

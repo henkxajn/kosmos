@@ -3573,6 +3573,7 @@ export default {
   'intel.console.map':            'Map of known systems',
   'intel.console.mapYours':       'your systems',
   'intel.console.mapTheirs':      'their known systems',
+  'intel.console.mapLy':          '{0} ly',   // K0b-1 — odległość / podziałka mini-mapy
 
   // === WarOverlay ===
   'warOverlay.title':            '⚔ WARS',
