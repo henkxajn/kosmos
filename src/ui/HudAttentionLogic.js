@@ -154,6 +154,19 @@ export function bracketCorners(box) {
   return [c(cx - s, cy - s, +1, +1, 'tl'), c(cx + s, cy - s, -1, +1, 'tr'), c(cx - s, cy + s, +1, -1, 'bl'), c(cx + s, cy + s, -1, -1, 'br')];
 }
 
+/**
+ * ARC KONSOLE K0a — wariant prostokątny `bracketCorners`: cztery narożniki prostokąta `{x, y, w, h}` o ramieniu `arm` (px,
+ * klamra do połowy krótszego boku). Ten sam kształt wyniku (łamana `pts` + prostokąt narożnika `rect`) — rama strefy konsoli.
+ */
+export function bracketCornersRect(r, arm) {
+  if (!r || !(r.w > 0) || !(r.h > 0)) return [];
+  const L = Math.max(1, Math.min(Number(arm) || 0, r.w / 2, r.h / 2));
+  const x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
+  const c = (x, y, dx, dy, id) => ({ id, pts: [x, y + dy * L, x, y, x + dx * L, y],
+    rect: { x: Math.min(x, x + dx * L), y: Math.min(y, y + dy * L), w: L, h: L } });
+  return [c(x0, y0, +1, +1, 'tl'), c(x1, y0, -1, +1, 'tr'), c(x0, y1, +1, -1, 'bl'), c(x1, y1, -1, -1, 'br')];
+}
+
 const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 /** Narożniki, które NIE wchodzą na żaden z prostokątów (przypięta / rozwinięta etykieta ma pierwszeństwo). */

@@ -92,7 +92,10 @@ import {
   hitTestSidebar,
   drawSubNav,
   hitTestSubNav,
+  NAV_GROUPS,
 } from '../ui/CivPanelDrawer.js';
+import { consoleTabIds, consoleSceneActive, consoleBgMode, consoleScrimAlpha, CONSOLE_GLASS } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a (D-K-5)
+import { CONSOLE_SCREEN_SPECS } from '../ui/ConsoleLayoutLogic.js';
 
 // Odstęp między toastami o awarii/rozmiarze zapisu (lata gry). Quota to błąd TRWAŁY —
 // autosave leci co rok gry, więc bez throttlingu alarm zalałby ekran i wypłukał Dziennik.
@@ -473,6 +476,29 @@ export class UIManager {
   skirmishLineText(empireId) {
     const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);
     return t('log.skirmish', emp?.namePL ?? emp?.name ?? empireId ?? '?');
+  }
+
+  // ── ARC KONSOLE K0a (D-K-5, Finding 730) — konsola zasłania scenę ──
+  /**
+   * Czy otwarta zakładka zasłania scenę 3D (`FEATURES.consoleKit`, czytana w chwili użycia): wtedy `_draw` maluje
+   * nieprzezroczyste tło `bgPrimary`, a ThreeRenderer pomija przebieg composera (tiki biegną). Ten sam predykat dla obu
+   * stron — renderer pyta co klatkę. Flaga OFF → false (dzisiejsze zachowanie co do bitu).
+   */
+  isConsoleSceneActive() {
+    if (GAME_CONFIG.FEATURES.consoleKit !== true) return false;
+    const om = this.overlayManager;
+    const id = om?.active ?? null;
+    const ov = id ? om.overlays[id] : null;
+    if (!this._consoleTabIds) this._consoleTabIds = consoleTabIds(NAV_GROUPS);
+    return consoleSceneActive({
+      enabled: true,
+      civMode: !!window.KOSMOS?.civMode,
+      globeOpen: !!window.KOSMOS?.planetGlobeOpen,
+      cleanView: !!this._cleanView,
+      activeId: id,
+      visible: !!(ov && (ov.visible ?? ov.isVisible ?? ov._visible)),
+      tabIds: this._consoleTabIds,
+    });
   }
 
   // ── ARC CV-6b2 — pasek walki: Esc i baner pickera ──
@@ -2421,6 +2447,18 @@ export class UIManager {
 
     const civMode = !!window.KOSMOS?.civMode;
     const globeOpen = !!window.KOSMOS?.planetGlobeOpen;
+
+    // ARC KONSOLE K0a (D-K-5) — otwarta zakładka: nieprzezroczyste tło konsoli na CAŁYM płótnie PRZED wszystkim (paski,
+    // overlay i klaster zegara malują się na nim); scena 3D pod spodem nie renderuje się (ThreeRenderer, ten sam predykat).
+    // Tryb tła (D-K-5 poprawione): opaque — pełne krycie; glass / live — zasłona o kryciu ze specyfikacji ekranu albo pokrętła.
+    if (this.isConsoleSceneActive()) {
+      const opaque = consoleBgMode(CONSOLE_GLASS) === 'opaque';
+      ctx.save();
+      ctx.globalAlpha = opaque ? 1 : consoleScrimAlpha(CONSOLE_SCREEN_SPECS[this.overlayManager.active], CONSOLE_GLASS);
+      ctx.fillStyle = THEME.bgPrimary;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
 
     // ── TopBar (zasoby + czas) ───────────────────────────────
     if (civMode) {

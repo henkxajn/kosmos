@@ -538,6 +538,14 @@ export const GAME_CONFIG = {
     //   planety — jedyna prezentacja bitwy orbitalnej), `cvDirector` (kamera reżysera; FUNKCJA zostaje — chip domyślnie WYŁĄCZONY,
     //   `uiPrefs.cvDirector`, D-CV-23; F9 tryb nagrywania, F10 nagrywarka rolek, `cv916`). Przestawienie dawnych kluczy w konsoli nie
     //   ma skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
+
+    // ── ARC KONSOLE (docs/design/CONSOLES_PLAN.md, D-K-20 — flaga na rodzinę ekranów, czytana W CHWILI UŻYCIA) ──
+    //   consoleKit (K0a, D-K-5 poprawione, Finding 730): ON = otwarta zakładka (członkowie grup nawigacji + U, bez Obserwatorium)
+    //     ma za sobą żywy, ostry, przyciemniony świat (tryb `live`, `ConsoleSceneLogic.CONSOLE_GLASS`: filtr CSS `brightness(0.4)` na
+    //     płótnie WebGL, bez rozmycia i zasłony; scena renderuje się dalej); tryby debug `glass` (zamrożona scena — composer pominięty,
+    //     tiki biegną) i `opaque` — kandydaci na ustawienie wydajności dla słabszych GPU; zestaw `ConsoleKit` / `ConsoleLayoutLogic`.
+    //   OFF = dzisiejsze zachowanie co do bitu (półprzezroczyste tła, scena renderowana pod każdą zakładką).
+    consoleKit: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

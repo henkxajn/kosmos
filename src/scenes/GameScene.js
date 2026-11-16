@@ -181,6 +181,7 @@ import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningA
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
 import { rngWatchToggle, countGameDraws } from '../debug/RngWatch.js';   // ARC CV-0b (Finding 612) — przyrząd: kto losuje ze strumienia gry (tylko konsola)
 import { printStrikeWaves, printSquadronNeeds, squadronMaxShips } from '../utils/StrikeWavePlanner.js';   // AI STRIKES BACK S3 (SB53) — fala desantu AI (odczyt konsoli)
+import { consoleKitDebugHelpers } from '../debug/ConsoleKitDebug.js';   // ARC KONSOLE K0a — pomocniki konsoli przeglądarki
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -624,6 +625,8 @@ export class GameScene {
       // Finding 663 — KOSMOS.debug.rendezvousPlace(0.8) (zaznaczony statek 0,8 AU za najbliższą planetą; drugi argument 1 — przed),
       // rendezvousInfo() (wynik „Lecisz do planety” dla ciał układu) — src/debug/RendezvousDebug.js.
       ...rendezvousDebugHelpers({ getSaveSystem: () => this.saveSystem }),
+      // ARC KONSOLE K0a — KOSMOS.debug.consoleKit.scene() / on() / off() / tune({…}) / tuneLayout({…}) / reset() — src/debug/ConsoleKitDebug.js.
+      ...consoleKitDebugHelpers({ getRenderer: () => this.threeRenderer }),
       // #640 / #675 — okna ogłoszeń (bez cudzysłowów; pokrętła na sesję — F5 przywraca wartości domyślne):
       //   KOSMOS.debug.battleGrace(1.5)   — okno łaski przed banerem i linią bitwy w rundach oglądanego starcia (0 = bez okna,
       //                                     ogłoszenie od razu — jak przed krokiem); bez argumentu — odczyt (rundy i ms).

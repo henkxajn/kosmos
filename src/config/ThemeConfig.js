@@ -46,6 +46,7 @@ export const THEME = {
   fontSizeNormal: 11,
   fontSizeMedium: 13,
   fontSizeLarge:  16,
+  fontSizeInstrument: 32,   // ARC KONSOLE K0a (D-K-19) — duży instrument liczbowy konsol (≈ 2 × fontSizeLarge)
   fontSizeTitle:  16,
   // Efekty CRT (terminal)
   crtEnabled:     false,      // master toggle — włącza scanlines/vignette/sweep
@@ -92,6 +93,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -122,6 +124,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -152,6 +155,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -184,6 +188,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -214,6 +219,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -244,6 +250,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -274,6 +281,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -304,6 +312,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 10,
     fontSizeMedium: 12,
     fontSizeLarge:  13,
+    fontSizeInstrument: 26,
     fontSizeTitle:  15,
   },
 
@@ -339,6 +348,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 14,
     fontSizeMedium: 16,
     fontSizeLarge:  20,
+    fontSizeInstrument: 40,
     fontSizeTitle:  20,
     crtEnabled:     true,
     crtSweepColor:  '#ffaa40',
@@ -375,6 +385,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 14,
     fontSizeMedium: 16,
     fontSizeLarge:  20,
+    fontSizeInstrument: 40,
     fontSizeTitle:  20,
     crtEnabled:     true,
     crtSweepColor:  '#ff4400',
@@ -411,6 +422,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 14,
     fontSizeMedium: 16,
     fontSizeLarge:  20,
+    fontSizeInstrument: 40,
     fontSizeTitle:  20,
     crtEnabled:     true,
     crtSweepColor:  '#88ff44',
@@ -447,6 +459,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 14,
     fontSizeMedium: 16,
     fontSizeLarge:  20,
+    fontSizeInstrument: 40,
     fontSizeTitle:  20,
     crtEnabled:     true,
     crtSweepColor:  '#ffd700',
@@ -718,6 +731,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 12,
     fontSizeMedium: 14,
     fontSizeLarge:  17,
+    fontSizeInstrument: 34,
     fontSizeTitle:  17,
     crtEnabled:   false,
     crtGlow:      3,
@@ -756,6 +770,7 @@ export const PRESET_THEMES = {
     fontSizeNormal: 12,
     fontSizeMedium: 14,
     fontSizeLarge:  17,
+    fontSizeInstrument: 34,
     fontSizeTitle:  17,
     crtEnabled:   true,
     crtSweepColor:'#ff2288',
