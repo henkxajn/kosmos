@@ -1014,3 +1014,29 @@ Podgląd `KOSMOS.debug.holo.*`. Keeper `ship_hologram_smoke` 58/0 (fail-first: 2
 `check-i18n` PASS. Następny krok: K1b (kotwice).
 
 ---
+
+## ARC KONSOLE — K1b: kotwice modułów (`574ee3f`, PASS właściciela 2026-11-16 po trzech rundach)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §11. Bez flagi (gracz bez zmian; podgląd w podglądzie debug K1a).
+- **Pliki i schemat:** `assets/models/ships/anchors/<slot>.json`, ≤ 6 ról (napęd, uzbrojenie, obrona, ładownia, misja, habitat),
+  ścisły walidator `ShipAnchorsSchema.js`. Hardpointy i ich schemat nietknięte. Plik niesie tylko role postawione przez właściciela.
+- **Loader:** `ShipAnchors.js`, `anchorsFor` = plik nad domyślnymi, nigdy nie rzuca. Domyślne są deterministyczne:
+  - napęd = środek dyszy;
+  - uzbrojenie = środek wieżyczek W1…Wn (gdy są), inaczej reguła bbox;
+  - reszta z bbox po stronie widocznej z kamery 3/4;
+  - wszystko poza napędem przyciągnięte do najbliższego punktu kadłuba — ta sama siatka w grze i w Workshopie.
+- **Moduł → rola:** wszystkie 35 modułów.
+- **Model Workshop, tryb 6 „Kotwice modułów”:** wybór roli, blade kółka = domyślne, klik stawia, przeciąganie przesuwa, R przywraca,
+  wspólne cofanie, zapis do `anchors/` przez File System Access.
+- **Podgląd:** `KOSMOS.debug.holo.anchors()` / `anchorsInfo()` — znacznik + odnośnik + etykieta roli WIELKIMI literami (rola
+  `primary`; domyślne przygaszone i przerywane), rzut w pozie ostatniej klatki (obrót, plan, sylwetka).
+- **Przejście właściciela w Workshopie:** wieżyczki na pięciu okrętach (2 / 5 / 5 / 14 / 22), habitat na pięciu kolonijnych
+  (warp_large_colony zostaje przy domyślnych).
+- **Finding 737 ✅:** pin N11f keepera normalizatora dzielił sloty po dopisku Workshopu, więc zapis samych wieżyczek opróżnił świadka
+  równości dysz. Teraz klasyfikacja po dyszy.
+- **Testy:** keeper `ship_anchors_smoke` 93/0 (A10 na prawdziwych siatkach 24 GLB: kadłub ≤ 10⁻³, najgorzej 7·10⁻⁵); fail-first
+  12 czerwonych / 3 zielone; 11/11 mutacji czerwonych; keepery `cv_*` zielone na plikach właściciela; sweep 412/412, `check-i18n` PASS.
+
+Następny krok: K1c (Stocznia na szablonie konsoli: warstwa hologramu, etykiety kotwic z listą modułów).
+
+---

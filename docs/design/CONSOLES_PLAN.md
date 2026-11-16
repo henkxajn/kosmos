@@ -1,10 +1,10 @@
 # CONSOLES — visual reform of the full-screen tabs (plan and findings registry)
 
 Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
-owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); next step K1b
-(anchors: format, loader, computed defaults, Model Workshop «anchors» mode).** Phase A
+owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); K1b delivered (`574ee3f`, owner PASS
+2026-11-16 after three review rounds — §11); next step K1c (Shipyard on the console template: hologram layer, anchor labels).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
-the K0a gate). Register: findings #723–#736 filed; **next free finding number: 737**.
+the K0a gate). Register: findings #723–#737 filed; **next free finding number: 738**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
 allowlist, not game code); 41 untracked files, all older than 2026-11-02, none from the combat-visuals arc.
 Handover: `C:\Users\Komputer\kosmos-handover\consoles-phase-a\` (`STOP_A.md`, `kontakt_now.html`, `shots_now/`,
@@ -319,7 +319,7 @@ Hit zones stay per screen (first-hit-wins in BaseOverlay; Command keeps its own 
 
 ## 5. Findings (next free number verified: **723**; the brief expected 612 — the CV arc filed #612–#722)
 
-This plan files **#723–#736**. **Next free finding number: 737.**
+This plan files **#723–#737**. **Next free finding number: 738.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
@@ -336,6 +336,7 @@ This plan files **#723–#736**. **Next free finding number: 737.**
 | **733** | ⚪ | **Economy tile alert and Budget disagree on «net»**: the nav alert uses trade + tax − fleet upkeep (`NavPeekProviders.js:33-36`), Budget subtracts labor and unit upkeep too (`EconomyOverlay.js:2974`) — the tile can stay calm while Budget shows a deficit | files as listed | mechanics/UI (owner: K3 or separate) |
 | **734** | ⚪ | **Dead and dormant tab code** (do not reskin): `FleetTabPanel.js` 2678 + `FleetPanel.js` 474 (zero importers outside tests); Command flag-OFF map ~1200 LOC + `_drawLeftFleets`; EconomyOverlay priority/manual modes ~700 LOC; ColonyOverlay V1 workforce + `_stationMode`; `UIManager._drawCivPanel` never called, so `CIV_TABS[].key` hints are stale data (Civ `V`, Dyson `D`, Diplomacy `Y`, Trade `H`, Colonies `C`); PopulationOverlay unreachable | agents' call-site greps; `UIManager.js:2663` | D-K-18 (refactor before each K step) |
 | **736** | ⚪ | **Combat strip overflows its console header slot with 2–3 simultaneous battles**: one battle line (21 px) fits the 30 px header slot (D-K-17), but each extra battle adds a line (`MAX_LINES` 3, `stripLayout`), so the block grows below the header over the top of the inspector | `combatSlotInsets` (`CombatStripLogic.js`), `stripLayout`; K0b review (not staged) | later (owner: collapse to one «⚔ N ▼» chip in the slot) |
+| **737** | ✅ K1b | **Normalizer keeper N11f classified slots by the Workshop stamp, not by the nozzle**: every Workshop save stamps `notes` (turrets only too), so after the owner clicked turrets on the five remaining warships all six slots carried the stamp and the equality witness (`nozMeasured ≥ 1`) emptied while every nozzle was correct. Fix: classify by the nozzle — a nozzle equal to the measurement always counts as equality; the aft-half rule applies only to a nozzle moved in the Workshop; unstamped and not equal is still an error; the control takes the first stamped slot. Red on a moved nozzle without the stamp | `cv_normalizer_logic_smoke.mjs` N11f (56/1 → 57/0 on the owner's files; 57/0 on the base files) | K1b |
 | **735** | 🟠 | **War screen ships two debug actions to the player, unconditionally**: «⚡ WYMUŚ STARCIE (debug)» → `warSystem.forceBattle` and «🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)» are drawn and clickable for every active war (`WarOverlay.js:380-386`, `:707`; i18n `warOverlay.btnForceBattle/btnForceInvasion`) — a cheat in the player UI | `shots_now/*/32_war.jpg`; files as listed | K2 (owner: hide behind a debug flag or `KOSMOS.debug.*`) |
 
 ## 6. Proposed cut, decisions, effort
@@ -585,3 +586,74 @@ Recorded at the owner's request before the close-out.
 - **K1c — map showing through:** the owner saw the system map through the additive hologram in the debug viewer. In a real
   console `#hud-canvas` is cleared (map labels gone). If the dimmed scene still competes there, add an **optional extra local
   dim behind the hero rect only** (owner knob).
+
+## 11. K1b — delivered (module anchors: data, loader, computed defaults, Model Workshop «anchors» mode)
+
+**Commit `574ee3f` feat(K1b)** · no `FEATURES` flag: nothing changes for the player. The preview lives in the K1a debug viewer, which
+refuses when `FEATURES.shipHologram` is false. Owner PASS 2026-11-16 after three review rounds (handover
+`C:\Users\Komputer\kosmos-handover\consoles-k1b\`: `STOP_K1b.md`, `kontakt_k1b.html`, `shots/{amber_noir_r1, amber_noir,
+amber_noir_r3, workshop}`, `probes/{k1b, workshop, sheet, montage}.mjs`. The probes served a `git worktree` copy outside the repo,
+since removed; Chrome profiles are in `E:\kosmos-work\consoles-k1b\work`).
+
+- **Data (D-K-8 a, D-K-9 a):** `assets/models/ships/anchors/<slot>.json` = `{ v:1, slot, anchors:[{ role, p }] }`, at most one anchor
+  per role (`drive`, `weapons`, `defence`, `hold`, `mission`, `habitat`). Points use the hardpoints' normalised model space. The strict
+  validator is `src/data/ShipAnchorsSchema.js`: an unknown key, unknown role, duplicate role, non-finite or out-of-space point, wrong
+  version or wrong slot is an error. `hardpoints/<slot>.json` and `ShipHardpointsSchema` are unchanged (the strict schema still
+  rejects an `anchors` key). Files are per model key (Finding 728: medium and large cargo share a GLB). A file holds only the roles the
+  owner placed (decision 1); an empty list is valid.
+- **Loader + computed defaults** (`src/renderer/ShipAnchors.js`): `anchorsFor(slot, ctx)` puts file roles over the defaults and never
+  throws; a missing, invalid or foreign-slot file falls back to defaults only. `ShipAnchorsCache` validates once and shares parallel
+  requests. Defaults are deterministic and computed, never stored:
+  - **drive** = nozzle hardpoint centre, never snapped (round 3);
+  - **weapons** = turret centroid W1…Wn when the model has turrets, else the bbox rule (round 2). On battleships with 14–22 turrets the
+    anchor lands midship; K1c lists all weapons on that one label;
+  - **the rest** follow the bbox along the bow axis from the file frame, all on the side the 3/4 camera sees: hold midship dorsal,
+    mission 0.2 towards the bow on the upper starboard flank (round 3), defence midship starboard, habitat aft dorsal (left bbox-based;
+    the owner places it on colony models);
+  - **hull snap:** every default except drive moves to the closest point of the hull mesh (`closestPointOnMesh`, Ericson 5.1.5). The
+    game uses `modelNormTriangles` and the Workshop `templateNormTriangles`, with the same meshes, matrices and bbox, so Workshop
+    defaults equal game defaults.
+- **Module → role** (`moduleAnchorRole`, by `slotType`): propulsion → drive · weapon → weapons · armor, shield → defence · cargo, fuel
+  (incl. warp tank) → hold · science, special, troop → mission · habitat → habitat. All 35 modules are mapped. `groupModulesByRole`
+  feeds K1c's stacked labels.
+- **Model Workshop mode 6 «Kotwice modułów»:** role picker with placed / default state, ghost markers for defaults, click on the hull
+  places the selected role, click on a marker selects it, drag moves it, R resets it to the default. Undo history is shared with the
+  hardpoint edits. **Zapisz kotwice** writes through File System Access to a separately remembered folder (`anchors/`, or `ships/` with
+  `anchors/` created); there is a download fallback. The hardpoints document, its signature and its save path ignore the anchors
+  field. All existing modes are unchanged.
+- **Preview** (`KOSMOS.debug.holo.anchors()` toggles, `KOSMOS.debug.holo.anchorsInfo()`, both quote-free and checked on the engine):
+  - each anchor shows a marker, a leader line and an uppercase role label (`shipAnchor.*`, PL/EN). Labels point outward, never
+    overlap on one side and stay inside the hero rect (`ShipAnchorOverlayLogic`);
+  - projection `ShipHologramRenderer.projectPoints` uses the pose of the last frame (3/4 spin; plan and silhouette = technical drawing,
+    labels on the side view only);
+  - anchors load lazily (no requests from the hologram alone), and snapped defaults are computed once per model;
+  - colour is the theme `primary` role: file anchors full and solid, defaults at 0.5 alpha and dashed (decision 2 — `dim` vanished on
+    Amber Noir).
+- **Owner's Workshop pass (in the commit):** turrets on nonwarp_frigate 2, nonwarp_destroyer 5, warp_destroyer 5, nonwarp_battleship 14,
+  warp_battleship 22 (warp_frigate already had 2). Habitat is placed on nonwarp_small/medium/large_colony and warp_small/medium_colony;
+  warp_large_colony keeps defaults (empty file). The `nonwarp_small_colony` hardpoints change is only the Workshop save stamp in
+  `notes`. No nozzle was moved.
+- **Finding 737 ✅** (filed and closed here): see §5.
+- **Keepers:**
+  - `ship_anchors_smoke` **93/0**: schema table and disk files with witness, defaults, loader / cache, module coverage, Workshop
+    round-trip (hardpoints blind to anchors, session, revert), label layout, lazy load and projection on three r171. A10 runs on the
+    **real meshes of all 24 GLBs** via `@gltf-transform`: weapons = turret centroid and its hull projection (6/6), the five snapped roles
+    ≤ 10⁻³ from the hull (worst 7·10⁻⁵), drive = nozzle, hold and mission on the visible side, deterministic. Closest-point-on-triangle
+    is checked against dense sampling; control: without the mesh the warp_battleship rule points float > 0.01.
+  - Fail-first on a `git worktree` at `cb06d7a`: 12 red, 3 green (2 controls, plus an exclusion pin whose witness is red).
+  - Mutations red 11/11: merge ignores the file, unmapped troop, duplicate role accepted, eager load, coinciding defaults, anchors
+    leaking into the hardpoints doc, wrong projection yaw, no snap, no centroid, dropped triangle vertex region, wrong early reject.
+  - `cv_normalizer_logic_smoke` 57/0, `cv_models_logic_smoke` 69/0, `cv_workshop_logic_smoke` 95/0 and `ship_hologram_smoke` 58/0 pass
+    on the owner's files. Sweep 412/412, `check-i18n` PASS. Workshop live in headless Chrome: 14/14.
+- **Deviations (approved):** decisions 1–3 above. Proposal 4 was extended in rounds 2–3: turret centroid, hull snap, drive exempt,
+  hold and mission moved to the visible side. Labels in plan view are on the side view only. A10 reads GLBs through the devDependency
+  `@gltf-transform` (without `node_modules` the section degrades red; the suite does not abort).
+
+### 11.1 Inputs for K1c
+
+- Use `anchorsFor(key, …)` plus `groupModulesByRole(design modules, SHIP_MODULES)`: one leader per non-empty role, with the module list
+  stacked under the role label. `drawShipAnchors` is the starting point; drop the default/file distinction for the player.
+- The renderer computes snapped defaults once per model. The hero rect for K1c is the hologram layer (§10.1); project with the same
+  `projectPoints`.
+- Anchor files are missing for 18 keys. Each one costs a 404 when its anchors are first requested. Saving any model in mode 6
+  writes a file, an empty one included.
