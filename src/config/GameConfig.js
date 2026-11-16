@@ -552,6 +552,11 @@ export const GAME_CONFIG = {
     //     w gnieździe nagłówka (D-K-17). Mgła wojny jak dziś (keeper `console_intel_smoke`).
     //   OFF = dzisiejszy Wywiad co do bitu (poza Findingiem 725 — trzy napisy przez t(), polski tekst bez zmian).
     consoleIntel: true,
+    //   shipHologram (K1a, D-K-4/7/10/11): ON = gospodarze mogą używać `ShipHologramRenderer` (hologram statku: własny offscreen
+    //     WebGLRenderer → drawImage w prostokąt bohatera, obwódka fresnela + linie skanowania + krawędzie w roli `primary`, sylwetka
+    //     Canvas 2D jako fallback). W K1a jedynym gospodarzem jest podgląd `KOSMOS.debug.holo` (Stocznia — K1c).
+    //   OFF = brak hologramu (podgląd debug odmawia), gra bez zmian co do bitu.
+    shipHologram: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

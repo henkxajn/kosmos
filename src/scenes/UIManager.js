@@ -499,6 +499,8 @@ export class UIManager {
    */
   isConsoleSceneActive() {
     if (GAME_CONFIG.FEATURES.consoleKit !== true) return false;
+    // ARC KONSOLE K1a — podgląd hologramu (`KOSMOS.debug.holo.open()`) leży nad tą samą żywą, przyciemnioną sceną co konsole.
+    if (this._holoDebug?.isOpen === true) return true;
     const om = this.overlayManager;
     const id = om?.active ?? null;
     const ov = id ? om.overlays[id] : null;
@@ -2615,6 +2617,9 @@ export class UIManager {
 
     // ── Powiadomienia (Opcja B): toast usunięty, wszystko w BottomBar EventLog ─
 
+    // ── ARC KONSOLE K1a — podgląd hologramu statku (debug `KOSMOS.debug.holo`; src/debug/ShipHologramDebug.js) ──
+    if (this._holoDebug?.isOpen) this._holoDebug.draw(ctx, W, H);
+
     // ── Tooltip TopBar (na wierzchu) ─────────────────────────
     if (civMode) this._topBar.drawTooltip(ctx, W, UI_SCALE);
 
@@ -2662,7 +2667,8 @@ export class UIManager {
     this._animating = flashActive || !!this._gameOverData
       || (this._topResourceDrawer?.isAnimating?.() ?? false)
       || (this._eventLogDrawer?.isAnimating?.() ?? false)
-      || (this._bottomNavBar?.isAnimating?.() ?? false);
+      || (this._bottomNavBar?.isAnimating?.() ?? false)
+      || (this._holoDebug?.isAnimating?.() ?? false);   // ARC KONSOLE K1a — obrót / przenikanie hologramu
 
     ctx.restore();
   }
