@@ -59,3 +59,57 @@ export function drawShipAnchors(ctx, renderer, rect, { roles, font }) {
   ctx.restore();
   return { drawn: placed.length, fromFile: res.fromFile, pending: false };
 }
+
+/**
+ * K1c — etykiety modułów projektu na kotwicach (bohater Stoczni): JEDNA etykieta na niepustą rolę (WIELKIE litery nad
+ * podkreśleniem), pod nią lista zamontowanych modułów tej roli («Laser ×6»); role puste nie są rysowane. Dla gracza bez
+ * rozróżnienia plik / domyślna (wszystko `primary`, pełne). Plan i sylwetka — etykiety tylko na widoku z boku.
+ * @param {object} renderer — `ShipHologramRenderer`
+ * @param {{ role:string, items:{ id:string, count:number }[] }[]} stacks — `ShipyardConsoleLogic.roleStacks`
+ * @param {{ roles:{ primary:string, dim:string }, font:string, smallFont:string, itemText:(it:object) => string }} style
+ * @returns {{ drawn:number, pending:boolean, placed:object[] }}
+ */
+export function drawDesignAnchors(ctx, renderer, rect, stacks, { roles, font, smallFont, itemText }) {
+  const list = Array.isArray(stacks) ? stacks : [];
+  if (!list.length) return { drawn: 0, pending: false, placed: [] };
+  const res = renderer?.anchors?.();
+  if (!res) return { drawn: 0, pending: true, placed: [] };
+  const byRole = new Map(list.map((s) => [s.role, s]));
+  const used = res.anchors.filter((a) => byRole.has(a.role));
+  const pts = renderer.projectPoints(used.map((a) => a.p), rect, ctx);
+  ctx.save();
+  const measure = (s, small) => { ctx.font = small ? smallFont : font; return ctx.measureText(s).width; };
+  const items = pts.map((q) => {
+    const a = used[q.i];
+    const st = byRole.get(a.role);
+    const side = q.view !== 'top';
+    return { key: a.role + ':' + q.view, role: a.role, x: q.x, y: q.y, text: anchorRoleLabel(a.role), label: side,
+      subs: side ? st.items.map((it) => itemText(it)) : [] };
+  });
+  const placed = layoutAnchorLabels(items, rect, { measure });
+  const o = ANCHOR_OVERLAY;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = roles.primary;
+  for (const e of placed) {
+    ctx.fillStyle = roles.primary;
+    ctx.beginPath(); ctx.arc(e.x, e.y, o.MARK_R, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(e.x, e.y, 1.3, 0, Math.PI * 2); ctx.fill();
+    if (!e.elbow) continue;
+    const dx = e.elbow[0] - e.x, dy = e.elbow[1] - e.y, d = Math.hypot(dx, dy) || 1;
+    const lx = e.side < 0 ? e.line[1] : e.line[0];
+    ctx.beginPath();
+    ctx.moveTo(e.x + dx / d * o.MARK_R, e.y + dy / d * o.MARK_R);
+    ctx.lineTo(lx, e.elbow[1]);
+    ctx.lineTo(e.side < 0 ? e.line[0] : e.line[1], e.elbow[1]);
+    ctx.stroke();
+    ctx.font = font;
+    ctx.fillText(e.text, e.textX, e.elbow[1] - 3);
+    ctx.font = smallFont;
+    ctx.fillStyle = roles.dim;
+    (e.subs ?? []).forEach((s, k) => ctx.fillText(s, e.textX, e.elbow[1] + (k + 1) * o.LINE_H - 1));
+  }
+  ctx.restore();
+  return { drawn: placed.filter((e) => e.elbow).length, pending: false, placed };
+}

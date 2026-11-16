@@ -557,6 +557,12 @@ export const GAME_CONFIG = {
     //     Canvas 2D jako fallback). W K1a jedynym gospodarzem jest podgląd `KOSMOS.debug.holo` (Stocznia — K1c).
     //   OFF = brak hologramu (podgląd debug odmawia), gra bez zmian co do bitu.
     shipHologram: true,
+    //   consoleShipyard (K1c-A, D-K-20; Finding 723): ON (razem z consoleKit) = Stocznia na szablonie 4-strefowym — nagłówek z
+    //     kontekstem (kolonia, stocznia naziemna) i bramkami S0/S1 jako linią banera, lista (projekty + kadłuby), bohater (hologram
+    //     projektu z etykietami ról na kotwicach, [ 3D ] [ PLAN ]), inspektor (sloty, picker z deltą, staty, [ BUDUJ ] [ ZAPISZ ]
+    //     [ WYCZYŚĆ ]), pas (budowy + Surge, oczekujące, rezerwa). Te same typy stref i handlery co dziś.
+    //   OFF = dzisiejsza Stocznia co do bitu.
+    consoleShipyard: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

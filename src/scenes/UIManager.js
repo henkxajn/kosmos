@@ -2668,7 +2668,9 @@ export class UIManager {
       || (this._topResourceDrawer?.isAnimating?.() ?? false)
       || (this._eventLogDrawer?.isAnimating?.() ?? false)
       || (this._bottomNavBar?.isAnimating?.() ?? false)
-      || (this._holoDebug?.isAnimating?.() ?? false);   // ARC KONSOLE K1a — obrót / przenikanie hologramu
+      || (this._holoDebug?.isAnimating?.() ?? false)    // ARC KONSOLE K1a — obrót / przenikanie hologramu
+      || (this.overlayManager?.active === 'shipyard'
+          && (this.overlayManager.overlays.shipyard?.isAnimating?.() ?? false));   // K1c-A — hologram bohatera Stoczni
 
     ctx.restore();
   }

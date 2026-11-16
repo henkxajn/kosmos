@@ -45,7 +45,7 @@ export const CONSOLE_SCREEN_SPECS = {};
 // Ekrany przebudowane na zestawie konsoli (id overlayu → klucz flagi `FEATURES`, D-K-20). Ekran zestawu rysuje własny nagłówek
 // z czipami podzakładek — pas subnav grupy nie jest wtedy rysowany ani trafiany, a overlay zaczyna się tuż pod górną belką;
 // pasek walki siada w gnieździe nagłówka (D-K-17). Każdy wpis wymaga też `consoleKit` (żywa, przyciemniona scena za tekstem).
-export const CONSOLE_KIT_SCREENS = Object.freeze({ intel: 'consoleIntel' });
+export const CONSOLE_KIT_SCREENS = Object.freeze({ intel: 'consoleIntel', shipyard: 'consoleShipyard' });
 
 /** Czy overlay `id` rysuje się teraz jako ekran zestawu konsoli (flagi czytane w chwili wywołania). */
 export function isKitScreen(id, features) {

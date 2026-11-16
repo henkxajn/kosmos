@@ -22,6 +22,10 @@ import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { NAV_GROUPS } from '../../ui/CivPanelDrawer.js';
 import PL from '../../i18n/pl.js';
 import EN from '../../i18n/en.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
+// ARC KONSOLE K1c-A — ten keeper pinuje DZISIEJSZĄ Stocznię (wspólny scroll, przypięta stopka): flaga konsoli OFF.
+// Ścieżkę konsoli (ON) pinuje `console_shipyard_smoke` (S5 inwentarz, S13 przewijanie bez ghost-clicku).
+GAME_CONFIG.FEATURES.consoleShipyard = false;
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };

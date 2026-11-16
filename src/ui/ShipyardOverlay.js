@@ -25,6 +25,14 @@ import { t, getName }     from '../i18n/i18n.js';
 import EventBus           from '../core/EventBus.js';
 import { pruneZones }     from './InfoPanelLayoutLogic.js';
 import { isEnemyVessel }  from '../entities/Vessel.js';
+import { GAME_CONFIG }    from '../config/GameConfig.js';
+import { isKitScreen }    from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo } from './ConsoleKit.js';
+import { drawShipyardConsole, shipyardConsoleScroll } from './ShipyardConsoleView.js';
+import { ShipHologramRenderer } from '../renderer/ShipHologramRenderer.js';
+
+// ARC KONSOLE K1c-A — Stocznia na szablonie konsoli (`FEATURES.consoleKit` + `consoleShipyard`; OFF = dzisiejsza ścieżka co do bitu).
+const kitOn = () => isKitScreen('shipyard', GAME_CONFIG.FEATURES);
 
 // Typy hitów osadzonego edytora projektów (UnitDesignOverlay._drawShipDesigner) —
 // delegowane do instancji edytora w _onHit. Lustro DESIGN_EDITOR_HIT_TYPES z
@@ -42,6 +50,28 @@ export class ShipyardOverlay extends BaseOverlay {
     this._shipyardContentH = 0;   // łączna wysokość treści (do clampu scrolla)
     this._shipyardViewH    = 0;   // widoczna wysokość kolumny
     this._hoverPendingOrder = null;
+    // K1c-A — stan konsoli (używany tylko przy fladze ON)
+    this.consoleZones = null;      // strefy z ostatniej klatki (gniazdo paska walki, kółko myszy)
+    this._consoleScrollRects = {};
+    this._designsScroll = 0;
+    this._inspScroll = 0;
+    this._stripScroll = {};
+    this._holoView = '3q';         // [ 3D ] | [ PLAN ]
+    this._holo = null;             // ShipHologramRenderer — leniwie, zwalniany w hide()
+  }
+
+  // K1c-A — hologram bohatera (D-K-7 a); null, gdy `FEATURES.shipHologram` wyłączone.
+  _ensureHologram() {
+    if (GAME_CONFIG.FEATURES.shipHologram !== true) return null;
+    this._holo ??= new ShipHologramRenderer({
+      onChange: () => { const u = window.KOSMOS?.uiManager; if (u) u._dirty = true; },
+    });
+    return this._holo;
+  }
+
+  /** K1c-A — czy UIManager ma rysować kolejną klatkę (obrót / przenikanie hologramu). */
+  isAnimating() {
+    return this.visible && kitOn() && !!this._holo && this._holo.isAnimating();
   }
 
   // Zarejestrowana instancja unit_design (wspólny stan z klawiszem U). Null gdy
@@ -54,6 +84,14 @@ export class ShipyardOverlay extends BaseOverlay {
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    if (kitOn()) {
+      // K1c-A — konsola (poświata K0b za całym rysunkiem; zdjęta przez restore)
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawShipyardConsole(this, ctx, W, H); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
 
     // Tło + ramka
@@ -601,6 +639,14 @@ export class ShipyardOverlay extends BaseOverlay {
 
   // ── Interakcja ─────────────────────────────────────────────────────────────
   _onHit(zone) {
+    // K1c-A — konsola: wybór wiersza projektu = wczytaj do projektanta (ten sam `_loadTemplate` co [ EDYTUJ ]); czipy widoku.
+    if (kitOn()) {
+      if (zone.type === 'tpl_row') {
+        this._getDesignEditor()?._onHit({ type: 'edit_template', data: { index: zone.data.index } });
+        return;
+      }
+      if (zone.type === 'holo_view') { this._holoView = zone.data.mode === 'plan' ? 'plan' : '3q'; return; }
+    }
     // Delegacja hitów osadzonego edytora projektów do wspólnej instancji.
     if (DESIGN_EDITOR_HIT_TYPES.has(zone.type)) {
       this._getDesignEditor()?._onHit(zone);
@@ -657,6 +703,7 @@ export class ShipyardOverlay extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (kitOn()) return shipyardConsoleScroll(this, delta, x, y);
     const maxScroll = Math.max(0, this._shipyardContentH - this._shipyardViewH);
     this._shipyardScrollY = Math.max(0, Math.min(maxScroll, this._shipyardScrollY + delta * 0.5));
     return true;
@@ -665,5 +712,7 @@ export class ShipyardOverlay extends BaseOverlay {
   hide() {
     super.hide();
     this._hoverPendingOrder = null;
+    // K1c-A — zwolnij kontekst WebGL hologramu (ukryty gospodarz nie rysuje → bez pracy; zamknięcie → bez kontekstu)
+    if (this._holo) { this._holo.release(); this._holo = null; }
   }
 }
