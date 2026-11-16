@@ -999,3 +999,18 @@ poświata `HALO_BLUR`). Finding 725 (część Wywiadu) ✅; NOWE ⚪ 736 (2–3 
 `console_intel_smoke` 39/0 (fail-first: 30 czerwonych, 9 kontroli); sweep 410/410, `check-i18n` PASS. Następny krok: K1a.
 
 ---
+
+## ARC KONSOLE — K1a: hologram statku `ShipHologramRenderer` (`3f41ba3`, OK właściciela 2026-11-16 po jednej rundzie)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §10. Flaga `FEATURES.shipHologram` (ON). Własny offscreen WebGLRenderer (leniwy, zwalniany)
+→ `drawImage` w prostokąt gospodarza; render tylko przy zmianie / animacji (bezczynność i ukrycie = 0 renderów). Modele wg reguły
+`VesselModelResolver` (D-K-10, rola cywilna i oś warp z modułów), szablony z pamięci ThreeRenderera, scena główna nietknięta (klony,
+geometria tylko do odczytu). Wygląd: obwódka fresnela + linie skanowania + krawędzie w roli `primary`, przebieg głębi; widok 3/4 z obrotem
+i plan = rysunek techniczny (bok + góra). Sylwetka Canvas 2D (wypełnienie rzutu + kontur + krawędzie) przy braku / utracie kontekstu,
+przekroczonym budżecie albo wymuszeniu. Runda 1: widok z góry — przyczyna: krawędzie załamań nie obrysowują gładkich burt (nie oś, nie
+wyspy), plus kadr ze stałych pasów; domyślne właściciela `edgeAngle` 30°, `xray` 0. Pomiar: hologram 0,12–0,20 ms GPU, kompozycja w szumie,
+obrót kosztuje głównie przerysowanie całego UI (→ K1c: osobna warstwa płótna pod UI, przeciąganie myszą, opcjonalne lokalne przyciemnienie).
+Podgląd `KOSMOS.debug.holo.*`. Keeper `ship_hologram_smoke` 58/0 (fail-first: 28 czerwonych, 2 kontrole; 4 mutacje czerwone); sweep 411/411,
+`check-i18n` PASS. Następny krok: K1b (kotwice).
+
+---

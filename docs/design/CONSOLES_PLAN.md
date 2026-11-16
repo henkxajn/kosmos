@@ -1,7 +1,8 @@
 # CONSOLES — visual reform of the full-screen tabs (plan and findings registry)
 
 Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
-owner PASS 2026-11-16 — §9); next step K1a (ship hologram renderer).** Phase A
+owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); next step K1b
+(anchors: format, loader, computed defaults, Model Workshop «anchors» mode).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
 the K0a gate). Register: findings #723–#736 filed; **next free finding number: 737**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
@@ -503,3 +504,79 @@ Intel) · owner PASS 2026-11-16 after one review round (handover `C:\Users\Kompu
   `KOSMOS.debug.consoleKit.off()` → today's Intel, `.on()` → console.
 - **Deviations / notes**: no strip zone on this screen (nothing natural); the scrolled-list frame used 24 synthetic intel records
   and the battle frame a synthetic encounter fed only to the strip instance (probe-only staging).
+
+## 10. K1a — delivered (ShipHologramRenderer) + inputs for K1c
+
+**Commit `3f41ba3` feat(K1a)** · flag `FEATURES.shipHologram` (ON; OFF = no hologram, the debug viewer refuses, game bit for bit) ·
+owner OK 2026-11-16 after one look round (handover `C:\Users\Komputer\kosmos-handover\consoles-k1a\`: `STOP_K1a.md`,
+`kontakt_k1a.html`, `shots/{amber_noir,neon_cyber,r2_amber_noir}`, `probes/{k1a,k1a_r2,topdiag,oneliners,maskdbg,sheet}.mjs`;
+probes served the repo tree read-only, Chrome profiles in `E:\kosmos-work\consoles-k1a\work`).
+
+- **`ShipHologramRenderer`** (D-K-7 a): own offscreen `WebGLRenderer` created on first draw, released by `release()` (dispose +
+  `forceContextLoss`, listeners removed); output `drawImage`d into the host's rect with `lighter` compositing. Renders only
+  while the host draws **and** something changed or animates (spin, cross-fade); idle draws only composite the last frame.
+  Every world dependency (THREE, context creation, canvases, loaders, clock, colour, theme epoch) is injected — the keeper
+  executes the class under node on real three r171.
+- **Models** (D-K-10 a): `designModelKey(hull, modules)` = the map rule (`resolveVesselModelKey`; warp axis from
+  `calcShipStats().warpFuelCapacity`, civil role from modules); all 24 keys reachable from the designer. Templates from the
+  ThreeRenderer cache (combat hulls `@1k` first — same mesh, smaller textures; `default.glb` only after both fail),
+  hardpoint frame from `_shipHardpoints`. Main scene untouched: cloned meshes on read-only template geometry, matrices
+  computed from position/quaternion/scale (no `updateMatrixWorld` on the template), own materials and edges.
+  `setModel` swaps with a 220 ms cross-fade (snapshot of the last frame).
+- **Look** (theme roles only): one `ShaderMaterial` per renderer (fresnel rim dominant, faint fill, screen-space scanlines,
+  premultiplied additive; recoloured by uniform on theme epoch), depth pre-pass so the hull hides back edges and inner
+  faces (`xray` knob), `EdgesGeometry` lines at low alpha. GLSL = plain quoted literals, per-object values by uniforms.
+  3/4 view (slightly above, bow left) with slow spin; **plan = technical drawing**, side over top, two orthographic
+  viewports framed by `technicalLayout` on the model's real extents.
+- **Fallback silhouette** (D-K-11 a), Canvas 2D, no WebGL: projected fill + contour + crease edges, same layout, cached per
+  model × theme epoch × edge angle × size. Triggers in priority order: forced > context failed > context lost (recovers on
+  `webglcontextrestored`) > budget (median of 15 GPU samples > `budgetMs` after ≥ 8 samples; `EXT_disjoint_timer_query_webgl2`,
+  else synchronous 1-px reads on the first 12 renders after a change and every 90th). Never throws.
+- **Debug viewer** (quote-free, validated on the engine): `KOSMOS.debug.holo.open()` / `.next()` / `.prev()` / `.plan()` /
+  `.spin()` / `.silhouette()` / `.info()` / `.reset()` / `.close()`; knobs `KOSMOS.debug.holo.tune.edgeAngle` (also
+  `edgeAlpha`, `rim`, `scan`, `spin`, `budgetMs`, `xray`). Centred 900×640 logical rect (= 1125×800 px at UI scale 1.25);
+  the open viewer counts as a console scene (`UIManager.isConsoleSceneActive`), so it sits on the live dimmed backdrop.
+- **Owner defaults:** `edgeAngle` **30°**, edgeAlpha 0.22, rim 1.0, scan 0.22, spin 0.25 rad/s, budgetMs 4, `xray` 0.
+- **Measured** (1600×1041, RTX 3070, ZF120, paused): hologram **0.12–0.20 ms GPU** per frame on all 24 models (timer query;
+  battleship 29 k tris → 0.20); composite alone within noise (UI forced every frame: 3.92 ms CrGpuMain with the composite
+  vs 4.00 without; `drawImage` CPU < 0.1 ms) — the Phase-A 2.3–5.8 ms was the forced readback; viewer open and idle:
+  0 hologram renders, 0 UI draws (CrGpuMain 1.45 vs 1.33 map — noise); after `close()` 0 renders, context released;
+  spinning 4.24 ms CrGpuMain vs 1.45 idle — almost all of it the full-UI redraw (→ K1c layer below). First load: GLB
+  42–58 ms (≈ 0 when the map already holds the template) + edge build 5–48 ms.
+- **GLSL compile probe** (Chrome, `probes/k1a.mjs`): hologram and line materials link; the control (`void mian()`) fails
+  with «Fragment shader is not compiled».
+- **Keepers:** `ship_hologram_smoke` **58/0** — key resolution incl. civil role swap, template materials / geometry /
+  matrices byte-identical after use + `release` (zero `dispose` events), fallback triggers and priority, idle = no renders,
+  release frees the context, GLSL literals, knobs / flag / UIManager hooks, technical layout + plan viewports + mask
+  winding. Fail-first on a `git worktree` at `6a68570` (51-pin round-1 keeper): 28 red, 2 green = controls (module
+  witnesses, fingerprint detects a material swap); mutations red: template `updateMatrixWorld` + `needsUpdate`, template
+  geometry `dispose`, render while idle, winding not normalised (round 2). Sweep 411/411, `check-i18n` PASS (no player-facing
+  strings).
+- **Deviations (approved):** rect in UI units (larger than the Phase-A estimate — measurements conservative); extra `xray`
+  knob; additive composite; cross-fade instead of an instant swap; in the debug viewer the map HUD layer stays (it is not a tab).
+
+### 10.1 Owner look round 1 (2026-11-16) → inputs for K1c
+
+Recorded at the owner's request before the close-out.
+
+- **Defaults chosen by the owner:** `edgeAngle` **30°** (denser detail preferred over the noise), `xray` 0; rim 1.0, edgeAlpha 0.22,
+  scan 0.22, spin 0.25 rad/s, budgetMs 4 kept.
+- **Top-view diagnosis** (24 models, probe `topdiag.mjs`): not (a) the camera axis — every frame is bow ±X / up +Y and the side
+  view is right; not (b) geometry islands — 1–4 connected components per model, main component 93–100 % of the triangles,
+  0 components under 0.05 and 0 outside the main hull; partly (c) the framing — fixed 58/42 % bands and a scale that assumed
+  |z| ≤ 0.3 let wide hulls (|z| 0.35, `nonwarp_small_science`, `nonwarp_small_cargo`) spill out of the top band. **Main cause:**
+  `EdgesGeometry` draws crease edges only, so smooth curved hulls (the medium-cargo tanks) have no outline and the details on
+  them float «outside the ship». Fix: the silhouette fills the projected triangles and draws the projection's contour
+  (mask − erosion, canvas compositing; each triangle's winding normalised first — with front and back faces cancelling
+  under nonzero the medium-cargo mask covered 965 px instead of the hull), the crease edges on top as detail; the frame
+  comes from the model's real extents (band heights in the y : z ratio, shared scale, each view centred on its extent).
+- **Plan view = technical drawing:** with the top view clean, `plan()` renders side + top stacked in the same layout as the
+  silhouette (two orthographic viewports of one canvas; the fresnel rim draws the outline). **This view doubles as the
+  Shipyard `[ PLAN ]` view in K1c.**
+- **K1c — spin cost:** spinning forces a full `#ui-canvas` redraw every frame (≈ +2.8 ms CrGpuMain; the hologram itself
+  ≈ 0.2 ms). K1c moves the hologram to a **dedicated canvas layer between the 3D scene canvas and `#ui-canvas`** (under the
+  UI, never covers chrome; the UI leaves the hero rect transparent), so a spinning hologram never redraws the UI. Slow spin by
+  default + **mouse-drag rotate**.
+- **K1c — map showing through:** the owner saw the system map through the additive hologram in the debug viewer. In a real
+  console `#hud-canvas` is cleared (map labels gone). If the dimmed scene still competes there, add an **optional extra local
+  dim behind the hero rect only** (owner knob).
