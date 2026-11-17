@@ -370,7 +370,7 @@ owner look + tune; one `feat` commit + `docs` close-out; sized for one CC sessio
 | **K4** | Production (largest Economy page); 732 | 1–2 |
 | **K5** | Civilization + Dyson (Dyson hero diagram is new) | 1–2 |
 | ~~**K6a / K6b**~~ | ~~Colonies: frame, colony list, buildings strip under the hero / inspector rule (D-K-13), globe placement~~ — **moved out of this arc** (owner decision 2026-11-17) into its own arc «planet/body screen»; the Colonies tab keeps today's look and KZ does not touch it | — |
-| **K7a / K7b / K7c** | Command: frame + registry + timeline strip (D-K-14) / inspector reskin with T5 shared handlers + golden trace re-record / Atlas, Logistics, Ground | 3 |
+| **K7a / K7b / K7c** | Command: frame + registry + timeline strip (D-K-14) / inspector reskin with T5 shared handlers + golden trace re-record / Atlas, Logistics, Ground — **DONE (§20–§23)** | 3 |
 | ↳ **K7 split (2026-11-17)** | Inventory: 4 pages (registry; Ground = GroundUnitPanel, 3 hosts; Atlas; Logistics), own tab bar (no subnav), ~110 hit-zone types (registry 15, inspector ~70, Logistics 20, Atlas 3, `close`/`tab`), DOM inputs (registry search, Logistics qty — both `window.inner*`; rename/disband dialogs), risks: golden trace T4 (inspector), T5 dispatch into `_handleHit`/`_missionConfig`, ~40 keepers construct the overlay, dormant 2D map. **K7-A** = header chips replace the tab bar + registry page (list = search / grouping / fleets / filters with counts, hero = ship table, inspector = today's panel in the inspector zone + multi-selection summary, strip = mission timeline for the selection); Ground / Atlas / Logistics stay today's pages under the chips · **K7-pre** (D-K-18, owner to confirm) = remove the dormant 2D map + `_drawLeftFleets` · **K7-B** = inspector reskin + golden trace re-record + rename input from `consoleZones` · **K7-C** = Atlas, Logistics (qty input from `consoleZones`), Ground on the console. Each ends at an owner gate. | — |
 | **KZ** | Flags permanent ON, OFF paths and old styles removed (`_drawButton`, `GLASS_BORDER` subnav, per-file `✕`), before/after frame comparison — **Economy group done early as KZ-E (§18)**; the rest at the end of the arc | 1–2 |
 
@@ -1119,4 +1119,70 @@ for bit) · owner gate PASS 2026-11-17: deviations 1–4 approved; after the gat
 - **Live engine (CDP mouse + keyboard, GATE-S4):** 5 themes, 1280×833, OFF, base — 0 page exceptions; undock → orbiting, auto-refuel
   toggle and back, mission configurator, typed rename, scrap confirm opened + cancelled, fleet created from the list and disbanded with
   confirm, multi-selection, „POKAŻ” (close + one `vessel:focus`). Frames regenerated after the gate changes.
-- **Next:** K7-C (Atlas, Logistics, Ground on the console + enemy panel and mission configurator reskin).
+- **Next:** K7-C — delivered (§23).
+
+## 23. K7-C — delivered (enemy panel, mission setup, Atlas, Logistics, Ground on the console) — Command DONE
+
+**Commits `4e71750` fix(753), `7e59e26` fix(754)** (separate, before the feature) **and `cab95b4` feat(K7-C)** · flag `FEATURES.consoleCommand`
+(OFF = today bit for bit: draw log + hit zones of 15 states identical to `880a81b`) · owner gate PASS 2026-11-17: deviations 1–6 approved,
+three owner changes applied after the gate (below). Handover `C:\Users\Komputer\kosmos-handover\consoles-k7\`: `STOP_K7-C.md`,
+`STOP_K7-C-GATE.md`, `kontakt_k7c.html`, `shots/k7c/`, `probes/{k7c, run_k7c, sheet_k7c}`; fail-first / mutation worktrees removed.
+
+- **Command DONE (K7-A / pre / B / C):** header chips `[ TAKTYKA SYSTEMU ] [ JEDNOSTKI ] [ ATLAS GWIAZD ] [ LOGISTYKA ]`; registry (§20),
+  dormant 2D map and left fleet list removed (§21), ship / fleet inspector (§22), and in K7-C the last four surfaces — no Command page
+  stands on today's opaque background any more. Each tab has its own 4-zone split (`CommandPagesView.PAGES`).
+- **Owner decisions in session (2026-11-17, asked before code):** Atlas = **bodies of the active system** (today's content; the brief's
+  known-systems list + galaxy mini-map was new content); Jednostki = **colonies + recruitment** (page-local colony; the global active
+  colony is never switched — like the Trade colony context).
+- **Enemy panel:** name / empire only at full contact; an unidentified contact shows only its distance from home (fog of the same
+  `_isEnemyTracked` predicate); status in alert role; known / unknown facts; no actions today → a line says where to order (map, right
+  click); today's only zone `back_to_shipyard` = `[ STOCZNIA ]`.
+- **Mission setup:** steps Typ → Cel → Opcje → Potwierdź read top to bottom; target list (out of fuel range: no zone + reason); confirm
+  with distance / flight time / fuel / arrival, options (repeat, return cargo), `[ WYŚLIJ MISJĘ ]` full width, disabled with the fuel
+  reason. `_missionConfirmFacts` is the single source for the OFF drawing and the console.
+- **Atlas:** list of bodies (explored X / Y, colonies), hero = orrery (planet orbits only, capital ◆, colony ring, own ships ▲, unexplored
+  bodies without names; list ↔ orrery = one selection), inspector = body + today's `map_body` (`[ ZAZNACZ NA MAPIE ]`) and `atlas_report`
+  (`[ RAPORT CIAŁA ]`, unexplored: reason) + deposits, strip = one-line summary. New zone `atlasSelect`.
+- **Logistics:** list = «+ Nowe zlecenie» + orders (progress, bottleneck in alert role: empty pool / queued / waiting for cargo); hero =
+  routes between colonies (warp dashed, delivery progress, red = bottleneck); inspector = builder (from / to / goods / [−] qty [+] [✕] /
+  `[ UTWÓRZ ]` with the missing-step reason; dropdowns inside the zone) or the selected order (per-good progress, ships and phases,
+  `[ ANULUJ ZLECENIE ]`); strip = ships en route. All 15 `logi_*` types kept; new `logiSelect`. The qty `<input>` is placed from the zone
+  rect × UI scale (no `window.inner*`): measured (1455, 281, 58×23) at 1600×1041, (1164, 225, 46×18) at 1280×833.
+- **Ground:** list = player colonies with unit counts; hero = unit table + archetype tile grid; inspector = archetype (stats, counters,
+  costs by name, barracks, `[ REKRUTUJ W: X ]` or the reason: no colony / tech / barracks level / slots / cap / cost) or the selected unit
+  (HP, organisation, morale, supply). Recruitment targets the page colony through the panel's injectable colony source (swapped for the
+  click, restored — pinned). GroundUnitPanel's other hosts (unit designer, colony draft) unchanged except fixes 753 / 754. New zones
+  `groundColony`, `groundUnit`.
+- **Owner changes at the gate:** (1) Atlas inspector lists **all** non-depleted deposits (name, ★, amount; scrolls; actions moved above the
+  orbit block; unexplored body still hides them); (2) orrery **+9.8 % radius** (full hero height with the legend in the free corner, strip
+  40 → 22 px, margin 18 → 5) — owner OK; (3) Jednostki tiles and table icons use the **owner's unit models**: GLB in
+  `assets/units/ground/humanity/` → `GroundUnitFactory.loadUnitSprite` → `GlbSnapshotRenderer` (256 px, rendered once, cached by the
+  panel); the console reads the same cached image (`img._kosmosAsset` = glb / png / missing / loading), glyph only when missing; tiles ≈2×
+  (≈96 px thumbnail) in a grid under the unit table, locked tiles keep the model at 60 % + lock + reason; fits 1280×833 (pinned).
+- **Approved deviations:** (1) Atlas and Jednostki per the session decisions, not literally per the brief; (2) the recruitment panel's
+  hover-only zones (`stat_hover`, `ability_hover`, `counter_hover`) replaced by inline text (a click did nothing); (3) body / order
+  actions only after selection (row = select, as the registry); (4) enemy without actions — a line names where to order; (5) Logistics
+  steppers as chips, the empty page says «kreator po prawej»; (6) recruitment into the page colony via the panel's colony source.
+- **Findings:** **750 ⚪** filed — the `map_body` «set mission target» branch is unreachable since K7-pre (`_switchTab` drops the select
+  step, the 2D map is gone), so the Atlas chip «Ustaw jako cel misji» is theoretical · **751 ✅** cargo window and body report anchored at
+  the console inspector (`applyModalAnchor`, K7-B mechanism; `_dialogAnchor(zone, { anyTab, minWcss })`; OFF centred) — measured cargo
+  (1160, 113, 440) and report (1080, 113, 520) at 1600×1041 · **752 ✅** FleetManagerOverlay literal ratchet 5 → 3 (measured 3 already on
+  `880a81b`) · **753 ✅** (`4e71750`) the panel never shows a raw archetype id (`_archName`: faction name → `unit.<id>.name` → «unnamed
+  unit»; tile tag SUPPLY) · **754 ✅** (`7e59e26`) every archetype resolves to an existing GLB: garrison `catalogSprite` = mobile model
+  (a new player unit starts mobile; the colony map keeps deriving `_mobile` / `_deployed` from the base path), ground_supply_unit faction
+  entry with `human_supply` · **755 ⚪** filed for KZ — console text over a bright close-up planet (camera near a body) loses readability
+  in the list / inspector zones; KZ to strengthen the zone text treatment over a bright backdrop. Next free: **756**.
+- **Keepers:** `console_command_pages_smoke` 296/0 — E enemy zones ON == OFF + fog; G configurator zones ON == OFF in 8 states + reasons +
+  reading order; A Atlas actions per body ON ⊇ OFF, list ↔ orrery, fog, config target; L Logistics actions ON == OFF in 7 builder states +
+  orders + qty input at 1600×1041 / 1280×833 + bottleneck; N Ground actions ON == OFF, page colony, recruitment target, other hosts
+  unchanged (draw log + zones ON / OFF), chips keep every page's state; P post-gate: all deposits, model thumbnail used when present
+  (glyph only when missing), 753 on every host, 754 every GLB on disk, tile grid inside the hero without overlap at both sizes, 751
+  anchors; R reason / label keys PL + EN. `transport_ui_render_smoke` pinned to flag OFF (guards today's page). Fail-first on `880a81b`:
+  76/121 green = only equivalence pins (the base drew ON with today's panel) and witnesses; mutations 20/20 + 4/4 red; 754 pin red on
+  the old data. Sweep 425/425, `check-i18n` PASS (+131 `cmdPages.*` keys, parity kept).
+- **Live engine (CDP mouse + keyboard, GATE-S4, 1600×1041):** 5 themes, 1280×833, OFF, base — 0 page exceptions. Staged with the real
+  API: 2 hulls, a ground unit, an outpost (`createOutpost`); enemy selected via `_selectedVesselId`. Orbit mission sent (idle / docked →
+  on_mission / in_transit); Atlas list + orrery select + one `body:selected`; report anchored; order created with a typed qty of 40;
+  page colony switched (global active colony unchanged); 7 / 7 archetype models ready; chips tour keeps state; close.
+- **Next:** remaining arc steps per §6.1 — KZ (flags permanent, OFF paths removed) for Command, Civilization and the other screens; 750 and
+  755 go there.

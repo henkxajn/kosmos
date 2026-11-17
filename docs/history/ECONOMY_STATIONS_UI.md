@@ -1202,3 +1202,22 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §21–§22. Flaga `FEATURES.cons
   żywy silnik 0 wyjątków (5 motywów, 1280×833, OFF, baza).
 
 Następny krok: K7-C (Atlas, Logistyka, Jednostki na konsoli + reskin panelu wroga i konfiguratora misji).
+
+## ARC KONSOLE — K7-C: wróg, konfigurator misji, Atlas, Logistyka, Jednostki na konsoli (`4e71750` + `7e59e26` + `cab95b4`, PASS właściciela 2026-11-17) — Dowództwo GOTOWE
+
+Flaga `FEATURES.consoleCommand` (OFF = dziś bit w bit, 15 stanów identycznych z `880a81b`). Plan: `docs/design/CONSOLES_PLAN.md` §23.
+- **Decyzje właściciela w sesji:** Atlas = ciała aktywnego układu; Jednostki = kolonie + rekrutacja (kolonia strony lokalna).
+- **Wróg:** nazwa / imperium tylko przy pełnym kontakcie (mgła), status w roli alert, znane / nieznane; brak akcji → gdzie wydać rozkaz.
+- **Konfigurator misji:** kroki Typ → Cel → Opcje → Potwierdź; cel poza zasięgiem paliwa bez strefy z powodem; `[ WYŚLIJ MISJĘ ]` wyłączone
+  z powodem paliwa.
+- **Atlas:** lista ciał ↔ orrery (jeden wybór, +9,8% promienia), inspektor z dzisiejszymi akcjami i wszystkimi złożami (przewijany).
+- **Logistyka:** lista zleceń + kreator, trasy między koloniami z wąskim gardłem, pole ilości ze strefy konsoli, pas „W trasie”.
+- **Jednostki:** kolonie z licznikami, tabela jednostek, siatka kafli z modelami właściciela (miniatury GLB z cache panelu), rekrutacja
+  w kolonii strony z powodem blokady.
+- **Findingi:** 750 ⚪ (gałąź „cel konfiguratora” z Atlasu nieosiągalna), 751 ✅ (okno ładunku i raport przy strefie), 752 ✅ (zapadka
+  literałów 5 → 3), 753 ✅ (`fix(753)`: panel bez surowych id), 754 ✅ (`fix(754)`: każdy archetyp ma istniejący model), 755 ⚪ (czytelność
+  tekstu konsoli na jasnej planecie z bliska — do KZ).
+- **Testy:** `console_command_pages_smoke` 296/0; mutacje 20/20 + 4/4; sweep 425/425, `check-i18n` PASS; żywy silnik 0 wyjątków
+  (5 motywów, 1280×833, OFF, baza).
+
+Następny krok: KZ (flagi na stałe, ścieżki OFF usunięte); 750 i 755 trafiają tam.
