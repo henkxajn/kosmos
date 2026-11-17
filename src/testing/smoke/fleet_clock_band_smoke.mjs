@@ -17,6 +17,9 @@ if (!globalThis.KOSMOS) globalThis.KOSMOS = {};
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; } else { fail++; console.log('  ✗ FAIL:', m); } };
 
+// ARC KONSOLE K7-A — keeper przypina DZISIEJSZE Dowództwo (flaga OFF); konsolę (strefy nad zegarem) pinuje console_command_smoke.
+const { GAME_CONFIG } = await import('../../config/GameConfig.js');
+GAME_CONFIG.FEATURES.consoleCommand = false;
 const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
 const { BottomControlBar } = await import('../../ui/BottomControlBar.js');
 const { COSMIC, BOTTOM_RESERVED } = await import('../../config/LayoutConfig.js');

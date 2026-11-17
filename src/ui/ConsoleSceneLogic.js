@@ -93,3 +93,25 @@ export function consoleSceneActive(s) {
   if (!s.activeId || s.visible !== true) return false;
   return !!s.tabIds?.has?.(s.activeId);
 }
+
+/**
+ * ARC KONSOLE K7-A (decyzja właściciela na bramce K7-A) — reguła zestawu dla KAŻDEGO ekranu konsoli: plakietki i znaczniki mapy
+ * nie są rysowane, gdy konsola zasłania scenę; wracają po zamknięciu. Warstwa HUD (`#hud-canvas`: etykiety ciał i statków,
+ * alarmy, trasy) gaśnie już pod każdym overlayem (`hudGate` → `overlay`); tu — rodziny sprite'ów-znaczników w scenie 3D,
+ * gaszone TYLKO na czas renderu klatki (`ThreeRenderer._hideConsoleMapBadges`, wzór `_applyFlightFade`) — bez zmiany stanu.
+ * Scena (gwiazda, planety, orbity, modele statków, efekty) zostaje. Klucz = pole rodziny w ThreeRenderer.
+ */
+export const CONSOLE_HIDDEN_MAP_BADGES = Object.freeze([
+  'colonyBuildingMarkers',   // ikony budynków kolonii na planecie (`ColonyBuildingMarkers`)
+  'lifeGlows',               // kropka planety gracza / życia (`_lifeGlows`)
+  'tacticalGlyphs',          // tryb Y: glify statków
+  'tacticalGhosts',          // tryb Y: duchy ETA w punktach celu
+  'tacticalOrbitMarkers',    // tryb Y: znaczniki przyszłej pozycji na orbitach
+  'enemyAlertMarkers',       // pulsujące znaczniki wrogów
+  'poiSprites',              // znaczniki punktów zainteresowania (POI)
+]);
+
+/** Czy w tej klatce gasić plakietki mapy: konsola zasłania scenę (ten sam predykat co tło; flaga `consoleKit` OFF → nigdy). */
+export function consoleHidesMapBadges(covered) {
+  return covered === true;
+}

@@ -47,8 +47,10 @@ export const CONSOLE_SCREEN_SPECS = {};
 // pasek walki siada w gnieździe nagłówka (D-K-17). Każdy wpis wymaga też `consoleKit` (żywa, przyciemniona scena za tekstem).
 // K2: Dyplomacja i Wojny (jedna flaga rodziny) — z Wywiadem cała grupa Dyplomacji jest na czipach nagłówka.
 // K5: Cywilizacja i Sfera Dysona (jedna flaga rodziny) — grupa Cywilizacji na czipach nagłówka.
+// K7-A: Dowództwo (`fleet`) — czipy zakładek w nagłówku zamiast własnego paska zakładek (pasa subnav Dowództwo nie miało).
 export const CONSOLE_KIT_SCREENS = Object.freeze({ intel: 'consoleIntel', shipyard: 'consoleShipyard',
-  diplomacy: 'consoleDiplomacy', war: 'consoleDiplomacy', civilization: 'consoleCivilization', dyson: 'consoleCivilization' });
+  diplomacy: 'consoleDiplomacy', war: 'consoleDiplomacy', civilization: 'consoleCivilization', dyson: 'consoleCivilization',
+  fleet: 'consoleCommand' });
 
 // KZ-E — ekrany, których flaga stała się trwała (stara ścieżka usunięta): zawsze ekran zestawu, bez flagi i bez `consoleKit`
 // (`consoleKit` steruje dalej tylko sceną za tekstem). Grupa Ekonomii: Budżet, Przepływy, Handel (Handel + Rynek), Produkcja

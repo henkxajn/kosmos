@@ -580,6 +580,13 @@ export const GAME_CONFIG = {
     //     koszt vs magazyn planety domowej + [ DOSTARCZ ] (wyłączony z powodem), pas = ścieżka końca gry. Mechanika bez zmian.
     //   OFF = dzisiejsza Cywilizacja i Sfera Dysona co do bitu.
     consoleCivilization: true,
+    //   consoleCommand (K7-A, D-K-14, D-K-20): ON (razem z consoleKit) = Dowództwo na szablonie 4-strefowym — czipy zakładek
+    //     [ TAKTYKA SYSTEMU ] [ JEDNOSTKI ] [ ATLAS GWIAZD ] [ LOGISTYKA ] w nagłówku zamiast własnego paska zakładek. Rejestr: lista = szukajka,
+    //     grupowanie, floty, układy, role, sekcje (z licznikami), bohater = tabela statków (12 kolumn, sort, grupy, zaznaczenie
+    //     wielokrotne, pasek zbiorczy), inspektor = dzisiejszy panel statku / floty (reskin K7-B) albo podsumowanie zaznaczenia,
+    //     pas = oś czasu misji dla zaznaczenia. Naziemne / Atlas / Logistyka — dzisiejsze strony pod czipami (K7-C).
+    //   OFF = dzisiejsze Dowództwo co do bitu.
+    consoleCommand: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

@@ -66,6 +66,12 @@ import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getDesc, getShort, getLocale } from '../i18n/i18n.js';
+// ARC KONSOLE K7-A — Dowództwo na szablonie konsoli (FEATURES.consoleCommand, czytane w chwili użycia)
+import { isKitScreen } from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo } from './ConsoleKit.js';
+import { drawCommandConsole } from './CommandConsoleView.js';
+import { defaultRegistryFilter, searchInputCss, focusPlan } from './CommandConsoleLogic.js';
+const kitOn = () => isKitScreen('fleet', GAME_CONFIG.FEATURES);
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
@@ -607,6 +613,15 @@ export class FleetManagerOverlay {
     // overlayu jako widget w rogu — ustępuje mu dopiero treść (contentH niżej). Patrz TIME_STRIP_H.
     const oh = (H - BOTTOM_RESERVED) - oy;
     this._bounds = { x: ox, y: oy, w: ow, h: oh };
+
+    // K7-A — konsola: nagłówek z czipami zakładek, rejestr w 4 strefach (żywa, przyciemniona scena za tekstem)
+    if (kitOn()) {
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawCommandConsole(this, ctx, W, H); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
 
     // ── Tło ──────────────────────────────────────────────────
     // Pełna nieprzezroczystość — overlay zakrywa 3D mapę układu, żeby ruchome
@@ -1531,6 +1546,24 @@ export class FleetManagerOverlay {
       return true;
     }
 
+    // ── K7-A — konsola rejestru: przewijanie po strefach `consoleZones` (lista / tabela / pas = zoom osi / inspektor) ──
+    if (kitOn() && this._cmdRects) {
+      const r = this._cmdRects;
+      if (inRect(r.list)) { this._cmdListScroll = Math.max(0, (this._cmdListScroll || 0) + delta * 0.5); return true; }
+      if (r.timeline && inRect(r.timeline) && this._timelineYears) {
+        const vp = { ...this._timelineYears, x0: r.timeline.vx0, x1: r.timeline.vx1 };
+        const nv = zoomViewport(vp, delta > 0 ? 1.2 : 0.83, xToYear(mx, vp));
+        this._timelineYears = { startYear: nv.startYear, endYear: nv.endYear };
+        return true;
+      }
+      if (inRect(r.hero)) { this._registryScroll = Math.max(0, (this._registryScroll || 0) + delta * 0.5); return true; }
+      if (inRect(r.inspector)) {
+        if (this._selectedVesselId || this._selectedFleetId) this._applyRightScroll(delta);
+        return true;
+      }
+      return true;
+    }
+
     // ── TACTICAL — 3 kolumny ─────────────────────────────────
     // F3 REJESTR: scroll tabeli / zoom osi czasu (pivot = rok pod kursorem).
     if (GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry') {
@@ -1617,6 +1650,8 @@ export class FleetManagerOverlay {
   handleMouseMove(mx, my) {
     this._regMouseX = mx; this._regMouseY = my;   // F3: hover-tooltip osi czasu
     if (!this._visible) return;
+    // K7-A — strefa pod kursorem (podświetlenia czipów nagłówka i akcji konsoli); ta sama reguła wierzchniej strefy co klik
+    if (kitOn()) this._kitHoverZone = resolveStratcomZone(this._hitZones, mx, my) ?? null;
 
     // Drag mapy taktycznej
     if (this._mapDragging) {
@@ -1793,7 +1828,14 @@ export class FleetManagerOverlay {
         this._registryFilter.search = '';
         this._closeRegistrySearch();
         break;
+      case 'registryClearFilters':
+        // K7-A — pusta tabela po filtrach: jeden klik przywraca filtr domyślny (jak open({ focusVesselId }))
+        this._registryFilter = defaultRegistryFilter();
+        this._closeRegistrySearch();
+        break;
       case 'registryFocus': {
+        // K7-A — konsola: deterministyczny „POKAŻ” z planu liczonego z żywego statku (`_focusVesselKit`)
+        if (kitOn()) { this._focusVesselKit(zone.data.vesselId); break; }
         // 🎯 = zamknij overlay → (inny układ? przełącz kanałem STAR ATLAS) → dolot.
         const { vesselId, systemId } = zone.data;
         window.KOSMOS?.uiManager?.overlayManager?.closeActive?.();
@@ -1872,7 +1914,8 @@ export class FleetManagerOverlay {
           // M4 P2 — fly camera 3D do vessela. Dla wraków (deep-space lub orbital
           // graveyard) sprite.position jest już ustawione poprawnie, więc handler
           // vessel:focus w ThreeRenderer zrobi focusOnInstant prawidłowo.
-          EventBus.emit('vessel:focus', { vesselId: zone.data.vesselId });
+          // K7-A (bramka właściciela) — na konsoli klik wiersza TYLKO zaznacza; kamerą rusza „POKAŻ” (`registryFocus`).
+          if (!kitOn()) EventBus.emit('vessel:focus', { vesselId: zone.data.vesselId });
         }
         this._missionConfig = null;
         this._targetScrollOffset = 0;
@@ -4148,6 +4191,9 @@ export class FleetManagerOverlay {
   // wzorca TradeOverlay._openQtyInput; żyje tylko w widoku REJESTR).
   _openRegistrySearch(zone) {
     this._closeRegistrySearch();
+    // K7-A — konsola: prostokąt pola ze strefy listy (`consoleZones`) i skala z ostatniego rysunku (`uiViewport`)
+    const kitRect = kitOn() ? this._cmdRects?.search : null;
+    if (kitRect) { this._openRegistrySearchKit(kitRect); return; }
     const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     const input = document.createElement('input');
     input.type = 'text';
@@ -4159,6 +4205,73 @@ export class FleetManagerOverlay {
       zIndex: '300', background: '#0a1016', color: '#cfeee4',
       border: '1px solid #2a4a44', font: `${Math.round(10 * SCALE)}px monospace`,
       padding: '0 4px', outline: 'none',
+    });
+    input.oninput = () => {
+      this._registryFilter.search = input.value;
+      if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+    };
+    input.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape' || e.key === 'Enter') this._closeRegistrySearch();
+    };
+    for (const ev of ['click', 'mousedown', 'mouseup']) {
+      input.addEventListener(ev, (e) => e.stopPropagation());
+    }
+    document.body.appendChild(input);
+    input.focus();
+    this._registrySearchEl = input;
+  }
+
+  /** K7-A — środowisko planu „POKAŻ” (układ oglądany, czy układ da się otworzyć, stacja, nazwy) dla statku `vesselId`. */
+  _focusPlanFor(vesselId) {
+    const K = window.KOSMOS;
+    const v = K?.vesselManager?.getVessel?.(vesselId) ?? null;
+    const ssm = K?.starSystemManager;
+    const names = this._registryCtx();
+    const known = (sid) => (ssm?._systems?.has ? ssm._systems.has(sid)
+      : !!ssm?.getAllSystems?.()?.some?.((s) => (s.systemId ?? s.id) === sid));
+    return focusPlan(v, {
+      activeSystemId: K?.activeSystemId ?? 'sys_home',
+      canSwitch: known,
+      isStation: (id) => !!K?.stationSystem?.getAllStations?.()?.some?.((st) => st.id === id),
+      systemName: (sid) => names.systemName(sid),
+      transitTarget: v?.mission?.toSystemId ? names.systemName(v.mission.toSystemId) : null,
+    });
+  }
+
+  /**
+   * K7-A — „POKAŻ” na konsoli: zamknij Dowództwo → (inny układ: przełącz; odmowa = komunikat z powodem i koniec) → zaznacz →
+   * `vessel:focus` (renderer: statek — śledzi bieżącą pozycję sprite'a; zadokowany — ciało / stacja dokowania).
+   * @returns {object|null} wykonany plan (keeper)
+   */
+  _focusVesselKit(vesselId) {
+    const plan = this._focusPlanFor(vesselId);
+    if (!plan) return null;
+    if (!plan.ok) {
+      EventBus.emit('ui:toast', { text: t(plan.reasonKey, ...(plan.args ?? [])), color: THEME.warning, durationMs: 2500 });
+      return plan;
+    }
+    window.KOSMOS?.uiManager?.overlayManager?.closeActive?.();
+    if (plan.switchTo && window.KOSMOS?.starSystemManager?.switchActiveSystem?.(plan.switchTo) !== true) {
+      EventBus.emit('ui:toast', { text: t('cmdConsole.focusNoSystem', plan.args?.[0] ?? '?'), color: THEME.warning, durationMs: 2500 });
+      return { ...plan, ok: false };
+    }
+    this._setSelectedVesselViaUI(vesselId);
+    EventBus.emit('vessel:focus', { vesselId });
+    return plan;
+  }
+
+  /** K7-A — szukajka konsoli: ten sam cykl życia co dziś (oninput → filtr, Esc/Enter zamyka), pozycja z `searchInputCss`. */
+  _openRegistrySearchKit(rect) {
+    const css = searchInputCss(rect, this._uiScale || 1);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = this._registryFilter.search;
+    input.placeholder = t('cmdConsole.searchPlaceholder');
+    Object.assign(input.style, {
+      position: 'fixed', left: `${css.left}px`, top: `${css.top}px`, width: `${css.width}px`, height: `${css.height}px`,
+      zIndex: '300', background: THEME.bgPrimary, color: THEME.textPrimary, border: 'none',
+      borderBottom: `1px solid ${THEME.accent}`, font: `${css.fontPx}px ${THEME.fontFamily}`, padding: '0 4px', outline: 'none',
     });
     input.oninput = () => {
       this._registryFilter.search = input.value;

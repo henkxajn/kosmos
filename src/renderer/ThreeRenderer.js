@@ -107,7 +107,7 @@ import { planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle,
 // (D-HUD-16). Radar, trasy i etykiety rysuje warstwa HUD 2D (`HudLayer`); od B-Z bez flag HUD i bez dawnych ścieżek 3D.
 import { readHudLayers } from '../ui/HudLayerChipsLogic.js';
 import { hudRoleHex } from '../ui/HudPalette.js';
-import { consoleBackdrop, consoleBgMode, glassFilterCss, CONSOLE_GLASS } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a — tło szkła (D-K-5 poprawione)
+import { consoleBackdrop, consoleBgMode, glassFilterCss, CONSOLE_GLASS, CONSOLE_HIDDEN_MAP_BADGES, consoleHidesMapBadges } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a — tło szkła (D-K-5 poprawione)
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -4571,10 +4571,13 @@ export class ThreeRenderer {
           this._sceneSkipFrames++;
         } else {
           const undoFlight = this._galaxyFlight ? this._applyFlightFade() : null;
+          // ARC KONSOLE K7-A — plakietki mapy gasną pod każdą konsolą tylko na czas renderu (cofnięte zaraz po nim)
+          const undoBadges = consoleHidesMapBadges(this._consoleMode != null) ? this._hideConsoleMapBadges() : null;
           try {
             if (this._composer) this._composer.render();
             else this.renderer.render(this.scene, this.camera);
           } finally {
+            if (undoBadges) undoBadges();
             if (undoFlight) undoFlight();
           }
           this._sceneRenderFrames++;
@@ -4621,10 +4624,33 @@ export class ThreeRenderer {
     return bd.skip;
   }
 
-  /** ARC KONSOLE K0a — liczniki klatek pętli: `{ rendered, skipped, skipping, mode, filter }` (keeper, pomiar bramki). */
+  /**
+   * ARC KONSOLE K7-A — plakietki mapy pod konsolą (`CONSOLE_HIDDEN_MAP_BADGES`): widoczne sprite'y rodzin gaszone na czas renderu;
+   * zwraca funkcję cofającą (przywraca dokładnie te, które zgasiła). Liczba zgaszonych w ostatniej klatce — `getConsoleSceneStats`.
+   */
+  _hideConsoleMapBadges() {
+    const fam = {
+      colonyBuildingMarkers: () => this._colonyMarkers?._markers?.values?.() ?? [],
+      lifeGlows:             () => this._lifeGlows.values(),
+      tacticalGlyphs:        () => this._tacticalGlyphs.values(),
+      tacticalGhosts:        () => this._tacticalGhosts.values(),
+      tacticalOrbitMarkers:  () => this._tacticalOrbitMarkers.values(),
+      enemyAlertMarkers:     () => this._enemyAlertMarkers.values(),
+      poiSprites:            () => [...this._poiSprites.values()].map((e) => e?.sprite),
+    };
+    const hidden = [];
+    for (const key of CONSOLE_HIDDEN_MAP_BADGES) {
+      for (const o of fam[key]?.() ?? []) if (o && o.visible) { o.visible = false; hidden.push(o); }
+    }
+    this._consoleBadgesHidden = hidden.length;
+    return () => { for (const o of hidden) o.visible = true; };
+  }
+
+  /** ARC KONSOLE K0a — liczniki klatek pętli: `{ rendered, skipped, skipping, mode, filter, badgesHidden }` (keeper, pomiar bramki). */
   getConsoleSceneStats() {
     return { rendered: this._sceneRenderFrames ?? 0, skipped: this._sceneSkipFrames ?? 0, skipping: this._consoleSceneSkip()
-      && consoleBgMode(CONSOLE_GLASS) !== 'live', mode: this._consoleMode ?? null, filter: this._consoleFilterCss ?? '' };
+      && consoleBgMode(CONSOLE_GLASS) !== 'live', mode: this._consoleMode ?? null, filter: this._consoleFilterCss ?? '',
+      badgesHidden: this._consoleMode != null ? (this._consoleBadgesHidden ?? 0) : 0 };
   }
 
   // Żywe gazowce (C1a) — dwa uniformy odświeżane co klatkę, niezależnie od pauzy gry:
