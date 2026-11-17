@@ -5520,6 +5520,12 @@ export class ThreeRenderer {
         this._placeFreeVessel(id, entry, vx, vy);   // POLISH P2b (D3, Finding 461) — w oglądanym starciu: płynnie
         continue;
       }
+      // ⚠ Finding 746 — statek W LOCIE nie orbituje: jego sprite stawia `_syncVesselPositions` z pozycji logicznej. Orbita
+      //   w OrbitalSpaceSystem bywa niezwolniona (rozpoznanie całego układu przestawia stan na `in_transit` bez
+      //   `vessel:launched`), a ta pętla biegnie w `physics:updated` TUŻ PRZED `_updateCameraFocus` — sprite skakał na orbitę
+      //   ciała startowego w każdym tiku, kamera śledząca statek łapała ten punkt (zmierzone: cel kamery 0,17 j. od ciała
+      //   startu, statek 17–43 j. dalej). Strażnik u czytelnika obejmuje każdego producenta takiego stanu.
+      if (v && !v.isWreck && v.position?.state === 'in_transit') continue;
       if (!orbital) continue;
       const orb = orbital.getOrbit(id);
       if (!orb) continue;
