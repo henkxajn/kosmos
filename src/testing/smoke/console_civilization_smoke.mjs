@@ -1,15 +1,16 @@
-// ARC KONSOLE K5 — keeper konsol Cywilizacji i Sfery Dysona (docs/design/CONSOLES_PLAN.md §1.2, §19; FEATURES.consoleCivilization).
+// ARC KONSOLE K5 / KZ — keeper konsol Cywilizacji i Sfery Dysona (docs/design/CONSOLES_PLAN.md §1.2, §19; na stałe od KZ-Civ).
 //
-// A — dostępność akcji ON == OFF (inwentarz stref): Cywilizacja — `close` i zbiór `goto_colony` (planetId) identyczne; Dyson — wybór
-//     segmentu ON ⊇ OFF, `deliverMax` / `deliverPercent` dla wybranego segmentu, gdy silnik przyjmie dostawę (ON == OFF); skutek
-//     handlera (`goto_colony` przełącza aktywną kolonię, `deliverMax` naprawdę dostarcza).
-// C — czipy grupy zastępują pas subnav (ON: wysokość 0, drawSubNav nic nie rysuje; OFF: pas wraca) i zachowują stan instancji.
+// A — inwentarz akcji konsoli (piny bezwzględne z dzisiejszej ścieżki konsoli, KZ-Civ): Cywilizacja — dokładny zbiór typów stref
+//     w każdym stanie inspektora, `close`, zbiór `goto_colony` (planetId) = wszystkie kolonie; Dyson — dokładny zbiór typów stref
+//     na segment, każdy z 20 segmentów wybieralny, `deliverMax` / `deliverPercent` dla wybranego segmentu, gdy silnik przyjmie
+//     dostawę; skutek handlera (`goto_colony` przełącza aktywną kolonię, `deliverMax` naprawdę dostarcza).
+// C — czipy grupy zastępują pas subnav (wysokość 0, drawSubNav nic nie rysuje) bez żadnej flagi i zachowują stan instancji.
 // G — bramki [ DOSTARCZ ]: każdy powód silnika (faza zablokowana, technologia segmentu, brak surowców, ukończony, sfera zablokowana)
-//     → brak strefy dostawy + tekst powodu i18n z nazwą technologii; KONTROLA: OFF daje strefę `deliverMax` (cicha odmowa).
+//     → brak strefy dostawy + tekst powodu i18n z nazwą technologii; ŚWIADEK: silnik naprawdę odmawia (deliverMax → ok: false).
 // M — mapowanie stanów segmentu / fazy, bieżąca faza, postęp, ścieżka końca gry, pierścień 20 łuków, koszt efektywny = wzór silnika.
 // H — grupowanie powtórzeń kroniki (licznik, lata, kolonie, kolejność) i wiersze listy z licznikiem.
 // E — gniazdo emblematu: obraz załadowany → obraz (drawImage), brak / błąd / ładowanie → nazwa imperium (nigdy pusta rama).
-// N — bez surowych id i kluczy snake_case w tekście konsoli; KONTROLA: OFF rysuje `dyson_collector`.
+// N — bez surowych id i kluczy snake_case w tekście konsoli; ŚWIADEK: segment wymaga `dyson_collector`, konsola pokazuje jego nazwę.
 // S — geometria przy 1600×1041 i 1280×833: strefy wewnątrz ramy / stref konsoli, czipy dostawy nie pod zegarem; wejście bez
 //     window.inner* (kółko i klik z ostatniej klatki); konsola nie tworzy elementów DOM `<input>`.
 // Bez pinów na stałych rysowania. Moduły jeszcze nieistniejące importowane dynamicznie (pin degraduje, nie przerywa).
@@ -34,8 +35,6 @@ const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.log(' 
 const src = (rel) => { try { return readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n').replace(/\/\/.*$/gm, ''); } catch { return ''; } };
 setLocale('pl');
 const F = GAME_CONFIG.FEATURES;
-const savedFlags = { consoleKit: F.consoleKit, consoleCivilization: F.consoleCivilization };
-const setOn = (on) => { F.consoleKit = true; F.consoleCivilization = on; };
 
 // ── atrapa płótna: tekst (cyfry w kratce sklejane po linii bazowej) + drawImage ──
 function recCtx() {
@@ -97,46 +96,54 @@ const DY_P1 = { active: true, unlockedPhases: ['phase_1'], completedCount: 1, re
   segments: { 1: { delivered: { Fe: 5000, Si: 2000 }, completed: true }, 2: { delivered: { Fe: 100 }, completed: false } } };
 const DY_P4 = { active: true, unlockedPhases: ['phase_1', 'phase_2', 'phase_3', 'phase_4'], completedCount: 0, researchBonus: 0, segments: {} };
 
-// ══ A — inwentarz akcji ON == OFF ══
-console.log('\nA — dostępność akcji ON == OFF');
+// ══ A — inwentarz akcji konsoli (piny bezwzględne, KZ-Civ) ══
+console.log('\nA — inwentarz akcji konsoli');
 {
-  const rows = {};
-  for (const on of [false, true]) {
-    setOn(on); makeWorld();
+  const CIV_TYPES = 'civ_item,close,goto_colony,tab';
+  const civRows = [];
+  for (const sel of ['empire', 'leader', 'col:p_home', 'col:p_out', 'fac:seekers', 'hist:disaster_survived']) {
+    makeWorld();
     const ov = CO ? new CO.CivilizationOverlay() : null;
+    if (ov) ov._kitSel = sel;
     const d = ov ? safe(() => civDraw(ov), { zones: [] }) : { zones: [] };
-    rows[on] = { kit: !!ov?.consoleZones, close: d.zones.some((z) => z.type === 'close'), cols: [...new Set(d.zones.filter((z) => z.type === 'goto_colony').map((z) => z.data.planetId))].sort().join(',') };
+    civRows.push({ sel, kit: !!ov?.consoleZones, types: [...types(d.zones)].sort().join(','), close: d.zones.filter((z) => z.type === 'close').length,
+      cols: [...new Set(d.zones.filter((z) => z.type === 'goto_colony').map((z) => z.data.planetId))].sort().join(',') });
   }
-  assert(rows.false.cols === 'p_home,p_out,p_two', `A0 świadek: OFF ma goto_colony dla 3 kolonii (${rows.false.cols})`);
-  assert(rows.true.kit && !rows.false.kit && rows.true.cols === rows.false.cols, `A1 Cywilizacja: zbiór goto_colony ON == OFF (${rows.true.cols})`);
-  assert(rows.true.kit && rows.true.close && rows.false.close, 'A2 Cywilizacja: [ x ] ON i OFF');
+  const badT = civRows.filter((r) => !r.kit || r.types !== CIV_TYPES);
+  assert(civRows.length === 6 && badT.length === 0, `A0 Cywilizacja: w każdym stanie inspektora typy stref = {${CIV_TYPES}} (${badT.map((r) => `${r.sel}:${r.types}`).join(' | ')})`);
+  assert(civRows.every((r) => r.cols === 'p_home,p_out,p_two'), `A1 Cywilizacja: zbiór goto_colony = wszystkie 3 kolonie w każdym stanie (${civRows[0].cols})`);
+  assert(civRows.every((r) => r.close === 1), 'A2 Cywilizacja: dokładnie jedno [ x ] w każdym stanie');
   // skutek handlera goto_colony na konsoli
-  setOn(true); const w = makeWorld();
+  const w = makeWorld();
   const ov = CO ? new CO.CivilizationOverlay() : null;
   const d = ov ? safe(() => civDraw(ov), { zones: [] }) : { zones: [] };
   const z = d.zones.find((q) => q.type === 'goto_colony' && q.data.planetId === 'p_two');
   if (z) safe(() => ov._onHit(z));
   assert(w.calls.switched.join() === 'p_two' && ov?._kitSel === 'col:p_two', `A3 goto_colony: przełącza aktywną kolonię i otwiera jej inspektor (${w.calls.switched}, ${ov?._kitSel})`);
-  // Dyson: segment otwarty z magazynem → deliverMax / deliverPercent ON == OFF
+  // Dyson: dokładny zbiór typów stref na segment (otwarty z magazynem → dostawa; ukończony / zablokowany → bez dostawy)
+  const DY_TYPES = { 2: 'close,deliverMax,deliverPercent,selectSegment,tab', 1: 'close,selectSegment,tab', 7: 'close,selectSegment,tab' };
+  const dyBad = [];
   const dz = {};
-  for (const on of [false, true]) {
-    setOn(on); makeWorld({ active: 'dyson', dyson: DY_P1 });
+  for (const seg of [2, 1, 7]) {
+    makeWorld({ active: 'dyson', dyson: DY_P1 });
     const dv = DO ? new DO.DysonOverlay() : null;
-    if (dv) dv._selectedSeg = 2;
+    if (dv) dv._selectedSeg = seg;
     const r = dv ? safe(() => civDraw(dv), { zones: [] }) : { zones: [] };
-    dz[on] = { sel: new Set(r.zones.filter((q) => q.type === 'selectSegment').map((q) => q.data.segmentId)),
-      max: r.zones.filter((q) => q.type === 'deliverMax' && q.data.segmentId === 2).length > 0,
-      pct: r.zones.filter((q) => q.type === 'deliverPercent' && q.data.segmentId === 2).length > 0, dv, zones: r.zones, kit: !!dv?.consoleZones };
+    const ty = [...types(r.zones)].sort().join(',');
+    if (!dv?.consoleZones || ty !== DY_TYPES[seg]) dyBad.push(`${seg}:${ty}`);
+    if (seg === 2) Object.assign(dz, { sel: new Set(r.zones.filter((q) => q.type === 'selectSegment').map((q) => q.data.segmentId)),
+      max: r.zones.filter((q) => q.type === 'deliverMax' && q.data.segmentId === 2).length === 1,
+      pct: r.zones.filter((q) => q.type === 'deliverPercent' && q.data.segmentId === 2 && q.data.percent === 0.10).length === 1, dv, zones: r.zones, kit: !!dv?.consoleZones });
   }
-  assert(dz.false.max && dz.false.pct, 'A4 świadek: OFF — deliverMax i deliverPercent dla wybranego segmentu 2');
-  assert(dz.true.kit && dz.true.max && dz.true.pct, 'A5 Dyson: ON — deliverMax i deliverPercent dla segmentu 2 (ON == OFF, gdy silnik przyjmie dostawę)');
-  assert(dz.true.kit && [...dz.false.sel].every((s) => dz.true.sel.has(s)) && dz.false.sel.size > 0, `A6 Dyson: wybór segmentu ON ⊇ OFF (OFF ${dz.false.sel.size}, ON ${dz.true.sel.size})`);
+  assert(dyBad.length === 0, `A4 Dyson: typy stref na segment 2 / 1 / 7 = dokładne zbiory (${dyBad.join(' | ')})`);
+  assert(dz.kit && dz.max && dz.pct, 'A5 Dyson: deliverMax i deliverPercent (10 %) dla segmentu 2, gdy silnik przyjmie dostawę');
+  assert(dz.kit && dz.sel.size === 20, `A6 Dyson: wybór segmentu — wszystkie 20 segmentów (${dz.sel?.size})`);
   const zin = (r) => (q) => !!r && q.x >= r.x - 1 && q.y >= r.y - 1 && q.x + q.w <= r.x + r.w + 1 && q.y + q.h <= r.y + r.h + 1;
-  const segSet = (pred) => new Set(dz.true.zones.filter((q) => q.type === 'selectSegment' && pred(q)).map((q) => q.data.segmentId));
-  const inList = segSet(zin(dz.true.dv?._consoleListRect)), inHero = segSet(zin(dz.true.dv?.consoleZones?.hero));
+  const segSet = (pred) => new Set(dz.zones.filter((q) => q.type === 'selectSegment' && pred(q)).map((q) => q.data.segmentId));
+  const inList = segSet(zin(dz.dv?._consoleListRect)), inHero = segSet(zin(dz.dv?.consoleZones?.hero));
   assert(inList.size === 20 && inHero.size === 20, `A7 Dyson ON: każdy z 20 segmentów wybieralny w liście i na pierścieniu bohatera (zablokowany pokazuje powód) — lista ${inList.size}, pierścień ${inHero.size}`);
   // skutek deliverMax na konsoli
-  setOn(true); const w2 = makeWorld({ active: 'dyson', dyson: DY_P1 });
+  const w2 = makeWorld({ active: 'dyson', dyson: DY_P1 });
   const dv = DO ? new DO.DysonOverlay() : null;
   if (dv) dv._selectedSeg = 2;
   const r2 = dv ? safe(() => civDraw(dv), { zones: [] }) : { zones: [] };
@@ -154,7 +161,7 @@ console.log('\nT — tabela kolonii i placówek');
     { planetId: 'o', name: 'O', isOutpost: true, fleetCount: 0, buildings: 1 }, { planetId: 'b', name: 'B', pop: 9, prosperity: 60, fleetCount: 4, buildings: 8 }], { a: 3, b: -2 }) ?? [];
   assert(rows.map((r) => `${r.planetId}:${r.kind}`).join() === 'b:colony,a:colony,o:outpost' && rows[1].krYear === 3 && rows[2].pop === null && rows[0].ships === 4,
     `T1 każda kolonia i placówka (kolonie po POP, placówki na końcu), Kr/rok, statki, budynki (${rows.map((r) => r.planetId).join()})`);
-  setOn(true); const w = makeWorld();
+  const w = makeWorld();
   const ov = CO ? new CO.CivilizationOverlay() : null;
   const d = ov ? safe(() => civDraw(ov), { zones: [], texts: [] }) : { zones: [], texts: [] };
   const ir = ov?._consoleInspRect, lr = ov?._consoleListRect;
@@ -176,14 +183,15 @@ console.log('\nT — tabela kolonii i placówek');
 // ══ C — czipy zamiast subnav, stan zachowany ══
 console.log('\nC — czipy grupy zastępują pas subnav');
 {
-  for (const on of [true, false]) {
-    setOn(on); makeWorld({ active: 'civilization' });
-    const kit = !!LL?.isKitScreen?.('civilization', F) && !!LL?.isKitScreen?.('dyson', F);
-    const sub = safe(() => CPD?.getSubNavHeight?.(), -1);
-    if (on) assert(kit && sub === 0, `C1 ON: obie strony grupy są ekranami zestawu, pas subnav 0 (kit ${kit}, ${sub})`);
-    else assert(!kit && sub > 0, `C2 KONTROLA OFF: pas subnav wraca (${sub})`);
-  }
-  setOn(true); makeWorld({ active: 'civilization' });
+  makeWorld({ active: 'civilization' });
+  const kit = !!LL?.isKitScreen?.('civilization', F) && !!LL?.isKitScreen?.('dyson', F);
+  const sub = safe(() => CPD?.getSubNavHeight?.(), -1);
+  assert(kit && sub === 0, `C1 obie strony grupy są ekranami zestawu, pas subnav 0 (kit ${kit}, ${sub})`);
+  // KZ-Civ — trwałość: ekran zestawu bez żadnej flagi (puste FEATURES, consoleKit OFF) i bez klucza flagi w FEATURES
+  const perm = ['civilization', 'dyson'].every((id) => LL?.isKitScreen?.(id, {}) === true && LL?.isKitScreen?.(id, { consoleKit: false }) === true);
+  assert(perm && !('consoleCivilization' in F) && LL?.PERMANENT_KIT_SCREENS?.includes?.('dyson') && !LL?.CONSOLE_KIT_SCREENS?.civilization,
+    `C2 trwałość: Cywilizacja i Dyson są ekranami zestawu bez flag (klucz consoleCivilization zdjęty: ${!('consoleCivilization' in F)})`);
+  makeWorld({ active: 'civilization' });
   const ov = CO ? new CO.CivilizationOverlay() : null;
   const d = ov ? safe(() => civDraw(ov), { zones: [] }) : { zones: [] };
   const tabs = d.zones.filter((z) => z.type === 'tab').map((z) => z.data.id);
@@ -215,20 +223,19 @@ console.log('\nG — bramki [ DOSTARCZ ]');
   const { getName } = await import('../../i18n/i18n.js');
   for (const c of cases) {
     const res = {};
-    for (const on of [true, false]) {
-      setOn(on); makeWorld({ active: 'dyson', dyson: c.dyson, stock: c.stock });
-      const dv = DO ? new DO.DysonOverlay() : null;
-      if (dv) dv._selectedSeg = c.seg;
-      res[on] = dv ? safe(() => civDraw(dv), { zones: [], texts: [] }) : { zones: [], texts: [] };
-    }
+    const wg = makeWorld({ active: 'dyson', dyson: c.dyson, stock: c.stock });
+    const dv = DO ? new DO.DysonOverlay() : null;
+    if (dv) dv._selectedSeg = c.seg;
+    res.true = dv ? safe(() => civDraw(dv), { zones: [], texts: [] }) : { zones: [], texts: [] };
+    const engine = safe(() => wg.ds?.deliverMax?.(c.seg), null);
     const onZone = res.true.zones.some((z) => (z.type === 'deliverMax' || z.type === 'deliverPercent') && z.data.segmentId === c.seg);
     const reason = t(c.key, c.tech ? getName(TECHS[c.tech], 'tech') : '');
     const shown = res.true.texts.some((s) => s.includes(reason.slice(0, 30)));
     assert(!onZone && shown && !reason.includes('{0}'), `G ${c.name}: ON bez strefy dostawy + powód «${reason.slice(0, 50)}…»`);
-    if (c.offZone) assert(res.false.zones.some((z) => z.type === 'deliverMax' && z.data.segmentId === c.seg), `G ${c.name}: KONTROLA OFF ma strefę deliverMax (cicha odmowa silnika)`);
+    if (c.offZone) assert(engine && engine.ok === false, `G ${c.name}: ŚWIADEK — silnik naprawdę odmawia dostawy (${JSON.stringify(engine)?.slice(0, 60)})`);
   }
   // ukończony segment: brak czipów, tekst «Segment ukończony»
-  setOn(true); makeWorld({ active: 'dyson', dyson: DY_P1 });
+  makeWorld({ active: 'dyson', dyson: DY_P1 });
   const dv = DO ? new DO.DysonOverlay() : null;
   if (dv) dv._selectedSeg = 1;
   const r = dv ? safe(() => civDraw(dv), { zones: [], texts: [] }) : { zones: [], texts: [] };
@@ -286,7 +293,7 @@ console.log('\nH — grupowanie kroniki');
     `H1 powtórzenia typu → jedna grupa ×3, lata 10–50, kolonie (${d?.count}, ${d?.firstYear}–${d?.lastYear})`);
   assert(gs[0]?.key === 'disaster_survived' && d?.loyaltyPerm === -9, 'H2 kolejność: najnowsze na górze; suma trwałej lojalności');
   assert(CL?.historyGroups?.(ent, 'en')?.[1]?.name === 'Founding', 'H3 nazwa w języku gry');
-  setOn(true); makeWorld();
+  makeWorld();
   const ov = CO ? new CO.CivilizationOverlay() : null;
   const r = ov ? safe(() => civDraw(ov), { texts: [], zones: [] }) : { texts: [], zones: [] };
   assert(r.texts.some((s) => /×2/.test(s)) && r.zones.some((z) => z.type === 'civ_item' && z.data.id === 'hist:disaster_survived'),
@@ -300,7 +307,7 @@ console.log('\nE — gniazdo emblematu');
   assert(['name', 'name', 'name', 'name'].join() === [null, { complete: false, naturalWidth: 0 }, { complete: true, naturalWidth: 0 }, { complete: true, naturalWidth: 512, failed: true }]
     .map((i) => CL?.emblemSlot?.(i)).join(), 'E2 brak / ładowanie / pusty / błąd → nazwa');
   assert(CL?.EMBLEM_PATH === 'assets/ui/emblems/player.png', 'E3 ścieżka emblematu właściciela');
-  setOn(true); makeWorld();
+  makeWorld();
   const ov = CO ? new CO.CivilizationOverlay() : null;
   const a = ov ? safe(() => civDraw(ov), { texts: [], images: [] }) : { texts: [], images: [] };
   assert(a.texts.some((s) => s === 'NOVASENTINEL'), 'E4 brak pliku (node, bez Image) → nazwa imperium dużym krojem w bohaterze');
@@ -318,7 +325,6 @@ console.log('\nN — bez surowych id');
 {
   const RAW = /\b[a-z]+_[a-z_]+\b|civConsole\.|civOverlay\.|dyson\.[a-z]/;
   const bad = [];
-  setOn(true);
   for (const sel of ['empire', 'leader', 'col:p_home', 'col:p_out', 'fac:seekers', 'fac:confederates', 'hist:disaster_survived']) {
     for (const locked of [false, true]) {
       makeWorld({ facLocked: locked });
@@ -336,10 +342,16 @@ console.log('\nN — bez surowych id');
     bad.push(...r.texts.filter((s) => RAW.test(s)));
   }
   assert(bad.length === 0 && CO && DO, `N1 konsole: żadnego id / klucza snake_case w tekście (${bad.slice(0, 3).join(' | ')})`);
-  setOn(false); makeWorld({ active: 'dyson', dyson: DY_P1 });
+  // ŚWIADEK (KZ-Civ, zamiast kontroli OFF): segment zablokowanej fazy wymaga `dyson_collector` — konsola pokazuje jego NAZWĘ
+  makeWorld({ active: 'dyson', dyson: DY_P1 });
+  const { TECHS: TX } = await import('../../data/TechData.js');
+  const { getName: gn } = await import('../../i18n/i18n.js');
   const dv = DO ? new DO.DysonOverlay() : null;
+  if (dv) dv._selectedSeg = 7;
   const r = dv ? safe(() => civDraw(dv), { texts: [] }) : { texts: [] };
-  assert(r.texts.some((s) => s.includes('dyson_collector')), 'N2 KONTROLA: OFF rysuje surowe id technologii');
+  const nm = TX?.dyson_collector ? gn(TX.dyson_collector, 'tech') : '';
+  assert(nm.length > 3 && nm !== 'dyson_collector' && r.texts.some((s) => s.includes(nm)) && !r.texts.some((s) => s.includes('dyson_collector')),
+    `N2 ŚWIADEK: segment 7 wymaga dyson_collector — konsola pisze «${nm}», nie id`);
 }
 
 // ══ S — geometria i wejście ══
@@ -347,7 +359,6 @@ console.log('\nS — geometria (1600×1041, 1280×833) i wejście');
 {
   for (const [iw, ih] of [[1600, 1041], [1280, 833]]) {
     const vp = LL?.uiViewport?.(iw, ih) ?? { W, H };
-    setOn(true);
     for (const page of ['civilization', 'dyson']) {
       makeWorld({ active: page, dyson: DY_P1 });
       const ov = page === 'civilization' ? (CO ? new CO.CivilizationOverlay() : null) : (DO ? new DO.DysonOverlay() : null);
@@ -367,16 +378,19 @@ console.log('\nS — geometria (1600×1041, 1280×833) i wejście');
       // klik w środek strefy z ostatniej klatki trafia ją (bez window.inner*)
       const saved = { w: globalThis.innerWidth, h: globalThis.innerHeight };
       globalThis.innerWidth = 1; globalThis.innerHeight = 1; window.innerWidth = 1; window.innerHeight = 1;
-      const row = zs.find((q) => q.type === (page === 'dyson' ? 'selectSegment' : 'civ_item'));
+      // wiersz INNY niż bieżący wybór — klik musi zmienić stan (skutek handlera, nie tylko pochłonięcie)
+      const cur = () => (page === 'dyson' ? ov._selectedSeg : ov._kitSel);
+      const rowId = (q) => (page === 'dyson' ? q.data.segmentId : q.data.id);
+      const row = zs.find((q) => q.type === (page === 'dyson' ? 'selectSegment' : 'civ_item') && rowId(q) !== cur());
       const ok = row ? ov.handleClick(row.x + row.w / 2, row.y + row.h / 2) : false;
       const lr = ov._consoleListRect ?? { x: -9, y: -9 };
       const scr = safe(() => ov.handleScroll(100, lr.x + 5, lr.y + 5), false);
       window.innerWidth = saved.w; window.innerHeight = saved.h; globalThis.innerWidth = saved.w; globalThis.innerHeight = saved.h;
-      assert(ok === true && scr === true && (ov._kitScrollList ?? 0) > 0, `S ${iw}×${ih} ${page}: klik i kółko ze stref ostatniej klatki (window.inner* = 1)`);
+      assert(ok === true && !!row && cur() === rowId(row) && scr === true && (ov._kitScrollList ?? 0) > 0, `S ${iw}×${ih} ${page}: klik (wybór → ${row ? rowId(row) : '?'}) i kółko ze stref ostatniej klatki (window.inner* = 1)`);
     }
   }
   const kitSrc = src('../../ui/CivilizationConsoleView.js') + src('../../ui/CivilizationConsoleLogic.js');
-  const ovSrc = (s) => (s.match(/_kitScroll\(delta[\s\S]*?\n  }\n[\s\S]*?_kitClick\(x, y\)[\s\S]*?\n  }\n/) ?? [''])[0];
+  const ovSrc = (s) => ((s.match(/\n  handleClick\(x, y\) \{[\s\S]*?\n  }\n/) ?? [''])[0] + (s.match(/\n  handleScroll\(delta, x, y\) \{[\s\S]*?\n  }\n/) ?? [''])[0]);
   const a = ovSrc(src('../../ui/CivilizationOverlay.js')), b = ovSrc(src('../../ui/DysonOverlay.js'));
   assert(a.length > 50 && b.length > 50 && !/inner(Width|Height)/.test(a + b + kitSrc), 'S wejście konsoli i widok bez window.inner*');
   assert(kitSrc.length > 100 && !/createElement\(\s*['"]input/.test(kitSrc), 'S konsole nie tworzą DOM <input> (brak pól do pozycjonowania)');
@@ -401,6 +415,5 @@ console.log('\nD — KOSMOS.debug.civConsole');
   assert(f1 === false && got.Fe > 0 && safe(() => h?.state()?.star3d?.stage, null) === 0, 'D2 unlockFactions(), stageStock(1), state() z etapem gwiazdy 3D');
 }
 
-F.consoleKit = savedFlags.consoleKit; F.consoleCivilization = savedFlags.consoleCivilization;
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} console_civilization_smoke: ${pass} ✓ / ${fail} ✗`);
 process.exitCode = fail === 0 ? 0 : 1;

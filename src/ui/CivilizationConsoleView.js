@@ -1,5 +1,5 @@
 // CivilizationConsoleView — Cywilizacja i Sfera Dysona na zestawie konsoli (ARC KONSOLE K5, docs/design/CONSOLES_PLAN.md §1.2, §19;
-// FEATURES.consoleCivilization).
+// na stałe od KZ — flaga zdjęta).
 //
 // Wołane przez `CivilizationOverlay.draw` / `DysonOverlay.draw`, gdy `isKitScreen('civilization' | 'dyson')`. Szablon 4-strefowy:
 //  Cywilizacja — (1) nagłówek z czipami grupy; (2) lista Imperium / Frakcje / Historia (dzisiejsze kolonie ze strefą `goto_colony`);

@@ -1,5 +1,5 @@
 // CivilizationConsoleLogic — czysta logika konsol grupy Cywilizacji (ARC KONSOLE K5, docs/design/CONSOLES_PLAN.md §1.2, §19;
-// FEATURES.consoleCivilization).
+// na stałe od KZ — flaga zdjęta).
 //
 // Bez DOM i canvas — testowalne pod node (keeper `console_civilization_smoke.mjs`). Widok: `CivilizationConsoleView.js`.
 //  • czipy grupy [ CYWILIZACJA ] [ SFERA DYSONA ] (zastępują pas subnav grupy, jak czipy Ekonomii);
