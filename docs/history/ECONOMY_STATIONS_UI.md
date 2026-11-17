@@ -1147,3 +1147,21 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §18. Decyzja właściciela 2026-
 Następny krok: pozostałe kroki arcu (§6.1); końcowy KZ — flagi pozostałych ekranów i `consoleKit`.
 
 ---
+
+---
+
+## ARC KONSOLE — K5: Cywilizacja + Sfera Dysona na szablonie konsoli (`3678990` + `e3af2db`, PASS właściciela 2026-11-17) — Cywilizacja GOTOWA
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §19. Flaga `FEATURES.consoleCivilization` (OFF = dziś bit w bit).
+- **Decyzje właściciela:** Sfera Dysona NIE jest zamrożona (jedyna ścieżka końca gry; jej przyszłość razem z nowym projektem końca gry);
+  emblemat dostarcza właściciel (`assets/ui/emblems/player.png`, biały na przezroczystym, 512×512; bez pliku — nazwa imperium); podpisana
+  tabela bohatera Cywilizacji przepisana do planu; po bramce sekcja «Kolonie i placówki» w przeglądzie imperium.
+- **Cywilizacja:** czipy grupy zamiast subnav; lista Imperium / Frakcje / Historia (powtórzenia ×N); bohater = portret + emblemat + 4 liczby;
+  inspektor = premie i tabela kolonii / cechy lidera / kolonia / frakcja / grupa kroniki; pas = oś kroniki.
+- **Dyson:** pierścień 20 segmentów, koszt vs magazyn domu, [ DOSTARCZ ] albo powód (dziś cicha odmowa), ścieżka końca gry.
+- **Findingi:** 743 ✅ (osobny `fix(743)`: etap i pierścienie 3D wracają po wczytaniu i po przebudowie układu, tylko przy gwieździe
+  macierzystej), 744 ⚪ (martwa cecha lidera `dysonProgress`).
+- **Testy:** `console_civilization_smoke` 60/0, `dyson_stage_restore_smoke` 9/0, mutacje 19/19; sweep 420/420, `check-i18n` PASS;
+  żywy silnik 0 wyjątków (5 motywów, 1280×833, OFF, baza, placówka, zapis → wczytanie).
+
+Następny krok: pozostałe kroki arcu (§6.1 — K7 Dowództwo); końcowy KZ obejmie `consoleCivilization`.

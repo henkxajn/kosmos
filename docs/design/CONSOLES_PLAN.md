@@ -4,9 +4,9 @@ Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §
 owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); K1b delivered (`574ee3f`, owner PASS
 2026-11-16 after three review rounds — §11); K1c-A delivered (`301b66b`, owner PASS 2026-11-16 — §12); K1c-B delivered (`eb59908`, owner PASS
 2026-11-16 — §13) — **Shipyard console DONE**; K2 delivered (`1685293` + `1f6c960`, owner PASS 2026-11-16 — §15) — **Diplomacy group DONE**; K3 delivered (`79c8ba3` + `a75a402` +
-`bd72f73`, owner PASS 2026-11-17 — §16); K4 delivered (`886b659`, owner PASS 2026-11-17 — §17) — **Economy group DONE**; K6 moved out of this arc (§16, owner 2026-11-17).** Phase A
+`bd72f73`, owner PASS 2026-11-17 — §16); K4 delivered (`886b659`, owner PASS 2026-11-17 — §17) — **Economy group DONE**; KZ-E delivered (`f47b0b8` — §18); K5 delivered (`3678990` fix(743) + `e3af2db`, owner PASS 2026-11-17 — §19) — **Civilization group DONE**; K6 moved out of this arc (§16, owner 2026-11-17).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
-the K0a gate). Register: findings #723–#742 filed; **next free finding number: 743**.
+the K0a gate). Register: findings #723–#744 filed; **next free finding number: 745**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
 allowlist, not game code); 41 untracked files, all older than 2026-11-02, none from the combat-visuals arc.
 Handover: `C:\Users\Komputer\kosmos-handover\consoles-phase-a\` (`STOP_A.md`, `kontakt_now.html`, `shots_now/`,
@@ -92,10 +92,10 @@ is unreachable (`FEATURES.populationOverlay` false).
 
 Legend: **L** list · **H** hero · **I** inspector · **S** strip · **∅** fits no zone.
 
-**Civilization.** L = colony table (name, POP, prosperity, Kr, fleet, buildings; row click only switches the active colony,
-`:728`) · H = leader portrait + faction slider/tension (proposed) · I = empire stats; selected colony summary (new, small) ·
-S = 4 summary cards (POP, prosperity, Kr/yr, trade) · ∅ = History chronicle (right column today — candidate: second
-header chip «History» or S). Leader bonus text wall → I.
+**Civilization.** **Signed hero table (owner, project design doc, copied here at K5):** L = Imperium · Frakcje · Historia ·
+H = leader portrait + emblem + 4 big numbers · I = factions, bonuses · S = history timeline with repeats grouped. Delivered in K5
+(§19); the colony table moved into the list (Imperium section) and into the empire overview inspector («Kolonie i placówki»).
+(Phase A proposal, superseded: L = colony table, H = portrait + faction slider, S = 4 summary cards, History as ∅.)
 **Dyson.** L = 4 phases × 20 segments · H = **missing** — sphere completion diagram (20 segments / 4 phases; the 3D rings
 `_dysonRingsGroup` are a reference) · I = selected segment: delivered/needed per resource + `[ DELIVER MAX ]`
 `[ DELIVER 10 % ]` · S = X/20, research bonus, stage N/4.
@@ -321,7 +321,7 @@ Hit zones stay per screen (first-hit-wins in BaseOverlay; Command keeps its own 
 
 ## 5. Findings (next free number verified: **723**; the brief expected 612 — the CV arc filed #612–#722)
 
-This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16) and **#742** (K4, §17). **Next free finding number: 743.**
+This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** (K4, §17) and **#743–#744** (K5, §19). **Next free finding number: 745.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
@@ -345,6 +345,8 @@ This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16) and **#742
 | **740** | ⚪ | **Founding an outpost switches the global active colony to it**: `outpost:founded` → `GameScene` calls `switchActiveColony(outpost)`, so the top bar shows the outpost's zeros and today's Trade page refuses orders («is_outpost») until the player re-selects a full colony | `GameScene.js` `outpost:founded` listener; `ColonyManager.switchActiveColony` | later UX fix (outside this arc); the Trade console is immune (Trade-local context, §16) |
 | **741** | ⚪ | **AI partner colonies may hold 0 Kr, so SELL on Rynek can be dead**: settlement needs `aiCol.credits ≥ total`; on GATE-S4 the partner colony shows 0 Kr — check whether AI colony credits ever accumulate | `TradeOrderBoard._settle`; AI colony `credits` | audit later (economy) |
 | **742** | ✅ K4 (console path) · KZ-E (the flag-OFF payload without `colonyId` is gone) | **Production export toggles changed the wrong colony**: today's [ Przyjmuj ] and tier chips emit `factory:setExportEnabled` / `setExportTier` without a colony, and `FactorySystem` applies them to the ACTIVE colony (`window.KOSMOS.factorySystem === this`) while the page shows the colony picked in the filter — a click on another colony's prefs silently changed the active colony's | `EconomyOverlay._handleFactoryBtn` export cases; `FactorySystem` listeners | K4 — the console sends `colonyId`; the listener honours it (`exportTarget`), no `colonyId` = today's behaviour |
+| **743** | ✅ K5 (`3678990`) | **Dyson 3D stage and rings lost after loading a save**: `DysonSystem.restore` never emitted `dyson:visualStageChanged` and `ThreeRenderer.switchSystem` (`_disposeAllMeshes`) zeroed `_dysonStage` — measured: stage 1 + rings before save, stage 0 and no rings after load | live probe K5 (`k5.json` `dysonBeforeSave` / `dysonAfterLoad`); `DysonSystem.restore`, `ThreeRenderer._disposeAllMeshes` | K5 — `dysonViewStage` + `ThreeRenderer._restoreDysonStage()` after restore, after `switchSystem` and on segment completion; rings only around the home star |
+| **744** | ⚪ | **Dead leader trait `dysonProgress`**: Viktor Havel-Osei's bonus «Sfera Dysona ×3 szybciej» (`LeaderData.js:193`) is shown to the player but `DysonSystem.getDysonProgressMultiplier()` is read nowhere | `grep dysonProgress src` | later — with the new endgame design (owner 2026-11-17: Dyson's future decided there) |
 
 ## 6. Proposed cut, decisions, effort
 
@@ -952,3 +954,59 @@ owner smoke PASS 2026-11-17. Handover `C:\Users\Komputer\kosmos-handover\console
   min-stock [+]/[−] and threshold `<input>`, one-shot `<input>`, droid build / cancel, Trade colony picker, Market gates (no ion_drives → no
   BUY; with it the order uses the trade colony, also with an outpost active); staged: trade agreement, ion_drives, outpost — 0 page errors.
 - **Next:** remaining arc steps per §6.1; the final KZ covers the other screens' flags and `consoleKit`.
+
+## 19. K5 — delivered (Civilization + Dyson on the console template) — Civilization group DONE
+
+**Commits `3678990` fix(743)** (separate, before the feature) **and `e3af2db` feat(K5)** · flag `FEATURES.consoleCivilization` (ON, with
+`consoleKit`; OFF = today's Civilization and Dyson pages bit for bit — draw log + hit zones, 14 states, PL and EN identical to `adae333`) ·
+owner gate PASS 2026-11-17, deviations 1–8 approved, one post-gate addition. Handover `C:\Users\Komputer\kosmos-handover\consoles-k5\`:
+`STOP_K5-0.md` (Dyson freeze audit), `STOP_K5-A.md`, `STOP_K5.md`, `kontakt_k5.html`, `shots/`, `probes/{k5, k5b, offhash, mutate, mutate_t,
+oneliners, sheet, mkemblem}`; fail-first / mutation worktrees and the test emblem removed.
+
+- **Owner decisions 2026-11-17:**
+  - **Dyson is NOT frozen** — it is the only endgame path and carries late economy (collector energy ×3, transmitter range ×2,
+    fabricator, relay). No mechanics change in K5; Dyson's future is decided later together with a new endgame design (separate topic).
+    The K5-0 freeze proposal is withdrawn.
+  - **Emblem:** the owner provides `assets/ui/emblems/player.png` (white mark on transparent, 512×512). Present → drawn tinted with the
+    theme primary role; absent → the empire name in large type takes its place (never an empty frame). No emblem is committed.
+  - **Signed Civilization hero table** copied into §1.2 (list Imperium · Frakcje · Historia; hero portrait + emblem + 4 big numbers;
+    inspector factions, bonuses; strip history timeline with repeats grouped).
+  - **Post-gate addition:** «Kolonie i placówki» section at the bottom of the empire overview inspector — one row per player colony and
+    outpost (name, type — outposts in the dim role —, POP, prosperity, Kr/yr, ships, buildings); row click = the list's colony action
+    (`goto_colony`: switch active colony + its inspector).
+- **Frame:** chips `[ CYWILIZACJA ] [ SFERA DYSONA ]` (`civilization`, `dyson` in `CONSOLE_KIT_SCREENS`), no subnav strip; a chip switch keeps
+  each overlay's selection.
+- **Civilization:** list Imperium (overview, leader, colonies) / Frakcje (support %) / Historia (repeats ×N); hero = portrait, emblem slot,
+  POP / prosperity / Kr/yr / trade instruments with the hero dim; inspector = empire bonuses + colonies table / leader traits / colony /
+  faction (support, demands, what raises support from the slider tables, zone effects; locked factions show the reason and the same data
+  dimmed) / chronicle group; strip = chronicle timeline (newest right, wheel = older, «◂ +N starszych»).
+- **Dyson:** list phases → all 20 segments; hero = ring of 20 arcs in 4 phases (built / open / locked, roles only), current phase, X/20,
+  delivery %, star stage; inspector = effective cost vs home-planet stock, `[ DOSTARCZ ]` / `[ DOSTARCZ 10 % ]` or an i18n reason (phase
+  locked + tech name, segment tech, no stock, completed, sphere locked), research bonus, related techs and buildings; strip = endgame path
+  Faza I → II → III → IV → Brama Skoku → final decision with «tu jesteś».
+- **Hit zones:** today's types kept (`close`, `goto_colony`, `selectSegment`, `deliverMax`, `deliverPercent`); new `tab`, `civ_item`. Input
+  from the last frame's `consoleZones`; no DOM inputs.
+- **System touches without mechanics change:** `FactionSystem` exports `ZONE_MODIFIERS`; `DysonSystem` exports `RESEARCH_PER_SEGMENT` and
+  `getCostMultiplier()` (same formula, now the single source). Gate helpers `KOSMOS.debug.civConsole.state() / stageDyson() /
+  stageStock(1|0) / unlockFactions()` (`src/debug/CivConsoleDebug.js`, registered in `GameScene.js`).
+- **Approved deviations:**
+  1. The Dyson chip keeps today's subnav label «SFERA DYSONA» (brief: «DYSON»).
+  2. Colonies live in the Imperium section; a click does what it does today (switch active colony) and opens the colony inspector.
+  3. All 20 segments selectable (a locked one shows why); delivery only for the selected segment in the inspector (today a button per row).
+  4. A blocked delivery has no hit zone (today a zone with a silent refusal: segment 20 without the tech, no stock).
+  5. Effective cost shown (with the orbital fabricator — what the engine takes); today the base cost.
+  6. Faction «demands» are new i18n text (from the FactionSystem description); «what raises support» comes from the slider tables.
+  7. Population «/ max» hidden when max = 0 (today «67.0 / 0»).
+  8. Gate helper `KOSMOS.debug.civConsole` (no mechanics change).
+- **Findings:** **743 ✅** fixed (`3678990`): Dyson stage and rings restored from the saved segment count after load and after a system rebuild,
+  only around the home star. **744 ⚪** filed (dead leader trait `dysonProgress`).
+- **Keepers:**
+  - `console_civilization_smoke` 60/0: A actions ON == OFF + effects, T colonies/outposts table (logic + row click == list click), C chips /
+    subnav / state, G deliver gates → reason, M segment / phase states, H chronicle grouping, E emblem slot, N no raw ids, S geometry at
+    1600×1041 and 1280×833 + input, D gate helpers. Fail-first on `adae333`: only 6 witnesses / controls green. Mutations 19/19 red.
+  - `dyson_stage_restore_smoke` 9/0 (view stage, save → load stage == saved for 0..20, live-path source pins); fail-first: only the witness.
+  - Sweep 420/420, `check-i18n` PASS (+96 `civConsole.*` keys, parity kept).
+- **Live engine (CDP mouse, GATE-S4):** 5 themes, no emblem, 1280×833, OFF, base; outpost staged via `createOutpost`; Dyson staged with the
+  engine event + real `deliverMax`; 743 after the fix: other system stage 0 / no rings, back home stage 1 + rings, save → load stage 1 + rings
+  — 0 page exceptions in every run.
+- **Next:** remaining arc steps per §6.1 (K7 Command); the final KZ covers `consoleCivilization` with the other screens' flags.
