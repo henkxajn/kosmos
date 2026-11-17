@@ -319,7 +319,6 @@ C.K.activeSystemId = C.sysB;
   const mb = o._hitZones.filter(z => z.type === 'map_body').map(z => z.data.bodyId);
   const sysOf = (id) => EntityManager.get(id)?.systemId;
   console.log('  Atlas map_body =', mb.length, '| z ukladu B =', mb.filter(id => sysOf(id) === C.sysB).length, '| zawiera Xb =', mb.includes(C.Xb.id));
-  console.log('  Mapa taktyczna FMO (commandTacticalMap) =', GAME_CONFIG.FEATURES?.commandTacticalMap);
 }
 {
   const o = makeFmo(); o._selectedVesselId = C.CS.id;

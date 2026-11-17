@@ -213,18 +213,16 @@ header('T3  statusy (i) — _drawEnemyDetails WYKONANIEM: „Stan:" = słowo kan
   const t1v = hll.slice(hll.indexOf('  _t1Vessel('), hll.indexOf('\n  }\n', hll.indexOf('  _t1Vessel(')));
   ok(!/_showVesselTooltip\s*\(/.test(tr) && !/vesselStatusLabelKey/.test(tr),
      'ThreeRenderer: tooltip 3D statku usunięty (T4-4) — bez `_showVesselTooltip` i bez kanonu stanu (nie ma czego etykietować)');
-  ok((fmo.match(/vesselStatusLabelKey\(/g) ?? []).length >= 2, `FMO woła vesselStatusLabelKey ≥ 2× (wiersz wroga + detal; jest ${(fmo.match(/vesselStatusLabelKey\(/g) ?? []).length})`);
+  ok((fmo.match(/vesselStatusLabelKey\(/g) ?? []).length >= 1, `FMO woła vesselStatusLabelKey (detal wroga; wiersz wroga listy mapy 2D usunięty w K7-pre; jest ${(fmo.match(/vesselStatusLabelKey\(/g) ?? []).length})`);
   ok(t1v.length > 50 && /buildShipEntry\(/.test(t1v) && /import \{[^}]*\bbuildShipEntry\b[^}]*\} from '\.\/FleetPictureLogic\.js'/.test(hll)
      && /import \{[^}]*\bresolveVesselStatus\b[^}]*\} from '\.\.\/utils\/VesselStatus\.js'/.test(fpl),
      'następca tooltipa 3D: rozwinięcie etykiety statku (`HudLabelLayer._t1Vessel`) bierze stan z `buildShipEntry` — kanon `VesselStatus`');
   ok(!/hangarze|[Ww] locie'|Bezczynny|'Na orbicie'/.test(fmo), 'FMO (kod bez komentarzy): ZERO literałów W hangarze / w locie / Bezczynny / Na orbicie');
   ok(!/hangarze|[Ww] locie'|Bezczynny|'Na orbicie'/.test(tr),  'ThreeRenderer (kod bez komentarzy): ZERO literałów W hangarze / Na orbicie / Bezczynny');
-  // Wiersz wroga: glif per token + słowo kanonu — jedno wyrażenie, nie łańcuch ternary z literałami.
-  ok(/ENEMY_STATE_GLYPH\[eTok\][^\n]*t\(vesselStatusLabelKey\(eTok\)\)/.test(fmo),
-     'FMO wiersz wroga: `${ENEMY_STATE_GLYPH[eTok] ?? \'?\'} ${t(vesselStatusLabelKey(eTok))}`');
-  const glyph = /ENEMY_STATE_GLYPH\s*=\s*Object\.freeze\(\{([^}]*)\}\)/.exec(fmo);
-  ok(!!glyph && ['docked', 'orbiting', 'in_transit', 'in_space', 'unknown'].every((k) => new RegExp(`\\b${k}\\s*:`).test(glyph[1])),
-     'FMO: ENEMY_STATE_GLYPH ma glif dla WSZYSTKICH pięciu tokenów kanonu');
+  // Wiersz wroga lewej listy (glif `ENEMY_STATE_GLYPH` + słowo kanonu) odszedł z mapą 2D (K7-pre, D-K-18) — świadek „nie ma”,
+  // żeby lista z własnym glifem nie wróciła po cichu obok kanonu.
+  ok(!/ENEMY_STATE_GLYPH/.test(fmo) && /vesselStatusLabelKey\(/.test(fmo),
+     'FMO: wiersz wroga lewej listy usunięty (bez `ENEMY_STATE_GLYPH`); świadek: detal wroga nadal bierze słowo z kanonu');
 }
 
 // ═══ T4 — bramka check-i18n: sink DOM mierzy, GameScene spłacony ════════════════════════════

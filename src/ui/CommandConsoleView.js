@@ -85,7 +85,6 @@ export function drawCommandConsole(ov, ctx, W, H) {
   const activePid = colMgr?.activePlanetId;
 
   if (tactical) {
-    ov._mapBounds = null;   // mapa 2D (uśpiona) nie istnieje na konsoli — klik w pustą tabelę nie trafia „w mapę”
     ov._contentBounds = z.body;
     drawRegistryConsole(ov, ctx, z, roles, { vMgr, ms, colMgr, activePid, allVessels });
   } else {

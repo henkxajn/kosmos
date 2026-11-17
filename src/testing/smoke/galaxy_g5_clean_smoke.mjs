@@ -204,8 +204,8 @@ header('C6  KONTROLE — co ZOSTAJE (zielone po obu stronach)');
   const fmo = readClean('src/ui/FleetManagerOverlay.js') ?? '', sp = readClean('src/ui/ShipPanelHudLogic.js') ?? '';
   ok(/case 'cluster_switch':/.test(fmo) && /type: 'cluster_switch'/.test(fmo) && /chip\('cluster_switch'/.test(sp),
     'C6a: `cluster_switch` zostaje — handler w FMO, producent w panelu przylotu (`_drawRight`) i czip panelu statku');
-  ok(['_dispatchReturnJump', '_toastReturnFailed', '_warpErrLabel', '_drawStratcomGhostBlip'].every((n) => new RegExp(`^\\s{2}${n}\\s*\\(`, 'm').test(fmo)),
-    'C6b: FMO zostawia powrót skokiem (Finding 125: `_dispatchReturnJump`, `_toastReturnFailed`, `_warpErrLabel`) i kropkę „?” mapy taktycznej');
+  ok(['_dispatchReturnJump', '_toastReturnFailed', '_warpErrLabel'].every((n) => new RegExp(`^\\s{2}${n}\\s*\\(`, 'm').test(fmo)),
+    'C6b: FMO zostawia powrót skokiem (Finding 125: `_dispatchReturnJump`, `_toastReturnFailed`, `_warpErrLabel`); kropka „?” odeszła z mapą 2D (K7-pre)');
   const hit = readClean('src/ui/StratcomHitLogic.js') ?? '', hc = readClean('src/renderer/HolotableCamera.js') ?? '';
   const trl = readClean('src/ui/TerritoryRenderLogic.js') ?? '', gw = readClean('src/ui/GalaxyWarpLogic.js') ?? '', orng = readClean('src/utils/ObservatoryRange.js') ?? '';
   const exp = (src, names) => names.every((n) => new RegExp(`^export (?:function|const) ${n}\\b`, 'm').test(src));

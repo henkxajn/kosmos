@@ -53,10 +53,7 @@ function mkOverlay(tab = 'tactical') {
   const o = Object.create(FleetManagerOverlay.prototype);
   o._visible = true;
   o._activeTab = tab;
-  o._pendingFocusInit = false;
-  o._pendingFocusSection = null;
   o._pendingFocusVesselId = null;
-  o._tacticalView = 'registry';
   o._registryFilter = { systemKey: null, role: null, search: '', showWrecks: false, showContacts: false };
   // stan per-zakladka, ktory `_switchTab` ma sprzatac
   o._registrySearchEl = null;
@@ -65,15 +62,11 @@ function mkOverlay(tab = 'tactical') {
   o._logiColDropdown = null;
   o._logiGoodDropdownOpen = false;
   o._mapHoverBody = null;
-  o._hoverVesselId = null;
   o._rightScrollY = 0;
   o._atlasScrollY = 0;
   o._missionConfig = null;
   o._targetScrollOffset = 0;
   o._cachedTargets = null;
-  // `_close()` dotyka tych pol — musza istniec, zeby sciezka Esc nie rzucila
-  o._mapDragging = false;
-  o._mapDragWasDrag = false;
   return o;
 }
 
@@ -159,11 +152,10 @@ console.log('\nT5 — klawisz K: intencja wejscia nie zostaje zjedzona przez `_s
   o.open({ focusSection: 'wreck' });
 
   assert(o._activeTab === 'tactical', 'K: zakladka taktyczna');
-  // przy domyslnych flagach (commandTacticalMap OFF, fleetRegistry ON) galaz 3g przekierowuje
-  // sekcje wrakow do REJESTRU z wlaczonym chipem 💀 — pinujemy realny skutek, nie zyczenie
-  assert(o._tacticalView === 'registry', 'K: widok REJESTR (galaz 3g przy mapie 2D OFF)');
+  // K7-pre: REJESTR jest jedyna trescia zakladki taktycznej (mapa 2D usunieta) — sekcja wrakow = chip 💀
+  // rejestru; pinujemy realny skutek, nie zyczenie
   assert(o._registryFilter.showWrecks === true, 'K: filtr wrakow wlaczony — intencja wejscia zachowana');
-  assert(o._pendingFocusSection === null, 'K: _pendingFocusSection skonsumowane przez galaz 3g');
+  assert(!('_pendingFocusSection' in o) && !('_tacticalView' in o), 'K: brak pol mapy 2D (`_pendingFocusSection`, `_tacticalView`) — K7-pre');
   assert(!inDom(el), 'K: input wyszukiwarki posprzatany przy zmianie zakladki atlas → tactical');
 }
 

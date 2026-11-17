@@ -9,7 +9,6 @@ import { normalize as normalizeBattleLocation, isDeepSpace as isDeepSpaceBattle 
 import { resolveBattleSides, battleWinnerName } from '../utils/BattleSides.js';
 import { mouseToNDC, castRay, resolveTargetFromHits } from '../utils/RaycasterHelper.js';
 import { worldToGameplay } from '../utils/CoordTransform.js';
-import { tacticalToWorld } from '../utils/TacticalRaycaster.js';
 import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } from '../ui/POIModal.js';
 import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
 import { systemDisplayName }  from '../ui/MapLabelLogic.js';
@@ -6381,26 +6380,9 @@ export class GameScene {
     }
 
     // DOM elements z data-tooltip — sam Tooltip.js obsługuje przez global mouseover/mouseout,
-    // tu tylko canvas paths.
-    // M3 P1.5 post-fix #1: planet-canvas (z=4) capture'uje WSZYSTKIE mouse
-    // events nad mapą — events nigdy nie docierają do ui-canvas mimo że
-    // tactical map jest tam renderowana. Bound check (fleetOv._mapBounds w
-    // przestrzeni ui-canvas-local) rozróżnia tactical region od mapy 3D.
-    // Pattern z P1.2 post-fix #2 (CANVAS bypass dla isOverUI), tutaj dla mousemove.
+    // tu tylko canvas paths. (K7-pre: wyjątek „mapa 2D Dowództwa pod planet-canvas” usunięty z mapą.)
     const isMainCanvas = (targetId === 'three-canvas' || targetId === 'planet-canvas');
     if (isMainCanvas) {
-      const fleetOv = this.uiManager?.overlayManager?.overlays?.fleet;
-      const b = fleetOv?._visible ? fleetOv._mapBounds : null;
-      if (b) {
-        // _mapBounds żyje w ui-canvas-local (po UI_SCALE) — konwertujemy clientX/Y
-        const local = this.uiManager?.toLocalUI?.(clientX, clientY);
-        if (local
-          && local.x >= b.x && local.x <= b.x + b.w
-          && local.y >= b.y && local.y <= b.y + b.h) {
-          this._tooltipHoverFromTactical(clientX, clientY);
-          return;
-        }
-      }
       this._tooltipHoverFromMain3D(clientX, clientY);
       return;
     }
@@ -6527,18 +6509,7 @@ export class GameScene {
       return;
     }
     if (!info) {
-      // M3 P2.3 — coord tooltip dla empty space w obrębie tactical map bounds.
-      // resolveHoverInfo zwraca null gdy outside mapBounds LUB empty hit.
-      // Re-check bounds: jeśli inside → coord tooltip, inaczej cancel.
-      const mb = fleet._mapBounds;
-      if (mb && local.x >= mb.x && local.x <= mb.x + mb.w
-          && local.y >= mb.y && local.y <= mb.y + mb.h) {
-        const wp = tacticalToWorld(local.x, local.y, fleet._mapViewState);
-        if (wp) {
-          this._scheduleCoordTooltip(wp, clientX, clientY);
-          return;
-        }
-      }
+      // (K7-pre: coord tooltip pustego miejsca mapy 2D usunięty z mapą.)
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
     }

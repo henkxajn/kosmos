@@ -8,9 +8,8 @@
 //   * `ObservatorySystem._tickVesselDetection` — `(v.systemId ?? sysId)`: statek w skoku był „w oglądanym układzie”
 //     (Finding 427; przy obserwatorium 4+ zasięg ∞ — każdy skok).
 // Brak pola (stary zapis) = `sys_home` — bez zmian (kontrole T1d, T2c).
-// ⚠ POZA ZAKRESEM: trzy filtry mapy 2D `FleetManagerOverlay` (utajone za `commandTacticalMap:false`) mają tę samą
-//   koercję (dopisek 151), ale `fleet_engage_scope` T12c/T12d pinują je dosłownie jako dokument zakresu 166 — zostają
-//   nietknięte (T3f pinuje, że ten slice ich nie ruszył).
+// (K7-pre: trzy filtry mapy 2D `FleetManagerOverlay` z tą samą koercją — dopisek 151 — odeszły razem z mapą; T3f pinuje,
+//  że nie wróciły.)
 //
 // PINY (fail-first na S3-7, `84d8638`):
 //   T1  ProximitySystem — pary: kontrola (ten sam układ), statek w skoku, oba w skoku, stary zapis, inny układ,
@@ -163,15 +162,15 @@ header('T3 — źródło: ProximitySystem i ObservatorySystem bez własnej koerc
   const obs = strip(readFileSync('src/systems/ObservatorySystem.js', 'utf8').replace(/\r\n/g, '\n'));
 
   // KONTROLA PINU: zdejmowanie komentarzy działa i zostawia kod (inaczej „brak wzorca” byłby jałowy).
-  assert(/const enemyVisible = allVessels\.filter\(/.test(fmo) && /_checkPair\(v1, v2\) \{/.test(prox) && /_tickVesselDetection\(/.test(obs),
-    'T3-0 KONTROLA PINU: kod po zdjęciu komentarzy zawiera filtr `enemyVisible`, `_checkPair` i `_tickVesselDetection`');
+  assert(/_drawRegistry\(ctx/.test(fmo) && /_checkPair\(v1, v2\) \{/.test(prox) && /_tickVesselDetection\(/.test(obs),
+    'T3-0 KONTROLA PINU: kod po zdjęciu komentarzy zawiera `_drawRegistry` (FMO), `_checkPair` i `_tickVesselDetection`');
   assert(!/\?\? 'sys_home'/.test(prox) && /const sameSystem = isSameSystemStrict\(v1, v2\);/.test(prox),
     'T3d TRIPWIRE: ProximitySystem nie ma własnej koercji `?? \'sys_home\'` — para z kanonu fail-closed');
   assert(!/\(v\.systemId \?\? sysId\)/.test(obs) && /if \(systemIdOf\(v\) !== sysId\) continue;/.test(obs),
     'T3e TRIPWIRE: ObservatorySystem filtruje układ statku kanonem `systemIdOf`');
-  // GRANICA ZAKRESU: filtry mapy 2D (utajone) zostają, jak pinuje `fleet_engage_scope` T12c/T12d.
-  assert(/\(v\.systemId \?\? 'sys_home'\) === sysId/.test(fmo) && /\(v\.systemId \?\? 'sys_home'\) !== sysId/.test(fmo),
-    'T3f GRANICA ZAKRESU: filtry mapy 2D `FleetManagerOverlay` (utajone) nietknięte — pinowane jako zakres 166 w `fleet_engage_scope`');
+  // K7-pre: filtry mapy 2D z koercją `?? 'sys_home'` usunięte z mapą — nie wracają (świadek: T3-0 `_drawRegistry`).
+  assert(!/\(v\.systemId \?\? 'sys_home'\) === sysId/.test(fmo) && !/\(v\.systemId \?\? 'sys_home'\) !== sysId/.test(fmo),
+    'T3f (K7-pre) filtry mapy 2D `FleetManagerOverlay` z koercją kamery usunięte razem z mapą');
 }
 
 console.log(`\n${pass} PASS, ${fail} FAIL`);

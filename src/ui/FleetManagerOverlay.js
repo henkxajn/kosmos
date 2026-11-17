@@ -1,7 +1,7 @@
 // FleetManagerOverlay — trójdzielny overlay zarządzania flotą
 //
 // Otwierany klawiszem F lub kliknięciem FLOTA w Outlinerze.
-// Layout: LEFT (lista statków) | CENTER (mapa schematyczna) | RIGHT (szczegóły + akcje)
+// Layout zakładki taktycznej: REJESTR (tabela + oś czasu) | RIGHT (szczegóły + akcje).
 // Rysowany na Canvas 2D (#ui-canvas), NA WIERZCHU istniejącego UI.
 // Logika misji delegowana do MissionSystem + FleetActions.
 
@@ -24,8 +24,7 @@ import EntityManager       from '../core/EntityManager.js';
 import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
-import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
-import { getPOILocation } from '../utils/POIPanelLogic.js';
+import { findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
@@ -46,8 +45,7 @@ import {
   groupRows, GROUP_MODES, UNGROUPED_KEY,
 } from './FleetRegistryLogic.js';
 
-// Rejestr 2.0 (3e): szerokość prawego panelu W WIDOKU REJESTR (per-widok —
-// globalny RIGHT_W=200 dla mapy NIEZMIENIONY; _drawRight liczy z parametru w).
+// Rejestr 2.0 (3e): szerokość prawego panelu zakładki taktycznej (_drawRight liczy z parametru w).
 const REGISTRY_RIGHT_W = 300;
 
 import {
@@ -77,19 +75,6 @@ import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
 // bierzemy z zarejestrowanej instancji (window.KOSMOS.overlayManager.overlays.unit_design).
 
-// ── Helper: skrót tekstu do zadanej SZEROKOŚCI w px (mierzonej bieżącym fontem ctx) ──
-// Zastępuje obcinanie po liczbie znaków (slice(0,N)), które ignorowało realną szerokość
-// panelu — nazwa ucinała się na sztywnym limicie niezależnie od tego ile było miejsca.
-// Wzór: FleetCommandPanel._truncate.
-function _fitText(ctx, text, maxW) {
-  text = String(text ?? '');
-  if (maxW <= 0) return '';
-  if (ctx.measureText(text).width <= maxW) return text;
-  let s = text;
-  while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
-  return s + '…';
-}
-
 // ── Ikony + etykiety slotów modułów (panel szczegółów statku) ──
 // Reuse ikon/kluczy i18n z designera (MODULE_CATEGORIES w FleetTabPanel) + 3 typy
 // bojowe/desantowe których designer nie grupuje (weapon/shield/troop).
@@ -105,19 +90,6 @@ const MODULE_SLOT_INFO = {
   shield:     { icon: '✦', key: 'fleet.slotShield' },
   troop:      { icon: '🪖', key: 'fleet.slotTroop' },
 };
-
-// ── Helper M4 P3: czy vessel bierze udział w aktywnym deep-space encounter ──
-// Sprawdza DSCS._activeEncounters → vesselStates ma vessel.id. Read-only — wołane
-// per-frame z render loop, więc tania lookup (Map.has).
-function _isVesselInCombat(vesselId) {
-  const dscs = window.KOSMOS?.deepSpaceCombatSystem;
-  if (!dscs?._activeEncounters) return false;
-  for (const enc of dscs._activeEncounters.values()) {
-    if (!enc?.isActive) continue;
-    if (enc.vesselStates?.has?.(vesselId)) return true;
-  }
-  return false;
-}
 
 // ── Helper detekcji wrogów: czy wrogi statek jest WYKRYTY z TOŻSAMOŚCIĄ (mapa taktyczna/listy) ──
 // Po reformie detekcji obserwatorium (2026-06-25): wykrycie przez obserwatorium = poziom 'rumor'
@@ -188,13 +160,6 @@ function _resolveName(id) {
 }
 
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
-// LEFT_W: szerokość listy floty. Budżet nazwy ≈ (LEFT_W - 107) px przy 13px Space Mono
-// (0.6em/znak) → 260 daje ~19 znaków, czyli mieści pulę VesselNames z licznikiem rzymskim
-// (mediana 12, p90 15, „Kwatermistrz VIII" 17) także z odznaką ⚔/⚠. Dłuższe („Zaopatrzeniowiec
-// VIII" = 21) skraca _fitText. Centrum nic na tym nie traci: promień mapy taktycznej to
-// min(mb.w/2, mb.h/2)-20, czyli limituje go WYSOKOŚĆ (~300 px), nie szerokość (~400 px).
-const LEFT_W    = 260;
-const RIGHT_W   = 200;
 const TAB_H     = 28;   // wysokość paska zakładek (tytuł + 4 zakładki) pod nagłówkiem overlay
 
 // Typy hitów pochodzące z osadzonego edytora projektów (UnitDesignOverlay._drawShipDesigner) —
@@ -226,10 +191,6 @@ const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
 
 // Kolory statusów statków
 // Finding 266: klucz = TOKEN KANONU (`utils/VesselStatus`), nie surowy `position.state`.
-// Finding 269 (A-MIN, decyzja (i)): glif per token KANONU dla wiersza wroga w liście Command —
-// słowo bierze `vesselStatusLabelKey` (jedno słowo dla jednego stanu na każdej powierzchni).
-const ENEMY_STATE_GLYPH = Object.freeze({ docked: '◈', orbiting: '⊙', in_transit: '→', in_space: '◌', unknown: '?' });
-
 const STATUS_COLORS = {
   docked:     () => THEME.success,
   in_transit: () => THEME.warning,
@@ -245,51 +206,6 @@ const STATUS_ICONS = {
   refueling:  '⚡',
   damaged:    '!',
 };
-
-// Filtr — labele dynamiczne (i18n)
-function _getFilterBtns() {
-  return [
-    { id: 'all',             label: t('fleet.filterAll') },
-    { id: 'science_vessel',  label: '🛸' },
-    { id: 'cargo_ship',      label: '📦' },
-    { id: 'here',            label: t('fleet.filterHere') },
-  ];
-}
-
-// ── Formatowanie roku gry ────────────────────────────────────────────────────
-function _fmtYear(y) {
-  if (y == null) return '?';
-  if (y >= 1e9) return (y / 1e9).toFixed(1) + 'G';
-  if (y >= 1e6) return (y / 1e6).toFixed(1) + 'M';
-  if (y >= 1e4) return (y / 1e3).toFixed(0) + 'k';
-  return String(Math.round(y));
-}
-
-// ── Ikona i label typu misji (do sekcji W LOCIE) ────────────────────────────
-function _missionTypeIcon(type) {
-  switch (type) {
-    case 'recon': case 'survey': case 'deep_scan': return '🔭';
-    case 'transport': return '📦';
-    case 'passenger': return '🧑‍🚀';
-    case 'colony': return '🏗';
-    case 'mining': return '⛏';
-    case 'trade_route': return '🔄';
-    case 'interstellar_jump': return '🌀';
-    default: return '🚀';
-  }
-}
-
-function _missionTypeLabel(type) {
-  const key = {
-    recon: 'fleet.missionTypeRecon', survey: 'fleet.missionTypeSurvey',
-    deep_scan: 'fleet.missionTypeDeepScan',
-    mining: 'fleet.missionTypeMining', colony: 'fleet.missionTypeColony',
-    transport: 'fleet.missionTypeTransport', trade_route: 'fleet.missionTypeTransport',
-    passenger: 'fleet.missionTypePassenger',
-    interstellar_jump: 'fleet.missionTypeInterstellar',
-  }[type];
-  return key ? t(key) : type || '';
-}
 
 // ── Styl akcji wg typu ──────────────────────────────────────────────────────
 // Ikona + nazwa towaru/surowca (dual-locale, fallback do id)
@@ -348,23 +264,13 @@ function _drawSectionButton(ctx, x, y, w, h, label, fgColor, borderColor) {
 export class FleetManagerOverlay {
   constructor() {
     this._visible = false;
-    this._filter  = 'all';
-    this._scrollOffset = 0;       // scroll listy statków (LEFT)
     this._selectedVesselId = null;
-    this._hoverVesselId = null;
     // Player Fleet Groups (P2.5 outliner) — jedna lista z drzewem.
     //   _activeTab i _fleetScrollOffset usunięte (jeden widok, jeden scroll).
-    //   _collapsedFleets — Set<fleetId> dla collapse state per fleet. Lokalne,
-    //   nie persist między sesjami (decyzja gracza — startuj zawsze rozwinięte).
-    //   _collapsedSections — Set<'ungrouped'|'enemy'|'wreck'> dla non-fleet sekcji.
     this._selectedFleetId = null;
-    this._hoverFleetId  = null;
-    this._collapsedFleets = new Set();
-    this._collapsedSections = new Set();
     // Multi-select w drzewie — Set<vesselId>; przypisywanie do floty.
     this._multiSelectedIds = new Set();
     // ── Faza 3 (Obraz Operacyjny) — rejestr K3 (pod-widok zakładki tactical) ──
-    this._tacticalView = 'map';                 // 'map' | 'registry' (gate FEATURES.fleetRegistry)
     this._registrySort = { col: 'name', dir: 1 };
     this._registryFilter = { systemKey: null, role: null, search: '',
                              showWrecks: false, showContacts: false };   // 3f: sekcje domyślnie OFF
@@ -378,11 +284,10 @@ export class FleetManagerOverlay {
     this._timelineBarZones = [];                // hover-tooltip pasków osi
     this._regMouseX = 0; this._regMouseY = 0;
     // P2 polish — Fleet Engage pick mode: po kliku „Atak" w panelu floty,
-    // gracz wybiera enemy klikem LPM w tactical map.
+    // gracz wybiera wrogi kontakt klikiem LPM (wiersz rejestru).
     this._fleetEngagePickMode = null;  // null | { fleetId }
     this._missionConfig = null;   // null | { actionId, targetId, step:'select'|'confirm' }
     this._targetScrollOffset = 0; // scroll listy celów
-    this._mapToggles = { routes: true, range: false };
     // Zakładki „Dowództwa Taktycznego": 'tactical' | 'ground' | 'atlas' | 'logistics'.
     // Zastąpiły boole _showAtlas/_showCluster. Zakładka Stratcom (dawny star-cluster) usunięta w G5 —
     // mapa galaktyki jest trybem głównego widoku 3D (klawisz G albo M).
@@ -416,42 +321,12 @@ export class FleetManagerOverlay {
     this._cachedTargets = null;   // cache celów misji
     this._cachedTargetsKey = '';   // klucz walidacji cache
 
-    // Mapa — zoom i pan
-    this._mapZoom = 1.0;          // 1.0 = fit all, >1 = zoom in
-    this._mapPanX = 0;            // pan offset w px
-    this._mapPanY = 0;
-    this._mapBounds = null;       // { x,y,w,h } — bounds obszaru mapy (do scroll detect)
-    this._mapFocusBodyId = null;  // null = gwiazda, inaczej body.id — zoom utrzymuje focus
-    // Race fix: _focusOnHomeAtStart() wymaga _mapBounds, które dostępne dopiero
-    // w _drawCenterMap. Flaga deferuje init focusu do pierwszego draw'a po
-    // otwarciu overlay'a.
-    this._pendingFocusInit = false;
+    // Tooltip ciała pod kursorem (wiersze katalogu Atlasu — strefy 'map_body')
+    this._mapHoverBody = null;    // { bodyId, screenX, screenY } — hover info
 
-    // Tooltip ciała na mapie
-    this._mapHoverBody = null;    // { body, screenX, screenY } — hover info
-
-    // Drag do przesuwania mapy / cluster
-    this._mapDragging = false;
-    this._mapDragStartX = 0;
-    this._mapDragStartY = 0;
-    this._mapDragWasDrag = false; // odróżnienie klik od drag
-
-    // M3 P1.3.5 — view state cached przy każdym render tactical map.
-    // { mapCx, mapCy, auToPx, AU_TO_PX } — używane przez tacticalToWorld
-    // (inverse coord transform dla orderów wydawanych z tactical map).
-    // null gdy tactical map jeszcze nie renderowana (defensywny guard
-    // w handleRightClick przed first draw).
-    this._mapViewState = null;
-
-    // Reset stanu mapy przy interstellar jump — pan/zoom/focus z poprzedniego
-    // systemu nie ma sensu w nowym (inne maxOrbitAU, inne ciała).
+    // Skok międzygwiezdny — hover ciała z poprzedniego układu nie ma sensu w nowym.
     EventBus.on('system:switched', () => {
-      this._mapZoom = 1.0;
-      this._mapPanX = 0;
-      this._mapPanY = 0;
-      this._mapFocusBodyId = null;
       this._mapHoverBody = null;
-      this._pendingFocusInit = true;
     });
   }
 
@@ -459,10 +334,7 @@ export class FleetManagerOverlay {
 
   toggle() {
     this._visible = !this._visible;
-    // Defer focus init do pierwszego draw'a — _focusOnHomeAtStart wymaga
-    // _mapBounds, które dostępne dopiero w _drawCenterMap.
-    if (this._visible) this._pendingFocusInit = true;
-    else this._close();
+    if (!this._visible) this._close();
   }
   // Finding 160 — WSZYSTKIE trzy przypisania zakładki idą przez `_switchTab`, nigdy wprost.
   // POWÓD: `OverlayManager.handleKey:75-80` przy JUŻ aktywnym overlayu woła `_showOverlay` BEZ
@@ -478,29 +350,17 @@ export class FleetManagerOverlay {
   // Plan: docs/design/OVERLAY_TAB_ENTRY_PLAN.md · audyt: docs/audit/STRATCOM_110_159_160_AUDIT.md §3
   open(opts = {}) {
     this._visible = true;
-    this._pendingFocusInit = true;
     // Wybór zakładki przez wywołującego (nav itp.).
     if (opts.tab) this._switchTab(opts.tab);
-    // M4 P2 — klawisz K otwiera fleet z focusSection: 'wreck'. Przy najbliższym
-    // draw wymuszamy scroll listy do tej sekcji + auto-select pierwszy wrak.
-    // Sekcja Wraki żyje w lewym pasie (tylko zakładka taktyczna) → wymuś ją.
-    // Kolejność zachowana (plan T3=W1): `_switchTab` NIE dotyka `_pendingFocusSection` ani
-    // `_registryFilter`, więc pola intencji wejścia przeżywają przełączenie.
-    this._pendingFocusSection = opts.focusSection ?? null;
-    if (this._pendingFocusSection) this._switchTab('tactical');
-    // 3g: przy mapie 2D OFF klawisz K (sekcja wraków lewej listy) prowadzi do
-    // REJESTRU z włączonym chipem 💀 (lewa lista nie istnieje w tym trybie).
-    if (this._pendingFocusSection === 'wreck'
-        && GAME_CONFIG.FEATURES?.commandTacticalMap !== true
-        && GAME_CONFIG.FEATURES?.fleetRegistry === true) {
-      this._pendingFocusSection = null;
-      this._tacticalView = 'registry';
-      this._registryFilter.showWrecks = true;
-    }
+    // M4 P2 — klawisz K otwiera fleet z focusSection: 'wreck' → zakładka taktyczna, REJESTR z włączoną
+    // sekcją wraków (K7-pre: lewa lista mapy 2D usunięta; dawna gałąź 3g jest jedyną drogą).
+    // Kolejność zachowana (plan T3=W1): `_switchTab` NIE dotyka `_registryFilter`, więc intencja wejścia
+    // przeżywa przełączenie.
+    if (opts.focusSection) this._switchTab('tactical');
+    if (opts.focusSection === 'wreck') this._registryFilter.showWrecks = true;
     // F3: otwarcie wprost w REJESTRZE (chip 🌀 tranzytu → prefiltr transit).
-    if (opts.view === 'registry' && GAME_CONFIG.FEATURES?.fleetRegistry === true) {
+    if (opts.view === 'registry') {
       this._switchTab('tactical');
-      this._tacticalView = 'registry';
       if (opts.registrySystemKey !== undefined) {
         this._registryFilter.systemKey = opts.registrySystemKey;
       }
@@ -515,30 +375,12 @@ export class FleetManagerOverlay {
   }
   close()  { this._visible = false; this._closeRegistrySearch(); this._closeLogiQtyInput(); this._close(); }
 
-  // Przy otwarciu overlay'a — jeśli mapa w stanie domyślnym (pan=0, zoom=1),
-  // ustaw domyślne ujęcie: gwiazda w centrum (pan=0) z zoomem fit-all, przy
-  // którym ZAWSZE widać orbitę najdalszego ciała. Skala mapy normalizuje się do
-  // maxOrbitAU (najdalsza orbita × 1.15 zapasu), więc zoom=1.0 = orbita
-  // najdalszego ciała tuż przy krawędzi kadru, niezależnie od rozpiętości
-  // układu. Stan jest ustawiany tylko raz (guard) — kolejne otwarcia zachowują
-  // pan/zoom dostosowany przez gracza.
-  _focusOnHomeAtStart() {
-    if (this._mapPanX !== 0 || this._mapPanY !== 0 || this._mapZoom !== 1.0) return;
-    this._mapFocusBodyId = null;  // null = gwiazda (środek układu)
-    this._mapZoom = 1.0;          // fit-all → najdalsza orbita zawsze widoczna
-    // pan zostaje 0 → mapCx/mapCy bez offsetu → gwiazda w środku obszaru mapy
-  }
   get isVisible() { return this._visible; }
 
   _close() {
     this._missionConfig = null;
     this._targetScrollOffset = 0;
     this._cachedTargets = null;
-    // Stan mapy taktycznej (_mapZoom/Pan/FocusBodyId) NIE jest resetowany —
-    // gracz oczekuje że ujęcie zachowa się między otwarciami. Reset wymuszany
-    // tylko przy `system:switched` (interstellar jump) — patrz konstruktor.
-    this._mapDragging = false;
-    this._mapDragWasDrag = false;
     this._activeTab = 'tactical';
   }
 
@@ -554,7 +396,6 @@ export class FleetManagerOverlay {
     this._logiGoodDropdownOpen = false;
     // Wyczyść hovery wszystkich widoków
     this._mapHoverBody = null;
-    this._hoverVesselId = null;
     this._rightScrollY = 0;   // reset scrolla prawego panelu przy zmianie zakładki
     // Tryb wyboru celu misji nie może przetrwać zmiany zakładki
     if (this._missionConfig?.step === 'select') {
@@ -563,38 +404,6 @@ export class FleetManagerOverlay {
       this._cachedTargets = null;
     }
     if (tab === 'atlas') this._atlasScrollY = 0;
-  }
-
-  // Centruj mapę na ciele (AU → px pan offset)
-  // Oblicz maxOrbitAU (do skali mapy)
-  _getMaxOrbitAU() {
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    let maxAU = 1;
-    for (const p of (EntityManager.getByTypeInSystem('planet', sysId))) {
-      const a = p.orbital?.a ?? 0; if (a > maxAU) maxAU = a;
-    }
-    for (const pd of (EntityManager.getByTypeInSystem('planetoid', sysId))) {
-      const a = pd.orbital?.a ?? 0; if (a > maxAU) maxAU = a;
-    }
-    return maxAU * 1.15;
-  }
-
-  // Pozycja ciała w AU (body.x/y to px, trzeba przeliczyć)
-  _bodyAU(body) {
-    const bx = (body?.x ?? 0) / GAME_CONFIG.AU_TO_PX;
-    const by = (body?.y ?? 0) / GAME_CONFIG.AU_TO_PX;
-    return { x: bx, y: by };
-  }
-
-  _centerMapOnBody(body) {
-    const mb = this._mapBounds;
-    if (!mb) return;
-    const maxAU = this._getMaxOrbitAU();
-    const baseR = Math.min(mb.w / 2, mb.h / 2) - 20;
-    const auPx = baseR * this._mapZoom / maxAU;
-    const { x: bx, y: by } = this._bodyAU(body);
-    this._mapPanX = -bx * auPx;
-    this._mapPanY = -by * auPx;
   }
 
   // ── Główna metoda rysowania ────────────────────────────────────────────────
@@ -661,60 +470,16 @@ export class FleetManagerOverlay {
 
     // ── Zawartość zależna od aktywnej zakładki ──────────────
     if (this._activeTab === 'tactical') {
-      const centerW = ow - LEFT_W - RIGHT_W;
-
-      // Separatory kolumn (tylko w układzie 3-kolumnowym MAPY; rejestr 2.0
-      // rysuje własny separator prawego panelu niżej)
-      if (!(GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry')) {
-        ctx.strokeStyle = THEME.border;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(ox + LEFT_W, contentY); ctx.lineTo(ox + LEFT_W, contentY + contentH);
-        ctx.moveTo(ox + ow - RIGHT_W, contentY); ctx.lineTo(ox + ow - RIGHT_W, contentY + contentH);
-        ctx.stroke();
-      }
-
-      // Podział: statki gracza żywe + wrogie widoczne + wraki (osobna sekcja).
-      // Wraki gracza wypadają z sekcji "flota gracza" i lądują w sekcji WRAKI.
-      const isLiving = (v) => !v.isWreck;
-      const playerAll  = allVessels.filter(v => !isEnemyVessel(v) && isLiving(v));
-      const playerList = this._filterVessels(playerAll, activePid);
-      const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';   // aktualnie oglądany układ (jak mapa)
-      const enemyVisible = allVessels.filter(v =>
-        isEnemyVessel(v) && isLiving(v) && _isEnemyTracked(v)
-        && (v.systemId ?? 'sys_home') === sysId   // tylko wrogowie z oglądanego układu (spójność z mapą)
-      );
-      const wrecks = allVessels.filter(v => v.isWreck);
-
-      // F3 (K3): pod-widok [MAPA]/[REJESTR]. Rejestr 2.0 (3e): PEŁNA szerokość
-      // (bez lewej listy) + prawy panel poszerzony per-widok (parametr, nie
-      // zmiana globalnej stałej — _drawRight i helpery liczą z parametru w).
-      // 3g — próba deprecjacji mapy 2D: commandTacticalMap OFF → REJESTR jest
-      // jedyną treścią tactical (kod mapy NIETKNIĘTY; ON przywraca 1:1).
-      const mapAvailable = GAME_CONFIG.FEATURES?.commandTacticalMap === true
-        || GAME_CONFIG.FEATURES?.fleetRegistry !== true;   // bez rejestru mapa zawsze (guard pustki)
-      if (!mapAvailable && this._tacticalView !== 'registry') this._tacticalView = 'registry';
-      const useRegistry = GAME_CONFIG.FEATURES?.fleetRegistry === true
-        && this._tacticalView === 'registry';
-      if (useRegistry) {
-        const rightW = REGISTRY_RIGHT_W;
-        ctx.strokeStyle = THEME.border;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(ox + ow - rightW, contentY); ctx.lineTo(ox + ow - rightW, contentY + contentH);
-        ctx.stroke();
-        this._drawRegistry(ctx, ox, contentY, ow - rightW, contentH, allVessels);
-        // 3g: przełącznik tylko gdy mapa 2D w ogóle dostępna (flaga ON)
-        if (mapAvailable) this._drawTacticalViewSwitch(ctx, ox, contentY, 8);
-        this._drawRight(ctx, ox + ow - rightW, contentY, rightW, contentH, vMgr, ms, colMgr, activePid);
-      } else {
-        this._drawLeft(ctx, ox, contentY, LEFT_W, contentH, playerList, ms, enemyVisible, wrecks);
-        this._drawCenter(ctx, ox + LEFT_W, contentY, centerW, contentH, allVessels, ms);
-        if (GAME_CONFIG.FEATURES?.fleetRegistry === true) {
-          this._drawTacticalViewSwitch(ctx, ox + LEFT_W, contentY);
-        }
-        this._drawRight(ctx, ox + ow - RIGHT_W, contentY, RIGHT_W, contentH, vMgr, ms, colMgr, activePid);
-      }
+      // REJESTR 2.0 (3e): PEŁNA szerokość + prawy panel szczegółów (parametr szerokości, nie globalna
+      // stała — _drawRight i helpery liczą z parametru w). K7-pre: uśpiona mapa 2D usunięta (D-K-14/D-K-18).
+      const rightW = REGISTRY_RIGHT_W;
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ox + ow - rightW, contentY); ctx.lineTo(ox + ow - rightW, contentY + contentH);
+      ctx.stroke();
+      this._drawRegistry(ctx, ox, contentY, ow - rightW, contentH, allVessels);
+      this._drawRight(ctx, ox + ow - rightW, contentY, rightW, contentH, vMgr, ms, colMgr, activePid);
     } else if (this._activeTab === 'atlas') {
       this._drawAtlasCatalog(ctx, ox, contentY, ow, contentH, allVessels);
     } else if (this._activeTab === 'ground') {
@@ -1349,25 +1114,17 @@ export class FleetManagerOverlay {
     const b = this._bounds;
     if (mx < b.x || mx > b.x + b.w || my < b.y || my > b.y + b.h) return false;
 
-    // Jeśli to był drag mapy — nie dispatch kliknięcia
-    if (this._mapDragWasDrag) {
-      this._mapDragWasDrag = false;
-      return true;
-    }
-
-    // S3.3b-S3b — podczas wyboru celu misji (step==='select') PRIORYTET ciała/stacji nad statkiem.
+    // S3.3b-S3b — podczas wyboru celu misji (step==='select') PRIORYTET ciała nad statkiem.
     // handleClick kończy po PIERWSZEJ trafionej, a statek zone wygrywa reverse-iter — więc tu, ZANIM
-    // wejdziemy w normalną pętlę, sprawdzamy czy pod kliknięciem jest map_body/map_station i wybieramy CEL.
+    // wejdziemy w normalną pętlę, sprawdzamy czy pod kliknięciem jest map_body i wybieramy CEL.
     if (this._missionConfig?.step === 'select') {
       const tgtZone = this._hitZones.find(z =>
-        (z.type === 'map_body' || z.type === 'map_station') &&
+        z.type === 'map_body' &&
         mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h);
       if (tgtZone) { this._handleHit(tgtZone, mx, my); return true; }
     }
 
     // Szukaj hit zone (reverse — top-most first).
-    // M3 P1.3.5: map_vessel obsługiwane (selection z tactical mapy);
-    // wcześniej skipped — wybór tylko z listy po lewej.
     //
     // Finding 109 — `resolveStratcomZone` = reguła międzywarstwowa: wygrywa strefa WIERZCHNIA (ostatnia pushowana).
     // Doprecyzowanie „najbliższa gwiazda” dotyczy stref `cluster_star`, których od G5 (zakładka Stratcom usunięta)
@@ -1377,40 +1134,14 @@ export class FleetManagerOverlay {
       this._handleHit(hitZone, mx, my);
       return true;
     }
-
-    // M3 P1.3.5 — pusty obszar tactical map (nie atlas/cluster):
-    //   picker mode patrolWaypoints → addPickerWaypoint w world coords
-    //   M3 P2.3 — picker mode targetPoint → finalize via GameScene helper
-    //   inaczej → clearSelection (deselect)
-    if (this._activeTab === 'tactical' && this._mapBounds) {
-      const mb = this._mapBounds;
-      if (mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
-        const um = window.KOSMOS?.uiManager;
-        if (um?.isPickerActive?.()) {
-          const ps = um.getPickerState?.();
-          const wp = tacticalToWorld(mx, my, this._mapViewState);
-          if (wp) {
-            if (ps?.mode === 'patrolWaypoints') {
-              um.addPickerWaypoint?.({ x: wp.x, y: wp.y });
-            } else if (ps?.mode === 'targetPoint') {
-              // M3 P2.3 — single-click finalize. tactical wp już w gameplay px.
-              EventBus.emit('ui:targetPointPickerFinalize', { point: { x: wp.x, y: wp.y } });
-            }
-          }
-        } else {
-          um?.clearSelection?.();
-        }
-        return true;
-      }
-    }
     return true; // pochłoń klik w overlayu
   }
 
-  // M3 P1.5 — hover info dla universal Tooltip system. Read-only sibling
-  // do handleRightClick (NIE emituje eventu). Zwraca:
-  //   { kind: 'entity', target } — dla vessel/planet/poi sprite na tactical
+  // M3 P1.5 — hover info dla universal Tooltip system (NIE emituje eventu). Zwraca:
+  //   { kind: 'entity', target } — dla wiersza ciała w katalogu Atlasu
   //   { kind: 'uiHint', textKey } — dla hit zone z UI hint (np. cancel button)
-  //   null                          — empty / poza overlayem / przed renderem
+  //   { kind: 'none' }             — Atlas bez trafienia (bez fallbacku coord-tooltipa)
+  //   null                          — pozostałe miejsca overlayu
   resolveHoverInfo(mx, my) {
     if (!this._visible) return null;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return null;
@@ -1443,56 +1174,13 @@ export class FleetManagerOverlay {
       }
       return { kind: 'none' };
     }
-
-    // Tactical map entity hover — w obrębie _mapBounds
-    if (!this._mapBounds) return null;
-    const mb = this._mapBounds;
-    if (mx < mb.x || mx > mb.x + mb.w || my < mb.y || my > mb.y + mb.h) return null;
-    if (!this._mapViewState) return null;
-
-    const worldPoint = tacticalToWorld(mx, my, this._mapViewState);
-    const lookups = {
-      getVessel: (id) => window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null,
-      getEntity: (id) => EntityManager.get(id),
-      getPOI:    (id) => window.KOSMOS?.poiRegistry?.getPOI?.(id) ?? null,
-    };
-    const target = resolveTacticalTarget(hit, worldPoint, lookups);
-    if (!target || target.type === 'empty') return null;
-    return { kind: 'entity', target };
+    return null;
   }
 
-  // M3 P1.3.5 — handleRightClick (PPM) — emit ui:rightClickMenuOpened
-  // z target shape kompatybilnym z RightClickMenu (P1.1).
-  // Tylko w trybie tactical map (nie atlas/cluster) i tylko w `_mapBounds`.
-  // Mapa 3D układu PPM jest zablokowana przez overlayManager.isAnyOpen()
-  // w GameScene._handleTacticalRightClick (commit f2b7e75) — ten path
-  // przejmuje PPM gdy FleetOverlay otwarty.
-  handleRightClick(mx, my) {
-    if (!this._visible) return false;
-    if (!this._mapBounds) return false;
-    if (this._activeTab !== 'tactical') return false;
-    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return false;
-    const mb = this._mapBounds;
-    if (mx < mb.x || mx > mb.x + mb.w || my < mb.y || my > mb.y + mb.h) return false;
-    // Defensywnie: handleRightClick przed first render → _mapViewState=null
-    // → tacticalToWorld zwróci null → resolveTacticalTarget z worldPoint=null
-    // (target type 'empty' bez wp). Lepiej bail niż emit zły event.
-    if (!this._mapViewState) return false;
-
-    const hit = findHitZone(mx, my, this._hitZones);
-    const worldPoint = tacticalToWorld(mx, my, this._mapViewState);
-    const lookups = {
-      getVessel: (id) => window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null,
-      getEntity: (id) => EntityManager.get(id),
-      getPOI:    (id) => window.KOSMOS?.poiRegistry?.getPOI?.(id) ?? null,
-    };
-    const target = resolveTacticalTarget(hit, worldPoint, lookups);
-
-    EventBus.emit('ui:rightClickMenuOpened', {
-      target,
-      screenPoint: { x: mx, y: my },
-    });
-    return true;
+  // PPM w overlayu nie ma celu: menu PPM (`ui:rightClickMenuOpened`) otwierała tylko mapa 2D, usunięta w K7-pre.
+  // Metoda zostaje (wołana przez GameScene) i zwraca false — jak dotąd poza obszarem mapy.
+  handleRightClick() {
+    return false;
   }
 
   handleScroll(delta, mx, my) {
@@ -1564,86 +1252,35 @@ export class FleetManagerOverlay {
       return true;
     }
 
-    // ── TACTICAL — 3 kolumny ─────────────────────────────────
-    // F3 REJESTR: scroll tabeli / zoom osi czasu (pivot = rok pod kursorem).
-    if (GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry') {
-      const r = this._registryRects;
-      if (r && inRect(r.timeline) && this._timelineYears) {
-        const vp = { ...this._timelineYears, x0: r.timeline.vx0, x1: r.timeline.vx1 };
-        const nv = zoomViewport(vp, delta > 0 ? 1.2 : 0.83, xToYear(mx, vp));
-        this._timelineYears = { startYear: nv.startYear, endYear: nv.endYear };
-        return true;
-      }
-      if (r && inRect(r.table)) {
-        this._registryScroll = Math.max(0, this._registryScroll + delta * 0.5);
-        return true;
-      }
-    }
-    // Scroll w LEFT (jedna lista drzewa — outliner P2.5).
-    if (mx < b.x + LEFT_W) {
-      this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
+    // ── TACTICAL (REJESTR) — scroll tabeli / zoom osi czasu (pivot = rok pod kursorem) ──
+    const r = this._registryRects;
+    if (r && inRect(r.timeline) && this._timelineYears) {
+      const vp = { ...this._timelineYears, x0: r.timeline.vx0, x1: r.timeline.vx1 };
+      const nv = zoomViewport(vp, delta > 0 ? 1.2 : 0.83, xToYear(mx, vp));
+      this._timelineYears = { startYear: nv.startYear, endYear: nv.endYear };
       return true;
     }
-    // Scroll w RIGHT (panel szczegółów statku/floty) — obejmuje TAKŻE konfigurator
-    // misji (krok 'select' i 'confirm'): picker celów jest rysowany jako część
-    // przewijalnej treści panelu, więc jeden `_rightScrollY` przewija całość.
-    // Szerokość prawego panelu zależy od widoku: REJESTR jest szerszy (300) niż
-    // mapa (200) — bez tego lewe ~100 px panelu rejestru nie łapało scrolla.
-    const _effRightW = (GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry')
-      ? REGISTRY_RIGHT_W : RIGHT_W;
-    if (mx > b.x + b.w - _effRightW && (this._selectedVesselId || this._selectedFleetId)) {
+    if (r && inRect(r.table)) {
+      this._registryScroll = Math.max(0, this._registryScroll + delta * 0.5);
+      return true;
+    }
+    // Scroll w RIGHT (panel szczegółów statku/floty, szerokość REJESTRU) — obejmuje TAKŻE konfigurator
+    // misji (krok 'select' i 'confirm'): picker celów jest rysowany jako część przewijalnej treści
+    // panelu, więc jeden `_rightScrollY` przewija całość.
+    if (mx > b.x + b.w - REGISTRY_RIGHT_W && (this._selectedVesselId || this._selectedFleetId)) {
       this._applyRightScroll(delta);
       return true;
-    }
-    // Zoom-at-cursor mapy taktycznej
-    const mb = this._mapBounds;
-    if (mb && mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
-      // world point pod kursorem (mx, my) ma pozostać pod kursorem po zmianie
-      // zoomu. Math zsynchronizowana z _drawCenterMap:
-      //   mapCx = mb.x + mb.w/2 + panX  (analogicznie mapCy)
-      //   bodyScreen = bodyAU * auToPx + mapCx
-      const oldZoom = this._mapZoom;
-      const newZoom = Math.max(0.3, Math.min(300, oldZoom * (delta > 0 ? 0.85 : 1.18)));
-      if (newZoom === oldZoom) return true;  // clamp hit — pan bez zmian
-
-      const baseR = Math.min(mb.w / 2, mb.h / 2) - 20;
-      const maxAU = this._getMaxOrbitAU();
-      const oldAuToPx = baseR * oldZoom / maxAU;
-      const newAuToPx = baseR * newZoom / maxAU;
-
-      const oldMapCx = mb.x + mb.w / 2 + this._mapPanX;
-      const oldMapCy = mb.y + mb.h / 2 + this._mapPanY;
-      const worldAU_x = (mx - oldMapCx) / oldAuToPx;
-      const worldAU_y = (my - oldMapCy) / oldAuToPx;
-
-      this._mapZoom = newZoom;
-      this._mapPanX = mx - (mb.x + mb.w / 2) - worldAU_x * newAuToPx;
-      this._mapPanY = my - (mb.y + mb.h / 2) - worldAU_y * newAuToPx;
     }
     return true;
   }
 
-  handleMouseDown(mx, my) {
-    if (!this._visible) return false;
-    const inRect = (r) => r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
-
-    // Tactical — pan mapy taktycznej (w _mapBounds).
-    if (this._activeTab === 'tactical' && inRect(this._mapBounds)) {
-      this._mapDragging = true;
-      this._mapDragStartX = mx;
-      this._mapDragStartY = my;
-      this._mapDragWasDrag = false;
-      return true;
-    }
+  // Przeciąganie myszą nie ma celu w overlayu (pan mapy 2D usunięty w K7-pre); metody zostają, bo woła je
+  // dyspozytor wejścia — zwracają false jak dotąd poza obszarem mapy.
+  handleMouseDown() {
     return false;
   }
 
-  handleMouseUp(mx, my) {
-    if (this._mapDragging) {
-      this._mapDragging = false;
-      // Jeśli to był drag (nie klik) — pochłoń event
-      if (this._mapDragWasDrag) return true;
-    }
+  handleMouseUp() {
     return false;
   }
 
@@ -1653,29 +1290,10 @@ export class FleetManagerOverlay {
     // K7-A — strefa pod kursorem (podświetlenia czipów nagłówka i akcji konsoli); ta sama reguła wierzchniej strefy co klik
     if (kitOn()) this._kitHoverZone = resolveStratcomZone(this._hitZones, mx, my) ?? null;
 
-    // Drag mapy taktycznej
-    if (this._mapDragging) {
-      const dx = mx - this._mapDragStartX;
-      const dy = my - this._mapDragStartY;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) this._mapDragWasDrag = true;
-      this._mapPanX += dx;
-      this._mapPanY += dy;
-      this._mapDragStartX = mx;
-      this._mapDragStartY = my;
-      return;
-    }
-
-    // Hover na statku w LEFT
-    this._hoverVesselId = null;
-    for (const z of this._hitZones) {
-      if (mx < z.x || mx > z.x + z.w || my < z.y || my > z.y + z.h) continue;
-      if (z.type === 'vessel') { this._hoverVesselId = z.data.vesselId; break; }
-    }
-    // Hover na ciele na mapie
+    // Hover na ciele (wiersze katalogu Atlasu)
     this._mapHoverBody = null;
     // ⚠ map_body ZOSTAJE pierwszo-trafieniowy (decyzja E4). Ma tę samą klasę rozjazdu co gwiazdy
-    //   (Finding 159), ale dotyczy głównej mapy taktycznej i nie był mierzony — nie ruszamy go
-    //   przy okazji.
+    //   (Finding 159) — nie ruszamy go przy okazji.
     for (const z of this._hitZones) {
       if (z.type === 'map_body' && mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
         this._mapHoverBody = { bodyId: z.data.bodyId, screenX: z.x + z.w / 2, screenY: z.y + z.h };
@@ -1716,31 +1334,8 @@ export class FleetManagerOverlay {
       case 'close':
         this.close();
         break;
-      // ── Player Fleet Groups (P2.5 outliner) ────────────────────────────
-      case 'fleetSectionToggle': {
-        // Toggle collapse fleet section
-        const fid = zone.data.fleetId;
-        if (this._collapsedFleets.has(fid)) this._collapsedFleets.delete(fid);
-        else this._collapsedFleets.add(fid);
-        break;
-      }
-      case 'sectionToggle': {
-        // Toggle collapse non-fleet section (ungrouped/enemy/wreck)
-        const key = zone.data.sectionKey;
-        if (this._collapsedSections.has(key)) this._collapsedSections.delete(key);
-        else this._collapsedSections.add(key);
-        break;
-      }
-      case 'fleetSectionSelect': {
-        // Klik wiersza floty → select fleet (mutex: clear vessel selection).
-        const um = window.KOSMOS?.uiManager;
-        const next = (this._selectedFleetId === zone.data.fleetId) ? null : zone.data.fleetId;
-        if (um?.setSelectedFleetId) um.setSelectedFleetId(next);
-        else this._selectedFleetId = next;
-        // Mutex — clear vessel selection (fleet wygrywa context).
-        if (next && um?.setSelectedVesselId) um.setSelectedVesselId(null);
-        break;
-      }
+      // ── Player Fleet Groups ────────────────────────────────────────────
+      // `fleetCreate` / `fleetDisband` zostają: akcje domeny (producentem była lewa lista mapy 2D — Finding 747).
       case 'fleetCreate':
         this._handleCreateFleet();
         break;
@@ -1789,10 +1384,6 @@ export class FleetManagerOverlay {
         break;
       }
       // ── F3 (rejestr K3) ──────────────────────────────────────────────────
-      case 'tacticalView':
-        this._tacticalView = zone.data.view;
-        if (zone.data.view !== 'registry') this._closeRegistrySearch();
-        break;
       case 'registrySort':
         if (this._registrySort.col === zone.data.col) this._registrySort.dir *= -1;
         else this._registrySort = { col: zone.data.col, dir: 1 };
@@ -1874,10 +1465,6 @@ export class FleetManagerOverlay {
         break;
       // C8 — build_ship (martwe) / build_template / surge_ship / cancel_pending_ship
       // przeniesione do ShipyardOverlay (osobny overlay). Producenci hitów usunięci z FMO.
-      case 'filter':
-        this._filter = zone.data.filterId;
-        this._scrollOffset = 0;
-        break;
       case 'vessel': {
         // P2 polish — Fleet Engage pick mode: jeśli aktywny i klik na enemy
         // vessel → fire fleet engage order, exit pick mode.
@@ -1930,19 +1517,6 @@ export class FleetManagerOverlay {
         this._cachedTargets = null;
         window.KOSMOS?.overlayManager?.openPanel('shipyard');
         break;
-      case 'map_station': {
-        // S3.4-F2 — klik stacji na mapie taktycznej: wybór celu (gdy konfigurator) lub selekcja
-        // stacji (dual-emit station:selected/focus, wzór ThreeRenderer.handleClick — bez body:selected).
-        if (this._missionConfig?.step === 'select') {
-          this._missionConfig.targetId = zone.data.stationId;
-          this._missionConfig.step = 'confirm';
-          this._mapHoverBody = null;
-          break;
-        }
-        EventBus.emit('station:selected', { stationId: zone.data.stationId });
-        EventBus.emit('station:focus', { stationId: zone.data.stationId });
-        break;
-      }
       case 'map_body': {
         // Gdy konfigurator aktywny i czeka na cel → wybierz cel z mapy
         if (this._missionConfig?.step === 'select') {
@@ -1959,39 +1533,11 @@ export class FleetManagerOverlay {
             vesselId: this._selectedVesselId,
             targetId: zone.data.bodyId,
           });
-          this._mapFocusBodyId = zone.data.bodyId;
           this._mapHoverBody = null;
           break;
         }
-        // Ustaw focus na klikniętym ciele (zoom + centruj mapę)
-        this._mapFocusBodyId = zone.data.bodyId;
         const bodyEntity = _findBody(zone.data.bodyId);
-        if (bodyEntity) {
-          EventBus.emit('body:selected', { entity: bodyEntity });
-          this._centerMapOnBody(bodyEntity);
-          // Auto-zoom — planeta/księżyc klik → wskocz do zoomu który pokazuje
-          // ciało + jego księżyce/satelity. Dla planety ~zoom 40 (widok ~2 AU).
-          // Dla księżyca/planetoida ~zoom 120 (widok ~0.2 AU).
-          if (bodyEntity.type === 'planet') {
-            this._mapZoom = Math.max(this._mapZoom, 40);
-          } else if (bodyEntity.type === 'moon' || bodyEntity.type === 'planetoid') {
-            this._mapZoom = Math.max(this._mapZoom, 120);
-          }
-        }
-        break;
-      }
-      case 'map_station': {
-        // S3.3b-S3b — wybór STACJI jako cel misji (transport→HUB). Podczas wyboru celu → targetId+confirm.
-        if (this._missionConfig?.step === 'select') {
-          this._missionConfig.targetId = zone.data.stationId;
-          this._missionConfig.step = 'confirm';
-          this._mapHoverBody = null;
-          break;
-        }
-        // Poza trybem wyboru — focus na ciele macierzystym stacji.
-        this._mapFocusBodyId = zone.data.bodyId;
-        const stBody = _findBody(zone.data.bodyId);
-        if (stBody) { EventBus.emit('body:selected', { entity: stBody }); this._centerMapOnBody(stBody); }
+        if (bodyEntity) EventBus.emit('body:selected', { entity: bodyEntity });
         break;
       }
       case 'atlas_report': {
@@ -2002,51 +1548,6 @@ export class FleetManagerOverlay {
         }
         break;
       }
-      case 'map_vessel': {
-        // S3.3b-S3b — klik w statek W PUSTCE podczas wyboru celu (brak ciała/stacji pod spodem — Fix A
-        // już obsłużył nakładanie) → ignoruj, NIE selekcjonuj (nie podmieniaj wybranego statku w trakcie misji).
-        if (this._missionConfig?.step === 'select') break;
-        // P2 polish — Fleet Engage pick mode (tactical map LPM na enemy).
-        // Bug fix (jak case 'vessel'): klik na własny → cancel pick mode + select.
-        if (this._fleetEngagePickMode?.fleetId) {
-          const v = window.KOSMOS?.vesselManager?.getVessel?.(zone.data.vesselId);
-          if (v && isEnemyVessel(v)) {
-            const fleetId = this._fleetEngagePickMode.fleetId;
-            this._fleetEngagePickMode = null;
-            const fs = window.KOSMOS?.fleetSystem;
-            const res = fs?.issueFleetOrder?.(fleetId, {
-              type: 'engage',
-              targetEntityId: zone.data.vesselId,
-            });
-            this._announceFleetOrderResult(res, fleetId, 'engage');
-            break;
-          }
-          // Klik na własny → cancel pick mode, fall-through do select.
-          this._fleetEngagePickMode = null;
-          EventBus.emit('ui:toast', { text: t('fleet.engageCancelled'), color: '#808080', durationMs: 1500 });
-        }
-        this._setSelectedVesselViaUI(zone.data.vesselId);
-        // P2.5 mutex — klik vessela na tactical map też czyści fleet selection.
-        const umMV = window.KOSMOS?.uiManager;
-        if (umMV?.setSelectedFleetId) umMV.setSelectedFleetId(null);
-        this._missionConfig = null;
-        break;
-      }
-      case 'home_focus': {
-        // Powrót do widoku "nasza planeta + księżyce" — reset pan + zoom 40 + center
-        const home = window.KOSMOS?.homePlanet;
-        if (home) {
-          this._mapFocusBodyId = home.id;
-          this._mapPanX = 0;
-          this._mapPanY = 0;
-          this._mapZoom = 40;
-          this._centerMapOnBody(home);
-        }
-        break;
-      }
-      case 'map_toggle':
-        this._mapToggles[zone.data.key] = !this._mapToggles[zone.data.key];
-        break;
       case 'tab':
         this._switchTab(zone.data.tab);
         break;
@@ -2154,11 +1655,6 @@ export class FleetManagerOverlay {
         const ssMgr = window.KOSMOS?.starSystemManager;
         if (ssMgr && zone.data.systemId) {
           ssMgr.switchActiveSystem(zone.data.systemId);
-          // Reset tactical map po przełączeniu układu
-          this._mapZoom = 1.0;
-          this._mapPanX = 0;
-          this._mapPanY = 0;
-          this._mapFocusBodyId = null;
           this._mapHoverBody = null;
           // Przełącz na zakładkę taktyki żeby gracz widział nowy układ
           this._activeTab = 'tactical';
@@ -2283,9 +1779,6 @@ export class FleetManagerOverlay {
       }
       // (duplikat map_body usunięty — obsługa w pierwszym case powyżej)
       case 'map_planet': {
-        this._mapFocusBodyId = zone.data.planetId;
-        const planetEntity = _findBody(zone.data.planetId);
-        if (planetEntity) this._centerMapOnBody(planetEntity);
         EventBus.emit('camera:focusTarget', { targetId: zone.data.planetId });
         break;
       }
@@ -2805,758 +2298,9 @@ export class FleetManagerOverlay {
     reg.updatePOI(rallyId, { memberVesselIds: next });
   }
 
-  // ── Filtrowanie statków ───────────────────────────────────────────────────
-
-  _filterVessels(allVessels, activePid) {
-    if (this._filter === 'all') return allVessels;
-    if (this._filter === 'here') {
-      return allVessels.filter(v => v.colonyId === activePid);
-    }
-    return allVessels.filter(v => v.shipId === this._filter);
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // LEFT — lista statków
-  // ══════════════════════════════════════════════════════════════════════════
-
-  _drawLeft(ctx, x, y, w, h, vessels, ms, enemyVessels = [], wrecks = []) {
-    const pad = 8;
-    // P2.5 outliner — jedna lista, sekcje per flota + Bez floty + Wrogie + Wraki.
-    // tabH usunięty (brak zakładek). _activeTab obsolete.
-    const flagOn = !!GAME_CONFIG.FEATURES?.playerFleets;
-    const tabH = 0;
-    // Wiersz statku gracza ma STAŁĄ wysokość — niezależnie od stanu (docked/orbiting/in_transit)
-    // i wyposażenia (Komora Warp). Miejsce na WSZYSTKIE pola (nazwa + paliwo + pasek warp +
-    // status + ETA) jest zarezerwowane na sztywno, nawet gdy dane pole akurat nie występuje.
-    // Wcześniej wysokość zależała od stanu (34 vs 52 px) i od baku warp (+8 px) → każdy start
-    // i każde zadokowanie zmieniało wysokość kafla i cała lista poniżej „skakała".
-    const ROW_PLAYER = 52;  // = dawny ROW_FLIGHT (kalibracja bez zmian: nazwa+paliwo, status, ETA)
-    const ROW_ENEMY  = 34;  // nazwa + typ + odległość — bez paliwa/ETA (nie znamy)
-    const ROW_WRECK  = 30;  // nazwa + "wrak" + rok zniszczenia
-    const SECTION_H  = 22;  // header sekcji (lekko większy dla buttonów floty)
-    const ENEMY_COLOR = '#ff4466';
-    const WRECK_COLOR = '#808080';
-
-    // Helper: wysokość wiersza per vessel (JEDNO źródło: scroll-total, focus-offset i draw-loop
-    // liczą z niego tak samo). Statki gracza mają jedną stałą wysokość — patrz ROW_PLAYER.
-    const _rowHForVessel = (v) => {
-      if (v.isWreck) return ROW_WRECK;
-      if (isEnemyVessel(v)) return ROW_ENEMY;
-      return ROW_PLAYER;
-    };
-
-    // M3 P3.1 — cache vesselId→rallyName mapping (per draw) dla LEFT panel indicator.
-    // Avoid N×M lookup w pętli wierszy (jeden skan rally POI raz, lookup O(1)).
-    const _rallyByVesselId = new Map();
-    const _reg = window.KOSMOS?.poiRegistry;
-    if (_reg?.listPOIs) {
-      for (const r of _reg.listPOIs({ type: 'rally' }) ?? []) {
-        for (const vid of (r.memberVesselIds ?? [])) {
-          _rallyByVesselId.set(vid, r.name ?? '?');
-        }
-      }
-    }
-
-    // ── Nagłówek (h=36) ──────────────────────────────────────
-    ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('fleet.header') + ` [${vessels.length}]`, x + pad, y + 22);
-
-    // ── ＋ Nowa flota button (P2.5 — zawsze widoczny gdy flagOn) ──────────
-    let preListY = y + 36;
-    if (flagOn) {
-      const newBtnH = 20;
-      ctx.fillStyle = 'rgba(0,255,180,0.10)';
-      ctx.fillRect(x + pad, preListY, w - pad * 2, newBtnH);
-      ctx.strokeStyle = THEME.borderActive;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + pad, preListY, w - pad * 2, newBtnH);
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.accent;
-      ctx.textAlign = 'center';
-      ctx.fillText('＋ ' + t('fleet.newFleet'), x + w / 2, preListY + 14);
-      ctx.textAlign = 'left';
-      this._hitZones.push({ x: x + pad, y: preListY, w: w - pad * 2, h: newBtnH, type: 'fleetCreate', data: {} });
-      preListY += newBtnH + 4;
-    }
-
-    // ── Filtry (h=28) ────────────────────────────────────────
-    const filterY = preListY;
-    let fx = x + pad;
-    for (const btn of _getFilterBtns()) {
-      const active = this._filter === btn.id;
-      const tw = ctx.measureText(btn.label).width + 8;
-      const bw = Math.max(tw, 22);
-      if (fx + bw > x + w - pad) break;
-
-      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : THEME.bgTertiary;
-      ctx.fillRect(fx, filterY, bw, 18);
-      ctx.strokeStyle = active ? THEME.accent : THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(fx, filterY, bw, 18);
-
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
-      ctx.fillText(btn.label, fx + 4, filterY + 13);
-
-      this._hitZones.push({ x: fx, y: filterY, w: bw, h: 18, type: 'filter', data: { filterId: btn.id } });
-      fx += bw + 2;
-    }
-
-    // ── P2.5 outliner — grupowanie player vessels po fleetId ─────────────
-    const fSys = window.KOSMOS?.fleetSystem;
-    const fleets = (flagOn && fSys?.listFleets) ? fSys.listFleets() : [];
-    const byFleet = new Map();         // fleetId → vessel[]
-    const ungrouped = [];
-    for (const v of vessels) {
-      if (flagOn && v.fleetId && fSys?.getFleet?.(v.fleetId)) {
-        if (!byFleet.has(v.fleetId)) byFleet.set(v.fleetId, []);
-        byFleet.get(v.fleetId).push(v);
-      } else {
-        ungrouped.push(v);
-      }
-    }
-
-    // Sekcje — kolejność: per fleet (createdYear asc) → Bez floty → Wrogie → Wraki.
-    const sections = [];
-    for (const fleet of fleets) {
-      sections.push({
-        key:         `fleet_${fleet.id}`,
-        sectionType: 'fleet',
-        fleet,
-        label:       fleet.name,
-        color:       THEME.accent,
-        vessels:     byFleet.get(fleet.id) ?? [],
-      });
-    }
-    if (flagOn) {
-      // Bez floty zawsze widoczna gdy flagOn (nawet pusta — info dla gracza)
-      sections.push({
-        key:         'ungrouped',
-        sectionType: 'special',
-        label:       t('fleet.sectionUngrouped'),
-        color:       THEME.textSecondary,
-        vessels:     ungrouped,
-      });
-    } else {
-      // Legacy fallback bez flagi — wszystkie player vessels jako "Bez floty"
-      if (ungrouped.length > 0) {
-        sections.push({
-          key: 'ungrouped', sectionType: 'special',
-          label: t('fleet.sectionUngrouped'),
-          color: THEME.textSecondary,
-          vessels: ungrouped,
-        });
-      }
-    }
-    sections.push({
-      key: 'enemy', sectionType: 'special',
-      label: 'WROGIE JEDNOSTKI', color: ENEMY_COLOR, vessels: enemyVessels,
-    });
-    sections.push({
-      key: 'wreck', sectionType: 'special',
-      label: 'WRAKI', color: WRECK_COLOR, vessels: wrecks,
-    });
-
-    // Helper: czy sekcja zwinięta
-    const _isCollapsed = (sec) => {
-      if (sec.sectionType === 'fleet') return this._collapsedFleets.has(sec.fleet.id);
-      return this._collapsedSections.has(sec.key);
-    };
-
-    // Oblicz łączną wysokość contentu (uwzględnia collapse)
-    let totalContentH = 0;
-    for (const sec of sections) {
-      if (sec.vessels.length === 0 && sec.sectionType !== 'fleet') continue;
-      // Fleet sections renderują się nawet puste (gracz musi widzieć flotę bez statków)
-      if (sec.sectionType === 'fleet' && sec.vessels.length === 0 && !_isCollapsed(sec)) {
-        totalContentH += SECTION_H + 18;  // header + "brak statków" hint row
-        continue;
-      }
-      totalContentH += SECTION_H;
-      if (!_isCollapsed(sec)) {
-        for (const v of sec.vessels) totalContentH += _rowHForVessel(v);
-      }
-    }
-
-    // ── Lista scrollowalna ───────────────────────────────────
-    // Player Fleet Groups (P1) — pasek multi-select gdy są zaznaczone vessele.
-    const multiCount = this._multiSelectedIds.size;
-    const showAssignBar = flagOn && multiCount > 0;
-    const assignBarH = showAssignBar ? 24 : 0;
-    const multiBarY = filterY + 22;
-    if (showAssignBar) {
-      const barY = multiBarY;
-      ctx.fillStyle = 'rgba(0,255,180,0.10)';
-      ctx.fillRect(x + pad, barY, w - pad * 2, 22);
-      ctx.strokeStyle = THEME.borderActive;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + pad, barY, w - pad * 2, 22);
-      // "Przypisz (N) ▼" — lewa część (klik otwiera DOM popup)
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.accent;
-      const assignLabel = t('fleet.assignSelectedTo') + ` (${multiCount}) ▼`;
-      ctx.fillText(assignLabel, x + pad + 6, barY + 15);
-      const labelW = ctx.measureText(assignLabel).width + 8;
-      this._hitZones.push({ x: x + pad, y: barY, w: labelW, h: 22, type: 'fleetAssignMenuOpen', data: {} });
-      // ✕ Wyczyść — prawy róg
-      ctx.fillStyle = THEME.danger;
-      ctx.textAlign = 'right';
-      ctx.fillText('✕', x + w - pad - 6, barY + 15);
-      ctx.textAlign = 'left';
-      this._hitZones.push({ x: x + w - pad - 18, y: barY, w: 14, h: 22, type: 'fleetClearMultiSelect', data: {} });
-    }
-    const listY = filterY + 22 + assignBarH + 4;
-    const listH = h - (listY - y);
-
-    // M4 P2 — focusSection: scroll do sekcji + auto-select pierwszy element.
-    // open({ focusSection: 'wreck' }) ustawia _pendingFocusSection; tu w pierwszym
-    // draw obliczamy offset (suma poprzednich sekcji) i wybieramy pierwszy wrak.
-    if (this._pendingFocusSection) {
-      const target = this._pendingFocusSection;
-      let offset = 0;
-      let foundSec = null;
-      for (const sec of sections) {
-        if (sec.key === target) { foundSec = sec; break; }
-        if (sec.vessels.length === 0 && sec.sectionType !== 'fleet') continue;
-        offset += SECTION_H;
-        if (!_isCollapsed(sec)) {
-          for (const v of sec.vessels) offset += _rowHForVessel(v);
-        }
-      }
-      if (foundSec && foundSec.vessels.length > 0) {
-        this._scrollOffset = Math.min(offset, Math.max(0, totalContentH - listH));
-        const first = foundSec.vessels[0];
-        this._setSelectedVesselViaUI(first.id);
-        EventBus.emit('vessel:focus', { vesselId: first.id });
-      }
-      this._pendingFocusSection = null;
-    }
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, listY, w, listH);
-    ctx.clip();
-
-    let ry = listY - this._scrollOffset;
-
-    for (const sec of sections) {
-      const isCollapsed = _isCollapsed(sec);
-      // Pomiń puste special sections (enemy/wreck/ungrouped legacy bez flagOn).
-      // Fleet sections renderują się nawet puste — gracz widzi że ma flotę bez statków.
-      if (sec.vessels.length === 0 && sec.sectionType !== 'fleet') continue;
-      if (sec.sectionType === 'fleet' && sec.vessels.length === 0
-          && !flagOn) continue;  // legacy safety
-
-      // ── Nagłówek sekcji (z toggle + actions per typ) ──
-      if (ry + SECTION_H > listY - 2 && ry < listY + listH + 2) {
-        const isSelFleet = sec.sectionType === 'fleet'
-          && this._selectedFleetId === sec.fleet.id;
-        ctx.fillStyle = isSelFleet ? 'rgba(0,255,180,0.10)' : 'rgba(20,30,45,0.8)';
-        ctx.fillRect(x, ry, w, SECTION_H);
-        if (isSelFleet) {
-          ctx.fillStyle = THEME.accent;
-          ctx.fillRect(x, ry, 2, SECTION_H);
-        }
-        ctx.strokeStyle = sec.color; ctx.lineWidth = 1; ctx.globalAlpha = 0.35;
-        ctx.beginPath(); ctx.moveTo(x + pad, ry + SECTION_H - 1); ctx.lineTo(x + w - pad, ry + SECTION_H - 1); ctx.stroke();
-        ctx.globalAlpha = 1.0;
-        // Toggle arrow ▾/▸
-        const arrow = isCollapsed ? '▸' : '▾';
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = sec.color;
-        ctx.fillText(arrow, x + pad, ry + 15);
-        this._hitZones.push({
-          x: x + pad - 2, y: ry, w: 14, h: SECTION_H,
-          type: sec.sectionType === 'fleet' ? 'fleetSectionToggle' : 'sectionToggle',
-          data: sec.sectionType === 'fleet' ? { fleetId: sec.fleet.id } : { sectionKey: sec.key },
-        });
-        // Label (truncated do dostępnej szerokości)
-        ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = sec.color;
-        const rightBtnW = sec.sectionType === 'fleet' ? 22 : 0;  // miejsce na ✕
-        const labelMaxW = w - pad * 2 - 14 - 28 - rightBtnW;
-        let label = sec.label;
-        while (label.length > 4 && ctx.measureText(label).width > labelMaxW) {
-          label = label.slice(0, -2) + '…';
-        }
-        ctx.fillText(label, x + pad + 14, ry + 14);
-        // [count] po prawej + (dla floty) doktryna + ✕
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        if (sec.sectionType === 'fleet') {
-          // ✕ disband
-          ctx.fillStyle = THEME.danger;
-          const xBtnX = x + w - pad - 8;
-          ctx.fillText('✕', xBtnX, ry + 14);
-          this._hitZones.push({
-            x: xBtnX - 4, y: ry, w: 16, h: SECTION_H,
-            type: 'fleetDisband', data: { fleetId: sec.fleet.id },
-          });
-          // [count] przed ✕
-          ctx.fillStyle = THEME.textDim;
-          ctx.textAlign = 'right';
-          ctx.fillText(`[${sec.vessels.length}]`, xBtnX - 14, ry + 14);
-          ctx.textAlign = 'left';
-        } else {
-          ctx.fillStyle = THEME.textDim;
-          ctx.textAlign = 'right';
-          ctx.fillText(`${sec.vessels.length}`, x + w - pad, ry + 14);
-          ctx.textAlign = 'left';
-        }
-        // Klik wiersza floty (poza toggle/disband) → select fleet
-        if (sec.sectionType === 'fleet') {
-          this._hitZones.push({
-            x: x + pad + 14, y: ry, w: w - pad * 2 - 14 - 22, h: SECTION_H,
-            type: 'fleetSectionSelect', data: { fleetId: sec.fleet.id },
-          });
-        }
-      }
-      ry += SECTION_H;
-
-      // Fleet bez statków + nie zwinięta → hint row
-      if (sec.sectionType === 'fleet' && sec.vessels.length === 0 && !isCollapsed) {
-        if (ry + 18 > listY && ry < listY + listH) {
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textDim;
-          ctx.textAlign = 'center';
-          ctx.fillText(t('fleet.fleetMembersEmpty'), x + w / 2, ry + 13);
-          ctx.textAlign = 'left';
-        }
-        ry += 18;
-        continue;
-      }
-      // Sekcja zwinięta → pomiń wiersze (header był renderowany wyżej).
-      if (isCollapsed) continue;
-
-      // ── Wiersze statków ──
-      for (const vessel of sec.vessels) {
-        const rH = _rowHForVessel(vessel);
-        if (ry + rH < listY) { ry += rH; continue; }
-        if (ry > listY + listH) { ry += rH; continue; }
-
-        const selected = vessel.id === this._selectedVesselId;
-        const hovered  = vessel.id === this._hoverVesselId;
-
-        if (selected) {
-          ctx.fillStyle = sec.key === 'enemy' ? 'rgba(255,68,102,0.12)' : 'rgba(0,255,180,0.06)';
-          ctx.fillRect(x, ry, w, rH);
-          ctx.fillStyle = sec.key === 'enemy' ? ENEMY_COLOR : THEME.accent;
-          ctx.fillRect(x, ry, 2, rH);
-        } else if (hovered) {
-          ctx.fillStyle = sec.key === 'enemy' ? 'rgba(255,68,102,0.06)' : 'rgba(0,255,180,0.03)';
-          ctx.fillRect(x, ry, w, rH);
-        }
-
-        // ── Wrak: minimalny wiersz (ikona + nazwa + rok zniszczenia) ──
-        if (sec.key === 'wreck') {
-          const shipW = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
-          const iconW = '💀';
-          ctx.font = `13px ${THEME.fontFamily}`;
-          ctx.fillStyle = selected ? '#c8c8c8' : WRECK_COLOR;
-          const vNameW = (vessel.name ?? '?').length > 12 ? vessel.name.slice(0, 11) + '…' : vessel.name;
-          ctx.fillText(`${iconW} ${vNameW}`, x + pad, ry + 14);
-
-          const ownerIsEnemy = isEnemyVessel(vessel);
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textDim;
-          ctx.textAlign = 'right';
-          ctx.fillText(ownerIsEnemy ? 'wrogi' : 'nasz', x + w - pad, ry + 13);
-          ctx.textAlign = 'left';
-
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textDim;
-          const wyear = vessel.wreckedAt != null ? `rok ${Math.floor(vessel.wreckedAt)}` : '?';
-          ctx.fillText(`zniszczony: ${wyear}`, x + pad + 2, ry + 26);
-
-          ctx.strokeStyle = 'rgba(128,128,128,0.18)';
-          ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
-          this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
-          ry += rH;
-          // ── M4 P2 — Battle report w expanded selected wrak row ──
-          // Zniszczony w bitwie b_XX (rok YYYY) • strona A:N vs B:N
-          if (selected && vessel.lastBattleId) {
-            const expandH = 36;
-            ctx.fillStyle = 'rgba(0,0,0,0.30)';
-            ctx.fillRect(x + pad, ry, w - 2 * pad, expandH);
-            ctx.strokeStyle = 'rgba(128,128,128,0.14)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(x + pad + 0.5, ry + 0.5, w - 2 * pad - 1, expandH - 1);
-            const ws  = window.KOSMOS?.warSystem;
-            const rec = ws?.getBattleRecord?.(vessel.lastBattleId);
-            ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-            if (rec) {
-              const aCount = rec.participantA?.count ?? rec.participantA?.vesselIds?.length ?? '?';
-              const bCount = rec.participantB?.count ?? rec.participantB?.vesselIds?.length ?? '?';
-              const yrLabel = rec.year != null ? Math.floor(rec.year) : '?';
-              ctx.fillStyle = THEME.textSecondary;
-              ctx.fillText(`⚔ ${t('fleet.battleHeader', yrLabel)}`, x + pad + 6, ry + 13);
-              ctx.fillStyle = THEME.textDim;
-              ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-              ctx.fillText(`A:${aCount} vs B:${bCount} • ${t('fleet.battleResult')}: ${rec.winner ?? '?'}`,
-                           x + pad + 6, ry + 27);
-            } else {
-              ctx.fillStyle = THEME.textDim;
-              ctx.fillText(t('fleet.battleNoRecord'), x + pad + 6, ry + 18);
-            }
-            ry += expandH;
-          }
-          continue;
-        }
-
-        // ── Wrogi statek: uproszczony wiersz (nazwa + typ + odległość) ──
-        if (sec.key === 'enemy') {
-          const ship2 = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
-          const icon2 = ship2?.icon ?? '⚔';
-          ctx.font = `13px ${THEME.fontFamily}`;
-          ctx.fillStyle = selected ? '#ffd0d8' : ENEMY_COLOR;
-          const vName2 = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
-          const inCombatE = _isVesselInCombat(vessel.id);
-          const combatBadgeE = inCombatE ? ' ⚔' : '';
-          ctx.fillText(`${icon2} ${vName2}${combatBadgeE}`, x + pad, ry + 14);
-
-          // Dystans do najbliższej planety gracza (euclidean AU)
-          const home = window.KOSMOS?.homePlanet;
-          let distLabel = '—';
-          if (home) {
-            const d = DistanceUtils.euclideanAU(
-              { x: home.x ?? 0, y: home.y ?? 0 },
-              { x: vessel.position?.x ?? 0, y: vessel.position?.y ?? 0 }
-            );
-            distLabel = `${d.toFixed(1)} AU`;
-          }
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textDim;
-          ctx.textAlign = 'right';
-          ctx.fillText(distLabel, x + w - pad, ry + 13);
-          ctx.textAlign = 'left';
-
-          // Wiersz 2: stan (orbituje / w locie / cumuje) + typ kadłuba
-          // Finding 266: rozstrzyga KANON; Finding 269 (A-MIN, decyzja (i)): słowo TEŻ z kanonu
-          // (`vesselStatusLabelKey`) — dawne trzy polskie literały zdjęte, glif per token.
-          const eTok = resolveVesselStatus(vessel).token;
-          const stateLabel = `${ENEMY_STATE_GLYPH[eTok] ?? '?'} ${t(vesselStatusLabelKey(eTok))}`;
-          const roleLabel = ship2?.namePL ?? ship2?.nameEN ?? ship2?.name ?? vessel.shipId ?? '?';
-          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = ENEMY_COLOR;
-          ctx.fillText(`${stateLabel}`, x + pad + 2, ry + 28);
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textDim;
-          const roleTrim = roleLabel.length > 16 ? roleLabel.slice(0, 15) + '…' : roleLabel;
-          ctx.fillText(roleTrim, x + pad + 95, ry + 28);
-
-          // Separator + hitzone
-          ctx.strokeStyle = 'rgba(255,68,102,0.12)';
-          ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
-          this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
-          ry += rH;
-          continue;  // pomiń wspólny pipeline (paliwo/misja — brak sensu dla wroga)
-        }
-
-        const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
-        const icon = ship?.icon ?? '🚀';
-
-        // Player Fleet Groups (P1 polish): gdy flagOn i sekcja = własne statki,
-        // checkbox zajmuje 14px gutter po lewej — przesuwamy nazwę+ikonę o ten offset.
-        const fleetGutter = (flagOn && sec.key !== 'enemy' && sec.key !== 'wreck') ? 14 : 0;
-
-        // Pasek paliwa — geometria liczona PRZED nazwą, bo wyznacza jej budżet szerokości.
-        const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
-        const fuelColor = fuelPct > 0.5 ? THEME.success : fuelPct > 0.2 ? THEME.warning : THEME.danger;
-        const barW = 26; const barH = 3;
-        const barX = x + w - pad - barW - 24; const barBY = ry + 9;
-
-        // ── Wiersz 1: ikona + nazwa + paliwo ──
-        const nameX = x + pad + fleetGutter;
-        const _rallyName = _rallyByVesselId.get(vessel.id);   // M3 P3.1 — rezerwuje miejsce na 🎯
-        ctx.font = `13px ${THEME.fontFamily}`;
-        ctx.fillStyle = selected ? THEME.textPrimary : THEME.textSecondary;
-        const inCombat = _isVesselInCombat(vessel.id);
-        const combatBadge = inCombat ? ' ⚔' : '';
-        // S3.5a-1 — ⚠ gdy statek immobilized (zaległe utrzymanie floty)
-        const immobilized = window.KOSMOS?.vesselManager?.isImmobilized?.(vessel) ?? false;
-        const immobBadge = immobilized ? ' ⚠' : '';
-        if (immobilized) ctx.fillStyle = THEME.danger;
-        // Nazwa skracana do REALNEJ wolnej szerokości (do paska paliwa), z odjęciem części
-        // stałych: ikony, znaczników ⚔/⚠ i ewentualnego 🎯 rally.
-        const namePrefix = `${icon} `;
-        const nameSuffix = `${combatBadge}${immobBadge}`;
-        const nameBudget = (barX - 6) - nameX
-                         - ctx.measureText(namePrefix + nameSuffix).width
-                         - (_rallyName ? 16 : 0);
-        const vName = _fitText(ctx, vessel.name, nameBudget);
-        ctx.fillText(`${namePrefix}${vName}${nameSuffix}`, nameX, ry + 14);
-
-        // M3 P3.1 — rally indicator (🎯) gdy vessel assigned do rally
-        if (_rallyName) {
-          const _nameW = ctx.measureText(`${namePrefix}${vName}${nameSuffix}`).width;
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = '#ffaa22';  // rally color
-          ctx.fillText('🎯', nameX + _nameW + 4, ry + 14);
-        }
-
-        ctx.fillStyle = THEME.bgTertiary; ctx.fillRect(barX, barBY, barW, barH);
-        ctx.fillStyle = fuelColor; ctx.fillRect(barX, barBY, Math.round(barW * fuelPct), barH);
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = fuelColor;
-        ctx.textAlign = 'right';
-        ctx.fillText(`${Math.round(fuelPct * 100)}%`, x + w - pad, ry + 13);
-        ctx.textAlign = 'left';
-
-        // S3.0b S1b: drugi pasek — paliwo warp (cyan THEME.info) pod paskiem in-system; tylko statki
-        // z Komorą Warp. Miejsce mieści się w stałej wysokości wiersza (ROW_PLAYER). Px → kalibracja wizualna.
-        if (vessel.warpFuel?.max > 0) {
-          const warpPct = vessel.warpFuel.current / vessel.warpFuel.max;
-          const wBarBY = ry + 18;
-          ctx.fillStyle = THEME.bgTertiary; ctx.fillRect(barX, wBarBY, barW, barH);
-          ctx.fillStyle = THEME.info; ctx.fillRect(barX, wBarBY, Math.round(barW * warpPct), barH);
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.info;
-          ctx.textAlign = 'right';
-          ctx.fillText(`${Math.round(warpPct * 100)}%`, x + w - pad, ry + 22);
-          ctx.textAlign = 'left';
-        }
-
-        // ── Wiersz 2: lokalizacja / cel ──
-        // P2.5 outliner fix: branch po STANIE statku (nie po sec.key — w drzewie
-        // sec.key='ungrouped' lub 'fleet_<id>', nie 'hangar/orbit/flight'). Bez tego
-        // docked vessel w sekcji floty/ungrouped wpadał w fallback "W locie → ???".
-        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        // Finding 266: token KANONU — orbita bez ciała to 'in_space' (dawniej „⊙ ???"), stan
-        // nierozpoznany to 'unknown'; oba mają własne wiersze zamiast wpadać w gałąź lotu.
-        const vStatus = resolveVesselStatus(vessel);
-        const vState = vStatus.token;
-        const subX = x + pad + 2 + fleetGutter;   // lewa krawędź wierszy 2 i 3
-        const missionColX = x + pad + 95 + fleetGutter;   // kolumna typu misji (wiersz 2)
-        if (vState === 'docked') {
-          ctx.fillStyle = THEME.success;
-          ctx.fillText(`◈ ${_fitText(ctx, _resolveName(vStatus.bodyId), w - (subX - x) - pad - 12)}`, subX, ry + 28);
-        } else if (vState === 'orbiting') {
-          ctx.fillStyle = THEME.mint;
-          ctx.fillText(`⊙ ${_fitText(ctx, _resolveName(vStatus.bodyId), w - (subX - x) - pad - 12)}`, subX, ry + 28);
-        } else if (vState === 'in_space') {
-          ctx.fillStyle = THEME.mint;
-          ctx.fillText(`◌ ${_fitText(ctx, t('fleetGroup.statusInSpace'), w - (subX - x) - pad - 12)}`, subX, ry + 28);
-        } else if (vState === 'unknown') {
-          ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`? ${_fitText(ctx, t('fleetGroup.statusUnknown'), w - (subX - x) - pad - 12)}`, subX, ry + 28);
-        } else {
-          // W locie: → cel + typ misji
-          const targetName = vessel.mission?.targetName ?? _resolveName(vessel.mission?.targetId);
-          const mType = vessel.mission?.type ?? '';
-          const mIcon = _missionTypeIcon(mType);
-          const mLabel = _missionTypeLabel(mType);
-          ctx.fillStyle = THEME.warning;
-          ctx.fillText(`→ ${_fitText(ctx, targetName ?? '?', missionColX - subX - 18)}`, subX, ry + 28);
-          ctx.fillStyle = THEME.textDim;
-          ctx.fillText(_fitText(ctx, `${mIcon} ${mLabel}`, x + w - pad - missionColX), missionColX, ry + 28);
-
-          // ── Wiersz 3: ETA ──
-          const m = vessel.mission;
-          const isReturning = m?.phase === 'returning';
-          const etaYear = isReturning
-            ? (m?.returnYear ?? m?.arrivalYear)
-            : (m?.arrivalYear ?? m?.returnYear);
-          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          // Ikona + gotowy dwujęzyczny wpis (klucze zawierają już „ETA:"); wcześniej „rok"
-          // było wpisane po polsku na sztywno, mimo dostępnego fleet.etaYearLabel.
-          const etaIcon = isReturning ? '↩' : '⏱';
-          if (etaYear != null && etaYear > 0) {
-            ctx.fillStyle = THEME.warning;
-            ctx.fillText(`${etaIcon} ${t('fleet.etaYearLabel', _fmtYear(etaYear))}`, subX, ry + 43);
-          } else {
-            ctx.fillStyle = THEME.textSecondary;
-            ctx.fillText(`${etaIcon} ${t('fleet.etaPrefix', '—')}`, subX, ry + 43);
-          }
-        }
-
-        // ── Wiersz 3 poza lotem: klasa kadłuba ──
-        // Wysokość wiersza jest stała, więc linia po ETA istnieje zawsze. Dla statku
-        // w hangarze/na orbicie nie ma ETA — zamiast zostawiać pustkę (kafel wyglądałby
-        // na uszkodzony) pokazujemy klasę kadłuba, której lista statków gracza dotąd nie
-        // pokazywała wcale (wiersz wroga pokazuje ją od zawsze).
-        if (vState !== 'in_transit') {   // docked / orbiting / in_space / unknown — bez ETA
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textDim;
-          const clsName = ship ? getName(ship, 'ship') : (vessel.shipId ?? '?');
-          ctx.fillText(_fitText(ctx, clsName, x + w - pad - subX - 44), subX, ry + 43);
-        }
-
-        // Separator
-        ctx.strokeStyle = 'rgba(0,255,180,0.05)';
-        ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
-
-        this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
-
-        // Player Fleet Groups (P1) — multi-select checkbox dla statków gracza.
-        // Bug P2 polish #3: checkbox + badge mieszczą się w 14px gutter po lewej
-        // (icon+name shifted o fleetGutter). Checkbox na środku wiersza, badge
-        // FLOTY pokazujemy jako mały trójkątny indicator obok checkboxa (czytelnie
-        // bez nakładki na ikonę statku).
-        if (flagOn && sec.key !== 'enemy' && sec.key !== 'wreck') {
-          const isMulti = this._multiSelectedIds.has(vessel.id);
-          const fleet = vessel.fleetId ? window.KOSMOS?.fleetSystem?.getFleet?.(vessel.fleetId) : null;
-          const cbx = x + 1;
-          const cby = Math.max(ry + (rH / 2) - 7, listY);  // pionowo wycentrowane
-          // Checkbox (12×12 char)
-          ctx.font = `12px ${THEME.fontFamily}`;
-          ctx.fillStyle = isMulti ? THEME.accent : THEME.textDim;
-          ctx.fillText(isMulti ? '☑' : '☐', cbx, cby + 10);
-          this._hitZones.push({ x: cbx, y: cby, w: 14, h: 14, type: 'vesselMultiToggle', data: { vesselId: vessel.id } });
-          // Badge floty — wąski kolorowy pasek (3px szerokości) lewa krawędź wiersza,
-          // mints gdy w jakiejś flocie. Brak tekstu = brak nakładki na ikonę.
-          if (fleet) {
-            ctx.fillStyle = THEME.mint;
-            ctx.fillRect(x, ry + 2, 3, rH - 4);
-            // Tooltip-like nazwa floty w skrajnie prawym dolnym rogu wiersza (małym fontem)
-            ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-            ctx.fillStyle = THEME.mint;
-            const fName = fleet.name.length > 8 ? fleet.name.slice(0, 7) + '…' : fleet.name;
-            ctx.textAlign = 'right';
-            ctx.fillText('⚑' + fName, x + w - pad, ry + rH - 4);
-            ctx.textAlign = 'left';
-          }
-        }
-        ry += rH;
-      }
-    }
-
-    // Ograniczenie scrollu
-    const maxScroll = Math.max(0, totalContentH - listH);
-    if (this._scrollOffset > maxScroll) this._scrollOffset = maxScroll;
-
-    ctx.restore();
-
-    // Scroll indicator
-    if (totalContentH > listH) {
-      const thumbH = Math.max(20, (listH / totalContentH) * listH);
-      const thumbY = listY + (this._scrollOffset / totalContentH) * listH;
-      ctx.fillStyle = 'rgba(0,255,180,0.15)';
-      ctx.fillRect(x + w - 4, thumbY, 3, thumbH);
-    }
-  }
-
-  _getLocationText(vessel) {
-    // Finding 266: KANON — orbita bez ciała była „Orbit: ???" (`_resolveName(null)`), teraz ma
-    // własne słowo; stan nierozpoznany nie udaje lotu.
-    const st = resolveVesselStatus(vessel);
-    if (st.token === 'docked')   return t('fleet.locationHangar', _resolveName(st.bodyId));
-    if (st.token === 'orbiting') return t('fleet.locationOrbit', _resolveName(st.bodyId));
-    if (st.token === 'in_space') return t('fleetGroup.statusInSpace');
-    if (st.token === 'unknown')  return t('fleetGroup.statusUnknown');
-    if (vessel.mission?.targetId) {
-      return `→ ${vessel.mission.targetName ?? _resolveName(vessel.mission.targetId)}`;
-    }
-    return t('fleet.locationInFlight');
-  }
-
   // ══════════════════════════════════════════════════════════════════════════
   // Player Fleet Groups (P1) — Fleets tab UI (dawny pasek [Statki | Floty] `_drawLeftTabs` bez wołających usunięty w G5)
   // ══════════════════════════════════════════════════════════════════════════
-
-  // LEFT panel — zakładka Floty: header + przycisk Nowa Flota + lista flot.
-  _drawLeftFleets(ctx, x, y, w, h) {
-    const pad = 8;
-    const fSys = window.KOSMOS?.fleetSystem;
-    const fleets = fSys?.listFleets?.() ?? [];
-
-    // Nagłówek
-    ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('fleet.fleetsHeader') + ` [${fleets.length}]`, x + pad, y + 22);
-
-    // Przycisk: Nowa flota (h=22)
-    const newBtnY = y + 36;
-    const newBtnH = 22;
-    ctx.fillStyle = 'rgba(0,255,180,0.10)';
-    ctx.fillRect(x + pad, newBtnY, w - pad * 2, newBtnH);
-    ctx.strokeStyle = THEME.borderActive;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + pad, newBtnY, w - pad * 2, newBtnH);
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.textAlign = 'center';
-    ctx.fillText('＋ ' + t('fleet.newFleet'), x + w / 2, newBtnY + 15);
-    ctx.textAlign = 'left';
-    this._hitZones.push({ x: x + pad, y: newBtnY, w: w - pad * 2, h: newBtnH, type: 'fleetCreate', data: {} });
-
-    // Lista flot — scrollowalna
-    const listY = newBtnY + newBtnH + 8;
-    const listH = y + h - listY - 2;
-    const ROW_H = 36;
-    const totalH = fleets.length * ROW_H;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, listY, w, listH);
-    ctx.clip();
-
-    let ry = listY - this._fleetScrollOffset;
-    for (const fleet of fleets) {
-      if (ry + ROW_H < listY || ry > listY + listH) { ry += ROW_H; continue; }
-      this._drawFleetRow(ctx, x, ry, w, ROW_H, fleet);
-      ry += ROW_H;
-    }
-    ctx.restore();
-
-    // Pusty stan — komunikat
-    if (fleets.length === 0) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.fleetsEmpty'), x + w / 2, listY + 30);
-      ctx.textAlign = 'left';
-    }
-    // Clamp scroll offset
-    const maxScroll = Math.max(0, totalH - listH);
-    if (this._fleetScrollOffset > maxScroll) this._fleetScrollOffset = maxScroll;
-  }
-
-  _drawFleetRow(ctx, x, y, w, h, fleet) {
-    const pad = 8;
-    const selected = this._selectedFleetId === fleet.id;
-    const hovered  = this._hoverFleetId === fleet.id;
-    // Tło
-    if (selected) {
-      ctx.fillStyle = 'rgba(0,255,180,0.10)';
-      ctx.fillRect(x, y, w, h);
-    } else if (hovered) {
-      ctx.fillStyle = 'rgba(255,255,255,0.02)';
-      ctx.fillRect(x, y, w, h);
-    }
-    // Lewa krawędź — accent strip dla selected
-    if (selected) {
-      ctx.fillStyle = THEME.accent;
-      ctx.fillRect(x, y, 2, h);
-    }
-    // Nazwa
-    ctx.font = `${selected ? 'bold ' : ''}${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = selected ? THEME.accent : THEME.textPrimary;
-    const nameTxt = fleet.name.length > 16 ? fleet.name.slice(0, 15) + '…' : fleet.name;
-    ctx.fillText(nameTxt, x + pad, y + 14);
-    // Pod-linia: doctrine + member count
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    const doctrineLabel = t(doctrineNameKey(fleet.doctrine));
-    const memberCnt = fleet.memberIds.length;
-    ctx.fillText(`${doctrineLabel} · ${memberCnt}`, x + pad, y + 28);
-    // ✕ disband button na prawym górnym rogu
-    const xBtnX = x + w - 18;
-    const xBtnY = y + 4;
-    ctx.font = `${THEME.fontSizeSmall + 2}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.danger;
-    ctx.fillText('✕', xBtnX, xBtnY + 12);
-    this._hitZones.push({ x: xBtnX - 4, y: xBtnY, w: 18, h: 18, type: 'fleetDisband', data: { fleetId: fleet.id } });
-    // Reszta wiersza — hit zone select
-    this._hitZones.push({ x, y, w: w - 22, h, type: 'fleetRow', data: { fleetId: fleet.id } });
-    // Dolna linia separator
-    ctx.strokeStyle = THEME.border;
-    ctx.globalAlpha = 0.4;
-    ctx.beginPath();
-    ctx.moveTo(x + pad, y + h - 1);
-    ctx.lineTo(x + w - pad, y + h - 1);
-    ctx.stroke();
-    ctx.globalAlpha = 1.0;
-  }
 
   // RIGHT panel — szczegóły wybranej floty (gdy activeTab='fleets' i fleet selected).
   _drawRightFleet(ctx, x, y, w, h, fleet) {
@@ -3775,29 +2519,6 @@ export class FleetManagerOverlay {
     let s = s0;
     while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     return s + '…';
-  }
-
-  // Przełącznik [MAPA]/[REJESTR] — w linii nagłówka centrum, za tytułem+zoomem
-  // (mapa: offset 170 za „TACTICAL MAP ×N"; rejestr pełnej szerokości: offset 8).
-  _drawTacticalViewSwitch(ctx, x, y, offset = 170) {
-    const views = [['map', t('fleet.viewMap')], ['registry', t('fleet.viewRegistry')]];
-    let bx = x + offset;
-    ctx.font = `bold 9px ${THEME.fontFamily}`;
-    for (const [id, label] of views) {
-      const tw = ctx.measureText(label).width + 12;
-      const active = (this._tacticalView === 'registry') === (id === 'registry');
-      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'rgba(255,255,255,0.03)';
-      ctx.fillRect(bx, y + 6, tw, 16);
-      ctx.strokeStyle = active ? THEME.accent : THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(bx + 0.5, y + 6.5, tw - 1, 15);
-      ctx.fillStyle = active ? THEME.accent : THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(label, bx + tw / 2, y + 17);
-      this._hitZones.push({ x: bx, y: y + 6, w: tw, h: 16, type: 'tacticalView', data: { view: id } });
-      bx += tw + 4;
-    }
-    ctx.textAlign = 'left';
   }
 
   // ctx dla czystej logiki rejestru (wpięcia świata jak warstwa etykiet HUD).
@@ -4460,8 +3181,7 @@ export class FleetManagerOverlay {
     //   decyzja właściciela, Finding 272) — członek spoza tego układu odpada w MOS GŁOŚNO (D-E2).
     // D-E4: kolumna AU w popupie liczy `hypot(wróg, firstMember)` — po przecelowaniu listy OBIE strony
     //   są w ramce floty, więc liczba mieszana znika Z KONSTRUKCJI (popup nietknięty).
-    // ⚠ `enemyVisible` (`draw`, lewa lista 2D) i pętla statków w `_drawCenter` ZOSTAJĄ keyed na kamerze:
-    //   to listy MAPY (utajone za `commandTacticalMap`), a mapa ma pokazywać OGLĄDANY układ.
+    // (Listy mapy 2D keyed na kamerze — `enemyVisible`, `_drawCenter` — odeszły z mapą w K7-pre.)
     const fs = window.KOSMOS?.fleetSystem;
     const fleet = fs?.getFleet?.(fleetId);
     const firstMember = fleet?.memberIds?.map(vid => vm.getVessel(vid)).find(v => v && !v.isWreck);
@@ -4625,582 +3345,6 @@ export class FleetManagerOverlay {
         if (this._selectedFleetId === fleetId) this._selectedFleetId = null;
       }
     } catch { /* anulowano */ }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // CENTER — mapa schematyczna
-  // ══════════════════════════════════════════════════════════════════════════
-
-  _drawCenter(ctx, x, y, w, h, allVessels, ms) {
-    const pad = 8;
-
-    // ── Nagłówek (h=32) ──────────────────────────────────────
-    // Atlas i star-cluster mają teraz własne zakładki — tu zawsze mapa taktyczna.
-    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('fleet.tacticalMap'), x + pad, y + 20);
-
-    // Zoom label
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`×${this._mapZoom.toFixed(1)}`, x + pad + 110, y + 20);
-
-    // Toggle: HOME / TRASY / ZASIĘG (prawy róg nagłówka mapy)
-    const toggleY = y + 6;
-    let tbx = x + w - pad;
-
-    // 🏠 HOME — szybki powrót na planetę gracza
-    {
-      const homeTw = 60;
-      tbx -= homeTw + 4;
-      ctx.fillStyle = 'transparent';
-      ctx.fillRect(tbx, toggleY, homeTw, 18);
-      ctx.strokeStyle = THEME.accent;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(tbx, toggleY, homeTw, 18);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.accent;
-      ctx.textAlign = 'center';
-      ctx.fillText('🏠 HOME', tbx + homeTw / 2, toggleY + 13);
-      ctx.textAlign = 'left';
-      this._hitZones.push({ x: tbx, y: toggleY, w: homeTw, h: 18, type: 'home_focus', data: {} });
-    }
-
-    // TRASY / ZASIĘG
-    for (const key of ['range', 'routes']) {
-      const label = key === 'routes' ? t('fleet.toggleRoutes') : t('fleet.toggleRange');
-      const active = this._mapToggles[key];
-      const tw = 50;
-      tbx -= tw + 4;
-      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'transparent';
-      ctx.fillRect(tbx, toggleY, tw, 18);
-      ctx.strokeStyle = active ? THEME.accent : THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(tbx, toggleY, tw, 18);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = active ? THEME.accent : THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(label, tbx + tw / 2, toggleY + 13);
-      ctx.textAlign = 'left';
-      this._hitZones.push({ x: tbx, y: toggleY, w: tw, h: 18, type: 'map_toggle', data: { key } });
-    }
-
-    // ── Obszar mapy (clip) ──────────────────────────────────
-    const mapY = y + 32;
-    const mapH = h - 32;
-    this._mapBounds = { x, y: mapY, w, h: mapH };
-
-    // Deferred focus init — _focusOnHomeAtStart wymaga _mapBounds, którego
-    // nie ma na momencie wywołania open()/toggle(). Pierwszy draw po otwarciu
-    // teraz centruje home planet poprawnie.
-    if (this._pendingFocusInit) {
-      this._pendingFocusInit = false;
-      this._focusOnHomeAtStart();
-    }
-
-    // Orphan focus guard — body mogło zostać usunięte (wreck collected,
-    // asteroid impact) w długiej sesji z persist state.
-    if (this._mapFocusBodyId && !_findBody(this._mapFocusBodyId)) {
-      this._mapFocusBodyId = null;
-    }
-
-    const mapCx = x + w / 2 + this._mapPanX;
-    const mapCy = mapY + mapH / 2 + this._mapPanY;
-    const baseRadius = Math.min(w / 2, mapH / 2) - 20;
-    const mapRadius = baseRadius * this._mapZoom;
-
-    // Tło mapy — solidne czarne, żeby 3D mapa układu pod spodem nie prześwitywała.
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x + 1, mapY, w - 2, mapH - 1);
-
-    // Clip do obszaru mapy
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x + 1, mapY, w - 2, mapH - 1);
-    ctx.clip();
-
-    // ── Zbierz ciała AKTYWNEGO układu ──────────────────────────
-    const sysId      = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    const planets    = EntityManager.getByTypeInSystem('planet', sysId);
-    const moons      = EntityManager.getByTypeInSystem('moon', sysId);
-    const planetoids = EntityManager.getByTypeInSystem('planetoid', sysId);
-    const asteroids  = EntityManager.getByTypeInSystem('asteroid', sysId);
-    const comets     = EntityManager.getByTypeInSystem('comet', sysId);
-    const stars      = EntityManager.getByType('star')?.filter(s => s.systemId === sysId) ?? [];
-
-    // Skala: max orbit AU → mapRadius (base, bez zoom)
-    let maxOrbitAU = 1;
-    for (const p of planets) {
-      const a = p.orbital?.a ?? 0;
-      if (a > maxOrbitAU) maxOrbitAU = a;
-    }
-    for (const pd of planetoids) {
-      const a = pd.orbital?.a ?? 0;
-      if (a > maxOrbitAU) maxOrbitAU = a;
-    }
-    maxOrbitAU *= 1.15;
-    const auToPx = mapRadius / maxOrbitAU;
-
-    // M3 P1.3.5 — cache view state dla inverse transform (handleRightClick).
-    // KEEP IN SYNC z toSx/toSy poniżej.
-    this._mapViewState = { mapCx, mapCy, auToPx, AU_TO_PX: GAME_CONFIG.AU_TO_PX };
-
-    // Helper: AU coords → screen px
-    const toSx = (bodyX) => (bodyX ?? 0) / GAME_CONFIG.AU_TO_PX * auToPx + mapCx;
-    const toSy = (bodyY) => (bodyY ?? 0) / GAME_CONFIG.AU_TO_PX * auToPx + mapCy;
-
-    const homePid = window.KOSMOS?.homePlanet?.id;
-    const colMgr  = window.KOSMOS?.colonyManager;
-
-    // ── Gwiazda ─────────────────────────────────────────────
-    // Rozmiar clamped — wcześniej `5 * _mapZoom` przy wysokim zoomie robiło
-    // gwiazdę większą od orbit wewnętrznych planet, chowając je pod spodem.
-    // Nowy wzór: logarytmiczny wzrost z zoom, cap 10 px, glow 2× zamiast 3×.
-    const starR = Math.max(3, Math.min(10, 3 + 2 * Math.log2(Math.max(1, this._mapZoom))));
-    ctx.beginPath();
-    ctx.arc(mapCx, mapCy, starR, 0, Math.PI * 2);
-    ctx.fillStyle = THEME.yellow;
-    ctx.fill();
-    // Glow — 2× zamiast 3×, mniejsza alpha żeby nie zasłaniać bliskich orbit
-    const grad = ctx.createRadialGradient(mapCx, mapCy, starR, mapCx, mapCy, starR * 2);
-    grad.addColorStop(0, 'rgba(255,200,60,0.15)');
-    grad.addColorStop(1, 'rgba(255,200,60,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(mapCx, mapCy, starR * 2, 0, Math.PI * 2); ctx.fill();
-
-    if (stars[0]) {
-      this._hitZones.push({
-        x: mapCx - 10, y: mapCy - 10, w: 20, h: 20,
-        type: 'map_body', data: { bodyId: stars[0].id },
-      });
-    }
-
-    // ── Orbity planet ───────────────────────────────────────
-    ctx.strokeStyle = 'rgba(0,255,180,0.055)';
-    ctx.lineWidth = 1;
-    for (const p of planets) {
-      const orbitR = (p.orbital?.a ?? 0) * auToPx;
-      if (orbitR > 2) {
-        ctx.beginPath();
-        ctx.arc(mapCx, mapCy, orbitR, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    }
-
-    // ── Wszystkie ciała — rysuj i rejestruj hit zones ───────
-
-    // Helper — skala rozmiaru ciał z zoom. `base` = baseline przy zoom=1.
-    // `absMaxPx` = bezwzględny pułap w pixelach (zapobiega kolosom na wysokim zoom).
-    const bodyScale = (base, absMaxPx) => {
-      return Math.min(absMaxPx, Math.max(base, base * Math.sqrt(this._mapZoom)));
-    };
-
-    // Planetoidy
-    for (const pd of planetoids) {
-      const px = toSx(pd.x), py = toSy(pd.y);
-      const r = bodyScale(2.5, 12);
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = pd.explored ? 'rgba(255,230,100,0.8)' : 'rgba(100,136,170,0.3)';
-      ctx.fill();
-      this._hitZones.push({ x: px - 8, y: py - 8, w: 16, h: 16, type: 'map_body', data: { bodyId: pd.id } });
-    }
-
-    // Asteroidy
-    for (const a of asteroids) {
-      const px = toSx(a.x), py = toSy(a.y);
-      const r = bodyScale(1.5, 6);
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(140,120,100,0.4)';
-      ctx.fill();
-      this._hitZones.push({ x: px - 6, y: py - 6, w: 12, h: 12, type: 'map_body', data: { bodyId: a.id } });
-    }
-
-    // Komety
-    for (const c of comets) {
-      const px = toSx(c.x), py = toSy(c.y);
-      const r = bodyScale(2, 8);
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(120,200,255,0.5)';
-      ctx.fill();
-      this._hitZones.push({ x: px - 6, y: py - 6, w: 12, h: 12, type: 'map_body', data: { bodyId: c.id } });
-    }
-
-    // Księżyce
-    for (const m of moons) {
-      const px = toSx(m.x), py = toSy(m.y);
-      const r = bodyScale(2.5, 15);
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = m.explored ? 'rgba(255,230,100,0.8)' : 'rgba(120,150,180,0.4)';
-      ctx.fill();
-      if (this._mapZoom >= 2) {
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText((m.name ?? '').slice(0, 5), px + r + 2, py + 3);
-      }
-      this._hitZones.push({ x: px - 8, y: py - 8, w: 16, h: 16, type: 'map_body', data: { bodyId: m.id } });
-    }
-
-    // Planety (na wierzchu) — cap 25px absolute żeby nie zalewały mapy
-    for (const p of planets) {
-      const px = toSx(p.x), py = toSy(p.y);
-      const isHome = p.id === homePid;
-      const hasColony = colMgr?.hasColony(p.id);
-      const base = isHome ? 5 : hasColony ? 4 : 3;
-      const r = bodyScale(base, 25);
-
-      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = isHome ? THEME.accent : hasColony ? THEME.mint : p.explored ? 'rgba(255,230,100,0.8)' : THEME.textSecondary;
-      ctx.fill();
-
-      // Label — widoczny zawsze
-      const label = (p.name ?? p.id).slice(0, this._mapZoom >= 1.5 ? 8 : 3);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(label, px + r + 2, py + 3);
-
-      this._hitZones.push({ x: px - 10, y: py - 10, w: 20, h: 20, type: 'map_body', data: { bodyId: p.id } });
-    }
-
-    // ── S3.3b-S3b — stacje orbitalne (HUB) — marker przy ciele macierzystym (pozycja LIVE z bodyId) ──
-    for (const st of EntityManager.getByTypeInSystem('station', sysId)) {
-      const body = EntityManager.get(st.bodyId);
-      const bx0 = toSx(body?.x ?? st.x), by0 = toSy(body?.y ?? st.y);
-      const off = bodyScale(9, 30);         // offset skalowany z zoomem (jak rozmiar ciał) — marker poza planetą na każdym zoomie
-      const sxm = bx0 + off, sym = by0 - off;
-      const isOwn = (st.ownerEmpireId ?? 'player') === 'player';
-      ctx.strokeStyle = 'rgba(120,200,255,0.30)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(bx0, by0); ctx.lineTo(sxm, sym); ctx.stroke();   // linia łącząca z ciałem
-      ctx.fillStyle = isOwn ? (THEME.info ?? '#44ccff') : THEME.danger;
-      ctx.fillRect(sxm - 3, sym - 3, 6, 6);
-      ctx.strokeStyle = isOwn ? '#aaddff' : THEME.danger;
-      ctx.strokeRect(sxm - 3, sym - 3, 6, 6);
-      if (this._mapZoom >= 2) {
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText((st.name ?? '').slice(0, 6), sxm + 5, sym + 3);
-      }
-      this._hitZones.push({ x: sxm - 7, y: sym - 7, w: 14, h: 14, type: 'map_station', data: { stationId: st.id, bodyId: st.bodyId } });
-    }
-
-    // ── Misje aktywne (linie + ikona misji) ─────────────────
-    const missions = ms?.getActive?.() ?? [];
-    for (const m of missions) {
-      if (!m.vesselId) continue;
-      const vMgr = window.KOSMOS?.vesselManager;
-      const vessel = vMgr?.getVessel(m.vesselId);
-      if (!vessel) continue;
-      // Pokaż tylko misje statków w aktywnym układzie
-      if ((vessel.systemId ?? 'sys_home') !== sysId) continue;
-
-      const vx = toSx(vessel.position.x), vy = toSy(vessel.position.y);
-      const target = _findBody(m.targetId);
-
-      // Linia misji: statek → cel
-      if (target) {
-        const tpx = toSx(target.x), tpy = toSy(target.y);
-        const isSel = vessel.id === this._selectedVesselId;
-
-        // Kolor wg typu misji
-        let routeColor = 'rgba(255,204,68,0.4)';
-        if (m.type === 'recon' || m.type === 'survey' || m.type === 'deep_scan')
-          routeColor = 'rgba(0,204,255,0.5)';
-        else if (m.type === 'colony') routeColor = 'rgba(170,136,255,0.5)';
-        else if (m.type === 'transport') routeColor = 'rgba(255,204,68,0.5)';
-        if (isSel) routeColor = THEME.accent;
-
-        ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = routeColor;
-        ctx.lineWidth = isSel ? 2 : 1;
-        ctx.beginPath(); ctx.moveTo(vx, vy); ctx.lineTo(tpx, tpy); ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Ikona misji (połowa drogi)
-        if (vessel.position.state === 'in_transit') {
-          const midX = (vx + tpx) / 2, midY = (vy + tpy) / 2;
-          const mIcon = m.type === 'recon' || m.type === 'survey' ? '🔭'
-            : m.type === 'colony' ? '🚢'
-            : m.type === 'transport' ? '📦'
-            : m.type === 'mining' ? '⛏' : '→';
-          ctx.font = `10px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textPrimary;
-          ctx.fillText(mIcon, midX - 5, midY + 4);
-        }
-      }
-
-      // Status badge na orbicie
-      if (vessel.position.state === 'orbiting' && target) {
-        const tpx = toSx(target.x), tpy = toSy(target.y);
-        ctx.strokeStyle = THEME.mint;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-        ctx.beginPath(); ctx.arc(tpx, tpy, 10 * Math.min(this._mapZoom, 2), 0, Math.PI * 2); ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-
-    // ── Zasięg wybranego statku ─────────────────────────────
-    if (this._mapToggles.range && this._selectedVesselId) {
-      const vMgr = window.KOSMOS?.vesselManager;
-      const selV = vMgr?.getVessel(this._selectedVesselId);
-      if (selV) {
-        const range = effectiveRange(selV);
-        const rangeR = range * auToPx;
-        const svx = toSx(selV.position.x), svy = toSy(selV.position.y);
-        ctx.setLineDash([6, 3]);
-        ctx.strokeStyle = 'rgba(0,255,180,0.3)';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(svx, svy, rangeR, 0, Math.PI * 2); ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-
-    // ── Stacje gracza (lokacja doku/orbity) — S3.4-F2 ────────────
-    // Command „nie znał" stacji jako lokacji: mapa taktyczna rysowała tylko ciała, więc statki
-    // zadokowane/orbitujące stację były wizualnie osierocone (bez kotwicy). Rysuj 🛰 markery na
-    // POZYCJI CIAŁA KOTWICZĄCEGO (stacja ma statyczne x/y, ale anchor body orbituje) — spójnie z
-    // resolveBodyPos. Docked statki i tak ukryte, ale stacja daje im widoczną lokację na mapie.
-    for (const st of (EntityManager.getByType('station') ?? [])) {
-      if (st.ownerEmpireId && st.ownerEmpireId !== 'player') continue;   // mgła wojny — tylko stacje gracza
-      if ((st.systemId ?? 'sys_home') !== sysId) continue;
-      const anchor = st.bodyId ? EntityManager.get(st.bodyId) : null;
-      const sx = toSx(anchor?.x ?? st.x), sy = toSy(anchor?.y ?? st.y);
-      const sr = bodyScale(3, 9);
-      // Romb (diament) — odróżnia stację od kropek statków/ciał; obrys akcentowy.
-      ctx.save();
-      ctx.translate(sx, sy);
-      ctx.rotate(Math.PI / 4);
-      ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1.5;
-      ctx.strokeRect(-sr, -sr, sr * 2, sr * 2);
-      ctx.restore();
-      if (this._mapZoom >= 1.5) {
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.accent;
-        ctx.fillText(`🛰 ${(st.name ?? '').slice(0, 8)}`, sx + sr + 3, sy + 3);
-      }
-      this._hitZones.push({ x: sx - 9, y: sy - 9, w: 18, h: 18, type: 'map_station', data: { stationId: st.id } });
-    }
-
-    // ── Statki (kropki — na wierzchu) — tylko z aktywnego układu ──
-    for (const v of allVessels) {
-      if ((v.systemId ?? 'sys_home') !== sysId) continue;
-      const isEnemy = isEnemyVessel(v);
-      const isWreck = !!v.isWreck;
-      // Fog-of-war 3-poziomowy (wraki zawsze widoczne — zniszczony statek nie ma mgły):
-      //   hidden → pomiń; echo → anonimowy ghost „?" (pozycja bez tożsamości); identified → pełny render.
-      if (isEnemy && !isWreck) {
-        const vis = _enemyVisLevel(v);
-        if (vis === 'hidden') continue;
-        if (vis === 'echo') {
-          // Echo obserwatorium: pusta przyćmiona kropka „?" — bez nazwy, bez hit-zony (brak inspekcji
-          // tożsamości; gracz wysyła statek → proximity → contact → pełne dane). Pozycja = ZAMROŻONA
-          // positionLastKnown (jak ghost na 3D): w zasięgu sensorów odświeżana ~na żywo, po wyjściu
-          // zamrożona i gaśnie po RUMOR_FADE_YEARS (inaczej rumor — który nie wygasa — śledziłby wroga
-          // na żywo poza zasięgiem = przeciek pozycji).
-          const rec = window.KOSMOS?.intelSystem?.getVesselContact?.(v.id);
-          const pos = rec?.positionLastKnown ?? v.position;
-          if (!pos) continue;
-          const detectedNow = window.KOSMOS?.observatorySystem?.isVesselDetected?.(v.id);
-          if (!detectedNow) {
-            const gy = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-            const ageY = gy - (rec?.lastSeenYear ?? gy);
-            if (ageY > (GAME_CONFIG.RUMOR_FADE_YEARS ?? 10)) continue;   // przestarzałe echo → zgaś
-          }
-          this._drawStratcomGhostBlip(ctx, toSx(pos.x), toSy(pos.y));
-          continue;
-        }
-      }
-      const vx = toSx(v.position.x), vy = toSy(v.position.y);
-      const isSel = v.id === this._selectedVesselId;
-      // Statki skalują się z zoom; absolutny cap 10px żeby nie konkurowały z planetami
-      const baseR = isSel ? 4 : 3;
-      const r = bodyScale(baseR, 10);
-      const color = isSel ? THEME.accent
-        : isWreck ? '#808080'
-        : isEnemy ? '#ff4466'
-        : (STATUS_COLORS[resolveVesselStatus(v).token] ?? (() => THEME.warning))();
-
-      ctx.beginPath(); ctx.arc(vx, vy, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-
-      if (isSel) {
-        ctx.strokeStyle = THEME.accent;
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(vx, vy, r + 2, 0, Math.PI * 2); ctx.stroke();
-      }
-
-      // Label statku przy zoom
-      if (this._mapZoom >= 2) {
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = color;
-        ctx.fillText((v.name ?? '').slice(0, 8), vx + r + 3, vy + 3);
-      }
-
-      this._hitZones.push({
-        x: vx - 10, y: vy - 10, w: 20, h: 20,
-        type: 'map_vessel', data: { vesselId: v.id },
-      });
-    }
-
-    // ── M3 P2.3 — POI sprites (resolves issue #6) ─────────────
-    this._drawPOISprites(ctx, toSx, toSy, bodyScale, auToPx);
-
-    ctx.restore(); // koniec clip
-
-    // ── Legenda (poza clip) ─────────────────────────────────
-    const legX = x + w - 140;
-    const legY2 = mapY + 8;
-    ctx.fillStyle = bgAlpha(0.65);
-    ctx.fillRect(legX, legY2, 132, 116);
-    ctx.strokeStyle = THEME.borderActive;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(legX, legY2, 132, 116);
-
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    const legendItems = [
-      { color: THEME.accent,        label: t('fleet.legendHomePlanet') },
-      { color: THEME.mint,          label: t('fleet.legendColony') },
-      { color: THEME.textSecondary, label: t('fleet.legendPlanet') },
-      { color: THEME.success,       label: t('fleet.legendShipHangar') },
-      { color: THEME.warning,       label: t('fleet.legendShipFlight') },
-      { color: THEME.mint,          label: t('fleet.legendShipOrbit') },
-      { color: '#ff4466',           label: '⚔ Wróg (wykryty)' },
-      { color: '#808080',           label: '💀 Wrak' },
-    ];
-    let ly = legY2 + 12;
-    for (const item of legendItems) {
-      ctx.fillStyle = item.color;
-      ctx.fillText(item.label, legX + 6, ly);
-      ly += 13;
-    }
-
-    // ── Tooltip ciała (na hover/klik) ───────────────────────
-    if (this._mapHoverBody) {
-      this._drawBodyTooltip(ctx, x, mapY, w, mapH);
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // M3 P2.3 — POI sprites w tactical map (resolves issue #6)
-  // ══════════════════════════════════════════════════════════════════════════
-  // Per-type geometric shapes (D-tactical-poi-display = β):
-  //   waypoint  → outlined circle
-  //   patrol    → triangle z linami do waypointów (route visualization)
-  //   picket    → filled circle + range circle (semi-transparent fill)
-  //   rally     → diamond (rotated square)
-  //   ambush    → dashed circle (dimmed alpha gdy hidden=true)
-  //
-  // POI_TYPE_COLORS hex (z ThreeRenderer M2b POI sprites) → CSS rgba.
-  _drawPOISprites(ctx, toSx, toSy, bodyScale, auToPx) {
-    const reg = window.KOSMOS?.poiRegistry;
-    if (!reg?.listPOIs) return;
-    const pois = reg.listPOIs() ?? [];
-    if (pois.length === 0) return;
-
-    const POI_COLOR_CSS = {
-      waypoint: '#5588ff',
-      patrol:   '#33ff66',
-      picket:   '#ff3333',
-      rally:    '#ffaa22',
-      ambush:   '#aa44ff',
-    };
-    // M3 P3.1 — runtime state colors (simple color change, no animation per Filip flag #2)
-    const POI_TRIGGERED_COLOR = '#ff8800';  // picket triggered (orange)
-    const POI_COMPLETE_COLOR  = '#44ff88';  // rally complete (green)
-    const r = bodyScale(3, 8);
-
-    ctx.save();
-    for (const poi of pois) {
-      const loc = getPOILocation(poi);
-      if (!loc) continue;
-      const px = toSx(loc.x), py = toSy(loc.y);
-      // Runtime state override koloru (P3.1):
-      //   picket triggered (orange) — persistent przez cooldown 30 dni gry
-      //   rally complete (green) — persistent po complete=true
-      let color = POI_COLOR_CSS[poi.type] ?? '#888';
-      if (poi.type === 'picket' && poi.triggered) color = POI_TRIGGERED_COLOR;
-      else if (poi.type === 'rally' && poi.complete) color = POI_COMPLETE_COLOR;
-
-      ctx.globalAlpha = (poi.type === 'ambush' && poi.hidden) ? 0.4 : 0.9;
-
-      if (poi.type === 'waypoint') {
-        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
-      } else if (poi.type === 'patrol') {
-        // Triangle marker + lines do waypoints[1..n] (loop closure: ostatni → pierwszy)
-        const wps = Array.isArray(poi.waypoints) ? poi.waypoints : [];
-        if (wps.length >= 2) {
-          ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
-          ctx.beginPath();
-          for (let i = 0; i < wps.length; i++) {
-            const wx = toSx(wps[i].x), wy = toSy(wps[i].y);
-            if (i === 0) ctx.moveTo(wx, wy);
-            else         ctx.lineTo(wx, wy);
-          }
-          if (poi.loopMode === 'loop') {
-            const w0x = toSx(wps[0].x), w0y = toSy(wps[0].y);
-            ctx.lineTo(w0x, w0y);
-          }
-          ctx.stroke(); ctx.setLineDash([]);
-
-          // Małe kropki na każdym waypoincie
-          ctx.fillStyle = color;
-          for (const wp of wps) {
-            ctx.beginPath();
-            ctx.arc(toSx(wp.x), toSy(wp.y), Math.max(2, r - 1), 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        // Triangle marker w pierwszym waypoincie
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(px, py - r);
-        ctx.lineTo(px + r, py + r * 0.7);
-        ctx.lineTo(px - r, py + r * 0.7);
-        ctx.closePath();
-        ctx.fill();
-      } else if (poi.type === 'picket') {
-        // Range circle (semi-transparent fill) + filled center
-        const rangeR = (poi.rangePxLocal ?? 0) / GAME_CONFIG.AU_TO_PX * (auToPx ?? 1);
-        if (rangeR > 1) {
-          ctx.fillStyle = color + '22';  // alpha ~0x22 = 13%
-          ctx.beginPath(); ctx.arc(px, py, rangeR, 0, Math.PI * 2); ctx.fill();
-          ctx.strokeStyle = color + '55'; ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.arc(px, py, rangeR, 0, Math.PI * 2); ctx.stroke();
-        }
-        ctx.fillStyle = color;
-        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
-      } else if (poi.type === 'rally') {
-        // Diamond (rotated square)
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(px, py - r);
-        ctx.lineTo(px + r, py);
-        ctx.lineTo(px, py + r);
-        ctx.lineTo(px - r, py);
-        ctx.closePath(); ctx.fill();
-      } else if (poi.type === 'ambush') {
-        // Dashed circle (zawsze dashed; alpha 0.4 gdy hidden=true ustawiona wyżej)
-        const rangeR = (poi.rangePxLocal ?? 0) / GAME_CONFIG.AU_TO_PX * (auToPx ?? 1);
-        if (rangeR > 1) {
-          ctx.strokeStyle = color + '44'; ctx.lineWidth = 1;
-          ctx.setLineDash([2, 2]);
-          ctx.beginPath(); ctx.arc(px, py, rangeR, 0, Math.PI * 2); ctx.stroke();
-          ctx.setLineDash([]);
-        }
-        ctx.strokeStyle = color; ctx.lineWidth = 1;
-        ctx.setLineDash([3, 2]);
-        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      // Hitzone — większy niż sprite dla łatwiejszego hover/PPM
-      this._hitZones.push({
-        x: px - 10, y: py - 10, w: 20, h: 20,
-        type: 'map_poi', data: { poiId: poi.id },
-      });
-    }
-    ctx.restore();
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -5447,22 +3591,7 @@ export class FleetManagerOverlay {
   }
 
   // ARC GALAXY G5 — zakładka Stratcom usunięta (mapa galaktyki = tryb głównego widoku 3D, `GalaxyModeController`).
-  // Zostały: kropka „?” pośredniego kontaktu (rysuje ją mapa taktyczna `_drawCenter`) i powrót skokiem z panelu
-  // obcego układu (Finding 125).
-
-  // Ghost-blip pośredniego kontaktu: przyćmiona pusta kropka „?" (brak tożsamości i trasy).
-  _drawStratcomGhostBlip(ctx, x, y) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,90,90,0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,90,90,0.75)';
-    ctx.font = `bold ${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('?', x, y + 0.5);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.restore();
-  }
+  // Został powrót skokiem z panelu obcego układu (Finding 125); kropka „?” pośredniego kontaktu odeszła z mapą 2D (K7-pre).
 
   // ── Powrót skokiem z panelu obcego układu ──────────────────────────────────
 
@@ -5576,12 +3705,6 @@ export class FleetManagerOverlay {
       ctx.fillText(l.text, ttX + padX, ty + 10);
       ty += lineH;
     }
-  }
-
-  _bodyDistFromStar(body) {
-    const bx = (body.x ?? 0) / GAME_CONFIG.AU_TO_PX;
-    const by = (body.y ?? 0) / GAME_CONFIG.AU_TO_PX;
-    return Math.sqrt(bx * bx + by * by);
   }
 
   // ══════════════════════════════════════════════════════════════════════════

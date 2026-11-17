@@ -24,7 +24,7 @@
 //   T2  stan undefined / token nieznany / brak `position` → etykieta NIE jest żadnym słowem stanu
 //       realnego i JEST „Unknown" (klucz dedykowany `fleetGroup.statusUnknown`).
 //   T3  kształt z gate'u legu D (`sys_020`, orbiting, dockedAt:null) → „In space" bez nazwy ciała
-//       na obu panelach, w K3 i w `FMO._getLocationText` (koniec „Orbit: ???");
+//       na obu panelach i w K3 (koniec „Orbit: ???"; martwy `FMO._getLocationText` usunięty w K7-pre — świadek „nie ma”);
 //       KONTROLA: ten sam statek z dockedAt:'h2' → „Orbiting h2". ARKUSZ UI U4-1 — przecelowanie: karta floty NavPeek
 //       usunięta razem z kartami peek (UI_PLAN §4.5, decyzja 4) — dawne dwie asercje karty zastępuje świadek „tej
 //       powierzchni nie ma” (moduł bez `getPeekData`), żeby żadna karta nie wróciła po cichu ze starym słowem.
@@ -282,12 +282,10 @@ header('T3  leg-D (sys_020, orbiting, dockedAt:null) → „In space"; kontrola 
   // Rejestr K3 — ciało tylko przy orbicie WOKÓŁ ciała (kontrola).
   const rc = k3Row(Dc);
   ok(rc?.stateKey === 'fleetPicture.state.orbiting' && rc?.body === 'Halny', `K3 KONTROLA: dockedAt:h2 → orbiting + „Halny” (${rc?.stateKey}/${rc?.body})`);
-  // Command — `_getLocationText` (dawniej „Orbit: ???" przez `_resolveName(null)`)
+  // Command — `_getLocationText` (bez wołających od 3g) usunięty z lewą listą mapy 2D (K7-pre); świadek: żywy `_statusText`.
   world([D, Dc]);
-  const loc  = FleetManagerOverlay.prototype._getLocationText.call({}, D);
-  const locC = FleetManagerOverlay.prototype._getLocationText.call({}, Dc);
-  ok(!loc.includes('???') && loc === inSpace, `FMO._getLocationText(leg-D) = „${inSpace}", bez „???" (jest: ${J(loc)})`);
-  ok(locC === t('fleet.locationOrbit', 'Halny'), `FMO._getLocationText KONTROLA = ${J(t('fleet.locationOrbit', 'Halny'))} (jest: ${J(locC)})`);
+  ok(typeof FleetManagerOverlay.prototype._getLocationText === 'undefined' && typeof FleetManagerOverlay.prototype._statusText === 'function',
+    'FMO: martwy `_getLocationText` usunięty (K7-pre) — świadek: `_statusText` (linia stanu panelu) istnieje');
   // K3
   const rD = buildRegistryRows([D], { bodyName: (id) => EntityManager.get(id)?.name ?? id })[0];
   ok(rD.stateKey === 'fleetGroup.statusInSpace' && rD.body === null, `K3 leg-D: stateKey=inSpace, body=null (${rD.stateKey}/${rD.body})`);

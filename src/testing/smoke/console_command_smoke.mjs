@@ -126,7 +126,6 @@ function mk({ on, vessels = world(), setup = null } = {}) {
   installKosmos(ov, vessels);
   ov._visible = true;
   ov._activeTab = 'tactical';
-  ov._tacticalView = 'registry';
   if (setup) setup(ov);
   return ov;
 }
@@ -159,7 +158,7 @@ const STATES = {
 // ═══ A — dostępność akcji ON ⊇ OFF ═════════════════════════════════════════════════════════════════════════════════
 header('A  inwentarz stref trafień: każda akcja OFF istnieje ON (te same typy i dane)');
 const ON_ONLY_OK = new Set(['registryClearFilters']);
-const OFF_ONLY_OK = new Set();   // pasek zakładek → czipy (ten sam typ `tab`), mapa 2D niedostępna przy commandTacticalMap OFF
+const OFF_ONLY_OK = new Set();   // pasek zakładek → czipy (ten sam typ `tab`), mapa 2D usunięta (K7-pre)
 for (const [name, setup] of Object.entries(STATES)) {
   safe(`A ${name}`, () => {
     const off = mk({ on: false, setup }); draw(off, false);

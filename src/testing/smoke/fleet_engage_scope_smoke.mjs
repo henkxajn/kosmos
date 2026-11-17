@@ -431,15 +431,15 @@ header('T12 ŹRÓDŁO — CRLF-safe, komentarze zdjęte');
   assert((stripComments(cfSrc).match(/export function describeFleetOrderRefusal\(/g) ?? []).length === 1
          && /export function describeOrderFail\(/.test(cfSrc),
     'T12b2 `describeFleetOrderRefusal` zdefiniowane RAZ, obok `describeOrderFail` (CameraFrame.js)');
-  // Pin SCOPE'U: listy MAPY zostają keyed na kamerze (mapa pokazuje oglądany układ; obie utajone za flagą).
+  // K7-pre (D-K-18): listy MAPY 2D (keyed na kamerze, świadomie poza 166) usunięte razem z mapą — pin „tej powierzchni
+  // nie ma”, ze świadkiem żywego prototypu (`_drawRegistry`), żeby lista kamery nie wróciła po cichu.
   const drawSrc = stripComments(fmoSrc);
-  assert(/const enemyVisible = allVessels\.filter\(v =>\s*isEnemyVessel\(v\) && isLiving\(v\) && _isEnemyTracked\(v\)\s*&& \(v\.systemId \?\? 'sys_home'\) === sysId/.test(drawSrc),
-    'T12c `enemyVisible` (lewa lista 2D, utajona) NADAL keyed na kamerze — lista MAPY, świadomie poza 166');
-  const centerBody = stripComments(FleetManagerOverlay.prototype._drawCenter.toString());
-  assert(/if \(\(v\.systemId \?\? 'sys_home'\) !== sysId\) continue;/.test(centerBody) && /activeSystemId/.test(centerBody),
-    'T12d pętla statków `_drawCenter` (mapa 2D, utajona) NADAL keyed na kamerze — mapa pokazuje oglądany układ');
-  assert(GAME_CONFIG.FEATURES?.commandTacticalMap === false && GAME_CONFIG.FEATURES?.fleetRegistry === true,
-    'T12f KONTROLA flag: `commandTacticalMap:false` + `fleetRegistry:true` ⇒ obie listy mapy są UTAJONE (żywy Rejestr nie pushuje zon kontaktów)');
+  const P = FleetManagerOverlay.prototype;
+  assert(typeof P._drawRegistry === 'function' && typeof P._drawLeft === 'undefined' && typeof P._drawCenter === 'undefined'
+         && !/const enemyVisible = /.test(drawSrc),
+    'T12c/T12d (K7-pre) listy mapy 2D (`_drawLeft` / `_drawCenter` / `enemyVisible`) usunięte — świadek: `_drawRegistry` istnieje');
+  assert(!('commandTacticalMap' in (GAME_CONFIG.FEATURES ?? {})) && !('fleetRegistry' in (GAME_CONFIG.FEATURES ?? {})),
+    'T12f (K7-pre) flagi `commandTacticalMap` i `fleetRegistry` usunięte — REJESTR jest jedyną treścią SYSTEM TACTICAL');
 }
 
 console.log(`\n════ fleet_engage_scope_smoke: ${pass} PASS / ${fail} FAIL ════`);

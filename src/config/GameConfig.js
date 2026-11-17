@@ -233,15 +233,8 @@ export const GAME_CONFIG = {
     //   glify-billboardy, wymuszone warstwy, duchy ETA. Render/UI-only, bez migracji
     //   save. OFF = klawisz nieaktywny, zero kosztów w pętli.
     tacticalMode:         true,
-    // Obraz Operacyjny Faza 3 — rejestr floty K3: pod-widok [MAPA]/[REJESTR]
-    //   w zakładce SYSTEM TACTICAL (tabela + oś czasu). Render/UI-only.
-    //   OFF = przełącznik niewidoczny, zero kosztów.
-    fleetRegistry:        true,
-    // Mini-arc „Polish + Rejestr 2.0" (3g) — PRÓBA DEPRECJACJI mapy 2D w Command:
-    //   OFF (default) = REJESTR jest domyślną treścią SYSTEM TACTICAL (mapa 2D
-    //   i lewa lista ukryte, kod NIETKNIĘTY); ON = przywraca wszystko 1:1.
-    //   Usunięcie kodu mapy = OSOBNA decyzja Filipa po okresie próbnym.
-    commandTacticalMap:   false,
+    // (K7-pre, D-K-18: `fleetRegistry` i `commandTacticalMap` usunięte razem z uśpioną mapą 2D Dowództwa —
+    //   REJESTR jest jedyną treścią SYSTEM TACTICAL; OFF jednej i ON drugiej flagi przywracały tylko mapę.)
     // Obraz Operacyjny Faza 4 — „Dok taktyczny": półprzezroczysty pas dowodzenia
     //   na dole ekranu WYŁĄCZNIE w trybie taktycznym Y. Lewy dok [LISTA]/[OŚ] (czwarta
     //   soczewka FleetPictureLogic — „co się dzieje TERAZ, tutaj") + prawy mini-panel
