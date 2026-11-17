@@ -14,8 +14,21 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
-import { t, getName, getLocale } from '../i18n/i18n.js';
+import { t, getName } from '../i18n/i18n.js';
 import { drawResourceIcon, hasIconFile, getIconPath } from './ResourceIcons.js';
+// ARC KONSOLE K3 — Budżet i Przepływy na zestawie konsoli (FEATURES.consoleEconomy); OFF = dzisiejszy rysunek niżej.
+// Produkcja (`economy`) zostaje dzisiejszą stroną do K4 (ta sama instancja przełącza się między stronami zestawu a starą).
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { isKitScreen } from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo } from './ConsoleKit.js';
+import { drawEconomyConsole } from './EconomyConsoleView.js';
+import { applyEconChip, taxEffect } from './EconomyConsoleLogic.js';
+
+// Strona zestawu konsoli dla aktywnego id grupy (null = dzisiejsza strona: Produkcja albo flaga OFF)
+const kitPage = () => {
+  const id = window.KOSMOS?.overlayManager?.active;
+  return (id === 'budget' || id === 'flows') && isKitScreen(id, GAME_CONFIG.FEATURES) ? id : null;
+};
 
 const LEFT_W   = 220;
 const RIGHT_W  = 260;
@@ -74,12 +87,23 @@ export class EconomyOverlay extends BaseOverlay {
     // Flows — wybrany zasób w matrycy zużycia (master-detail)
     this._flowSelectedResId = null;
 
-
     // Tooltip DOM (hover na wierszach surowców/towarów)
     this._hoverResourceId = null;
     this._mouseScreenX = 0;
     this._mouseScreenY = 0;
     this._createTooltipEl();
+
+    // K3 — konsola Budżetu i Przepływów (FEATURES.consoleEconomy): strefy ostatniej klatki (wejście czyta je stąd, bez
+    // window.inner*), zaznaczona linia Budżetu, przewijanie listy i inspektora, skala UI z rysunku (podpowiedzi DOM)
+    this.consoleZones = null;
+    this._consoleListRect = null;
+    this._consoleInspRect = null;
+    this._consoleTooltip = null;
+    this._budgetLine = null;
+    this._kitScrollList = 0;
+    this._kitScrollInsp = 0;
+    this._kitInspContentH = 0;
+    this._uiScale = 1;
   }
 
   // ── Encje zakładek: kolonie + stacje GRACZA (overlay-local; NIE ColonyManager — audyt §2) ──
@@ -458,6 +482,16 @@ export class EconomyOverlay extends BaseOverlay {
     this._centerTab = activeId === 'budget' ? 'budget'
                     : activeId === 'flows'  ? 'flows'
                     : 'production';
+
+    const page = kitPage();
+    if (page) {
+      // K3 — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawEconomyConsole(this, ctx, W, H, page); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
     // PRODUCTION = 3 kolumny (lewa bilans | środek | prawa wykresy+alerty).
@@ -2346,21 +2380,9 @@ export class EconomyOverlay extends BaseOverlay {
 
   // Etykieta efektu stawki podatkowej na konsumpcję (PL/EN). Port z CivilizationOverlay.
   _getTaxEffectLabel(rate) {
-    const isPL = getLocale() !== 'en';
-    const drain = rate <= 0.05 ? -(0.05 - rate) * 200
-                : rate <= 0.12 ? 0
-                : (rate - 0.12) / 0.13 * 40;
-    const drainPct = Math.round(drain);
-    if (drainPct < 0) return isPL
-      ? `✓ Dotacja konsumpcji +${-drainPct}%`
-      : `✓ Consumption subsidy +${-drainPct}%`;
-    if (drainPct === 0) return isPL ? '● Neutralne' : '● Neutral';
-    if (rate <= 0.20) return isPL
-      ? `⚠ Konsumpcja -${drainPct}%`
-      : `⚠ Consumption -${drainPct}%`;
-    return isPL
-      ? `✗ Konsumpcja -${drainPct}% — ryzyko protestu`
-      : `✗ Consumption -${drainPct}% — protest risk`;
+    // K3 / Finding 725 — etykiety przez t() (klucze econPanel.taxEffect.*); formuła w EconomyConsoleLogic.taxEffect (bez zmian)
+    const e = taxEffect(rate);
+    return t(e.key, e.pct);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -2597,6 +2619,15 @@ export class EconomyOverlay extends BaseOverlay {
 
   handleClick(x, y) {
     if (!this.visible) return false;
+    if (kitPage()) {
+      // K3 — geometria wyłącznie ze stref ostatniej klatki (bez window.inner*); klik w ramie zawsze pochłonięty (jak dziś)
+      const f = this.consoleZones?.frame;
+      if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+      this._lastClickX = x;   // tax_slider — ta sama reguła co dziś
+      const hit = this._hitTest(x, y);
+      if (hit) this._onHit(hit);
+      return true;
+    }
     const { ox, oy, ow, oh } = this._getOverlayBounds(
       Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
       Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
@@ -2618,6 +2649,8 @@ export class EconomyOverlay extends BaseOverlay {
         this.hide();
         break;
       case 'tab':
+        // K3 — czip grupy w nagłówku konsoli (D-K-15): Budżet / Produkcja / Handel / Rynek / Przepływy
+        if (zone.data?.id) { applyEconChip(zone.data.id, window.KOSMOS?.overlayManager); break; }
         this._centerTab = zone.data.tab;
         this._scrollCenter = 0;
         this._scrollCenterTop = 0;
@@ -2628,6 +2661,11 @@ export class EconomyOverlay extends BaseOverlay {
         break;
       case 'flow_res':
         this._flowSelectedResId = zone.data.resId;
+        this._kitScrollInsp = 0;
+        break;
+      case 'budget_line':   // K3 — wybór linii Budżetu (inspektor pokazuje jej rozbicie)
+        this._budgetLine = zone.data.lineId;
+        this._kitScrollInsp = 0;
         break;
       case 'colony_filter':
         this._selectedColonyId = zone.data.colonyId;
@@ -2659,8 +2697,8 @@ export class EconomyOverlay extends BaseOverlay {
     }
     this._hoverZone = this._hitTest(x, y);
 
-    // Pozycja myszy w pikselach ekranowych (do pozycjonowania tooltipa)
-    const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    // Pozycja myszy w pikselach ekranowych (do pozycjonowania tooltipa); K3 — konsola: skala zapamiętana w draw()
+    const scale = kitPage() ? (this._uiScale || 1) : Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     this._mouseScreenX = x * scale;
     this._mouseScreenY = y * scale;
 
@@ -2694,6 +2732,15 @@ export class EconomyOverlay extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (kitPage()) {
+      // K3 — lista i inspektor przewijane osobno; klamra w rysunku (drawList / inspektor)
+      const f = this.consoleZones?.frame;
+      if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+      const inR = (r) => r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+      if (inR(this._consoleListRect)) this._kitScrollList = Math.max(0, this._kitScrollList + delta * 0.5);
+      else if (inR(this._consoleInspRect)) this._kitScrollInsp = Math.max(0, this._kitScrollInsp + delta * 0.5);
+      return true;
+    }
     const { ox, oy, ow, oh } = this._getOverlayBounds(
       Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
       Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
