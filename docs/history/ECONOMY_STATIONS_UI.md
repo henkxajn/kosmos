@@ -1094,3 +1094,21 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §15. Flaga `FEATURES.consoleDipl
 Następny krok: K3 (rodzina Ekonomii).
 
 ---
+
+## ARC KONSOLE — K3: rodzina Ekonomii na szablonie konsoli (`79c8ba3` + `a75a402` + `bd72f73`, PASS właściciela 2026-11-17) — Ekonomia GOTOWA poza Produkcją
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §16. Flaga `FEATURES.consoleEconomy` (Budżet, Przepływy, Handel; OFF = dziś bit w bit).
+- **Rama:** czipy [ BUDŻET ] [ PRODUKCJA ] [ HANDEL ] [ RYNEK ] [ PRZEPŁYWY ], bez pasa subnav; lewa kolumna magazynu zdjęta (D-K-16:
+  szuflada albo blok magazynu na Przepływach); Produkcja zostaje dzisiejsza do K4. Martwe tryby fabryk usunięte (−771 linii).
+- **Budżet:** linie, netto i skarbiec, przychody / wydatki, suwak podatku; pas = surowce, deficyt budżetu pierwszy.
+- **Przepływy:** lista zgodna z bohaterem (738), diagram w tercjach, przyciemnienie K1c-B pod liczbą.
+- **Handel:** wiersz „Wszystkie połączenia”, wybrane połączenie steruje bohaterem, inspektorem i pasem; wydatki z powodem.
+- **Rynek:** tablica kolonia · imperium, objaśnienie zlecenia (odbiorca, płatność, dostawa warpem), KUP / SPRZEDAJ wyłączone z powodem.
+- **Runda 2:** lokalna kolonia Handlu („Twoja kolonia ▾”), globalna aktywna nietknięta; `KOSMOS.debug.trade.ctx()`.
+- **Findingi:** 725 (Budżet + Handel) ✅, 738 ✅, 739 ⚪, 740 ⚪ (placówka przejmuje aktywną kolonię), 741 ⚪ (AI z 0 Kr — martwa sprzedaż).
+- **Testy:** `console_economy_smoke` 89/0, `console_trade_smoke` 98/0; mutacje 8/8 + 15/15 + 10/10; sweep 417/417, `check-i18n` PASS.
+- **Decyzja właściciela:** K6 (Kolonie) wychodzi z arcu do osobnego arcu „ekran planety/ciała”; zakładka Kolonie zostaje jak dziś.
+
+Następny krok: K4 (Produkcja).
+
+---

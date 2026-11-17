@@ -3,9 +3,10 @@
 Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
 owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); K1b delivered (`574ee3f`, owner PASS
 2026-11-16 after three review rounds — §11); K1c-A delivered (`301b66b`, owner PASS 2026-11-16 — §12); K1c-B delivered (`eb59908`, owner PASS
-2026-11-16 — §13) — **Shipyard console DONE**; K2 delivered (`1685293` + `1f6c960`, owner PASS 2026-11-16 — §15) — **Diplomacy group DONE**.** Phase A
+2026-11-16 — §13) — **Shipyard console DONE**; K2 delivered (`1685293` + `1f6c960`, owner PASS 2026-11-16 — §15) — **Diplomacy group DONE**; K3 delivered (`79c8ba3` + `a75a402` +
+`bd72f73`, owner PASS 2026-11-17 — §16) — **Economy group DONE except Production (K4)**; K6 moved out of this arc (§16, owner 2026-11-17).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
-the K0a gate). Register: findings #723–#737 filed; **next free finding number: 738**.
+the K0a gate). Register: findings #723–#741 filed; **next free finding number: 742**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
 allowlist, not game code); 41 untracked files, all older than 2026-11-02, none from the combat-visuals arc.
 Handover: `C:\Users\Komputer\kosmos-handover\consoles-phase-a\` (`STOP_A.md`, `kontakt_now.html`, `shots_now/`,
@@ -320,13 +321,13 @@ Hit zones stay per screen (first-hit-wins in BaseOverlay; Command keeps its own 
 
 ## 5. Findings (next free number verified: **723**; the brief expected 612 — the CV arc filed #612–#722)
 
-This plan files **#723–#737**. **Next free finding number: 738.**
+This plan files **#723–#737** (Phase A) and **#738–#741** (K3, §16). **Next free finding number: 742.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
 | **723** | ✅ K1c-A | **The Shipyard ignores the 4-zone idea entirely**: one centred 560 px column (`ShipyardOverlay.js:82`) with build list, reserve and the ship designer stacked in one scroll; the designer (hull picker, slots, module picker, stats, SAVE) is reachable only by scrolling past the reserve, and its pinned action bar floats at the bottom of an otherwise empty screen | `shots_now/*/2x_shipyard_*.jpg`; `ShipyardOverlay.js:91-154` | K1 |
 | **724** | ✅ K2 | **Diplomacy shows raw engine ids**: the AI stance prints `fsm.state` (`NEGOTIATING`, `IDLE`…) verbatim and the relation memory prints event keys (`research_intrusion`, `peace_offered`) | `DiplomacyOverlay.js:266-270`; `shots_now/amber_noir/30_diplomacy.jpg` | K2 |
-| **725** | ⚪ (Intel part ✅ K0b; War part ✅ K2) | **Hard-coded literals bypassing i18n on tab screens**: Intel `(wymaga skanu naziemnego)` `:333`, `Ostatnie incydenty` ~`:346`, `(brak)` ~`:356`; Production demand headers `Źródło/Towar/Potrzeba` `EconomyOverlay.js:1774-1776`; Trade `Kr/rok` `:603` and local prices shown as raw resource ids `:696/:706`; War heading `Casus Belli`; Budget tax-effect labels inline PL/EN `:3105` | files as listed | the step that touches each screen |
+| **725** | ⚪ (Intel part ✅ K0b; War part ✅ K2; Budget + Trade parts ✅ K3; Production part → K4) | **Hard-coded literals bypassing i18n on tab screens**: Intel `(wymaga skanu naziemnego)` `:333`, `Ostatnie incydenty` ~`:346`, `(brak)` ~`:356`; Production demand headers `Źródło/Towar/Potrzeba` `EconomyOverlay.js:1774-1776`; Trade `Kr/rok` `:603` and local prices shown as raw resource ids `:696/:706`; War heading `Casus Belli`; Budget tax-effect labels inline PL/EN `:3105` | files as listed | the step that touches each screen |
 | **726** | ⚪ (console part ✅ K1c-A; U screen → K1c-B) | **Module picker shows raw keys for two module groups**: `UnitDesignOverlay` category labels are a local PL/EN map (`:37-68`) with no `shield` / `troop` entries → those groups render their raw slotType with no icon (`catLabel ?? cat`, `:436-439`) | `UnitDesignOverlay.js:37-68, 436-439` | K1 |
 | **727** | ✅ K2 | **Diplomacy action band collides with the clock cluster**: the bottom-right action button («Zaproponuj sojusz») sits under the always-on clock/bell cluster drawn over every tab | `shots_now/amber_noir/30_diplomacy.jpg` | K2 (console frame reserves the clock rect) |
 | **728** | ⚪ | **Medium and Large cargo hulls show the same model**: `nonwarp_medium_cargo.glb` ≡ `nonwarp_large_cargo.glb` (identical md5 `43be8bba…`); also `cargo3d.glb` ≡ `default.glb` (unused) | `md5sum assets/models/ships/*.glb` | art / model pipeline (no step) |
@@ -339,6 +340,10 @@ This plan files **#723–#737**. **Next free finding number: 738.**
 | **736** | ⚪ | **Combat strip overflows its console header slot with 2–3 simultaneous battles**: one battle line (21 px) fits the 30 px header slot (D-K-17), but each extra battle adds a line (`MAX_LINES` 3, `stripLayout`), so the block grows below the header over the top of the inspector | `combatSlotInsets` (`CombatStripLogic.js`), `stripLayout`; K0b review (not staged) | later (owner: collapse to one «⚔ N ▼» chip in the slot) |
 | **737** | ✅ K1b | **Normalizer keeper N11f classified slots by the Workshop stamp, not by the nozzle**: every Workshop save stamps `notes` (turrets only too), so after the owner clicked turrets on the five remaining warships all six slots carried the stamp and the equality witness (`nozMeasured ≥ 1`) emptied while every nozzle was correct. Fix: classify by the nozzle — a nozzle equal to the measurement always counts as equality; the aft-half rule applies only to a nozzle moved in the Workshop; unstamped and not equal is still an error; the control takes the first stamped slot. Red on a moved nozzle without the stamp | `cv_normalizer_logic_smoke.mjs` N11f (56/1 → 57/0 on the owner's files; 57/0 on the base files) | K1b |
 | **735** | ✅ K2 (console path; flag-OFF screen keeps the buttons until KZ) | **War screen ships two debug actions to the player, unconditionally**: «⚡ WYMUŚ STARCIE (debug)» → `warSystem.forceBattle` and «🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)» are drawn and clickable for every active war (`WarOverlay.js:380-386`, `:707`; i18n `warOverlay.btnForceBattle/btnForceInvasion`) — a cheat in the player UI | `shots_now/*/32_war.jpg`; files as listed | K2 (owner: hide behind a debug flag or `KOSMOS.debug.*`) |
+| **738** | ✅ K3 (console path) | **Flows list balance disagreed with the hero**: the list summed `_producers` only (no mine output, no factory input) while the hero/inspector use `_gatherFlowBreakdown` → e.g. Fe list −1.0 vs hero −116 | `EconomyOverlay._drawFlows` list; K3-A `flowListItems` | K3 — list row = `flowDiagram(_gatherFlowBreakdown(id)).net` over `flowCandidateIds`; flag-OFF list unchanged until KZ |
+| **739** | ⚪ | **Today's Budget prints «Kr//rok»** (`Kr/${t('tradePanel.perYear')}` with perYear = '/rok'; the console uses `econ.console.krPerYear`); `econPanel.stationLabel` has no `{0}`, so the station name is never shown in today's column header | `EconomyOverlay.js` Budget lines; `pl.js`/`en.js` `econPanel.stationLabel` | KZ (flag-OFF path removed) |
+| **740** | ⚪ | **Founding an outpost switches the global active colony to it**: `outpost:founded` → `GameScene` calls `switchActiveColony(outpost)`, so the top bar shows the outpost's zeros and today's Trade page refuses orders («is_outpost») until the player re-selects a full colony | `GameScene.js` `outpost:founded` listener; `ColonyManager.switchActiveColony` | later UX fix (outside this arc); the Trade console is immune (Trade-local context, §16) |
+| **741** | ⚪ | **AI partner colonies may hold 0 Kr, so SELL on Rynek can be dead**: settlement needs `aiCol.credits ≥ total`; on GATE-S4 the partner colony shows 0 Kr — check whether AI colony credits ever accumulate | `TradeOrderBoard._settle`; AI colony `credits` | audit later (economy) |
 
 ## 6. Proposed cut, decisions, effort
 
@@ -356,7 +361,7 @@ owner look + tune; one `feat` commit + `docs` close-out; sized for one CC sessio
 | **K3** | Economy frame (drop left inventory, D-K-16) + Budget + Flows + Trade (D-K-15); dead code removed first | 1–2 |
 | **K4** | Production (largest Economy page); 732 | 1–2 |
 | **K5** | Civilization + Dyson (Dyson hero diagram is new) | 1–2 |
-| **K6a / K6b** | Colonies: frame, colony list, buildings strip under the hero / inspector rule (D-K-13), globe placement | 2–3 |
+| ~~**K6a / K6b**~~ | ~~Colonies: frame, colony list, buildings strip under the hero / inspector rule (D-K-13), globe placement~~ — **moved out of this arc** (owner decision 2026-11-17) into its own arc «planet/body screen»; the Colonies tab keeps today's look and KZ does not touch it | — |
 | **K7a / K7b / K7c** | Command: frame + registry + timeline strip (D-K-14) / inspector reskin with T5 shared handlers + golden trace re-record / Atlas, Logistics, Ground | 3 |
 | **KZ** | Flags permanent ON, OFF paths and old styles removed (`_drawButton`, `GLASS_BORDER` subnav, per-file `✕`), before/after frame comparison | 1–2 |
 
@@ -806,3 +811,56 @@ the before/after `git worktree` copies were removed at commit time.
   `wp_peace_table` set the flag OFF (they pin today's panels); `console_intel_smoke` S3 sets `consoleDiplomacy` OFF explicitly;
   `i18n_hardcoded_gate_smoke` T3 uses POIModal as its sample. Sweep 415/415, `check-i18n` PASS. Live engine: 7 frames × 5 themes +
   before/after + 1280×833 + post-fix frame, 0 console errors; one-liners validated on the engine.
+
+## 16. K3 — delivered (Economy group on the console template: Budget, Flows, Trade) — Economy group DONE except Production
+
+**Commits `79c8ba3` refactor(K-pre Economy)** (D-K-18: dormant manual/priority factory modes and an unused Trade helper, −771 LOC),
+**`a75a402` feat(K3-A)** (Economy frame + Budget + Flows) **and `bd72f73` feat(K3-B)** (Trade + polish) · flag `FEATURES.consoleEconomy`
+(Budget, Flows, Trade; ON, with `consoleKit`; OFF = today's pages bit for bit, proven by draw-log + zone hashes against the base) ·
+owner PASS 2026-11-17 after two polish rounds. Handover `C:\Users\Komputer\kosmos-handover\consoles-k3\`: `STOP_K3-A.md`,
+`STOP_K3.md`, `STOP_K3_POLISH.md`, `STOP_K3_R2.md`, `kontakt_k3.html`, `shots{,_p,_r2}/`, `probes/{k3, k3r2, sheet, sheet_p, sheet_r2}.mjs`,
+`run{,_p,_p2,_r2}.sh`; fail-first worktrees removed.
+
+- **Frame (D-K-15, D-K-16):** header chips `[ BUDŻET ] [ PRODUKCJA ] [ HANDEL ] [ RYNEK ] [ PRZEPŁYWY ]` (`applyEconChip`), no subnav
+  strip; Production stays today's page with the strip until K4. The left inventory column is dropped: every line is either in the top
+  drawer or in the Flows stock block «Magazyn — poza szufladą» (goods beyond fuel, orphan-station depots); D-K-16 deviation approved
+  (no energy balance for a selected station). After the gate the stock block lives on Flows only.
+- **Budget:** budget lines list, hero = net + treasury instruments, income vs expense bars, tax slider (today's `tax_slider` rule);
+  inspector = breakdown + tax effect (725); strip = resource deficits / surpluses labelled «Surowce», with the budget deficit first in
+  alert role when net < 0.
+- **Flows:** resource list (Finding 738 fix: row value = hero net), hero = producer / resource / consumer diagram in hero thirds
+  (headers above columns, band thickness by value, K1c-B local dim under the centre number), inspector = production, consumption,
+  balance, stock, years to empty, full breakdown + stock block.
+- **Handel:** connection list with «Wszystkie połączenia» first (today's global chart); a selected connection drives the hero (its
+  history from the trade log, else its current flows as bars, else plain «no data»), the inspector (partner, distance, prosperity gap,
+  its flows, the partner endpoint's prices) and the strip (its log entries); spend actions, migration, goods control below.
+  **Report A:** per connection = partner, distance, gradient, current flows (`_flowsPerYear`, rebuilt every half-year, not saved — empty
+  after load / while paused), history (the trade log stores the partner NAME, matched by name), endpoint prices (prices are per colony);
+  per colony = credits, Kr/yr, capacity, spends, migration, goods control.
+- **Rynek:** partner empires → colonies, board titled colony · empire with «Towar / Zapas · cena» column headers, order box (qty chips +
+  typed `<input>` placed from `consoleZones`), recipient / pay / receive / warp delivery (`TradeOrderBoard.DELAY_YEARS`, now exported)
+  and how BUY / SELL settle; pending orders always in the strip. **Report B:** `placeOrder` gates = full player colony → AI colony →
+  `ion_drives` → trade treaty (the partner list already requires the treaty); settlement cancels on missing credits / stock. The flag-OFF
+  page rejects the same way (same method, result ignored — silent). The console disables BUY / SELL with an i18n reason (`orderGate`).
+- **Round 2 — which colony trades:** the active colony is the global `colonyManager.activePlanetId`, set only by `switchActiveColony`
+  (Outliner, map label, event log, Civilization list, colony panel switcher, opening a colony map, founding a colony **or outpost**,
+  capture, colony loss); it swaps the per-colony systems of the whole UI. No console click changes it (pin K8). The owner's refusal was an
+  outpost as active colony (Finding 740). «Full colony» in code = player colony with `isOutpost !== true`; «outpost» = `isOutpost === true`
+  (pop 0, no civilization). Fix: a **Trade-local colony context** («Twoja kolonia: X ▾» picker on both pages; outposts dimmed with the
+  reason) — the global active colony is never switched; credits, connections, spends, migration, goods, stock and orders follow it.
+  `KOSMOS.debug.trade.ctx()` prints the active and the trade colony (id, name, type, pop) and every order and spend gate.
+- **Approved deviations:** (1) pending orders always in the Rynek strip; (2) local / partner prices in the Handel inspector, spend
+  descriptions shown; (3) 725 names only in the console (OFF keeps raw ids until KZ), `Kr/rok` via `t()` on both paths (EN «Kr/yr»);
+  (4) the Flows list has more rows than today (mine / factory-input resources — 738); (5) Rynek board in 2 columns, import in the
+  foreign role; (6) a blocked BUY / SELL has no hit zone (OFF: zone with a silent refusal); (7) credits and stock are checked before the
+  order (today: accepted, cancelled after a year); (8) the K1c-B local dim is copied (`drawHeroDim`), Shipyard untouched; (9) Trade-local
+  colony context, global active colony untouched; (10) spend actions act on the selected Trade colony and are disabled with a reason.
+- **Findings:** **725** Budget + Trade parts ✅ (Production part → K4); **738 ✅**; **739 ⚪** filed; **740 ⚪** and **741 ⚪** new.
+- **Keepers:** `console_economy_smoke` **89/0** (actions ON == OFF, D-K-16 reachability drawer ∪ Flows block, chips, Production ON == OFF,
+  geometry, 725, formulas, strip, Flows layout); `console_trade_smoke` **98/0** (hit-zone inventory ON ⊇ OFF, qty `<input>` at 1600×1041
+  and 1280×833 with patched `innerWidth`, no raw ids, chips, 738, connection selection, order gate per condition, OFF rejects the same way,
+  chart / board labels, colony context, reason keys PL + EN, spend gates, order explanation, debug dump). Fail-first per round on the
+  previous state (only named controls green); mutations 8/8, 15/15, 10/10 red. Sweep 417/417, `check-i18n` PASS. Live engine (CDP mouse
+  + keyboard, GATE-S4): 5 themes ON, OFF, pre-change, 1280×833, outpost-active and no-active cases — 0 page errors.
+- **Owner decision 2026-11-17:** K6 (Colonies) leaves this arc for its own arc «planet/body screen»; the Colonies tab keeps today's look
+  and KZ does not touch it. Next step here: K4 (Production; 732, 725 Production part).
