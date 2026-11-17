@@ -70,6 +70,7 @@ import { applyConsoleHalo } from './ConsoleKit.js';
 import { drawCommandConsole } from './CommandConsoleView.js';
 import { defaultRegistryFilter, searchInputCss, focusPlan } from './CommandConsoleLogic.js';
 import { dialogAnchorCss } from './CommandInspectorLogic.js';
+import { UNIT_ARCHETYPES, checkArchetypeUnlocked, GROUND_UNIT_CAP_EXEMPT, ARCHETYPE_ICONS } from '../data/unitArchetypes.js';   // K7-C (dane, bez three)
 const kitOn = () => isKitScreen('fleet', GAME_CONFIG.FEATURES);
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
@@ -308,6 +309,11 @@ export class FleetManagerOverlay {
     this._logiColDropdownRect = null;    // rect panelu drop-downu kolonii (routing wheel)
     this._logiQtyInput = null;           // DOM <input> ręcznej ilości (wzór safety stock)
     this._atlasScrollY = 0;       // scroll katalogu ciał
+    this._groundColonyId = null;       // K7-C — kolonia strony Jednostek (lokalna)
+    this._groundSelUnitId = null;      // K7-C — jednostka wybrana w tabeli Jednostek
+    this._logiSelectedOrderId = 'new'; // K7-C — wybór na liście Logistyki konsoli ('new' = kreator)
+    this._logiKitRects = null;         // K7-C — prostokąty listy / inspektora Logistyki (kółko)
+    this._atlasSelectedBodyId = null;  // K7-C — ciało wybrane w Atlasie konsoli (lista ↔ orrery)
     this._atlasContentH = 0;      // wysokość zawartości katalogu
     this._atlasVisibleH = 0;      // widoczna wysokość katalogu
     // Prawy panel taktyki (szczegóły statku) — pionowy scroll (treść bywa wyższa niż panel)
@@ -760,12 +766,19 @@ export class FleetManagerOverlay {
   }
 
   // DOM <input> ręcznego wpisania ilości towaru (wzór EconomyOverlay._openOneShotQtyInput).
-  _openLogiQtyInput(goodId, canvasX, canvasY) {
+  _openLogiQtyInput(goodId, canvasX, canvasY, kitBox = null) {
     this._closeLogiQtyInput();
-    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
-    const boxW = 34, boxH = 20;
-    const sx = (canvasX ?? 100) * SCALE, sy = (canvasY ?? 100) * SCALE;
-    const sw = boxW * SCALE, sh = boxH * SCALE;
+    let sx, sy, sw, sh;
+    if (kitBox) {
+      // K7-C — konsola: prostokąt pola z rysunku strefy inspektora (`consoleZones`) × skala UI z ostatniego rysunku; bez `window.inner*`
+      const css = searchInputCss({ x: canvasX, y: canvasY, w: kitBox.w, h: kitBox.h }, this._uiScale || 1);
+      sx = css.left; sy = css.top; sw = css.width; sh = css.height;
+    } else {
+      const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+      const boxW = 34, boxH = 20;
+      sx = (canvasX ?? 100) * SCALE; sy = (canvasY ?? 100) * SCALE;
+      sw = boxW * SCALE; sh = boxH * SCALE;
+    }
 
     const input = document.createElement('input');
     input.type = 'number'; input.min = '0'; input.max = '999990'; input.step = '10';
@@ -869,6 +882,52 @@ export class FleetManagerOverlay {
     this._logiDropdownViewH = listH;
     ctx.restore();
     this._clipRightHitZones(hzStart, listY, listH);
+  }
+
+  /**
+   * K7-C — fakty strony Logistyka dla konsoli (te same źródła i reguły co `_drawLogiBuilder` / `_drawLogiOrders` /
+   * drop-downy): pula, kolonie gracza, źródło / cel, wybrane towary z zapasem źródła, katalog dóbr, bramka „Utwórz”, zlecenia.
+   */
+  _logiFacts(colMgr) {
+    const tos = window.KOSMOS?.transportOrderSystem;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const playerCols = colMgr?.getPlayerColonies?.() ?? [];
+    const activePid = colMgr?.activePlanetId;
+    if (!this._logiFrom && playerCols.some(c => c.planetId === activePid)) this._logiFrom = activePid;   // jak builder OFF
+    const srcInv = this._logiFrom ? colMgr?.getColony(this._logiFrom)?.resourceSystem?.inventory : null;
+    const srcAmt = (id) => (srcInv instanceof Map ? Math.floor(srcInv.get(id) ?? 0) : 0);
+    const good = (id) => ({ id, icon: _cargoIcon(id), name: _cargoName(id) });
+    const selected = Object.entries(this._logiGoods).filter(([, q]) => q > 0).map(([id, qty]) => ({ ...good(id), qty, inStock: srcAmt(id) }));
+    const PHASE = { hauling: 'transportOrder.phase_hauling', to_origin: 'transportOrder.phase_to_origin', waiting: 'transportOrder.phase_waiting' };
+    const orders = (tos?.getOrders?.() ?? []).map((o, i) => {
+      const fromSys = colMgr?.getColony(o.fromColonyId)?.systemId;
+      const toSys = colMgr?.getColony(o.toColonyId)?.systemId;
+      return {
+        id: o.id, fifo: i + 1, fromId: o.fromColonyId, toId: o.toColonyId,
+        fromName: colMgr?.getColony(o.fromColonyId)?.name ?? o.fromColonyId, toName: colMgr?.getColony(o.toColonyId)?.name ?? o.toColonyId,
+        cross: !!(fromSys && toSys && fromSys !== toSys),
+        goods: Object.keys(o.goods).map(g => ({ ...good(g), total: o.goods[g] ?? 0, done: o.delivered?.[g] ?? 0 })),
+        assigns: (o.assignments ?? []).map(a => {
+          const v = vMgr?.getVessel?.(a.vesselId);
+          const warping = v?.mission?.phase === 'warp_transit';
+          return { vesselId: a.vesselId, name: v?.name ?? a.vesselId, phase: a.phase ?? null, warping,
+            phaseKey: warping ? 'transportOrder.phase_warp' : (PHASE[a.phase] ?? 'transportOrder.phase_idle') };
+        }),
+      };
+    });
+    const totalGoods = selected.length;
+    let createReason = null;
+    if (!this._logiFrom) createReason = 'cmdPages.logi.reasonNoFrom';
+    else if (!this._logiTo) createReason = 'cmdPages.logi.reasonNoTo';
+    else if (this._logiFrom === this._logiTo) createReason = 'cmdPages.logi.reasonSame';
+    else if (totalGoods === 0) createReason = 'cmdPages.logi.reasonNoGoods';
+    return {
+      pool: tos?.getPool?.().length ?? 0, hasSystem: !!tos,
+      cols: playerCols.map(c => ({ id: c.planetId, name: c.name ?? c.planetId, systemId: c.systemId ?? null, sysName: this._sysName(c.systemId) })),
+      from: this._logiFrom ?? null, to: this._logiTo ?? null, selected, totalGoods, canCreate: createReason === null, createReason,
+      catalog: _LOGI_GOOD_CATALOG.map(id => ({ ...good(id), amt: srcAmt(id), already: (this._logiGoods[id] ?? 0) > 0 })),
+      orders,
+    };
   }
 
   // Nazwa układu gwiezdnego (galaxyData). Fallback = id.
@@ -1192,6 +1251,12 @@ export class FleetManagerOverlay {
 
     // ── ATLAS (pełna szerokość) — scroll katalogu ────────────
     if (this._activeTab === 'atlas') {
+      // K7-C — konsola: inspektor ciała (pełna lista złóż) ma własne przewijanie
+      if (kitOn() && inRect(this._atlasKitRects?.insp)) {
+        const maxI = Math.max(0, (this._atlasInspContentH || 0) - (this._atlasInspViewH || 0));
+        this._atlasInspScrollY = Math.max(0, Math.min(maxI, (this._atlasInspScrollY || 0) + delta * 0.5));
+        return true;
+      }
       if (inRect(this._contentBounds)) {
         const maxScroll = Math.max(0, this._atlasContentH - this._atlasVisibleH);
         this._atlasScrollY = Math.max(0, Math.min(maxScroll, this._atlasScrollY + delta * 0.5));
@@ -1220,6 +1285,15 @@ export class FleetManagerOverlay {
       if (this._logiColDropdown && inRect(this._logiColDropdownRect)) {
         const maxC = Math.max(0, (this._logiColDropdownContentH || 0) - (this._logiColDropdownViewH || 0));
         this._logiColDropdownScrollY = Math.max(0, Math.min(maxC, (this._logiColDropdownScrollY || 0) + delta * 0.5));
+        return true;
+      }
+      // K7-C — konsola: lista zleceń (strefa listy) / kreator (strefa inspektora) wg prostokątów z rysunku
+      if (kitOn() && this._logiKitRects) {
+        if (inRect(this._logiKitRects.list)) {
+          this._logiOrdersScrollY = Math.max(0, Math.min(Math.max(0, (this._logiOrdersContentH || 0) - (this._logiOrdersViewH || 0)), (this._logiOrdersScrollY || 0) + delta * 0.5));
+        } else if (inRect(this._logiKitRects.insp)) {
+          this._logiBuilderScrollY = Math.max(0, Math.min(Math.max(0, (this._logiBuilderContentH || 0) - (this._logiBuilderViewH || 0)), (this._logiBuilderScrollY || 0) + delta * 0.5));
+        }
         return true;
       }
       if (inRect(cb)) {
@@ -1323,6 +1397,12 @@ export class FleetManagerOverlay {
     // do wspólnej tablicy _hitZones i są tu delegowane do instancji edytora.
     // Panel jednostek naziemnych (zakładka Jednostki) — UDO._onHit rozpakowuje prefix.
     if (zone.type?.startsWith('ground:')) {
+      if (kitOn() && this._activeTab === 'ground') {
+        // K7-C — konsola: rekrutacja celuje w kolonię strony; wybór kafla archetypu zdejmuje wybór jednostki
+        if (zone.type === 'ground:select_tile') this._groundSelUnitId = null;
+        this._withGroundColony(() => this._getDesignEditor()?._onHit(zone));
+        return;
+      }
       this._getDesignEditor()?._onHit(zone);
       return;
     }
@@ -1541,11 +1621,27 @@ export class FleetManagerOverlay {
         if (bodyEntity) EventBus.emit('body:selected', { entity: bodyEntity });
         break;
       }
+      case 'groundColony':
+        // K7-C — kolonia strony Jednostek (globalna aktywna kolonia nietknięta — jak kontekst Handlu)
+        this._groundColonyId = zone.data.colonyId ?? null;
+        this._groundSelUnitId = null;
+        break;
+      case 'groundUnit':
+        this._groundSelUnitId = zone.data.unitId ?? null;
+        break;
+      case 'logiSelect':
+        // K7-C — wybór na liście Logistyki konsoli: 'new' = kreator, id = zlecenie (inspektor)
+        this._logiSelectedOrderId = zone.data.orderId ?? 'new';
+        break;
+      case 'atlasSelect':
+        // K7-C — wybór ciała w Atlasie konsoli (lista i orrery = jeden stan); akcje ciała w inspektorze (dzisiejsze strefy)
+        this._atlasSelectedBodyId = zone.data.bodyId ?? null;
+        break;
       case 'atlas_report': {
         // Ikona raportu 📋 w Star Atlas — otwórz modal ze szczegółami
         const reportBody = _findBody(zone.data.bodyId);
         if (reportBody) {
-          showBodyDetailModal(reportBody);
+          showBodyDetailModal(reportBody, { anchor: this._dialogAnchor('inspector', { anyTab: true, minWcss: 520 }) });
         }
         break;
       }
@@ -1601,7 +1697,8 @@ export class FleetManagerOverlay {
         this._logiGoodDropdownScrollY = 0;
         break;
       case 'logi_good_qty_input':
-        this._openLogiQtyInput(zone.data.goodId, zone.data.boxCanvasX, zone.data.boxCanvasY);
+        this._openLogiQtyInput(zone.data.goodId, zone.data.boxCanvasX, zone.data.boxCanvasY,
+          (kitOn() && zone.data.boxW) ? { w: zone.data.boxW, h: zone.data.boxH } : null);
         break;
       case 'logi_dropdown_close':
         this._logiGoodDropdownOpen = false;
@@ -1876,7 +1973,7 @@ export class FleetManagerOverlay {
     if (actionId === 'load_troops') {
       const colony = this._getVesselColony?.(vessel) ?? window.KOSMOS?.colonyManager?.getColony(vessel.colonyId);
       if (colony) {
-        try { showCargoLoadModal(vessel, colony, { troopsOnly: true }); } catch { /* anulowano */ }
+        try { showCargoLoadModal(vessel, colony, { troopsOnly: true, anchor: this._dialogAnchor('inspector', { minWcss: 440 }) }); } catch { /* anulowano */ }
       }
       return;
     }
@@ -1927,7 +2024,7 @@ export class FleetManagerOverlay {
     try {
       const colony = this._getVesselColony(vessel);
       if (!colony) return;
-      await showCargoLoadModal(vessel, colony);
+      await showCargoLoadModal(vessel, colony, { anchor: this._dialogAnchor('inspector', { minWcss: 440 }) });
       // Po zamknięciu modal — otwórz target picker
       this._missionConfig = { actionId: 'transport', targetId: null, step: 'select' };
       this._targetScrollOffset = 0;
@@ -2121,7 +2218,7 @@ export class FleetManagerOverlay {
     if (!vessel) return;
     const colony = this._getVesselColony(vessel);
     if (!colony) return;
-    try { await showCargoLoadModal(vessel, colony); } catch { /* anulowano */ }
+    try { await showCargoLoadModal(vessel, colony, { anchor: this._dialogAnchor('inspector', { minWcss: 440 }) }); } catch { /* anulowano */ }
   }
 
   /**
@@ -3337,12 +3434,15 @@ export class FleetManagerOverlay {
    * K7-B — kotwica okna dialogowego DOM z prostokąta strefy konsoli (`consoleZones[zoneKey]`, skala z ostatniego rysunku —
    * bez `window.inner*`). Poza konsolą rejestru (flaga OFF, inne zakładki) → null = dzisiejsze okno na środku ekranu.
    */
-  _dialogAnchor(zoneKey = 'inspector') {
-    if (!kitOn() || (this._activeTab ?? 'tactical') !== 'tactical') return null;
+  _dialogAnchor(zoneKey = 'inspector', { anyTab = false, minWcss = 0 } = {}) {
+    // K7-C (751): `anyTab` — strony Atlas / Logistyka / Jednostki też są konsolą; `minWcss` — szerokość okna, które nie
+    // zmieści się w strefie (okno ładunku 440 px, raport ciała 520 px CSS) — dosunięte do prawej krawędzi ramy
+    if (!kitOn() || (!anyTab && (this._activeTab ?? 'tactical') !== 'tactical')) return null;
     const z = this.consoleZones;
     const r = z?.[zoneKey];
     if (!r) return null;
-    return dialogAnchorCss(r, this._uiScale ?? 1, { frame: z.frame ?? null, dy: 22 });
+    const s = this._uiScale ?? 1;
+    return dialogAnchorCss(r, s, { frame: z.frame ?? null, dy: 22, minW: Math.max(260, minWcss / s) });
   }
 
   async _handleDisbandFleet(fleetId) {
@@ -3564,6 +3664,27 @@ export class FleetManagerOverlay {
     }
   }
 
+  /**
+   * K7-C — fakty ciała dla inspektora Atlasu (te same wzory co wiersz `_drawAtlasCatalog`). Niezbadane = tylko typ i orbita
+   * (mgła jak dziś: wiersz „???” z typem i odległościami).
+   */
+  _atlasBodyFacts(body) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const explored = !!body.explored || body === window.KOSMOS?.homePlanet;
+    const typeKey = body.type === 'planet' ? 'fleet.bodyTypePlanet' : body.type === 'moon' ? 'fleet.bodyTypeMoon' : 'fleet.bodyTypePlanetoid';
+    const base = { id: body.id, explored, typeKey, orbitAU: body.orbital?.a ?? 0, distHomeAU: DistanceUtils.orbitalFromHomeAU(body) };
+    if (!explored) return base;
+    const col = colMgr?.hasColony?.(body.id) ? colMgr.getColony(body.id) : null;
+    // wszystkie niewyczerpane złoża (bramka K7-C: właściciel chce pełną listę; wiersz OFF pokazuje 3 najbogatsze)
+    const deps = (body.deposits ?? []).filter(d => d.remaining > 0).sort((a, b) => b.richness - a.richness)
+      .map(d => ({ id: d.resourceId, name: _cargoName(d.resourceId), remaining: d.remaining ?? null, stars: d.richness >= 0.7 ? 3 : d.richness >= 0.4 ? 2 : 1 }));
+    return { ...base, name: body.name ?? body.id, subType: body.planetType ?? body.subType ?? body.type,
+      tempC: (body.temperatureC != null || body.temperatureK) ? Math.round(body.temperatureC ?? (body.temperatureK - 273)) : null,
+      colony: col ? { name: col.name ?? body.name, pop: col.civSystem?.population ?? 0, outpost: col.isOutpost === true } : null,
+      deposits: deps, isHome: body === window.KOSMOS?.homePlanet, marked: !!body._markedAsTarget,
+      redirect: !!(this._selectedVesselId && this._isForeignRedirectClickable(this._selectedVesselId, body.id)) };
+  }
+
   _getAllCatalogBodies() {
     const homePl = window.KOSMOS?.homePlanet;
     const sysId  = window.KOSMOS?.activeSystemId ?? 'sys_home';
@@ -3730,6 +3851,29 @@ export class FleetManagerOverlay {
 
   // Panel wrogiego statku — brak akcji, ograniczone info
   // (imperium name, typ kadłuba, pozycja / odległość, stan). Intel poza zakresem MVP.
+  /**
+   * K7-C — fakty panelu wroga dla konsoli (te same predykaty i źródła co `_drawEnemyDetails`): mgła tożsamości
+   * `_isEnemyTracked`; kontakt niezidentyfikowany = tylko dystans od domu.
+   */
+  _enemyFacts(vessel) {
+    const K = window.KOSMOS;
+    const home = K?.homePlanet;
+    const distHomeAU = home ? DistanceUtils.euclideanAU(
+      { x: home.x ?? 0, y: home.y ?? 0 }, { x: vessel.position?.x ?? 0, y: vessel.position?.y ?? 0 }) : null;
+    if (!_isEnemyTracked(vessel)) return { tracked: false, distHomeAU };
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    const empId = vessel.ownerEmpireId ?? vessel.owner;
+    const emp = empId && K?.empireRegistry?.get?.(empId);
+    const intel = K?.intelSystem?.getVesselContact?.(vessel.id)?.quality ?? K?.intelSystem?.getLevel?.(empId) ?? null;
+    return {
+      tracked: true, distHomeAU, name: vessel.name ?? '?', icon: ship?.icon ?? '⚔',
+      empireName: emp?.name ?? null, intel,
+      typeName: (getLocale() === 'en' ? (ship?.nameEN ?? ship?.namePL) : (ship?.namePL ?? ship?.nameEN)) ?? ship?.name ?? vessel.shipId ?? null,
+      stateKey: vesselStatusLabelKey(resolveVesselStatus(vessel).token),
+      posAU: { x: (vessel.position?.x ?? 0) / GAME_CONFIG.AU_TO_PX, y: (vessel.position?.y ?? 0) / GAME_CONFIG.AU_TO_PX },
+    };
+  }
+
   _drawEnemyDetails(ctx, x, y, w, h, vessel) {
     const pad = 8;
     const ENEMY_COLOR = '#ff4466';
@@ -5042,6 +5186,88 @@ export class FleetManagerOverlay {
     return window.KOSMOS?.overlayManager?.overlays?.unit_design ?? null;
   }
 
+  // ── K7-C — Jednostki na konsoli: kolonia strony (lokalna; globalna aktywna kolonia nietknięta) ─────────────────
+
+  /** Kolonia strony Jednostek: wybrana na liście, inaczej aktywna (jeśli gracza), inaczej pierwsza kolonia gracza. */
+  _groundLocalColony() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const cols = colMgr?.getPlayerColonies?.() ?? [];
+    const pick = cols.find(c => c.planetId === this._groundColonyId)
+      ?? cols.find(c => c.planetId === colMgr?.activePlanetId) ?? cols[0] ?? null;
+    this._groundColonyId = pick?.planetId ?? null;
+    return pick;
+  }
+
+  /**
+   * Wykonaj `fn` z panelem rekrutacji wskazującym kolonię strony (wstrzykiwalne źródło kolonii `GroundUnitPanel` —
+   * ten sam mechanizm, którym ColonyOverlay celuje w oglądaną kolonię). Przywracane natychmiast; poza konsolą nieużywane.
+   */
+  _withGroundColony(fn) {
+    const panel = this._getDesignEditor()?._groundPanel;
+    if (!panel) return fn(null);
+    const col = this._groundLocalColony();
+    const saved = panel._getColonyDep;
+    panel._getColonyDep = () => col;
+    try { return fn(panel); } finally { panel._getColonyDep = saved; }
+  }
+
+  /**
+   * Fakty strony Jednostek (te same reguły co `GroundUnitPanel._drawActions`: kolonia → blokada → koszary → limit → koszt).
+   * Jednostki gracza w kolonii: `groundUnitManager.getUnitsOnPlanet` (owner gracza / frakcja ludzkości).
+   */
+  _groundFacts() {
+    const K = window.KOSMOS;
+    const colMgr = K?.colonyManager;
+    const gum = K?.groundUnitManager;
+    const mine = (u) => u.owner === 'player' || u.factionId === 'humanity';
+    const unitsAt = (pid) => (gum?.getUnitsOnPlanet?.(pid) ?? []).filter(mine);
+    const local = this._groundLocalColony();
+    const colonies = (colMgr?.getPlayerColonies?.() ?? []).map(c => ({ id: c.planetId, name: c.name ?? c.planetId, outpost: c.isOutpost === true,
+      units: unitsAt(c.planetId).length, queue: c.groundUnitQueues?.length ?? 0 }));
+    return this._withGroundColony((panel) => {
+      const colony = local;
+      const archId = panel?._selectedArchetypeId ?? null;
+      const barracksLv = colMgr?._getBarracksLevel?.(colony) ?? 0;
+      const archs = Object.keys(UNIT_ARCHETYPES).map(id => {
+        const g = checkArchetypeUnlocked(id, barracksLv, K?.techSystem);
+        return { id, icon: ARCHETYPE_ICONS[id] ?? '', role: UNIT_ARCHETYPES[id].role, unlocked: !!g.unlocked, gate: g };
+      });
+      let recruit = null;
+      if (panel && archId) {
+        const gate = panel._getGatingStatus();
+        const canAfford = panel._canAfford(colony);
+        const slots = colMgr?._getBarracksSlots?.(colony) ?? 0;
+        const queue = colony?.groundUnitQueues?.length ?? 0;
+        const slotFree = queue < slots;
+        const capOK = colMgr?._canRecruitMoreUnits?.(colony, archId) ?? true;
+        let reasonKey = null, reasonArgs = [];
+        if (!colony) reasonKey = 'cmdPages.ground.reasonNoColony';
+        else if (!gate.unlocked) { reasonKey = gate.reason === 'tech' ? 'cmdPages.ground.reasonTech' : 'cmdPages.ground.reasonBarracks';
+          reasonArgs = gate.reason === 'tech' ? [gate.missing ?? '?'] : [gate.requiredLv ?? '?', gate.currentLv ?? 0]; }
+        else if (!slotFree) { reasonKey = 'cmdPages.ground.reasonSlots'; reasonArgs = [queue, slots]; }
+        else if (!capOK) { reasonKey = 'cmdPages.ground.reasonCap'; reasonArgs = [colMgr?._getMaxGroundUnits?.(colony) ?? 0]; }
+        else if (!canAfford) reasonKey = 'cmdPages.ground.reasonCost';
+        const cost = panel._getRecruitCost();
+        // nazwy towarów kosztu (bez surowych id) — ten sam słownik co ładownia / Logistyka
+        const costGoods = Object.entries({ ...(cost.resources ?? {}), ...(cost.commodities ?? {}) }).map(([id, n]) => ({ id, name: _cargoName(id), n }));
+        recruit = { archId, canRecruit: reasonKey === null, reasonKey, reasonArgs, cost, costGoods,
+          barracksLv, slots, queue, maxUnits: colMgr?._getMaxGroundUnits?.(colony) ?? 0,
+          active: unitsAt(colony?.planetId).filter(u => !GROUND_UNIT_CAP_EXEMPT.has(u.archetypeId)).length,
+          toast: panel._recruitToast && panel._recruitToast.expireAt > Date.now() ? panel._recruitToast : null };
+      }
+      const units = colony ? unitsAt(colony.planetId).map(u => ({ id: u.id, archId: u.archetypeId ?? u.type, name: u.name ?? null,
+        hp: u.currentHP ?? u.hp ?? 0, hpMax: u.hpMax ?? u.maxHP ?? 0, status: u.status ?? 'idle', org: u.org ?? null, maxOrg: u.maxOrg ?? null,
+        morale: u.morale ?? null, maxMorale: u.maxMorale ?? null, experience: u.experience ?? 0, supply: u.supply ?? null, supplyCap: u.supplyCap ?? null })) : [];
+      return { local: colony ? { id: colony.planetId, name: colony.name ?? colony.planetId } : null, colonies, units, archs, archId, recruit,
+        hasPanel: !!panel };
+    });
+  }
+
+  /** K7-C — miniatura modelu archetypu z cache panelu rekrutacji (null: brak panelu / brak wpisu frakcji). */
+  _groundSprite(archId) {
+    return this._getDesignEditor()?._groundPanel?._ensureSprite?.(archId) ?? null;
+  }
+
   // ── Zakładka JEDNOSTKI: katalog + rekrutacja jednostek naziemnych ───────────
   // Panel to prawa połowa UnitDesignOverlay (wspólny stan z klawiszem U). Hity
   // ('ground:*') trafiają do wspólnej _hitZones i są delegowane w _handleHit.
@@ -5608,6 +5834,16 @@ export class FleetManagerOverlay {
     return cy;
   }
 
+  /** K7-C — definicja akcji floty (konsola nie importuje danych akcji osobno). */
+  _fleetActionDef(actionId) { return FLEET_ACTIONS[actionId] ?? null; }
+
+  /** Podpowiedź „kolonizacja innego układu idzie z mapy galaktyki” — statek warp + kolonizacja (OFF i konsola). */
+  _cfgColonizeCrossHint(vessel, actionId) {
+    const isWarpShip = (vessel.warpFuel?.max ?? 0) > 0
+      || (vessel.modules ?? []).some(m => SHIP_MODULES[m]?.warpCapable);
+    return actionId === 'colonize' && isWarpShip;
+  }
+
   _drawTargetPicker(ctx, x, cy, w, maxH, pad, vessel, action, ms) {
     // Nagłówek
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -5622,9 +5858,7 @@ export class FleetManagerOverlay {
     // Statek warp: picker listuje TYLKO aktywny układ. Kolonizacja innego układu idzie
     // osobnym torem (skok z mapy galaktyki → orbituj ciało → „Kolonizuj obcy"). Podpowiedź, bo
     // z tego przycisku cel cross-system jest nieosiągalny.
-    const isWarpShip = (vessel.warpFuel?.max ?? 0) > 0
-      || (vessel.modules ?? []).some(m => SHIP_MODULES[m]?.warpCapable);
-    if (this._missionConfig.actionId === 'colonize' && isWarpShip) {
+    if (this._cfgColonizeCrossHint(vessel, this._missionConfig.actionId)) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.info;
       ctx.fillText(t('fleet.colonizeCrossSystemHint'), x + pad, cy + 8);
@@ -5715,11 +5949,46 @@ export class FleetManagerOverlay {
     return cancelY + 24;   // dolna krawędź (ANULUJ) → pomiar _rightContentH
   }
 
-  _drawMissionConfirm(ctx, x, cy, w, maxH, pad, vessel, action) {
-    const targetId = this._missionConfig.targetId;
+  /**
+   * K7-C — fakty kroku potwierdzenia konfiguratora (jedno źródło dla rysunku OFF i konsoli): cel, skok między układami,
+   * dystans / czas / paliwo, ETA, opcje (powtarzanie, ładunek powrotny), bramka paliwa przycisku WYŚLIJ.
+   * Brak celu → null (wołający zdejmuje konfigurator, jak dziś).
+   */
+  _missionConfirmFacts(vessel) {
+    const config = this._missionConfig;
+    const targetId = config?.targetId;
     // S3.3b-S3b — cel może być STACJĄ (HUB); _findBody nie zna 'station' → fallback na EntityManager.
     const target = _findBody(targetId) ?? EntityManager.get(targetId);
-    if (!target) { this._missionConfig = null; return cy; }
+    if (!target) return null;
+    // Slice D — cel w INNYM układzie: auto-łańcuch warp→dostawa (dystans/paliwo in-system nie dotyczą skoku warp)
+    const targetSysId = config.targetSystemId ?? null;
+    const isCrossSystem = !!(targetSysId && targetSysId !== (vessel.systemId ?? 'sys_home'));
+    const sysName = isCrossSystem ? (window.KOSMOS?.galaxyData?.systems?.find(s => s.id === targetSysId)?.name ?? targetSysId) : null;
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    const distAU = this._calcDistAU(vessel, target);
+    const effectiveSpeed = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+    const travelYears = effectiveSpeed > 0 ? distAU / effectiveSpeed : Infinity;
+    // Etap 4 reformy — podgląd == wydatek (dopłata za studnię grawitacyjną); zasila też bramkę „BRAK PALIWA"
+    const fuelCost = distAU * (vessel.fuel.consumption ?? 0) * launchFuelMultiplierForVessel(vessel);
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const hasCargoCap = (vessel.cargoMax ?? 0) > 0 || (ship?.cargoCapacity ?? 0) > 0;
+    const repeatOption = config.actionId === 'transport' && !!vessel && hasCargoCap;
+    const repeat = config.repeat ?? false;
+    const targetColony = (repeatOption && repeat) ? (window.KOSMOS?.colonyManager?.getColony(config.targetId) ?? null) : null;
+    const returnCargoCount = config.returnCargo ? Object.keys(config.returnCargo).length : 0;
+    const fuelCur = vessel.fuel?.current ?? 0;
+    return {
+      target, targetId, isCrossSystem, sysName, ship, distAU, travelYears, fuelCost, gameYear,
+      eta: gameYear + travelYears, repeatOption, repeat, returnCargoOption: !!targetColony, returnCargoCount,
+      fuelCur, insufficientFuel: fuelCur < fuelCost,
+    };
+  }
+
+  _drawMissionConfirm(ctx, x, cy, w, maxH, pad, vessel, action) {
+    const f = this._missionConfirmFacts(vessel);
+    if (!f) { this._missionConfig = null; return cy; }
+    const target = f.target;
+    const targetId = f.targetId;
 
     // Cel
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -5743,10 +6012,9 @@ export class FleetManagerOverlay {
 
     // Slice D — cel w INNYM układzie: pokaż notkę o auto-łańcuchu warp→dostawa
     // zamiast mylącej tabeli AU (dystans/paliwo in-system nie dotyczą skoku warp).
-    const targetSysId = this._missionConfig.targetSystemId ?? null;
-    const isCrossSystem = targetSysId && targetSysId !== (vessel.systemId ?? 'sys_home');
+    const isCrossSystem = f.isCrossSystem;
     if (isCrossSystem) {
-      const sysName = window.KOSMOS?.galaxyData?.systems?.find(s => s.id === targetSysId)?.name ?? targetSysId;
+      const sysName = f.sysName;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.info;
       ctx.fillText(t('fleet.crossSystemDelivery', sysName), x + pad, cy + 12);
@@ -5757,13 +6025,7 @@ export class FleetManagerOverlay {
     }
 
     // Tabela: odległość, czas lotu, paliwo (tylko same-system)
-    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
-    const distAU = this._calcDistAU(vessel, target);
-    const effectiveSpeed = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
-    const travelYears = effectiveSpeed > 0 ? distAU / effectiveSpeed : Infinity;
-    // Etap 4 reformy — podgląd MUSI odzwierciedlać dopłatę za studnię grawitacyjną (podgląd == wydatek);
-    // ta sama zasada co podgląd kosztu budowy (Etap 2) i komponentów (Etap 3). Zasila też bramkę „BRAK PALIWA".
-    const fuelCost = distAU * (vessel.fuel.consumption ?? 0) * launchFuelMultiplierForVessel(vessel);
+    const { distAU, travelYears, fuelCost } = f;
 
     const tableData = isCrossSystem ? [] : [
       [t('fleet.distanceLabel'), `${distAU.toFixed(2)} AU`],
@@ -5784,8 +6046,7 @@ export class FleetManagerOverlay {
 
     // ETA (duże) — tylko same-system (cross-system ETA = warp, liczony przy dispatchu).
     if (!isCrossSystem) {
-      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-      const eta = gameYear + travelYears;
+      const eta = f.eta;
       ctx.font = `bold ${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.accent;
       ctx.textAlign = 'center';
@@ -5798,8 +6059,7 @@ export class FleetManagerOverlay {
     // vessel.cargoMax (z modułów) lub ship.cargoCapacity (legacy SHIPS) — nowoczesne
     // statki projektowane z modułów mają pojemność tylko na vessel.cargoMax.
     const config = this._missionConfig;
-    const hasCargoCap = (vessel.cargoMax ?? 0) > 0 || (ship?.cargoCapacity ?? 0) > 0;
-    if (config.actionId === 'transport' && vessel && hasCargoCap) {
+    if (f.repeatOption) {
       const cbSize = 14;
       const cbX = x + pad;
       const cbY = cy;
@@ -5852,7 +6112,7 @@ export class FleetManagerOverlay {
     // (d) Luka B — gdy paliwa nie starcza na dolot (one-way), przycisk wyszarzony
     // "⛽ BRAK PALIWA" i NIEklikalny (jednoznacznie zamiast mylącego "za daleko").
     // fuelCost policzony wyżej (one-way) — spójny z obroną systemową w MissionSystem.
-    const insufficientFuel = (vessel.fuel?.current ?? 0) < fuelCost;
+    const insufficientFuel = f.insufficientFuel;
     const sendW = w - pad * 2;
     const sendH = 30;
     ctx.fillStyle = insufficientFuel ? 'rgba(255,68,102,0.10)' : 'rgba(0,255,180,0.12)';

@@ -326,6 +326,8 @@ export const GroundUnitFactory = {
     const img = new Image();
     // Natychmiast pokaż placeholder — nie czekamy na async load
     img.src = this._getPlaceholderDataUrl();
+    // K7-C — stan zasobu (czytany przez konsolę Dowództwa: model / obraz albo brak → glif); rysunek innych hostów bez zmian
+    img._kosmosAsset = spritePath ? 'loading' : 'missing';
 
     if (!spritePath) return img;
 
@@ -335,6 +337,7 @@ export const GroundUnitFactory = {
     // ── Próba 1: GLB → offscreen Three.js snapshot ──
     glbSnapshotRenderer.snapshot(glbPath).then(canvas => {
       img.src = canvas.toDataURL('image/png');
+      img._kosmosAsset = 'glb';
     }).catch(() => {
       // GLB nie istnieje albo loader padł → próbuj PNG
       this._tryLoadPng(img, spritePath);
@@ -346,8 +349,8 @@ export const GroundUnitFactory = {
   /** Fallback: spróbuj załadować PNG; jeśli nie ma → placeholder (nic nie rób, już jest). */
   _tryLoadPng(img, pngPath) {
     const pngTest = new Image();
-    pngTest.onload  = () => { img.src = pngTest.src; };
-    pngTest.onerror = () => { /* placeholder już w img.src — nic nie rób */ };
+    pngTest.onload  = () => { img.src = pngTest.src; img._kosmosAsset = 'png'; };
+    pngTest.onerror = () => { img._kosmosAsset = 'missing'; /* placeholder już w img.src */ };
     pngTest.src = pngPath;
   },
 

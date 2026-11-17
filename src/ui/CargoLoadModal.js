@@ -10,6 +10,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { loadCargo, unloadCargo, loadGroundUnit, unloadGroundUnit, loadOrbitalShells } from '../entities/Vessel.js';
 import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { applyModalAnchor } from './ModalAnchor.js';   // K7-C (751) — okno przy strefie konsoli (bez kotwicy: jak dziś)
 import { t, getName } from '../i18n/i18n.js';
 import { cargoUnloadRefusal } from '../utils/WarGate.js';   // D13a / G2-2 — „Wyładuj” nigdy na ciele innego imperium
 
@@ -550,6 +551,7 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
       overlay.addEventListener(evt, (e) => e.stopPropagation());
     }
     overlay.appendChild(panel);
+    applyModalAnchor(overlay, panel, options.anchor ?? null);
     document.body.appendChild(overlay);
 
     // Klik poza panel = zamknij

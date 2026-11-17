@@ -385,7 +385,9 @@ const HARDCODED_BASELINE = process.env.KOSMOS_I18N_BASELINE
   'src/ui/DropTroopsModal.js':       3,  // DOM (269): nagłówek + podpowiedzi zrzutu (klasa 113).
   // ARC KONSOLE K4 (2026-11-17): 'src/ui/EconomyOverlay.js' 1 → 0 i WYPADA — nagłówki kolumn zapotrzebowania Produkcji
   //   (Źródło / Towar / Potrzeba) przez t() (Finding 725, część Produkcji).
-  'src/ui/FleetManagerOverlay.js':   5,
+  // ARC KONSOLE K7-C (2026-11-17, Finding 752): 'src/ui/FleetManagerOverlay.js' 5 → 3 — zmierzone 3 już na 880a81b (literały
+  //   usunięte wcześniej razem z mapą 2D, K7-pre); zapadka dociągnięta do pomiaru.
+  'src/ui/FleetManagerOverlay.js':   3,
   'src/ui/GroundUnitPanel.js':       1,
   // ARC KONSOLE K0b (2026-11-16): 'src/ui/IntelOverlay.js' 2 → 0 i WYPADA — Finding 725 (napisy przez t()).
   'src/ui/POIModal.js':              1,  // DOM (269): „[unsupported field: …]" — komunikat dev w DOM.

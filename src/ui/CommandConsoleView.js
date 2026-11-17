@@ -6,7 +6,7 @@
 //   bohater   — tabela statków (12 dzisiejszych kolumn, sort, grupy, pole wyboru, „Pokaż”), linia kontekstu, pasek zbiorczy
 //   inspektor — statek / flota / wrak w języku konsoli (K7-B, `CommandInspectorView`) albo podsumowanie zaznaczenia
 //   pas       — oś czasu misji dla zaznaczenia (flota / zaznaczone / statek; bez wyboru — wiersze widoczne w tabeli)
-// Pozostałe zakładki (Naziemne, Atlas, Logistyka) — dzisiejsze strony pod czipami nagłówka (K7-C).
+// Pozostałe zakładki (Naziemne, Atlas, Logistyka) — od K7-C też w 4 strefach (`CommandPagesView`).
 // Strefy trafień mają DZISIEJSZE typy i dane (handlery `_handleHit` bez zmian); nowa jest tylko `registryClearFilters`.
 // Kolory wyłącznie przez role konsoli (`consoleRoles`).
 
@@ -15,7 +15,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import { t } from '../i18n/i18n.js';
 import { consoleZones, consoleClockRect, insetRect, uiViewport } from './ConsoleLayoutLogic.js';
 import { drawConsoleHeader, drawZoneFrame, drawZoneRule, drawEyebrow, drawKvRow, drawActionChip, drawConsoleTooltip,
-  drawList, drawSelectBrackets, drawTabular, drawConsoleBackground, CONSOLE_KIT } from './ConsoleKit.js';
+  drawList, drawSelectBrackets, drawTabular, CONSOLE_KIT } from './ConsoleKit.js';
 import { consoleRoles } from './ConsoleRolesLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
 import { truncateText } from './HudLabelLogic.js';
@@ -23,12 +23,12 @@ import { clampScroll, scrollThumb } from './InfoPanelLayoutLogic.js';
 import { buildRegistryRows, sortRows, filterRows, groupRows } from './FleetRegistryLogic.js';
 import { buildTimelineRows } from './FleetPictureLogic.js';
 import { defaultViewport, layoutTimelineRows, nowLineX, timelineTicks } from './TimelineLayout.js';
-import { BOTTOM_STRIP_H } from './MapInsets.js';
 import { commandGroupChips, rowRole, fuelRole, registryColumnLayout, facetCounts, registryListRows, fleetListItems,
   contextParts, emptyState, focusGate, bulkGate, rowHintKey, timelineSubject, subjectLabel, multiSummary,
   roleShort, emptyColumnIds } from './CommandConsoleLogic.js';
 import { drawInspector, summaryRows } from './CommandInspectorView.js';
 import { groupStats } from './CommandInspectorLogic.js';
+import { PAGES, drawAtlasPage, drawLogisticsPage, drawGroundPage } from './CommandPagesView.js';
 
 // Układ konsoli Dowództwa (px logiczne). Tabela potrzebuje szerokości — lista i inspektor węższe niż domyślne.
 export const CMD = Object.freeze({
@@ -63,8 +63,10 @@ export function drawCommandConsole(ov, ctx, W, H) {
   const roles = consoleRoles(THEME);
   const K = window.KOSMOS;
   const tactical = (ov._activeTab ?? 'tactical') === 'tactical';
-  const stripH = tactical ? (ov._timelineCollapsed ? CMD.STRIP_COLLAPSED_H : CMD.STRIP_H) : 0;
-  const z = consoleZones(ov._bounds, { listW: CMD.LIST_W, inspW: CMD.INSP_W, stripH,
+  // K7-C: każda zakładka ma własny podział 4 stref (rejestr — tabela szeroka; Atlas / Logistyka / Jednostki — `PAGES`)
+  const pg = tactical ? null : PAGES[ov._activeTab];
+  const stripH = tactical ? (ov._timelineCollapsed ? CMD.STRIP_COLLAPSED_H : CMD.STRIP_H) : (pg?.stripH ?? 0);
+  const z = consoleZones(ov._bounds, { listW: pg?.listW ?? CMD.LIST_W, inspW: pg?.inspW ?? CMD.INSP_W, stripH,
     clock: consoleClockRect(W, H, NAV_GROUPS.length) });
   ov.consoleZones = z;
   ov._cmdTip = null;
@@ -90,21 +92,17 @@ export function drawCommandConsole(ov, ctx, W, H) {
   if (tactical) {
     ov._contentBounds = z.body;
     drawRegistryConsole(ov, ctx, z, roles, { vMgr, ms, colMgr, activePid, allVessels });
-  } else {
-    // Dzisiejsza strona pod czipami (K7-C): ta sama treść i strefy, nieprzezroczyste tło jak dziś (Dowództwo = `#000`)
-    const b = ov._bounds;
-    const contentY = z.header.y + z.header.h;
-    const contentH = b.y + b.h - contentY - BOTTOM_STRIP_H;
-    drawConsoleBackground(ctx, { x: b.x, y: contentY, w: b.w, h: b.y + b.h - contentY });
-    ov._contentBounds = { x: b.x, y: contentY, w: b.w, h: contentH };
-    if (ov._activeTab === 'atlas') {
-      ov._drawAtlasCatalog(ctx, b.x, contentY, b.w, contentH, allVessels);
-    } else if (ov._activeTab === 'ground') {
-      const guW = Math.min(b.w, 560);
-      ov._drawGroundTab(ctx, b.x + Math.floor((b.w - guW) / 2), contentY, guW, contentH);
-    } else if (ov._activeTab === 'logistics') {
-      ov._drawLogisticsTab(ctx, b.x, contentY, b.w, contentH, colMgr);
-    }
+  } else if (ov._activeTab === 'atlas') {
+    // K7-C: Atlas Gwiazd w 4 strefach (ciała aktywnego układu — decyzja właściciela 2026-11-17)
+    drawAtlasPage(ov, ctx, z, roles);
+  } else if (ov._activeTab === 'logistics') {
+    // K7-C: Logistyka w 4 strefach (zlecenia transportowe; strefy `logi_*` dzisiejsze)
+    drawLogisticsPage(ov, ctx, z, roles, colMgr);
+  } else if (ov._activeTab === 'ground') {
+    // K7-C: Jednostki w 4 strefach (kolonia strony lokalna; dzisiejsze strefy `ground:*`). Żadna strona Dowództwa nie stoi
+    // już na nieprzezroczystym tle.
+    ov._contentBounds = z.body;
+    drawGroundPage(ov, ctx, z, roles);
   }
 
   // Podpowiedź (powód wyłączonej akcji, pełna treść uciętej komórki) — na wierzchu

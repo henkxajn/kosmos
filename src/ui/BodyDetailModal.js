@@ -5,6 +5,7 @@
 // lub "???" dla niezbadanych. Umożliwia rename i "oznacz jako cel".
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { applyModalAnchor } from './ModalAnchor.js';   // K7-C (751) — raport przy strefie konsoli (bez kotwicy: jak dziś)
 import { showRenameModal } from './ModalInput.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
@@ -28,7 +29,7 @@ const PTYPE_ICONS = {
  * Wyświetla modal ze szczegółami ciała niebieskiego.
  * @param {Object} body — encja ciała (planet/moon/planetoid)
  */
-export function showBodyDetailModal(body) {
+export function showBodyDetailModal(body, { anchor = null } = {}) {
   // ── Dimming overlay ───────────────────────────────────────
   const overlay = document.createElement('div');
   overlay.className = 'kosmos-modal-overlay';
@@ -310,6 +311,7 @@ export function showBodyDetailModal(body) {
     overlay.addEventListener(evt, (e) => e.stopPropagation());
   }
   overlay.appendChild(panel);
+  applyModalAnchor(overlay, panel, anchor);
   document.body.appendChild(overlay);
 
   // ── Cleanup ───────────────────────────────────────────────

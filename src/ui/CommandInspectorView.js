@@ -1,7 +1,7 @@
 // ARC KONSOLE K7-B — inspektor statku / floty na konsoli Dowództwa: rysunek (FEATURES.consoleCommand).
 //
 // Wołane z `CommandConsoleView.drawInspectorZone` (strefa inspektora `consoleZones`). Treść = dzisiejszy panel `_drawRight`
-// (statek, flota, wrak; wróg i konfigurator misji — dzisiejsze rysunki w strefie), język konsoli: bez wypełnionych paneli
+// (statek, flota, wrak; od K7-C także wróg i konfigurator misji), język konsoli: bez wypełnionych paneli
 // i przycisków, tekst w rolach konsoli, przyrządy jako cienkie paski z liczbami, akcje jako czipy w nawiasach pogrupowane
 // (główne → rozkazy → logistyka → niszczące w roli alert). Strefy trafień: DZISIEJSZE typy i dane (handlery bez zmian),
 // fakty z `FleetManagerOverlay._inspectorShipFacts` (te same predykaty co panel OFF). Akcja niemożliwa = czip wyłączony
@@ -15,6 +15,7 @@ import { isEnemyVessel } from '../entities/Vessel.js';
 import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import { resolveVesselStatus } from '../utils/VesselStatus.js';
 import { shipActionGroups, preConfigGroups, noOrdersKey, fleetActionGroups, groupStats, meter, hullState, upkeepLines, LOW_FRAC } from './CommandInspectorLogic.js';
+import { enemyRows, configSteps, targetRow, confirmGate } from './CommandPagesLogic.js';
 
 export const INSP = Object.freeze({
   PAD_R: 6,          // odstęp od paska przewijania
@@ -49,8 +50,8 @@ export function drawInspector(ov, ctx, r, roles, env) {
     return;
   }
   if (!sel) { ov._setSelectedVesselViaUI(null); return; }
-  // wróg — dzisiejszy uproszczony panel (bez akcji) w strefie inspektora
-  if (isEnemyVessel(sel)) { ov._drawEnemyDetails(ctx, r.x, r.y, r.w, r.h, sel); return; }
+  // wróg — K7-C: panel w języku inspektora (mgła tożsamości jak dziś; jedyna dzisiejsza strefa = powrót do stoczni)
+  if (isEnemyVessel(sel)) { scrolled(ov, ctx, r, roles, `enemy:${sel.id}`, (c) => drawEnemyBody(ov, ctx, c, roles, sel)); return; }
   scrolled(ov, ctx, r, roles, `vessel:${sel.id}`, (c) => drawShipBody(ov, ctx, c, roles, sel, env));
 }
 
@@ -232,14 +233,13 @@ function drawShipBody(ov, ctx, c, roles, v, env) {
   const facts = ov._inspectorShipFacts(v, env.ms, env.colMgr, env.activePid);
   drawMissionBlock(ctx, c, roles, info, facts);
 
-  // konfigurator misji zastępuje akcje (jak dziś): zostają tylko czipy, które panel rysuje przed nim; konfigurator — dzisiejszy rysunek
+  // konfigurator misji zastępuje akcje (jak dziś): zostają tylko czipy, które panel rysuje przed nim; konfigurator — K7-C (kroki)
   if (ov._missionConfig) {
     const pg = preConfigGroups(shipActionGroups(facts));
     chips(ov, ctx, c, pg.primary, roles, 1);
     chips(ov, ctx, c, [...pg.orders, ...pg.logistics], roles, 2);
     c.y += 4;
-    const end = ov._drawMissionConfig(ctx, c.x, c.y, c.w + INSP.PAD_R, c.bottom - c.y, 0, v, env.ms, env.colMgr);
-    if (typeof end === 'number' && end > c.y) c.y = end;
+    drawConfigurator(ov, ctx, c, roles, v);
     return;
   }
 
@@ -418,4 +418,149 @@ function drawWreck(ov, ctx, r, roles, v) {
     line(ctx, c, t('fleet.battleNoRecord'), roles, { tone: 'dim' });
   }
   ctx.restore();
+}
+
+// ── Wróg (K7-C) ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+function drawEnemyBody(ov, ctx, c, roles, v) {
+  const f = ov._enemyFacts(v);
+  // nagłówek: nazwa tylko przy pełnym kontakcie (mgła); link [ STOCZNIA ] = dzisiejsza strefa `back_to_shipyard`
+  const mx = ov._regMouseX, my = ov._regMouseY;
+  ctx.font = F(THEME.fontSizeSmall);
+  const linkLabel = t('cmdInsp.shipyard');
+  const lw = Math.ceil(ctx.measureText(chipLabel(linkLabel)).width) + 2 * CONSOLE_KIT.CHIP_PAD_X;
+  const lr = { x: c.x + c.w - lw, y: c.y, w: lw, h: CONSOLE_KIT.CHIP_H };
+  drawActionChip(ctx, lr.x, lr.y, lw, roles, { label: linkLabel, hover: inside(lr, mx, my) });
+  push(ov, lr.x, lr.y, lr.w, lr.h, 'back_to_shipyard', {});
+  ctx.font = F(INSP.NAME_FONT, true);
+  ctx.fillStyle = roles.alert;
+  const title = f.tracked ? `${f.icon} ${f.name}` : t('intel.unidentifiedContact');
+  ctx.fillText(fit(ctx, title, c.w - lw - 8), c.x, c.y + CONSOLE_KIT.CHIP_H / 2);
+  c.y += CONSOLE_KIT.CHIP_H + 2;
+  // linia statusu w rolach: wroga jednostka / kontakt bez identyfikacji
+  line(ctx, c, `● ${t(f.tracked ? 'cmdPages.enemy.statusHostile' : 'cmdPages.enemy.statusUnidentified')}`, roles, { tone: 'alert' });
+  // znane fakty
+  eyebrow(ctx, c, t('cmdPages.enemy.known'), roles);
+  for (const row of enemyRows(f)) kv(ctx, c, t(row.key), row.valueKey ? t(row.valueKey, ...(row.args ?? [])) : row.value, roles, row.tone);
+  // nieznane — co i jak odsłonić (mgła)
+  if (!f.tracked) {
+    eyebrow(ctx, c, t('cmdPages.enemy.unknown'), roles);
+    line(ctx, c, t('cmdPages.enemy.unknownList'), roles, { tone: 'dim' });
+    wrapped(ov, ctx, c, t('intel.unidentifiedHint'), roles);
+  }
+  // akcje: dzisiejszy panel nie ma żadnej — mówimy, gdzie wydać rozkaz (bez cichego braku)
+  eyebrow(ctx, c, t('cmdInsp.actions'), roles);
+  line(ctx, c, t('cmdPages.enemy.noActions'), roles, { tone: 'dim' });
+  wrapped(ov, ctx, c, t('cmdPages.enemy.noActionsHint'), roles);
+}
+
+function wrapped(ov, ctx, c, text, roles, tone = 'dim') {
+  ctx.font = F(THEME.fontSizeSmall - 1);
+  for (const ln of ov._wrapTextWidth(ctx, text, c.w)) line(ctx, c, ln, roles, { tone, size: THEME.fontSizeSmall - 1 });
+}
+
+// ── Konfigurator misji (K7-C): kroki typ → cel → opcje → potwierdź, czytane z góry na dół ─────────────────────────
+
+function drawConfigurator(ov, ctx, c, roles, v) {
+  const cfg = ov._missionConfig;
+  const action = ov._fleetActionDef(cfg.actionId);
+  if (!action) return;
+  const facts = cfg.step === 'confirm' ? ov._missionConfirmFacts(v) : null;
+  if (cfg.step === 'confirm' && !facts) { ov._missionConfig = null; return; }
+  eyebrow(ctx, c, t('cmdPages.cfg.title'), roles, 'primary');
+  // linia kroków: zrobione (✓ dim) · bieżący (▸ primary) · do zrobienia (· dim)
+  let sx = c.x;
+  for (const st of configSteps(cfg.step, !!facts?.repeatOption)) {
+    const txt = `${st.state === 'done' ? '✓' : st.state === 'current' ? '▸' : '·'} ${t(st.labelKey)}`;
+    ctx.font = F(THEME.fontSizeSmall - 1, st.state === 'current');
+    ctx.fillStyle = st.state === 'current' ? roles.primary : roles.dim;
+    ctx.fillText(txt, sx, c.y + INSP.LINE_H / 2);
+    sx += ctx.measureText(txt).width + 10;
+  }
+  c.y += INSP.LINE_H + 2;
+  // 1 · typ misji
+  kv(ctx, c, t('cmdPages.cfg.step.type'), `${action.icon ?? ''} ${action.label ?? cfg.actionId}`.trim(), roles, 'primary');
+  if (cfg.step === 'select') drawTargetStep(ov, ctx, c, roles, v, cfg);
+  else drawConfirmStep(ov, ctx, c, roles, facts);
+}
+
+function drawTargetStep(ov, ctx, c, roles, v, cfg) {
+  eyebrow(ctx, c, t('cmdPages.cfg.pickTarget'), roles, 'primary');
+  if (ov._cfgColonizeCrossHint(v, cfg.actionId)) wrapped(ov, ctx, c, t('fleet.colonizeCrossSystemHint'), roles);
+  const targets = ov._getValidTargets(v, cfg.actionId);
+  if (!targets.length) line(ctx, c, t('cmdPages.cfg.noTargets'), roles, { tone: 'alert' });
+  const mx = ov._regMouseX, my = ov._regMouseY;
+  const rowH = CONSOLE_KIT.CHIP_H + 2;
+  let lastSys = null;
+  for (const tgt of targets) {
+    if (tgt.sameSystem === false && tgt.systemName !== lastSys) {
+      lastSys = tgt.systemName;
+      line(ctx, c, `${t('fleet.otherSystem')}: ${tgt.systemName}`, roles, { tone: 'dim', bold: true, size: THEME.fontSizeSmall - 1 });
+    }
+    const tr = targetRow(tgt, cfg.actionId);
+    const rect = { x: c.x, y: c.y, w: c.w, h: rowH };
+    const hov = tr.enabled && inside(rect, mx, my) && my >= c.top && my <= c.bottom;
+    ctx.save();
+    if (hov) { ctx.globalAlpha = CONSOLE_KIT.HOVER_ALPHA; ctx.fillStyle = roles.primary; ctx.fillRect(rect.x, rect.y, rect.w, rect.h); ctx.globalAlpha = 1; }
+    ctx.font = F(THEME.fontSizeSmall);
+    ctx.textBaseline = 'middle';
+    const badge = t(tr.badgeKey);
+    const bw = ctx.measureText(badge).width;
+    const dw = ctx.measureText(tr.dist).width;
+    ctx.fillStyle = tr.enabled ? roles.primary : roles.dim;
+    ctx.fillText(fit(ctx, tgt.name ?? '?', c.w - bw - dw - 24), c.x + 2, rect.y + rowH / 2);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = roles[tr.tone] ?? roles.dim;
+    ctx.fillText(badge, c.x + c.w - 2, rect.y + rowH / 2);
+    ctx.fillStyle = roles.dim;
+    ctx.fillText(tr.dist, c.x + c.w - bw - 12, rect.y + rowH / 2);
+    ctx.restore();
+    if (tr.enabled) push(ov, rect.x, rect.y, rect.w, rect.h, 'select_target', { targetId: tgt.id, targetSystemId: tgt.systemId ?? null });
+    else ov._cmdDisabled.push({ rect, reasonKey: tr.reasonKey, args: [] });
+    c.y += rowH;
+  }
+  // 3 · opcje i 4 · potwierdzenie — jeszcze niedostępne: powód zamiast cichego braku
+  c.y += 4;
+  line(ctx, c, `${t('cmdPages.cfg.step.options')}: ${t('cmdPages.cfg.optionsAfterTarget')}`, roles, { tone: 'dim' });
+  chips(ov, ctx, c, [{ labelKey: 'cmdPages.cfg.send', zone: null, reasonKey: 'cmdPages.cfg.reasonNoTarget' }], roles, 1);
+  chips(ov, ctx, c, [{ labelKey: 'cmdPages.cfg.cancel', zone: { type: 'cancel_config', data: {} } }], roles, 1);
+}
+
+function drawConfirmStep(ov, ctx, c, roles, f) {
+  // 2 · cel + [ ZMIEŃ ] (dzisiejsza strefa `change_target`)
+  const mx = ov._regMouseX, my = ov._regMouseY;
+  ctx.font = F(THEME.fontSizeSmall);
+  const chg = t('cmdPages.cfg.change');
+  const cw = Math.ceil(ctx.measureText(chipLabel(chg)).width) + 2 * CONSOLE_KIT.CHIP_PAD_X;
+  const cr = { x: c.x + c.w - cw, y: c.y, w: cw, h: CONSOLE_KIT.CHIP_H };
+  drawActionChip(ctx, cr.x, cr.y, cw, roles, { label: chg, hover: inside(cr, mx, my) });
+  push(ov, cr.x, cr.y, cr.w, cr.h, 'change_target', {});
+  drawKvRow(ctx, c.x, c.y + Math.max(0, (CONSOLE_KIT.CHIP_H - CONSOLE_KIT.KV_H) / 2), c.w - cw - 8, t('cmdPages.cfg.step.target'),
+    String(f.target.name ?? f.targetId), roles, { tone: 'primary' });
+  c.y += CONSOLE_KIT.CHIP_H + 2;
+  if (f.isCrossSystem) {
+    line(ctx, c, t('fleet.crossSystemDelivery', f.sysName), roles, { tone: 'primary' });
+    wrapped(ov, ctx, c, t('fleet.crossSystemDeliveryHint'), roles);
+  } else {
+    kv(ctx, c, t('fleet.distanceLabel'), `${f.distAU.toFixed(2)} AU`, roles, 'primary');
+    kv(ctx, c, t('fleet.travelTime'), f.travelYears < 1 ? t('fleet.etaDays', Math.ceil(f.travelYears * 365)) : t('fleet.etaYears', f.travelYears.toFixed(1)), roles, 'primary');
+    kv(ctx, c, t('fleet.fuelOneWay'), `${f.fuelCost.toFixed(1)} / ${f.fuelCur.toFixed(1)} pc`, roles, f.insufficientFuel ? 'alert' : 'primary');
+    kv(ctx, c, t('cmdPages.cfg.arrival'), t('cmdPages.cfg.arrivalYear', Math.ceil(f.eta)), roles, 'primary');
+  }
+  // 3 · opcje (dzisiejsze: powtarzanie transportu, ładunek powrotny)
+  eyebrow(ctx, c, t('cmdPages.cfg.step.options'), roles);
+  if (!f.repeatOption) line(ctx, c, t('cmdPages.cfg.noOptions'), roles, { tone: 'dim' });
+  else {
+    chips(ov, ctx, c, [{ text: `${f.repeat ? '■' : '□'} ${t('fleet.repeatAuto')}`, zone: { type: 'toggle_repeat', data: {} } }], roles, 1);
+    if (f.returnCargoOption) {
+      chips(ov, ctx, c, [{ labelKey: 'fleet.setReturnCargo', zone: { type: 'set_return_cargo', data: {} } }], roles, 1);
+      line(ctx, c, f.returnCargoCount > 0 ? t('fleet.returnCargoStatus', f.returnCargoCount) : t('fleet.returnCargoNone'), roles, { tone: 'dim' });
+    } else if (f.repeat) line(ctx, c, t('cmdPages.cfg.returnCargoNeedsColony'), roles, { tone: 'dim' });
+  }
+  // 4 · potwierdź — czip główny (pełna szerokość); bez paliwa wyłączony z powodem (także w linii pod nim)
+  eyebrow(ctx, c, t('cmdPages.cfg.step.confirm'), roles);
+  const g = confirmGate(f);
+  chips(ov, ctx, c, [{ labelKey: 'cmdPages.cfg.send', zone: g.ok ? { type: 'confirm_mission', data: {} } : null, reasonKey: g.reasonKey, reasonArgs: g.args }], roles, 1);
+  if (!g.ok) wrapped(ov, ctx, c, t(g.reasonKey, ...g.args), roles, 'alert');
+  chips(ov, ctx, c, [{ labelKey: 'cmdPages.cfg.cancel', zone: { type: 'cancel_config', data: {} } }], roles, 1);
 }

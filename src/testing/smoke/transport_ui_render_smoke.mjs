@@ -20,6 +20,10 @@ import { VesselManager }   from '../../systems/VesselManager.js';
 import { OrderService }    from '../../systems/OrderService.js';
 import { TransportOrderSystem } from '../../systems/TransportOrderSystem.js';
 import { FleetManagerOverlay }  from '../../ui/FleetManagerOverlay.js';
+import { GAME_CONFIG }          from '../../config/GameConfig.js';
+// K7-C: ten keeper pilnuje DZISIEJSZEJ strony Logistyki (flaga OFF). Strona na konsoli (anulowanie w inspektorze wybranego
+// zlecenia, pole ilości z `consoleZones`) — `console_command_pages_smoke` sekcja L.
+GAME_CONFIG.FEATURES.consoleCommand = false;
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => {
