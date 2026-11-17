@@ -266,15 +266,20 @@ export class FactorySystem {
       this._emitStatus();
     });
 
-    EventBus.on('factory:setExportEnabled', ({ enabled }) => {
-      if (window.KOSMOS?.factorySystem !== this) return;
+    // K4 (Finding 742): konsola Produkcji adresuje kolonię wybraną w zakresie (`colonyId`); bez `colonyId` — aktywna kolonia
+    // (dzisiejsza strona: przełączała preferencje AKTYWNEJ kolonii, pokazując preferencje kolonii z filtra).
+    const exportTarget = (colonyId) => (colonyId
+      ? this._getOwnerColony()?.planetId === colonyId
+      : window.KOSMOS?.factorySystem === this);
+    EventBus.on('factory:setExportEnabled', ({ enabled, colonyId }) => {
+      if (!exportTarget(colonyId)) return;
       if (!systemBelongsToPlayer(this, 'factorySystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this._exportPrefs.enabled = !!enabled;
       this._emitStatus();
     });
 
-    EventBus.on('factory:setExportTier', ({ tier, enabled }) => {
-      if (window.KOSMOS?.factorySystem !== this) return;
+    EventBus.on('factory:setExportTier', ({ tier, enabled, colonyId }) => {
+      if (!exportTarget(colonyId)) return;
       if (!systemBelongsToPlayer(this, 'factorySystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       if (tier < 1 || tier > 4) return;
       this._exportPrefs.tiers[tier] = !!enabled;

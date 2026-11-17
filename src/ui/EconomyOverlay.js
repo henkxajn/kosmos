@@ -16,18 +16,19 @@ import EntityManager     from '../core/EntityManager.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import { t, getName } from '../i18n/i18n.js';
 import { drawResourceIcon, hasIconFile, getIconPath } from './ResourceIcons.js';
-// ARC KONSOLE K3 — Budżet i Przepływy na zestawie konsoli (FEATURES.consoleEconomy); OFF = dzisiejszy rysunek niżej.
-// Produkcja (`economy`) zostaje dzisiejszą stroną do K4 (ta sama instancja przełącza się między stronami zestawu a starą).
+// ARC KONSOLE K3/K4 — Budżet, Przepływy i Produkcja na zestawie konsoli (FEATURES.consoleEconomy); OFF = dzisiejszy rysunek niżej
+// (ta sama instancja przełącza się między stronami zestawu a starą).
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { isKitScreen } from './ConsoleLayoutLogic.js';
 import { applyConsoleHalo } from './ConsoleKit.js';
 import { drawEconomyConsole } from './EconomyConsoleView.js';
+import { drawProductionConsole } from './ProductionConsoleView.js';
 import { applyEconChip, taxEffect } from './EconomyConsoleLogic.js';
 
-// Strona zestawu konsoli dla aktywnego id grupy (null = dzisiejsza strona: Produkcja albo flaga OFF)
+// Strona zestawu konsoli dla aktywnego id grupy (null = dzisiejsza strona: flaga OFF); K4 — Produkcja (`economy`) dołącza
 const kitPage = () => {
   const id = window.KOSMOS?.overlayManager?.active;
-  return (id === 'budget' || id === 'flows') && isKitScreen(id, GAME_CONFIG.FEATURES) ? id : null;
+  return (id === 'budget' || id === 'flows' || id === 'economy') && isKitScreen(id, GAME_CONFIG.FEATURES) ? id : null;
 };
 
 const LEFT_W   = 220;
@@ -104,6 +105,9 @@ export class EconomyOverlay extends BaseOverlay {
     this._kitScrollInsp = 0;
     this._kitInspContentH = 0;
     this._uiScale = 1;
+    // K4 — konsola Produkcji: wybrany towar (bohater + inspektor), rozwinięty wybór zakresu w nagłówku listy
+    this._prodGoodId = null;
+    this._prodScopeOpen = false;
   }
 
   // ── Encje zakładek: kolonie + stacje GRACZA (overlay-local; NIE ColonyManager — audyt §2) ──
@@ -161,8 +165,8 @@ export class EconomyOverlay extends BaseOverlay {
     const fs = col?.factorySystem;
     if (!fs) return;
 
-    // Skala logiczne → fizyczne piksele (identyczna jak w UIManager)
-    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    // Skala logiczne → fizyczne piksele (identyczna jak w UIManager); K4 — konsola: skala zapamiętana w draw() (bez window.inner*)
+    const SCALE = kitPage() ? (this._uiScale || 1) : Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     const sx = canvasX * SCALE;
     const sy = canvasY * SCALE;
     const sw = boxW * SCALE;
@@ -488,7 +492,10 @@ export class EconomyOverlay extends BaseOverlay {
       // K3 — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
       ctx.save();
       applyConsoleHalo(ctx);
-      try { drawEconomyConsole(this, ctx, W, H, page); } finally { ctx.restore(); }
+      try {
+        if (page === 'economy') drawProductionConsole(this, ctx, W, H);   // K4 — Produkcja
+        else drawEconomyConsole(this, ctx, W, H, page);
+      } finally { ctx.restore(); }
       return;
     }
     this.consoleZones = null;
@@ -900,7 +907,7 @@ export class EconomyOverlay extends BaseOverlay {
     const fs = colMgr?.getColony(colonyId)?.factorySystem;
     if (!fs) return;
 
-    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const SCALE = kitPage() ? (this._uiScale || 1) : Math.min(window.innerWidth / 1280, window.innerHeight / 720);   // K4 — jw.
     const boxW = 50, boxH = 18;
     const sx = (canvasX ?? 100) * SCALE, sy = (canvasY ?? 100) * SCALE;
     const sw = boxW * SCALE, sh = boxH * SCALE;
@@ -1384,9 +1391,10 @@ export class EconomyOverlay extends BaseOverlay {
       // Nagłówki kolumn
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Źródło', x + pad, ry + 10);
-      ctx.fillText('Towar', x + pad + 100, ry + 10);
-      ctx.fillText('Potrzeba', x + pad + colW - 80, ry + 10);
+      // Finding 725 (część Produkcji) — nagłówki przez t() (PL = dzisiejszy tekst)
+      ctx.fillText(t('econPanel.reactiveColSource'), x + pad, ry + 10);
+      ctx.fillText(t('econPanel.reactiveColGood'), x + pad + 100, ry + 10);
+      ctx.fillText(t('econPanel.reactiveColNeed'), x + pad + colW - 80, ry + 10);
       ry += 14;
 
       // Etykiety źródeł
@@ -1923,13 +1931,15 @@ export class EconomyOverlay extends BaseOverlay {
 
       // ── Tryb reaktywny — zlecenia eksportowe (Plan B) ─
       case 'export_toggle_enabled':
-        EventBus.emit('factory:setExportEnabled', { enabled: !fs.exportPrefs.enabled });
+        // K4 (Finding 742) — konsola adresuje kolonię strefy (zakres Produkcji); OFF: dzisiejszy ładunek (aktywna kolonia)
+        EventBus.emit('factory:setExportEnabled', kitPage()
+          ? { enabled: !fs.exportPrefs.enabled, colonyId: data.colonyId }
+          : { enabled: !fs.exportPrefs.enabled });
         break;
       case 'export_toggle_tier':
-        EventBus.emit('factory:setExportTier', {
-          tier: data.tier,
-          enabled: !fs.exportPrefs.tiers[data.tier],
-        });
+        EventBus.emit('factory:setExportTier', kitPage()
+          ? { tier: data.tier, enabled: !fs.exportPrefs.tiers[data.tier], colonyId: data.colonyId }
+          : { tier: data.tier, enabled: !fs.exportPrefs.tiers[data.tier] });
         break;
     }
   }
@@ -2667,8 +2677,18 @@ export class EconomyOverlay extends BaseOverlay {
         this._budgetLine = zone.data.lineId;
         this._kitScrollInsp = 0;
         break;
+      case 'prod_good':     // K4 — wybór towaru konsoli Produkcji (bohater: łańcuch; inspektor: akcje)
+        this._prodGoodId = zone.data.commodityId;
+        this._kitScrollInsp = 0;
+        break;
+      case 'prod_scope_toggle':   // K4 — rozwiń / zwiń wybór zakresu (Finding 732 — pełna lista encji zamiast czipów)
+        this._prodScopeOpen = !this._prodScopeOpen;
+        this._kitScrollList = 0;
+        break;
       case 'colony_filter':
         this._selectedColonyId = zone.data.colonyId;
+        this._prodScopeOpen = false;   // K4 — wybór zakresu zamyka listę wyboru (OFF tego pola nie czyta)
+        this._kitScrollList = 0;
         this._scrollLeft = 0;
         this._scrollCenterTop = 0;
         this._scrollCenterBot = 0;

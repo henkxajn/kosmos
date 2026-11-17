@@ -9,8 +9,11 @@
 //     konsoli (strefy `resource_hover` ścieżki ON); stany: globalnie, wybrana kolonia, wybrana stacja-sierota, globalnie ze stacją.
 //     Świadkowie: towar spoza paliwa jest w kolumnie OFF i w bloku ON; linia magazynu stacji jest w bloku ON.
 // G — czipy grupy [ BUDŻET ] [ PRODUKCJA ] [ HANDEL ] [ RYNEK ] [ PRZEPŁYWY ]: kolejność, klik → openPanel z właściwym id, HANDEL / RYNEK
-//     ustawiają zakładkę Handlu, reszta stanu Handlu zostaje; pas subnav znika nad Budżetem i Przepływami, zostaje nad Produkcją.
-// P — Produkcja niezmieniona przy fladze ON: zapis wywołań rysunku strony Produkcji ON == OFF (kontrola: Budżet ON ≠ OFF).
+//     ustawiają zakładkę Handlu, reszta stanu Handlu zostaje; pas subnav znika nad Budżetem i Przepływami (K4: i nad Produkcją),
+//     zostaje przy fladze OFF.
+// P — K4 (zmiana podpisana): Produkcja przy fladze ON jest konsolą (strefy konsoli, dziennik ≠ OFF), przy OFF — dzisiejszą stroną
+//     (czipy `colony_filter`, bez stref konsoli). Równość OFF z bazą f2a3604 — dziennik rysunku w probe (worktree), keeper
+//     `console_production_smoke.mjs` pinuje resztę Produkcji.
 // S — geometria: strefy w ramie konsoli przy 1600×1041 i 1280×833 (wiersze w prostokącie listy, suwak w bohaterze, blok w
 //     inspektorze); wejście konsoli (klik / kółko) bez window.inner* — handler wykonany przy podmienionym innerWidth.
 // T — Finding 725: efekt podatku przez t() (PL = dzisiejszy tekst, EN przetłumaczony; źródło bez gałęzi isPL); tekst konsoli bez
@@ -324,20 +327,23 @@ console.log('G — czipy grupy');
     setEco(false);
     window.KOSMOS.overlayManager.active = 'budget';
     const hOff = CPD.getSubNavHeight();
+    setEco(false);
+    window.KOSMOS.overlayManager.active = 'economy';
+    const hPOff = CPD.getSubNavHeight();
     assert(hB === 0 && hF === 0, `G8 ON: brak pasa subnav nad Budżetem i Przepływami (${hB}, ${hF})`);
-    assert(hP > 0 && hOff > 0, `G9 kontrola: Produkcja ON i Budżet OFF mają pas subnav (${hP}, ${hOff})`);
+    assert(hP === 0 && hOff > 0 && hPOff > 0, `G9 K4: ON bez pasa subnav nad Produkcją (${hP}); OFF — pas nad Budżetem i Produkcją (${hOff}, ${hPOff})`);
   } else assert(false, 'G8 CivPanelDrawer importuje się');
 }
 
 // ═══ P — Produkcja niezmieniona przy fladze ON ═══════════════════════════════════════════════════════════════════
-console.log('P — Produkcja ON == OFF');
+console.log('P — Produkcja: ON = konsola, OFF = dzisiejsza strona');
 {
   makeWorld(); const off = render('economy', false);
   makeWorld(); const on = render('economy', true);
   const a = JSON.stringify(off.log), b = JSON.stringify(on.log);
-  assert(off.log.length > 50 && a === b, `P1 dziennik rysunku Produkcji ON == OFF (${off.log.length} wywołań)`);
-  assert(JSON.stringify(off.zones.map((z) => [z.type, z.x, z.y, z.w, z.h])) === JSON.stringify(on.zones.map((z) => [z.type, z.x, z.y, z.w, z.h])),
-    'P2 strefy Produkcji ON == OFF');
+  assert(isKit(on) && off.log.length > 50 && a !== b, `P1 K4: Produkcja ON jest konsolą (strefy konsoli; dziennik ON ≠ OFF, ${off.log.length} wywołań OFF)`);
+  assert(!isKit(off) && off.zones.some((z) => z.type === 'colony_filter') && !off.zones.some((z) => z.type === 'tab'),
+    'P2 K4: Produkcja OFF — dzisiejsza strona (czipy colony_filter, bez czipów grupy w nagłówku)');
   makeWorld(); const bOff = render('budget', false);
   makeWorld(); const bOn = render('budget', true);
   assert(JSON.stringify(bOff.log) !== JSON.stringify(bOn.log), 'P3 kontrola: Budżet ON ≠ OFF (dziennik rozróżnia)');

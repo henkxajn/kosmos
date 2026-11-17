@@ -1,6 +1,7 @@
 // EconomyConsoleView — Budżet i Przepływy na zestawie konsoli (ARC KONSOLE K3, docs/design/CONSOLES_PLAN.md §1.2; FEATURES.consoleEconomy).
 //
-// Wołane przez `EconomyOverlay.draw`, gdy `isKitScreen('budget' | 'flows')`. Produkcja (`economy`) zostaje dzisiejszą stroną do K4.
+// Wołane przez `EconomyOverlay.draw`, gdy `isKitScreen('budget' | 'flows')`. Produkcja (`economy`, K4) — `ProductionConsoleView.js`
+// (rama `econConsoleFrame`, inspektor, blok magazynu i lokalne przyciemnienie bohatera stąd).
 // Szablon 4-strefowy (D-K-1):
 //  (1) nagłówek — EKONOMIA + czipy grupy [ BUDŻET ] [ PRODUKCJA ] [ HANDEL ] [ RYNEK ] [ PRZEPŁYWY ] (D-K-15) + [ x ];
 //  BUDŻET: (2) lista linii przychodów / wydatków · (3) bohater: netto Kr/rok (duży instrument), pasek przychody vs wydatki, suwak
@@ -55,13 +56,13 @@ function text(ctx, s, x, y, color, font = null, align = 'left') {
   ctx.textAlign = 'left';
 }
 const kr = () => t('econ.console.krPerYear');
-function fmtAmt(n) {
+export function fmtAmt(n) {
   const a = Math.abs(n);
   const s = a >= 1_000_000 ? `${(a / 1_000_000).toFixed(1)}M` : a >= 1_000 ? `${(a / 1_000).toFixed(1)}k`
     : Number.isInteger(a) ? String(Math.round(a)) : a.toFixed(1);
   return n < 0 ? `-${s}` : s;
 }
-const resName = (id) => {
+export const resName = (id) => {
   const def = ALL_RESOURCES[id] ?? COMMODITIES[id];
   return def ? getName(def, COMMODITIES[id] && !ALL_RESOURCES[id] ? 'commodity' : 'resource') : id;
 };
@@ -76,9 +77,21 @@ function typeName(type) {
 
 /** Wejście: rysuje stronę `page` ('budget' | 'flows') konsoli Ekonomii. */
 export function drawEconomyConsole(ov, ctx, W, H, page) {
+  const { z, roles, K, hz } = econConsoleFrame(ov, ctx, W, H, page, page === 'budget' ? EV.TICKER_H : 0);
+  if (page === 'budget') drawBudget(ov, ctx, z, roles, K, hz);
+  else drawFlows(ov, ctx, z, roles, K, hz);
+
+  if (ov._consoleTooltip) drawConsoleTooltip(ctx, ov._consoleTooltip, z.frame, roles, { tone: 'dim' });
+}
+
+/**
+ * Rama strony grupy Ekonomii: strefy (`ov.consoleZones`), skala UI z rysunku, nagłówek EKONOMIA + czipy grupy + [ x ] ze strefami
+ * `tab` / `close`. `page` — id overlayu ('budget' | 'flows' | 'economy'); `stripH` — wysokość pasa (0 = bez pasa).
+ * @returns {{ z, roles, K, hz }}
+ */
+export function econConsoleFrame(ov, ctx, W, H, page, stripH) {
   const roles = consoleRoles(THEME);
   const K = window.KOSMOS;
-  const stripH = page === 'budget' ? EV.TICKER_H : 0;
   const spec = { ...(CONSOLE_SCREEN_SPECS[page] ?? {}), stripH, clock: consoleClockRect(W, H, NAV_GROUPS.length) };
   const z = consoleZones(ov._getOverlayBounds(W, H), spec);
   ov.consoleZones = z;
@@ -95,11 +108,7 @@ export function drawEconomyConsole(ov, ctx, W, H, page) {
     if (h.type === 'close') ov._addHit(h.x, h.y, h.w, h.h, 'close');
     else ov._addHit(h.x, h.y, h.w, h.h, 'tab', { id: h.id });
   }
-
-  if (page === 'budget') drawBudget(ov, ctx, z, roles, K, hz);
-  else drawFlows(ov, ctx, z, roles, K, hz);
-
-  if (ov._consoleTooltip) drawConsoleTooltip(ctx, ov._consoleTooltip, z.frame, roles, { tone: 'dim' });
+  return { z, roles, K, hz };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -449,7 +458,7 @@ function drawFlowDiagram(ctx, r, resId, dia, roles) {
 }
 
 /** K1c-B (Stocznia, `paintHeroContent`): miękka elipsa `bgPrimary` o kryciu `HOLO_TUNING.heroDim` — pełna w środku, zero na krawędzi. */
-function drawHeroDim(ctx, rect) {
+export function drawHeroDim(ctx, rect) {
   const dim = Number(HOLO_TUNING.heroDim) || 0;
   if (!(dim > 0) || typeof ctx.createRadialGradient !== 'function') return;
   ctx.save();
@@ -470,7 +479,7 @@ function drawHeroDim(ctx, rect) {
  * Inspektor: reguła z etykietą, treść w przycięciu z przewijaniem `ov._kitScrollInsp` (klamra po wysokości treści). `body(x, y, w,
  * vis)` rysuje i zwraca wysokość; `vis(y)` — czy wiersz na wysokości y jest w pasie widoku (strefy dokładane tylko wtedy).
  */
-function drawScrolledInspector(ov, ctx, iz, roles, label, body) {
+export function drawScrolledInspector(ov, ctx, iz, roles, label, body) {
   const ih = drawZoneRule(ctx, iz, label, roles);
   const rect = { x: iz.x, y: iz.y + ih + 6, w: iz.w, h: Math.max(0, iz.h - ih - 6) };
   ov._consoleInspRect = rect;
@@ -505,7 +514,7 @@ export function stockBlockData(ov) {
 }
 
 /** Blok D-K-16: linie kolumny inwentarza, których górna szuflada nie pokazuje. Zwraca wysokość. */
-function drawStockBlock(ov, ctx, x, y, w, roles, hz, vis) {
+export function drawStockBlock(ov, ctx, x, y, w, roles, hz, vis) {
   const data = stockBlockData(ov);
   let yy = y;
   const scope = data.selCol ? (data.selCol.name ?? data.selCol.planetId) : t('econPanel.globalLabel');

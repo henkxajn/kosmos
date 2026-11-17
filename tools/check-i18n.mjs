@@ -383,7 +383,8 @@ const HARDCODED_BASELINE = process.env.KOSMOS_I18N_BASELINE
   'src/ui/CargoLoadModal.js':        5,  // DOM (269): nagłówki sekcji ładowni (klasa 113).
   'src/ui/ColonyOverlay.js':        17,  // ⚠ w tym 3 flashe budowy — znane z arca BRAMKA WŁASNOŚCI.
   'src/ui/DropTroopsModal.js':       3,  // DOM (269): nagłówek + podpowiedzi zrzutu (klasa 113).
-  'src/ui/EconomyOverlay.js':        1,
+  // ARC KONSOLE K4 (2026-11-17): 'src/ui/EconomyOverlay.js' 1 → 0 i WYPADA — nagłówki kolumn zapotrzebowania Produkcji
+  //   (Źródło / Towar / Potrzeba) przez t() (Finding 725, część Produkcji).
   'src/ui/FleetManagerOverlay.js':   5,
   'src/ui/GroundUnitPanel.js':       1,
   // ARC KONSOLE K0b (2026-11-16): 'src/ui/IntelOverlay.js' 2 → 0 i WYPADA — Finding 725 (napisy przez t()).
