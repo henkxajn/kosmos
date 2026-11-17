@@ -2701,6 +2701,8 @@ export class GameScene {
       // Faza D3: Przywróć DysonSystem
       if (c4x.dysonSystem) {
         this.dysonSystem.restore(c4x.dysonSystem);
+        // Finding 743 — restore nie emituje 'dyson:visualStageChanged': etap gwiazdy i pierścienie z zapisanego postępu
+        this.threeRenderer?._restoreDysonStage?.();
       }
       // Auto-pauza: przywróć ustawienia (master + per-kategoria)
       if (c4x.autoPause) {
@@ -3532,8 +3534,9 @@ export class GameScene {
 
     // ── Faza D3: handlery DysonSystem ────────────────────────────────────
     // Wizualna progresja gwiazdy w 3D — DysonSystem emituje przy każdym ukończonym segmencie
-    EventBus.on('dyson:visualStageChanged', ({ stage }) => {
-      window.KOSMOS?.threeRenderer?.updateStarForDyson?.(stage);
+    // Finding 743 — ta sama ścieżka co po wczytaniu / przebudowie układu: pierścienie tylko wokół gwiazdy układu macierzystego
+    EventBus.on('dyson:visualStageChanged', () => {
+      window.KOSMOS?.threeRenderer?._restoreDysonStage?.();
     });
 
     // Popup po ukończeniu segmentu Sfery + faction shift

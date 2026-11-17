@@ -79,6 +79,7 @@ import { GalaxyTerritory } from './GalaxyTerritory.js';     // ARC GALAXY G2-3 �
 import { buildPlateTerritoryPayload, plateTerritoryVisibility, plateOwnerHalos, plateRiserIds } from '../ui/GalaxyTerritoryLogic.js';
 import { subPixelHidden } from '../ui/GalaxyFlightLogic.js'; // ARC GALAXY G2-1 — siatki poniżej 0,5 px chowane w trakcie lotu
 import { systemIdOf } from '../utils/SystemScope.js';   // ARKUSZ UI U3-2 — termin układu pingu (Finding 477)
+import { dysonViewStage } from './DysonStageLogic.js';   // Finding 743 — etap Sfery Dysona odtwarzany z postępu segmentów
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
 import { getMapInsets } from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 / U4-2 — wcięcia kadru „Obserwuj” (outlinery, pas dolny)
@@ -2050,6 +2051,7 @@ export class ThreeRenderer {
     this._recomputeSky('switchSystem');
     this._restoreActiveSystemVesselSprites();
     this._restoreActiveSystemStations();   // 4f-B: stacje aktywnego układu wracają po switchSystem
+    this._restoreDysonStage();             // Finding 743: _disposeAllMeshes zeruje pierścienie Sfery — wracają z postępu segmentów
     // F2/2g: tryb taktyczny przeżywa zmianę układu (chip-switch w trybie Y) —
     // stare materiały orbit zdisposowane ze sceną → restyle świeżych + nowa siatka;
     // markery ruchu starego układu sprzątnięte (odbudują się w syncu).
@@ -3744,7 +3746,18 @@ export class ThreeRenderer {
 
   // ── Faza D3: Wizualna progresja gwiazdy z postępem Sfery Dysona ──
   // stage: 0 = normalna gwiazda, 1-4 = etapy Sfery (1 segm/2 wyraźne/3 przyciemnione/4 fioletowe)
-  // Wywoływane z GameScene listener'a 'dyson:visualStageChanged'
+  // Finding 743 — etap Sfery Dysona i pierścienie odtwarzane z liczby ukończonych segmentów (zapisanej w save): po wczytaniu
+  // zapisu (GameScene po DysonSystem.restore), po przebudowie układu (switchSystem) i po ukończeniu segmentu ('dyson:visualStageChanged').
+  // Sfera otacza gwiazdę układu macierzystego — w innym układzie etap 0 (`dysonViewStage`). Zwraca zastosowany etap.
+  _restoreDysonStage() {
+    const K = window.KOSMOS;
+    const view = this._star?.systemId ?? K?.activeSystemId ?? null;
+    const stage = dysonViewStage(K?.dysonSystem?.completedCount ?? 0, view, systemIdOf(K?.homePlanet));
+    this.updateStarForDyson(stage);
+    return stage;
+  }
+
+  // Wywoływane przez _restoreDysonStage (wczytanie, przebudowa układu, ukończony segment)
   updateStarForDyson(stage) {
     if (stage === this._dysonStage) return;
     this._dysonStage = stage;
