@@ -10,6 +10,16 @@ import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { BASE_PRICE, scarcityMultiplier, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
 import EventBus           from '../core/EventBus.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
+// ARC KONSOLE K3-B — Handel i Rynek na zestawie konsoli (FEATURES.consoleEconomy); OFF = dzisiejszy rysunek niżej.
+import { GAME_CONFIG }    from '../config/GameConfig.js';
+import { isKitScreen }    from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo } from './ConsoleKit.js';
+import { drawTradeConsole } from './TradeConsoleView.js';
+import { applyEconChip }  from './EconomyConsoleLogic.js';
+import { tradeColonyOptions, pickTradeColony } from './TradeConsoleLogic.js';
+import { installTradeDebug } from './TradeConsoleView.js';
+
+const kitOn = () => isKitScreen('trade', GAME_CONFIG.FEATURES);
 
 const LEFT_W  = 320;
 const TAB_H   = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -30,6 +40,15 @@ export class TradeOverlay extends BaseOverlay {
     this._marketAiColId  = null;
     this._marketGoodId   = null;
     this._marketQty      = 10;
+
+    // K3-B — konsola: strefy ostatniej klatki (wejście czyta je stąd, bez window.inner*), skala UI z rysunku, wybrane
+    // połączenie Handlu, przewijanie pasa (lista = _scrollLeft, inspektor = _scrollRight — jak dzisiejsze kolumny)
+    this.consoleZones   = null;
+    this._uiScale       = 1;
+    this._tradeConnId   = null;
+    this._kitScrollStrip = 0;
+    this._tradeColId    = null;   // K3 runda 2 — lokalna kolonia Handlu (wybrana w konsoli; bez switchActiveColony)
+    this._ctxOpen       = false;  // lista wyboru kolonii otwarta
 
     // Tooltip DOM (hover na słupkach wykresu)
     this._hoverTradeBar = null;
@@ -52,7 +71,8 @@ export class TradeOverlay extends BaseOverlay {
     this._closeQtyInput();
 
     // Skala logiczne → fizyczne piksele (identyczna jak w UIManager/EconomyOverlay)
-    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    // K3-B — konsola: skala zapamiętana w draw() (prostokąt pola pochodzi ze stref konsoli); OFF — jak dziś
+    const SCALE = kitOn() ? (this._uiScale || 1) : Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     const sx = canvasX * SCALE, sy = canvasY * SCALE;
     const sw = boxW * SCALE, sh = boxH * SCALE;
 
@@ -165,7 +185,7 @@ export class TradeOverlay extends BaseOverlay {
     const color = isExport ? THEME.warning : THEME.info;
     const arrow = isExport ? '↑' : '↓';
     const label = isExport ? t('tradePanel.exports') : t('tradePanel.imports');
-    lines.push(`<div style="font-weight:bold;color:${color}">${arrow} ${label} — ${t('tradePanel.year')} ${year}</div>`);
+    lines.push(`<div style="font-weight:bold;color:${color}">${arrow} ${label}${year != null ? ` — ${t('tradePanel.year')} ${year}` : ''}</div>`);
     lines.push(`<div style="color:${THEME.textDim};margin-bottom:2px">${t('tradePanel.tooltipTotal')}: ${total}</div>`);
 
     const sorted = Object.entries(items).sort((a, b) => b[1] - a[1]);
@@ -181,9 +201,29 @@ export class TradeOverlay extends BaseOverlay {
 
   // ── Główna metoda rysowania ──────────────────────────────────────────────
 
+  /**
+   * K3 runda 2 — kolonia, która handluje. Konsola: lokalny wybór (`_tradeColId`) → aktywna gry, gdy pełna → pierwsza pełna
+   * (globalnej aktywnej NIE przełącza — `switchActiveColony` podmienia systemy całego UI). OFF: aktywna kolonia gry (jak dziś).
+   */
+  _tradeColonyId() {
+    const cm = window.KOSMOS?.colonyManager;
+    if (!kitOn()) return cm?.activePlanetId;
+    return pickTradeColony(tradeColonyOptions(cm?.getPlayerColonies?.() ?? []), this._tradeColId, cm?.activePlanetId);
+  }
+
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    installTradeDebug(this);
+
+    if (kitOn()) {
+      // K3-B — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawTradeConsole(this, ctx, W, H); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
 
@@ -599,7 +639,7 @@ export class TradeOverlay extends BaseOverlay {
     // TC
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(`${t('tradePanel.tradeCapacity')}: ${civTC.toFixed(0)} Kr/rok`, x + pad, ry + 10);
+    ctx.fillText(`${t('tradePanel.tradeCapacity')}: ${civTC.toFixed(0)} ${t('econ.console.krPerYear')}`, x + pad, ry + 10);
     ry += 16;
 
     // ── Migracja cywilna — toggle ────────────────────────────────────────
@@ -1026,6 +1066,14 @@ export class TradeOverlay extends BaseOverlay {
 
   handleClick(x, y) {
     if (!this.visible) return false;
+    if (kitOn()) {
+      // K3-B — geometria wyłącznie ze stref ostatniej klatki (bez window.inner*); klik w ramie zawsze pochłonięty (jak dziś)
+      const f = this.consoleZones?.frame;
+      if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+      const hit = this._hitTest(x, y);
+      if (hit) this._onHit(hit);
+      return true;
+    }
     const { ox, oy, ow, oh } = this._getOverlayBounds(
       Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
       Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
@@ -1063,7 +1111,7 @@ export class TradeOverlay extends BaseOverlay {
         const { cost, colonyId } = zone.data;
         const civTrade = window.KOSMOS?.civilianTradeSystem;
         if (!civTrade || civTrade.getCredits(colonyId) < cost) break;
-        const bSys = window.KOSMOS?.buildingSystem;
+        const bSys = kitOn() ? window.KOSMOS?.colonyManager?.getColony?.(colonyId)?.buildingSystem : window.KOSMOS?.buildingSystem;
         if (!bSys || bSys._constructionQueue?.size === 0) break;
         // Przyspiesz wszystkie budowy o 50% postępu
         for (const [, entry] of bSys._constructionQueue) {
@@ -1076,7 +1124,7 @@ export class TradeOverlay extends BaseOverlay {
         const { cost, goodId, qty, colonyId } = zone.data;
         const civTrade = window.KOSMOS?.civilianTradeSystem;
         if (!civTrade || civTrade.getCredits(colonyId) < cost) break;
-        const resSys = window.KOSMOS?.resourceSystem;
+        const resSys = kitOn() ? window.KOSMOS?.colonyManager?.getColony?.(colonyId)?.resourceSystem : window.KOSMOS?.resourceSystem;
         if (!resSys) break;
         resSys.receive({ [goodId]: qty });
         EventBus.emit('trade:spendCredits', { colonyId, amount: cost, purpose: 'emergency_buy' });
@@ -1086,7 +1134,7 @@ export class TradeOverlay extends BaseOverlay {
         const { cost, colonyId } = zone.data;
         const civTrade = window.KOSMOS?.civilianTradeSystem;
         if (!civTrade || civTrade.getCredits(colonyId) < cost) break;
-        const prospSys = window.KOSMOS?.prosperitySystem;
+        const prospSys = kitOn() ? window.KOSMOS?.colonyManager?.getColony?.(colonyId)?.prosperitySystem : window.KOSMOS?.prosperitySystem;
         if (!prospSys) break;
         prospSys.addEventBonus('trade_festival', 5, 3);
         EventBus.emit('trade:spendCredits', { colonyId, amount: cost, purpose: 'festival' });
@@ -1106,8 +1154,24 @@ export class TradeOverlay extends BaseOverlay {
 
       // ── S3.5b: zakładka Rynek (Order Board) ──────────────────────────────
       case 'tab':
+        // K3-B — czip grupy w nagłówku konsoli (D-K-15): Budżet / Produkcja / Handel / Rynek / Przepływy
+        if (zone.data?.id) { applyEconChip(zone.data.id, window.KOSMOS?.overlayManager); break; }
         this._tab = zone.data.tab;
         this._scrollLeft = 0;
+        this._scrollRight = 0;
+        break;
+      case 'trade_ctx_toggle':   // K3 runda 2 — „Twoja kolonia ▾” otwiera / zamyka listę kolonii
+        this._ctxOpen = !this._ctxOpen;
+        break;
+      case 'trade_ctx_pick':     // wybór kolonii Handlu (tylko pełne kolonie mają strefę); lokalnie, bez switchActiveColony
+        this._tradeColId = zone.data.colonyId;
+        this._ctxOpen = false;
+        this._tradeConnId = null;
+        this._scrollLeft = 0;
+        this._scrollRight = 0;
+        break;
+      case 'trade_conn':   // K3-B — wybór połączenia na liście konsoli (inspektor pokazuje jego przepływy)
+        this._tradeConnId = zone.data.partnerId;
         this._scrollRight = 0;
         break;
       case 'market_empire':
@@ -1139,7 +1203,7 @@ export class TradeOverlay extends BaseOverlay {
       case 'market_buy':
       case 'market_sell': {
         const board = window.KOSMOS?.tradeOrderBoard;
-        const activeColId = window.KOSMOS?.colonyManager?.activePlanetId;
+        const activeColId = kitOn() ? this._tradeColonyId() : window.KOSMOS?.colonyManager?.activePlanetId;
         if (board && this._marketAiColId) {
           board.placeOrder({
             side: zone.type === 'market_buy' ? 'buy' : 'sell',
@@ -1165,7 +1229,8 @@ export class TradeOverlay extends BaseOverlay {
     }
     this._hoverZone = this._hitTest(x, y);
 
-    const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    // K3-B — konsola: skala zapamiętana w draw()
+    const scale = kitOn() ? (this._uiScale || 1) : Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     this._mouseScreenX = x * scale;
     this._mouseScreenY = y * scale;
 
@@ -1187,6 +1252,16 @@ export class TradeOverlay extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (kitOn()) {
+      // K3-B — lista, inspektor i pas przewijane osobno ze stref ostatniej klatki; klamra w rysunku
+      const f = this.consoleZones?.frame;
+      if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+      const inR = (r) => r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+      if (inR(this._consoleListRect)) this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
+      else if (inR(this._consoleInspRect)) this._scrollRight = Math.max(0, this._scrollRight + delta * 0.5);
+      else if (inR(this._consoleStripRect)) this._kitScrollStrip = Math.max(0, this._kitScrollStrip + delta * 0.5);
+      return true;
+    }
     const { ox, oy, ow, oh } = this._getOverlayBounds(
       Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
       Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))

@@ -6,7 +6,7 @@
 //    staje się dwoma czipami grupy; HANDEL i RYNEK otwierają ten sam overlay `trade` z inną zakładką (stan Handlu zostaje);
 //  • Budżet: linie przychodów / wydatków z tych samych danych co dzisiejsza zakładka (`EconomyOverlay._gatherBudgetData`), netto
 //    tym samym wzorem, rozbicie wybranej linii, efekt stawki podatku (ta sama formuła co dziś), ticker deficytów / nadwyżek;
-//  • Przepływy: diagram producenci → zasób → konsumenci (pasma, wąskie gardło), wiersze listy jak dziś;
+//  • Przepływy: diagram producenci → zasób → konsumenci (pasma, wąskie gardło), wiersze listy z tego samego rozbicia co bohater (Finding 738);
 //  • D-K-16 (warunkowe): które linie lewej kolumny inwentarza pokazuje już górna szuflada zasobów — reszta idzie do bloku inspektora.
 
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
@@ -198,28 +198,21 @@ export function budgetTicker(globalResources, allResources, limit = 4) {
   return { deficits, surpluses };
 }
 
-// ── Przepływy ────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-/** Wiersze listy Przepływów — TE SAME co dziś: sumy z `_producers` kolonii gracza (bez energii i badań), malejąco po obrocie. */
-export function flowListItems(colonies) {
-  const flows = {};
-  for (const col of colonies ?? []) {
-    const rs = col?.resourceSystem;
-    if (!rs?._producers) continue;
-    for (const rates of rs._producers.values()) {
-      for (const [resId, rate] of Object.entries(rates)) {
-        if (resId === 'energy' || resId === 'research') continue;
-        if (!flows[resId]) flows[resId] = { prod: 0, cons: 0 };
-        if (rate > 0) flows[resId].prod += rate;
-        else flows[resId].cons += Math.abs(rate);
-      }
-    }
-  }
-  return Object.entries(flows)
-    .filter(([, f]) => f.prod > 0 || f.cons > 0)
-    .sort((a, b) => (b[1].prod + b[1].cons) - (a[1].prod + a[1].cons))
-    .map(([id, f]) => ({ id, prod: f.prod, cons: f.cons, bal: f.prod - f.cons }));
+/**
+ * Pas Budżetu (polerka K3, uwaga właściciela 1): wiersze opisane jako SUROWCE, żeby pusty pas nie czytał się jak zbilansowany
+ * budżet; przy ujemnym netto budżetu PIERWSZA pozycja pasa to deficyt budżetu w roli alert.
+ * Zwraca `{ budget: { net, tone:'alert' } | null, rows: [{ key, items, tone }], emptyKey }`.
+ */
+export function budgetStripItems(net, ticker) {
+  const budget = Number.isFinite(net) && net < 0 ? { net, tone: 'alert' } : null;
+  const rows = [
+    { key: 'econ.console.resDeficits', items: ticker?.deficits ?? [], tone: 'alert' },
+    { key: 'econ.console.resSurpluses', items: ticker?.surpluses ?? [], tone: 'primary' },
+  ];
+  return { budget, rows, emptyKey: 'econ.console.resNoTicker' };
 }
+
+// ── Przepływy ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
  * Diagram przepływu wybranego zasobu z rozbicia `{ producers:{type:val}, consumers:{type:val} }` (`_gatherFlowBreakdown`):
@@ -318,4 +311,73 @@ export function stockBlockLines({ inv = {}, rate = {}, selected = false, station
       .map((id) => ({ id, amount: s.inv?.[id] ?? 0, rate: s.rate?.[id] ?? 0 })),
   })).filter((s) => s.lines.length > 0);
   return { goods, stations: st };
+}
+
+// ── Finding 738 — lista Przepływów z tego samego rozbicia co bohater ─────────────────────────────────────────────────
+
+/**
+ * Kandydaci listy Przepływów konsoli: id z rejestru producentów, złoża czynnej kopalni i składniki receptur aktywnych
+ * przydziałów fabryk — te same źródła co `EconomyOverlay._gatherFlowBreakdown` (§1 rejestr, §2 kopalnie, §3 fabryki).
+ * Bez energii i badań (jak dzisiejsza lista). Kolejność: pierwsze wystąpienie (remisy sortowania jak dziś).
+ */
+export function flowCandidateIds(colonies, commodities = COMMODITIES) {
+  const ids = new Set();
+  for (const col of colonies ?? []) {
+    const rs = col?.resourceSystem;
+    if (!rs?._producers) continue;   // rozbicie pomija taką kolonię
+    for (const rates of rs._producers.values()) for (const id of Object.keys(rates ?? {})) ids.add(id);
+    const b = col.buildingSystem;
+    if (b?._deposits && b._cachedMineLevel > 0) {
+      for (const d of b._deposits) if (d?.remaining > 0 && d.resourceId) ids.add(d.resourceId);
+    }
+    const fs = col.factorySystem;
+    if (fs?._allocations) {
+      for (const [cid, alloc] of fs._allocations) {
+        if (alloc?._paused) continue;
+        for (const id of Object.keys(commodities?.[cid]?.recipe ?? {})) ids.add(id);
+      }
+    }
+  }
+  ids.delete('energy'); ids.delete('research');
+  return [...ids];
+}
+
+/**
+ * Wiersze listy Przepływów konsoli z rozbicia `breakdownOf(id)` (`_gatherFlowBreakdown`) — bilans liczony TĄ SAMĄ funkcją co
+ * bohater i inspektor (`flowDiagram(...).net`), więc lista i bohater zawsze się zgadzają (Finding 738). Sortowanie jak dziś:
+ * malejąco po (produkcja + konsumpcja), wiersze bez ruchu pominięte.
+ */
+export function flowListFromBreakdown(ids, breakdownOf) {
+  return (ids ?? []).map((id) => {
+    const d = flowDiagram(breakdownOf(id) ?? {});
+    return { id, prod: d.prodTotal, cons: d.consTotal, bal: d.net };
+  }).filter((f) => f.prod > 0 || f.cons > 0).sort((a, b) => (b.prod + b.cons) - (a.prod + a.cons));
+}
+
+/**
+ * Układ bohatera Przepływów (polerka K3, uwaga właściciela 3): kolumna producentów / zasób / kolumna konsumentów w TERCJACH
+ * bohatera; nagłówki PRODUCENCI / KONSUMENCI tuż nad swoją kolumną; węzły rozłożone na wysokość bohatera; grubość pasma ∝ wartość.
+ * @param {{x,y,w,h}} r — wnętrze bohatera; `nProd`/`nCons` — liczba węzłów; `bandMax` — grubość pasma przy udziale 1
+ */
+export function flowHeroLayout(r, nProd, nCons, { nodeMinH = 30, nodeMaxStep = 96, headerH = 22, bandMax = 16 } = {}) {
+  const third = r.w / 3;
+  const pad = Math.min(24, third * 0.08);
+  const prodCol = { x: r.x + pad, w: third - 2 * pad };
+  const centre = { x: r.x + third, w: third, cx: r.x + r.w / 2, cy: r.y + headerH + (r.h - headerH) / 2 };
+  const consCol = { x: r.x + 2 * third + pad, w: third - 2 * pad };
+  const bodyTop = r.y + headerH, bodyH = Math.max(0, r.h - headerH);
+  const ys = (n) => {
+    if (!(n > 0)) return [];
+    const step = Math.max(nodeMinH, Math.min(nodeMaxStep, bodyH / n));
+    const top = centre.cy - (step * n) / 2 + step / 2;
+    return Array.from({ length: n }, (_, i) => top + i * step);
+  };
+  const prodYs = ys(nProd), consYs = ys(nCons);
+  const headerY = (yy) => Math.max(r.y, (yy.length ? yy[0] : centre.cy) - nodeMinH - 4);
+  return {
+    prodCol, consCol, centre, prodYs, consYs,
+    prodHeader: { x: prodCol.x, y: headerY(prodYs) },               // wyrównanie do lewej krawędzi kolumny producentów
+    consHeader: { x: consCol.x + consCol.w, y: headerY(consYs) },   // wyrównanie do prawej krawędzi kolumny konsumentów
+    band: (frac) => Math.max(1, Math.round((frac > 0 ? frac : 0) * bandMax)),
+  };
 }

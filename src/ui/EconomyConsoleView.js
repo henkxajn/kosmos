@@ -25,8 +25,10 @@ import { NAV_GROUPS } from './CivPanelDrawer.js';
 import { clampScroll, scrollThumb } from './InfoPanelLayoutLogic.js';
 import { truncateText } from './HudLabelLogic.js';
 import { drawResourceIcon } from './ResourceIcons.js';
+import { HOLO_TUNING } from '../renderer/ShipHologramLogic.js';
 import { economyGroupChips, budgetLines, budgetLineTone, budgetNet, budgetTotals, budgetBreakdown, fmtSigned, taxEffect,
-  taxTone, TAX_MAX, TAX_BANDS, budgetTicker, flowListItems, flowDiagram, yearsToEmpty, aggregateStock, stockBlockLines }
+  taxTone, TAX_MAX, TAX_BANDS, budgetTicker, budgetStripItems, flowHeroLayout, flowDiagram, yearsToEmpty, aggregateStock, stockBlockLines, flowCandidateIds,
+  flowListFromBreakdown }
   from './EconomyConsoleLogic.js';
 
 // Wymiary widoku (px logiczne)
@@ -187,12 +189,11 @@ function drawBudget(ov, ctx, z, roles, K, hz) {
     yy += CONSOLE_KIT.KV_H + 2;
     if (vis(yy)) text(ctx, t(eff.key, eff.pct), x, yy + 11, roles[eff.tone] ?? roles.dim, F(THEME.fontSizeSmall));
     yy += CONSOLE_KIT.KV_H + 8;
-    yy += drawStockBlock(ov, ctx, x, yy, w, roles, hz, vis);
     return yy - y;
   });
 
-  // pas — ticker
-  if (z.strip) drawTicker(ctx, z.strip, budgetTicker(d.globalResources, ALL_RESOURCES), roles);
+  // pas — surowce (deficyty / nadwyżki); przy ujemnym netto budżetu pierwsza pozycja = deficyt budżetu
+  if (z.strip) drawTicker(ctx, z.strip, budgetStripItems(budgetNet(d), budgetTicker(d.globalResources, ALL_RESOURCES)), roles);
 }
 
 function drawBudgetHero(ov, ctx, r, d, roles, hz) {
@@ -247,23 +248,33 @@ function drawBudgetHero(ov, ctx, r, d, roles, hz) {
   if (hz?.type === 'tax_slider') ov._consoleTooltip = { text: t('econ.console.taxHint'), x: barX, y: barY + 18 };
 }
 
-function drawTicker(ctx, r, tk, roles) {
+function drawTicker(ctx, r, st, roles) {
   drawZoneRule(ctx, r, '', roles);
   ctx.save();
   ctx.textBaseline = 'middle';
   const rowY = [r.y + 16, r.y + 36];
-  const sides = [['econ.console.deficits', tk.deficits, 'alert'], ['econ.console.surpluses', tk.surpluses, 'primary']];
-  if (!tk.deficits.length && !tk.surpluses.length) {
-    text(ctx, t('econ.console.noTicker'), r.x, rowY[0], roles.dim, F(THEME.fontSizeSmall));
+  let x0 = r.x;
+  if (st.budget) {
+    // deficyt budżetu — pierwsza pozycja pasa, w roli alert
+    ctx.font = F(THEME.fontSizeSmall, true);
+    const lab = `${t('econ.console.budgetDeficit').toUpperCase()} `;
+    text(ctx, lab, x0, rowY[0], roles.alert);
+    x0 += ctx.measureText(lab).width;
+    ctx.font = F(THEME.fontSizeSmall); ctx.fillStyle = roles.alert;
+    x0 += drawTabular(ctx, `${fmtSigned(st.budget.net)} ${kr()}`, x0, rowY[0], 'left') + 28;
+  }
+  if (st.rows.every((row) => !row.items.length)) {
+    text(ctx, t(st.emptyKey), x0, rowY[0], roles.dim, F(THEME.fontSizeSmall));
     ctx.restore();
     return;
   }
-  sides.forEach(([key, items, tone], i) => {
+  st.rows.forEach(({ key, items, tone }, i) => {
     const y = rowY[i];
     ctx.font = F(THEME.fontSizeSmall);
     const lab = t(key).toUpperCase();
-    text(ctx, lab, r.x, y, roles[tone]);
-    let x = r.x + Math.max(110, ctx.measureText(lab).width + 14);
+    const lx = i === 0 ? x0 : r.x;
+    text(ctx, lab, lx, y, roles[tone]);
+    let x = lx + Math.max(150, ctx.measureText(lab).width + 14);
     if (!items.length) { text(ctx, '—', x, y, roles.dim); return; }
     for (const it of items) {
       const s1 = `${resName(it.id)} `;
@@ -286,7 +297,8 @@ function drawTicker(ctx, r, tk, roles) {
 
 function drawFlows(ov, ctx, z, roles, K, hz) {
   const colonies = K?.colonyManager?.getPlayerColonies?.() ?? [];
-  const items = flowListItems(colonies);
+  // Finding 738 — bilans wiersza z tego samego rozbicia co bohater (kopalnie i wsad fabryk wliczone); OFF liczy po staremu
+  const items = flowListFromBreakdown(flowCandidateIds(colonies), (id) => ov._gatherFlowBreakdown(id));
   // domyślny wybór — pierwszy zasób (albo gdy poprzedni zniknął), jak dziś
   if (items.length && (!ov._flowSelectedResId || !items.some((i) => i.id === ov._flowSelectedResId))) ov._flowSelectedResId = items[0].id;
 
@@ -359,21 +371,19 @@ function drawFlows(ov, ctx, z, roles, K, hz) {
 }
 
 function drawFlowDiagram(ctx, r, resId, dia, roles) {
-  const colW = Math.min(EV.COL_W_MAX, Math.round(r.w * EV.COL_W_FRAC));
-  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-  const cw = Math.min(EV.CENTRE_W, r.w - 2 * colW - 40);
-  const cL = cx - cw / 2, cR = cx + cw / 2;
+  const L = flowHeroLayout(r, dia.prod.length, dia.cons.length, { bandMax: Math.max(EV.BAND_MAX, Math.round(r.h / 24)) });
+  const { cx, cy } = L.centre;
+  const cw = L.centre.w;
+  const cL = cx - cw / 2 + 12, cR = cx + cw / 2 - 12;
   const consTone = dia.bottleneck ? 'alert' : 'foreign';
+  const valFont = F(THEME.fontSizeLarge);           // wartość węzła — rozmiar etykiety instrumentu
+  const nameFont = F(THEME.fontSizeNormal);
 
-  const nodesY = (n) => {
-    const step = EV.NODE_H + EV.NODE_GAP;
-    const total = n * step - EV.NODE_GAP;
-    const top = Math.max(r.y + 20, cy - total / 2);
-    return Array.from({ length: n }, (_, i) => top + i * step + EV.NODE_H / 2);
-  };
-  const drawSide = (nodes, left, tone) => {
-    const ys = nodesY(nodes.length);
-    const thick = nodes.map((n) => Math.max(1, Math.round(n.frac * EV.BAND_MAX)));
+  // K1c-B: miękkie lokalne przyciemnienie pod środkiem — liczba nie siada na gwieździe tła
+  drawHeroDim(ctx, { x: L.centre.x, y: cy - r.h * 0.3, w: L.centre.w, h: r.h * 0.6 });
+
+  const drawSide = (nodes, ys, col, left, tone) => {
+    const thick = nodes.map((n) => L.band(n.frac));
     const bundle = thick.reduce((s, v) => s + v, 0);
     let off = cy - bundle / 2;
     ctx.save();
@@ -381,57 +391,74 @@ function drawFlowDiagram(ctx, r, resId, dia, roles) {
       const y = ys[i];
       const th = thick[i];
       const by = off + th / 2; off += th;
-      const nx0 = left ? r.x : r.x + r.w - colW;
-      const nx1 = nx0 + colW;
-      // pasmo: krzywa od węzła do zasobu (cienkie, w roli)
+      // węzeł: nazwa + wartość przy ZEWNĘTRZNEJ krawędzi tercji; pasmo biegnie przez resztę kolumny aż do zasobu
+      const outer = left ? col.x : col.x + col.w;
+      const al = left ? 'left' : 'right';
+      const name = truncateText(n.type === '__more' ? t('econ.console.more', n.count) : typeName(n.type), col.w * 0.78,
+        (q) => { ctx.font = nameFont; return ctx.measureText(q).width; });
+      const val = `${left ? '+' : '-'}${fmtAmt(n.val)}`;
+      ctx.font = nameFont; const nw = ctx.measureText(name).width;
+      ctx.font = valFont; const vw = ctx.measureText(val).width;
+      const labW = Math.max(nw, vw) + 14;
+      const b0 = left ? outer + labW : outer - labW;
       ctx.globalAlpha = 0.55;
       ctx.strokeStyle = roles[tone] ?? roles.primary; ctx.lineWidth = th;
       ctx.beginPath();
-      if (left) { ctx.moveTo(nx1 + 4, y); ctx.bezierCurveTo((nx1 + cL) / 2, y, (nx1 + cL) / 2, by, cL - 4, by); }
-      else { ctx.moveTo(cR + 4, by); ctx.bezierCurveTo((cR + nx0) / 2, by, (cR + nx0) / 2, y, nx0 - 4, y); }
+      if (left) { ctx.moveTo(b0, y); ctx.bezierCurveTo((b0 + cL) / 2, y, (b0 + cL) / 2, by, cL - 4, by); }
+      else { ctx.moveTo(cR + 4, by); ctx.bezierCurveTo((cR + b0) / 2, by, (cR + b0) / 2, y, b0, y); }
       ctx.stroke();
       ctx.globalAlpha = 1;
-      // węzeł: nazwa + wartość
-      const name = n.type === '__more' ? t('econ.console.more', n.count) : typeName(n.type);
-      ctx.font = F(THEME.fontSizeSmall); ctx.textBaseline = 'middle';
-      const al = left ? 'right' : 'left';
-      const tx = left ? nx1 : nx0;
-      text(ctx, truncateText(name, colW - 4, (s) => ctx.measureText(s).width), tx, y - 7, roles.foreign ?? roles.primary, null, al);
-      ctx.font = F(THEME.fontSizeNormal);
+      ctx.textBaseline = 'middle';
+      text(ctx, name, outer, y - 11, roles.foreign ?? roles.primary, nameFont, al);
+      ctx.font = valFont;
       ctx.fillStyle = roles[tone] ?? roles.primary;
-      drawTabular(ctx, `${left ? '+' : '-'}${fmtAmt(n.val)}`, tx, y + 8, al);
+      drawTabular(ctx, val, outer, y + 11, al);
     });
     ctx.restore();
   };
 
-  // kolumny nagłówków
+  // nagłówki tuż nad swoimi kolumnami
   ctx.save();
-  ctx.font = F(THEME.fontSizeSmall); ctx.textBaseline = 'alphabetic';
-  text(ctx, t('econ.console.producers').toUpperCase(), r.x + colW, r.y + 10, roles.dim, null, 'right');
-  text(ctx, t('econ.console.consumers').toUpperCase(), r.x + r.w - colW, r.y + 10, roles[dia.bottleneck ? 'alert' : 'dim'], null, 'left');
+  ctx.font = F(THEME.fontSizeSmall, true); ctx.textBaseline = 'alphabetic';
+  text(ctx, t('econ.console.producers').toUpperCase(), L.prodHeader.x, L.prodHeader.y, roles.dim, null, 'left');
+  text(ctx, t('econ.console.consumers').toUpperCase(), L.consHeader.x, L.consHeader.y, roles[dia.bottleneck ? 'alert' : 'dim'], null, 'right');
   ctx.restore();
-  if (!dia.prod.length) { ctx.save(); ctx.textBaseline = 'middle'; text(ctx, t('econPanel.flowNone'), r.x + colW, cy, roles.dim, F(THEME.fontSizeSmall), 'right'); ctx.restore(); }
-  if (!dia.cons.length) { ctx.save(); ctx.textBaseline = 'middle'; text(ctx, t('econPanel.flowNone'), r.x + r.w - colW, cy, roles.dim, F(THEME.fontSizeSmall), 'left'); ctx.restore(); }
-  drawSide(dia.prod, true, 'primary');
-  drawSide(dia.cons, false, consTone);
+  if (!dia.prod.length) { ctx.save(); ctx.textBaseline = 'middle'; text(ctx, t('econPanel.flowNone'), L.prodCol.x + L.prodCol.w, cy, roles.dim, nameFont, 'right'); ctx.restore(); }
+  if (!dia.cons.length) { ctx.save(); ctx.textBaseline = 'middle'; text(ctx, t('econPanel.flowNone'), L.consCol.x, cy, roles.dim, nameFont, 'left'); ctx.restore(); }
+  drawSide(dia.prod, L.prodYs, L.prodCol, true, 'primary');
+  drawSide(dia.cons, L.consYs, L.consCol, false, consTone);
 
-  // węzeł zasobu (środek)
+  // węzeł zasobu (środkowa tercja)
   const def = ALL_RESOURCES[resId] ?? COMMODITIES[resId];
   ctx.save();
   ctx.strokeStyle = roles[dia.bottleneck ? 'alert' : 'dim']; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(cL, cy - 36); ctx.lineTo(cL, cy + 36); ctx.moveTo(cR, cy - 36); ctx.lineTo(cR, cy + 36); ctx.stroke();
-  drawResourceIcon(ctx, resId, cx - 12, cy - 30, 24, def?.icon);
+  ctx.beginPath(); ctx.moveTo(cL, cy - 44); ctx.lineTo(cL, cy + 44); ctx.moveTo(cR, cy - 44); ctx.lineTo(cR, cy + 44); ctx.stroke();
+  drawResourceIcon(ctx, resId, cx - 14, cy - 40, 28, def?.icon);
   ctx.font = F(THEME.fontSizeMedium, true); ctx.textBaseline = 'middle';
-  text(ctx, truncateText(resName(resId).toUpperCase(), cw - 8, (s) => ctx.measureText(s).width), cx, cy - 8, roles.primary, null, 'center');
+  text(ctx, truncateText(resName(resId).toUpperCase(), cR - cL - 8, (s) => ctx.measureText(s).width), cx, cy - 4, roles.primary, null, 'center');
   ctx.font = F(THEME.fontSizeInstrument ?? Math.round(2 * THEME.fontSizeLarge));
   ctx.fillStyle = roles[dia.net >= 0 ? 'primary' : 'alert'];
-  drawTabular(ctx, `${dia.net >= 0 ? '+' : ''}${fmtAmt(dia.net)}`, cx, cy + 18, 'center');
+  drawTabular(ctx, `${dia.net >= 0 ? '+' : ''}${fmtAmt(dia.net)}`, cx, cy + 24, 'center');
   ctx.font = F(THEME.fontSizeSmall);
-  text(ctx, t('econ.console.perYear'), cx, cy + 38, roles.dim, null, 'center');
+  text(ctx, t('econ.console.perYear'), cx, cy + 46, roles.dim, null, 'center');
   if (dia.bottleneck) {
-    text(ctx, t('econ.console.bottleneck').toUpperCase(), cx, cy + 56, roles.alert, F(THEME.fontSizeSmall, true), 'center');
-    text(ctx, t('econ.console.shortBy', fmtAmt(-dia.net)), cx, cy + 72, roles.alert, F(THEME.fontSizeSmall), 'center');
+    text(ctx, t('econ.console.bottleneck').toUpperCase(), cx, cy + 64, roles.alert, F(THEME.fontSizeSmall, true), 'center');
+    text(ctx, t('econ.console.shortBy', fmtAmt(-dia.net)), cx, cy + 80, roles.alert, F(THEME.fontSizeSmall), 'center');
   }
+  ctx.restore();
+}
+
+/** K1c-B (Stocznia, `paintHeroContent`): miękka elipsa `bgPrimary` o kryciu `HOLO_TUNING.heroDim` — pełna w środku, zero na krawędzi. */
+function drawHeroDim(ctx, rect) {
+  const dim = Number(HOLO_TUNING.heroDim) || 0;
+  if (!(dim > 0) || typeof ctx.createRadialGradient !== 'function') return;
+  ctx.save();
+  ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
+  ctx.scale(rect.w / 2, rect.h / 2);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  g.addColorStop(0, THEME.bgPrimary); g.addColorStop(0.55, THEME.bgPrimary); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = dim; ctx.fillStyle = g;
+  ctx.fillRect(-1, -1, 2, 2);
   ctx.restore();
 }
 

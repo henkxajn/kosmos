@@ -20,7 +20,7 @@ import EventBus from '../core/EventBus.js';
 import gameState from '../core/GameState.js';
 import { BASE_PRICE, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
 
-const DELAY_YEARS = 1.0; // opóźnienie dostawy (lata gry — absolutny zegar timeSystem.gameTime)
+export const DELAY_YEARS = 1.0; // opóźnienie dostawy (lata gry — absolutny zegar timeSystem.gameTime)
 
 export class TradeOrderBoard {
   constructor(colonyManager) {

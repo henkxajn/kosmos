@@ -33,6 +33,7 @@ const TO = await tryImport('../../ui/TradeOverlay.js');
 const TRD = await tryImport('../../ui/TopResourceDrawer.js');
 const CL = await tryImport('../../ui/ConsoleLayoutLogic.js');
 const CPD = await tryImport('../../ui/CivPanelDrawer.js');
+const ROLES = await tryImport('../../ui/ConsoleRolesLogic.js');
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -51,7 +52,7 @@ function recCtx() {
     get: (o, k) => {
       if (k === 'fillText') return (s, x, y) => { texts.push(String(s)); log.push(['fillText', String(s), x, y, o.fillStyle, o.font]); };
       if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
-      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop: () => {} });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => { log.push(['gradient', String(k)]); return { addColorStop: () => {} }; };
       if (k === 'getImageData') return () => ({ data: [] });
       if (k in o) return o[k];
       return (...a) => { log.push([String(k), ...a]); };
@@ -119,12 +120,20 @@ function makeOverlay(page, selected = null) {
   window.KOSMOS.overlayManager.active = page;
   return ov;
 }
-function render(page, on, { W = 1600, H = 1041, selected = null } = {}) {
+function render(page, on, { W = 1600, H = 1041, selected = null, negNet = false } = {}) {
   setEco(on);
+  if (negNet) {
+    // netto budżetu < 0: utrzymanie floty ponad przychody
+    window.KOSMOS.vesselManager.getTotalFleetUpkeep = () => 900;
+    window.KOSMOS.vesselManager.getFleetUpkeepBreakdown = () => ({ deployed: 900, reserve: 0, total: 900, deployedCount: 3, reserveCount: 0 });
+  }
   const ov = makeOverlay(page, selected);
   const r = recCtx();
   safe(() => ov.draw(r.ctx, W, H));
-  return { ov, ...r, zones: ov._hitZones ?? [] };
+  const posTexts = r.log.filter((e) => e[0] === 'fillText').map((e) => ({ s: e[1], x: e[2], y: e[3], color: e[4] }));
+  const gradients = r.log.filter((e) => e[0] === 'gradient').length;
+  const net = page === 'budget' ? safe(() => ECL.budgetNet(ov._gatherBudgetData()), null) : null;
+  return { ov, ...r, ptexts: posTexts, gradients, net, roles: ROLES ? ROLES.consoleRoles() : null, zones: ov._hitZones ?? [] };
 }
 const types = (zs) => new Set(zs.map((z) => z.type));
 // świadek: render ON naprawdę jest konsolą (strefy konsoli zapisane) — bez niego piny „ON == OFF” byłyby zielone na bazie
@@ -200,7 +209,8 @@ for (const s of states) {
     makeWorld({ withStation: s.withStation });
     const off = render(page, false, { H: 5000, selected: s.selected });
     makeWorld({ withStation: s.withStation });
-    const on = render(page, true, { H: 5000, selected: s.selected });
+    // polerka K3 (uwaga 2): blok magazynu tylko na Przepływach — linia kolumny OFF dowolnej strony osiągalna w szufladzie albo w bloku Przepływów
+    const on = render('flows', true, { H: 5000, selected: s.selected });
     const colIds = new Set([...idsOf(off.zones, 'resource_hover', 'resourceId'), 'energy']);
     const blockIds = new Set(idsOf(on.zones, 'resource_hover', 'resourceId'));
     const stationSel = s.selected === 'st_1';
@@ -220,9 +230,61 @@ assert(witnessGood, `D4 świadek: towar spoza paliwa (${COM_X}) jest w kolumnie 
 assert(witnessStation, 'D5 świadek: magazyn stacji-sieroty (Cu) jest w bloku ON (globalnie)');
 {
   makeWorld({ withStation: true });
-  const on = render('budget', true, { H: 5000, selected: 'st_1' });
+  const on = render('flows', true, { H: 5000, selected: 'st_1' });
   const blockIds = new Set(idsOf(on.zones, 'resource_hover', 'resourceId'));
-  assert(isKit(on) && blockIds.has('Cu') && blockIds.has('fuel'), 'D6 wybrana stacja: jej linie z zapasem (Cu, paliwo) w bloku ON');
+  assert(isKit(on) && blockIds.has('Cu') && blockIds.has('fuel'), 'D6 wybrana stacja: jej linie z zapasem (Cu, paliwo) w bloku ON (Przepływy)');
+}
+{
+  // D7 — polerka K3 (uwaga 2): Budżet ON nie ma bloku magazynu (świadek: Przepływy ON go mają)
+  makeWorld({ withStation: true });
+  const bud = render('budget', true, { H: 5000 });
+  makeWorld({ withStation: true });
+  const flo = render('flows', true, { H: 5000 });
+  const blockT = (r) => r.zones.filter((q) => q.type === 'resource_hover' || q.type === 'toggle_cat').length;
+  assert(isKit(bud) && isKit(flo) && blockT(flo) > 3 && blockT(bud) === 0,
+    `D7 blok magazynu tylko na Przepływach (Budżet ${blockT(bud)} stref, Przepływy ${blockT(flo)})`);
+}
+
+// ═══ U — pas Budżetu opisany jako surowce; deficyt budżetu pierwszy (polerka K3, uwaga 1) ═══════════════════════
+console.log('U — pas Budżetu');
+{
+  const tk = { deficits: [{ id: 'Fe', rate: -3, stock: 10 }], surpluses: [] };
+  const neg = safe(() => ECL.budgetStripItems(-12.5, tk), null);
+  const pos = safe(() => ECL.budgetStripItems(4, tk), null);
+  const empty = safe(() => ECL.budgetStripItems(0, { deficits: [], surpluses: [] }), null);
+  assert(neg?.budget?.tone === 'alert' && neg.budget.net === -12.5, 'U1 netto < 0 → pierwsza pozycja pasa = deficyt budżetu w roli alert');
+  assert(pos && pos.budget === null && empty && empty.budget === null, 'U2 netto ≥ 0 → brak pozycji budżetu (4 i 0)');
+  const keys = [...(neg?.rows ?? []).map((r) => r.key), neg?.emptyKey];
+  const pl = keys.map((k) => (k ? t(k) : ''));
+  assert(keys.length === 3 && pl.every((s) => /^Surowce/.test(s)), `U3 etykiety pasa (i pusty pas) mówią „Surowce”: ${pl.join(' | ')}`);
+  // wykonanie: ujemne netto → pierwszy napis pasa to deficyt budżetu w kolorze alert
+  makeWorld();
+  const on = render('budget', true, { negNet: true });
+  const strip = on.ov.consoleZones?.strip;
+  const inStrip = (on.ptexts ?? []).filter((q) => strip && q.y >= strip.y && q.y <= strip.y + strip.h).sort((a, b) => a.y - b.y || a.x - b.x);
+  const first = inStrip[0];
+  assert(isKit(on) && first && first.s.toUpperCase().startsWith(t('econ.console.budgetDeficit').toUpperCase()) && first.color === on.roles?.alert,
+    `U4 wykonanie (netto ${on.net?.toFixed?.(1)}): pierwszy napis pasa „${first?.s ?? '—'}” w roli alert`);
+}
+
+// ═══ L — bohater Przepływów w tercjach (polerka K3, uwaga 3) ═════════════════════════════════════════════════════
+console.log('L — układ Przepływów');
+{
+  const r = { x: 100, y: 50, w: 900, h: 600 };
+  const L = safe(() => ECL.flowHeroLayout(r, 4, 3), null);
+  const third = r.w / 3;
+  const inThird = (c, k) => c.x >= r.x + k * third - 0.5 && c.x + c.w <= r.x + (k + 1) * third + 0.5;
+  assert(L && inThird(L.prodCol, 0) && inThird(L.consCol, 2) && Math.abs(L.centre.cx - (r.x + r.w / 2)) < 0.5,
+    'L1 producenci w lewej tercji, zasób w środku, konsumenci w prawej');
+  assert(L && L.prodHeader.x >= L.prodCol.x && L.prodHeader.x <= L.prodCol.x + L.prodCol.w && L.consHeader.x >= L.consCol.x
+    && L.consHeader.x <= L.consCol.x + L.consCol.w && L.prodHeader.y < L.prodYs[0] && L.consHeader.y < L.consYs[0],
+    'L2 nagłówki PRODUCENCI / KONSUMENCI nad swoimi kolumnami');
+  const span = L ? L.prodYs[L.prodYs.length - 1] - L.prodYs[0] : 0;
+  assert(L && L.prodYs.length === 4 && L.consYs.length === 3 && span > r.h * 0.4, `L3 węzły rozłożone na wysokość bohatera (rozpiętość ${Math.round(span)} px z ${r.h})`);
+  assert(L && L.band(1) > L.band(0.5) && L.band(0.5) > L.band(0.05) && L.band(0) >= 1, 'L4 grubość pasma rośnie z wartością');
+  makeWorld();
+  const on = render('flows', true);
+  assert(isKit(on) && (on.gradients ?? 0) > 0, `L5 wykonanie: lokalne przyciemnienie K1c-B pod środkiem (${on.gradients ?? 0} gradient)`);
 }
 
 // ═══ G — czipy grupy i subnav ════════════════════════════════════════════════════════════════════════════════════
