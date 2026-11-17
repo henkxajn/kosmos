@@ -1165,3 +1165,22 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §19. Flaga `FEATURES.consoleCivi
   żywy silnik 0 wyjątków (5 motywów, 1280×833, OFF, baza, placówka, zapis → wczytanie).
 
 Następny krok: pozostałe kroki arcu (§6.1 — K7 Dowództwo); końcowy KZ obejmie `consoleCivilization`.
+
+## ARC KONSOLE — K7-A: Dowództwo (rejestr) na szablonie konsoli (`44dd164` + `2c13b9f`, PASS właściciela 2026-11-17)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §20 (podział K7 w §6.1). Flaga `FEATURES.consoleCommand` (OFF = dziś bit w bit).
+- **Rama:** czipy zakładek Dowództwa w nagłówku zamiast własnego paska; Jednostki / Atlas / Logistyka — dzisiejsze strony pod czipami (K7-C).
+- **Rejestr:** lista (szukajka, grupowanie, floty, układy, role, sekcje z licznikami) · bohater = tabela statków (12 kolumn, sort, grupy,
+  zaznaczenie wielokrotne, stały pasek zbiorczy, „wyczyść filtry”) · inspektor = dzisiejszy panel (reskin K7-B) albo podsumowanie zaznaczenia
+  · pas = oś misji dla zaznaczenia.
+- **Po bramce (odstępstwo 9 zmienione):** klik wiersza tylko zaznacza; „POKAŻ” liczy plan z żywego statku (ten sam układ — kamera śledzi
+  bieżącą pozycję; dok — ciało / stacja; inny układ — przełączenie; skok / nieotwieralny układ — wyłączone z powodem). Diagnoza
+  zawodności zmierzona na żywym silniku per stan (§20).
+- **Reguła zestawu:** plakietki mapy (ikony budynków, kropka planety gracza, glify / duchy / znaczniki trybu Y, znaczniki wrogów i POI)
+  nie są rysowane pod żadną konsolą, wracają po zamknięciu; warstwa HUD gasła już wcześniej.
+- **Findingi:** 745 ⚪ (etykiety torów osi rejestru OFF; ścieżka konsoli poprawna), 746 ✅ (osobny `fix(746)`: sprite statku w locie nie
+  jest przypinany do niezwolnionej orbity — kamera na statku, nie w miejscu startu rozpoznania).
+- **Testy:** `console_command_smoke` 214/0, `console_map_badges_smoke` 24/0, `transit_sprite_orbit_smoke` 7/0; mutacje 17/17 + 15/15;
+  sweep 423/423, `check-i18n` PASS; żywy silnik 0 wyjątków (5 motywów, 1280×833, +60 statków, OFF, baza, POKAŻ per stan, plakietki).
+
+Następny krok: K7-pre (usunięcie uśpionej mapy 2D, D-K-18), potem K7-B.

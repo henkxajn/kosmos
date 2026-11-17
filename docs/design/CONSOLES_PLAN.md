@@ -321,7 +321,7 @@ Hit zones stay per screen (first-hit-wins in BaseOverlay; Command keeps its own 
 
 ## 5. Findings (next free number verified: **723**; the brief expected 612 — the CV arc filed #612–#722)
 
-This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** (K4, §17) and **#743–#744** (K5, §19). **Next free finding number: 745.**
+This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** (K4, §17), **#743–#744** (K5, §19) and **#745–#746** (K7-A, §20). **Next free finding number: 747.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
@@ -346,6 +346,8 @@ This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** 
 | **741** | ⚪ | **AI partner colonies may hold 0 Kr, so SELL on Rynek can be dead**: settlement needs `aiCol.credits ≥ total`; on GATE-S4 the partner colony shows 0 Kr — check whether AI colony credits ever accumulate | `TradeOrderBoard._settle`; AI colony `credits` | audit later (economy) |
 | **742** | ✅ K4 (console path) · KZ-E (the flag-OFF payload without `colonyId` is gone) | **Production export toggles changed the wrong colony**: today's [ Przyjmuj ] and tier chips emit `factory:setExportEnabled` / `setExportTier` without a colony, and `FactorySystem` applies them to the ACTIVE colony (`window.KOSMOS.factorySystem === this`) while the page shows the colony picked in the filter — a click on another colony's prefs silently changed the active colony's | `EconomyOverlay._handleFactoryBtn` export cases; `FactorySystem` listeners | K4 — the console sends `colonyId`; the listener honours it (`exportTarget`), no `colonyId` = today's behaviour |
 | **743** | ✅ K5 (`3678990`) | **Dyson 3D stage and rings lost after loading a save**: `DysonSystem.restore` never emitted `dyson:visualStageChanged` and `ThreeRenderer.switchSystem` (`_disposeAllMeshes`) zeroed `_dysonStage` — measured: stage 1 + rings before save, stage 0 and no rings after load | live probe K5 (`k5.json` `dysonBeforeSave` / `dysonAfterLoad`); `DysonSystem.restore`, `ThreeRenderer._disposeAllMeshes` | K5 — `dysonViewStage` + `ThreeRenderer._restoreDysonStage()` after restore, after `switchSystem` and on segment completion; rings only around the home star |
+| **745** | ⚪ (console path ✅ K7-A; OFF until KZ) | **Today's registry timeline labels lanes by table index**: `_drawTimelinePanel` names lane *i* after `rows[i]`, but `buildTimelineRows` skips wrecks and contacts — with wrecks shown a ship's mission bar sits next to another name (executed: Bravo's recon bar labelled «Aaa wrak») | `FleetManagerOverlay._drawTimelinePanel`; `FleetPictureLogic.buildTimelineRows` | K7-A (console labels by `entryId`) |
+| **746** | ✅ `44dd164` | **Camera following a ship on full-system recon goes to where the recon started** (owner: outliner double-click on an exploration ship in another system): `_startForeignRecon` sets `in_transit` without `vessel:launched`, so the start body's orbit stays in `OrbitalSpaceSystem`; `_tickOrbitingVessels` (on `physics:updated`, right before `_updateCameraFocus`) put the sprite on that orbit every tick → camera goal 0.17 u from the start body, ship 17–43 u away. Same root cause as part of the «POKAŻ» unreliability | live probe `reconrun` (ship in `sys_059`, time running); `ThreeRenderer._tickOrbitingVessels`, `VesselManager._startForeignRecon` | fixed at the reader: in-flight vessels skip the orbit loop (after: goal 0.02–0.08 u from the ship) |
 | **744** | ⚪ | **Dead leader trait `dysonProgress`**: Viktor Havel-Osei's bonus «Sfera Dysona ×3 szybciej» (`LeaderData.js:193`) is shown to the player but `DysonSystem.getDysonProgressMultiplier()` is read nowhere | `grep dysonProgress src` | later — with the new endgame design (owner 2026-11-17: Dyson's future decided there) |
 
 ## 6. Proposed cut, decisions, effort
@@ -366,6 +368,7 @@ owner look + tune; one `feat` commit + `docs` close-out; sized for one CC sessio
 | **K5** | Civilization + Dyson (Dyson hero diagram is new) | 1–2 |
 | ~~**K6a / K6b**~~ | ~~Colonies: frame, colony list, buildings strip under the hero / inspector rule (D-K-13), globe placement~~ — **moved out of this arc** (owner decision 2026-11-17) into its own arc «planet/body screen»; the Colonies tab keeps today's look and KZ does not touch it | — |
 | **K7a / K7b / K7c** | Command: frame + registry + timeline strip (D-K-14) / inspector reskin with T5 shared handlers + golden trace re-record / Atlas, Logistics, Ground | 3 |
+| ↳ **K7 split (2026-11-17)** | Inventory: 4 pages (registry; Ground = GroundUnitPanel, 3 hosts; Atlas; Logistics), own tab bar (no subnav), ~110 hit-zone types (registry 15, inspector ~70, Logistics 20, Atlas 3, `close`/`tab`), DOM inputs (registry search, Logistics qty — both `window.inner*`; rename/disband dialogs), risks: golden trace T4 (inspector), T5 dispatch into `_handleHit`/`_missionConfig`, ~40 keepers construct the overlay, dormant 2D map. **K7-A** = header chips replace the tab bar + registry page (list = search / grouping / fleets / filters with counts, hero = ship table, inspector = today's panel in the inspector zone + multi-selection summary, strip = mission timeline for the selection); Ground / Atlas / Logistics stay today's pages under the chips · **K7-pre** (D-K-18, owner to confirm) = remove the dormant 2D map + `_drawLeftFleets` · **K7-B** = inspector reskin + golden trace re-record + rename input from `consoleZones` · **K7-C** = Atlas, Logistics (qty input from `consoleZones`), Ground on the console. Each ends at an owner gate. | — |
 | **KZ** | Flags permanent ON, OFF paths and old styles removed (`_drawButton`, `GLASS_BORDER` subnav, per-file `✕`), before/after frame comparison — **Economy group done early as KZ-E (§18)**; the rest at the end of the arc | 1–2 |
 
 Total ≈ 16–22 sessions. Order rationale: K0 proves the kit on the cheapest read-only screen; K1 is the owner's pilot and
@@ -1009,4 +1012,60 @@ oneliners, sheet, mkemblem}`; fail-first / mutation worktrees and the test emble
 - **Live engine (CDP mouse, GATE-S4):** 5 themes, no emblem, 1280×833, OFF, base; outpost staged via `createOutpost`; Dyson staged with the
   engine event + real `deliverMax`; 743 after the fix: other system stage 0 / no rings, back home stage 1 + rings, save → load stage 1 + rings
   — 0 page exceptions in every run.
-- **Next:** remaining arc steps per §6.1 (K7 Command); the final KZ covers `consoleCivilization` with the other screens' flags.
+- **Next:** remaining arc steps per §6.1 (K7 Command — §20); the final KZ covers `consoleCivilization` with the other screens' flags.
+
+## 20. K7-A — delivered (Command registry on the console template; console-wide map-badge rule)
+
+**Commits `44dd164` fix(746)** (separate, before the feature) **and `2c13b9f` feat(K7-A)** · flag `FEATURES.consoleCommand` (ON, with
+`consoleKit`; OFF = today's Command bit for bit — draw log + hit zones, 11 states, PL and EN identical to `19e8b3d`) · owner gate PASS
+2026-11-17: deviations 1–8 approved, deviation 9 changed (applied after the gate, below); K7-pre confirmed for the next session.
+Handover `C:\Users\Komputer\kosmos-handover\consoles-k7\`: `STOP_K7-A.md`, `kontakt_k7a.html`, `shots/{after,after_r2,off,before,badges}/`,
+`probes/{k7a, focusdiag, reconrun, clickdbg, badges, layers, oneliners, offhash, mutate, mutate2, sheet}`; fail-first / mutation worktrees removed.
+
+- **K7 split** (row in §6.1): K7-A (this) · K7-pre = remove the dormant 2D map + `_drawLeftFleets` (D-K-18, confirmed) · K7-B = inspector
+  reskin + golden trace T4 re-record + rename input from `consoleZones` · K7-C = Atlas, Logistics, Ground on the console.
+- **Frame:** `fleet` in `CONSOLE_KIT_SCREENS`; header chips `[ TAKTYKA SYSTEMU ] [ JEDNOSTKI ] [ ATLAS GWIAZD ] [ LOGISTYKA ]` replace the
+  own tab bar (same `tab` zones, registry state kept across chips); combat strip in the header slot.
+- **Registry:** list = search (DOM `<input>` placed from `consoleZones` + `uiViewport`, no `window.inner*` in the handler), grouping, fleets
+  (new access path), systems, roles, sections — faceted counts, today's zone types · hero = ship table: today's 12 columns (fixed columns
+  scaled ×0.8 in the 720 px hero, cut cells in full on hover), sort, groups, checkboxes, row = select, „POKAŻ”, context line, fixed bulk
+  line (disabled + reason when nothing is ticked), empty result → [ WYCZYŚĆ FILTRY ] (new zone `registryClearFilters`) · inspector =
+  today's `_drawRight` (reskin K7-B) or a multi-selection summary (roles, systems, combat, attention, low fuel, bulk actions, names) ·
+  strip = mission timeline: selected fleet › ticked › selected ship › rows visible in the table; plain message when nothing is under way.
+- **Approved deviations (owner):** (1) chips keep today's tab labels; (2) strip without selection = rows visible in the table;
+  (3) Ground / Atlas / Logistics = today's pages under the chips on today's opaque background; (4) inspector body unchanged until K7-B,
+  multi-selection summary new; (5) narrower columns, words instead of emoji (Pal., Alarm, POKAŻ); (6) bulk line always shown;
+  (7) fleets in the list, faceted counts, clear-filters, contact hint, transit „POKAŻ” disabled with reason; (8) `commandTacticalMap`
+  ON shows no map switch on the console (map dormant, D-K-14).
+- **Deviation 9 CHANGED by the owner — row = select, „POKAŻ” = fly:** a registry row click only selects (`vessel` zone without
+  `vessel:focus` on the console; OFF unchanged). „POKAŻ” is the way to fly to a ship, planned from the LIVE vessel
+  (`CommandConsoleLogic.focusPlan`, executed by `FleetManagerOverlay._focusVesselKit`): same system → camera follows the ship's current
+  position (renderer `_focusVesselId` follows the sprite); docked (hangar / station, no 3D object) → its body / station; other system →
+  switch the view, then follow; switch refused → message, no camera; jump between systems → disabled, reason names the target
+  system; a system that cannot be opened → disabled, reason names it.
+- **„POKAŻ” diagnosis (live engine, real CDP mouse, GATE-S4; camera goal vs live sprite after 2 s, per state):**
+  - Today's handler worked per state when its click arrived — docked → body (0.000), orbit → ship (0), other system → switch + ship (0).
+  - Sources of „sometimes / not the exact spot”: (a) recon ships — stale orbit pinned the sprite → camera at the recon start point
+    (Finding 746, below); (b) the row click itself already flew the camera (deviation 9), so „POKAŻ” often looked like a no-op;
+    (c) the zone carried the system from the last drawn frame and the switch refusal was ignored; (d) docked ships have no 3D object
+    — the camera shows the body / station (now said in the hint); (e) one-tick follow lag 0.02–0.08 u on a moving ship (accepted);
+    (f) an event modal over the console swallows the click (general DOM-modal behaviour, not a console defect).
+  - After the change, measured: row click moves the camera 0 and selects; docked → body 0; orbit, recon at home and recon in another
+    system → ship 0; transit → no zone, reason «cel: Propus».
+- **Console-wide rule (all console screens) — map badges hidden while a console covers the scene:** `ConsoleSceneLogic.
+  CONSOLE_HIDDEN_MAP_BADGES` + `consoleHidesMapBadges(covered)` (same predicate as the backdrop; `consoleKit` OFF → never), executed by
+  `ThreeRenderer._hideConsoleMapBadges` only for the frame's render and restored right after (no state change). Suppressed: colony
+  building icons (`ColonyBuildingMarkers`), player-planet dot (`_lifeGlows`), tactical-mode glyphs, ETA ghosts and orbit markers,
+  enemy markers, POI markers. `#hud-canvas` (body and ship labels, alerts, routes) was already gated under any overlay (`hudGate` →
+  `overlay`). The scene itself (star, planets, orbits, ship models, effects) stays. Measured: 23 building icons hidden under Command
+  and under Civilization, all 23 back after close; `KOSMOS.debug.consoleKit.scene().badgesHidden`.
+- **Findings:** **745 ⚪** filed (OFF timeline lane labels; console path fixed) · **746 ✅** filed and fixed (`44dd164`).
+- **Keepers:** `console_command_smoke` 214/0 (A–X as staged + F: row click without `vessel:focus` ON / with it OFF, `focusPlan` per state,
+  execution order close → switch → select → focus, refusal, live system over zone data); `console_map_badges_smoke` 24/0;
+  `transit_sprite_orbit_smoke` 7/0; `fleet_clock_band_smoke` pins the flag-OFF Command. Fail-first on `19e8b3d`: sections red via
+  their witnesses, green only equivalence pins and named controls. Mutations 17/17 + 15/15 red (the old transit-gate mutation moved
+  into `focusPlan`, F4). Sweep 423/423, `check-i18n` PASS.
+- **Live engine (CDP mouse + keyboard, GATE-S4):** 5 themes, 1280×833, +60 ships (scroll), OFF, OFF + 60, base; after the gate:
+  „POKAŻ” per state, row click, recon in another system with time running, badges under Command and Civilization, frames
+  regenerated (Amber Noir, Cold Blue) — 0 page exceptions.
+- **Next:** K7-pre (remove the dormant 2D map, D-K-18), then K7-B.
