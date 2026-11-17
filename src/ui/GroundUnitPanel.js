@@ -48,6 +48,7 @@ const ARCHETYPE_SHORT = {
   aa_platform:      'AA',
   medic_unit:       'MEDIC',
   recon_drone:      'DRONE',
+  ground_supply_unit: 'SUPPLY',   // Finding 753 — bez wpisu skrót był ucięciem surowego id („GROUND”)
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -103,6 +104,18 @@ export class GroundUnitPanel {
 
   _abilityDesc(ab) {
     return this._isEn() ? (ab.descriptionEN ?? '') : (ab.descriptionPL ?? '');
+  }
+
+  /**
+   * Finding 753 — nazwa archetypu: nadpisanie frakcji (`HUMANITY_UNITS[id].name`), inaczej klucz i18n `unit.<id>.name`;
+   * nigdy surowe id (archetyp bez wpisu frakcji, np. zaopatrzenie, pokazywał `GROUND_SUPPLY_UNIT`).
+   */
+  _archName(archId) {
+    const own = HUMANITY_UNITS[archId]?.name;
+    if (own) return own;
+    const k = `unit.${archId}.name`;
+    const v = t(k);
+    return v !== k ? v : t('groundPanel.unnamedArchetype');
   }
 
   _shortName(archId) {
@@ -302,7 +315,7 @@ export class GroundUnitPanel {
     const color    = override.color ?? '#94A3B8';
 
     // ── Title (name + role badge) ──
-    const name = (override.name ?? archId).toUpperCase();
+    const name = this._archName(archId).toUpperCase();
     ctx.fillStyle = THEME.textHeader;
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillText(`${ARCHETYPE_ICONS[archId] ?? ''} ${name}`, x + PAD, cy + 14);
@@ -725,7 +738,7 @@ export class GroundUnitPanel {
       const arch     = UNIT_ARCHETYPES[data.archetypeId];
       const override = HUMANITY_UNITS[data.archetypeId] ?? {};
       if (!arch) return;
-      title = override.name ?? data.archetypeId;
+      title = this._archName(data.archetypeId);
       body  = this._archDesc(arch);
     } else if (type === 'stat_hover') {
       title = t(`groundPanel.stat.${data.statKey}`);
@@ -739,7 +752,7 @@ export class GroundUnitPanel {
       const arch     = UNIT_ARCHETYPES[data.archetypeId];
       const override = HUMANITY_UNITS[data.archetypeId] ?? {};
       if (!arch) return;
-      title = `${override.name ?? data.archetypeId}  ${data.isCounter ? '(+30% DMG)' : '(−30% DMG)'}`;
+      title = `${this._archName(data.archetypeId)}  ${data.isCounter ? '(+30% DMG)' : '(−30% DMG)'}`;
       body  = this._archDesc(arch);
     } else {
       return;

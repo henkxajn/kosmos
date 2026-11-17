@@ -2898,6 +2898,7 @@ export default {
   'groundPanel.year':              'rok',
   'groundPanel.years':             'lat',
   'groundPanel.recruit':           '🎖 REKRUTUJ',
+  'groundPanel.unnamedArchetype': 'Jednostka bez nazwy',
   'groundPanel.recruitDisabled':   '🚫 Brak kolonii',
   'groundPanel.cannotAfford':      'Brak zasobów',
   'groundPanel.queue':             'Kolejka',

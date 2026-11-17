@@ -2895,6 +2895,7 @@ export default {
   'groundPanel.year':              'year',
   'groundPanel.years':             'years',
   'groundPanel.recruit':           '🎖 RECRUIT',
+  'groundPanel.unnamedArchetype': 'Unnamed unit',
   'groundPanel.recruitDisabled':   '🚫 No colony',
   'groundPanel.cannotAfford':      'Insufficient resources',
   'groundPanel.queue':             'Queue',
