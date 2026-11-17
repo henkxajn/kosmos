@@ -33,6 +33,7 @@ const HUM = await imp('../../data/factions/humanity.js');
 const PL = (await import('../../i18n/pl.js')).pl ?? (await import('../../i18n/pl.js')).default ?? {};
 const EN = (await import('../../i18n/en.js')).en ?? (await import('../../i18n/en.js')).default ?? {};
 const { t } = await import('../../i18n/i18n.js');
+globalThis.__i18nMod = await import('../../i18n/i18n.js');
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; if (process.env.VERBOSE) console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ FAIL: ' + m); } };
@@ -586,25 +587,139 @@ await safe('P 754', () => {
     }
   }
 });
+const gUnits = (n) => Array.from({ length: n }, (_, i) => ({ id: `gu_${i}`, planetId: 'p_home', owner: 'player', archetypeId: 'shock_infantry', currentHP: 15, hpMax: 15, status: 'idle' }));
+const ovl = (a, b) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
 await safe('P grid', () => {
-  // kafle archetypów ≈2× (siatka pod tabelą): w strefie bohatera, bez nakładania na siebie ani na wiersze tabeli — oba rozmiary
+  // K7-C-ground (uwaga właściciela): rząd kafli w rozmiarze sprzed „≈2×” zakotwiczony u dołu bohatera, tabela jednostek nad nim
+  // z własnym przewijaniem — obie części rozłączne przy 1600×1041 i 1280×833, przy 0, 1 i wielu jednostkach
   for (const [cw, ch] of [[1600, 1041], [1280, 833]]) {
-    const units = Array.from({ length: 4 }, (_, i) => ({ id: `gu_${i}`, planetId: 'p_home', owner: 'player', archetypeId: 'shock_infantry', currentHP: 15, hpMax: 15, status: 'idle' }));
-    groundWorld({ units });
+    for (const n of [0, 1, 25]) {
+      groundWorld({ units: gUnits(n) });
+      const vp = CLL.uiViewport(cw, ch);
+      const ov = new FleetManagerOverlay();
+      const r = pageDraw('ground', ov, { W: vp.W, H: vp.H });
+      const hero = ov.consoleZones.hero, K = ov._groundKitRects ?? {};
+      const TB = K.tableBody ?? hero;   // brak prostokąta (baza) → pin degraduje, nie przerywa
+      const tag = `P grid ${cw}×${ch} n=${n}`;
+      const tiles = r.zones.filter((z) => z.type === 'ground:select_tile');
+      const rows = r.zones.filter((z) => z.type === 'groundUnit');
+      const inHero = (z) => z.x >= hero.x - 0.5 && z.y >= hero.y - 0.5 && z.x + z.w <= hero.x + hero.w + 0.5 && z.y + z.h <= hero.y + hero.h + 0.5;
+      ok(tiles.length === Object.keys(UA.UNIT_ARCHETYPES).length && !!K.table && !!K.hero, `${tag}: świadek — ${tiles.length} kafli, prostokąt tabeli`);
+      ok(n === 0 ? rows.length === 0 : rows.length >= 1, `${tag}: świadek — ${rows.length} wierszy ze strefą`);
+      ok(tiles.every(inHero) && rows.every(inHero), `${tag}: kafle i wiersze w strefie bohatera`);
+      ok(!tiles.some((a, i) => tiles.some((b, j) => i < j && ovl(a, b))), `${tag}: kafle się nie nakładają`);
+      ok(!tiles.some((a) => rows.some((b) => ovl(a, b))), `${tag}: strefy kafli i wierszy się nie nakładają`);
+      ok(!!K.table && tiles.every((z) => !ovl(z, K.table)) && K.table.y + K.table.h <= K.tilesTop + 0.5, `${tag}: obszar tabeli i rząd kafli (z etykietą) rozłączne`);
+      ok(rows.every((z) => z.y >= TB.y - 0.5 && z.y + z.h <= TB.y + TB.h + 0.5), `${tag}: strefy wierszy tylko w obszarze przewijania tabeli`);
+      ok(!!K.table && K.table.h >= PG.GROUND_HERO.HEAD_H + PG.GROUND_HERO.ROW_H, `${tag}: tabela mieści nagłówek + co najmniej wiersz (${K.table?.h})`);
+      const bottom = Math.max(...tiles.map((z) => z.y + z.h));
+      const hb = K.hero ? K.hero.y + K.hero.h : NaN;
+      ok(new Set(tiles.map((z) => z.y)).size === 1 && Math.abs(hb - bottom) <= 4.5, `${tag}: jeden rząd kafli zakotwiczony u dołu bohatera (dół ${bottom} vs ${hb})`);
+      // rozmiar sprzed „≈2×”: blok rekrutacji 112 px, kafel 86 px wys., miniatura ≈52 px (nie ≈96)
+      const th = Math.min(...tiles.map((z) => z.h)), tw = Math.min(...tiles.map((z) => z.w));
+      ok(th === (PG.GROUND_HERO?.TILES_H ?? 112) - 26 && th < 96 && Math.min(tw - 8, th - 34) >= 40, `${tag}: kafel w dawnym rozmiarze (${tw}×${th}, miniatura ${Math.min(tw - 8, th - 34)} px)`);
+    }
+  }
+});
+await safe('P scroll', () => {
+  // przewijanie tabeli jednostek kółkiem: każda jednostka osiągalna, strefy tylko dla widocznych wierszy, wybór i kafel działają po przewinięciu
+  for (const [cw, ch] of [[1600, 1041], [1280, 833]]) {
+    const N = 25, tag = `P scroll ${cw}×${ch}`;
+    groundWorld({ units: gUnits(N) });
     const vp = CLL.uiViewport(cw, ch);
     const ov = new FleetManagerOverlay();
-    const r = pageDraw('ground', ov, { W: vp.W, H: vp.H });
-    const hero = ov.consoleZones.hero;
-    const tiles = r.zones.filter((z) => z.type === 'ground:select_tile');
-    const rows = r.zones.filter((z) => z.type === 'groundUnit');
-    const inHero = (z) => z.x >= hero.x - 0.5 && z.y >= hero.y - 0.5 && z.x + z.w <= hero.x + hero.w + 0.5 && z.y + z.h <= hero.y + hero.h + 0.5;
-    const ov2 = (a, b) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
-    ok(tiles.length === Object.keys(UA.UNIT_ARCHETYPES).length && rows.length === 4, `P grid ${cw}×${ch}: świadek — ${tiles.length} kafli, ${rows.length} wiersze`);
-    ok(tiles.every(inHero) && rows.every(inHero), `P grid ${cw}×${ch}: kafle i wiersze w strefie bohatera`);
-    ok(!tiles.some((a, i) => tiles.some((b, j) => i < j && ov2(a, b))), `P grid ${cw}×${ch}: kafle się nie nakładają`);
-    ok(!tiles.some((a) => rows.some((b) => ov2(a, b))), `P grid ${cw}×${ch}: kafle pod tabelą, bez nakładania`);
-    ok(Math.min(...tiles.map((z) => z.w)) >= 96 && Math.min(...tiles.map((z) => z.h)) >= 96, `P grid ${cw}×${ch}: kafel mieści miniaturę ≈96 px (${Math.min(...tiles.map((z) => z.w))}×${Math.min(...tiles.map((z) => z.h))})`);
+    let r = pageDraw('ground', ov, { W: vp.W, H: vp.H });
+    const K = ov._groundKitRects ?? {};
+    const TB = K.tableBody ?? { x: ov.consoleZones.hero.x, y: ov.consoleZones.hero.y + 40, w: ov.consoleZones.hero.w, h: ov.consoleZones.hero.h - 40 };
+    const vis0 = r.zones.filter((z) => z.type === 'groundUnit');
+    ok(vis0.length > 0 && vis0.length < N, `${tag}: świadek — widać ${vis0.length} z ${N} (tabela wymaga przewijania)`);
+    ok(vis0[0]?.data.unitId === 'gu_0', `${tag}: bez przewinięcia od pierwszej jednostki`);
+    ok(r.log.length > 0 && (ov._groundUnitScrollY ?? 0) === 0, `${tag}: start przewinięcia 0`);
+    const seen = new Set(vis0.map((z) => z.data.unitId));
+    const mx = TB.x + 20, my = TB.y + 10;
+    let guard = 0, prev = -1;
+    while (guard++ < 200 && ov._groundUnitScrollY !== prev) {
+      prev = ov._groundUnitScrollY;
+      withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(60, mx, my));
+      r = pageDraw('ground', ov, { W: vp.W, H: vp.H });
+      const rz = r.zones.filter((z) => z.type === 'groundUnit');
+      rz.forEach((z) => seen.add(z.data.unitId));
+      if (!rz.every((z) => z.y >= TB.y - 0.5 && z.y + z.h <= TB.y + TB.h + 0.5)) { ok(false, `${tag}: strefa poza pasem widoku przy przewinięciu ${ov._groundUnitScrollY}`); break; }
+      if (rz.length > vis0.length + 1) { ok(false, `${tag}: więcej stref (${rz.length}) niż widocznych wierszy`); break; }
+    }
+    ok((ov._groundUnitScrollY ?? 0) > 0, `${tag}: kółko nad tabelą przewija (${ov._groundUnitScrollY})`);
+    ok(seen.size === N, `${tag}: każda jednostka osiągalna przewijaniem (${seen.size}/${N})`);
+    const last = r.zones.filter((z) => z.type === 'groundUnit');
+    ok(last.some((z) => z.data.unitId === `gu_${N - 1}`) && !last.some((z) => z.data.unitId === 'gu_0'), `${tag}: na dole listy ostatnia widoczna, pierwszej brak`);
+    // przewinięcie trzymane w klamrze: po dojściu do dołu i nadmiarze kółka jeden ruch w górę od razu odsłania wcześniejszy wiersz
+    for (let k = 0; k < 20; k++) withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(60, mx, my));
+    pageDraw('ground', ov, { W: vp.W, H: vp.H });
+    withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(-60, mx, my));
+    const up = pageDraw('ground', ov, { W: vp.W, H: vp.H }).zones.filter((z) => z.type === 'groundUnit');
+    ok(up.some((z) => !last.some((q) => q.data.unitId === z.data.unitId)), `${tag}: nadmiar kółka w dół nie „martwi” kółka w górę`);
+    pageDraw('ground', ov, { W: vp.W, H: vp.H });
+    for (let k = 0; k < 20; k++) withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(60, mx, my));
+    pageDraw('ground', ov, { W: vp.W, H: vp.H });
+    // wybór jednostki z dołu listy po przewinięciu
+    const bz = last.find((z) => z.data.unitId === `gu_${N - 1}`);
+    if (bz) withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(bz));
+    r = pageDraw('ground', ov, { W: vp.W, H: vp.H });
+    ok(ov._groundSelUnitId === `gu_${N - 1}` && r.log.some((q) => q.toUpperCase().includes(t('cmdPages.ground.state').toUpperCase())), `${tag}: wybór ostatniej jednostki po przewinięciu → inspektor jednostki`);
+    // kółko nad kaflami nie przewija tabeli; kafel klikalny przy przewiniętej tabeli
+    const s0 = ov._groundUnitScrollY;
+    const tz = r.zones.find((z) => z.type === 'ground:select_tile');
+    withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(-60, tz.x + 4, tz.y + 4));
+    ok(ov._groundUnitScrollY === s0, `${tag}: kółko nad kaflami nie rusza tabeli`);
+    withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(tz));
+    ok(ov._groundSelUnitId === null, `${tag}: kafel po przewinięciu → inspektor archetypu`);
+    // zmiana kolonii → tabela od góry
+    const cz = r.zones.find((z) => z.type === 'groundColony' && z.data.colonyId === 'p_two');
+    withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(cz));
+    ok(!!cz && ov._groundUnitScrollY === 0, `${tag}: zmiana kolonii zeruje przewinięcie`);
   }
+});
+await safe('P scroll logic', () => {
+  // logika: strefy wyłącznie w pasie widoku, reszta osiągalna (czysta geometria)
+  const L = PG.groundHeroLayout({ x: 0, y: 0, w: 600, h: 400 }, { nArchs: 7, nUnits: 40, scroll: 9999 });
+  ok(L.scroll === L.maxScroll && L.maxScroll === 40 * PG.GROUND_HERO.ROW_H - L.body.h, `P scroll logic: klamra przewinięcia (${L.scroll})`);
+  ok(L.rows.length > 0 && L.rows.at(-1).i === 39 && L.rows.every((q) => !q.zone || (q.zone.y >= L.body.y && q.zone.y + q.zone.h <= L.body.y + L.body.h)), 'P scroll logic: strefy w pasie widoku, ostatni wiersz na dole');
+  ok(L.tiles.every((z) => z.y >= L.table.y + L.table.h), 'P scroll logic: kafle pod tabelą');
+  const maxVis = Math.ceil(L.body.h / PG.GROUND_HERO.ROW_H) + 1;
+  ok(L.rows.length <= maxVis && L.rows.every((q) => q.y + PG.GROUND_HERO.ROW_H > L.body.y && q.y < L.body.y + L.body.h), `P scroll logic: tylko wiersze w pasie widoku (${L.rows.length} ≤ ${maxVis})`);
+});
+await safe('P names', () => {
+  // K7-C-ground: nazwa domyślna archetypu (fabryka zapisuje angielskie `name` frakcji) → nazwa i18n; nazwa własna bez zmian;
+  // etykieta zaopatrzenia w inspektorze przez i18n — w PL żadnej angielskiej nazwy domyślnej ani „SUPPLY”
+  const I18N = globalThis.__i18nMod;
+  const HU = HUM.HUMANITY_UNITS ?? {};
+  const ids = Object.keys(UA.UNIT_ARCHETYPES ?? {}).filter((id) => HU[id]?.name && HU[id].namePL && HU[id].namePL !== HU[id].name);
+  const units = ids.map((id, i) => ({ id: `gu_${i}`, planetId: 'p_home', owner: 'player', archetypeId: id, name: HU[id].name, currentHP: 10, hpMax: 10, status: 'idle',
+    supply: 50, supplyCap: 100, org: 5, maxOrg: 10, morale: 7, maxMorale: 10 }));
+  units.push({ id: 'gu_raw', planetId: 'p_home', owner: 'player', archetypeId: 'shock_infantry', name: 'shock_infantry', currentHP: 10, hpMax: 10, status: 'idle' });
+  units.push({ id: 'gu_own', planetId: 'p_home', owner: 'player', archetypeId: 'shock_infantry', name: 'Krwawe Lisy', currentHP: 10, hpMax: 10, status: 'idle' });
+  ok(ids.length >= 5 && ids.includes('ground_supply_unit'), `P names: świadek — ${ids.length} archetypów z angielską nazwą domyślną ≠ PL`);
+  const prev = I18N.getLocale();
+  try {
+    for (const lang of ['pl', 'en']) {
+      I18N.setLocale(lang);
+      groundWorld({ units });
+      const ov = new FleetManagerOverlay();
+      const r0 = pageDraw('ground', ov);
+      const tableText = r0.log.join('\n');
+      const want = (id) => (lang === 'en' ? HU[id].nameEN : HU[id].namePL) ?? HU[id].name;
+      ok(ids.every((id) => tableText.includes(want(id))), `P names ${lang}: tabela pokazuje nazwy i18n archetypów`);
+      if (lang === 'pl') ok(!ids.some((id) => r0.log.some((q) => q.includes(HU[id].name))), `P names pl: żadnej angielskiej nazwy domyślnej (${ids.filter((id) => r0.log.some((q) => q.includes(HU[id].name))).join(',') || '—'})`);
+      ok(r0.log.some((q) => q.includes('Krwawe Lisy')), `P names ${lang}: nazwa własna bez zmian`);
+      ok(!r0.log.some((q) => q === 'shock_infantry' || q.startsWith('shock_infantry')), `P names ${lang}: surowe id jako nazwa → nazwa i18n`);
+      const sup = units.find((u) => u.archetypeId === 'ground_supply_unit');
+      withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(r0.zones.find((z) => z.type === 'groundUnit' && z.data.unitId === sup.id)));
+      const r1 = pageDraw('ground', ov);
+      ok(ov._groundSelUnitId === sup.id, `P names ${lang}: świadek — wybrana jednostka zaopatrzenia`);
+      ok(r1.log.filter((q) => q.includes(want('ground_supply_unit'))).length >= 2, `P names ${lang}: inspektor — tytuł nazwą i18n`);
+      ok(r1.log.some((q) => q.toUpperCase().includes(t('cmdPages.ground.supply').toUpperCase())), `P names ${lang}: etykieta zaopatrzenia z i18n`);
+      if (lang === 'pl') ok(!r1.log.some((q) => /\bSUPPLY\b/.test(q) || q.includes(HU.ground_supply_unit.name)), 'P names pl: inspektor bez „SUPPLY” i angielskiej nazwy');
+    }
+  } finally { I18N.setLocale(prev); }
 });
 await safe('P 751', () => {
   world([ship()]);

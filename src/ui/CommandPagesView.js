@@ -12,7 +12,9 @@ import { HUMANITY_UNITS } from '../data/factions/humanity.js';
 import { drawZoneRule, drawZoneFrame, drawEyebrow, drawKvRow, drawActionChip, drawList, drawSelectBrackets, drawBar, drawConsoleBackground,
   CONSOLE_KIT } from './ConsoleKit.js';
 import { truncateText } from './HudLabelLogic.js';
-import { atlasRows, atlasCounts, atlasSelection, orreryLayout, atlasActions, logiSelection, orderProgress, orderAlert, logiNodes } from './CommandPagesLogic.js';
+import { scrollThumb } from './InfoPanelLayoutLogic.js';
+import { atlasRows, atlasCounts, atlasSelection, orreryLayout, atlasActions, logiSelection, orderProgress, orderAlert, logiNodes,
+  groundHeroLayout, GROUND_HERO } from './CommandPagesLogic.js';
 
 const F = (sz, b = false) => `${b ? 'bold ' : ''}${sz}px ${THEME.fontFamily}`;
 const fit = (ctx, s, w) => truncateText(String(s ?? ''), Math.max(0, w), (q) => ctx.measureText(q).width);
@@ -521,6 +523,15 @@ const archName = (id) => {
   const k = `unit.${id}.name`, v = t(k);   // archetyp bez nadpisania frakcji (np. zaopatrzenie) — nazwa z i18n
   return v !== k ? v : t('cmdPages.ground.unnamedArch');
 };
+/**
+ * Nazwa jednostki do wyświetlenia: jednostka niesie nazwę nadaną przy tworzeniu (fabryka zapisuje angielskie `name`
+ * frakcji, także w zapisie gry) — nazwa domyślna archetypu (dowolny wariant językowy albo surowe id) → nazwa i18n
+ * archetypu; nazwa własna gracza bez zmian. Tylko wyświetlanie, dane i zapis nietknięte.
+ */
+const unitName = (u) => {
+  const o = HUMANITY_UNITS[u.archId] ?? {};
+  return !u.name || [o.name, o.namePL, o.nameEN, u.archId].includes(u.name) ? archName(u.archId) : u.name;
+};
 /** Linia zawijana (powód, opis) — nie ucina tekstu w wąskiej strefie. */
 function wrappedLine(ov, ctx, c, text, roles, tone = 'dim') {
   ctx.font = F(THEME.fontSizeSmall - 1);
@@ -564,63 +575,65 @@ function drawGroundHero(ov, ctx, hz, roles, f) {
   const mx = ov._regMouseX, my = ov._regMouseY;
   ctx.save();
   ctx.textBaseline = 'middle';
-  // tabela jednostek kolonii (u góry, tyle wierszy ile trzeba), pod nią siatka kafli archetypów (miniatury ≈2× — uwaga
-  // właściciela po bramce K7-C) wypełniająca resztę bohatera; tabela oddaje miejsce kaflom, nie odwrotnie
-  const RH = GROUND_ROW_H;
-  const n = Math.max(1, f.archs.length), gap = 8;
-  const gcols = Math.max(1, Math.min(n, Math.floor((r.w + gap) / (GROUND_TILE_MIN_W + gap))));
-  const grows = Math.ceil(n / gcols);
-  const tileH = GROUND_ART + 32;
-  const tilesH = CONSOLE_KIT.EYEBROW_H + 4 + grows * (tileH + gap);
-  const tableNeed = 16 + Math.max(1, f.units.length) * RH + 8;
-  const tr = { x: r.x, y: r.y, w: r.w, h: Math.max(16 + RH + 8, Math.min(tableNeed, r.h - tilesH - 8)) };
+  // u góry tabela jednostek kolonii z własnym przewijaniem (nagłówek stały, kółko nad tabelą → `_groundUnitScrollY`),
+  // u dołu rząd kafli archetypów w rozmiarze sprzed „≈2×” (uwaga właściciela po K7-C) — geometria `groundHeroLayout`
+  const RH = GROUND_HERO.ROW_H;
+  const L = groundHeroLayout(r, { nArchs: f.archs.length, nUnits: f.units.length, scroll: ov._groundUnitScrollY || 0 });
+  ov._groundUnitScrollY = L.scroll;
+  ov._groundKitRects = { ...(ov._groundKitRects ?? {}), hero: r, table: L.table, tableBody: L.body, tilesTop: L.tilesTop };
+  const tr = L.table;
   const cols = [['name', 0.34], ['hp', 0.16], ['org', 0.14], ['morale', 0.14], ['status', 0.22]];
   let x = tr.x;
   ctx.font = F(THEME.fontSizeSmall - 1); ctx.fillStyle = roles.dim;
   const colX = {};
-  for (const [id, wf] of cols) { colX[id] = x; ctx.fillText(t(`cmdPages.ground.col.${id}`).toUpperCase(), x + 4, tr.y + 7); x += tr.w * wf; }
-  let y = tr.y + 16;
+  for (const [id, wf] of cols) { colX[id] = x; ctx.fillText(t(`cmdPages.ground.col.${id}`).toUpperCase(), x + 4, tr.y + 7); x += L.rowW * wf; }
   if (!f.units.length) {
     ctx.font = F(THEME.fontSizeSmall); ctx.fillStyle = roles.dim;
-    ctx.fillText(fit(ctx, t('cmdPages.ground.noUnits'), tr.w - 8), tr.x + 4, y + 12);
+    ctx.fillText(fit(ctx, t('cmdPages.ground.noUnits'), tr.w - 8), tr.x + 4, L.body.y + 12);
   }
-  ctx.save(); ctx.beginPath(); ctx.rect(tr.x, y, tr.w, tr.y + tr.h - y); ctx.clip();
-  for (const u of f.units) {
-    if (y + RH > tr.y + tr.h) break;
-    const row = { x: tr.x, y, w: tr.w, h: RH };
+  ctx.save(); ctx.beginPath(); ctx.rect(L.body.x, L.body.y, L.body.w, L.body.h); ctx.clip();
+  for (const lr of L.rows) {
+    const u = f.units[lr.i];
+    const y = lr.y;
+    const row = { x: tr.x, y, w: L.rowW, h: RH };
     const sel = u.id === ov._groundSelUnitId;
-    if (inside(row, mx, my) && !sel) { ctx.globalAlpha = CONSOLE_KIT.HOVER_ALPHA; ctx.fillStyle = roles.primary; ctx.fillRect(row.x, row.y, row.w, row.h); ctx.globalAlpha = 1; }
+    if (lr.zone && inside(lr.zone, mx, my) && !sel) { ctx.globalAlpha = CONSOLE_KIT.HOVER_ALPHA; ctx.fillStyle = roles.primary; ctx.fillRect(row.x, row.y, row.w, row.h); ctx.globalAlpha = 1; }
     ctx.font = F(THEME.fontSizeSmall, sel);
     const lowHp = u.hpMax > 0 && u.hp / u.hpMax < 0.35;
-    const cell = (id, txt, tone = 'primary') => { ctx.fillStyle = roles[tone] ?? roles.primary; ctx.fillText(fit(ctx, txt, tr.w * cols.find((q) => q[0] === id)[1] - 8), colX[id] + 4, y + RH / 2); };
+    const cell = (id, txt, tone = 'primary') => { ctx.fillStyle = roles[tone] ?? roles.primary; ctx.fillText(fit(ctx, txt, L.rowW * cols.find((q) => q[0] === id)[1] - 8), colX[id] + 4, y + RH / 2); };
     // ikona: miniatura modelu właściciela (wysokość wiersza), glif tylko gdy zasobu brak
     const art = unitArt(ov, u.archId);
     if (art) ctx.drawImage(art, colX.name + 2, y + 1, RH - 2, RH - 2);
     else { ctx.fillStyle = roles.primary; ctx.fillText(ARCHETYPE_ICONS[u.archId] ?? '•', colX.name + 4, y + RH / 2); }
     ctx.save(); ctx.translate(RH, 0);
-    cell('name', u.name ?? archName(u.archId));
+    cell('name', unitName(u));
     ctx.restore();
     cell('hp', `${Math.round(u.hp)}/${Math.round(u.hpMax)}`, lowHp ? 'alert' : 'primary');
     cell('org', u.org == null ? '—' : `${Math.round(u.org)}/${Math.round(u.maxOrg ?? u.org)}`, 'dim');
     cell('morale', u.morale == null ? '—' : `${Math.round(u.morale)}`, 'dim');
     cell('status', t(`cmdPages.ground.status.${STATUS_KEYS.has(u.status) ? u.status : 'other'}`), u.status === 'offline' ? 'alert' : 'dim');
     if (sel) drawSelectBrackets(ctx, row, roles);
-    push(ov, row.x, row.y, row.w, row.h, 'groundUnit', { unitId: u.id });
-    y += RH;
+    // strefa tylko części wiersza w pasie widoku (clip nie przycina stref — Finding 110)
+    if (lr.zone) push(ov, lr.zone.x, lr.zone.y, lr.zone.w, lr.zone.h, 'groundUnit', { unitId: u.id });
   }
   ctx.restore();
+  // pasek przewijania 2 px (jak tabela rejestru)
+  const sth = scrollThumb(L.scroll, L.contentH, L.body.h, L.body.y);
+  if (sth) {
+    const sx = r.x + r.w - GROUND_HERO.SCROLLBAR_W;
+    ctx.globalAlpha = CONSOLE_KIT.TRACK_ALPHA; ctx.fillStyle = roles.dim; ctx.fillRect(sx, L.body.y, GROUND_HERO.SCROLLBAR_W, L.body.h);
+    ctx.globalAlpha = 1; ctx.fillStyle = roles.primary; ctx.fillRect(sx, sth.y, GROUND_HERO.SCROLLBAR_W, sth.h);
+  }
   // kafle archetypów — dzisiejsze strefy `ground:select_tile` (także zablokowane: wybór pokazuje, czego brakuje)
-  const ty = tr.y + tr.h + 8;   // siatka zaraz pod tabelą (wykorzystuje puste miejsce bohatera)
-  drawEyebrow(ctx, r.x, ty, r.w, t('cmdPages.ground.recruitTitle', f.local?.name ?? '—'), roles);
-  const tw = Math.floor((r.w - gap * (gcols - 1)) / gcols), th = tileH;
+  drawEyebrow(ctx, r.x, L.eyebrowY, r.w, t('cmdPages.ground.recruitTitle', f.local?.name ?? '—'), roles);
   f.archs.forEach((a, i) => {
-    const rect = { x: r.x + (i % gcols) * (tw + gap), y: ty + CONSOLE_KIT.EYEBROW_H + 4 + Math.floor(i / gcols) * (tileH + gap), w: tw, h: th };
+    const rect = L.tiles[i];
     const sel = !ov._groundSelUnitId && a.id === f.archId;
     const hov = inside(rect, mx, my);
     if (hov && !sel) { ctx.globalAlpha = CONSOLE_KIT.HOVER_ALPHA; ctx.fillStyle = roles.primary; ctx.fillRect(rect.x, rect.y, rect.w, rect.h); ctx.globalAlpha = 1; }
     ctx.textAlign = 'center';
     // miniatura modelu (GLB → offscreen, renderowana raz i cache'owana przez fabrykę jednostek); zablokowany = przygaszony
-    const artSz = Math.max(16, Math.min(GROUND_ART, rect.w - 8, rect.h - 32));
+    const artSz = Math.max(16, Math.min(rect.w - 8, rect.h - 34));
     const art = unitArt(ov, a.id);
     if (art) {
       ctx.globalAlpha = a.unlocked ? 1 : LOCKED_ART_ALPHA;
@@ -663,10 +676,7 @@ function artTitle(ov, ctx, c, archId, name, roles) {
     c.y += S + 2;
   } else line(ctx, c, `${ARCHETYPE_ICONS[archId] ?? ''} ${name}`, roles, { bold: true, size: 13 });
 }
-const LOCKED_ART_ALPHA = 0.6;
-const GROUND_ART = 96;          // miniatura modelu na kaflu (px log.; źródło 256 px — ostra)
-const GROUND_TILE_MIN_W = 112;  // najwęższy kafel siatki (miniatura + margines na nazwę)
-const GROUND_ROW_H = 28;        // wiersz tabeli jednostek z ikoną modelu   // zablokowany archetyp: model czytelny, kłódka + powód obok
+const LOCKED_ART_ALPHA = 0.6;   // zablokowany archetyp: model czytelny, kłódka + powód obok
 const STATUS_KEYS = new Set(['idle', 'moving', 'scanning', 'in_cargo', 'offline']);
 
 function drawGroundInspector(ov, ctx, iz, roles, f) {
@@ -676,7 +686,7 @@ function drawGroundInspector(ov, ctx, iz, roles, f) {
   ctx.save();
   const u = ov._groundSelUnitId ? f.units.find((q) => q.id === ov._groundSelUnitId) : null;
   if (u) {
-    artTitle(ov, ctx, c, u.archId, u.name ?? archName(u.archId), roles);
+    artTitle(ov, ctx, c, u.archId, unitName(u), roles);
     line(ctx, c, `${archName(u.archId)} · ${t(`cmdPages.ground.status.${STATUS_KEYS.has(u.status) ? u.status : 'other'}`)}`, roles, { tone: 'dim' });
     eyebrow(ctx, c, t('cmdPages.ground.state'), roles);
     const bar = (label, cur, max) => {
@@ -688,7 +698,7 @@ function drawGroundInspector(ov, ctx, iz, roles, f) {
     bar(t('groundPanel.stat.hp'), u.hp, u.hpMax);
     bar(t('cmdPages.ground.col.org'), u.org, u.maxOrg);
     bar(t('cmdPages.ground.col.morale'), u.morale, u.maxMorale);
-    bar(t('groundPanel.stat.supply'), u.supply, u.supplyCap);
+    bar(t('cmdPages.ground.supply'), u.supply, u.supplyCap);
     kv(ctx, c, t('cmdPages.ground.experience'), u.experience, roles, 'dim');
     eyebrow(ctx, c, t('cmdInsp.actions'), roles);
     ctx.font = F(THEME.fontSizeSmall - 1);

@@ -181,3 +181,45 @@ export function logiNodes(cols, rect, { pad = 46 } = {}) {
   });
   return out;
 }
+
+// ── Jednostki (bohater: tabela jednostek + rząd kafli rekrutacji) ──────────────────────────────────────────────────
+
+/**
+ * Stałe bohatera Jednostek (px log.). TILES_H = cały blok rekrutacji (etykieta + rząd kafli) — rozmiar sprzed „≈2×”
+ * (miniatura ≈52 px przy siedmiu archetypach); ROW_H = wiersz tabeli z ikoną modelu; HEAD_H = stały nagłówek kolumn.
+ */
+export const GROUND_HERO = Object.freeze({ HEAD_H: 16, ROW_H: 28, TILES_H: 112, GAP: 8, TILE_GAP: 8, EYEBROW_H: 18, SCROLLBAR_W: 2 });
+
+/**
+ * Geometria bohatera Jednostek. Rząd kafli archetypów zakotwiczony u DOŁU bohatera (nad pasem kolejki koszar), tabela
+ * jednostek wypełnia resztę nad nim: stały nagłówek + własny obszar przewijania — dwie części rozłączne z konstrukcji.
+ * Wiersze tylko widoczne; strefa wiersza = część w pasie widoku (≥ pół wiersza), poza nim brak strefy (Finding 110).
+ * @param {{x:number,y:number,w:number,h:number}} r prostokąt treści bohatera
+ * @param {{nArchs:number, nUnits:number, scroll?:number}} o
+ * @returns {{table, head, body, tilesTop:number, eyebrowY:number, tiles:Array, rows:Array<{i:number,y:number,zone:?object}>,
+ *            scroll:number, contentH:number, maxScroll:number, rowW:number}}
+ */
+export function groundHeroLayout(r, { nArchs, nUnits, scroll = 0 } = {}) {
+  const G = GROUND_HERO;
+  const tilesTop = r.y + Math.max(0, r.h - G.TILES_H);
+  const table = { x: r.x, y: r.y, w: r.w, h: Math.max(0, tilesTop - G.GAP - r.y) };
+  const head = { x: r.x, y: r.y, w: r.w, h: Math.min(G.HEAD_H, table.h) };
+  const body = { x: r.x, y: head.y + head.h, w: r.w, h: Math.max(0, table.h - head.h) };
+  const contentH = Math.max(0, nUnits | 0) * G.ROW_H;
+  const maxScroll = Math.max(0, contentH - body.h);
+  const sc = Math.max(0, Math.min(Number.isFinite(scroll) ? scroll : 0, maxScroll));
+  const rowW = r.w - G.SCROLLBAR_W - 2;   // pasek przewijania poza wierszem
+  const rows = [];
+  for (let i = 0; i < (nUnits | 0); i++) {
+    const y = body.y + i * G.ROW_H - sc;
+    if (y + G.ROW_H <= body.y || y >= body.y + body.h) continue;
+    const y0 = Math.max(y, body.y), y1 = Math.min(y + G.ROW_H, body.y + body.h);
+    rows.push({ i, y, zone: y1 - y0 >= G.ROW_H / 2 ? { x: r.x, y: y0, w: rowW, h: y1 - y0 } : null });
+  }
+  const n = Math.max(1, nArchs | 0);
+  const tw = Math.floor((r.w - G.TILE_GAP * (n - 1)) / n);
+  const th = G.TILES_H - G.EYEBROW_H - 8;
+  const ty = tilesTop + G.EYEBROW_H + 4;
+  const tiles = Array.from({ length: Math.max(0, nArchs | 0) }, (_, i) => ({ x: r.x + i * (tw + G.TILE_GAP), y: ty, w: tw, h: th }));
+  return { table, head, body, tilesTop, eyebrowY: tilesTop, tiles, rows, scroll: sc, contentH, maxScroll, rowW };
+}

@@ -4117,6 +4117,7 @@ export default {
   'cmdPages.ground.status.other': "inny stan",
   'cmdPages.ground.state': "Stan jednostki",
   'cmdPages.ground.experience': "Doświadczenie",
+  'cmdPages.ground.supply': "Zaopatrzenie",
   'cmdPages.ground.unitOrdersHint': "Rozkazy dla jednostek (ruch, atak, załadunek) wydajesz na mapie kolonii i w Outlinerze.",
   'cmdPages.ground.selectHint': "Wybierz archetyp z kafli albo jednostkę z tabeli",
   'cmdPages.ground.noPanel': "Katalog rekrutacji niedostępny",

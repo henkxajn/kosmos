@@ -310,6 +310,7 @@ export class FleetManagerOverlay {
     this._logiQtyInput = null;           // DOM <input> ręcznej ilości (wzór safety stock)
     this._atlasScrollY = 0;       // scroll katalogu ciał
     this._groundColonyId = null;       // K7-C — kolonia strony Jednostek (lokalna)
+    this._groundUnitScrollY = 0;       // K7-C — przewinięcie tabeli jednostek (px log.)
     this._groundSelUnitId = null;      // K7-C — jednostka wybrana w tabeli Jednostek
     this._logiSelectedOrderId = 'new'; // K7-C — wybór na liście Logistyki konsoli ('new' = kreator)
     this._logiKitRects = null;         // K7-C — prostokąty listy / inspektora Logistyki (kółko)
@@ -1266,6 +1267,11 @@ export class FleetManagerOverlay {
 
     // ── JEDNOSTKI — scroll detalu archetypu (własny scroll panelu) ─
     if (this._activeTab === 'ground') {
+      // K7-C — konsola: kółko nad tabelą jednostek przewija ją (klamra przy rysowaniu, `groundHeroLayout`)
+      if (kitOn() && inRect(this._groundKitRects?.table)) {
+        this._groundUnitScrollY = Math.max(0, (this._groundUnitScrollY || 0) + delta * 0.5);
+        return true;
+      }
       if (inRect(this._contentBounds)) {
         this._getDesignEditor()?._groundPanel?.handleScroll(delta, mx, my);
       }
@@ -1625,6 +1631,7 @@ export class FleetManagerOverlay {
         // K7-C — kolonia strony Jednostek (globalna aktywna kolonia nietknięta — jak kontekst Handlu)
         this._groundColonyId = zone.data.colonyId ?? null;
         this._groundSelUnitId = null;
+        this._groundUnitScrollY = 0;   // nowa kolonia → tabela jednostek od góry
         break;
       case 'groundUnit':
         this._groundSelUnitId = zone.data.unitId ?? null;

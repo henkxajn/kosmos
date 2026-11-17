@@ -4114,6 +4114,7 @@ export default {
   'cmdPages.ground.status.other': "other state",
   'cmdPages.ground.state': "Unit state",
   'cmdPages.ground.experience': "Experience",
+  'cmdPages.ground.supply': "Supply",
   'cmdPages.ground.unitOrdersHint': "Unit orders (move, attack, embark) are given on the colony map and in the Outliner.",
   'cmdPages.ground.selectHint': "Select an archetype tile or a unit in the table",
   'cmdPages.ground.noPanel': "Recruitment catalogue unavailable",
