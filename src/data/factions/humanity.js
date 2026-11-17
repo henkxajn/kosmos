@@ -25,7 +25,9 @@ export const HUMANITY_UNITS = {
     name:   'Fortified Position',
     namePL: 'Umocniona Pozycja',
     nameEN: 'Fortified Position',
-    sprite: 'assets/units/ground/humanity/human_garrison.png',
+    sprite: 'assets/units/ground/humanity/human_garrison.png',   // baza wariantów mapy kolonii (_mobile / _deployed)
+    // Finding 754 — katalog rekrutacji: model istniejący (nowa jednostka gracza startuje jako `mobile`); bazowy GLB nie istnieje
+    catalogSprite: 'assets/units/ground/humanity/human_garrison_mobile.png',
     color:  '#94A3B8',
   },
   aa_platform: {
@@ -47,6 +49,14 @@ export const HUMANITY_UNITS = {
     namePL: 'Dron Zwiadowczy MK-I',
     nameEN: 'Scout Drone MK-I',
     sprite: 'assets/units/ground/humanity/human_drone.png',
+    color:  '#94A3B8',
+  },
+  // Finding 754 — zaopatrzenie nie miało wpisu frakcji (hosty: placeholder / surowe id); model `human_supply.glb`
+  ground_supply_unit: {
+    name:   'Supply Unit',
+    namePL: 'Jednostka Zaopatrzeniowa',
+    nameEN: 'Supply Unit',
+    sprite: 'assets/units/ground/humanity/human_supply.png',
     color:  '#94A3B8',
   },
 };

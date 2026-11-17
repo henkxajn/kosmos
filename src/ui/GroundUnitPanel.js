@@ -84,8 +84,9 @@ export class GroundUnitPanel {
     const cached = this._sprites.get(archetypeId);
     if (cached) return cached;
     const def = HUMANITY_UNITS[archetypeId];
-    if (!def?.sprite) return null;
-    const img = GroundUnitFactory.loadUnitSprite(def.sprite);
+    const path = def?.catalogSprite ?? def?.sprite;   // Finding 754 — katalog: wariant istniejący (garnizon mobilny)
+    if (!path) return null;
+    const img = GroundUnitFactory.loadUnitSprite(path);
     this._sprites.set(archetypeId, img);
     return img;
   }
