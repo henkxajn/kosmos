@@ -572,6 +572,14 @@ export const GAME_CONFIG = {
     //   OFF = dzisiejsza Dyplomacja i Wojny co do bitu (z przyciskami debug — do KZ).
     consoleDiplomacy: true,
     //   (consoleEconomy — usunięta w KZ-E: grupa Ekonomii jest na stałe konsolą, `PERMANENT_KIT_SCREENS` w ConsoleLayoutLogic.js)
+    //   consoleCivilization (K5, D-K-20): ON (razem z consoleKit) = Cywilizacja i Sfera Dysona na szablonie 4-strefowym — czipy grupy
+    //     [ CYWILIZACJA ] [ SFERA DYSONA ] w nagłówku zamiast pasa subnav. Cywilizacja: lista Imperium / Frakcje / Historia, bohater =
+    //     portret lidera + gniazdo emblematu (assets/ui/emblems/player.png, barwione rolą primary; brak pliku → nazwa imperium) + 4
+    //     instrumenty (POP, prosperity, Kr/rok, handel), inspektor = frakcja / imperium / lider / kolonia / wpis kroniki, pas = oś
+    //     kroniki z powtórzeniami zgrupowanymi. Dyson: bohater = pierścień 20 segmentów w 4 fazach, lista faz → segmentów, inspektor =
+    //     koszt vs magazyn planety domowej + [ DOSTARCZ ] (wyłączony z powodem), pas = ścieżka końca gry. Mechanika bez zmian.
+    //   OFF = dzisiejsza Cywilizacja i Sfera Dysona co do bitu.
+    consoleCivilization: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

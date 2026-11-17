@@ -184,6 +184,7 @@ import { printStrikeWaves, printSquadronNeeds, squadronMaxShips } from '../utils
 import { consoleKitDebugHelpers } from '../debug/ConsoleKitDebug.js';   // ARC KONSOLE K0a — pomocniki konsoli przeglądarki
 import { shipHologramDebugHelpers } from '../debug/ShipHologramDebug.js'; // ARC KONSOLE K1a — podgląd hologramu statku
 import { warDebugHelpers } from '../debug/WarDebug.js';   // ARC KONSOLE K2 (Finding 735) — wymuś starcie / desant tylko z konsoli przeglądarki
+import { civConsoleDebugHelpers } from '../debug/CivConsoleDebug.js';   // ARC KONSOLE K5 — pomocniki bramki Cywilizacji / Dysona
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -635,6 +636,8 @@ export class GameScene {
       // ARC KONSOLE K2 (Finding 735) — KOSMOS.debug.war.forceBattle() / forceInvasion() / target() — zaznaczona wojna panelu Wojen
       //   (bez zaznaczenia: pierwsza aktywna); dawne przyciski «(debug)» nie są rysowane na konsoli — src/debug/WarDebug.js.
       ...warDebugHelpers({ getUIManager: () => this.uiManager }),
+      // ARC KONSOLE K5 — KOSMOS.debug.civConsole.state() / stageDyson() / stageStock(1) / stageStock(0) / unlockFactions() — src/debug/CivConsoleDebug.js.
+      ...civConsoleDebugHelpers({ getRenderer: () => this.threeRenderer, getUIManager: () => this.uiManager }),
       // #640 / #675 — okna ogłoszeń (bez cudzysłowów; pokrętła na sesję — F5 przywraca wartości domyślne):
       //   KOSMOS.debug.battleGrace(1.5)   — okno łaski przed banerem i linią bitwy w rundach oglądanego starcia (0 = bez okna,
       //                                     ogłoszenie od razu — jak przed krokiem); bez argumentu — odczyt (rundy i ms).

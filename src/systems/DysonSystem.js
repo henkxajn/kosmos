@@ -22,7 +22,7 @@ import { DYSON_SEGMENTS, DYSON_PHASES, getDysonVisualStage }
   from '../data/DysonData.js';
 import EventBus from '../core/EventBus.js';
 
-const RESEARCH_PER_SEGMENT = 5;
+export const RESEARCH_PER_SEGMENT = 5;   // K5: eksport — inspektor konsoli Dysona (bonus za segment)
 const RESEARCH_PRODUCER_ID = 'dyson_research_bonus';
 
 // Helper: zwróć ResourceSystem kolonii domowej (gdzie stoi dyson_command)
@@ -123,8 +123,7 @@ export class DysonSystem {
     const resSys = _getHomeResourceSystem();
 
     // Cost reduction z orbital_fabricator (level × 10%, max -50% przy lv5)
-    const fabricatorLv = window.KOSMOS?.buildingSystem?._getBuildingLevel?.('orbital_fabricator') ?? 0;
-    const costMult = Math.max(0.5, 1.0 - (fabricatorLv * 0.10));
+    const costMult = this.getCostMultiplier();
 
     // Oblicz ile faktycznie pobrać per surowiec
     const toDeliver = {};
@@ -196,14 +195,20 @@ export class DysonSystem {
     return this.deliver(segmentId, request);
   }
 
+  // Mnożnik kosztu segmentów z orbital_fabricator (poziom × 10 %, min 0,5 przy poz. 5) — jedno źródło wzoru
+  // (deliver / getProgress / _isSegmentComplete; K5: inspektor konsoli czyta efektywny koszt tym samym wzorem)
+  getCostMultiplier() {
+    const fabricatorLv = window.KOSMOS?.buildingSystem?._getBuildingLevel?.('orbital_fabricator') ?? 0;
+    return Math.max(0.5, 1.0 - (fabricatorLv * 0.10));
+  }
+
   // Postęp segmentu (0.0-1.0) — uwzględnia cost reduction
   getProgress(segmentId) {
     const seg    = this._segments[segmentId];
     const segDef = DYSON_SEGMENTS[segmentId];
     if (!seg || !segDef) return 0;
 
-    const fabricatorLv = window.KOSMOS?.buildingSystem?._getBuildingLevel?.('orbital_fabricator') ?? 0;
-    const costMult = Math.max(0.5, 1.0 - (fabricatorLv * 0.10));
+    const costMult = this.getCostMultiplier();
 
     let totalNeeded    = 0;
     let totalDelivered = 0;
@@ -220,10 +225,7 @@ export class DysonSystem {
   _isSegmentComplete(segmentId, costMult = null) {
     const seg    = this._segments[segmentId];
     const segDef = DYSON_SEGMENTS[segmentId];
-    if (costMult === null) {
-      const fabricatorLv = window.KOSMOS?.buildingSystem?._getBuildingLevel?.('orbital_fabricator') ?? 0;
-      costMult = Math.max(0.5, 1.0 - (fabricatorLv * 0.10));
-    }
+    if (costMult === null) costMult = this.getCostMultiplier();
     for (const [res, baseNeeded] of Object.entries(segDef.cost)) {
       const effective = Math.ceil(baseNeeded * costMult);
       if ((seg.delivered[res] ?? 0) < effective) return false;

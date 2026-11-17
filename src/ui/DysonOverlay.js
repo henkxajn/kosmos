@@ -14,6 +14,14 @@ import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { DYSON_SEGMENTS, DYSON_PHASES } from '../data/DysonData.js';
 import { t, getLocale } from '../i18n/i18n.js';
 import EventBus from '../core/EventBus.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { isKitScreen } from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo } from './ConsoleKit.js';
+import { drawDysonConsole } from './CivilizationConsoleView.js';
+import { applyCivChip } from './CivilizationConsoleLogic.js';
+
+// K5 — Sfera Dysona na zestawie konsoli (FEATURES.consoleCivilization, czytane w chwili użycia)
+const kitOn = () => isKitScreen('dyson', GAME_CONFIG.FEATURES);
 
 const LEFT_W = 340;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -38,6 +46,10 @@ export class DysonOverlay extends BaseOverlay {
     this._state = null;
     this._scrollRight  = 0;
     this._selectedSeg  = null;  // Segment id wybrany w UI
+    // K5 — konsola: strefy ostatniej klatki, przewinięcia listy / inspektora
+    this.consoleZones   = null;
+    this._kitScrollList = 0;
+    this._kitScrollInsp = 0;
 
     // Nasłuch eventów DysonSystem
     EventBus.on('dyson:panelUpdate', (state) => {
@@ -50,6 +62,14 @@ export class DysonOverlay extends BaseOverlay {
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    if (kitOn()) {
+      // K5 — poświata za całym rysunkiem konsoli; zdjęta przez restore
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawDysonConsole(this, ctx, W, H); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
 
     // Pobierz świeży snapshot jeśli stan brak (np. po otwarciu przed pierwszym update)
     if (!this._state) {
@@ -439,8 +459,29 @@ export class DysonOverlay extends BaseOverlay {
   // Obsługa kliknięć
   // ══════════════════════════════════════════════════════════════════════════
 
+  // K5 — kółko na konsoli: geometria wyłącznie ze stref ostatniej klatki (bez window.inner*)
+  _kitScroll(delta, x, y) {
+    const f = this.consoleZones?.frame;
+    if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+    const inR = (r) => !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    if (inR(this._consoleListRect)) this._kitScrollList = Math.max(0, (this._kitScrollList ?? 0) + delta * 0.5);
+    else if (inR(this._consoleInspRect)) this._kitScrollInsp = Math.max(0, (this._kitScrollInsp ?? 0) + delta * 0.5);
+    else if (inR(this._consoleStripRect)) this._kitStripOff = Math.max(0, (this._kitStripOff ?? 0) + (delta > 0 ? 1 : -1));
+    return true;
+  }
+
+  // K5 — klik na konsoli: ramka ze stref ostatniej klatki; klik wewnątrz zawsze pochłonięty
+  _kitClick(x, y) {
+    const f = this.consoleZones?.frame;
+    if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+    const hit = this._hitTest(x, y);
+    if (hit) this._onHit(hit);
+    return true;
+  }
+
   handleClick(x, y) {
     if (!this.visible) return false;
+    if (kitOn()) return this._kitClick(x, y);
     const W = Math.round(window.innerWidth  / Math.min(window.innerWidth / 1280, window.innerHeight / 720));
     const H = Math.round(window.innerHeight / Math.min(window.innerWidth / 1280, window.innerHeight / 720));
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
@@ -461,6 +502,10 @@ export class DysonOverlay extends BaseOverlay {
         break;
       case 'selectSegment':
         this._selectedSeg = zone.data.segmentId;
+        if (kitOn()) this._kitScrollInsp = 0;   // K5 — nowy segment w inspektorze od góry
+        break;
+      case 'tab':   // K5 — czip grupy w nagłówku konsoli (jak klik w pas subnav)
+        applyCivChip(zone.data?.id, window.KOSMOS?.overlayManager);
         break;
       case 'deliverMax': {
         // Klik na segment row = również wybierz segment (UX: feedback w sub-panelu)
@@ -487,6 +532,7 @@ export class DysonOverlay extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (kitOn()) return this._kitScroll(delta, x, y);
     const W = Math.round(window.innerWidth  / Math.min(window.innerWidth / 1280, window.innerHeight / 720));
     const H = Math.round(window.innerHeight / Math.min(window.innerWidth / 1280, window.innerHeight / 720));
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);

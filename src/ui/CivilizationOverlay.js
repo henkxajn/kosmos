@@ -10,6 +10,14 @@ import { BaseOverlay, HEADER_H } from './BaseOverlay.js';
 import { THEME, bgAlpha }        from '../config/ThemeConfig.js';
 import { LEADERS }               from '../data/LeaderData.js';
 import { t, getLocale }          from '../i18n/i18n.js';
+import { GAME_CONFIG }           from '../config/GameConfig.js';
+import { isKitScreen }           from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo }      from './ConsoleKit.js';
+import { drawCivilizationConsole } from './CivilizationConsoleView.js';
+import { applyCivChip }          from './CivilizationConsoleLogic.js';
+
+// K5 — Cywilizacja na zestawie konsoli (FEATURES.consoleCivilization, czytane w chwili użycia)
+const kitOn = () => isKitScreen('civilization', GAME_CONFIG.FEATURES);
 
 // Faza C5: kolory frakcji (wspólne z FactionSelectScene/branding)
 const COLOR_SEEKERS      = '#D85A30';
@@ -53,6 +61,13 @@ export class CivilizationOverlay extends BaseOverlay {
     this._scrollLeft    = 0;   // scroll lewej kolumny (Przywódca + Imperium)
     this._scrollMid     = 0;   // scroll listy kolonii (środek)
     this._scrollHistory = 0;   // scroll kroniki (prawa)
+    // K5 — konsola: strefy ostatniej klatki, wybór pozycji listy ('empire' | 'leader' | 'col:<id>' | 'fac:<id>' | 'hist:<typ>'),
+    // przewinięcia listy / inspektora, przesunięcie osi kroniki (w grupach)
+    this.consoleZones = null;
+    this._kitSel = 'empire';
+    this._kitScrollList = 0;
+    this._kitScrollInsp = 0;
+    this._kitStripOff = 0;
   }
 
   // Geometria 3 kolumn (lewa szersza, środek+prawa równo).
@@ -70,6 +85,14 @@ export class CivilizationOverlay extends BaseOverlay {
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    if (kitOn()) {
+      // K5 — poświata za całym rysunkiem konsoli; zdjęta przez restore
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try { drawCivilizationConsole(this, ctx, W, H); } finally { ctx.restore(); }
+      return;
+    }
+    this.consoleZones = null;
 
     const C = this._getColumns(W, H);
     const { ox, oy, ow, oh, leftW, midW, rightW, x1, x2 } = C;
@@ -709,6 +732,7 @@ export class CivilizationOverlay extends BaseOverlay {
 
   handleClick(x, y) {
     if (!this.visible) return false;
+    if (kitOn()) return this._kitClick(x, y);
     const { ox, oy, ow, oh } = this._getOverlayBounds(
       Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
       Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
@@ -728,13 +752,41 @@ export class CivilizationOverlay extends BaseOverlay {
       case 'goto_colony': {
         const colMgr = window.KOSMOS?.colonyManager;
         if (colMgr) colMgr.switchActiveColony(zone.data.planetId);
+        if (kitOn()) { this._kitSel = `col:${zone.data.planetId}`; this._kitScrollInsp = 0; }   // K5 — inspektor kolonii
         break;
       }
+      case 'tab':        // K5 — czip grupy w nagłówku konsoli (jak klik w pas subnav)
+        applyCivChip(zone.data?.id, window.KOSMOS?.overlayManager);
+        break;
+      case 'civ_item':   // K5 — pozycja listy / osi kroniki → inspektor
+        if (zone.data?.id) { this._kitSel = zone.data.id; this._kitScrollInsp = 0; }
+        break;
     }
+  }
+
+  // K5 — kółko na konsoli: geometria wyłącznie ze stref ostatniej klatki (bez window.inner*)
+  _kitScroll(delta, x, y) {
+    const f = this.consoleZones?.frame;
+    if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+    const inR = (r) => !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    if (inR(this._consoleListRect)) this._kitScrollList = Math.max(0, (this._kitScrollList ?? 0) + delta * 0.5);
+    else if (inR(this._consoleInspRect)) this._kitScrollInsp = Math.max(0, (this._kitScrollInsp ?? 0) + delta * 0.5);
+    else if (inR(this._consoleStripRect)) this._kitStripOff = Math.max(0, (this._kitStripOff ?? 0) + (delta > 0 ? 1 : -1));
+    return true;
+  }
+
+  // K5 — klik na konsoli: ramka ze stref ostatniej klatki; klik wewnątrz zawsze pochłonięty
+  _kitClick(x, y) {
+    const f = this.consoleZones?.frame;
+    if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+    const hit = this._hitTest(x, y);
+    if (hit) this._onHit(hit);
+    return true;
   }
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (kitOn()) return this._kitScroll(delta, x, y);
     const W = Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)));
     const H = Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)));
     const { ox, oy, ow, oh, x1, x2 } = this._getColumns(W, H);

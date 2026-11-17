@@ -336,7 +336,8 @@ export class FactionSystem {
 // ── Modyfikatory per strefa ─────────────────────────────────────────────────
 // mult < 1.0 = kara, mult > 1.0 = bonus
 // Każdy system konsumujący sam decyduje czy uwzględnia dany stat (przez getModifier()).
-const ZONE_MODIFIERS = {
+// K5 (konsola Cywilizacji): eksport tylko do odczytu — skutki stref frakcji w inspektorze
+export const ZONE_MODIFIERS = {
   seekers_max: {
     industryProduction: 0.75,   // -25% produkcja przemysłowa
     prosperity:         0.90,   // -10% prosperity
