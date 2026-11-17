@@ -1219,5 +1219,8 @@ Flaga `FEATURES.consoleCommand` (OFF = dziś bit w bit, 15 stanów identycznych 
   tekstu konsoli na jasnej planecie z bliska — do KZ).
 - **Testy:** `console_command_pages_smoke` 296/0; mutacje 20/20 + 4/4; sweep 425/425, `check-i18n` PASS; żywy silnik 0 wyjątków
   (5 motywów, 1280×833, OFF, baza).
+- **Poprawka `9185f16` fix(K7-C-ground) (OK właściciela 2026-11-17):** kafle rekrutacji wróciły do rozmiaru sprzed „≈2×” w jednym rzędzie
+  u dołu bohatera; tabela jednostek nad nimi przewija się kółkiem (stały nagłówek, strefy tylko widocznych wierszy); nazwy domyślne
+  jednostek i etykieta zaopatrzenia przez i18n (tylko wyświetlanie). Keeper 387/0, mutacje 9/9 + 5/5, żywy silnik 0 wyjątków.
 
 Następny krok: KZ (flagi na stałe, ścieżki OFF usunięte); 750 i 755 trafiają tam.

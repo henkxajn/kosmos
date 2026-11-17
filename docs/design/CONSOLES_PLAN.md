@@ -1184,5 +1184,12 @@ three owner changes applied after the gate (below). Handover `C:\Users\Komputer\
   API: 2 hulls, a ground unit, an outpost (`createOutpost`); enemy selected via `_selectedVesselId`. Orbit mission sent (idle / docked →
   on_mission / in_transit); Atlas list + orrery select + one `body:selected`; report anchored; order created with a typed qty of 40;
   page colony switched (global active colony unchanged); 7 / 7 archetype models ready; chips tour keeps state; close.
+- **Follow-up `9185f16` fix(K7-C-ground) — owner OK 2026-11-17:** the ≈2× tiles overlapped the unit table, which could not scroll.
+  Tiles back to the pre-2× size (112 px block, 92×86 tile, 52 px thumbnail) in one row anchored to the hero bottom; the unit table above
+  has a fixed header and its own wheel-scroll area (2 px bar, zones only for visible rows, colony change resets) — pure
+  `groundHeroLayout`, disjoint by construction. Unit names: a default name stored by the factory (English, also in saves) is shown as the
+  i18n archetype name, custom names unchanged (display only, no data change); supply label via `cmdPages.ground.supply`. Keeper 387/0
+  (P grid 2 sizes × 0/1/25 units, P scroll, P names); fail-first on `c3e8468` red; mutations 9/9 + 5/5; live 24 units scrolled, bottom
+  unit selected, 0 page exceptions.
 - **Next:** remaining arc steps per §6.1 — KZ (flags permanent, OFF paths removed) for Command, Civilization and the other screens; 750 and
   755 go there.
