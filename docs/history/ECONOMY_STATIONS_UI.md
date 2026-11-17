@@ -1112,3 +1112,21 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §16. Flaga `FEATURES.consoleEcon
 Następny krok: K4 (Produkcja).
 
 ---
+
+## ARC KONSOLE — K4: Produkcja na szablonie konsoli (`886b659`, PASS właściciela 2026-11-17) — Ekonomia GOTOWA
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §17. Flaga `FEATURES.consoleEconomy` (pięć czipów grupy na zestawie; OFF = dziś bit w bit).
+- **Lista:** towary pod «Zakres: X ▾» (pełna lista encji — 732), kolumna «zapas / min», steppery minimalnego zapasu na wierszu pod
+  kursorem i zaznaczonym (także zablokowane — próg przed odkryciem), znacznik «▸ buduj» przy droidzie.
+- **Bohater w trzech pasmach:** «Produkcja teraz» (pasek w czasie gry, «+1», linia stojąca nigdy nie wygląda na pracującą) · łańcuch
+  receptury · wąskie gardło + kolejka i zlecenia.
+- **Inspektor:** instrument «zapas / minimum», blok budowy droida (nowy powód «brak źródła składników»), alerty kolonii zakresu,
+  zlecenie jednorazowe przez pole, zapotrzebowanie, przełącznik fabryk, blok magazynu D-K-16.
+- **Pas:** zlecenia eksportowe (742 — adresowane do kolonii zakresu) + jeden wykres 10 lat.
+- **Findingi:** 725 ✅ (cały), 732 ✅, 742 ✅ (nowy: przełączniki eksportu zmieniały aktywną kolonię).
+- **Testy:** `console_production_smoke` 101/0, mutacje 32/32; sweep 418/418, `check-i18n` PASS; żywy silnik 0 błędów strony; animacja bez
+  własnych klatek, rysowanie ≈ 1,8 ms.
+
+Następny krok: KZ grupy Ekonomii.
+
+---
