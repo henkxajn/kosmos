@@ -9,6 +9,7 @@
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { t }              from '../i18n/i18n.js';
+import { applyModalAnchor } from './ModalAnchor.js';   // K7-B — okno z prostokąta strefy konsoli (bez kotwicy: jak dziś)
 
 const Z_INDEX = 1000;
 
@@ -20,9 +21,10 @@ const Z_INDEX = 1000;
  * @param {string} [opts.confirmLabel] — etykieta przycisku potwierdzenia (default: t('confirm.yes'))
  * @param {string} [opts.cancelLabel]  — etykieta anulowania (default: t('confirm.cancel'))
  * @param {boolean} [opts.danger]     — true = czerwony confirm button (operacje destrukcyjne)
+ * @param {object}  [opts.anchor]     — K7-B: `{ left, top, width }` px CSS z prostokąta strefy konsoli (brak = środek ekranu)
  * @returns {Promise<boolean>} — true gdy potwierdzono, false gdy Cancel/ESC/backdrop
  */
-export function showConfirmModal({ title, message, confirmLabel, cancelLabel, danger = false } = {}) {
+export function showConfirmModal({ title, message, confirmLabel, cancelLabel, danger = false, anchor = null } = {}) {
   return new Promise((resolve) => {
     // ── Dimming overlay ──────────────────────────────────────
     const overlay = document.createElement('div');
@@ -123,6 +125,7 @@ export function showConfirmModal({ title, message, confirmLabel, cancelLabel, da
     document.addEventListener('keydown', onKeyDown, true);
 
     overlay.appendChild(card);
+    applyModalAnchor(overlay, card, anchor);
     document.body.appendChild(overlay);
 
     // Autofocus na cancel button (safe default — nie commit'ujemy przypadkiem ENTERem)

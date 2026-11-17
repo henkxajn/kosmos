@@ -69,6 +69,7 @@ import { isKitScreen } from './ConsoleLayoutLogic.js';
 import { applyConsoleHalo } from './ConsoleKit.js';
 import { drawCommandConsole } from './CommandConsoleView.js';
 import { defaultRegistryFilter, searchInputCss, focusPlan } from './CommandConsoleLogic.js';
+import { dialogAnchorCss } from './CommandInspectorLogic.js';
 const kitOn = () => isKitScreen('fleet', GAME_CONFIG.FEATURES);
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
@@ -2252,7 +2253,7 @@ export class FleetManagerOverlay {
       const { showRenameModal } = await import('../ui/ModalInput.js');
       // Finding 749 — pole startuje z BIEŻĄCĄ nazwą statku (ModalInput ją zaznacza); etykieta tylko gdy statku brak
       const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
-      const newName = await showRenameModal(vessel?.name ?? t('fleetPanel.rename'));
+      const newName = await showRenameModal(vessel?.name ?? t('fleetPanel.rename'), { anchor: this._dialogAnchor('inspector') });
       if (newName) {
         EventBus.emit('vessel:rename', { vesselId, name: newName });
       }
@@ -3044,7 +3045,7 @@ export class FleetManagerOverlay {
   async _handleCreateFleet() {
     try {
       const { showRenameModal } = await import('../ui/ModalInput.js');
-      const name = await showRenameModal(t('fleet.newFleetDefaultName'));
+      const name = await showRenameModal(t('fleet.newFleetDefaultName'), { anchor: this._dialogAnchor('list') });
       if (!name) return;
       const fSys = window.KOSMOS?.fleetSystem;
       const fleet = fSys?.createFleet?.(name);
@@ -3067,7 +3068,7 @@ export class FleetManagerOverlay {
       const fleet = fSys?.getFleet?.(fleetId);
       if (!fleet) return;
       const { showRenameModal } = await import('../ui/ModalInput.js');
-      const newName = await showRenameModal(fleet.name);
+      const newName = await showRenameModal(fleet.name, { anchor: this._dialogAnchor('inspector') });
       if (newName) fSys.setName(fleetId, newName);
     } catch { /* anulowano */ }
   }
@@ -3079,12 +3080,12 @@ export class FleetManagerOverlay {
     if (!fSys || this._multiSelectedIds.size === 0) return;
     const fleets = fSys.listFleets();
     try {
-      const choice = await showFleetAssignModal(fleets);
+      const choice = await showFleetAssignModal(fleets, { anchor: this._dialogAnchor('inspector') });
       if (!choice) return;
       let targetFleetId = choice.fleetId;
       if (choice.action === 'new') {
         const { showRenameModal } = await import('../ui/ModalInput.js');
-        const name = await showRenameModal(t('fleet.newFleetDefaultName'));
+        const name = await showRenameModal(t('fleet.newFleetDefaultName'), { anchor: this._dialogAnchor('inspector') });
         if (!name) return;
         const created = fSys.createFleet(name);
         targetFleetId = created.id;
@@ -3328,7 +3329,20 @@ export class FleetManagerOverlay {
       message:      t('fleet.disbandVesselConfirm', vessel?.name ?? vessel?.id ?? ''),
       confirmLabel: t('common.disband'),
       danger:       true,
+      anchor:       this._dialogAnchor('inspector'),
     });
+  }
+
+  /**
+   * K7-B — kotwica okna dialogowego DOM z prostokąta strefy konsoli (`consoleZones[zoneKey]`, skala z ostatniego rysunku —
+   * bez `window.inner*`). Poza konsolą rejestru (flaga OFF, inne zakładki) → null = dzisiejsze okno na środku ekranu.
+   */
+  _dialogAnchor(zoneKey = 'inspector') {
+    if (!kitOn() || (this._activeTab ?? 'tactical') !== 'tactical') return null;
+    const z = this.consoleZones;
+    const r = z?.[zoneKey];
+    if (!r) return null;
+    return dialogAnchorCss(r, this._uiScale ?? 1, { frame: z.frame ?? null, dy: 22 });
   }
 
   async _handleDisbandFleet(fleetId) {
@@ -3341,6 +3355,7 @@ export class FleetManagerOverlay {
         title:   t('fleet.disbandConfirmTitle'),
         message: t('fleet.disbandConfirmMessage', fleet.name),
         danger:  true,
+        anchor:  this._dialogAnchor('inspector'),
       });
       if (ok) {
         fSys.disbandFleet(fleetId, 'manual');
@@ -4586,6 +4601,194 @@ export class FleetManagerOverlay {
     }
   }
 
+
+  // ═══ K7-B — inspektor konsoli (FEATURES.consoleCommand): FAKTY dla `CommandInspectorView` ═══════════════════════════
+  // Każdy predykat poniżej jest przepisany 1:1 z gałęzi statku `_drawRight` / `_drawActions` / `_drawRallyAssignSection`
+  // (te same gettery, te same warunki, ta sama kolejność). Keeper `console_inspector_smoke` porównuje strefy ON z OFF.
+
+  /** Fakty akcji statku → `shipActionGroups` (CommandInspectorLogic). */
+  _inspectorShipFacts(vessel, ms, colMgr, activePid) {
+    const K = window.KOSMOS;
+    const vMgr = K?.vesselManager;
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    const pos = vessel.position ?? {};
+    const docked = pos.state === 'docked';
+    const state = { missionSystem: ms, vesselManager: vMgr, colonyManager: colMgr, techSystem: K?.techSystem, activePlanetId: activePid };
+    const svc = vessel.serviceState ?? 'active';
+    const actions = getAvailableActions(vessel, state);
+    const im = vessel.mission;
+    let foreign = null;
+    const fb = foreignActionsBodyId(vessel, foreignActionsContext(K));
+    if (fb) {
+      const orbitBody = _findBody(fb);
+      const hullCaps = ship?.capabilities ?? [];
+      const modCaps = vessel.modules?.length ? getModuleCapabilities(vessel.modules) : new Set();
+      if (vessel.modules?.some(m => SHIP_MODULES[m]?.slotType === 'propulsion')) { modCaps.add('recon'); modCaps.add('survey'); }
+      const has = (c) => hullCaps.includes(c) || modCaps.has(c);
+      foreign = {
+        bodyId: fb, bodyName: orbitBody?.name ?? fb, recon: has('recon'), analyzed: orbitBody?.analyzed ?? false,
+        colonize: vesselCanColonize(vessel) ? { explored: orbitBody?.explored ?? false,
+          colonized: K?.colonyManager?.getColony(fb) != null, validType: isForeignColonizeType(orbitBody) } : null,
+        unload: has('cargo') && (vessel.cargoUsed ?? 0) > 0 ? { tons: vessel.cargoUsed ?? 0 } : null,
+      };
+    }
+    const colony = vessel.colonyId ? colMgr?.getColony(vessel.colonyId) : null;
+    const hasShipyard = colony ? colMgr._getShipyardLevel(colony) > 0 : false;
+    // `_drawActions` wraca wcześnie przy pustej liście akcji — Rozbiórka / Tankowanie / pula są wtedy NIEOSIĄGALNE (dziś);
+    // na konsoli Rozbiórka i Tankowanie mają wtedy czip wyłączony z powodem (bez strefy), pula — brak (parytet; Finding 748).
+    const noActions = actions.length === 0;
+    const tos = K?.transportOrderSystem;
+    const reg = K?.poiRegistry;
+    let rally = null;
+    if (reg?.listPOIs) {
+      const rallies = reg.listPOIs({ type: 'rally' }) ?? [];
+      if (rallies.length > 0) {
+        const cur = rallies.find((r) => (r.memberVesselIds ?? []).includes(vessel.id)) ?? null;
+        rally = { currentId: cur?.id ?? null, currentName: cur?.name ?? null };
+      }
+    }
+    const cargoMax = (vessel.cargoMax ?? 0) > 0 ? vessel.cargoMax : (ship?.cargoCapacity ?? 0);
+    return {
+      vesselId: vessel.id, vesselRef: vessel,
+      docked, dockedAt: pos.dockedAt ?? null, orbiting: pos.state === 'orbiting',
+      service: (vMgr?.deployVessel && !vessel.isWreck) ? { mobilizing: svc === 'mobilizing', toReserve: svc === 'active' } : null,
+      actions,
+      cancelOrder: vessel.movementOrder?.status === 'active',
+      interstellarSwitch: (im?.type === 'interstellar_jump' && im.phase === 'in_system' && K?.starSystemManager?.getSystem(im.toSystemId))
+        ? im.toSystemId : null,
+      foreign,
+      foreignRecon: im?.type === 'foreign_recon',
+      loop: !!ms?.getActive?.()?.find(m => m.vesselId === vessel.id && m.loop && m.type === 'transport'),
+      cargo: cargoMax > 0 ? { used: vessel.cargoUsed ?? 0, max: cargoMax } : null,
+      colonistsOnBoard: vessel.colonists ?? 0,
+      canDisband: !noActions && docked && hasShipyard, hasShipyard,
+      refuelAuto: vessel.refuelAutomatically ?? true,
+      refuelReachable: !noActions,
+      pool: (!noActions && GAME_CONFIG.FEATURES?.transportOrders && tos && !isEnemyVessel(vessel)) ? { inPool: tos.isInPool?.(vessel.id) ?? false } : null,
+      rally,
+    };
+  }
+
+  /** Treść informacyjna inspektora statku (nagłówek, przyrządy, akta techniczne, utrzymanie, misja, log) — dzisiejsze dane. */
+  _inspectorShipInfo(vessel, ms, colMgr) {
+    const K = window.KOSMOS;
+    const vMgr = K?.vesselManager;
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    const tok = resolveVesselStatus(vessel).token;
+    const sysId = systemIdOf(vessel);
+    const reg = this._registryCtx();
+    // akta techniczne — te same wartości co `_drawShipSpecs` / `_drawModulesSection`
+    const specs = [];
+    if (ship) {
+      const baseSpeed = vessel?.speedAU ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0;
+      const techMult = K?.techSystem?.getShipSpeedMultiplier?.() ?? 1;
+      specs.push([t('fleet.designSpeed'), techMult > 1.01 ? `${baseSpeed.toFixed(1)} → ${(baseSpeed * techMult).toFixed(1)} AU/r` : `${baseSpeed.toFixed(1)} AU/r`]);
+      const per = vessel?.fuel?.consumption ?? ship.fuelPerAU ?? 0.5;
+      const cap = vessel?.fuel?.max ?? ship.fuelCapacity ?? 10;
+      const range = per > 0 ? cap / per : (ship.range ?? 20);
+      specs.push([t('fleet.shipRange'), `${range.toFixed(1)} AU${vessel?.warpFuel?.max > 0 ? ` / ${warpRange(vessel).toFixed(1)} LY` : ''}`]);
+      specs.push([t('fleet.shipFuelType'), getShort(ship.fuelType)]);
+      const mass = vessel?.totalMass ?? ship.baseMass ?? 0;
+      if (mass > 0) specs.push([t('fleet.designMass'), `${mass} t`]);
+      const cargoCap = vessel?.cargoMax ?? ship.cargoCapacity ?? 0;
+      if (cargoCap > 0) specs.push([t('fleet.shipCargo'), `${cargoCap} t`]);
+      specs.push([t('fleet.shipCrew'), `${ship.crewCost} POP`]);
+      if (ship.capabilities?.length > 0) {
+        const capIcons = { recon: '🔭', survey: '📡', deep_scan: '🛰', colony: '🏗', cargo: '📦' };
+        specs.push([t('fleet.shipCapabilities'), ship.capabilities.map(c => capIcons[c] ?? c).join(' ')]);
+      }
+    }
+    const mods = (vessel.modules ?? []).map((id) => {
+      const m = SHIP_MODULES[id];
+      const slot = MODULE_SLOT_INFO[m?.slotType] ?? { icon: '▪', key: null };
+      return { slot: slot.key ? t(slot.key) : (m?.slotType ?? ''), name: m ? getName(m, 'module') : id, missing: !m };
+    });
+    // misja / manifest / pętla / rekon obcy / przylot — dzisiejsze dane
+    const active = (ms?.getActive?.() ?? []);
+    const mission = active.find(m => m.vesselId === vessel.id) ?? null;
+    let missionInfo = null;
+    if (mission) {
+      const phase = mission.status ?? 'transit';
+      const waitH = phase === 'no_housing';
+      const phaseTxt = phase === 'returning' ? t('fleet.phaseReturn') : phase === 'orbiting' ? t('fleet.phaseOrbiting')
+        : phase === 'working' ? t('fleet.phaseWorking') : waitH ? t('fleet.phaseWaitingHousing') : t('fleet.phaseTransit');
+      const pos = (o) => Object.entries(o ?? {}).filter(([, q]) => q > 0).map(([id, q]) => ({ text: `${_cargoIcon(id)} ${_cargoName(id)}`, qty: Math.round(q) }));
+      missionInfo = {
+        label: `${this._missionTypeName(mission.type)} → ${mission.targetName ?? _resolveName(mission.targetId)}`,
+        phase: phaseTxt, eta: (mission.arrivalYear && !waitH) ? t('fleet.etaYearLabel', Math.ceil(mission.arrivalYear)) : '',
+        pct: mission.progressPct ?? 0,
+        planned: pos(mission.cargo), onBoard: pos(vessel.cargo), ret: pos(mission.returnCargoSpec),
+      };
+    }
+    const im = vessel.mission;
+    let reconInfo = null;
+    if (im?.type === 'foreign_recon') {
+      if (im.scope === 'target') {
+        const b = _findBody(im.targetId);
+        reconInfo = { label: t('fleet.foreignScanning', b ? (b.name ?? b.id) : '...'), progress: null };
+      } else if (im.scope === 'full_system') {
+        const cur = im.targets?.[im.currentIdx];
+        const b = cur ? _findBody(cur) : null;
+        const nm = b ? (b.name ?? b.id) : '...';
+        reconInfo = { label: im.phase === 'scanning' ? t('fleet.foreignScanning', nm) : t('fleet.foreignTraveling', nm),
+          progress: `${(im.currentIdx ?? 0) + 1} / ${im.targets?.length ?? '?'}` };
+      }
+    }
+    const loopM = active.find(m => m.vesselId === vessel.id && m.loop && m.type === 'transport') ?? null;
+    let loopInfo = null;
+    if (loopM) {
+      const src = colMgr?.getColony(loopM.loopSourceId)?.name ?? loopM.loopSourceId ?? '?';
+      const tb = _findBody(loopM.loopTargetId);
+      const tgt = tb?.name ?? colMgr?.getColony(loopM.loopTargetId)?.name ?? loopM.loopTargetId ?? '?';
+      loopInfo = { route: `${src} ⇄ ${tgt}`, waitKey: loopM.status === 'waiting_reload' ? 'fleet.loopWaitReload'
+        : loopM.status === 'waiting_return_cargo' ? 'fleet.loopWaitReturnCargo' : null };
+    }
+    const upkeep = vMgr?.getVesselUpkeepCredits?.(vessel) ?? 0;
+    return {
+      ship, icon: ship?.icon ?? '',
+      className: ship ? getName(ship, 'ship') : vessel.shipId,
+      roleLabel: this._roleLabel(vessel),
+      statusText: this._statusText(vessel), statusToken: tok,
+      systemName: sysId === null ? null : reg.systemName(sysId ?? 'sys_home'),
+      otherSystem: sysId !== null && (sysId ?? 'sys_home') !== (K?.activeSystemId ?? 'sys_home'),
+      inTransit: sysId === null,
+      base: this._baseText(vessel), xp: this._xpStars(vessel),
+      desc: ship ? getDesc(ship, 'ship') : '',
+      specs, mods, modsMax: ship?.baseModuleSlots ?? ship?.slots?.length ?? mods.length,
+      fuel: vessel.fuel, warpFuel: vessel.warpFuel, endurance: vessel.endurance,
+      mobilizing: (vessel.serviceState ?? 'active') === 'mobilizing'
+        ? { key: vessel.mobilizeTarget === 'stored' ? 'fleet.withdrawing' : 'fleet.mobilizing', frac: Math.max(0, Math.min(1, vessel.mobilizeProgress ?? 0)) } : null,
+      upkeep: { upkeep, baseUpkeep: vMgr?.getVesselBaseUpkeepCredits?.(vessel) ?? 0, immobilized: vMgr?.isImmobilized?.(vessel) ?? false,
+        unpaid: vessel.unpaidYears ?? 0, treasury: K?.civilianTradeSystem?.getTreasuryCredits?.() ?? 0,
+        inReserve: (vessel?.serviceState ?? 'active') !== 'active' },
+      orderLine: this._movementOrderLine(vessel),
+      mission: missionInfo,
+      interstellar: (im?.type === 'interstellar_jump' && im.phase === 'in_system') ? t('fleet.arrivedAt', im.targetName ?? im.toSystemId) : null,
+      recon: reconInfo, loop: loopInfo,
+      log: (vessel.missionLog ?? []).slice(-8).reverse().map((e) => ({ year: e.year ? Math.floor(e.year) : null, text: e.text ?? '', type: e.type })),
+    };
+  }
+
+  /** Członkowie floty do inspektora konsoli: obecne statki z prędkością, zasięgiem i paliwem (jak akta techniczne). */
+  _inspectorMemberStats(ids) {
+    const K = window.KOSMOS;
+    const vMgr = K?.vesselManager;
+    const techMult = K?.techSystem?.getShipSpeedMultiplier?.() ?? 1;
+    const out = [];
+    for (const id of ids ?? []) {
+      const v = vMgr?.getVessel?.(id);
+      if (!v || v.isWreck) continue;
+      const ship = SHIPS[v.shipId] ?? HULLS[v.shipId];
+      const per = v.fuel?.consumption ?? ship?.fuelPerAU ?? 0.5;
+      const cap = v.fuel?.max ?? ship?.fuelCapacity ?? 10;
+      out.push({ id, name: v.name ?? id, vessel: v,
+        speedAU: (v.speedAU ?? ship?.speedAU ?? ship?.baseSpeedAU ?? 1.0) * techMult,
+        rangeAU: per > 0 ? cap / per : (ship?.range ?? 20),
+        fuelPct: v.fuel?.max > 0 ? v.fuel.current / v.fuel.max : null });
+    }
+    return out;
+  }
+
   // Usuwa hit-zony dodane od indeksu `start`, które wypadły poza pionowy zakres
   // panelu (przewinięte poza widok) — zapobiega „duchom" klików na niewidocznych
   // przyciskach po scrollu. Wzór: cy-offset + clip rysowania nie tnie hit-zon.
@@ -4905,8 +5108,19 @@ export class FleetManagerOverlay {
   //   escort:      🛡 Escort: <target name>
   //   status blocked: ⚠ Order blocked: <reason>
   _drawMovementOrderLabel(ctx, x, cy, w, pad, vessel) {
+    const line = this._movementOrderLine(vessel);
+    if (!line) return cy;
+    const { label, color } = line;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.fillText(label, x + pad, cy + 10);
+    return cy + 18;
+  }
+
+  /** K7-B — tekst i kolor etykiety rozkazu ruchu (wspólny dla panelu OFF i inspektora konsoli); null = brak aktywnego rozkazu. */
+  _movementOrderLine(vessel) {
     const order = vessel?.movementOrder;
-    if (!order || order.status === 'cancelled' || order.status === 'completed') return cy;
+    if (!order || order.status === 'cancelled' || order.status === 'completed') return null;
 
     // Cel: dla rozkazów celujących we wroga (engage/pursue/intercept) użyj wspólnego
     // helpera — nazwa z mgłą wojny (rumor → anonimowy) + żywy dystans. tinfo == null dla
@@ -4967,11 +5181,7 @@ export class FleetManagerOverlay {
     if (vessel._suspendedMission) {
       label += ' (mission paused)';
     }
-
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = color;
-    ctx.fillText(label, x + pad, cy + 10);
-    return cy + 18;
+    return { label, color, blocked: order.status === 'blocked', type: order.type };
   }
 
   // ── M3 P1.4 — przycisk anulowania orderu ──────────────────────────────────

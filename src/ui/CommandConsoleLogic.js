@@ -57,7 +57,7 @@ export function fuelRole(fuelPct) {
 export const CMD_FIXED_COLS = Object.freeze({
   role: 54, fleet: 80, system: 66, body: 76, state: 62, activity: 96, from: 78, to: 82, eta: 42, fuel: 38, alerts: 28,
 });
-export const CMD_TABLE = Object.freeze({ CHECK_W: 18, FOCUS_W: 40, NAME_MIN: 96, MIN_SCALE: 0.6 });
+export const CMD_TABLE = Object.freeze({ CHECK_W: 18, FOCUS_W: 40, NAME_MIN: 96, MIN_SCALE: 0.6, MIN_COL_W: 22 });
 
 /**
  * Prostokąty kolumn tabeli: pole wyboru, 12 dzisiejszych kolumn (`REGISTRY_COLUMNS`), kolumna „Pokaż”.
@@ -65,11 +65,15 @@ export const CMD_TABLE = Object.freeze({ CHECK_W: 18, FOCUS_W: 40, NAME_MIN: 96,
  * nazwa dostaje resztę (≥ NAME_MIN). Komórki ucina widok (pełny tekst w podpowiedzi).
  * @returns {{ check:{x,w}, cols:Array<{id,x,w}>, focus:{x,w}, scale:number }}
  */
-export function registryColumnLayout(x0, totalW) {
-  const fixedSum = Object.values(CMD_FIXED_COLS).reduce((a, b) => a + b, 0);
-  const room = totalW - CMD_TABLE.CHECK_W - CMD_TABLE.FOCUS_W - CMD_TABLE.NAME_MIN;
-  const scale = Math.max(CMD_TABLE.MIN_SCALE, Math.min(1, room / fixedSum));
-  const fixed = Object.fromEntries(Object.entries(CMD_FIXED_COLS).map(([k, v]) => [k, Math.floor(v * scale)]));
+export function registryColumnLayout(x0, totalW, { shrink = null } = {}) {
+  // K7-B — kolumna pusta dla KAŻDEGO widocznego wiersza kurczy się do `MIN_COL_W` (nigdy nie znika — nagłówek i sort zostają)
+  const shrunk = (id) => !!shrink && (shrink instanceof Set ? shrink.has(id) : !!shrink.includes?.(id));
+  const base = Object.fromEntries(Object.entries(CMD_FIXED_COLS).map(([k, v]) => [k, shrunk(k) ? Math.min(v, CMD_TABLE.MIN_COL_W) : v]));
+  const flexSum = Object.entries(base).filter(([k]) => !shrunk(k)).reduce((a, [, v]) => a + v, 0);
+  const pinned = Object.entries(base).filter(([k]) => shrunk(k)).reduce((a, [, v]) => a + v, 0);
+  const room = totalW - CMD_TABLE.CHECK_W - CMD_TABLE.FOCUS_W - CMD_TABLE.NAME_MIN - pinned;
+  const scale = flexSum > 0 ? Math.max(CMD_TABLE.MIN_SCALE, Math.min(1, room / flexSum)) : 1;
+  const fixed = Object.fromEntries(Object.entries(base).map(([k, v]) => [k, shrunk(k) ? v : Math.floor(v * scale)]));
   const usedFixed = Object.values(fixed).reduce((a, b) => a + b, 0);
   const nameW = Math.max(CMD_TABLE.NAME_MIN, totalW - CMD_TABLE.CHECK_W - CMD_TABLE.FOCUS_W - usedFixed);
   const cols = [];
@@ -130,6 +134,8 @@ export function registryListRows(m, t) {
     item(`fleet:${fl.id}`, fl.name, `×${fl.count}`, fl.id === m.selectedFleetId,
       { type: 'registryGroupFleet', data: { fleetId: fl.id } });
   }
+  // K7-B (Finding 747) — „[ + NOWA FLOTA ]”: dzisiejsza strefa `fleetCreate` (producentem była tylko uśpiona lewa lista mapy 2D)
+  item('fleet:new', `[ ${t('cmdConsole.newFleet').toUpperCase()} ]`, '', false, { type: 'fleetCreate', data: {} });
 
   out.push({ group: true, label: t('cmdConsole.secSystem') });
   // „Wszystkie”: aktywna = brak filtra układu (nic do zrobienia); nieaktywna = klik zdejmuje filtr (ten sam przełącznik czipa)
@@ -315,4 +321,49 @@ export function searchInputCss(rect, scale) {
     width: Math.round(rect.w * s), height: Math.round(rect.h * s),
     fontPx: Math.max(9, Math.round(10 * s)),
   };
+}
+
+// ── K7-B — kolumna ROLA: forma skrócona (glif roli + 3–4-literowy znacznik), pełna rola w podpowiedzi ─────────────────
+
+// Glify ról jak w rejestrze (`ROLE_GLYPHS`, FleetPictureLogic) + `envoy`.
+export const ROLE_SHORT_GLYPHS = Object.freeze({
+  transport: '□', cargo: '□', warship: '△', assault: '△', science: '◇', scout: '○', colony: '⬠', envoy: '✉',
+});
+/** Wszystkie role, które może pokazać kolumna (7 ról `getPrimaryRole` + `envoy`). */
+export const ROLE_SHORT_IDS = Object.freeze(Object.keys(ROLE_SHORT_GLYPHS));
+
+/**
+ * Forma skrócona roli dla kolumny ROLA: `{ glyph, tag, text, full }`; `text` = „glif TAG”, `full` = pełna nazwa (podpowiedź).
+ * Rola nieznana / brak → kreska (bez surowego id).
+ */
+export function roleShort(role, t) {
+  if (!role || !ROLE_SHORT_GLYPHS[role]) return { glyph: '', tag: '—', text: '—', full: '—' };
+  const tag = t(`cmdConsole.roleTag.${role}`);
+  const full = role === 'envoy' ? t('fleet.role.envoy') : t(`fleetPicture.role.${role}`);
+  return { glyph: ROLE_SHORT_GLYPHS[role], tag, text: `${ROLE_SHORT_GLYPHS[role]} ${tag}`, full };
+}
+
+// ── K7-B — kolumny puste dla wszystkich widocznych wierszy (kurczą się do minimum, nie znikają) ──────────────────────
+
+/** Czy komórka kolumny `id` wiersza `r` jest pusta (widok pokazałby „—” albo nic) — reguły jak `drawTableRow`. */
+export function cellEmpty(id, r) {
+  const kind = r?.kind ?? 'own';
+  switch (id) {
+    case 'fleet':    return r?.fleetName == null;
+    case 'from':     return r?.fromName == null;
+    case 'to':       return r?.toName == null;
+    case 'eta':      return r?.eta?.year == null;
+    case 'alerts':   return !(r?.alertCount > 0);
+    case 'state':    return !r?.stateKey;
+    case 'activity': return kind === 'wreck' ? r?.wreckedYear == null : !r?.activityKey;
+    case 'fuel':     return r?.fuelPct == null;
+    default:         return false;   // nazwa, rola, układ, ciało — zawsze coś pokazują
+  }
+}
+
+/** Kolumny stałe puste dla każdego widocznego wiersza (pusta tabela → żadna — nie zwężamy „na zapas”). */
+export function emptyColumnIds(rows) {
+  const rs = rows ?? [];
+  if (rs.length === 0) return new Set();
+  return new Set(Object.keys(CMD_FIXED_COLS).filter((id) => rs.every((r) => cellEmpty(id, r))));
 }

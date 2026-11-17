@@ -4,7 +4,7 @@
 //   nagłówek — tytuł + czipy zakładek Dowództwa (zastępują własny pasek zakładek; strefa `tab` z dzisiejszym `data.tab`) + [ x ]
 //   lista     — szukajka (DOM `<input>` z prostokąta strefy), grupowanie, floty, układy, role, sekcje — z licznikami
 //   bohater   — tabela statków (12 dzisiejszych kolumn, sort, grupy, pole wyboru, „Pokaż”), linia kontekstu, pasek zbiorczy
-//   inspektor — dzisiejszy panel statku / floty / wraku / wroga (`_drawRight`, reskin w K7-B) albo podsumowanie zaznaczenia
+//   inspektor — statek / flota / wrak w języku konsoli (K7-B, `CommandInspectorView`) albo podsumowanie zaznaczenia
 //   pas       — oś czasu misji dla zaznaczenia (flota / zaznaczone / statek; bez wyboru — wiersze widoczne w tabeli)
 // Pozostałe zakładki (Naziemne, Atlas, Logistyka) — dzisiejsze strony pod czipami nagłówka (K7-C).
 // Strefy trafień mają DZISIEJSZE typy i dane (handlery `_handleHit` bez zmian); nowa jest tylko `registryClearFilters`.
@@ -25,7 +25,10 @@ import { buildTimelineRows } from './FleetPictureLogic.js';
 import { defaultViewport, layoutTimelineRows, nowLineX, timelineTicks } from './TimelineLayout.js';
 import { BOTTOM_STRIP_H } from './MapInsets.js';
 import { commandGroupChips, rowRole, fuelRole, registryColumnLayout, facetCounts, registryListRows, fleetListItems,
-  contextParts, emptyState, focusGate, bulkGate, rowHintKey, timelineSubject, subjectLabel, multiSummary } from './CommandConsoleLogic.js';
+  contextParts, emptyState, focusGate, bulkGate, rowHintKey, timelineSubject, subjectLabel, multiSummary,
+  roleShort, emptyColumnIds } from './CommandConsoleLogic.js';
+import { drawInspector, summaryRows } from './CommandInspectorView.js';
+import { groupStats } from './CommandInspectorLogic.js';
 
 // Układ konsoli Dowództwa (px logiczne). Tabela potrzebuje szerokości — lista i inspektor węższe niż domyślne.
 export const CMD = Object.freeze({
@@ -108,7 +111,7 @@ export function drawCommandConsole(ov, ctx, W, H) {
   const mx = ov._regMouseX, my = ov._regMouseY;
   if (!ov._cmdTip) {
     const d = (ov._cmdDisabled ?? []).find((q) => inside(q.rect, mx, my));
-    if (d) ov._cmdTip = { text: t(d.reasonKey, ...(d.args ?? [])), x: mx + 12, y: my + 14, tone: d.tone ?? 'alert' };
+    if (d) ov._cmdTip = { text: d.text ?? t(d.reasonKey, ...(d.args ?? [])), x: mx + 12, y: my + 14, tone: d.tone ?? 'alert' };
   }
   if (ov._cmdTip) drawConsoleTooltip(ctx, ov._cmdTip, z.frame, roles, { tone: ov._cmdTip.tone ?? 'primary' });
 }
@@ -254,14 +257,16 @@ function drawHeroTable(ov, ctx, hz, roles, d) {
   y += CONSOLE_KIT.CHIP_H + 8;
 
   // (c) Nagłówki kolumn (sort klikiem — `registrySort`)
-  const lay = registryColumnLayout(x, w);
+  const lay = registryColumnLayout(x, w, { shrink: emptyColumnIds(d.rows) });
   ctx.font = F(CMD.HEAD_FONT, true);
   for (const c of lay.cols) {
     const sorted = ov._registrySort.col === c.id;
     ctx.fillStyle = sorted ? roles.primary : roles.dim;
     const lbl = `${colLabel(c.id).toUpperCase()}${sorted ? (ov._registrySort.dir > 0 ? ' ▲' : ' ▼') : ''}`;
-    ctx.fillText(fit(ctx, lbl, c.w - 4), c.x, y + CMD.HEAD_H / 2);
+    const shown = fit(ctx, lbl, c.w - 4);
+    ctx.fillText(shown, c.x, y + CMD.HEAD_H / 2);
     push(ov, c.x, y, c.w, CMD.HEAD_H, 'registrySort', { col: c.id });
+    if (shown !== lbl && inside({ x: c.x, y, w: c.w, h: CMD.HEAD_H }, mx, my)) ov._cmdTip = { text: lbl, x: mx + 12, y: my + 14, tone: 'primary' };
   }
   ctx.strokeStyle = roles.dim; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(x, y + CMD.HEAD_H + 0.5); ctx.lineTo(x + w, y + CMD.HEAD_H + 0.5); ctx.stroke();
@@ -378,7 +383,7 @@ function drawTableRow(ov, ctx, lay, x, ry, w, rowH, r, selId, roles, zone, mx, m
   const role = rowRole(r);
   const cells = {
     name: [`${r.glyph ?? ''} ${r.name}`.trim(), role, true],
-    role: [kind === 'wreck' ? t(r.isEnemy ? 'registry.enemyShort' : 'registry.ownShort') : roleLabel(r.role), 'dim'],
+    role: [kind === 'wreck' ? t(r.isEnemy ? 'registry.enemyShort' : 'registry.ownShort') : roleShort(r.role, t).text, 'dim'],
     fleet: [r.fleetName ?? '—', 'dim'],
     system: [r.isTransit ? t('cmdConsole.transit') : (r.systemName ?? ''), r.isTransit ? 'primary' : 'dim'],
     body: [r.body ?? (kind === 'own' ? t('registry.bodyTransit') : '—'), 'dim'],
@@ -404,6 +409,11 @@ function drawTableRow(ov, ctx, lay, x, ry, w, rowH, r, selId, roles, zone, mx, m
       // ucięta komórka pod kursorem → pełna treść w podpowiedzi
       if (hov && shown !== txt && mx >= c.x && mx <= c.x + c.w) ov._cmdTip = { text: txt, x: mx + 12, y: my + 14, tone: 'primary' };
     }
+  }
+  // K7-B — pełna nazwa roli pod kursorem (komórka pokazuje formę skróconą)
+  const roleCol = lay.cols.find((q) => q.id === 'role');
+  if (hov && kind !== 'wreck' && roleCol && mx >= roleCol.x && mx <= roleCol.x + roleCol.w && r.role) {
+    ov._cmdTip = { text: roleShort(r.role, t).full, x: mx + 12, y: my + 14, tone: 'primary' };
   }
   if (isSel) {
     drawSelectBrackets(ctx, rowRect, roles);
@@ -538,8 +548,8 @@ function drawInspectorZone(ov, ctx, iz, roles, d, env) {
   ov._cmdRects.inspBody = body;
   const multi = ov._multiSelectedIds.size > 0 && !ov._selectedVesselId && !ov._selectedFleetId;
   if (multi) { drawMultiSummary(ov, ctx, body, roles, d); return; }
-  // K7-A: dzisiejsza treść panelu (statek / flota / wrak / wróg / konfigurator misji) w strefie inspektora — reskin w K7-B
-  ov._drawRight(ctx, body.x, body.y, body.w, body.h, env.vMgr, env.ms, env.colMgr, env.activePid);
+  // K7-B: statek / flota / wrak w języku konsoli (te same strefy trafień co `_drawRight`)
+  drawInspector(ov, ctx, body, roles, env);
 }
 
 function drawMultiSummary(ov, ctx, r, roles, d) {
@@ -550,6 +560,7 @@ function drawMultiSummary(ov, ctx, r, roles, d) {
   drawEyebrow(ctx, c.x, c.y, c.w, t('cmdConsole.multiTitle', s.count), roles);
   c.y += CONSOLE_KIT.EYEBROW_H + 4;
   const kv = (k, v, tone = 'primary') => { drawKvRow(ctx, c.x, c.y, c.w, k, String(v), roles, { tone }); c.y += CONSOLE_KIT.KV_H + 2; };
+  summaryRows(ctx, c, roles, groupStats(ov._inspectorMemberStats([...ov._multiSelectedIds]), s.count));
   for (const rl of s.roles) kv(roleLabel(rl.role), `×${rl.n}`);
   kv(t('cmdConsole.multiSystems'), s.systems);
   kv(t('cmdConsole.multiCombat'), s.combat, s.combat > 0 ? 'alert' : 'dim');

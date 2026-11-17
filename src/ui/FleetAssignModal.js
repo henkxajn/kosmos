@@ -8,8 +8,9 @@
 
 import { THEME } from '../config/ThemeConfig.js';
 import { t }     from '../i18n/i18n.js';
+import { applyModalAnchor } from './ModalAnchor.js';   // K7-B — okno z prostokąta strefy konsoli (bez kotwicy: jak dziś)
 
-export function showFleetAssignModal(fleets) {
+export function showFleetAssignModal(fleets, { anchor = null } = {}) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'kosmos-modal-overlay';
@@ -106,6 +107,7 @@ export function showFleetAssignModal(fleets) {
     panel.appendChild(cancelRow);
 
     overlay.appendChild(panel);
+    applyModalAnchor(overlay, panel, anchor);
     for (const evt of ['click', 'mousedown', 'mouseup']) {
       panel.addEventListener(evt, (e) => e.stopPropagation());
     }

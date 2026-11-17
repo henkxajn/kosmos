@@ -5,13 +5,15 @@
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { t } from '../i18n/i18n.js';
+import { applyModalAnchor } from './ModalAnchor.js';   // K7-B — okno z prostokąta strefy konsoli (bez kotwicy: jak dziś)
 
 /**
  * Wyświetla modal do zmiany nazwy obiektu.
  * @param {string} currentName — aktualna nazwa (wstawiona w input)
+ * @param {{ anchor?: {left:number, top:number, width:number}|null }} [opts] — K7-B: pozycja z konsoli (px CSS)
  * @returns {Promise<string|null>} — nowa nazwa lub null
  */
-export function showRenameModal(currentName) {
+export function showRenameModal(currentName, { anchor = null } = {}) {
   return new Promise((resolve) => {
     // ── Dimming overlay ───────────────────────────────────────
     const overlay = document.createElement('div');
@@ -118,6 +120,7 @@ export function showRenameModal(currentName) {
       overlay.addEventListener(evt, (e) => e.stopPropagation());
     }
     overlay.appendChild(panel);
+    applyModalAnchor(overlay, panel, anchor);
     document.body.appendChild(overlay);
 
     // ── Cleanup + resolve ─────────────────────────────────────
