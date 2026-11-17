@@ -1,4 +1,4 @@
-// ProductionConsoleView — Produkcja na zestawie konsoli (ARC KONSOLE K4, docs/design/CONSOLES_PLAN.md §1.2, §17; FEATURES.consoleEconomy).
+// ProductionConsoleView — Produkcja na zestawie konsoli (ARC KONSOLE K4, docs/design/CONSOLES_PLAN.md §1.2, §17; KZ-E: jedyna ścieżka).
 //
 // Wołane przez `EconomyOverlay.draw`, gdy `isKitScreen('economy')`. Szablon 4-strefowy (D-K-1), kierunek bohatera: surowce → fabryki → towary:
 //  (1) nagłówek — EKONOMIA + pięć czipów grupy (rama `econConsoleFrame`, jak Budżet / Przepływy);

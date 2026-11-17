@@ -1,21 +1,29 @@
 // ARC KONSOLE K3 — keeper konsoli grupy Ekonomii, część A: Budżet + Przepływy (docs/design/CONSOLES_PLAN.md §1.2, D-K-15, D-K-16,
 // D-K-20; Finding 725 — efekt podatku).
 //
-// A — dostępność akcji ON == OFF na stronę (inwentarz typów stref jak K1c-A / K2): Budżet — `close`, `tax_slider` (+ skutek
-//     handlera: ta sama stawka z tej samej względnej pozycji X); Przepływy — `close`, `flow_res` (te same id w tej samej kolejności,
-//     skutek: wybór zasobu). Nowe typy konsoli: `tab` (czipy grupy), `budget_line` (wybór linii).
-// D — D-K-16: żadna linia lewej kolumny nie znika — każda linia, którą dziś rysuje kolumna (strefy `resource_hover` ścieżki OFF +
-//     bilans energii), jest w górnej szufladzie (zbiór z WYKONANIA `TopResourceDrawer._colonyTokens`) albo w bloku inspektora
-//     konsoli (strefy `resource_hover` ścieżki ON); stany: globalnie, wybrana kolonia, wybrana stacja-sierota, globalnie ze stacją.
-//     Świadkowie: towar spoza paliwa jest w kolumnie OFF i w bloku ON; linia magazynu stacji jest w bloku ON.
+// KZ-E — grupa Ekonomii jest konsolą na stałe (flaga usunięta, stara strona usunięta). Dawne porównania ON == OFF / ON ⊇ OFF
+// zamienione na piny bezwzględne, wartości zmierzone na dzisiejszej ścieżce (= stara ścieżka ON; dziennik rysunku równy bajt
+// w bajt przed / po KZ-E). Żadna akcja nie traci pokrycia.
+//
+// A — inwentarz typów stref na stronę i stan (globalnie, wybrana kolonia, wybrana stacja): Budżet ⊇ `tab`, `close`,
+//     `budget_line`, `tax_slider`; Przepływy ⊇ `tab`, `close`, `flow_res`, `toggle_cat`, `resource_hover`. Skutki handlerów:
+//     `tax_slider` — stawka z względnej pozycji X (0.2 → 0.05, 0.64 → 0.16, 1 → 0.25; świadek: stawka startowa 0.08 inna);
+//     `flow_res` — id w kolejności Fe, food, water (świat-atrapa), klik wybiera zasób; `budget_line` — klik wybiera linię.
+// D — D-K-16: żadna linia dawnej lewej kolumny nie znika — oczekiwany zbiór linii na stan (dane dzisiejsze: surowce wydobywalne +
+//     zbieralne + bilans energii; globalnie — towary z zapasem w świecie-atrapie; wybrana kolonia / stacja — wszystkie towary)
+//     jest w górnej szufladzie (zbiór z WYKONANIA `TopResourceDrawer._colonyTokens`) albo w bloku inspektora Przepływów (strefy
+//     `resource_hover`); wybrana stacja — wyłącznie w bloku (szuflada pokazuje kolonie). Globalnie ze stacją-sierotą: każda linia
+//     magazynu stacji z zapasem w bloku. Świadkowie: towar spoza paliwa w bloku; linia magazynu stacji (Cu) w bloku.
 // G — czipy grupy [ BUDŻET ] [ PRODUKCJA ] [ HANDEL ] [ RYNEK ] [ PRZEPŁYWY ]: kolejność, klik → openPanel z właściwym id, HANDEL / RYNEK
-//     ustawiają zakładkę Handlu, reszta stanu Handlu zostaje; pas subnav znika nad Budżetem i Przepływami (K4: i nad Produkcją),
-//     zostaje przy fladze OFF.
-// P — K4 (zmiana podpisana): Produkcja przy fladze ON jest konsolą (strefy konsoli, dziennik ≠ OFF), przy OFF — dzisiejszą stroną
-//     (czipy `colony_filter`, bez stref konsoli). Równość OFF z bazą f2a3604 — dziennik rysunku w probe (worktree), keeper
+//     ustawiają zakładkę Handlu, reszta stanu Handlu zostaje; brak pasa subnav nad Budżetem, Przepływami, Produkcją i Handlem —
+//     także przy `consoleKit` = false (kontrola: Wywiad / Dyplomacja / Wojna mają wtedy pas). Trwałość: `isKitScreen` zwraca true
+//     dla budget / flows / trade / economy bez flag i przy `consoleKit` = false; intel / shipyard / diplomacy / war nadal wymagają
+//     swoich flag (kontrola).
+// P — Produkcja jest konsolą: strefy konsoli, inwentarz ⊇ `tab`, `close`, `prod_scope_toggle`, `prod_good`; keeper
 //     `console_production_smoke.mjs` pinuje resztę Produkcji.
 // S — geometria: strefy w ramie konsoli przy 1600×1041 i 1280×833 (wiersze w prostokącie listy, suwak w bohaterze, blok w
-//     inspektorze); wejście konsoli (klik / kółko) bez window.inner* — handler wykonany przy podmienionym innerWidth.
+//     inspektorze); wejście konsoli (klik / kółko) bez window.inner* — handler wykonany przy podmienionym innerWidth; źródło:
+//     ciała handleClick / handleScroll / handleMouseMove (bez komentarzy, niepuste — świadek) bez window.inner.
 // T — Finding 725: efekt podatku przez t() (PL = dzisiejszy tekst, EN przetłumaczony; źródło bez gałęzi isPL); tekst konsoli bez
 //     surowych id snake_case. N — netto i linie Budżetu = dzisiejszy wzór; ticker = dzisiejsze filtry.
 //
@@ -44,10 +52,10 @@ const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.log(' 
 const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n').replace(/\/\/.*$/gm, '');
 setLocale('pl');
 const F = GAME_CONFIG.FEATURES;
-const saved = { consoleKit: F.consoleKit, consoleEconomy: F.consoleEconomy };
-const setEco = (on) => { F.consoleKit = true; F.consoleEconomy = on; };
+const saved = { consoleKit: F.consoleKit };
+F.consoleKit = true;   // warunek bazowy (scena za tekstem); grupa Ekonomii od niego nie zależy — pin G10 / G11
 
-// ── atrapa płótna: zapis tekstów + pełny dziennik wywołań (porównanie ON == OFF) ──
+// ── atrapa płótna: zapis tekstów + pełny dziennik wywołań ──
 function recCtx() {
   const texts = [], log = [];
   const st = { canvas: { width: 1600, height: 1041 } };
@@ -123,8 +131,7 @@ function makeOverlay(page, selected = null) {
   window.KOSMOS.overlayManager.active = page;
   return ov;
 }
-function render(page, on, { W = 1600, H = 1041, selected = null, negNet = false } = {}) {
-  setEco(on);
+function render(page, { W = 1600, H = 1041, selected = null, negNet = false } = {}) {
   if (negNet) {
     // netto budżetu < 0: utrzymanie floty ponad przychody
     window.KOSMOS.vesselManager.getTotalFleetUpkeep = () => 900;
@@ -139,47 +146,59 @@ function render(page, on, { W = 1600, H = 1041, selected = null, negNet = false 
   return { ov, ...r, ptexts: posTexts, gradients, net, roles: ROLES ? ROLES.consoleRoles() : null, zones: ov._hitZones ?? [] };
 }
 const types = (zs) => new Set(zs.map((z) => z.type));
-// świadek: render ON naprawdę jest konsolą (strefy konsoli zapisane) — bez niego piny „ON == OFF” byłyby zielone na bazie
+// świadek: render naprawdę jest konsolą (strefy konsoli zapisane)
 const isKit = (r) => !!r?.ov?.consoleZones;
 const idsOf = (zs, type, key) => zs.filter((z) => z.type === type).map((z) => z.data?.[key]);
 
-// ═══ A — dostępność akcji ON == OFF ═══════════════════════════════════════════════════════════════════════════════
-console.log('A — akcje ON == OFF');
+// ═══ A — inwentarz akcji i skutki handlerów (piny bezwzględne, KZ-E) ════════════════════════════════════════════
+console.log('A — akcje konsoli');
+// stany: globalnie, wybrana kolonia, wybrana stacja-sierota (świat ze stacją)
+const A_STATES = [null, 'col_a', 'st_1'];
+const A_NEED = {
+  budget: ['tab', 'close', 'budget_line', 'tax_slider'],
+  flows: ['tab', 'close', 'flow_res', 'toggle_cat', 'resource_hover'],
+};
 if (!EO) { assert(false, 'A EconomyOverlay importuje się'); } else {
-  makeWorld();
-  const bOff = render('budget', false), bOn = render('budget', true);
-  assert(types(bOff.zones).has('tax_slider') && types(bOff.zones).has('close'), 'A0 kontrola: OFF Budżet ma close + tax_slider');
-  for (const ty of ['close', 'tax_slider']) assert(isKit(bOn) && types(bOn.zones).has(ty), `A1 Budżet ON (konsola) ma strefę ${ty}`);
-  assert(types(bOn.zones).has('tab') && types(bOn.zones).has('budget_line'), 'A2 Budżet ON ma czipy grupy (tab) i linie (budget_line)');
-  // skutek suwaka: ta sama względna pozycja → ta sama stawka
-  const effect = (r, frac) => {
-    const w = makeWorld(); const z = r.zones.find((q) => q.type === 'tax_slider');
-    if (!z) return null;
-    window.KOSMOS.overlayManager.active = 'budget';
-    setEco(r === bOn);
-    r.ov._hitZones = r.zones; r.ov.consoleZones = r.ov.consoleZones ?? null;
-    const x = z.data.barX + z.data.barW * frac, y = z.y + z.h / 2;
-    safe(() => r.ov.handleClick(x, y));
-    return w.colMgr.taxRate;
-  };
-  for (const frac of [0.2, 0.64, 1]) {
-    const off = effect(bOff, frac), on = effect(bOn, frac);
-    assert(isKit(bOn) && off != null && on === off, `A3 tax_slider (konsola) przy ${frac}: ON ${on} == OFF ${off}`);
+  for (const [page, need] of Object.entries(A_NEED)) {
+    for (const sel of A_STATES) {
+      makeWorld({ withStation: true });
+      const r = render(page, { selected: sel });
+      const ty = types(r.zones);
+      const miss = need.filter((q) => !ty.has(q));
+      assert(isKit(r) && miss.length === 0, `A1 ${page} · ${sel ?? 'globalnie'}: strefy ⊇ ${need.join(', ')}${miss.length ? ' — brak: ' + miss.join(',') : ''}`);
+    }
   }
   makeWorld();
-  const fOff = render('flows', false), fOn = render('flows', true);
-  const fo = idsOf(fOff.zones, 'flow_res', 'resId'), fn = idsOf(fOn.zones, 'flow_res', 'resId');
-  assert(fo.length >= 3, `A4 kontrola: OFF Przepływy mają ${fo.length} wierszy flow_res`);
-  assert(isKit(fOn) && JSON.stringify(fo) === JSON.stringify(fn), `A5 flow_res konsoli == OFF (id i kolejność): ${fn.join(',')}`);
-  assert(isKit(fOn) && types(fOn.zones).has('close'), 'A6 Przepływy (konsola) mają close');
+  const bOn = render('budget');
+  // skutek suwaka: względna pozycja X → stawka (klamra 0–0.25, krok 1 %); świadek: stawka startowa 0.08 różna od każdej oczekiwanej
+  const effect = (frac) => {
+    const w = makeWorld(); const z = bOn.zones.find((q) => q.type === 'tax_slider');
+    if (!z || !(z.data?.barW > 0)) return null;
+    window.KOSMOS.overlayManager.active = 'budget';
+    const before = w.colMgr.taxRate;
+    const x = z.data.barX + z.data.barW * frac, y = z.y + z.h / 2;
+    safe(() => bOn.ov.handleClick(x, y));
+    return { before, after: w.colMgr.taxRate };
+  };
+  for (const [frac, exp] of [[0.2, 0.05], [0.64, 0.16], [1, 0.25]]) {
+    const e = effect(frac);
+    assert(isKit(bOn) && e && e.before === 0.08 && e.after === exp, `A3 tax_slider przy ${frac}: stawka ${e?.before} → ${e?.after} (oczekiwana ${exp})`);
+  }
+  makeWorld();
+  const fOn = render('flows');
+  const fn = idsOf(fOn.zones, 'flow_res', 'resId');
+  assert(isKit(fOn) && JSON.stringify(fn) === JSON.stringify(['Fe', 'food', 'water']), `A5 flow_res: id i kolejność Fe, food, water (${fn.join(',')})`);
   const last = fOn.zones.filter((z) => z.type === 'flow_res').pop();
-  setEco(true); window.KOSMOS.overlayManager.active = 'flows';
+  window.KOSMOS.overlayManager.active = 'flows';
+  const selBefore = fOn.ov._flowSelectedResId;
   if (last) safe(() => fOn.ov.handleClick(last.x + 4, last.y + last.h / 2));
-  assert(isKit(fOn) && last && fOn.ov._flowSelectedResId === last.data.resId, 'A7 klik wiersza flow_res konsoli wybiera zasób (handler jak dziś)');
+  assert(isKit(fOn) && last && selBefore !== last.data.resId && fOn.ov._flowSelectedResId === last.data.resId,
+    `A7 klik wiersza flow_res wybiera zasób (${selBefore} → ${fOn.ov._flowSelectedResId})`);
   const bl = bOn.zones.filter((z) => z.type === 'budget_line').find((z) => z.data.lineId === 'fleet');
-  setEco(true); window.KOSMOS.overlayManager.active = 'budget';
+  window.KOSMOS.overlayManager.active = 'budget';
+  const lineBefore = bOn.ov._budgetLine;
   if (bl) safe(() => bOn.ov.handleClick(bl.x + 4, bl.y + bl.h / 2));
-  assert(bOn.ov._budgetLine === 'fleet', 'A8 klik linii Budżetu wybiera linię');
+  assert(lineBefore !== 'fleet' && bOn.ov._budgetLine === 'fleet', `A8 klik linii Budżetu wybiera linię (${lineBefore} → ${bOn.ov._budgetLine})`);
 }
 
 // ═══ D — D-K-16: żadna linia nie znika ═══════════════════════════════════════════════════════════════════════════
@@ -200,49 +219,57 @@ assert(drawerIdsExec && drawerIdsExec.has('Fe') && drawerIdsExec.has('energy'), 
 const drawerModel = safe(() => ECL?.drawerLineIds?.(), null);
 assert(drawerModel && drawerIdsExec && drawerModel.size === drawerIdsExec.size && [...drawerIdsExec].every((i) => drawerModel.has(i)),
   'D1 drawerLineIds() == zbiór z wykonania TopResourceDrawer._colonyTokens');
+// oczekiwane linie dawnej lewej kolumny (zmierzone na bazie 762726c, wyrażone danymi dzisiejszymi — bez renderu starej strony):
+// surowce wydobywalne + zbieralne + bilans energii; globalnie — towary z zapasem w świecie-atrapie (COM_X, paliwo; magazyn
+// stacji-sieroty Cu / paliwo / COM_X mieści się w tym zbiorze); wybrana kolonia / stacja — wszystkie towary
+const idList = (x) => (Array.isArray(x) ? x.map((r) => r?.id ?? r) : Object.keys(x ?? {}));
+const BASE_LINES = [...idList(MINED_RESOURCES), ...idList(HARVESTED_RESOURCES), 'energy'];
+const ALL_GOODS = Object.keys(COMMODITIES);
+const STATION_DEPOT = ['Cu', 'fuel', COM_X];   // magazyn st_1 z zapasem (świat-atrapa)
+assert(BASE_LINES.includes('Fe') && BASE_LINES.includes('food') && ALL_GOODS.includes(COM_X) && ALL_GOODS.includes('fuel') && COM_X !== 'fuel',
+  `D1b świadek: oczekiwany zbiór niepusty (${BASE_LINES.length} linii bazowych, ${ALL_GOODS.length} towarów, towar spoza paliwa ${COM_X})`);
 const states = [
-  { name: 'globalnie', withStation: false, selected: null },
-  { name: 'globalnie + stacja-sierota', withStation: true, selected: null },
-  { name: 'wybrana kolonia', withStation: true, selected: 'col_a' },
-  { name: 'wybrana stacja', withStation: true, selected: 'st_1' },
+  { name: 'globalnie', withStation: false, selected: null, expect: [...BASE_LINES, COM_X, 'fuel'] },
+  { name: 'globalnie + stacja-sierota', withStation: true, selected: null, expect: [...BASE_LINES, COM_X, 'fuel', ...STATION_DEPOT] },
+  { name: 'wybrana kolonia', withStation: true, selected: 'col_a', expect: [...BASE_LINES, ...ALL_GOODS] },
+  // stacja nie ma systemu energii — bez bilansu energii
+  { name: 'wybrana stacja', withStation: true, selected: 'st_1', expect: [...BASE_LINES.filter((i) => i !== 'energy'), ...ALL_GOODS] },
 ];
 let witnessGood = false, witnessStation = false;
 for (const s of states) {
-  for (const page of ['budget', 'flows']) {
-    makeWorld({ withStation: s.withStation });
-    const off = render(page, false, { H: 5000, selected: s.selected });
-    makeWorld({ withStation: s.withStation });
-    // polerka K3 (uwaga 2): blok magazynu tylko na Przepływach — linia kolumny OFF dowolnej strony osiągalna w szufladzie albo w bloku Przepływów
-    const on = render('flows', true, { H: 5000, selected: s.selected });
-    const colIds = new Set([...idsOf(off.zones, 'resource_hover', 'resourceId'), 'energy']);
-    const blockIds = new Set(idsOf(on.zones, 'resource_hover', 'resourceId'));
-    const stationSel = s.selected === 'st_1';
-    // stacja wybrana: szuflada (tylko kolonie) jej nie pokazuje → wszystkie linie stacji muszą być w bloku (poza energią)
-    // stacja wybrana: szuflada pokazuje tylko kolonie → każda linia stacji (poza bilansem energii — stacja nie ma systemu energii)
-    // musi stać w bloku; inaczej — w szufladzie albo w bloku
-    const missing = [...colIds].filter((id) => (stationSel ? (id !== 'energy' && !blockIds.has(id))
-      : !(drawerIdsExec?.has(id) || blockIds.has(id))));
-    assert(isKit(on) && colIds.size > 3 && missing.length === 0, `D2 ${page} · ${s.name}: każda linia kolumny (${colIds.size}) w szufladzie lub bloku${missing.length ? ' — brak: ' + missing.join(',') : ''}`);
-    if (isKit(on) && !s.selected && blockIds.has(COM_X) && colIds.has(COM_X)) witnessGood = true;
-    if (isKit(on) && s.withStation && !s.selected && blockIds.has('Cu')) witnessStation = true;
-    assert(!types(on.zones).has('toggle_cat') || on.zones.filter((z) => z.type === 'toggle_cat').every((z) => z.data.catKey === 'commodities'),
-      `D3 ${page} · ${s.name}: toggle_cat tylko dla towarów (wydobywalne / zbieralne są w szufladzie)`);
-  }
-}
-assert(witnessGood, `D4 świadek: towar spoza paliwa (${COM_X}) jest w kolumnie OFF i w bloku ON`);
-assert(witnessStation, 'D5 świadek: magazyn stacji-sieroty (Cu) jest w bloku ON (globalnie)');
-{
-  makeWorld({ withStation: true });
-  const on = render('flows', true, { H: 5000, selected: 'st_1' });
+  makeWorld({ withStation: s.withStation });
+  // polerka K3 (uwaga 2): blok magazynu tylko na Przepływach — linia osiągalna w szufladzie albo w bloku Przepływów
+  const on = render('flows', { H: 5000, selected: s.selected });
   const blockIds = new Set(idsOf(on.zones, 'resource_hover', 'resourceId'));
-  assert(isKit(on) && blockIds.has('Cu') && blockIds.has('fuel'), 'D6 wybrana stacja: jej linie z zapasem (Cu, paliwo) w bloku ON (Przepływy)');
+  const stationSel = s.selected === 'st_1';
+  // stacja wybrana: szuflada pokazuje tylko kolonie → każda linia stacji musi stać w bloku; inaczej — w szufladzie albo w bloku
+  const exp = [...new Set(s.expect)];
+  const missing = exp.filter((id) => (stationSel ? !blockIds.has(id) : !(drawerIdsExec?.has(id) || blockIds.has(id))));
+  assert(isKit(on) && exp.length > 3 && missing.length === 0, `D2 ${s.name}: każda oczekiwana linia (${exp.length}) w szufladzie lub bloku${missing.length ? ' — brak: ' + missing.join(',') : ''}`);
+  if (isKit(on) && !s.selected && blockIds.has(COM_X)) witnessGood = true;
+  if (isKit(on) && s.withStation && !s.selected && blockIds.has('Cu')) witnessStation = true;
+  if (s.withStation && !s.selected) {
+    const missSt = STATION_DEPOT.filter((id) => !blockIds.has(id));
+    assert(isKit(on) && missSt.length === 0, `D2b ${s.name}: każda linia magazynu stacji (${STATION_DEPOT.join(', ')}) w bloku${missSt.length ? ' — brak: ' + missSt.join(',') : ''}`);
+  }
+  const tc = on.zones.filter((z) => z.type === 'toggle_cat');
+  assert(tc.length > 0 && tc.every((z) => z.data.catKey === 'commodities'),
+    `D3 ${s.name}: toggle_cat tylko dla towarów (wydobywalne / zbieralne są w szufladzie; ${tc.length} stref)`);
+}
+assert(witnessGood, `D4 świadek: towar spoza paliwa (${COM_X}) jest w bloku Przepływów (globalnie)`);
+assert(witnessStation, 'D5 świadek: magazyn stacji-sieroty (Cu) jest w bloku Przepływów (globalnie)');
+{
+  makeWorld({ withStation: true });
+  const on = render('flows', { H: 5000, selected: 'st_1' });
+  const blockIds = new Set(idsOf(on.zones, 'resource_hover', 'resourceId'));
+  assert(isKit(on) && blockIds.has('Cu') && blockIds.has('fuel'), 'D6 wybrana stacja: jej linie z zapasem (Cu, paliwo) w bloku (Przepływy)');
 }
 {
-  // D7 — polerka K3 (uwaga 2): Budżet ON nie ma bloku magazynu (świadek: Przepływy ON go mają)
+  // D7 — polerka K3 (uwaga 2): Budżet nie ma bloku magazynu (świadek: Przepływy go mają)
   makeWorld({ withStation: true });
-  const bud = render('budget', true, { H: 5000 });
+  const bud = render('budget', { H: 5000 });
   makeWorld({ withStation: true });
-  const flo = render('flows', true, { H: 5000 });
+  const flo = render('flows', { H: 5000 });
   const blockT = (r) => r.zones.filter((q) => q.type === 'resource_hover' || q.type === 'toggle_cat').length;
   assert(isKit(bud) && isKit(flo) && blockT(flo) > 3 && blockT(bud) === 0,
     `D7 blok magazynu tylko na Przepływach (Budżet ${blockT(bud)} stref, Przepływy ${blockT(flo)})`);
@@ -262,7 +289,7 @@ console.log('U — pas Budżetu');
   assert(keys.length === 3 && pl.every((s) => /^Surowce/.test(s)), `U3 etykiety pasa (i pusty pas) mówią „Surowce”: ${pl.join(' | ')}`);
   // wykonanie: ujemne netto → pierwszy napis pasa to deficyt budżetu w kolorze alert
   makeWorld();
-  const on = render('budget', true, { negNet: true });
+  const on = render('budget', { negNet: true });
   const strip = on.ov.consoleZones?.strip;
   const inStrip = (on.ptexts ?? []).filter((q) => strip && q.y >= strip.y && q.y <= strip.y + strip.h).sort((a, b) => a.y - b.y || a.x - b.x);
   const first = inStrip[0];
@@ -286,7 +313,7 @@ console.log('L — układ Przepływów');
   assert(L && L.prodYs.length === 4 && L.consYs.length === 3 && span > r.h * 0.4, `L3 węzły rozłożone na wysokość bohatera (rozpiętość ${Math.round(span)} px z ${r.h})`);
   assert(L && L.band(1) > L.band(0.5) && L.band(0.5) > L.band(0.05) && L.band(0) >= 1, 'L4 grubość pasma rośnie z wartością');
   makeWorld();
-  const on = render('flows', true);
+  const on = render('flows');
   assert(isKit(on) && (on.gradients ?? 0) > 0, `L5 wykonanie: lokalne przyciemnienie K1c-B pod środkiem (${on.gradients ?? 0} gradient)`);
 }
 
@@ -294,12 +321,12 @@ console.log('L — układ Przepływów');
 console.log('G — czipy grupy');
 {
   const w = makeWorld();
-  const on = render('budget', true);
+  const on = render('budget');
   const tabs = on.zones.filter((z) => z.type === 'tab').map((z) => z.data.id);
   assert(JSON.stringify(tabs) === JSON.stringify(['budget', 'economy', 'trade', 'market', 'flows']), `G1 czipy w kolejności: ${tabs.join(',')}`);
   const click = (id, from = 'budget') => {
-    const ww = makeWorld(); setEco(true);
-    const r = render(from, true);
+    const ww = makeWorld();
+    const r = render(from);
     const z = r.zones.find((q) => q.type === 'tab' && q.data.id === id);
     if (z) safe(() => r.ov.handleClick(z.x + 2, z.y + 2));
     return ww;
@@ -315,38 +342,49 @@ console.log('G — czipy grupy');
   const wB = click('budget');
   assert(wB.calls.open.length === 0, 'G7 aktywny czip nie otwiera ponownie (kontrola)');
   void w;
-  // subnav
+  // subnav — grupa Ekonomii bez pasa, także przy consoleKit = false (KZ-E: trwałe ekrany zestawu)
   if (CPD) {
-    makeWorld(); setEco(true);
-    window.KOSMOS.overlayManager.active = 'budget';
-    const hB = CPD.getSubNavHeight();
-    window.KOSMOS.overlayManager.active = 'flows';
-    const hF = CPD.getSubNavHeight();
-    window.KOSMOS.overlayManager.active = 'economy';
-    const hP = CPD.getSubNavHeight();
-    setEco(false);
-    window.KOSMOS.overlayManager.active = 'budget';
-    const hOff = CPD.getSubNavHeight();
-    setEco(false);
-    window.KOSMOS.overlayManager.active = 'economy';
-    const hPOff = CPD.getSubNavHeight();
-    assert(hB === 0 && hF === 0, `G8 ON: brak pasa subnav nad Budżetem i Przepływami (${hB}, ${hF})`);
-    assert(hP === 0 && hOff > 0 && hPOff > 0, `G9 K4: ON bez pasa subnav nad Produkcją (${hP}); OFF — pas nad Budżetem i Produkcją (${hOff}, ${hPOff})`);
+    const ECO_IDS = ['budget', 'flows', 'economy', 'trade'];
+    const subnav = (id) => { window.KOSMOS.overlayManager.active = id; return CPD.getSubNavHeight(); };
+    makeWorld();
+    const kitOn = ECO_IDS.map(subnav);
+    assert(kitOn.every((h) => h === 0), `G8 consoleKit ON: brak pasa subnav nad Budżetem, Przepływami, Produkcją, Handlem (${kitOn.join(', ')})`);
+    F.consoleKit = false;
+    const kitOff = ECO_IDS.map(subnav);
+    // kontrola: te same warunki, ekrany z flagą zestawu (Wywiad / Dyplomacja / Wojna) mają wtedy pas
+    const ctrl = ['intel', 'diplomacy', 'war'].map(subnav);
+    F.consoleKit = true;
+    // świadek: id Ekonomii są w grupie nawigacji (bez trwałości dostałyby pas)
+    const grouped = ECO_IDS.every((id) => CPD.isGroupedId?.(id) === true);
+    assert(grouped && kitOff.every((h) => h === 0), `G9 consoleKit OFF: nadal brak pasa nad grupą Ekonomii (${kitOff.join(', ')}; id w grupie: ${grouped})`);
+    assert(ctrl.every((h) => h > 0), `G9b kontrola: consoleKit OFF — Wywiad / Dyplomacja / Wojna mają pas (${ctrl.join(', ')})`);
   } else assert(false, 'G8 CivPanelDrawer importuje się');
+  // trwałość: isKitScreen bez flag
+  if (CL?.isKitScreen) {
+    const ECO_IDS = ['budget', 'flows', 'trade', 'economy'];
+    const noFlags = ECO_IDS.filter((id) => CL.isKitScreen(id, {}) !== true || CL.isKitScreen(id, { consoleKit: false }) !== true
+      || CL.isKitScreen(id, undefined) !== true);
+    assert(noFlags.length === 0, `G10 isKitScreen(budget / flows / trade / economy) = true bez flag i przy consoleKit false${noFlags.length ? ' — nie: ' + noFlags.join(',') : ''}`);
+    const OTHER = ['intel', 'shipyard', 'diplomacy', 'war'];
+    const allOn = { consoleKit: true, consoleIntel: true, consoleShipyard: true, consoleDiplomacy: true };
+    const ctrlBad = OTHER.filter((id) => CL.isKitScreen(id, {}) !== false || CL.isKitScreen(id, { ...allOn, consoleKit: false }) !== false
+      || CL.isKitScreen(id, allOn) !== true);
+    assert(ctrlBad.length === 0, `G11 kontrola: intel / shipyard / diplomacy / war nadal wymagają flag (bez flag false, z flagami true)${ctrlBad.length ? ' — źle: ' + ctrlBad.join(',') : ''}`);
+  } else assert(false, 'G10 ConsoleLayoutLogic.isKitScreen importuje się');
 }
 
-// ═══ P — Produkcja niezmieniona przy fladze ON ═══════════════════════════════════════════════════════════════════
-console.log('P — Produkcja: ON = konsola, OFF = dzisiejsza strona');
+// ═══ P — Produkcja jest konsolą ═══════════════════════════════════════════════════════════════════════════════════
+console.log('P — Produkcja: konsola');
 {
-  makeWorld(); const off = render('economy', false);
-  makeWorld(); const on = render('economy', true);
-  const a = JSON.stringify(off.log), b = JSON.stringify(on.log);
-  assert(isKit(on) && off.log.length > 50 && a !== b, `P1 K4: Produkcja ON jest konsolą (strefy konsoli; dziennik ON ≠ OFF, ${off.log.length} wywołań OFF)`);
-  assert(!isKit(off) && off.zones.some((z) => z.type === 'colony_filter') && !off.zones.some((z) => z.type === 'tab'),
-    'P2 K4: Produkcja OFF — dzisiejsza strona (czipy colony_filter, bez czipów grupy w nagłówku)');
-  makeWorld(); const bOff = render('budget', false);
-  makeWorld(); const bOn = render('budget', true);
-  assert(JSON.stringify(bOff.log) !== JSON.stringify(bOn.log), 'P3 kontrola: Budżet ON ≠ OFF (dziennik rozróżnia)');
+  for (const sel of A_STATES) {
+    makeWorld({ withStation: true });
+    const on = render('economy', { selected: sel });
+    const need = ['tab', 'close', 'prod_scope_toggle', 'prod_good'];
+    const ty = types(on.zones);
+    const miss = need.filter((q) => !ty.has(q));
+    assert(isKit(on) && on.log.length > 50 && miss.length === 0,
+      `P1 Produkcja · ${sel ?? 'globalnie'}: konsola, strefy ⊇ ${need.join(', ')}${miss.length ? ' — brak: ' + miss.join(',') : ''}`);
+  }
 }
 
 // ═══ S — geometria i wejście ═════════════════════════════════════════════════════════════════════════════════════
@@ -355,7 +393,7 @@ const inside = (r, f) => r.x >= f.x - 0.5 && r.y >= f.y - 0.5 && r.x + r.w <= f.
 for (const [W, H] of [[1600, 1041], [1280, 833]]) {
   for (const page of ['budget', 'flows']) {
     makeWorld();
-    const on = render(page, true, { W, H });
+    const on = render(page, { W, H });
     const z = on.ov.consoleZones;
     if (!z) { assert(false, `S0 ${page} ${W}×${H}: consoleZones zapisane`); continue; }
     assert(on.zones.length > 5 && on.zones.every((q) => inside(q, z.frame)), `S1 ${page} ${W}×${H}: ${on.zones.length} stref w ramie konsoli`);
@@ -375,11 +413,11 @@ for (const [W, H] of [[1600, 1041], [1280, 833]]) {
 {
   // wejście bez window.inner*: podmieniony innerWidth nie zmienia klik / kółka konsoli
   makeWorld();
-  const on = render('budget', true);
+  const on = render('budget');
   const iw = window.innerWidth, ih = window.innerHeight;
   window.innerWidth = 333; window.innerHeight = 222;
   const bl = on.zones.find((q) => q.type === 'budget_line' && q.data.lineId === 'tax');
-  setEco(true); window.KOSMOS.overlayManager.active = 'budget';
+  window.KOSMOS.overlayManager.active = 'budget';
   const hit = bl ? safe(() => on.ov.handleClick(bl.x + 3, bl.y + 3)) : false;
   const lr = on.ov._consoleListRect, ir = on.ov._consoleInspRect;
   safe(() => on.ov.handleScroll(40, ir.x + 4, ir.y + 4));
@@ -387,15 +425,27 @@ for (const [W, H] of [[1600, 1041], [1280, 833]]) {
   window.innerWidth = iw; window.innerHeight = ih;
   assert(hit === true && on.ov._budgetLine === 'tax', 'S6 klik konsoli przy podmienionym innerWidth trafia (geometria ze stref)');
   assert(on.ov._kitScrollInsp === 20 && on.ov._kitScrollList === 20, 'S7 kółko: inspektor i lista przewijane osobno ze stref ostatniej klatki');
-  const s = src('../../ui/EconomyOverlay.js');
-  const kitBlocks = [...s.matchAll(/if \(kitPage\(\)\) \{([\s\S]*?)\n    \}/g)].map((m) => m[1]);
-  assert(kitBlocks.length >= 2 && kitBlocks.every((b) => !/window\.inner/.test(b)), `S8 źródło: gałęzie kitPage w handlerach bez window.inner* (${kitBlocks.length})`);
+  // źródło: ciała handlerów wejścia (komentarze zdjęte) — geometria tylko ze stref ostatniej klatki / _uiScale
+  const s = src('../../ui/EconomyOverlay.js').replace(/\/\*[\s\S]*?\*\//g, '');
+  const body = (name) => {
+    const m = new RegExp(`\\n  ${name}\\([^)]*\\) \\{`).exec(s);
+    if (!m) return '';
+    let i = m.index + m[0].length, depth = 1;
+    const start = i;
+    for (; i < s.length && depth > 0; i++) { if (s[i] === '{') depth++; else if (s[i] === '}') depth--; }
+    return s.slice(start, i - 1);
+  };
+  const bodies = { handleClick: body('handleClick'), handleScroll: body('handleScroll'), handleMouseMove: body('handleMouseMove') };
+  // świadek: wyciągnięte ciała niepuste i czytają swoje źródło geometrii
+  const wit = /consoleZones/.test(bodies.handleClick) && /consoleZones/.test(bodies.handleScroll) && /_uiScale/.test(bodies.handleMouseMove);
+  const dirty = Object.entries(bodies).filter(([, b]) => /window\.inner/.test(b)).map(([k]) => k);
+  assert(wit && dirty.length === 0, `S8 źródło: handleClick / handleScroll / handleMouseMove bez window.inner* (długości ${Object.values(bodies).map((b) => b.length).join('/')})${dirty.length ? ' — w: ' + dirty.join(',') : ''}`);
 }
 
 // ═══ T / N — Finding 725, surowe id, wzory ═══════════════════════════════════════════════════════════════════════
 console.log('T/N — 725, id, wzory');
 {
-  makeWorld(); setEco(false);
+  makeWorld();
   const ov = makeOverlay('budget');
   const pl = { 0.02: '✓ Dotacja konsumpcji +6%', 0.08: '● Neutralne', 0.16: '⚠ Konsumpcja -12%', 0.24: '✗ Konsumpcja -37% — ryzyko protestu' };
   for (const [r, exp] of Object.entries(pl)) assert(ov._getTaxEffectLabel(Number(r)) === exp, `T1 PL efekt podatku ${r}: „${exp}” (tekst bez zmian)`);
@@ -406,13 +456,10 @@ console.log('T/N — 725, id, wzory');
   assert(!/isPL/.test(s) && /econPanel\.taxEffect/.test(src('../../ui/EconomyConsoleLogic.js')), 'T3 źródło: bez gałęzi isPL; klucze econPanel.taxEffect.*');
   for (const page of ['budget', 'flows']) {
     makeWorld();
-    const on = render(page, true);
+    const on = render(page);
     const raw = on.texts.filter((x) => /\b[a-z]+_[a-z_]+\b/.test(x));
     assert(isKit(on) && on.texts.length > 10 && raw.length === 0, `T4 ${page}: tekst konsoli bez surowych id snake_case${raw.length ? ' — ' + raw.slice(0, 3).join(' | ') : ''}`);
   }
-  makeWorld();
-  const offB = render('budget', false);
-  assert(offB.texts.some((x) => /_/.test(x) === false), 'T5 kontrola: ścieżka OFF rysuje tekst (atrapa działa)');
 }
 if (ECL) {
   const w = makeWorld();

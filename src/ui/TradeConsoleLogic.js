@@ -2,7 +2,7 @@
 // docs/design/CONSOLES_PLAN.md §1.2; Finding 725 — nazwy towarów zamiast surowych id).
 //
 // Bez DOM i canvas — testowalne pod node (keeper `console_trade_smoke.mjs`). Widok: `TradeConsoleView.js`.
-// Reguły (ceny lokalne, cel zakupu awaryjnego, partnerzy Rynku) — TE SAME co dzisiejsza strona `TradeOverlay` (OFF).
+// Reguły (ceny lokalne, cel zakupu awaryjnego, partnerzy Rynku) — TE SAME co dawna strona `TradeOverlay` (usunięta w KZ-E).
 
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -148,7 +148,7 @@ export function boardColumns(n, rowH, availH, maxCols = 3) {
   return Math.max(1, Math.min(maxCols, Math.ceil(n / fit)));
 }
 
-/** Format Kr jak dziś (`TradeOverlay._fmtKr`): 1 miejsce po przecinku poniżej 100, inaczej zaokrąglone. */
+/** Format Kr (reguła dawnego TradeOverlay._fmtKr, usuniętego w KZ-E): 1 miejsce po przecinku poniżej 100, inaczej zaokrąglone. */
 export function fmtKr(v) {
   if (!Number.isFinite(v)) return '0';
   return v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10);

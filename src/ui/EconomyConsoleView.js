@@ -1,4 +1,4 @@
-// EconomyConsoleView — Budżet i Przepływy na zestawie konsoli (ARC KONSOLE K3, docs/design/CONSOLES_PLAN.md §1.2; FEATURES.consoleEconomy).
+// EconomyConsoleView — Budżet i Przepływy na zestawie konsoli (ARC KONSOLE K3, docs/design/CONSOLES_PLAN.md §1.2; KZ-E: jedyna ścieżka).
 //
 // Wołane przez `EconomyOverlay.draw`, gdy `isKitScreen('budget' | 'flows')`. Produkcja (`economy`, K4) — `ProductionConsoleView.js`
 // (rama `econConsoleFrame`, inspektor, blok magazynu i lokalne przyciemnienie bohatera stąd).
@@ -306,7 +306,7 @@ function drawTicker(ctx, r, st, roles) {
 
 function drawFlows(ov, ctx, z, roles, K, hz) {
   const colonies = K?.colonyManager?.getPlayerColonies?.() ?? [];
-  // Finding 738 — bilans wiersza z tego samego rozbicia co bohater (kopalnie i wsad fabryk wliczone); OFF liczy po staremu
+  // Finding 738 — bilans wiersza z tego samego rozbicia co bohater (kopalnie i wsad fabryk wliczone)
   const items = flowListFromBreakdown(flowCandidateIds(colonies), (id) => ov._gatherFlowBreakdown(id));
   // domyślny wybór — pierwszy zasób (albo gdy poprzedni zniknął), jak dziś
   if (items.length && (!ov._flowSelectedResId || !items.some((i) => i.id === ov._flowSelectedResId))) ov._flowSelectedResId = items[0].id;

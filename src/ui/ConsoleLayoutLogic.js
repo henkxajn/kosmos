@@ -46,13 +46,17 @@ export const CONSOLE_SCREEN_SPECS = {};
 // z czipami podzakładek — pas subnav grupy nie jest wtedy rysowany ani trafiany, a overlay zaczyna się tuż pod górną belką;
 // pasek walki siada w gnieździe nagłówka (D-K-17). Każdy wpis wymaga też `consoleKit` (żywa, przyciemniona scena za tekstem).
 // K2: Dyplomacja i Wojny (jedna flaga rodziny) — z Wywiadem cała grupa Dyplomacji jest na czipach nagłówka.
-// K3: Budżet, Przepływy i Handel (Handel + Rynek) — rodzina Ekonomii, jedna flaga. K4: Produkcja (`economy`) dołącza — pięć czipów, bez subnav.
 export const CONSOLE_KIT_SCREENS = Object.freeze({ intel: 'consoleIntel', shipyard: 'consoleShipyard',
-  diplomacy: 'consoleDiplomacy', war: 'consoleDiplomacy', budget: 'consoleEconomy', flows: 'consoleEconomy',
-  trade: 'consoleEconomy', economy: 'consoleEconomy' });
+  diplomacy: 'consoleDiplomacy', war: 'consoleDiplomacy' });
+
+// KZ-E — ekrany, których flaga stała się trwała (stara ścieżka usunięta): zawsze ekran zestawu, bez flagi i bez `consoleKit`
+// (`consoleKit` steruje dalej tylko sceną za tekstem). Grupa Ekonomii: Budżet, Przepływy, Handel (Handel + Rynek), Produkcja
+// (`economy`) — pięć czipów nagłówka, bez pasa subnav.
+export const PERMANENT_KIT_SCREENS = Object.freeze(['budget', 'flows', 'trade', 'economy']);
 
 /** Czy overlay `id` rysuje się teraz jako ekran zestawu konsoli (flagi czytane w chwili wywołania). */
 export function isKitScreen(id, features) {
+  if (id && PERMANENT_KIT_SCREENS.includes(id)) return true;
   const key = id ? CONSOLE_KIT_SCREENS[id] : null;
   return !!key && features?.consoleKit === true && features?.[key] === true;
 }

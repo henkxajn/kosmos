@@ -1,19 +1,26 @@
 // ARC KONSOLE K4 — keeper konsoli Produkcji (docs/design/CONSOLES_PLAN.md §1.2, §17; Findings 725 (część Produkcji), 732, 742).
 //
-// A — dostępność akcji ON ⊇ OFF (inwentarz stref): każda para (typ strefy, akcja, towar, tier) strony OFF jest osiągalna na konsoli
-//     (suma po wyborze każdego towaru z listy i po rozwinięciu wyboru zakresu); jedyny wyjątek — `oneshot_toggle_picker` (lista
-//     towarów JEST pickerem: zlecenie jednorazowe = wybór towaru + [ ZLEĆ JEDNORAZOWO ]); skutek handlera: ta sama metoda fabryki.
-// C — czipy: pięć stron grupy to strony zestawu (strefy konsoli), pasa subnav nie ma przy ON, jest przy OFF.
-// F — zakres: globalnie / kolonia / placówka / stacja → te same encje i te same linie produkcji ON co dzisiejszy przegląd OFF;
-//     nazwa zakresu w nagłówku listy. 732: przy 24 encjach każda osiągalna z rozwiniętego wyboru (OFF gubi nadmiar — świadek).
+// KZ-E: grupa Ekonomii jest na stałe konsolą (flaga strony usunięta, starej strony nie ma) — porównania ON == OFF zastąpione
+// pinami bezwzględnymi z dzisiejszej konsoli (wartości wyliczone ze świata-atrapy poniżej).
+//
+// A — inwentarz stref bezwzględnie (klucz typ|akcja|towar|tier|kolonia) w każdym stanie: zakres globalny, wybór zakresu
+//     rozwinięty, kolonia z wybranym towarem (odblokowany / ZABLOKOWANY / droid), bonus zapasu, zlecenie jednorazowe, zlecenie
+//     droida, kolonia zakresu ≠ aktywna, stacja; skutki handlerów (metody fabryki, stan przeglądu, hover surowca).
+//     Zlecenie jednorazowe = wybór towaru z listy + [ ZLEĆ JEDNORAZOWO ] (osobnego pickera nie ma).
+// C — czipy: pięć stron grupy to strony zestawu (strefy konsoli); pasa subnav nie ma (także bez flag zestawu).
+// F — zakres: globalnie / kolonia / placówka / stacja → encje zakresu i linie produkcji (wartości bezwzględne);
+//     nazwa zakresu w nagłówku listy. 732: przy 25 zakresach każdy osiągalny z rozwiniętego wyboru.
 // D — D-K-16: blok «Magazyn — poza szufladą» osiągalny na Produkcji (każda linia towarów bloku ma strefę `resource_hover`).
-// B — wzory: tempo = Σ 1/timePerUnit, wejścia (na sztukę × tempo), kolejność wąskich gardeł, alerty = reguły `_generateAlerts`,
-//     układ bohatera (zawieranie, brak nakładania); bohater rysuje wąskie gardło w roli alert; wybór towaru i zakresu zmienia widok.
+// B — wzory: tempo = Σ 1/timePerUnit, wejścia (na sztukę × tempo), kolejność wąskich gardeł, alerty (reguły modułu logiki,
+//     lista bezwzględna ze świata-atrapy), układ bohatera (zawieranie, brak nakładania); bohater rysuje wąskie gardło w roli
+//     alert; wybór towaru i zakresu zmienia widok.
 // R — wyłączone akcje mają powód i18n (globalnie / stacja / placówka / zablokowana receptura), klucze PL i EN.
 // N — tekst konsoli bez surowych id i snake_case (nazwy zamiast id w alertach — 725).
 // S — geometria przy 1600×1041 i 1280×833; pola <input> (zlecenie jednorazowe, próg zapasu) = strefa × skala przy podmienionym
 //     innerWidth; źródło: skala pól na stronie zestawu z rysunku.
-// X — Finding 742: przełącznik eksportu konsoli adresuje kolonię zakresu (FactorySystem z `colonyId`); bez `colonyId` — aktywna.
+// X — Finding 742: oba przełączniki eksportu konsoli zawsze niosą kolonię strefy (zakresu), nie aktywną; FactorySystem
+//     z `colonyId` zmienia TĘ kolonię, bez `colonyId` — aktywną.
+// L, DR — steppery minimalnego zapasu (także zablokowanych towarów) i budowa droida: zbiory bezwzględne.
 //
 // Bez pinów na stałych rysowania. Moduły nowe importowane dynamicznie (pin degraduje, nie przerywa).
 
@@ -42,8 +49,8 @@ const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.log(' 
 const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n').replace(/\/\/.*$/gm, '');
 setLocale('pl');
 const F = GAME_CONFIG.FEATURES;
-const saved = { consoleKit: F.consoleKit, consoleEconomy: F.consoleEconomy };
-const setEco = (on) => { F.consoleKit = true; F.consoleEconomy = on; };
+const saved = { consoleKit: F.consoleKit };
+F.consoleKit = true;   // warunek bazowy (Ekonomia i tak jest konsolą bez flag — pin C5)
 
 function recCtx() {
   const texts = [], log = [];
@@ -110,14 +117,14 @@ function resSys(inv) {
   return { inventory, energy: { brownout: false, balance: 1 }, _deltaTracker: { observedPerYear: new Map() }, getAmount: (id) => inventory.get(id) ?? 0,
     inventorySnapshot: () => ({ ...inv, _observedPerYear: {}, _energy: {} }) };
 }
-function makeWorld({ extraColonies = 0, active = 'col_a' } = {}) {
+function makeWorld({ extraColonies = 0, active = 'col_a', droids = [] } = {}) {
   const calls = [];
   const allocRun = { commodityId: G_RUN.id, points: 2, timePerUnit: 0.4, progress: 0, pctComplete: 10, paused: false, targetQty: null, produced: 0, stallReason: null };
   const allocStall = { commodityId: G_STALL.id, points: 0, timePerUnit: Infinity, progress: 0, pctComplete: 0, paused: true, targetQty: null, produced: 0,
     stallReason: { kind: 'missing_ingredient', missing: [{ resId: missRes, need: G_STALL.recipe[missRes], have: 0 }] } };
   const fsA = makeFs({ total: 10, allocs: [allocRun, allocStall], queue: [{ commodityId: G_CONS.id, qty: 5 }],
     demand: [{ source: 'consumption', commodityId: G_CONS.id, qty: 12 }, { source: 'build', commodityId: G_RUN.id, qty: 4 }],
-    droids: G_DROID ? [] : [], accepted: [{ requestId: 'r1', commodityId: G_RUN.id, qtyTotal: 8, produced: 3, requesterId: 'col_b' }], calls });
+    droids, accepted: [{ requestId: 'r1', commodityId: G_RUN.id, qtyTotal: 8, produced: 3, requesterId: 'col_b' }], calls });
   const fsB = makeFs({ total: 4, allocs: [{ ...allocRun, points: 1, timePerUnit: 0.8 }], calls });
   const inv = { Fe: 500, C: 300, Si: 200, Cu: 100, [missRes]: 0 };
   const colA = { planetId: 'col_a', name: 'Alfa', ownerEmpireId: 'player', isOutpost: false, credits: 900, resourceSystem: resSys({ ...inv, [G_RUN.id]: 7 }), factorySystem: fsA };
@@ -141,15 +148,13 @@ function makeWorld({ extraColonies = 0, active = 'col_a' } = {}) {
     productionRequestBoard: { getAvailableFor: () => [{ commodityId: G_RUN.id }] } };
   return { calls, cols, fsA, fsB, colMgr, allocRun };
 }
-function render(on, { W = 1600, H = 1041, selected = null, good = null, picker = false, oneShotPicker = false, scrollInsp = 0, ov = null, page = 'economy' } = {}) {
-  setEco(on);
+function render({ W = 1600, H = 1041, selected = null, good = null, picker = false, scrollInsp = 0, ov = null, page = 'economy' } = {}) {
   window.KOSMOS.overlayManager.active = page;
   const o = ov ?? new EO.EconomyOverlay();
   o.visible = true;
   o._selectedColonyId = selected;
   if (good) o._prodGoodId = good;
   o._prodScopeOpen = picker;
-  o._showOneShotPicker = oneShotPicker;
   if (scrollInsp) o._kitScrollInsp = scrollInsp;
   const r = recCtx();
   safe(() => o.draw(r.ctx, W, H));
@@ -157,114 +162,185 @@ function render(on, { W = 1600, H = 1041, selected = null, good = null, picker =
 }
 const isKit = (r) => !!r?.ov?.consoleZones;
 const key = (z) => [z.type, z.data?.action ?? '', z.data?.commodityId ?? z.data?.resourceId ?? '', z.data?.tier ?? '', z.type === 'colony_filter' ? String(z.data?.colonyId) : ''].join('|');
-const clickZone = (r, z) => safe(() => { setEco(r.ov.consoleZones ? true : false); r.ov.handleClick(z.x + Math.min(2, z.w / 2), z.y + Math.min(2, z.h / 2)); });
+const clickZone = (r, z) => safe(() => { r.ov.handleClick(z.x + Math.min(2, z.w / 2), z.y + Math.min(2, z.h / 2)); });
 const allTexts = (r) => r.texts.join(' ');
 
-// ═══ A — dostępność akcji ═══════════════════════════════════════════════════════════════════════════════════════
-console.log('A — dostępność akcji ON ⊇ OFF');
+// ═══ A — inwentarz stref (bezwzględnie) ═════════════════════════════════════════════════════════════════════════
+console.log('A — inwentarz stref i skutki handlerów');
 try {
+  const keysOf = (r, pred = () => true) => [...new Set(r.zones.filter(pred).map(key))].sort();
+  const fbKeys = (r) => keysOf(r, (z) => z.type === 'factory_btn');
+  const typesOf = (r) => [...new Set(r.zones.map((z) => z.type))].sort();
+  const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  const fb = (action, id = '', tier = '') => `factory_btn|${action}|${id}|${tier}|`;
+  // przełącznik fabryk + eksport (włącz / 4 tiery) — w każdej kolonii z fabrykami, niezależnie od towaru
+  const BASE = [fb('toggle_production'), fb('export_toggle_enabled'), ...[1, 2, 3, 4].map((n) => fb('export_toggle_tier', '', n))];
+  const NO_FB = ['close', 'prod_good', 'prod_scope_toggle', 'resource_hover', 'tab', 'toggle_cat'];
+  const ALL_IDS = goods.map((d) => d.id);
+  const fbCols = (r) => [...new Set(r.zones.filter((z) => z.type === 'factory_btn').map((z) => z.data.colonyId))];
+
+  // zakres globalny: lista wszystkich towarów, bez akcji fabryki (świadek: pełna lista towarów)
   makeWorld();
-  const offKeys = new Set();
-  for (const osp of [false, true]) for (const z of render(false, { selected: 'col_a', oneShotPicker: osp }).zones) offKeys.add(key(z));
-  for (const z of render(false, { selected: null }).zones) offKeys.add(key(z));
-  const onKeys = new Set();
-  const onTypes = new Set();
-  let kitRenders = 0;
-  const ids = goods.map((d) => d.id);
-  for (const g of ids) for (const sc of [0, 400, 2000]) {
-    const r = render(true, { selected: 'col_a', good: g, scrollInsp: sc });
-    // drugi rysunek: przewinięcie inspektora klamrowane po wysokości z poprzedniej klatki
-    const r2 = sc ? render(true, { selected: 'col_a', good: g, scrollInsp: sc, ov: r.ov }) : r;
-    if (isKit(r)) kitRenders++;
-    for (const z of [...r.zones, ...r2.zones]) { onKeys.add(key(z)); onTypes.add(z.type); }
+  const g = render({ selected: null });
+  const gGoods = [...new Set(g.zones.filter((z) => z.type === 'prod_good').map((z) => z.data.commodityId))];
+  assert(isKit(g) && ALL_IDS.length > 20 && same(gGoods, ALL_IDS) && same(typesOf(g), NO_FB),
+    `A1 globalnie: typy stref ${typesOf(g).join(',')} (bez factory_btn), lista = wszystkie towary (${gGoods.length}/${ALL_IDS.length})`);
+  const gp = render({ selected: null, picker: true });
+  const cf = keysOf(gp, (z) => z.type === 'colony_filter').map((k) => k.split('|')[4]);
+  assert(same(cf, ['null', 'col_a', 'col_b', 'col_o', 'st_1']) && fbKeys(gp).length === 0,
+    `A2 wybór zakresu rozwinięty: colony_filter = globalnie + 3 kolonie + stacja (${cf.join(',')})`);
+
+  // kolonia, towar odblokowany: dokładnie 9 akcji, wszystkie na kolonii zakresu
+  const exRun = [...BASE, fb('demand_plus', G_RUN.id), fb('demand_set_input', G_RUN.id), fb('oneshot_pick', G_RUN.id)];
+  const ra = render({ selected: 'col_a', good: G_RUN.id });
+  assert(same(fbKeys(ra), exRun) && same(fbCols(ra), ['col_a']) && same(typesOf(ra), [...NO_FB, 'factory_btn']),
+    `A3 col_a + ${G_RUN.id}: factory_btn = przełącznik, eksport ×5, [+] / pole minimum, zlecenie jednorazowe (${fbKeys(ra).length}: ${fbKeys(ra).map((k) => k.split('|')[1] + (k.split('|')[3] || '')).join(',')})`);
+  const pa = render({ selected: 'col_a', picker: true });
+  assert(same(fbKeys(pa), exRun) && keysOf(pa, (z) => z.type === 'colony_filter').length === 5, 'A3b rozwinięty wybór zakresu przy kolonii: akcje inspektora zostają (9) obok 5 zakresów');
+
+  // bonus zapasu + zlecenie jednorazowe w toku → [ − ] i [ ANULUJ ] zamiast [ ZLEĆ ]
+  const w4 = makeWorld();
+  w4.fsA.setDemandBonus(G_RUN.id, 2); w4.fsA.setOneShotJob(G_RUN.id, 5); w4.calls.length = 0;
+  const r4 = render({ selected: 'col_a', good: G_RUN.id });
+  const ex4 = [...BASE, fb('demand_minus', G_RUN.id), fb('demand_plus', G_RUN.id), fb('demand_set_input', G_RUN.id), fb('oneshot_cancel')];
+  assert(same(fbKeys(r4), ex4), `A4 bonus 2 + zlecenie jednorazowe: + [ − ] minimum, [ ANULUJ ] zamiast zlecenia (${fbKeys(r4).map((k) => k.split('|')[1]).join(',')})`);
+  const minus = r4.zones.find((z) => z.data?.action === 'demand_minus');
+  if (minus) clickZone(r4, minus);
+  assert(w4.calls.some((c) => c[0] === 'setDemandBonus' && c[1] === G_RUN.id && c[2] === 1) && w4.fsA.getDemandBonus(G_RUN.id) === 1, 'A5 klik [ − ] → setDemandBonus(towar, 2 − 1)');
+  const osc = r4.zones.find((z) => z.data?.action === 'oneshot_cancel');
+  if (osc) clickZone(r4, osc);
+  assert(w4.calls.some((c) => c[0] === 'cancelOneShotJob') && w4.fsA.oneShotJob === null, 'A6 klik [ ANULUJ ] → cancelOneShotJob');
+
+  // towar ZABLOKOWANY: tylko [ + ] minimum (bez pola wartości i bez zlecenia); z bonusem — także [ − ]
+  makeWorld();
+  const rl = render({ selected: 'col_a', good: G_LOCK.id });
+  assert(!!G_LOCK && same(fbKeys(rl), [...BASE, fb('demand_plus', G_LOCK.id)]), `A7 zablokowany ${G_LOCK?.id}: przełącznik, eksport ×5 i [ + ] minimum — bez pola wartości i zlecenia (${fbKeys(rl).length})`);
+  const wl = makeWorld();
+  wl.fsA.setDemandBonus(G_LOCK.id, 1);
+  const rl2 = render({ selected: 'col_a', good: G_LOCK.id });
+  assert(same(fbKeys(rl2), [...BASE, fb('demand_plus', G_LOCK.id), fb('demand_minus', G_LOCK.id)]), 'A8 zablokowany z bonusem 1: + [ − ] minimum');
+
+  // droid: stepper ilości + [ ZBUDUJ ]; [ − ] dopiero przy ilości > 1; zlecenie w toku → tylko [ ANULUJ ]
+  const wd = makeWorld();
+  const rd = render({ selected: 'col_a', good: G_DROID.id });
+  assert(!!G_DROID && same(fbKeys(rd), [...BASE, fb('droid_qty_plus', G_DROID.id), fb('droid_build', G_DROID.id)]), `A9 droid ${G_DROID?.id}: [ + ] ilości i [ ZBUDUJ ] (bez [ − ] przy 1)`);
+  const bz = rd.zones.find((z) => z.data?.action === 'droid_build');
+  if (bz) clickZone(rd, bz);
+  assert(wd.calls.some((c) => c[0] === 'setDroidOrder' && c[1] === G_DROID.id && c[2] === 1), 'A10 [ ZBUDUJ ] bez zmiany ilości → setDroidOrder(droid, 1)');
+  wd.calls.length = 0;
+  let rq = render({ selected: 'col_a', good: G_DROID.id, ov: rd.ov });
+  for (const act of ['droid_qty_plus', 'droid_qty_plus', 'droid_qty_minus']) {
+    const z = rq.zones.find((q) => q.data?.action === act);
+    if (z) clickZone(rq, z);
+    rq = render({ selected: 'col_a', good: G_DROID.id, ov: rq.ov });
   }
-  for (const z of render(true, { selected: 'col_a', picker: true }).zones) { onKeys.add(key(z)); onTypes.add(z.type); }
-  for (const z of render(true, { selected: null, picker: true }).zones) { onKeys.add(key(z)); onTypes.add(z.type); }
-  const ignore = (k) => k.startsWith('factory_btn|oneshot_toggle_picker') || k.startsWith('toggle_cat') || k.startsWith('resource_hover');
-  const missing = [...offKeys].filter((k) => !ignore(k) && !onKeys.has(k));
-  assert(offKeys.size > 20 && missing.length === 0, `A1 każda para (strefa, akcja, towar, tier) OFF jest osiągalna ON (${offKeys.size} par OFF; brak: ${missing.slice(0, 6).join(' ; ')})`);
-  const offTypes = new Set([...offKeys].map((k) => k.split('|')[0]));
-  assert(kitRenders > 0 && onTypes.has('prod_good') && [...offTypes].every((ty) => onTypes.has(ty)), `A2 typy stref OFF ⊆ ON konsoli (${[...offTypes].join(',')}; renderów konsoli ${kitRenders})`);
-  const fbOff = [...offKeys].filter((k) => k.startsWith('factory_btn|')).length;
-  assert(fbOff >= 30, `A3 świadek: OFF ma ${fbOff} par factory_btn (inwentarz nie jest pusty)`);
-  const isPick = (k) => k.startsWith('factory_btn|oneshot_toggle_picker|');
-  assert([...offKeys].some(isPick) && ![...onKeys].some(isPick), 'A4 wyjątek opisany: picker zlecenia jednorazowego tylko OFF (lista towarów jest pickerem)');
-  // skutek handlera: ta sama metoda fabryki
+  assert(fbKeys(rq).includes(fb('droid_qty_minus', G_DROID.id)), 'A11 ilość > 1 → strefa [ − ] ilości');
+  const bz2 = rq.zones.find((z) => z.data?.action === 'droid_build');
+  if (bz2) clickZone(rq, bz2);
+  assert(wd.calls.some((c) => c[0] === 'setDroidOrder' && c[1] === G_DROID.id && c[2] === 2), 'A12 [ + ] [ + ] [ − ] → [ ZBUDUJ ] → setDroidOrder(droid, 2)');
+  const wo = makeWorld({ droids: [{ commodityId: G_DROID.id, qty: 3, produced: 1 }] });
+  const ro = render({ selected: 'col_a', good: G_DROID.id });
+  assert(same(fbKeys(ro), [...BASE, fb('droid_cancel', G_DROID.id)]), 'A13 zlecenie droida w toku: tylko [ ANULUJ ] (bez stepper / budowy)');
+  const dc = ro.zones.find((z) => z.data?.action === 'droid_cancel');
+  if (dc) clickZone(ro, dc);
+  assert(wo.calls.some((c) => c[0] === 'cancelDroidOrder' && c[1] === G_DROID.id), 'A14 klik [ ANULUJ ] droida → cancelDroidOrder(droid)');
+
+  // kolonia zakresu ≠ aktywna: każda akcja adresuje kolonię zakresu
+  makeWorld({ active: 'col_a' });
+  const rb = render({ selected: 'col_b', good: G_RUN.id });
+  assert(fbKeys(rb).length === 9 && same(fbCols(rb), ['col_b']), `A15 zakres Beta przy aktywnej Alfie: wszystkie ${fbKeys(rb).length} akcje niosą colonyId col_b (${fbCols(rb)})`);
+  // stacja: bez akcji fabryki (świadek: lista towarów i wybór zakresu są)
+  const rs = render({ selected: 'st_1', good: G_RUN.id });
+  assert(isKit(rs) && same(typesOf(rs), NO_FB), `A16 stacja: typy stref ${typesOf(rs).join(',')} (bez factory_btn)`);
+
+  // skutki handlerów: [ + ] minimum, przełącznik fabryk, wybór towaru, rozwinięcie zakresu, hover surowca
   const w = makeWorld();
-  const r = render(true, { selected: 'col_a', good: G_RUN.id });
+  const r = render({ selected: 'col_a', good: G_RUN.id });
   const plus = r.zones.find((z) => z.type === 'factory_btn' && z.data.action === 'demand_plus' && z.data.commodityId === G_RUN.id);
   if (plus) clickZone(r, plus);
-  assert(w.calls.some((c) => c[0] === 'setDemandBonus' && c[1] === G_RUN.id && c[2] === 1), 'A5 klik [ + ] minimalnego zapasu → setDemandBonus(towar, +1) na kolonii zakresu');
+  assert(w.calls.some((c) => c[0] === 'setDemandBonus' && c[1] === G_RUN.id && c[2] === 1), 'A17 klik [ + ] minimalnego zapasu → setDemandBonus(towar, +1) na kolonii zakresu');
   const tog = r.zones.find((z) => z.type === 'factory_btn' && z.data.action === 'toggle_production');
   if (tog) clickZone(r, tog);
-  assert(isKit(r) && w.calls.some((c) => c[0] === 'setProductionEnabled' && c[1] === false) && !!tog?.data?.tooltip, 'A6 przełącznik fabryk → setProductionEnabled(false); podpowiedź zostaje');
-  const w2 = makeWorld();
-  const r2 = render(true, { selected: 'col_a', good: G_DROID?.id });
-  const build = r2.zones.find((z) => z.type === 'factory_btn' && z.data.action === 'droid_build');
-  if (build) clickZone(r2, build);
-  assert(!!G_DROID && isKit(r2) && w2.calls.some((c) => c[0] === 'setDroidOrder' && c[1] === G_DROID.id), 'A7 droid (konsola): [ ZBUDUJ ] → setDroidOrder');
+  assert(isKit(r) && w.calls.some((c) => c[0] === 'setProductionEnabled' && c[1] === false) && !!tog?.data?.tooltip, 'A18 przełącznik fabryk → setProductionEnabled(false); podpowiedź zostaje');
+  const pg = r.zones.find((z) => z.type === 'prod_good' && z.data.commodityId === G_CONS.id);
+  r.ov._kitScrollInsp = 300;
+  if (pg) clickZone(r, pg);
+  assert(!!pg && r.ov._prodGoodId === G_CONS.id && r.ov._kitScrollInsp === 0, 'A19 klik towaru → wybór towaru, inspektor przewinięty na górę');
+  const st0 = r.zones.find((z) => z.type === 'prod_scope_toggle');
+  r.ov._kitScrollList = 120;
+  if (st0) clickZone(r, st0);
+  const open1 = r.ov._prodScopeOpen, list1 = r.ov._kitScrollList;
+  if (st0) clickZone(r, st0);
+  assert(!!st0 && open1 === true && list1 === 0 && r.ov._prodScopeOpen === false, 'A20 klik wyboru zakresu → rozwija (lista od góry), drugi klik zwija');
+  const rh = render({ selected: 'col_a', good: G_RUN.id });
+  const hz = rh.zones.find((z) => z.type === 'resource_hover');
+  if (hz) safe(() => rh.ov.handleMouseMove(hz.x + Math.min(2, hz.w / 2), hz.y + Math.min(2, hz.h / 2)));
+  assert(!!hz && rh.ov._hoverResourceId === hz.data.resourceId, `A21 hover surowca → podgląd tego surowca (${hz?.data?.resourceId})`);
 } catch (e) { assert(false, `A blok przerwany: ${e.message}`); }
 
 // ═══ C — czipy i subnav ═════════════════════════════════════════════════════════════════════════════════════════
 console.log('C — pięć stron zestawu, subnav');
 {
   makeWorld();
-  const pages = ['budget', 'economy', 'flows'].map((p) => render(true, { page: p }));
-  assert(pages.every(isKit), 'C1 Budżet, Produkcja, Przepływy ON — strony zestawu (strefy konsoli)');
+  const pages = ['budget', 'economy', 'flows'].map((p) => render({ page: p }));
+  assert(pages.every(isKit), 'C1 Budżet, Produkcja, Przepływy — strony zestawu (strefy konsoli)');
   const tabs = pages[1].zones.filter((z) => z.type === 'tab').map((z) => z.data.id);
   assert(JSON.stringify(tabs) === JSON.stringify(['budget', 'economy', 'trade', 'market', 'flows']), `C2 Produkcja ma pięć czipów grupy (${tabs.join(',')})`);
   assert(!!CL && CL.isKitScreen('trade', F) && CL.isKitScreen('economy', F), 'C3 Handel / Rynek (overlay trade) i Produkcja są w rejestrze ekranów zestawu');
+  const ECO = ['budget', 'economy', 'trade', 'flows'];
+  assert(!!CL && ECO.every((id) => CL.isKitScreen(id, {})) && CL.isKitScreen('intel', {}) === false,
+    'C3b grupa Ekonomii jest ekranem zestawu bez żadnej flagi (kontrola: Wywiad bez flag — nie)');
   if (CPD) {
-    const h = (on) => { setEco(on); return ['budget', 'economy', 'trade', 'flows'].map((id) => { window.KOSMOS.overlayManager.active = id; return CPD.getSubNavHeight(); }); };
-    const on = h(true), off = h(false);
-    assert(on.every((v) => v === 0), `C4 ON: brak pasa subnav nad pięcioma stronami (${on})`);
-    assert(off.every((v) => v > 0), `C5 OFF: pas subnav zostaje (${off})`);
+    const h = (kit) => { F.consoleKit = kit; const v = ECO.map((id) => { window.KOSMOS.overlayManager.active = id; return CPD.getSubNavHeight(); }); F.consoleKit = true; return v; };
+    const on = h(true), noKit = h(false);
+    F.consoleKit = false; window.KOSMOS.overlayManager.active = 'diplomacy';
+    const ctrl = CPD.getSubNavHeight(); F.consoleKit = true;
+    assert(on.every((v) => v === 0), `C4 brak pasa subnav nad stronami grupy Ekonomii (${on})`);
+    assert(ctrl > 0 && noKit.every((v) => v === 0), `C5 bez consoleKit też brak pasa (${noKit}); świadek — Dyplomacja bez consoleKit ma pas (${ctrl})`);
   } else assert(false, 'C4 CivPanelDrawer importuje się');
-  const off = render(false);
-  assert(!isKit(off) && off.zones.some((z) => z.type === 'colony_filter'), 'C6 OFF: dzisiejsza strona Produkcji (czipy colony_filter)');
 }
 
 // ═══ F — zakres ═════════════════════════════════════════════════════════════════════════════════════════════════
 console.log('F — zakres globalnie / kolonia / placówka / stacja');
 try {
+  // wartości ze świata-atrapy: Alfa — linia pracująca G_RUN + stojąca G_STALL; Beta — G_RUN; placówka i stacja — bez linii
+  const EXPECT = {
+    null: { scope: ['col_a', 'col_b', 'col_o', 'st_1'], lines: [G_RUN.id, G_STALL.id] },
+    col_a: { scope: ['col_a'], lines: [G_RUN.id, G_STALL.id] },
+    col_b: { scope: ['col_b'], lines: [G_RUN.id] },
+    col_o: { scope: ['col_o'], lines: [] },
+    st_1: { scope: ['st_1'], lines: [] },
+  };
   for (const sel of [null, 'col_a', 'col_b', 'col_o', 'st_1']) {
     makeWorld();
-    const ovOff = new EO.EconomyOverlay();
-    let offCols = null; const offIds = [];
-    const ov0 = ovOff._drawProductionOverview.bind(ovOff), ar0 = ovOff._drawAllocRow.bind(ovOff);
-    let inOv = false;
-    ovOff._drawProductionOverview = (ctx, x, y, w, h, cols) => { offCols = cols.map((c) => c.planetId); inOv = true; try { return ov0(ctx, x, y, w, h, cols); } finally { inOv = false; } };
-    ovOff._drawAllocRow = (ctx, x, y, w, a, col) => { if (inOv) offIds.push(a.commodityId); return ar0(ctx, x, y, w, a, col); };
-    render(false, { selected: sel, ov: ovOff });
-    const on = render(true, { selected: sel });
+    const ex = EXPECT[String(sel)];
+    const on = render({ selected: sel });
     const onIds = (on.ov._prodRows?.active ?? []).map((r) => r.id);
-    assert(isKit(on) && JSON.stringify(on.ov._prodScope) === JSON.stringify(offCols), `F1 ${sel ?? 'globalnie'}: encje zakresu ON == OFF (${offCols})`);
-    assert(isKit(on) && Array.isArray(on.ov._prodRows?.active) && JSON.stringify([...new Set(offIds)].sort()) === JSON.stringify([...onIds].sort()), `F2 ${sel ?? 'globalnie'}: linie produkcji ON == OFF (${[...new Set(offIds)].length})`);
+    assert(isKit(on) && JSON.stringify(on.ov._prodScope) === JSON.stringify(ex.scope), `F1 ${sel ?? 'globalnie'}: encje zakresu ${JSON.stringify(on.ov._prodScope)} (oczekiwane ${ex.scope})`);
+    assert(isKit(on) && Array.isArray(on.ov._prodRows?.active) && JSON.stringify([...onIds].sort()) === JSON.stringify([...ex.lines].sort()), `F2 ${sel ?? 'globalnie'}: linie produkcji [${onIds}] (oczekiwane [${ex.lines}])`);
     const name = sel ? (window.KOSMOS.colonyManager.getColony(sel)?.name ?? 'Orbita-9') : t('econ.console.prodScopeGlobal');
     assert(on.texts.some((s) => s.startsWith(t('econ.console.prodScope', name))), `F3 ${sel ?? 'globalnie'}: zakres jawnie w nagłówku listy („${t('econ.console.prodScope', name)}”)`);
   }
   // 732 — pełna lista encji w rozwiniętym wyborze
   makeWorld({ extraColonies: 21 });
   const entIds = [null, ...window.KOSMOS.colonyManager.getPlayerColonies().map((c) => c.planetId), 'st_1'];
-  const off = render(false);
-  const offF = new Set(off.zones.filter((z) => z.type === 'colony_filter').map((z) => z.data.colonyId));
   const seen = new Set();
   const ov = new EO.EconomyOverlay();
   for (let s = 0; s < 40; s++) {
     ov._kitScrollList = s * 60;
-    const r = render(true, { picker: true, ov });
+    const r = render({ picker: true, ov });
     for (const z of r.zones.filter((q) => q.type === 'colony_filter')) seen.add(z.data.colonyId);
   }
-  assert(offF.size < entIds.length, `F4 świadek 732: dzisiejsze czipy pokazują ${offF.size} z ${entIds.length} zakresów`);
-  assert(entIds.every((id) => seen.has(id)), `F5 732: rozwinięty wybór zakresu osiąga wszystkie ${entIds.length} zakresy (${seen.size})`);
+  assert(entIds.length === 26 && entIds.every((id) => seen.has(id)), `F5 732: rozwinięty wybór zakresu osiąga wszystkie ${entIds.length} zakresy (${seen.size})`);
   makeWorld();
-  const r1 = render(true, { selected: null });
+  const r1 = render({ selected: null });
   const tg = r1.zones.find((z) => z.type === 'prod_scope_toggle');
   if (tg) clickZone(r1, tg);
-  const r2 = render(true, { picker: r1.ov._prodScopeOpen, ov: r1.ov });
+  const r2 = render({ picker: r1.ov._prodScopeOpen, ov: r1.ov });
   const pick = r2.zones.find((z) => z.type === 'colony_filter' && z.data.colonyId === 'col_b');
+  r1.ov._kitScrollList = 60;
   if (pick) clickZone(r2, pick);
-  assert(!!tg && r1.ov._selectedColonyId === 'col_b' && r1.ov._prodScopeOpen === false, 'F6 klik zakresu → wybór kolonii (dzisiejszy handler colony_filter), lista wyboru się zamyka');
+  assert(!!tg && r1.ov._selectedColonyId === 'col_b' && r1.ov._prodScopeOpen === false && r1.ov._kitScrollList === 0, 'F6 klik zakresu → wybór kolonii (handler colony_filter), lista wyboru się zamyka i wraca na górę');
 } catch (e) { assert(false, `F blok przerwany: ${e.message}`); }
 
 // ═══ D — D-K-16 na Produkcji ════════════════════════════════════════════════════════════════════════════════════
@@ -277,9 +353,9 @@ console.log('D — blok magazynu na Produkcji');
     let kit = true;
     for (const sc of [0, 300, 600, 900, 1200, 5000]) {
       ov._kitScrollInsp = sc;
-      const r = render(true, { selected: sel, ov, good: G_RUN.id });
+      const r = render({ selected: sel, ov, good: G_RUN.id });
       kit = kit && isKit(r);
-      render(true, { selected: sel, ov });   // klamra po wysokości poprzedniej klatki
+      render({ selected: sel, ov });   // klamra po wysokości poprzedniej klatki
       for (const z of r.zones.filter((q) => q.type === 'resource_hover')) seen.add(z.data.resourceId);
     }
     const data = ECV ? ECV.stockBlockData(ov) : null;
@@ -287,7 +363,7 @@ console.log('D — blok magazynu na Produkcji');
     assert(kit && want.length > 0 && want.every((id) => seen.has(id)), `D1 ${sel ?? 'globalnie'}: każda linia bloku «${t('econ.console.stockBlock')}» ma strefę na Produkcji (${want.length})`);
   }
   makeWorld();
-  const fl = render(true, { page: 'flows' });
+  const fl = render({ page: 'flows' });
   assert(fl.texts.includes(t('econ.console.stockBlock').toUpperCase()) || fl.texts.some((s) => s.includes(t('econ.console.stockBlock'))), 'D2 kontrola: blok magazynu nadal na Przepływach');
 }
 
@@ -325,13 +401,22 @@ if (PCL) {
   const tbI = PCL.chainModel({ id: 'x', recipe, lines: [], stock: { Fe: 0, C: 99 }, fp, available: true, techBlocked: [{ ingredientId: 'C', requiresTech: 'tq' }] });
   assert(tbI.bottleneck?.kind === 'tech' && tbI.bottleneck.resId === 'C' && tbI.bottleneck.tech === 'tq' && tbI.inputs.find((i) => i.id === 'C')?.tech === true,
     'B15 bezczynny: składnik zablokowany technologią przed brakującym surowcem');
-  // alerty = reguły dzisiejszej prawej kolumny
+  // alerty: lista bezwzględna ze świata-atrapy (receptura G_RUN = Fe 8, C 4; Alfa ma C = 0 → niski C; linia G_STALL stoi
+  // z powodu braku C; Beta ma Fe 20 < 80 → niski Fe, do tego brownout; placówka pominięta)
   makeWorld();
   window.KOSMOS.colonyManager.getPlayerColonies()[1].resourceSystem.energy.brownout = true;
-  const ov = new EO.EconomyOverlay();
-  const old = ov._generateAlerts();
   const neu = PCL.productionAlerts(window.KOSMOS.colonyManager.getPlayerColonies());
-  assert(old.length >= 3 && JSON.stringify(old.map((a) => a.level)) === JSON.stringify(neu.map((a) => a.level)), `B10 alerty: te same reguły i poziomy co _generateAlerts (${old.length})`);
+  const want = [
+    { level: 'warning', kind: 'low', commodityId: G_RUN.id, resId: 'C', colonyId: 'col_a', colonyName: 'Alfa' },
+    { level: 'critical', kind: 'stall', commodityId: G_STALL.id, resId: missRes, colonyId: 'col_a', colonyName: 'Alfa' },
+    { level: 'warning', kind: 'low', commodityId: G_RUN.id, resId: 'Fe', colonyId: 'col_b', colonyName: 'Beta' },
+    { level: 'critical', kind: 'brownout', colonyId: 'col_b', colonyName: 'Beta' },
+  ];
+  assert(JSON.stringify(G_RUN.recipe) === JSON.stringify({ Fe: 8, C: 4 }) && missRes === 'C' && JSON.stringify(neu) === JSON.stringify(want),
+    `B10 alerty: niski zapas (ostrzeżenie), linia stojąca i brownout (krytyczne), placówka pominięta (${neu.map((a) => a.level + ':' + a.kind + ':' + (a.resId ?? '')).join(', ')})`);
+  assert(JSON.stringify(PCL.alertsFor(neu, G_RUN.id, new Set(['col_a'])).map((a) => a.kind)) === JSON.stringify(['low'])
+    && JSON.stringify(PCL.alertsFor(neu, G_STALL.id, new Set(['col_b'])).map((a) => a.kind)) === JSON.stringify(['brownout']),
+    'B10b alerty inspektora: towar + brownout, tylko kolonie zakresu');
   {
     // magazyn kolonii pełny, a silnik (magazyn puli) zgłasza brak — alert nazywa składnik z powodu STALL, nie «?»
     const rid = Object.keys(G_STALL.recipe)[1] ?? missRes;
@@ -353,14 +438,14 @@ if (PCL) {
   assert(okL, 'B11 układ bohatera: wejścia, fabryka, produkt, baner w prostokącie i bez nakładania (1–5 wejść, dwa rozmiary)');
   // render: wąskie gardło w roli alert, wybór zmienia widok
   makeWorld();
-  const rs = render(true, { selected: 'col_a', good: G_STALL.id });
+  const rs = render({ selected: 'col_a', good: G_STALL.id });
   const bnLine = rs.log.find((e) => e[0] === 'fillText' && String(e[1]).startsWith(t('econ.console.bottleneck').toUpperCase()));
   assert(!!bnLine && bnLine[4] === rs.roles?.alert && bnLine[1].includes(t('econ.console.prodBnMissing', '', '', '').split(' ')[0]), `B12 bohater: baner wąskiego gardła w roli alert („${bnLine?.[1]}”)`);
-  const rr = render(true, { selected: 'col_a', good: G_RUN.id });
+  const rr = render({ selected: 'col_a', good: G_RUN.id });
   const hero = (r) => r.log.filter((e) => e[0] === 'fillText' && r.ov.consoleZones?.hero && e[2] >= r.ov.consoleZones.hero.x && e[2] <= r.ov.consoleZones.hero.x + r.ov.consoleZones.hero.w && e[3] >= r.ov.consoleZones.hero.y && e[3] <= r.ov.consoleZones.hero.y + r.ov.consoleZones.hero.h).map((e) => e[1]).join('|');
   assert(hero(rs) !== hero(rr), 'B13 wybór innego towaru zmienia bohatera');
-  const ra = render(true, { selected: null, good: G_RUN.id });
-  const rb = render(true, { selected: 'col_b', good: G_RUN.id });
+  const ra = render({ selected: null, good: G_RUN.id });
+  const rb = render({ selected: 'col_b', good: G_RUN.id });
   assert(hero(ra) !== hero(rb), 'B14 zmiana zakresu zmienia bohatera (tempo / FP w zakresie)');
 } else assert(false, 'B ProductionConsoleLogic importuje się');
 
@@ -370,22 +455,18 @@ try {
   const first = (k, ...a) => t(k, ...a).split(' ').slice(0, 3).join(' ');
   for (const [sel, k] of [[null, 'econ.console.prodGateGlobal'], ['st_1', 'econ.console.prodGateStation'], ['col_o', 'econ.console.prodGateOutpost']]) {
     makeWorld();
-    const r = render(true, { selected: sel, good: G_RUN.id });
+    const r = render({ selected: sel, good: G_RUN.id });
     const fb = r.zones.filter((z) => z.type === 'factory_btn');
-    assert(fb.length === 0 && r.texts.some((s) => s.startsWith(first(k))), `R1 ${sel ?? 'globalnie'}: akcje wyłączone (0 stref) z powodem „${first(k)}…”`);
+    assert(fb.length === 0 && r.zones.some((z) => z.type === 'prod_good') && r.texts.some((s) => s.startsWith(first(k))), `R1 ${sel ?? 'globalnie'}: akcje wyłączone (0 stref) z powodem „${first(k)}…”`);
   }
   {
-    const w0 = makeWorld();
-    const offO = render(false, { selected: 'col_o' });
-    const fbOff = offO.zones.filter((z) => z.type === 'factory_btn').length;
+    // (R4 — świadek starej strony z akcjami placówki — usunięty w KZ-E: tej strony nie ma; R1 col_o pinuje konsolę)
     const wNo = makeWorld(); wNo.cols[1].factorySystem = null;
-    const rNo = render(true, { selected: 'col_b', good: G_RUN.id });
-    assert(fbOff > 0, `R4 świadek: dzisiejsza strona daje placówce ${fbOff} akcji fabryki (bez skutku — 0 FP, bez załogi)`);
-    assert(!rNo.zones.some((z) => z.type === 'factory_btn') && rNo.texts.some((s) => s.startsWith(first('econ.console.prodGateNoFactory'))), 'R5 kolonia bez systemu fabryk: powód „Tu nie ma fabryk…”');
-    void w0;
+    const rNo = render({ selected: 'col_b', good: G_RUN.id });
+    assert(!rNo.zones.some((z) => z.type === 'factory_btn') && rNo.zones.some((z) => z.type === 'prod_good') && rNo.texts.some((s) => s.startsWith(first('econ.console.prodGateNoFactory'))), 'R5 kolonia bez systemu fabryk: powód „Tu nie ma fabryk…”');
   }
   makeWorld();
-  const r = render(true, { selected: 'col_a', good: G_LOCK?.id });
+  const r = render({ selected: 'col_a', good: G_LOCK?.id });
   assert(!G_LOCK || (!r.zones.some((z) => z.data?.action === 'oneshot_pick') && r.texts.some((s) => s.startsWith(first('econ.console.prodGateLocked', 'x')))),
     'R2 zablokowana receptura: brak zlecenia jednorazowego, powód „zbadaj …”');
   const keys = PCL?.PROD_REASON_KEYS ?? [];
@@ -404,17 +485,17 @@ try {
   let kitN = 0;
   const ids = new Set([...Object.keys(COMMODITIES)]);
   for (const sel of [null, 'col_a', 'st_1']) for (const g of [G_RUN.id, G_STALL.id, G_CONS.id, G_LOCK?.id, G_DROID?.id].filter(Boolean)) for (const sc of [0, 600]) {
-    const r = render(true, { selected: sel, good: g, scrollInsp: sc });
+    const r = render({ selected: sel, good: g, scrollInsp: sc });
     if (isKit(r)) kitN++;
     for (const s of r.texts) {
       if (/\b[a-z]+_[a-z0-9_]+\b/.test(s) || ids.has(s.trim())) bad.add(s);
     }
   }
   assert(kitN > 0 && bad.size === 0, `N1 tekst konsoli Produkcji bez snake_case / id (${[...bad].slice(0, 4).join(' | ')})`);
-  const r = render(true, { selected: 'col_a', good: G_STALL.id });
+  const r = render({ selected: 'col_a', good: G_STALL.id });
   const rn = typeof ECV?.resName === 'function' ? ECV.resName(missRes) : missRes;
   const stallTxt = t('econ.console.prodAlertStall', 'Alfa', rn);
-  const rB = render(true, { selected: 'col_b', good: G_STALL.id });
+  const rB = render({ selected: 'col_b', good: G_STALL.id });
   assert(r.texts.includes(stallTxt) && !rB.texts.includes(stallTxt), 'N3 alerty inspektora tylko z kolonii zakresu (Alfa: jest; zakres Beta: brak)');
   assert(rn !== missRes && r.texts.some((s) => s.startsWith(t('econ.console.prodAlertStall', 'Alfa', rn).slice(0, 20)) && s.includes(rn)), `N2 alert STALL z nazwą kolonii i surowca „${rn}” (nie id ${missRes})`);
 } catch (e) { assert(false, `N blok przerwany: ${e.message}`); }
@@ -429,7 +510,7 @@ try {
     const vp = CL ? CL.uiViewport(cw, ch) : { scale: 1, W: 1280, H: 720 };
     const iw = window.innerWidth, ih = window.innerHeight;
     window.innerWidth = cw; window.innerHeight = ch;
-    const r = render(true, { W: vp.W, H: vp.H, selected: 'col_a', good: G_CONS.id });
+    const r = render({ W: vp.W, H: vp.H, selected: 'col_a', good: G_CONS.id });
     const zz = r.ov.consoleZones;
     const ok = isKit(r) && r.zones.every((z) => inside(z, zz.frame))
       && r.zones.filter((z) => z.type === 'prod_good' && z.x < zz.hero.x).every((z) => inside(z, zz.list))
@@ -437,12 +518,12 @@ try {
       && !CL.zonesOverlap(zz);
     assert(ok, `S1 ${cw}×${ch}: strefy w ramie; towary w liście; akcje w inspektorze, pasie lub (steppery) liście; strefy konsoli bez nakładania`);
     for (const action of ['oneshot_pick', 'demand_set_input']) {
-      const rr = render(true, { W: vp.W, H: vp.H, selected: 'col_a', good: G_CONS.id });
+      const rr = render({ W: vp.W, H: vp.H, selected: 'col_a', good: G_CONS.id });
       const z = rr.zones.find((q) => q.type === 'factory_btn' && q.data.action === action);
       window.innerWidth = 333; window.innerHeight = 222;   // handler nie może czytać okna
       document.createElement = (tag) => { const el = origCreate(tag); el.style = {}; el.focus = () => {}; el.select = () => {}; el.addEventListener = () => {}; return el; };
       const g0 = globalThis.requestAnimationFrame; globalThis.requestAnimationFrame = () => 0;
-      if (z) { setEco(true); safe(() => rr.ov.handleClick(z.x + 2, z.y + 2)); }
+      if (z) safe(() => rr.ov.handleClick(z.x + 2, z.y + 2));
       globalThis.requestAnimationFrame = g0;
       const inp = rr.ov._minStockInput;
       document.createElement = origCreate;
@@ -460,7 +541,9 @@ try {
   }
   const s = src('../../ui/EconomyOverlay.js');
   const scaleLines = (s.match(/const SCALE = [^\n]*/g) ?? []);
-  assert(scaleLines.length >= 2 && scaleLines.every((l) => /kitPage\(\) \? \(this\._uiScale/.test(l)), `S3 źródło: oba pola DOM biorą skalę z rysunku na stronie zestawu (${scaleLines.length})`);
+  // KZ-E: strona jest zawsze konsolą — skala tylko z rysunku (bez gałęzi okna i bez usuniętego `kitPage`)
+  assert(scaleLines.length >= 2 && scaleLines.every((l) => /this\._uiScale/.test(l) && !/window\.inner|kitPage/.test(l)),
+    `S3 źródło: oba pola DOM biorą skalę z rysunku, bez gałęzi okna (${scaleLines.map((l) => l.trim()).join(' ; ')})`);
 } catch (e) { assert(false, `S blok przerwany: ${e.message}`); }
 
 // ═══ L — lista: zapas / minimum + steppery (bramka właściciela) ══════════════════════════════════════════════════
@@ -469,35 +552,43 @@ try {
   const listZ = (r) => r.zones.filter((z) => z.type === 'factory_btn' && z.data?.src === 'list' && r.ov.consoleZones && z.x < r.ov.consoleZones.hero.x);
   const w = makeWorld();
   w.fsA.setDemandBonus(G_RUN.id, 2);
-  // dzisiejsza tabela minimalnych zapasów (OFF, kolonia): pary stepperów odblokowanych towarów
-  const off = render(false, { selected: 'col_a' });
-  // dzisiejsza tabela łącznie z towarami zablokowanymi (próg ustawiany przed odkryciem)
-  const isTable = (z) => z.type === 'factory_btn' && /^demand_/.test(z.data.action) && !COMMODITIES[z.data.commodityId]?.isDroidUnit;
-  const offPairs = new Set(off.zones.filter(isTable).map((z) => `${z.data.action}|${z.data.commodityId}`));
+  w.fsA.setDemandBonus(G_LOCK.id, 1);
+  // oczekiwane steppery listy (bezwzględnie): każdy towar nie-droid — [ + ] (także zablokowany: próg przed odkryciem);
+  // pole wartości tylko odblokowanym; [ − ] tylko z bonusem (bonus mają wyłącznie G_RUN i zablokowany G_LOCK)
+  const nonDroid = goods.filter((d) => !d.isDroidUnit);
+  const want = new Set([
+    ...nonDroid.map((d) => `demand_plus|${d.id}`),
+    ...nonDroid.filter((d) => !d.requiresTech).map((d) => `demand_set_input|${d.id}`),
+    `demand_minus|${G_RUN.id}`, `demand_minus|${G_LOCK.id}`,
+  ]);
   const onPairs = new Set();
   const ov = new EO.EconomyOverlay();
   for (const d of goods) {
     for (let sc = 0; sc <= 600; sc += 120) {
       ov._kitScrollList = sc;
-      const r = render(true, { selected: 'col_a', good: d.id, ov });
+      const r = render({ selected: 'col_a', good: d.id, ov });
       for (const z of listZ(r)) onPairs.add(`${z.data.action}|${z.data.commodityId}`);
     }
   }
-  const miss = [...offPairs].filter((k) => !onPairs.has(k));
-  const lockedPairs = [...offPairs].filter((k) => COMMODITIES[k.split('|')[1]]?.requiresTech);
-  assert(offPairs.size > 20 && lockedPairs.length > 0 && miss.length === 0, `L1 każdy stepper dzisiejszej tabeli min. zapasu (z zablokowanymi: ${lockedPairs.length}) osiągalny z listy (${offPairs.size}; brak: ${miss.slice(0, 4).join(' ; ')})`);
-  assert(offPairs.has(`demand_minus|${G_RUN.id}`) && onPairs.has(`demand_minus|${G_RUN.id}`), 'L2 [ − ] tylko z bonusem — w liście jak w tabeli (świadek: bonus 2)');
+  const miss = [...want].filter((k) => !onPairs.has(k));
+  const extra = [...onPairs].filter((k) => !want.has(k));
+  const lockedPlus = nonDroid.filter((d) => d.requiresTech && onPairs.has(`demand_plus|${d.id}`)).length;
+  assert(want.size > 20 && lockedPlus > 0 && miss.length === 0 && extra.length === 0,
+    `L1 steppery listy = [ + ] każdego towaru (zablokowanych: ${lockedPlus}), pole wartości odblokowanych, [ − ] z bonusem (${onPairs.size}/${want.size}; brak: ${miss.slice(0, 3).join(' ; ')}; nadmiar: ${extra.slice(0, 3).join(' ; ')})`);
+  const minusIds = [...onPairs].filter((k) => k.startsWith('demand_minus|'));
+  assert(JSON.stringify(minusIds.sort()) === JSON.stringify([`demand_minus|${G_RUN.id}`, `demand_minus|${G_LOCK.id}`].sort()),
+    `L2 [ − ] tylko z bonusem — także zablokowanemu (bonus: ${G_RUN.id}, ${G_LOCK.id}; ${minusIds})`);
   // komórka zapas / min w roli alert przy zapasie < min
-  const r = render(true, { selected: 'col_a', good: G_RUN.id });
+  const r = render({ selected: 'col_a', good: G_RUN.id });
   const cellTxt = PCL.stockMinCell(3, 12).text;
   const cellLine = r.log.find((e) => e[0] === 'fillText' && e[2] > r.ov.consoleZones.list.x + 150 && e[2] < r.ov.consoleZones.hero.x && String(e[1]).includes('/'));
   assert(!!cellLine && cellLine[4] === r.roles.alert, `L3 kolumna «zapas / min» w roli alert, gdy zapas < min („${cellTxt}”)`);
   // hover na innym wierszu → jego steppery; klik [ + ] zmienia kolonię zakresu
   const w2 = makeWorld();
-  const rB = render(true, { selected: 'col_b', good: G_RUN.id });
+  const rB = render({ selected: 'col_b', good: G_RUN.id });
   const rowZ = rB.zones.find((z) => z.type === 'prod_good' && z.data.commodityId === G_CONS.id && z.x < rB.ov.consoleZones.hero.x);
   rB.ov._hoverZone = rowZ;
-  const rB2 = render(true, { selected: 'col_b', good: G_RUN.id, ov: rB.ov });
+  const rB2 = render({ selected: 'col_b', good: G_RUN.id, ov: rB.ov });
   const plus = listZ(rB2).find((z) => z.data.action === 'demand_plus' && z.data.commodityId === G_CONS.id);
   assert(!!rowZ && !!plus, 'L4 wiersz pod kursorem pokazuje steppery (strefa przed strefą wiersza)');
   if (plus) clickZone(rB2, plus);
@@ -505,18 +596,17 @@ try {
     'L5 klik [ + ] w liście → minimalny zapas kolonii zakresu (Beta), nie aktywnej');
   // zablokowany: bez stepperów nawet zaznaczony; podpowiedź z wymaganiem
   makeWorld();
-  const rl = render(true, { selected: 'col_a', good: G_LOCK.id });
+  const rl = render({ selected: 'col_a', good: G_LOCK.id });
   const lz = rl.zones.find((z) => z.type === 'prod_good' && z.data.commodityId === G_LOCK.id && z.x < rl.ov.consoleZones.hero.x);
   rl.ov._hoverZone = lz;
-  const rl2 = render(true, { selected: 'col_a', good: G_LOCK.id, ov: rl.ov });
+  const rl2 = render({ selected: 'col_a', good: G_LOCK.id, ov: rl.ov });
   const lockList = listZ(rl2).filter((z) => z.data.commodityId === G_LOCK.id).map((z) => z.data.action);
   assert(lockList.includes('demand_plus') && !lockList.includes('demand_set_input')
     && String(rl2.ov._consoleTooltip?.text ?? '').includes(t('econPanel.minStockRequires', '').trim().split(' ')[0]),
     `L6 zablokowany: [ + ] min. zapasu (bez pola wartości, jak dziś) + podpowiedź z wymaganiem (${lockList})`);
-  const offL = render(false, { selected: 'col_a' });
-  assert(offL.zones.some((z) => z.data?.action === 'demand_plus' && z.data.commodityId === G_LOCK.id), 'L7 świadek: dzisiejsza tabela daje [ + ] zablokowanemu towarowi');
+  // (L7 — świadek starej tabeli z [ + ] zablokowanego — usunięty w KZ-E: strony nie ma; L1 / L6 / A7 pinują konsolę)
   // droid: znacznik «buduj»; długa nazwa ucięta → pełna w podpowiedzi
-  const rd = render(true, { selected: 'col_a', good: G_RUN.id });
+  const rd = render({ selected: 'col_a', good: G_RUN.id });
   assert(rd.texts.some((s) => s === t('econ.console.prodBuildMark') || s.includes(t('econ.console.prodBuildMark').slice(2))), 'L8 wiersz droida ma znacznik «buduj»');
 } catch (e) { assert(false, `L blok przerwany: ${e.message}`); }
 
@@ -524,7 +614,7 @@ try {
 console.log('I — instrument zapas / minimum');
 try {
   makeWorld();
-  const r = render(true, { selected: 'col_a', good: G_RUN.id });
+  const r = render({ selected: 'col_a', good: G_RUN.id });
   const cell = PCL.stockMinCell(3, 10);
   const big = r.log.filter((e) => e[0] === 'fillText' && e[2] >= r.ov.consoleZones.inspector.x);
   const statusY = big.find((e) => e[1] === t('econ.console.prodStatusKey'))?.[3] ?? 0;
@@ -545,7 +635,7 @@ try {
   assert([B.now, B.chain, B.foot].every(inR) && B.now.y + B.now.h <= B.chain.y && B.chain.y + B.chain.h <= B.foot.y && B.now.h > r0.h * 0.25 && B.foot.h > r0.h * 0.2,
     'H1 trzy pasma z góry na dół, w prostokącie, bez nakładania, mniej więcej tercje');
   makeWorld();
-  const r = render(true, { selected: null, good: G_CONS.id });
+  const r = render({ selected: null, good: G_CONS.id });
   const b = r.ov._prodBands;
   const nowZ = r.zones.filter((z) => z.type === 'prod_good' && b && z.x >= b.now.x && z.y >= b.now.y && z.y + z.h <= b.now.y + b.now.h + 0.5);
   const lines = PCL.productionLines(window.KOSMOS.colonyManager.getPlayerColonies());
@@ -573,11 +663,11 @@ try {
   {
     const wp = makeWorld();
     const ovp = new EO.EconomyOverlay();
-    const p0 = render(true, { selected: 'col_a', good: G_RUN.id, ov: ovp });
+    const p0 = render({ selected: 'col_a', good: G_RUN.id, ov: ovp });
     const plus0 = p0.texts.filter((s) => s === '+1').length;
     wp.allocRun.produced += 1;   // silnik ukończył sztukę między klatkami
-    const p1 = render(true, { selected: 'col_a', good: G_RUN.id, ov: ovp });
-    const p2 = render(true, { selected: 'col_a', good: G_RUN.id, ov: ovp });
+    const p1 = render({ selected: 'col_a', good: G_RUN.id, ov: ovp });
+    const p2 = render({ selected: 'col_a', good: G_RUN.id, ov: ovp });
     assert(plus0 === 0 && p1.texts.includes('+1') && p2.texts.includes('+1'), 'H11 render: ukończona sztuka → «+1» przy pasku linii (i trwa w kolejnych klatkach do wygaśnięcia)');
   }
   {
@@ -601,13 +691,13 @@ console.log('DR — budowa droida');
 try {
   const droids = goods.filter((d) => d.isDroidUnit);
   makeWorld();
-  const off = render(false, { selected: 'col_a' });
-  const offB = new Set(off.zones.filter((z) => z.data?.action === 'droid_build').map((z) => z.data.commodityId));
+  // oczekiwane: [ ZBUDUJ ] ma każdy droid bez wymogu technologii (atrapa: receptura dostępna ⇔ brak requiresTech)
+  const wantB = droids.filter((d) => !d.requiresTech).map((d) => d.id).sort();
   const onB = new Set();
   let ok = true;
   for (const d of droids) {
     makeWorld();
-    const r = render(true, { selected: 'col_a', good: d.id });
+    const r = render({ selected: 'col_a', good: d.id });
     const bz = r.zones.find((z) => z.data?.action === 'droid_build');
     if (bz) {
       onB.add(d.id);
@@ -615,41 +705,52 @@ try {
       if (!(bz.y < trendY && bz.h >= 26 && r.texts.includes(t('econ.console.prodDroidBuild', 1)))) ok = false;
     } else if (!r.texts.some((s) => s.startsWith(t('econ.console.prodGateLocked', '').split(' ')[0]))) ok = false;
   }
-  assert(offB.size >= 1 && JSON.stringify([...offB].sort()) === JSON.stringify([...onB].sort()), `DR1 budowa droida ON == OFF (${[...onB].join(',')})`);
+  assert(wantB.length >= 1 && droids.length > wantB.length && JSON.stringify(wantB) === JSON.stringify([...onB].sort()), `DR1 budowa droida: dostępne ${[...onB].join(',')} (oczekiwane ${wantB}; zablokowane bez przycisku)`);
   assert(ok, 'DR2 duży [ ZBUDUJ × N ] wysoko w inspektorze (nad trendem); zablokowany droid — powód z technologią');
   const w = makeWorld();
-  const r = render(true, { selected: 'col_a', good: G_DROID.id });
+  const r = render({ selected: 'col_a', good: G_DROID.id });
   const plus = r.zones.find((z) => z.data?.action === 'droid_qty_plus');
   if (plus) clickZone(r, plus);
-  const r2 = render(true, { selected: 'col_a', good: G_DROID.id, ov: r.ov });
+  const r2 = render({ selected: 'col_a', good: G_DROID.id, ov: r.ov });
   const bz = r2.zones.find((z) => z.data?.action === 'droid_build');
   if (bz) clickZone(r2, bz);
   assert(r2.texts.includes(t('econ.console.prodDroidBuild', 2)) && w.calls.some((c) => c[0] === 'setDroidOrder' && c[1] === G_DROID.id && c[2] === 2), 'DR3 [ + ] ilości → [ ZBUDUJ × 2 ] → setDroidOrder(droid, 2)');
   w.fsA._colonyCanSustainRecipe = () => false;
-  const r3 = render(true, { selected: 'col_a', good: G_DROID.id });
+  const r3 = render({ selected: 'col_a', good: G_DROID.id });
   assert(!r3.zones.some((z) => z.data?.action === 'droid_build') && r3.texts.some((s) => s.startsWith(t('econ.console.prodGateDroidSource').split(' ').slice(0, 3).join(' '))), 'DR4 brak źródła składników: przycisk wyłączony z powodem (dziś zlecenie by nie ruszyło)');
   makeWorld();
-  const rg = render(true, { selected: null, good: G_DROID.id });
+  const rg = render({ selected: null, good: G_DROID.id });
   assert(!rg.zones.some((z) => z.data?.action === 'droid_build') && rg.texts.some((s) => s.startsWith(t('econ.console.prodGateGlobal').split(' ').slice(0, 2).join(' '))), 'DR5 zakres globalny: budowa wyłączona z powodem');
 } catch (e) { assert(false, `DR blok przerwany: ${e.message}`); }
 
 // ═══ X — Finding 742 ════════════════════════════════════════════════════════════════════════════════════════════
 console.log('X — Finding 742: eksport adresowany do kolonii zakresu');
 try {
-  const w = makeWorld({ active: 'col_a' });
+  // ładunek ZAWSZE z kolonią strefy (zakresu), nie aktywną — oba przełączniki, w obie strony (zakres Beta / aktywna Alfa i odwrotnie)
   const seen = [];
-  const h = (e) => seen.push(e);
-  EventBus.on('factory:setExportEnabled', h);
-  const r = render(true, { selected: 'col_b', good: G_RUN.id });
-  const z = r.zones.find((q) => q.type === 'factory_btn' && q.data.action === 'export_toggle_enabled');
-  if (z) clickZone(r, z);
-  const off = render(false, { selected: 'col_b' });
-  const zo = off.zones.find((q) => q.type === 'factory_btn' && q.data.action === 'export_toggle_enabled');
-  if (zo) { setEco(false); safe(() => off.ov._onHit(zo)); }   // dzisiejszy handler (geometria OFF zależy od okna env)
-  EventBus.off?.('factory:setExportEnabled', h);
-  assert(seen[0]?.colonyId === 'col_b', `X1 konsola: zdarzenie niesie kolonię zakresu (${JSON.stringify(seen[0])})`);
-  assert(seen.length === 2 && !('colonyId' in seen[1]), 'X2 kontrola — OFF: dzisiejszy ładunek bez colonyId (zachowanie bez zmian)');
-  void w;
+  const hE = (e) => seen.push(['en', e]), hT = (e) => seen.push(['tier', e]);
+  EventBus.on('factory:setExportEnabled', hE);
+  EventBus.on('factory:setExportTier', hT);
+  const clickExport = (scope, active) => {
+    makeWorld({ active });
+    seen.length = 0;
+    const r = render({ selected: scope, good: G_RUN.id });
+    const zs = r.zones.filter((q) => q.type === 'factory_btn' && /^export_toggle_/.test(q.data.action));
+    for (const z of zs) clickZone(r, z);
+    return { n: zs.length, got: JSON.stringify(seen.map(([k, e]) => [k, e]).sort((p, q) => JSON.stringify(p) < JSON.stringify(q) ? -1 : 1)) };
+  };
+  // atrapa: eksport włączony, tiery { 1: tak, 2: tak, 3: nie, 4: nie } → klik odwraca każdą wartość
+  const expect = (col) => JSON.stringify([
+    ['en', { enabled: false, colonyId: col }],
+    ['tier', { tier: 1, enabled: false, colonyId: col }], ['tier', { tier: 2, enabled: false, colonyId: col }],
+    ['tier', { tier: 3, enabled: true, colonyId: col }], ['tier', { tier: 4, enabled: true, colonyId: col }],
+  ].sort((p, q) => JSON.stringify(p) < JSON.stringify(q) ? -1 : 1));
+  const xb = clickExport('col_b', 'col_a');
+  const xa = clickExport('col_a', 'col_b');
+  EventBus.off?.('factory:setExportEnabled', hE);
+  EventBus.off?.('factory:setExportTier', hT);
+  assert(xb.n === 5 && xb.got === expect('col_b'), `X1 zakres Beta, aktywna Alfa: 5 przełączników eksportu → ładunki z colonyId col_b (${xb.got})`);
+  assert(xa.n === 5 && xa.got === expect('col_a'), `X2 zakres Alfa, aktywna Beta: ładunki z colonyId col_a (${xa.got})`);
   // FactorySystem: adresowanie
   if (FSM?.FactorySystem) {
     const mk = (pid) => { const rs = { inventory: new Map(), _inventoryPerYear: new Map(), spend() {}, receive() {} }; const fs = safe(() => new FSM.FactorySystem(rs)); return { pid, fs }; };
@@ -671,6 +772,6 @@ try {
   } else assert(false, 'X3 FactorySystem importuje się');
 } catch (e) { assert(false, `X blok przerwany: ${e.message}`); }
 
-F.consoleKit = saved.consoleKit; F.consoleEconomy = saved.consoleEconomy;
+F.consoleKit = saved.consoleKit;
 console.log(`\n${pass} PASS, ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

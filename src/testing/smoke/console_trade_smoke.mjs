@@ -1,18 +1,25 @@
 // ARC KONSOLE K3-B — keeper konsoli Handlu (Handel + Rynek) w grupie Ekonomii i Finding 738 (docs/design/CONSOLES_PLAN.md §1.2,
 // D-K-15, D-K-20; Finding 725 — część Handlu).
 //
-// H — Handel: dostępność akcji ON ⊇ OFF (każdy dzisiejszy typ strefy jest w konsoli; jedyny nowy typ to `trade_conn`), dane stref
-//     ON == OFF (wydatki, migracja, siatka towarów, słupki wykresu); skutki handlerów (wybór połączenia, blokada towaru).
-// R — Rynek: to samo dla `market_*` (imperia, przełącznik auto-handlu, kolonie, tablica towarów, ilość, kup / sprzedaj, anuluj);
-//     skutki: ilość ±10, zlecenie kupna z tymi samymi argumentami co dziś.
+// KZ-E — grupa Ekonomii jest na stałe konsolą (flaga usunięta, stara strona skasowana): porównania ON == OFF / ON ⊇ OFF
+// zamienione na piny bezwzględne ze ścieżki konsoli; piny-kontrole starej strony usunięte, w ich miejsce świadkowie na ON.
+//
+// H — Handel: bezwzględny zbiór typów stref (domyślnie i z otwartą listą kolonii), dane stref (wydatki = kolonia Handlu,
+//     koszty z SPEND_COST / emergencyBuy, migracja, siatka towarów = TRADEABLE_GOODS z blokadą Fe, słupki wykresu ze świata);
+//     skutki handlerów (wybór połączenia, blokada / odblokowanie towaru, migracja).
+// R — Rynek: bezwzględny zbiór typów `market_*` i ich dane (imperia, przełącznik auto-handlu, kolonie, tablica towarów, ilość,
+//     kup / sprzedaj, anuluj); skutki: ilość ±10, zlecenie kupna / sprzedaży z kolonią Handlu i kolonią AI.
 // Q — pole ilości <input>: prostokąt = strefa `market_qty_edit` (w inspektorze konsoli) × skala z rysunku, przy 1600×1041 i 1280×833
-//     (okno CSS), klik i otwarcie pola przy podmienionym innerWidth; źródło: gałęzie konsoli w handlerach bez window.inner*.
-// T — Finding 725 (Handel): tekst konsoli bez surowych id / snake_case (kontrola: dzisiejsza strona rysuje surowe id cen
-//     lokalnych); źródło TradeOverlay bez literału „Kr/rok”.
+//     (okno CSS), klik i otwarcie pola przy podmienionym innerWidth; źródło: ciała handleClick / handleScroll / handleMouseMove /
+//     _openQtyInput bez window.inner* (świadek: ciała wycięte i niepuste).
+// T — Finding 725 (Handel): tekst konsoli bez surowych id / snake_case (świadek: surowe id jest w danych i w cenach lokalnych,
+//     a na stronie stoi jego nazwa); źródło TradeOverlay bez literału „Kr/rok”.
 // G — czipy grupy ze stron Handlu: kolejność, Handel → Rynek bez ponownego otwarcia i ze stanem Handlu, Budżet / Produkcja
-//     → openPanel; pas subnav nad Handlem znika przy fladze ON.
+//     → openPanel; pas subnav nad Handlem = 0 bez żadnej flagi (świadek: ekran zgrupowany spoza zestawu ma pas).
 // F — Finding 738: w świecie z kopalniami i fabrykami każdy wiersz listy Przepływów (wartość narysowana) == netto bohatera
 //     (`flowDiagram` rozbicia); świadek: zasób, którego bilans z samego rejestru producentów różni się od netto.
+// K — kolonia Handlu: wybór tylko pełnych kolonii, lokalnie (bez switchActiveColony); zlecenie i wydatki działają na kolonii
+//     Handlu, nie na aktywnej kolonii gry.
 //
 // Bez pinów na stałych rysowania. Moduły nowe importowane dynamicznie (pin degraduje, nie przerywa).
 
@@ -39,8 +46,8 @@ const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.log(' 
 const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n').replace(/\/\/.*$/gm, '');
 setLocale('pl');
 const F = GAME_CONFIG.FEATURES;
-const saved = { consoleKit: F.consoleKit, consoleEconomy: F.consoleEconomy };
-const setEco = (on) => { F.consoleKit = true; F.consoleEconomy = on; };
+const saved = { consoleKit: F.consoleKit };
+F.consoleKit = true;   // warunek bazowy (scena za tekstem); ekrany Ekonomii nie zależą już od flagi
 
 function recCtx() {
   const texts = [], log = [];
@@ -62,9 +69,9 @@ function recCtx() {
 const SNAKE_EXP = 'structural_alloys';   // drogi (zapas 0, konsumpcja) — surowe id na dzisiejszej stronie
 const SNAKE_CHEAP = 'power_cells';       // tani (zapas na lata)
 function makeWorld() {
-  const calls = { creditsOf: [], open: [], orders: [], cancels: [], emits: [], toggles: [], bonus: [] };
+  const calls = { creditsOf: [], open: [], orders: [], cancels: [], emits: [], toggles: [], bonus: [], recvA: [] };
   const colA = { planetId: 'col_a', name: 'Alfa', isOutpost: false, tradeOverrides: {}, credits: 5000,
-    resourceSystem: { inventory: new Map([['Fe', 100], [SNAKE_CHEAP, 500]]), receive() {},
+    resourceSystem: { inventory: new Map([['Fe', 100], [SNAKE_CHEAP, 500]]), receive: (x) => calls.recvA.push(x),
       _producers: new Map([['building_1_1', { [SNAKE_EXP]: -2, [SNAKE_CHEAP]: -1, Fe: 3 }]]) } };
   const colB = { planetId: 'col_b', name: 'Beta', isOutpost: false, resourceSystem: { inventory: new Map(), _producers: new Map() } };
   colA.buildingSystem = { _constructionQueue: new Map([['t1', { progress: 0, buildTime: 10 }]]) };
@@ -88,6 +95,7 @@ function makeWorld() {
   window.KOSMOS = {
     colonyManager: colMgr, civilianTradeSystem: civ, overlayManager: om,
     buildingSystem: colA.buildingSystem,   // globalne = systemy aktywnej kolonii (switchActiveColony)
+    resourceSystem: colA.resourceSystem,
     prosperitySystem: colA.prosperitySystem,
     tradeLog: {
       getLog: () => [{ type: 'export', year: 12.3, vesselName: 'Kupiec', partnerName: 'Beta', items: { [SNAKE_EXP]: 3.2 } },
@@ -105,8 +113,7 @@ function makeWorld() {
 }
 // stan Rynku: imperium + kolonia AI + towar wybrane
 function marketState(ov) { ov._marketEmpireId = 'emp_x'; ov._marketAiColId = 'ai_1'; ov._marketGoodId = SNAKE_CHEAP; ov._marketQty = 30; }
-function render(page, on, { W = 1600, H = 1041, market = true, pre = null } = {}) {
-  setEco(on);
+function render(page, { W = 1600, H = 1041, market = true, pre = null } = {}) {
   const w = makeWorld();
   const ov = w.trade;
   ov.visible = true; ov._tab = page;
@@ -120,24 +127,42 @@ const types = (zs) => new Set(zs.map((z) => z.type));
 const isKit = (r) => !!r?.ov?.consoleZones;
 const dataOf = (zs, type) => zs.filter((z) => z.type === type).map((z) => JSON.stringify(z.data ?? null));
 const sameSet = (a, b) => a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|');
-const clickZone = (r, z) => { setEco(true); window.KOSMOS.overlayManager.active = 'trade'; return safe(() => r.ov.handleClick(z.x + Math.min(3, z.w / 2), z.y + Math.min(3, z.h / 2))); };
+const clickZone = (r, z) => { window.KOSMOS.overlayManager.active = 'trade'; return safe(() => r.ov.handleClick(z.x + Math.min(3, z.w / 2), z.y + Math.min(3, z.h / 2))); };
 
 if (!TO) assert(false, 'TradeOverlay importuje się');
 else {
   // ═══ H — Handel ═════════════════════════════════════════════════════════════════════════════════════════════════
-  console.log('H — Handel: akcje ON ⊇ OFF');
-  const off = render('trade', false, { H: 5000 }), on = render('trade', true, { H: 5000 });
-  const tOff = types(off.zones), tOn = types(on.zones);
-  assert(['close', 'tab', 'migration_toggle', 'spend_rush', 'spend_buy', 'spend_festival', 'trade_toggle_good', 'trade_bar_hover'].every((x) => tOff.has(x)),
-    `H0 kontrola: OFF Handel ma wszystkie typy (${[...tOff].join(',')})`);
-  const lostH = [...tOff].filter((x) => !tOn.has(x));
-  assert(isKit(on) && lostH.length === 0, `H1 konsola Handlu ma każdy dzisiejszy typ strefy${lostH.length ? ' — brak: ' + lostH.join(',') : ''}`);
-  const newH = [...tOn].filter((x) => !tOff.has(x));
-  assert(isKit(on) && [...newH].sort().join(',') === 'trade_conn,trade_ctx_toggle', `H2 nowe typy tylko: trade_conn + trade_ctx_toggle (kontekst kolonii, runda 2) (${newH.join(',')})`);
-  for (const ty of ['spend_rush', 'spend_buy', 'spend_festival', 'migration_toggle', 'trade_toggle_good', 'trade_bar_hover']) {
-    assert(isKit(on) && sameSet(dataOf(off.zones, ty), dataOf(on.zones, ty)), `H3 dane stref ${ty} ON == OFF (${dataOf(on.zones, ty).length})`);
+  console.log('H — Handel: typy i dane stref (bezwzględnie)');
+  const on = render('trade', { H: 5000 });
+  const tOn = types(on.zones);
+  const TRADE_TYPES = ['close', 'migration_toggle', 'spend_buy', 'spend_festival', 'spend_rush', 'tab', 'trade_bar_hover', 'trade_conn',
+    'trade_ctx_toggle', 'trade_toggle_good'];
+  assert(isKit(on) && sameSet([...tOn], TRADE_TYPES), `H1 Handel: zbiór typów stref = ${TRADE_TYPES.length} typów (${[...tOn].sort().join(',')})`);
+  const onCtx = render('trade', { H: 5000, pre: (ov) => { ov._ctxOpen = true; } });
+  const tCtx = types(onCtx.zones);
+  const allowCtx = new Set([...TRADE_TYPES, 'trade_ctx_pick']);
+  assert(isKit(onCtx) && tCtx.has('trade_ctx_pick') && TRADE_TYPES.filter((x) => x !== 'trade_conn').every((x) => tCtx.has(x)) && [...tCtx].every((x) => allowCtx.has(x)),
+    `H2 lista kolonii otwarta: + trade_ctx_pick, reszta typów Handlu, nic spoza (${[...tCtx].sort().join(',')})`);
+  const colA0 = window.KOSMOS.colonyManager.getColony('col_a');
+  const eb = safe(() => TCL.emergencyBuy(on.ov._calcLocalPrices(colA0)), null);
+  const SC = TCL?.SPEND_COST ?? {};
+  const expect = {
+    spend_rush: [{ cost: SC.rush, colonyId: 'col_a' }],
+    spend_buy: [{ cost: eb?.cost, goodId: SNAKE_EXP, qty: TCL?.EMERGENCY_BUY_QTY, colonyId: 'col_a' }],
+    spend_festival: [{ cost: SC.festival, colonyId: 'col_a' }],
+    migration_toggle: [{ colonyId: 'col_a' }],
+    trade_bar_hover: [{ year: 11, items: { [SNAKE_EXP]: 5 }, total: 5, isExport: true }, { year: 12, items: { [SNAKE_EXP]: 8 }, total: 8, isExport: true },
+      { year: 11, items: { Fe: 2 }, total: 2, isExport: false }],
+  };
+  assert(SC.rush > 0 && SC.festival > 0 && eb?.cost > 0 && eb?.target?.id === SNAKE_EXP && TCL.EMERGENCY_BUY_QTY > 0,
+    `H3 świadek: koszty wydatków niepuste (rush ${SC.rush}, festyn ${SC.festival}, zakup ${eb?.cost} za ${eb?.target?.id})`);
+  for (const ty of Object.keys(expect)) {
+    const got = dataOf(on.zones, ty), want = expect[ty].map((o) => JSON.stringify(o));
+    assert(isKit(on) && sameSet(got, want), `H3 dane stref ${ty} (${got.length}) = ${want.join(' ')}`);
   }
-  assert(isKit(on) && dataOf(on.zones, 'trade_toggle_good').length === TRADEABLE_GOODS.length, `H4 siatka towarów: ${TRADEABLE_GOODS.length} stref (pełny inspektor)`);
+  const tgz = on.zones.filter((z) => z.type === 'trade_toggle_good').map((z) => z.data);
+  assert(isKit(on) && sameSet(tgz.map((d) => d.goodId), [...TRADEABLE_GOODS]) && tgz.every((d) => d.colonyId === 'col_a' && d.blocked === (d.goodId === 'Fe')),
+    `H4 siatka towarów: ${tgz.length} stref = TRADEABLE_GOODS (${TRADEABLE_GOODS.length}), kolonia Handlu, zablokowany tylko Fe`);
   // skutki
   const conn = on.zones.find((z) => z.type === 'trade_conn' && z.data.partnerId === 'col_c');
   if (conn) clickZone(on, conn);
@@ -145,54 +170,74 @@ else {
   const emitted = [];
   const origEmit = EventBus.emit.bind(EventBus);
   EventBus.emit = (ev, p) => { emitted.push([ev, JSON.stringify(p)]); };
-  for (const r of [off, on]) {
-    const z = r.zones.find((q) => q.type === 'trade_toggle_good' && q.data.goodId === 'Fe');
-    setEco(r === on); window.KOSMOS.overlayManager.active = 'trade';
-    if (z) safe(() => r.ov._onHit(z));
+  const otherGood = TRADEABLE_GOODS.find((g) => g !== 'Fe');
+  for (const gid of ['Fe', otherGood]) {
+    const z = on.zones.find((q) => q.type === 'trade_toggle_good' && q.data.goodId === gid);
+    window.KOSMOS.overlayManager.active = 'trade';
+    if (z) safe(() => on.ov._onHit(z));
   }
   EventBus.emit = origEmit;
-  assert(isKit(on) && emitted.length === 2 && emitted[0][1] === emitted[1][1] && /"mode":null/.test(emitted[1][1]), 'H6 blokada towaru: ten sam trade:setOverride ON == OFF (odblokowanie Fe)');
-  const onClick = render('trade', true, { H: 5000 });
+  const wantEm = [['trade:setOverride', JSON.stringify({ colonyId: 'col_a', goodId: 'Fe', mode: null })],
+    ['trade:setOverride', JSON.stringify({ colonyId: 'col_a', goodId: otherGood, mode: 'block' })]];
+  assert(isKit(on) && JSON.stringify(emitted) === JSON.stringify(wantEm),
+    `H6 siatka: Fe → odblokuj (mode null), ${otherGood} → zablokuj, kolonia Handlu (${emitted.map((e) => e[1]).join(' ')})`);
+  const onClick = render('trade', { H: 5000 });
   const tg = onClick.zones.find((q) => q.type === 'trade_toggle_good' && q.data.goodId === 'Fe');
   const em2 = [];
   EventBus.emit = (ev, p) => { em2.push(ev); };
   if (tg) clickZone(onClick, tg);
   EventBus.emit = origEmit;
   assert(isKit(onClick) && em2.includes('trade:setOverride'), 'H7 klik siatki konsoli dochodzi do handlera (handleClick → _onHit)');
+  const mig = onClick.zones.find((q) => q.type === 'migration_toggle');
+  const em3 = [];
+  EventBus.emit = (ev, p) => { em3.push([ev, JSON.stringify(p)]); };
+  if (mig) clickZone(onClick, mig);
+  EventBus.emit = origEmit;
+  assert(em3.length === 1 && em3[0][0] === 'trade:setOverride' && em3[0][1] === JSON.stringify({ colonyId: 'col_a', goodId: 'migration', mode: 'block' }),
+    `H8 klik migracji: trade:setOverride migration → block dla kolonii Handlu (${em3.map((e) => e[1]).join(' ')})`);
 
   // ═══ R — Rynek ══════════════════════════════════════════════════════════════════════════════════════════════════
-  console.log('R — Rynek: akcje ON ⊇ OFF');
-  const mOff = render('market', false, { H: 5000 }), mOn = render('market', true, { H: 5000 });
-  const mtOff = types(mOff.zones), mtOn = types(mOn.zones);
-  const MT = ['close', 'tab', 'market_empire', 'market_empire_toggle', 'market_colony', 'market_good', 'market_qty', 'market_qty_edit', 'market_buy', 'market_sell', 'market_cancel'];
-  assert(MT.every((x) => mtOff.has(x)), `R0 kontrola: OFF Rynek ma wszystkie typy (${mtOff.size})`);
-  const lostR = [...mtOff].filter((x) => !mtOn.has(x));
-  assert(isKit(mOn) && lostR.length === 0, `R1 konsola Rynku ma każdy dzisiejszy typ strefy${lostR.length ? ' — brak: ' + lostR.join(',') : ''}`);
-  assert(isKit(mOn) && [...mtOn].every((x) => mtOff.has(x) || x === 'trade_ctx_toggle'), 'R2 Rynek bez nowych typów stref (poza trade_ctx_toggle — kontekst kolonii)');
-  for (const ty of ['market_empire', 'market_empire_toggle', 'market_colony', 'market_good', 'market_qty', 'market_buy', 'market_sell', 'market_cancel']) {
-    assert(isKit(mOn) && sameSet(dataOf(mOff.zones, ty), dataOf(mOn.zones, ty)), `R3 dane stref ${ty} ON == OFF (${dataOf(mOn.zones, ty).length})`);
+  console.log('R — Rynek: typy i dane stref (bezwzględnie)');
+  const mOn = render('market', { H: 5000 });
+  const mtOn = types(mOn.zones);
+  const MT = ['close', 'tab', 'market_empire', 'market_empire_toggle', 'market_colony', 'market_good', 'market_qty', 'market_qty_edit', 'market_buy', 'market_sell',
+    'market_cancel', 'trade_ctx_toggle'];
+  assert(isKit(mOn) && sameSet([...mtOn], MT), `R1 Rynek: zbiór typów stref = ${MT.length} typów (${[...mtOn].sort().join(',')})`);
+  const mExpect = {
+    market_empire: [{ empireId: 'emp_x' }], market_empire_toggle: [{ empireId: 'emp_x' }],
+    market_colony: [{ aiColId: 'ai_1', empireId: 'emp_x' }, { aiColId: 'ai_2', empireId: 'emp_x' }],
+    market_good: TRADEABLE_GOODS.map((g) => ({ goodId: g })), market_qty: [{ delta: -10 }, { delta: 10 }],
+    market_buy: [{ goodId: SNAKE_CHEAP, qty: 30 }], market_sell: [{ goodId: SNAKE_CHEAP, qty: 30 }], market_cancel: [{ orderId: 'o1' }],
+  };
+  for (const ty of Object.keys(mExpect)) {
+    const got = dataOf(mOn.zones, ty), want = mExpect[ty].map((o) => JSON.stringify(o));
+    assert(isKit(mOn) && sameSet(got, want), `R3 dane stref ${ty} (${got.length})${want.length <= 3 ? ' = ' + want.join(' ') : ''}`);
   }
   const plus = mOn.zones.find((z) => z.type === 'market_qty' && z.data.delta > 0);
   if (plus) clickZone(mOn, plus);
   assert(isKit(mOn) && mOn.ov._marketQty === 40, `R4 klik [ + ] konsoli: ilość 30 → ${mOn.ov._marketQty}`);
-  const buyOf = (r, on) => {
+  const orderOf = (r, type) => {
     const got = [];
     window.KOSMOS.tradeOrderBoard.placeOrder = (o) => got.push(o);
-    const z = r.zones.find((q) => q.type === 'market_buy');
-    setEco(on); window.KOSMOS.overlayManager.active = 'trade';
+    const z = r.zones.find((q) => q.type === type);
+    window.KOSMOS.overlayManager.active = 'trade';
     if (z) safe(() => r.ov._onHit(z));
-    return got.length ? JSON.stringify(got[0]) : null;
+    return got.length === 1 ? JSON.stringify(got[0]) : null;
   };
-  const bOffArgs = buyOf(mOff, false);
-  const mOn2 = render('market', true, { H: 5000 });
-  const bOnArgs = buyOf(mOn2, true);
-  assert(isKit(mOn2) && bOffArgs != null && bOffArgs === bOnArgs, `R5 kup: te same argumenty placeOrder ON == OFF (${bOnArgs})`);
+  const mOn2 = render('market', { H: 5000 });
+  const bArgs = orderOf(mOn2, 'market_buy'), sArgs = orderOf(mOn2, 'market_sell');
+  const wantOrder = (side) => JSON.stringify({ side, goodId: SNAKE_CHEAP, qty: 30, playerColonyId: 'col_a', aiColonyId: 'ai_1' });
+  assert(isKit(mOn2) && bArgs === wantOrder('buy'), `R5 kup: placeOrder ${bArgs}`);
+  assert(isKit(mOn2) && sArgs === wantOrder('sell'), `R5b sprzedaj: placeOrder ${sArgs}`);
   const cancel = mOn2.zones.find((z) => z.type === 'market_cancel');
   if (cancel) clickZone(mOn2, cancel);
   assert(mOn2.w.calls.cancels.includes('o1'), 'R6 klik [ ANULUJ ] w pasie konsoli anuluje zlecenie o1');
   const emp = mOn2.zones.find((z) => z.type === 'market_empire');
   const tog = mOn2.zones.find((z) => z.type === 'market_empire_toggle');
   assert(isKit(mOn2) && emp && tog && (emp.x + emp.w <= tog.x + 0.5), 'R7 wiersz imperium: strefa wyboru i przełącznik auto-handlu nie zachodzą na siebie');
+  if (tog) clickZone(mOn2, tog);
+  assert(JSON.stringify(mOn2.w.calls.toggles) === JSON.stringify([['emp_x', false]]),
+    `R8 klik przełącznika auto-handlu: setCrossEmpireTrade(emp_x, false) (${JSON.stringify(mOn2.w.calls.toggles)})`);
 
   // ═══ Q — pole ilości ════════════════════════════════════════════════════════════════════════════════════════════
   console.log('Q — pole ilości <input>');
@@ -202,7 +247,7 @@ else {
     const iw = window.innerWidth, ih = window.innerHeight;
     window.innerWidth = cw; window.innerHeight = ch;
     const vp = CL ? CL.uiViewport(cw, ch) : { scale: 1, W: 1280, H: 720 };
-    const r = render('market', true, { W: vp.W, H: vp.H });
+    const r = render('market', { W: vp.W, H: vp.H });
     const z = r.zones.find((q) => q.type === 'market_qty_edit');
     assert(isKit(r) && inside(z, r.ov.consoleZones?.inspector), `Q1 ${cw}×${ch}: pole ilości w inspektorze konsoli`);
     window.innerWidth = 333; window.innerHeight = 222;   // handler nie może czytać okna
@@ -218,13 +263,26 @@ else {
     safe(() => r.ov._closeQtyInput());
   }
   const s = src('../../ui/TradeOverlay.js');
-  const kitBlocks = [...s.matchAll(/if \(kitOn\(\)\) \{([\s\S]*?)\n    \}/g)].map((m) => m[1]);
-  assert(kitBlocks.length >= 3 && kitBlocks.every((b) => !/window\.inner/.test(b)), `Q3 źródło: gałęzie kitOn w draw / klik / kółko bez window.inner* (${kitBlocks.length})`);
+  // ciało metody klasy: od „\n  nazwa(…) {” do domykającej klamry (komentarze blokowe też zdjęte)
+  const sNoBlock = s.replace(/\/\*[\s\S]*?\*\//g, '');
+  const bodyOf = (code, name) => {
+    const m = new RegExp(`\\n  ${name}\\([^)]*\\) \\{`).exec(code);
+    if (!m) return '';
+    let i = m.index + m[0].length, depth = 1;
+    const s0 = i;
+    while (i < code.length && depth > 0) { if (code[i] === '{') depth++; else if (code[i] === '}') depth--; i++; }
+    return code.slice(s0, i - 1);
+  };
+  const HANDLERS = ['handleClick', 'handleScroll', 'handleMouseMove', '_openQtyInput'];
+  const bodies = HANDLERS.map((n) => bodyOf(sNoBlock, n));
+  assert(bodies.every((b) => b.trim().length > 40) && /consoleZones/.test(bodies[0]) && /_uiScale/.test(bodies[3]),
+    `Q3 świadek: wycięte ciała ${HANDLERS.join(' / ')} (${bodies.map((b) => b.length).join(', ')} zn.)`);
+  const winBad = HANDLERS.filter((n, i) => /window\.inner/.test(bodies[i]));
+  assert(bodies.every((b) => b.length > 0) && winBad.length === 0, `Q3b źródło: ${HANDLERS.join(' / ')} bez window.inner*${winBad.length ? ' — czyta: ' + winBad.join(',') : ''}`);
   {
-    const r = render('trade', true);
+    const r = render('trade');
     const iw = window.innerWidth; window.innerWidth = 333;
     const lr = r.ov._consoleListRect, ir = r.ov._consoleInspRect, sr = r.ov._consoleStripRect;
-    setEco(true);
     safe(() => r.ov.handleScroll(40, lr.x + 4, lr.y + 4));
     safe(() => r.ov.handleScroll(40, ir.x + 4, ir.y + 4));
     safe(() => r.ov.handleScroll(40, sr.x + 4, sr.y + 4));
@@ -234,12 +292,18 @@ else {
 
   // ═══ T — Finding 725 ═══════════════════════════════════════════════════════════════════════════════════════════
   console.log('T — 725: nazwy zamiast id');
-  const offT = render('trade', false, { H: 5000 });
-  assert(offT.texts.some((x) => x.includes(SNAKE_EXP)), `T0 kontrola: dzisiejsza strona rysuje surowe id (${SNAKE_EXP}) w cenach lokalnych`);
+  {
+    // świadek: surowe id jest w danych świata (ceny lokalne kolonii Handlu), detektor je łapie, a strona rysuje jego nazwę
+    const rT = render('trade', { H: 5000 });
+    const priced = safe(() => rT.ov._calcLocalPrices(window.KOSMOS.colonyManager.getColony('col_a')), []).map((p) => p.id);
+    const nm = COMMODITIES[SNAKE_EXP]?.namePL;
+    assert(/\b[a-z]+_[a-z_]+\b/.test(SNAKE_EXP) && priced.includes(SNAKE_EXP) && !!nm && rT.texts.some((x) => x.includes(nm)),
+      `T0 świadek: ${SNAKE_EXP} jest w cenach lokalnych (${priced.join(',')}), detektor go łapie, strona rysuje nazwę „${nm}”`);
+  }
   for (const page of ['trade', 'market']) {
     for (const loc of ['pl', 'en']) {
       setLocale(loc);
-      const r = render(page, true, { H: 5000 });
+      const r = render(page, { H: 5000 });
       const raw = r.texts.filter((x) => /\b[a-z]+_[a-z_]+\b/.test(x) || /\b(Kr\/rok|econ\.|tradePanel\.|market\.)/.test(x) && loc === 'en');
       assert(isKit(r) && r.texts.length > 20 && raw.length === 0, `T1 ${page} ${loc}: tekst konsoli bez surowych id / kluczy${raw.length ? ' — ' + raw.slice(0, 3).join(' | ') : ''}`);
     }
@@ -250,11 +314,11 @@ else {
   // ═══ G — czipy ze stron Handlu ═════════════════════════════════════════════════════════════════════════════════
   console.log('G — czipy grupy ze stron Handlu');
   {
-    const r = render('trade', true);
+    const r = render('trade');
     const tabs = r.zones.filter((z) => z.type === 'tab').map((z) => z.data?.id);
     assert(JSON.stringify(tabs) === JSON.stringify(['budget', 'economy', 'trade', 'market', 'flows']), `G1 czipy z Handlu w kolejności: ${tabs.join(',')}`);
     const chipClick = (page, id) => {
-      const rr = render(page, true);
+      const rr = render(page);
       if (page === 'market') marketState(rr.ov);
       const z = rr.zones.find((q) => q.type === 'tab' && q.data?.id === id);
       if (z) clickZone(rr, z);
@@ -271,12 +335,16 @@ else {
     assert(d.w.calls.open.at(-1) === 'economy', 'G5 z Handlu [ PRODUKCJA ] → openPanel(economy) (dzisiejsza strona)');
     const e = chipClick('trade', 'flows');
     assert(e.w.calls.open.at(-1) === 'flows', 'G6 z Handlu [ PRZEPŁYWY ] → openPanel(flows)');
-    if (CPD) {
-      makeWorld(); window.KOSMOS.overlayManager.active = 'trade';
-      setEco(true); const hOn = CPD.getSubNavHeight();
-      setEco(false); const hOff = CPD.getSubNavHeight();
-      assert(hOn === 0 && hOff > 0, `G7 pas subnav nad Handlem: ON ${hOn}, OFF ${hOff} (kontrola)`);
-    } else assert(false, 'G7 CivPanelDrawer importuje się');
+    if (CPD && CL) {
+      makeWorld();
+      F.consoleKit = false;   // bez żadnej flagi konsoli
+      window.KOSMOS.overlayManager.active = 'trade'; const hTrade = safe(() => CPD.getSubNavHeight(), -1);
+      window.KOSMOS.overlayManager.active = 'tech'; const hTech = safe(() => CPD.getSubNavHeight(), -1);
+      F.consoleKit = true;
+      const kit = safe(() => CL.isKitScreen('trade', {}), null);
+      assert(hTrade === 0 && kit === true, `G7 pas subnav nad Handlem = ${hTrade} bez flag; isKitScreen('trade', {}) = ${kit}`);
+      assert(hTech > 0, `G8 świadek: ekran zgrupowany spoza zestawu (tech) ma pas subnav (${hTech})`);
+    } else assert(false, 'G7 CivPanelDrawer + ConsoleLayoutLogic importują się');
   }
 }
 
@@ -299,7 +367,6 @@ else {
   const cols = [colA, colB];
   window.KOSMOS = { colonyManager: { getPlayerColonies: () => cols, getAllColonies: () => cols, getColony: (id) => cols.find((c) => c.planetId === id),
     activePlanetId: 'col_a', taxRate: 0.1, calculateTaxIncome: () => 0 }, overlayManager: { active: 'flows', overlays: {} } };
-  setEco(true);
   const ov = new EO.EconomyOverlay();
   ov.visible = true;
   const r = recCtx();
@@ -322,12 +389,8 @@ else {
   const witness = ids.filter((id) => Math.abs(regOnly(id) - net(id)) > 0.5);
   assert(witness.includes('Fe'), `F2 świadek: Fe — rejestr producentów ${regOnly('Fe').toFixed(1)} ≠ netto ${net('Fe').toFixed(1)} (kopalnia + wsad fabryki)`);
   assert(ids.includes('Ti'), 'F3 zasób tylko z kopalni (Ti) jest na liście (bohater go pokazuje)');
-  setEco(false);
-  const off = new EO.EconomyOverlay(); off.visible = true;
-  const r3 = recCtx();
-  safe(() => off.draw(r3.ctx, 1600, 1041));
-  const offIds = (off._hitZones ?? []).filter((z) => z.type === 'flow_res').map((z) => z.data.resId);
-  assert(offIds.length >= 3 && !offIds.includes('Ti'), `F4 kontrola: dzisiejsza lista (OFF) bez Ti — liczona z samego rejestru (${offIds.join(',')})`);
+  const tiInReg = cols.some((c) => [...c.resourceSystem._producers.values()].some((rates) => 'Ti' in rates));
+  assert(!tiInReg && regOnly('Ti') === 0 && net('Ti') !== 0, `F4 świadek: Ti nie ma w rejestrze producentów (netto bohatera ${net('Ti')?.toFixed?.(2)} — z kopalni)`);
 }
 
 // ═══ A — Handel: wybór połączenia steruje bohaterem i inspektorem (polerka K3, uwaga A) ═══════════════════════════
@@ -350,28 +413,28 @@ const lc = (x) => String(x).toLowerCase();
   assert(bb.length === 2 && bb[0].goodId === 'Fe' && bb[0].qty === 2 && ba.find((b) => b.goodId === 'Fe' && b.isExport)?.qty === 5,
     'A3 słupki bieżących przepływów: jednego partnera / wszystkich zsumowane');
 
-  const all = render('trade', true);
+  const all = render('trade');
   const connZ = all.zones.filter((z) => z.type === 'trade_conn').map((z) => z.data.partnerId);
   assert(isKit(all) && connZ[0] === ALL && connZ.includes('col_b') && connZ.includes('col_c') && all.ov._tradeConnId === ALL,
     `A4 pierwszy wiersz listy = wszystkie połączenia i jest domyślnie wybrany (${connZ.join(',')})`);
-  const beta = render('trade', true, { pre: (ov) => { ov._tradeConnId = 'col_b'; } });
+  const beta = render('trade', { pre: (ov) => { ov._tradeConnId = 'col_b'; } });
   const barsAll = dataOf(all.zones, 'trade_bar_hover'), barsBeta = dataOf(beta.zones, 'trade_bar_hover');
   assert(isKit(beta) && barsBeta.length > 0 && !sameSet(barsAll, barsBeta), `A5 wybór połączenia zmienia wykres bohatera (${barsAll.length} → ${barsBeta.length} słupków)`);
   const jb = lc(joined(beta));
   assert(jb.includes(lc(t('econ.console.partnerPrices', 'Beta'))) && jb.includes(lc(t('econ.console.connInfo'))) && !jb.includes(lc(t('tradePanel.localPrices'))),
     'A6 inspektor połączenia: fakty połączenia + ceny u partnera (ceny są per kolonia)');
   const priced = [];
-  const bp = render('trade', true, { pre: (ov) => { ov._tradeConnId = 'col_b'; const f0 = ov._calcLocalPrices.bind(ov); ov._calcLocalPrices = (c) => { priced.push(c?.planetId); return f0(c); }; } });
+  const bp = render('trade', { pre: (ov) => { ov._tradeConnId = 'col_b'; const f0 = ov._calcLocalPrices.bind(ov); ov._calcLocalPrices = (c) => { priced.push(c?.planetId); return f0(c); }; } });
   const pricedAll = [];
-  render('trade', true, { pre: (ov) => { const f0 = ov._calcLocalPrices.bind(ov); ov._calcLocalPrices = (c) => { pricedAll.push(c?.planetId); return f0(c); }; } });
+  render('trade', { pre: (ov) => { const f0 = ov._calcLocalPrices.bind(ov); ov._calcLocalPrices = (c) => { pricedAll.push(c?.planetId); return f0(c); }; } });
   assert(isKit(bp) && priced.includes('col_b') && !pricedAll.includes('col_b'), `A6b ceny liczone dla kolonii partnera (${priced.join(',')}; wszystkie: ${pricedAll.join(',')})`);
-  const gam = render('trade', true, { pre: (ov) => { ov._tradeConnId = 'col_c'; } });
+  const gam = render('trade', { pre: (ov) => { ov._tradeConnId = 'col_c'; } });
   assert(isKit(gam) && joined(gam).includes(t('econ.console.connNoData')) && dataOf(gam.zones, 'trade_bar_hover').length === 0,
     'A7 połączenie bez danych: zwykły tekst „brak danych” zamiast cichego braku zmian');
   const strip = gam.ov.consoleZones?.strip;
   const stripTexts = gam.log.filter((e) => e[0] === 'fillText' && strip && e[3] >= strip.y && e[3] <= strip.y + strip.h).map((e) => e[1]);
   assert(stripTexts.length > 0 && !stripTexts.some((x) => x.includes('Kupiec')), 'A8 pas: dziennik tylko wybranego połączenia (Gamma — brak wpisów Beta)');
-  const cur = render('trade', true, { pre: (ov, w) => { ov._tradeConnId = 'col_b'; window.KOSMOS.tradeLog.getLog = () => []; } });
+  const cur = render('trade', { pre: (ov, w) => { ov._tradeConnId = 'col_b'; window.KOSMOS.tradeLog.getLog = () => []; } });
   const curBars = cur.zones.filter((z) => z.type === 'trade_bar_hover');
   assert(isKit(cur) && curBars.length === 2 && curBars.every((z) => z.data.goodId && z.data.year == null) && joined(cur).includes(t('econ.console.flowLegend')),
     'A9 połączenie bez historii w dzienniku: słupki bieżących przepływów + legenda szt./rok');
@@ -404,15 +467,15 @@ console.log('B — bramka zlecenia');
     ['kredyty', (ov, w) => { w.cols[0].credits = 1; }, 'econ.console.gateCredits'],
     ['zapas partnera', (ov, w) => { w.cols[2].resourceSystem.inventory.set(SNAKE_CHEAP, 0); }, 'econ.console.gatePartnerStock']];
   for (const [name, pre, key] of blocked) {
-    const r = render('market', true, { pre });
+    const r = render('market', { pre });
     const reasonHead = t(key, '\u0000', '\u0000').split('\u0000')[0].replace(/[:(]\s*$/, '').trim();
     assert(isKit(r) && !r.zones.some((z) => z.type === 'market_buy') && joined(r).includes(reasonHead),
       `B4 ${name}: [ KUP ] bez strefy, powód „${reasonHead}…” pod przyciskiem`);
   }
-  const ok = render('market', true);
+  const ok = render('market');
   assert(isKit(ok) && ok.zones.some((z) => z.type === 'market_buy') && ok.zones.some((z) => z.type === 'market_sell')
     && !joined(ok).includes(t('econ.console.gateTech', '').split(':')[0]), 'B5 stan dozwolony: KUP i SPRZEDAJ mają strefy, brak powodu');
-  // ścieżka OFF odrzuca tak samo — ta sama metoda placeOrder (to nie błąd konsoli)
+  // system zleceń odrzuca niezależnie od konsoli (druga linia obrony za bramką z powodem)
   if (TOB?.TradeOrderBoard) {
     const w = makeWorld();
     const board = new TOB.TradeOrderBoard(w.colMgr);
@@ -423,20 +486,22 @@ console.log('B — bramka zlecenia');
     window.KOSMOS.diplomacySystem.hasTradeAgreement = () => false;
     const r2 = safe(() => board.placeOrder({ side: 'buy', goodId: SNAKE_CHEAP, qty: 10, playerColonyId: 'col_a', aiColonyId: 'ai_1' }), null);
     assert(r1?.ok === false && r1.reason === 'no_warp' && r2?.ok === false && r2.reason === 'no_agreement',
-      `B6 TradeOrderBoard.placeOrder (ta sama dla OFF): bez ion_drives → ${r1?.reason}, bez traktatu → ${r2?.reason}`);
+      `B6 TradeOrderBoard.placeOrder: bez ion_drives → ${r1?.reason}, bez traktatu → ${r2?.reason}`);
     board.dispose?.();
   } else assert(false, 'B6 TradeOrderBoard importuje się');
-  const off = render('market', false, { pre: () => { window.KOSMOS.techSystem.isResearched = () => false; } });
-  assert(!isKit(off) && off.zones.some((z) => z.type === 'market_buy'), 'B7 kontrola OFF: strona dzisiejsza ma strefę [ KUP ] także bez ion_drives (klik = cicha odmowa placeOrder)');
+  const noTech = render('market', { pre: () => { window.KOSMOS.techSystem.isResearched = () => false; } });
+  assert(isKit(noTech) && !noTech.zones.some((z) => z.type === 'market_buy' || z.type === 'market_sell')
+    && dataOf(noTech.zones, 'market_good').length === TRADEABLE_GOODS.length && noTech.zones.some((z) => z.type === 'market_qty_edit'),
+    'B7 bez ion_drives: ani [ KUP ], ani [ SPRZEDAJ ] nie mają strefy (świadek: tablica towarów i pole ilości narysowane)');
 }
 
 // ═══ C — wykresy Handlu i tablica Rynku: etykiety (polerka K3, uwagi 4–5) ══════════════════════════════════════════
 console.log('C — etykiety');
 {
-  const r = render('trade', true);
+  const r = render('trade');
   assert(isKit(r) && r.texts.includes(t('econ.console.yearN', 11)) && r.texts.includes(t('econ.console.yearN', 12)) && joined(r).includes(t('econ.console.chartLegend')),
     'C1 Handel: oś X „Rok N” i linia jednostki słupków');
-  const m = render('market', true);
+  const m = render('market');
   const heads = m.texts.filter((x) => x === t('econ.console.boardStock').toUpperCase()).length;
   assert(isKit(m) && heads >= 1 && m.texts.includes(t('econ.console.boardGood').toUpperCase()), `C2 Rynek: nagłówki kolumn tablicy (${heads}× „zapas · cena”)`);
   const title = m.texts.find((x) => lc(x).includes(lc('Nowa Sparta ·')));
@@ -461,7 +526,7 @@ const withOutpost = (ov, w) => {
     && safe(() => TCL.pickTradeColony([{ id: 'o', ok: false }], null, 'o'), 'x') === null, 'K2 wybór: wybrana pełna → aktywna pełna → pierwsza pełna; sama placówka → brak');
 
   // przypadek właściciela: aktywna kolonia gry = placówka
-  const r = render('market', true, { pre: withOutpost });
+  const r = render('market', { pre: withOutpost });
   assert(isKit(r) && safe(() => r.ov._tradeColonyId?.(), null) === 'col_a' && joined(r).includes(t('econ.console.ctxLabel', 'Alfa')),
     `K3 aktywna = placówka → konsola handluje pełną kolonią i mówi którą („${t('econ.console.ctxLabel', 'Alfa')}”)`);
   const buy = r.zones.find((z) => z.type === 'market_buy');
@@ -469,13 +534,12 @@ const withOutpost = (ov, w) => {
   const ord = r.w.calls.orders[0];
   assert(buy && ord?.playerColonyId === 'col_a' && window.KOSMOS.colonyManager.activePlanetId === 'col_o' && !r.w.calls.switched,
     `K4 [ KUP ] składa zlecenie dla kolonii Handlu (${ord?.playerColonyId ?? '—'}); aktywna gry bez zmian, bez switchActiveColony`);
-  const off = render('market', false, { pre: withOutpost });
-  const offBuy = off.zones.find((z) => z.type === 'market_buy');
-  if (offBuy) { setEco(false); safe(() => off.ov.handleClick(offBuy.x + 2, offBuy.y + 2)); }
-  assert(!isKit(off) && (!offBuy || off.w.calls.orders[0]?.playerColonyId === 'col_o'), 'K5 kontrola OFF: dzisiejsza strona używa aktywnej kolonii gry (placówki)');
+  const optsO = safe(() => TCL.tradeColonyOptions(window.KOSMOS.colonyManager.getPlayerColonies()), []);
+  assert(r.w.colMgr.activePlanetId === 'col_o' && optsO.some((o) => o.id === 'col_o' && o.ok === false) && optsO.some((o) => o.id === 'col_a' && o.ok),
+    'K5 świadek: aktywna kolonia gry to placówka col_o (niewybieralna) — K4 odróżnia kolonię Handlu od aktywnej');
 
   // lista wyboru kolonii
-  const pk1 = render('trade', true, { pre: (ov, w) => { withOutpost(ov, w); ov._ctxOpen = true; } });
+  const pk1 = render('trade', { pre: (ov, w) => { withOutpost(ov, w); ov._ctxOpen = true; } });
   const picks = pk1.zones.filter((z) => z.type === 'trade_ctx_pick').map((z) => z.data.colonyId);
   assert(isKit(pk1) && picks.join(',') === 'col_a,col_b' && joined(pk1).includes(`Placówka Zeta — ${t('econ.console.ctxOutpost').split(' ')[0]}`),
     `K6 lista wyboru: pełne kolonie wybieralne (${picks.join(',')}), placówka przygaszona z powodem`);
@@ -483,7 +547,6 @@ const withOutpost = (ov, w) => {
   if (pz) clickZone(pk1, pz);
   pk1.w.calls.creditsOf.length = 0;
   const rd = recCtx();
-  setEco(true);
   safe(() => pk1.ov.draw(rd.ctx, 1600, 1041));
   assert(pk1.ov._tradeColId === 'col_b' && !pk1.ov._ctxOpen && pk1.w.calls.creditsOf.includes('col_b') && !pk1.w.calls.creditsOf.includes('col_a')
     && window.KOSMOS.colonyManager.activePlanetId === 'col_o' && !pk1.w.calls.switched,
@@ -492,9 +555,9 @@ const withOutpost = (ov, w) => {
   // żaden klik konsoli nie zmienia aktywnej kolonii gry (diagnoza — kontrola)
   let changed = 0, clicked = 0;
   for (const page of ['trade', 'market']) {
-    const base0 = render(page, true, { pre: withOutpost });
+    const base0 = render(page, { pre: withOutpost });
     for (const z of base0.zones.filter((q) => !['close', 'tab', 'trade_ctx_pick'].includes(q.type))) {
-      const rr = render(page, true, { pre: withOutpost });
+      const rr = render(page, { pre: withOutpost });
       const zz = rr.zones.find((q) => q.type === z.type && JSON.stringify(q.data) === JSON.stringify(z.data));
       if (!zz) continue;
       clickZone(rr, zz); clicked++;
@@ -522,25 +585,41 @@ const withOutpost = (ov, w) => {
     && sg({ buyTarget: false })?.buy?.key === 'econ.console.spendNoShortage' && sg({ credits: 39 })?.buy?.key === 'econ.console.spendCredits'
     && sg({ festivalActive: true })?.festival?.key === 'econ.console.spendFestivalOn' && sg({ credits: 79 })?.festival?.key === 'econ.console.spendCredits',
     'K12 każdy warunek wydatku → wyłączony z kluczem powodu');
-  const poor = render('trade', true, { pre: (ov, w) => { w.civ.getCredits = () => 10; } });
+  const poor = render('trade', { pre: (ov, w) => { w.civ.getCredits = () => 10; } });
   assert(isKit(poor) && !poor.zones.some((z) => z.type === 'spend_festival') && joined(poor).includes(t('econ.console.spendCredits', '80', '10')),
     'K13 mało kredytów: [ FESTYN ] bez strefy, powód pod nim');
-  const ctxB = render('trade', true, { pre: (ov, w) => { w.cols[1].credits = 900; w.cols[1].buildingSystem = { _constructionQueue: new Map([['b1', { progress: 0, buildTime: 10 }]]) };
+  const ctxB = render('trade', { pre: (ov, w) => { w.cols[1].credits = 900; w.cols[1].buildingSystem = { _constructionQueue: new Map([['b1', { progress: 0, buildTime: 10 }]]) };
     w.cols[1].prosperitySystem = { _eventBonuses: new Map(), addEventBonus: () => {} }; w.cols[1].resourceSystem._producers = new Map(); ov._tradeColId = 'col_b'; } });
   const rush = ctxB.zones.find((z) => z.type === 'spend_rush');
   if (rush) clickZone(ctxB, rush);
   assert(rush?.data.colonyId === 'col_b' && ctxB.w.cols[1].buildingSystem._constructionQueue.get('b1').progress > 0
     && window.KOSMOS.buildingSystem._constructionQueue.get('t1').progress === 0, 'K14 [ PRZYSPIESZ ] przyspiesza budowy kolonii Handlu (Beta), nie aktywnej');
+  // [ KUP ] (zakup awaryjny) i [ FESTYN ] — systemy kolonii ze strefy (Beta), nie globalne systemy aktywnej kolonii (Alfa)
+  const recvB = [], bonusB = [];
+  const spendB = () => render('trade', { pre: (ov, w) => {
+    w.cols[1].resourceSystem = { inventory: new Map(), receive: (x) => recvB.push(x), _producers: new Map([['building_9_9', { [SNAKE_EXP]: -2 }]]) };
+    w.cols[1].prosperitySystem = { _eventBonuses: new Map(), addEventBonus: (...a) => bonusB.push(a) };
+    w.cols[1].buildingSystem = { _constructionQueue: new Map() }; ov._tradeColId = 'col_b'; } });
+  const sb = spendB();
+  const buyZ = sb.zones.find((z) => z.type === 'spend_buy');
+  if (buyZ) clickZone(sb, buyZ);
+  assert(buyZ?.data.colonyId === 'col_b' && recvB.length === 1 && recvB[0][SNAKE_EXP] === buyZ.data.qty && sb.w.calls.recvA.length === 0,
+    `K14b [ KUP ] wydatku: towar trafia do kolonii Handlu (Beta ${JSON.stringify(recvB[0] ?? null)}), nie do aktywnej (Alfa ${sb.w.calls.recvA.length})`);
+  const sf = spendB();
+  const festZ = sf.zones.find((z) => z.type === 'spend_festival');
+  if (festZ) clickZone(sf, festZ);
+  assert(festZ?.data.colonyId === 'col_b' && bonusB.length === 1 && bonusB[0][0] === 'trade_festival' && sf.w.calls.bonus.length === 0,
+    `K14c [ FESTYN ]: premia w kolonii Handlu (Beta ${bonusB.length}), nie w aktywnej (Alfa ${sf.w.calls.bonus.length})`);
 
   // Rynek: objaśnienie zlecenia
-  const m = render('market', true);
+  const m = render('market');
   const jm = joined(m);
   assert(isKit(m) && jm.includes(t('econ.console.orderTo')) && jm.replace(/\s/g, '').includes(t('econ.console.orderDeliveryVal', '1', '11.0').replace(/\s/g, ''))
     && jm.includes(t('econ.console.orderHowBuy', 'Nowa Sparta', 'Alfa').split(' ').slice(0, 4).join(' ')),
     'K15 Rynek: odbiorca (Twoja kolonia), płacisz / otrzymujesz, dostawa warpem (rok 11.0), jak działa KUP');
 
   // debug
-  render('market', true, { pre: withOutpost });
+  render('market', { pre: withOutpost });
   const dbg = safe(() => window.KOSMOS.debug?.trade?.ctx?.(), null);
   assert(dbg?.activeColony?.type === 'outpost' && dbg?.tradeColony?.type === 'full_colony' && dbg?.market?.placeOrderGates?.playerColony_notOutpost === true
     && typeof dbg?.spend?.festival === 'string', `K16 KOSMOS.debug.trade.ctx(): aktywna ${dbg?.activeColony?.type}, Handlu ${dbg?.tradeColony?.type}, bramki zlecenia i wydatków`);

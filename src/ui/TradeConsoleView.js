@@ -1,4 +1,4 @@
-// TradeConsoleView — Handel i Rynek na zestawie konsoli (ARC KONSOLE K3-B, docs/design/CONSOLES_PLAN.md §1.2; FEATURES.consoleEconomy).
+// TradeConsoleView — Handel i Rynek na zestawie konsoli (ARC KONSOLE K3-B, docs/design/CONSOLES_PLAN.md §1.2; KZ-E: jedyna ścieżka).
 //
 // Wołane przez `TradeOverlay.draw`, gdy `isKitScreen('trade')`. Ta sama instancja, zakładka `_tab` ('trade' | 'market') wybiera stronę.
 // Szablon 4-strefowy (D-K-1), nagłówek grupy Ekonomii jak na Budżecie i Przepływach (D-K-15: te same czipy z każdej strony):
@@ -248,7 +248,7 @@ function drawTrade(ov, ctx, z, roles, K, hz) {
   const civTrade = K?.civilianTradeSystem;
   const tradeLog = K?.tradeLog;
   const tradeColId = ov._tradeColonyId();   // K3 runda 2 — kolonia Handlu (lokalna), nie globalna aktywna
-  // te same źródła co dzisiejsza lewa kolumna (`TradeOverlay._drawLeft`)
+  // te same źródła co dawna lewa kolumna Handlu (usunięta w KZ-E)
   const civCredits = civTrade?.getCredits(tradeColId) ?? 0;
   const civPerYear = civTrade?.getCreditsPerYear(tradeColId) ?? 0;
   const civTC = civTrade?.getTradeCapacity(tradeColId) ?? 0;

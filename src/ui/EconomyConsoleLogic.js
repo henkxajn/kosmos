@@ -53,7 +53,7 @@ export function applyEconChip(id, om) {
     const tr = om.overlays?.trade;
     if (tr && tr._tab !== tgt.tradeTab) {
       tr._tab = tgt.tradeTab;
-      tr._scrollLeft = 0;     // jak dzisiejszy klik zakładki Handel / Rynek (TradeOverlay._onHit 'tab')
+      tr._scrollLeft = 0;     // jak dawny klik zakładki Handel / Rynek (usunięty w KZ-E)
       tr._scrollRight = 0;
       tr._closeQtyInput?.();
     }
@@ -261,7 +261,7 @@ export function commoditySort(a, b) {
 }
 
 /**
- * Agregat magazynu jak `_drawLeft`: suma inventory + stawki (obserwowane delty, fallback `_inventoryPerYear`) po encjach.
+ * Agregat magazynu jak dawna lewa kolumna (usunięta w KZ-E): suma inventory + stawki (obserwowane delty, fallback `_inventoryPerYear`) po encjach.
  * @returns {{ inv:Object<string,number>, rate:Object<string,number> }}
  */
 export function aggregateStock(entities) {

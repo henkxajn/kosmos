@@ -571,15 +571,7 @@ export const GAME_CONFIG = {
     //     bitwy, [ ZAPROPONUJ POKÓJ ]; przyciski debug WYMUŚ STARCIE / DESANT tylko jako KOSMOS.debug.war.forceBattle() / forceInvasion().
     //   OFF = dzisiejsza Dyplomacja i Wojny co do bitu (z przyciskami debug — do KZ).
     consoleDiplomacy: true,
-    //   consoleEconomy (K3, D-K-15, D-K-16, D-K-20; Finding 725 — Budżet / Handel): ON (razem z consoleKit) = grupa Ekonomii na
-    //     szablonie 4-strefowym — czipy nagłówka [ BUDŻET ] [ PRODUKCJA ] [ HANDEL ] [ RYNEK ] [ PRZEPŁYWY ] (Handel / Rynek z drugiego
-    //     poziomu zakładek Handlu jako dwa czipy grupy). Budżet: lista linii przychodów / wydatków, bohater = netto Kr/rok + pasek
-    //     przychody vs wydatki + suwak podatku, inspektor = rozbicie linii + efekt podatku, pas = ticker deficytów / nadwyżek.
-    //     Przepływy: lista zasobów, bohater = producenci → zasób → konsumenci (wąskie gardło w roli alert), inspektor = liczby.
-    //     Lewa kolumna inwentarza znika (D-K-16): linie spoza górnej szuflady (towary poza paliwem, magazyny stacji-sierot) stoją w
-    //     bloku inspektora. Produkcja zostaje dzisiejszą stroną do K4.
-    //   OFF = dzisiejsza grupa Ekonomii co do bitu (efekt podatku przez t() — tekst PL bez zmian).
-    consoleEconomy: true,
+    //   (consoleEconomy — usunięta w KZ-E: grupa Ekonomii jest na stałe konsolą, `PERMANENT_KIT_SCREENS` w ConsoleLayoutLogic.js)
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

@@ -191,7 +191,7 @@ export function chainHeroLayout(r, nInputs, { headerH = 22, bannerH = 40, nodeH 
     banner: { x: r.x, y: bottom + 6, w: r.w, h: Math.max(0, bannerH - 6) }, colW };
 }
 
-// ── Alerty (te same reguły co dzisiejsza prawa kolumna `_generateAlerts`, ze strukturą zamiast surowych id) ─────────────
+// ── Alerty (te same reguły co dawna prawa kolumna Produkcji, usunięta w KZ-E; ze strukturą zamiast surowych id) ─────────────
 
 /**
  * @returns {Array<{ level:'critical'|'warning', kind:'stall'|'low'|'brownout', commodityId?, resId?, colonyId, colonyName }>}
