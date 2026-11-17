@@ -341,10 +341,10 @@ This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16) and **#742
 | **737** | ✅ K1b | **Normalizer keeper N11f classified slots by the Workshop stamp, not by the nozzle**: every Workshop save stamps `notes` (turrets only too), so after the owner clicked turrets on the five remaining warships all six slots carried the stamp and the equality witness (`nozMeasured ≥ 1`) emptied while every nozzle was correct. Fix: classify by the nozzle — a nozzle equal to the measurement always counts as equality; the aft-half rule applies only to a nozzle moved in the Workshop; unstamped and not equal is still an error; the control takes the first stamped slot. Red on a moved nozzle without the stamp | `cv_normalizer_logic_smoke.mjs` N11f (56/1 → 57/0 on the owner's files; 57/0 on the base files) | K1b |
 | **735** | ✅ K2 (console path; flag-OFF screen keeps the buttons until KZ) | **War screen ships two debug actions to the player, unconditionally**: «⚡ WYMUŚ STARCIE (debug)» → `warSystem.forceBattle` and «🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)» are drawn and clickable for every active war (`WarOverlay.js:380-386`, `:707`; i18n `warOverlay.btnForceBattle/btnForceInvasion`) — a cheat in the player UI | `shots_now/*/32_war.jpg`; files as listed | K2 (owner: hide behind a debug flag or `KOSMOS.debug.*`) |
 | **738** | ✅ K3 (console path) | **Flows list balance disagreed with the hero**: the list summed `_producers` only (no mine output, no factory input) while the hero/inspector use `_gatherFlowBreakdown` → e.g. Fe list −1.0 vs hero −116 | `EconomyOverlay._drawFlows` list; K3-A `flowListItems` | K3 — list row = `flowDiagram(_gatherFlowBreakdown(id)).net` over `flowCandidateIds`; flag-OFF list unchanged until KZ |
-| **739** | ⚪ | **Today's Budget prints «Kr//rok»** (`Kr/${t('tradePanel.perYear')}` with perYear = '/rok'; the console uses `econ.console.krPerYear`); `econPanel.stationLabel` has no `{0}`, so the station name is never shown in today's column header | `EconomyOverlay.js` Budget lines; `pl.js`/`en.js` `econPanel.stationLabel` | KZ (flag-OFF path removed) |
+| **739** | ✅ KZ-E (closed by removal — the flag-OFF Budget page and both keys are gone) | **Today's Budget prints «Kr//rok»** (`Kr/${t('tradePanel.perYear')}` with perYear = '/rok'; the console uses `econ.console.krPerYear`); `econPanel.stationLabel` has no `{0}`, so the station name is never shown in today's column header | `EconomyOverlay.js` Budget lines; `pl.js`/`en.js` `econPanel.stationLabel` | KZ (flag-OFF path removed) |
 | **740** | ⚪ | **Founding an outpost switches the global active colony to it**: `outpost:founded` → `GameScene` calls `switchActiveColony(outpost)`, so the top bar shows the outpost's zeros and today's Trade page refuses orders («is_outpost») until the player re-selects a full colony | `GameScene.js` `outpost:founded` listener; `ColonyManager.switchActiveColony` | later UX fix (outside this arc); the Trade console is immune (Trade-local context, §16) |
 | **741** | ⚪ | **AI partner colonies may hold 0 Kr, so SELL on Rynek can be dead**: settlement needs `aiCol.credits ≥ total`; on GATE-S4 the partner colony shows 0 Kr — check whether AI colony credits ever accumulate | `TradeOrderBoard._settle`; AI colony `credits` | audit later (economy) |
-| **742** | ✅ K4 (console path; flag-OFF payload unchanged until KZ) | **Production export toggles changed the wrong colony**: today's [ Przyjmuj ] and tier chips emit `factory:setExportEnabled` / `setExportTier` without a colony, and `FactorySystem` applies them to the ACTIVE colony (`window.KOSMOS.factorySystem === this`) while the page shows the colony picked in the filter — a click on another colony's prefs silently changed the active colony's | `EconomyOverlay._handleFactoryBtn` export cases; `FactorySystem` listeners | K4 — the console sends `colonyId`; the listener honours it (`exportTarget`), no `colonyId` = today's behaviour |
+| **742** | ✅ K4 (console path) · KZ-E (the flag-OFF payload without `colonyId` is gone) | **Production export toggles changed the wrong colony**: today's [ Przyjmuj ] and tier chips emit `factory:setExportEnabled` / `setExportTier` without a colony, and `FactorySystem` applies them to the ACTIVE colony (`window.KOSMOS.factorySystem === this`) while the page shows the colony picked in the filter — a click on another colony's prefs silently changed the active colony's | `EconomyOverlay._handleFactoryBtn` export cases; `FactorySystem` listeners | K4 — the console sends `colonyId`; the listener honours it (`exportTarget`), no `colonyId` = today's behaviour |
 
 ## 6. Proposed cut, decisions, effort
 
@@ -364,7 +364,7 @@ owner look + tune; one `feat` commit + `docs` close-out; sized for one CC sessio
 | **K5** | Civilization + Dyson (Dyson hero diagram is new) | 1–2 |
 | ~~**K6a / K6b**~~ | ~~Colonies: frame, colony list, buildings strip under the hero / inspector rule (D-K-13), globe placement~~ — **moved out of this arc** (owner decision 2026-11-17) into its own arc «planet/body screen»; the Colonies tab keeps today's look and KZ does not touch it | — |
 | **K7a / K7b / K7c** | Command: frame + registry + timeline strip (D-K-14) / inspector reskin with T5 shared handlers + golden trace re-record / Atlas, Logistics, Ground | 3 |
-| **KZ** | Flags permanent ON, OFF paths and old styles removed (`_drawButton`, `GLASS_BORDER` subnav, per-file `✕`), before/after frame comparison | 1–2 |
+| **KZ** | Flags permanent ON, OFF paths and old styles removed (`_drawButton`, `GLASS_BORDER` subnav, per-file `✕`), before/after frame comparison — **Economy group done early as KZ-E (§18)**; the rest at the end of the arc | 1–2 |
 
 Total ≈ 16–22 sessions. Order rationale: K0 proves the kit on the cheapest read-only screen; K1 is the owner's pilot and
 the only new rendering tech; then cheap screens that reuse the empire list (K2), then the Economy family (high player
@@ -917,3 +917,38 @@ fail-first worktrees removed.
 - **Live engine (CDP mouse + keyboard, GATE-S4):** 5 themes, 1280×833, OFF, base, outpost as active colony, staged orphan station and
   factory lines; bar advance and unit completion watched — 0 page errors.
 - **Next:** KZ (flags permanent, OFF paths removed) for the Economy group; remaining arc steps per §6.1.
+
+## 18. KZ-E — delivered (Economy group permanently on the console; flag and OFF paths removed)
+
+**Commit `f47b0b8` refactor(KZ-E)** · owner decision 2026-11-17: KZ for the Economy group now, the rest of KZ stays at the end of the arc ·
+owner smoke PASS 2026-11-17. Handover `C:\Users\Komputer\kosmos-handover\consoles-kz-e\`: `STOP_KZ-E.md`, `probes/kze.mjs`, `shots/`.
+- **Flag removed:** `FEATURES.consoleEconomy` is gone. Budget, Flows, Trade (Handel + Rynek) and Production (`economy`) are listed in
+  `PERMANENT_KIT_SCREENS` (`ConsoleLayoutLogic.js`); `isKitScreen` returns true for them without any flag. **Approved decision:** this holds
+  also with `consoleKit` OFF — there `consoleKit` only drives the backdrop dim until the final KZ. Other screens' flags are untouched.
+- **Removed:** all flag-OFF page drawing in `EconomyOverlay` (2827 → 897 lines) and `TradeOverlay` (1278 → 432): three-column pages, old
+  subnav tabs, left inventory column, per-file `✕`, colony chips, min-stock table, alerts column, charts, old Trade / Market pages; OFF-only
+  state, the unreachable `oneshot_toggle_picker` case, every `kitPage` / `kitOn` branch, unused imports; 80 i18n keys used only by the OFF
+  pages (PL/EN parity kept, literal baseline unchanged). **LOC: product +100 / −3040** (with keepers +696 / −3409). The commit body carries
+  the no-callers grep proof for every removed symbol.
+- **Behaviour:** hit-zone types, handlers and actions are the former ON path; export toggles always carry `colonyId`; Trade spend and Market
+  orders always use the console trade colony.
+- **Visual identity:** draw log + hit zones of the five pages in all probed states at 1600×1041 and 1280×833 (20 frames) identical to
+  `762726c`.
+- **Findings:** **739 ✅** closed by removal («Kr//rok» and `econPanel.stationLabel` without `{0}` lived only on the OFF Budget page);
+  **742** — the OFF part (payload without `colonyId`) is gone with the old page, as are the old pages' silent no-ops (e.g. 44 outpost actions);
+  **740 ⚪** and **741 ⚪** stay open.
+- **Keepers:** ON == OFF comparisons converted into absolute pins from today's ON path; only pins that tested the OFF path itself removed, each
+  with a reason (table in `STOP_KZ-E.md` and in the commit body):
+  - `console_economy_smoke` 85/0 (removed A0, A4, P2, P3, T5; new permanence pins G9–G11); mutations 13/13 red.
+  - `console_production_smoke` 114/0 (exact factory-button sets per state incl. locked goods, list steppers, droid qty, export payloads,
+    scope list, alert list; removed A3-OFF witness, A4, C5-OFF, C6, F4, R4, L7, X2-OFF); mutations 11/11 red.
+  - `console_trade_smoke` 102/0 (exact Trade 10 / Market 12 type sets, payloads, trade colony incl. outpost-active, ion_drives gate; removed
+    H0, R0; OFF controls replaced by ON witnesses); mutations 9/9 red.
+  - Sweep 418/418, `check-i18n` PASS.
+- **Bug caught by the converted keeper:** two leftover `kitPage()` calls in `_openMinStockInput` / `_openOneShotQtyInput` — clicking the
+  min-stock threshold field or [ ZLEĆ JEDNORAZOWO ] would throw and no `<input>` would open. The draw-log comparison could not see it (click
+  path only); `console_production_smoke` S2/S3 went red, fixed before the commit and pinned (SCALE comes only from `_uiScale`).
+- **Live engine (CDP mouse + keyboard, GATE-S4, 1600×1041 and 1280×833):** five chips (subnav 0), tax slider, Budget line, Flows, scope picker,
+  min-stock [+]/[−] and threshold `<input>`, one-shot `<input>`, droid build / cancel, Trade colony picker, Market gates (no ion_drives → no
+  BUY; with it the order uses the trade colony, also with an outpost active); staged: trade agreement, ion_drives, outpost — 0 page errors.
+- **Next:** remaining arc steps per §6.1; the final KZ covers the other screens' flags and `consoleKit`.

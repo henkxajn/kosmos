@@ -1130,3 +1130,20 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §17. Flaga `FEATURES.consoleEcon
 Następny krok: KZ grupy Ekonomii.
 
 ---
+
+## ARC KONSOLE — KZ-E: Ekonomia na stałe konsolą (`f47b0b8`, smoke właściciela PASS 2026-11-17)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §18. Decyzja właściciela 2026-11-17: KZ dla grupy Ekonomii teraz, reszta KZ na końcu arcu.
+- **Flaga `FEATURES.consoleEconomy` usunięta:** Budżet, Przepływy, Handel + Rynek i Produkcja są w `PERMANENT_KIT_SCREENS` — zawsze konsola,
+  także przy `consoleKit` OFF (zatwierdzone; tam `consoleKit` steruje tylko przyciemnieniem sceny do końcowego KZ).
+- **Usunięte ścieżki OFF:** `EconomyOverlay` 2827 → 897 linii, `TradeOverlay` 1278 → 432, 80 kluczy i18n; kod produktu +100 / −3040.
+- **Zachowanie i wygląd bez zmian:** strefy, handlery, akcje = dawna ścieżka ON; dziennik rysunku 20/20 identyczny z `762726c`.
+- **Findingi:** 739 ✅ (zamknięty usunięciem), 742 — część OFF znika ze starą stroną; 740 ⚪, 741 ⚪ otwarte.
+- **Testy:** piny ON == OFF zamienione na absolutne — `console_economy_smoke` 85/0, `console_production_smoke` 114/0, `console_trade_smoke`
+  102/0, mutacje 33/33; sweep 418/418, `check-i18n` PASS; żywy silnik w obu rozmiarach 0 błędów strony.
+- **Złapane przez skonwertowany keeper:** dwa wywołania usuniętego `kitPage()` w polach `<input>` (próg minimalnego zapasu, zlecenie
+  jednorazowe) — klik rzucałby błąd; naprawione przed commitem i przypięte.
+
+Następny krok: pozostałe kroki arcu (§6.1); końcowy KZ — flagi pozostałych ekranów i `consoleKit`.
+
+---
