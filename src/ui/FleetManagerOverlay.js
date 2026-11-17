@@ -2250,7 +2250,9 @@ export class FleetManagerOverlay {
   async _renameVessel(vesselId) {
     try {
       const { showRenameModal } = await import('../ui/ModalInput.js');
-      const newName = await showRenameModal(t('fleetPanel.rename'));
+      // Finding 749 — pole startuje z BIEŻĄCĄ nazwą statku (ModalInput ją zaznacza); etykieta tylko gdy statku brak
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const newName = await showRenameModal(vessel?.name ?? t('fleetPanel.rename'));
       if (newName) {
         EventBus.emit('vessel:rename', { vesselId, name: newName });
       }
