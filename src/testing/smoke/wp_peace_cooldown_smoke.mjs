@@ -28,6 +28,11 @@
 //      i `fleet.requiresOrbitalShipyard`). T5 mierzy to WYKONANIEM na `_hitZones`, bo
 //      `WarOverlay` importuje się pod node — grep na źródle nie odróżniłby „narysowane szare"
 //      od „nadal klikalne".
+//      ⚠ KZ (ARC KONSOLE): panel Wojen to WYŁĄCZNIE konsola — przycisk to czip inspektora
+//      `[ ☮ POKÓJ — ZA N L. ]` (`chipLabel`), a zablokowany czip wystawia strefę `action_blocked`
+//      (bez skutku, z powodem `warConsole.reason.peaceCooldown` w podpowiedzi). T5d (dawniej: „`force_battle`
+//      dalej klikalny" — przyciski debug usunięte w KZ) pinuje tę strefę i jej powód; T5d2 — klik bez skutku;
+//      T5i — podpowiedź po najechaniu; T5g/T7d czytają `drawInspector` / widok konsoli zamiast usuniętego `_drawRight`.
 //
 // ⚠ ZDANIE, KTÓRE C4 CZYNI FAŁSZYWYM, NAPRAWIAMY W TYM SAMYM COMMICIE. Modal odmowy renderuje
 //   wiersz `diploRefusal.cooldownYears` = „obciąża kolejną próbę jeszcze przez {0} l." —
@@ -54,9 +59,6 @@ import {
   VERB_ACCEPTANCE, RECENT_REFUSAL_YEARS, ACCEPTANCE_TERMS, TERM_STATUS,
 } from '../../data/AcceptanceWeightData.js';
 import { resolveWeights } from '../../utils/AcceptanceMath.js';
-// ARC KONSOLE K2 — keeper przypina DZISIEJSZE panele Dyplomacji / Wojen (flaga OFF); konsolę pinuje console_diplomacy_smoke.
-import { GAME_CONFIG as GC_K2 } from '../../config/GameConfig.js';
-GC_K2.FEATURES.consoleDiplomacy = false;
 
 // Symbole rodzące się w C4 — dynamicznie, żeby brak importu nie zabił kolorów pinów.
 let MathMod = null, WarOverlayMod = null, RefusalMod = null;
@@ -86,20 +88,18 @@ const dictValue = (file, key) => {
 };
 
 /**
- * Ciało JEDNEJ metody klasy — okno anchorowane STRUKTURALNIE (od nagłówka metody do
- * następnej metody na tym samym wcięciu), nie odległością w znakach. Powód: proxy
- * rozmiarowe („iStart + 3000") pada, gdy ktoś doda wiersz wyżej — `fleet_clock_band` T4
- * i `return_actions_removed` A6 zapłaciły za to rundą.
+ * Ciało JEDNEJ funkcji modułu — okno anchorowane STRUKTURALNIE (od `function name(` do następnej
+ * funkcji / eksportu na kolumnie 0), nie odległością w znakach. Powód: proxy rozmiarowe
+ * („iStart + 3000") pada, gdy ktoś doda wiersz wyżej — `fleet_clock_band` T4 i
+ * `return_actions_removed` A6 zapłaciły za to rundą. KZ: dawne `methodBody(_drawRight)` →
+ * funkcje widoku konsoli (`WarConsoleView.js`).
  */
-function methodBody(src, name) {
-  const i = src.indexOf('\n  ' + name + '(');
+function fnBody(src, name) {
+  const i = src.indexOf('\nfunction ' + name + '(');
   if (i < 0) return '';
   const rest = src.slice(i + 1);
-  const nl = rest.indexOf('\n');
-  if (nl < 0) return rest;
-  const tail = rest.slice(nl);
-  const j = tail.search(/\n {2}[_A-Za-z][A-Za-z0-9_]*\s*\(/);
-  return j < 0 ? rest : rest.slice(0, nl + j);
+  const j = rest.slice(1).search(/\n(function |export )/);
+  return j < 0 ? rest : rest.slice(0, j + 1);
 }
 
 // ── Fixture: ŻYWY silnik (GameCore) — lustro `wp_peace_table_smoke` ─────────
@@ -344,22 +344,52 @@ console.log('T5 — UI: ☮ wyszarzony z licznikiem i ZDJĘTĄ hit-zoną (wykona
     'T5b (KONTROLA PINU): po odmowie cooldown wynosi 1 rok (jest ' + yrs + ')');
   assert(!zoneTypes(after?.ov).includes('offer_peace'),
     'T5c: z cooldownem hit-zona `offer_peace` ZDJĘTA — przycisk nie jest klikalny, nie tylko szary');
-  assert(zoneTypes(after?.ov).includes('force_battle'),
-    'T5d (KONTROLA PINU): pozostałe przyciski panelu nietknięte (`force_battle` dalej klikalny)');
+  // KZ — zablokowany czip konsoli: strefa `action_blocked` (bez skutku) z powodem blokady; reszta panelu klikalna.
+  const blocked = (after?.ov?._hitZones ?? []).filter(z => z.type === 'action_blocked');
+  const reasonTpl = [dictValue('pl.js', 'warConsole.reason.peaceCooldown'), dictValue('en.js', 'warConsole.reason.peaceCooldown')]
+    .filter(Boolean).map(s => s.replace('{0}', String(yrs)));
+  assert(blocked.length === 1 && blocked[0].data?.action === 'offer_peace' && reasonTpl.length === 2
+    && reasonTpl.includes(blocked[0].data?.reason) && zoneTypes(after?.ov).includes('hero_mode')
+    && zoneTypes(after?.ov).includes('select'),
+    'T5d: zablokowany czip wystawia JEDNĄ strefę `action_blocked` {action: offer_peace, powód z licznikiem: '
+    + JSON.stringify(blocked[0]?.data?.reason ?? null) + '}; reszta panelu (lista, tryb bohatera) dalej klikalna');
+  const zb = blocked[0] ?? null;
+  let offers = 0;
+  const realOffer = K.diplomacySystem.offerPeace;
+  K.diplomacySystem.offerPeace = (...a) => { offers++; return realOffer.apply(K.diplomacySystem, a); };
+  if (zb) after.ov._onHit(zb);
+  K.diplomacySystem.offerPeace = realOffer;
+  assert(!!zb && offers === 0 && after.ov.visible === true,
+    'T5d2: klik w zablokowany czip NIE woła `offerPeace` (wywołań: ' + offers + ') i nie zamyka panelu');
+  const chip = (s) => '[ ' + String(s).toUpperCase() + ' ]';   // lustro `chipLabel` (ConsoleKit)
   const tplPl = dictValue('pl.js', KEY_BTN_CD);
   const tplEn = dictValue('en.js', KEY_BTN_CD);
-  const wanted = [tplPl, tplEn].filter(Boolean).map(s => s.replace('{0}', String(yrs)));
+  const wanted = [tplPl, tplEn].filter(Boolean).map(s => chip(s.replace('{0}', String(yrs))));
   const drawn = (after?.ctx.texts ?? []).map(x => x.t);
   assert(wanted.length === 2 && wanted.some(s => drawn.includes(s)),
-    'T5e: etykieta wyszarzonego przycisku NIESIE LICZNIK lat (szukane: ' + JSON.stringify(wanted) + ')');
-  const normalPl = dictValue('pl.js', 'warOverlay.btnProposePeace');
-  assert(!!normalPl && !drawn.includes(normalPl),
-    'T5f: zwykła etykieta „zaproponuj pokój" NIE jest rysowana, gdy trwa cooldown');
-  const body = methodBody(readClean('ui/WarOverlay.js'), '_drawRight');
-  assert(body.includes('getRefusalYearsLeft'),
-    'T5g (pin ŹRÓDŁOWY): `_drawRight` pyta FASADĘ o cooldown — UI nie importuje `Acceptance*` (pin P14)');
-  assert(!readClean('ui/WarOverlay.js').includes('AcceptanceWeightData'),
-    'T5h (pin P14): `WarOverlay` nie importuje katalogu wag');
+    'T5e: etykieta wyszarzonego czipu NIESIE LICZNIK lat (szukane: ' + JSON.stringify(wanted) + ')');
+  const normal = [dictValue('pl.js', 'warOverlay.btnProposePeace'), dictValue('en.js', 'warOverlay.btnProposePeace')].filter(Boolean);
+  const drawnBefore = (before?.ctx.texts ?? []).map(x => x.t);
+  assert(normal.length === 2 && normal.some(s => drawnBefore.includes(chip(s)))
+    && !normal.some(s => drawn.includes(chip(s)) || drawn.includes(s)),
+    'T5f: zwykła etykieta „zaproponuj pokój" NIE jest rysowana, gdy trwa cooldown (świadek: bez cooldownu jest)');
+  // Podpowiedź po najechaniu: powód blokady (czip ma krótką etykietę — powód żyje w dymku).
+  if (zb) {
+    after.ov._hoverZone = zb;
+    const hctx = mkCtx();
+    after.ov.draw(hctx, 1280, 720);
+    const htexts = hctx.texts.map(x => x.t).join('\n');
+    assert(reasonTpl.some(r => htexts.includes(r)) && !reasonTpl.some(r => drawn.join('\n').includes(r)),
+      'T5i: najechanie na zablokowany czip pokazuje POWÓD z licznikiem lat (bez najechania — nie)');
+  } else {
+    assert(false, 'T5i: brak strefy `action_blocked` — nie ma na czym najechać');
+  }
+  const body = fnBody(readClean('ui/WarConsoleView.js'), 'drawInspector');
+  assert(body.length > 200 && body.includes('getRefusalYearsLeft') && body.includes('peaceActionView'),
+    'T5g (pin ŹRÓDŁOWY): `drawInspector` konsoli pyta FASADĘ o cooldown — UI nie importuje `Acceptance*` (pin P14)');
+  const warUi = ['ui/WarOverlay.js', 'ui/WarConsoleView.js', 'ui/WarConsoleLogic.js'].map(f => readClean(f));
+  assert(warUi.every(src => src.length > 0 && !src.includes('AcceptanceWeightData')),
+    'T5h (pin P14): `WarOverlay` / widok i logika konsoli nie importują katalogu wag');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -412,9 +442,10 @@ console.log('T7 — i18n: nowe klucze w OBU słownikach, bez literałów w UI');
   const plPen = dictValue('pl.js', KEY_CD_PEN) ?? '';
   assert(plBlk !== '' && plBlk !== plPen && !plBlk.includes('obciąża'),
     'T7c: nowe brzmienie NIE mówi „obciąża" — po D-WP-4 odmowa pokoju niczego nie obciąża');
-  const body = methodBody(readClean('ui/WarOverlay.js'), '_drawRight');
-  assert(body !== '' && !/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(body),
-    'T7d: brak polskiego literału w rysowanej ścieżce `_drawRight` (klasa 113)');
+  // KZ — rysowana ścieżka = cały widok konsoli Wojen + overlay (bez komentarzy).
+  const body = readClean('ui/WarConsoleView.js') + '\n' + readClean('ui/WarOverlay.js');
+  assert(body.includes('function drawInspector(') && !/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(body),
+    'T7d: brak polskiego literału w rysowanej ścieżce konsoli Wojen (`WarConsoleView` + `WarOverlay`, klasa 113)');
 }
 
 // ════════════════════════════════════════════════════════════════════════════

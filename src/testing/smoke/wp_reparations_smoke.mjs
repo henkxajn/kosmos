@@ -41,8 +41,13 @@ import { DirectorGuards } from '../../systems/director/DirectorRegistry.js';
 import DirectorProduction from '../../systems/director/DirectorProduction.js';
 import DirectorMobilization, { registerMobilizationBehaviors } from '../../systems/director/DirectorMobilization.js';
 // ⚠ OBA overlaye IMPORTUJĄ SIĘ pod node (zmierzone) — dlatego warstwa UI jest pinowana
-//   WYKONANIEM, a nie źródłowo: przepuszczamy prawdziwy `_drawPeaceTable` / `_drawRight`
-//   przez atrapę `ctx` i czytamy, co poszło do `fillText`.
+//   WYKONANIEM, a nie źródłowo: przepuszczamy prawdziwe `draw()` przez atrapę `ctx` i czytamy,
+//   co poszło do `fillText`.
+// ⚠ KZ (ARC KONSOLE): stare panele (`_drawPeaceTable` / `_drawRight`) USUNIĘTE — Wojny i Dyplomacja to
+//   wyłącznie konsole. T10 rysuje konsolę Wojen (stół pokoju w bohaterze; `show({warId})` otwiera tryb
+//   stołu jak depesza „Kontrpropozycja"), T11 — inspektor konsoli Dyplomacji (wiersz ⚙ w sekcji traktatów).
+//   T10n (nowy): klik [ ZAPROPONUJ POKÓJ ] wysyła DOKŁADNIE `{ reparations: { years } }`; T11f czyta panel
+//   razem z widokiem i logiką konsoli (tam dziś mieszka odczyt `reparationsUntilYear`).
 import { WarOverlay } from '../../ui/WarOverlay.js';
 import { DiplomacyOverlay } from '../../ui/DiplomacyOverlay.js';
 
@@ -92,6 +97,24 @@ function world(year, { exh = 100 } = {}) {
 const REP = (years = YEARS) => ({ reparations: { years } });
 const rowOf = (r, term) => (r?.breakdown ?? []).find(b => b?.term === term) ?? null;
 const valOf = (r, term) => Number(rowOf(r, term)?.value ?? NaN);
+
+/**
+ * KZ — atrapa płótna dla konsol: napisy do `texts`, zapisane właściwości wracają przy odczycie,
+ * nieznane metody to no-op (konsola woła ich więcej niż stary panel — poświata, gradienty, przycinanie).
+ */
+function mkPaintCtx(texts) {
+  const store = {};
+  return new Proxy(store, {
+    get: (o, k) => {
+      if (k === 'fillText' || k === 'strokeText') return (s) => texts.push(String(s));
+      if (k === 'measureText') return () => ({ width: 60 });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop: () => {} });
+      if (k in o) return o[k];
+      return () => {};
+    },
+    set: (o, k, v) => { o[k] = v; return true; },
+  });
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 console.log('T1 — stała i waga: jedno źródło, wartości podpisane');
@@ -429,29 +452,17 @@ console.log('\nT9 — piny źródłowe: biała lista, audyt, zasięg bramki');
 console.log('\nT10 — STÓŁ POKOJU: przełącznik, terms, sufit nietknięty (C2)');
 {
   // ⚠ Panel pinowany WYKONANIEM — `WarOverlay` importuje się pod node, więc przepuszczamy
-  //   PRAWDZIWY `_drawPeaceTable` przez atrapę `ctx` i czytamy, co poszło do `fillText`.
-  // ⚠ FIXTURE MUSI MIEĆ KOLONIE PO OBU STRONACH. `_drawPeaceTable` ma wczesny `return` przy
-  //   PUSTYM stole (`n === 0`), a wtedy przełącznik w ogóle się nie rysuje. ZMIERZONE: pusty
+  //   PRAWDZIWE `draw()` konsoli (stół = `drawPeaceTable` w bohaterze) przez atrapę `ctx`.
+  // ⚠ FIXTURE MUSI MIEĆ KOLONIE PO OBU STRONACH. Pusty stół (`n === 0`) rysuje tylko „pusto"
+  //   (bez sufitu i wierszy), więc piny sufitu nie miałyby czego porównać. ZMIERZONE: pusty
   //   stół wymaga, żeby ŻADNA strona nie miała kolonii — `getPeaceTable` bierze WSZYSTKIE
   //   ciała obu stron, ze stolicą i domem włącznie (te tylko oznacza 🔒). W realnej wojnie
   //   jest więc nieosiągalny; w fixturze bez kolonii byłby CICHYM fałszywym negatywem.
-  const ctxStub = new Proxy({}, {
-    get: (_t, k) => {
-      if (k === 'measureText') return () => ({ width: 60 });
-      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
-      if (typeof k === 'string' && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) return () => {};
-      return undefined;
-    },
-    set: () => true,
-  });
   const paint = (ov, fn) => {
     const texts = [];
     ov._hitZones = [];
     ov.visible = true;
-    const ctx = new Proxy(ctxStub, {
-      get: (t2, k) => (k === 'fillText' || k === 'strokeText') ? ((s) => texts.push(String(s))) : Reflect.get(t2, k),
-      set: () => true,
-    });
+    const ctx = mkPaintCtx(texts);
     let threw = null;
     try { fn(ctx); } catch (e) { threw = e?.message ?? 'throw'; }
     return { texts, zones: ov._hitZones.map(z => z.type), hits: ov._hitZones, threw };
@@ -478,7 +489,7 @@ console.log('\nT10 — STÓŁ POKOJU: przełącznik, terms, sufit nietknięty (C
     colonyManager: { getColony: (id) => cols.get(id), getAllColonies: () => [...cols.values()],
       getPlayerColonies: () => [...cols.values()].filter(c => !c.ownerEmpireId) },
     warSystem: { getWarWith: () => war, getWar: (id) => (id === 'w1' ? war : null),
-      listActive: () => [war], getCaptures: () => [] },
+      listActive: () => [war], listAll: () => [war], getCaptures: () => [] },
   };
   const dipl = new DiplomacySystem();
   window.KOSMOS.diplomacySystem = dipl;
@@ -486,7 +497,7 @@ console.log('\nT10 — STÓŁ POKOJU: przełącznik, terms, sufit nietknięty (C
 
   const ov = new WarOverlay();
   ov.show({ warId: 'w1' });
-  const draw = () => paint(ov, (ctx) => ov._drawPeaceTable(ctx, 0, 200, 700, 18, war, 'emp_001'));
+  const draw = () => paint(ov, (ctx) => ov.draw(ctx, 1280, 833));
   // ⚠ Klik DEGRADUJE: na drzewie bez C2 strefy `reparations_toggle` NIE MA, a
   //   `_onHit(undefined)` rzuca i zabija CAŁY przebieg — wtedy żaden pin niżej nie
   //   dostaje koloru. TRZECIE wystąpienie tej lekcji w tym slice'ie: po `getReparationsUntilYear`
@@ -500,8 +511,8 @@ console.log('\nT10 — STÓŁ POKOJU: przełącznik, terms, sufit nietknięty (C
     'T10a (KONTROLA PINU): stół REALNIE się narysował (' + off.texts.length + ' napisów)'
     + (off.threw ? ' — ' + off.threw : ''));
   assert(off.zones.includes('peace_toggle'),
-    'T10b (KONTROLA PINU): fixture ma CIAŁA na stole (strefa `peace_toggle`) — inaczej '
-    + '`_drawPeaceTable` wychodzi wczesnym `return` i przełącznik nie ma się gdzie narysować');
+    'T10b (KONTROLA PINU): fixture ma CIAŁA na stole (strefa `peace_toggle`) — konsola jest w trybie stołu '
+    + '(`show({warId})`) i stół nie jest pusty, więc sufit i przełącznik mają się gdzie narysować');
   assert(/brak/i.test(String(gearOf(off))),
     'T10c: domyślnie przełącznik mówi „Reparacje: brak" — ' + JSON.stringify(gearOf(off)));
   assert(off.zones.includes('reparations_toggle'),
@@ -519,6 +530,17 @@ console.log('\nT10 — STÓŁ POKOJU: przełącznik, terms, sufit nietknięty (C
   const terms = ov._buildTerms();
   assert(terms?.reparations?.years === YEARS && terms.cessions === undefined,
     'T10h: `_buildTerms()` niesie SAME reparacje, bez cesji — ' + JSON.stringify(terms));
+  // KZ — ten sam warunek DOJEŻDŻA klikiem: czip [ ZAPROPONUJ POKÓJ ] konsoli → `offerPeace(…, { terms })`.
+  const offer = on.hits.find(h => h.type === 'offer_peace');
+  let sent = null;
+  const realOffer = dipl.offerPeace;
+  dipl.offerPeace = (...a) => { sent = a; return false; };
+  hit(offer);
+  dipl.offerPeace = realOffer;
+  assert(!!offer && offer.data?.empireId === 'emp_001' && sent?.[0] === 'emp_001' && sent?.[1] === 'player_war_panel'
+    && JSON.stringify(sent?.[2]) === JSON.stringify({ terms: { reparations: { years: YEARS } } }),
+    'T10n: klik [ ZAPROPONUJ POKÓJ ] wysyła DOKŁADNIE `{ terms: { reparations: { years: ' + YEARS + ' } } }` — '
+    + JSON.stringify(sent));
 
   // ⚠ SUFIT NIETKNIĘTY: reparacje są OSOBNYM kanałem (D-WPR-4), więc pasek „Żądanie / sufit"
   //   musi być identyczny co do znaku przed i po przełączeniu.
@@ -560,27 +582,16 @@ console.log('\nT10 — STÓŁ POKOJU: przełącznik, terms, sufit nietknięty (C
 console.log('\nT11 — CHIP w panelu Dyplomacji: jest, gdy blokada trwa; znika, gdy minie');
 {
   const dipl = world(1100, { exh: 100 });
-  const ctxStub = new Proxy({}, {
-    get: (_t, k) => {
-      if (k === 'measureText') return () => ({ width: 60 });
-      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
-      if (typeof k === 'string' && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) return () => {};
-      return undefined;
-    },
-    set: () => true,
-  });
   const ov = new DiplomacyOverlay();
   ov._selectedId = 'emp_001';
+  // KZ — konsola Dyplomacji: wiersz ⚙ rysuje inspektor (sekcja traktatów), `draw()` całego ekranu.
   const paint = () => {
     const texts = [];
     ov._hitZones = [];
     ov.visible = true;
-    const ctx = new Proxy(ctxStub, {
-      get: (t2, k) => (k === 'fillText' || k === 'strokeText') ? ((s) => texts.push(String(s))) : Reflect.get(t2, k),
-      set: () => true,
-    });
+    const ctx = mkPaintCtx(texts);
     let threw = null;
-    try { ov._drawRight(ctx, 0, 0, 640, 720); } catch (e) { threw = e?.message ?? 'throw'; }
+    try { ov.draw(ctx, 1280, 833); } catch (e) { threw = e?.message ?? 'throw'; }
     return { texts, threw };
   };
   const chipOf = (r) => r.texts.find(s => s.includes('⚙')) ?? null;
@@ -613,7 +624,9 @@ console.log('\nT11 — CHIP w panelu Dyplomacji: jest, gdy blokada trwa; znika, 
     + 'czyta pole, które ticker wyczyścił');
 
   // Panel NIE sięga do modelu — pole jedzie PROJEKCJĄ (inwariant zmierzony: 0 wystąpień).
-  const panelSrc = readClean('ui', 'DiplomacyOverlay.js');
+  // KZ — panel = overlay + widok i logika konsoli (odczyt pola mieszka dziś w `DiplomacyConsoleView`).
+  const panelSrc = ['DiplomacyOverlay.js', 'DiplomacyConsoleView.js', 'DiplomacyConsoleLogic.js']
+    .map(f => readClean('ui', f)).join('\n');
   assert(!/\.relations\./.test(panelSrc) && /reparationsUntilYear/.test(panelSrc),
     'T11f: panel czyta `reparationsUntilYear` z PROJEKCJI i ani razu nie dotyka `relations` — '
     + 'kształt rekordu pary zostaje prywatny (audyt R9/R12)');

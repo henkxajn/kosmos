@@ -1,18 +1,16 @@
 // IntelOverlay — panel Wywiadu (klawisz I)
 //
-// Pełnoekranowy overlay z listą obcych imperiów w mgle wojny.
-// Lewa kolumna — lista imperiów (kolor archetypu lub szary dla nieznanych).
-// Prawa kolumna — panel szczegółów zaznaczonego imperium (dane gated po intel.level).
+// ARC KONSOLE K0b / KZ — ekran konsoli (szablon 4-strefowy, `_drawConsole` niżej): lista obcych imperiów w mgle wojny
+// (wspólna z Dyplomacją), bohater = dossier + układ sił, inspektor = znane systemy, wojsko, incydenty. Dawny układ
+// 2-kolumnowy usunięty w KZ (ścieżka konsoli jedyna).
 
-import { BaseOverlay, HEADER_H }   from './BaseOverlay.js';
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { BaseOverlay }   from './BaseOverlay.js';
+import { THEME } from '../config/ThemeConfig.js';
 import { ARCHETYPES }     from '../data/EmpireData.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
 // W1-3c — czysty opis układu sił (pasmo + procent); logika poza widokiem, żeby dała się testować.
 import { describePowerBalance } from '../utils/ThreatMath.js';
-// ARC KONSOLE K0b — Wywiad na zestawie konsoli (FEATURES.consoleIntel); OFF = dzisiejszy rysunek niżej.
-import { GAME_CONFIG } from '../config/GameConfig.js';
-import { consoleZones, consoleClockRect, isKitScreen, insetRect, CONSOLE_SCREEN_SPECS } from './ConsoleLayoutLogic.js';
+import { consoleZones, consoleClockRect, insetRect, CONSOLE_SCREEN_SPECS } from './ConsoleLayoutLogic.js';
 import { drawConsoleHeader, drawZoneFrame, drawZoneRule, drawEyebrow, drawKvRow, drawBar, drawTabular, applyConsoleHalo } from './ConsoleKit.js';
 import { consoleRoles } from './ConsoleRolesLogic.js';
 import { NAV_GROUPS, CIV_TABS, getNavGroup } from './CivPanelDrawer.js';
@@ -23,26 +21,9 @@ import { drawEmpireList, revealEmpire } from './ConsoleEmpireList.js';
 import { truncateText } from './HudLabelLogic.js';
 import { drawEmpireMiniMap, drawEmpireMapMarker } from './ConsoleEmpireMap.js';   // K2 — wspólna mini-mapa (Wywiad + Dyplomacja)
 
-const LEFT_W = 280;
-const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
-
-// Klucze i18n dla poziomów wywiadu (locale-aware; wartości w słownikach)
-const LEVEL_LABEL_KEY = {
-  unknown:  'intel.levelUnknown',
-  rumor:    'intel.levelRumor',
-  contact:  'intel.levelContact',
-  detailed: 'intel.levelDetailed',
-};
-const LEVEL_COLOR = {
-  unknown:  '#666',
-  rumor:    '#AA9050',
-  contact:  '#60B090',
-  detailed: '#50C0E0',
-};
 const LEVEL_RANK = { unknown: 0, rumor: 1, contact: 2, detailed: 3 };
-const MASK = '???';
 
-// Pasma układu sił → klucze i18n (wspólne dla obu ścieżek).
+// Pasma układu sił → klucze i18n.
 const BAND_KEY = {
   dominant:   'intel.powerBalanceDominant',
   stronger:   'intel.powerBalanceStronger',
@@ -50,7 +31,6 @@ const BAND_KEY = {
   weaker:     'intel.powerBalanceWeaker',
   outmatched: 'intel.powerBalanceOutmatched',
 };
-const kitOn = () => isKitScreen('intel', GAME_CONFIG.FEATURES);
 
 export class IntelOverlay extends BaseOverlay {
   constructor() {
@@ -74,319 +54,13 @@ export class IntelOverlay extends BaseOverlay {
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
-    if (kitOn()) {
-      // K0b (A) — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
-      ctx.save();
-      applyConsoleHalo(ctx);
-      try { this._drawConsole(ctx, W, H); } finally { ctx.restore(); }
-      return;
-    }
-    this.consoleZones = null;
-
-    const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
-
-    // Tło
-    ctx.fillStyle = bgAlpha(0.40);
-    ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = THEME.borderActive;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(ox, oy, ow, oh);
-
-    // Separator
-    ctx.beginPath();
-    ctx.moveTo(ox + LEFT_W, oy);
-    ctx.lineTo(ox + LEFT_W, oy + oh);
-    ctx.stroke();
-
-    // Zamknij
-    const closeX = ox + ow - 24;
-    const closeY = oy + 4;
-    ctx.font = `bold 14px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText('✕', closeX, closeY + 14);
-    this._addHit(closeX - 4, closeY, 22, 22, 'close');
-
-    this._drawLeft(ctx, ox, oy, LEFT_W, oh);
-    this._drawRight(ctx, ox + LEFT_W, oy, ow - LEFT_W, oh);
-  }
-
-  // ── Lewa kolumna: lista imperiów ────────────────────────────
-
-  _drawLeft(ctx, x, y, w, h) {
-    const pad = 12;
-
-    this._drawOverlayHeader(ctx, x, y, w, `◐ ${t('intel.title')}`);
-
-    const intel    = window.KOSMOS?.gameState?.get('intel') ?? {};
-    const registry = window.KOSMOS?.empireRegistry;
-    const entries  = Object.entries(intel);
-
-    const listY = y + TAB_H;
-    const listH = h - TAB_H;
-
+    // K0b (A) — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, listY, w, listH);
-    ctx.clip();
-
-    let ry = listY + 6 - this._scrollLeft;
-
-    if (entries.length === 0) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('intel.noData'), x + w / 2, listY + 40);
-      ctx.fillText(t('intel.sendShipsOrBuild'), x + w / 2, listY + 58);
-      ctx.fillText(t('intel.observatoryHint'), x + w / 2, listY + 74);
-      ctx.textAlign = 'left';
-      ctx.restore();
-      return;
-    }
-
-    // Sort: detailed → contact → rumor → unknown, wewnątrz po ID
-    const sorted = [...entries].sort((a, b) => {
-      const ra = LEVEL_RANK[a[1]?.level ?? 'unknown'];
-      const rb = LEVEL_RANK[b[1]?.level ?? 'unknown'];
-      if (rb !== ra) return rb - ra;
-      return a[0].localeCompare(b[0]);
-    });
-
-    for (const [empireId, rec] of sorted) {
-      const level = rec?.level ?? 'unknown';
-      const levelRank = LEVEL_RANK[level];
-      const emp = registry?.get(empireId);
-      const arch = emp ? ARCHETYPES[emp.archetype] : null;
-      const isSel = this._selectedId === empireId;
-
-      const rowH = 38;
-      if (ry + rowH < listY) { ry += rowH; continue; } // cull scroll
-      if (ry > listY + listH) break;
-
-      // Tło rzędu (selekcja)
-      if (isSel) {
-        ctx.fillStyle = 'rgba(255,200,60,0.08)';
-        ctx.fillRect(x + 4, ry, w - 8, rowH - 2);
-        ctx.strokeStyle = THEME.accent;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x + 4.5, ry + 0.5, w - 9, rowH - 3);
-      }
-
-      // Kropka koloru archetypu (lub szara dla unknown/rumor)
-      const dotColor = levelRank >= LEVEL_RANK.contact && arch ? arch.color : LEVEL_COLOR[level];
-      ctx.fillStyle = dotColor;
-      ctx.beginPath();
-      ctx.arc(x + pad + 4, ry + 14, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Nazwa imperium (mgła)
-      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      const name = levelRank >= LEVEL_RANK.contact ? (emp?.name ?? MASK) : MASK;
-      ctx.fillStyle = levelRank >= LEVEL_RANK.contact ? THEME.textPrimary : THEME.textDim;
-      ctx.fillText(name, x + pad + 14, ry + 16);
-
-      // Poziom intel (label)
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = LEVEL_COLOR[level];
-      ctx.fillText(t(LEVEL_LABEL_KEY[level]), x + pad + 14, ry + 30);
-
-      // Archetyp (po prawej — tylko przy contact+)
-      if (levelRank >= LEVEL_RANK.contact && arch) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.textAlign = 'right';
-        ctx.fillText(getName(arch), x + w - pad, ry + 30);
-        ctx.textAlign = 'left';
-      }
-
-      this._addHit(x + 4, ry, w - 8, rowH - 2, 'select_empire', { empireId });
-      ry += rowH;
-    }
-
-    ctx.restore();
+    applyConsoleHalo(ctx);
+    try { this._drawConsole(ctx, W, H); } finally { ctx.restore(); }
   }
 
-  // ── Prawa kolumna: szczegóły imperium ───────────────────────
-
-  _drawRight(ctx, x, y, w, h) {
-    const pad = 18;
-
-    ctx.fillStyle = bgAlpha(0.45);
-    ctx.fillRect(x, y, w, TAB_H);
-
-    const intel    = window.KOSMOS?.gameState?.get(`intel.${this._selectedId}`);
-    const registry = window.KOSMOS?.empireRegistry;
-    const emp      = registry?.get(this._selectedId);
-
-    if (!this._selectedId || !intel || !emp) {
-      ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('intel.selectEmpire'), x + w / 2, y + h / 2);
-      ctx.textAlign = 'left';
-      return;
-    }
-
-    const level = intel.level ?? 'unknown';
-    const rank  = LEVEL_RANK[level];
-    const arch  = ARCHETYPES[emp.archetype];
-
-    // Nagłówek
-    ctx.font = `bold ${THEME.fontSizeMedium + 2}px ${THEME.fontFamily}`;
-    ctx.fillStyle = rank >= LEVEL_RANK.contact ? (arch?.color ?? THEME.textPrimary) : THEME.textDim;
-    const headerName = rank >= LEVEL_RANK.contact ? emp.name : MASK;
-    ctx.fillText(`⚑ ${headerName}`, x + pad, y + 22);
-
-    // Poziom intel (badge)
-    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = LEVEL_COLOR[level];
-    ctx.textAlign = 'right';
-    ctx.fillText(`[${t(LEVEL_LABEL_KEY[level])}]`, x + w - pad, y + 22);
-    ctx.textAlign = 'left';
-
-    let iy = y + TAB_H + 20;
-
-    // Blok 1: archetyp / opis (contact+)
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textSecondary;
-    if (rank >= LEVEL_RANK.contact && arch) {
-      ctx.fillStyle = arch.color;
-      ctx.fillText(`${t('intel.archetype')}: ${getName(arch)}`, x + pad, iy);
-      iy += 18;
-      ctx.fillStyle = THEME.textDim;
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      this._wrapText(ctx, getDesc(arch), x + pad, iy, w - pad * 2, 14);
-      iy += 18 + 14;
-    } else {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`${t('intel.archetype')}: ${MASK}`, x + pad, iy);
-      iy += 18;
-    }
-
-    // Separator
-    iy += 6;
-    ctx.strokeStyle = THEME.border;
-    ctx.beginPath(); ctx.moveTo(x + pad, iy); ctx.lineTo(x + w - pad, iy); ctx.stroke();
-    iy += 14;
-
-    // Blok 2: znane kolonie (systemy)
-    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('intel.knownSystems'), x + pad, iy);
-    iy += 16;
-
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const known = intel.knownColonies ?? [];
-    if (known.length === 0) {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('intel.none'), x + pad + 8, iy);
-      iy += 16;
-    } else {
-      const galaxy = window.KOSMOS?.galaxyData;
-      for (const sysId of known) {
-        const gs = galaxy?.systems?.find(s => s.id === sysId);
-        const name = gs?.name ?? sysId;
-        const isHome = emp.homeSystemId === sysId;
-        ctx.fillStyle = isHome ? THEME.accent : THEME.textSecondary;
-        ctx.fillText(`  • ${name}${isHome ? ` (${t('intel.capital')})` : ''}`, x + pad + 4, iy);
-        iy += 14;
-      }
-    }
-
-    // Separator
-    iy += 6;
-    ctx.strokeStyle = THEME.border;
-    ctx.beginPath(); ctx.moveTo(x + pad, iy); ctx.lineTo(x + w - pad, iy); ctx.stroke();
-    iy += 14;
-
-    // Blok 3: siła wojskowa (detailed+)
-    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('intel.militaryStrength'), x + pad, iy);
-    iy += 16;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    if (rank >= LEVEL_RANK.detailed && intel.knownMilitary != null) {
-      const bars = Math.min(10, Math.floor(intel.knownMilitary / 50));
-      ctx.fillStyle = THEME.warning;
-      ctx.fillText(`  ≈ ${t('intel.combatUnits', intel.knownMilitary)}`, x + pad + 4, iy);
-      iy += 14;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`  ${'█'.repeat(bars)}${'░'.repeat(10 - bars)}`, x + pad + 4, iy);
-      iy += 14;
-
-      // W2-7 — POTENCJAŁ obok SIŁY. Linia wyżej mówi, ile imperium ma OBSADZONYCH okrętów;
-      // ta mówi, ile trzyma w magazynie i ilu ludzi ma jeszcze do oddania. Bez niej gracz
-      // czytałby spadek `knownMilitary` po W2-2 jako rozbrojenie przeciwnika, a nie jako
-      // flotę czekającą na rozkaz — czyli dokładnie odwrotnie niż jest.
-      if (intel.knownReserve != null && intel.knownReserve > 0) {
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`  ${t('intel.reserveHulls', intel.knownReserve)}`, x + pad + 4, iy);
-        iy += 14;
-      }
-      // AI STRIKES BACK S1 (SB19, Finding 398) — FLOTA / LIMIT zamiast „wolnej załogi” (freePops stolicy, który od S0-2
-      //   nie bramkuje mobilizacji AI): ile uzbrojonych kadłubów imperium ma (każdy stan służby) i jaki ma limit floty.
-      if (intel.knownArmedHulls != null && intel.knownFleetLimit != null) {
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`  ${t('intel.fleetVsLimit', intel.knownArmedHulls, intel.knownFleetLimit)}`, x + pad + 4, iy);
-        iy += 14;
-      }
-
-      // W1-3c — CIĄGŁY odczyt układu sił. Odpowiada na pytanie, które gracz zadaje PRZED
-      // decyzją dyplomatyczną („czy w ogóle mam z czym prosić"), a nie po odmowie. Kanał
-      // rozbicia akceptacji (E4) jest z natury REAKTYWNY i pokazuje się wyłącznie przy
-      // odmowie — przy zgodzie gracz nie dowiaduje się niczego. Ta linia to naprawia,
-      // BEZ dotykania modala: ta sama bramka intelu (`detailed`), te same dane.
-      const mine = window.KOSMOS?.threatAssessment?.getPlayerStrength?.() ?? 0;
-      const bal  = describePowerBalance(mine, intel.knownMilitary);
-      // Kolor niesie OCENĘ, nie samą liczbę: zielony gdy przewaga po naszej stronie.
-      ctx.fillStyle = bal.leader === 'mine' ? THEME.success
-                    : bal.band === 'balanced' ? THEME.textDim
-                    : THEME.danger;
-      ctx.fillText(`  ${t('intel.powerBalance')}: ${t(BAND_KEY[bal.band], bal.pct)}`, x + pad + 4, iy);
-      iy += 14;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`  ${t('intel.powerBalanceYours', Math.round(mine))}`, x + pad + 4, iy);
-      iy += 14;
-    } else {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`  ${MASK}`, x + pad + 4, iy);
-      iy += 14;
-      ctx.fillStyle = THEME.textDim;
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillText(`  ${t('intel.needsGroundScan')}`, x + pad + 4, iy);
-      iy += 14;
-    }
-
-    // Separator
-    iy += 6;
-    ctx.strokeStyle = THEME.border;
-    ctx.beginPath(); ctx.moveTo(x + pad, iy); ctx.lineTo(x + w - pad, iy); ctx.stroke();
-    iy += 14;
-
-    // Blok 4: ostatnie incydenty (contact+)
-    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('intel.recentIncidents'), x + pad, iy);
-    iy += 16;
-
-    const inc = intel.lastIncidents ?? [];
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    if (rank < LEVEL_RANK.contact) {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`  ${MASK}`, x + pad + 4, iy);
-    } else if (inc.length === 0) {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`  ${t('intel.none')}`, x + pad + 4, iy);
-    } else {
-      const shown = inc.slice(-5).reverse();
-      for (const ev of shown) {
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`  [${(ev.year ?? 0).toFixed(0)}] ${ev.type}`, x + pad + 4, iy);
-        iy += 14;
-      }
-    }
-  }
-
-  // ══ ARC KONSOLE K0b — Wywiad na zestawie konsoli (FEATURES.consoleIntel) ═══════════════════════════════════════════════
+  // ══ ARC KONSOLE K0b — Wywiad na zestawie konsoli (na stałe od KZ) ═══════════════════════════════════════════════════════
   // Szablon 4-strefowy (D-K-1): nagłówek (tytuł + czipy grupy + [ x ]) · lista imperiów (wspólna z Dyplomacją od K2) ·
   // bohater = dossier + układ sił (ty kontra oni) · inspektor = znane systemy, wojsko, incydenty. Bez wypełnionych paneli —
   // tekst na żywej, przyciemnionej scenie (D-K-5 poprawione); nawiasy narożne tylko na bohaterze i zaznaczonym wierszu.
@@ -651,23 +325,12 @@ export class IntelOverlay extends BaseOverlay {
     }
   }
 
+  // K0b — kółko na konsoli: geometria wyłącznie ze stref ostatniej klatki (bez window.inner*); klamra przewijania w drawList.
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
-    if (kitOn()) {
-      // K0b — geometria wyłącznie ze stref ostatniej klatki (bez window.inner*); klamra przewijania w drawList.
-      const f = this.consoleZones?.frame, r = this._consoleListRect;
-      if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
-      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
-      return true;
-    }
-    const { ox, oy, ow, oh } = this._getOverlayBounds(
-      Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
-      Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
-    );
-    if (x < ox || x > ox + ow || y < oy || y > oy + oh) return false;
-    if (x < ox + LEFT_W) {
-      this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
-    }
+    const f = this.consoleZones?.frame, r = this._consoleListRect;
+    if (!f || x < f.x || x > f.x + f.w || y < f.y || y > f.y + f.h) return false;
+    if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
     return true;
   }
 }

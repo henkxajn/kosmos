@@ -6,11 +6,15 @@
 //   I2  brak systemu puli ⇒ null / null („nie wiem”, nigdy 0)
 //   I3  `advanceIntel` do `detailed` zapisuje oba pola, poniżej `detailed` — nic; `_refreshKnownMilitary` odświeża po
 //       zmianie floty (odrastanie), bez zapisu, gdy nic się nie zmieniło
-//   I4  panel Wywiadu, blok „Siła wojskowa” (`_drawRight` WYKONANIEM na atrapie ctx): linia „okręty uzbrojone: A / limit
-//       floty: L”; napisu „wolna załoga” nie ma; KONTROLA: linia „jednostek bojowych” jest rysowana
-//   I5  i18n: `intel.fleetVsLimit` w PL i EN (oba miejsca na liczby), `intel.crewCapacity` usunięty z obu słowników;
-//       w `src/` (poza testami) brak `knownCrewCapacity` i `intel.crewCapacity`
+//   I4  konsola Wywiadu (KZ: ścieżka jedyna; `draw()` WYKONANIEM na atrapie ctx), inspektor „Siła wojskowa”: wiersz
+//       `intel.console.armedLimit` = „A / L” z rekordu wywiadu; napisu „wolna załoga” nie ma; MGŁA: ten sam rekord przy
+//       „contact” — wiersz „???”, liczby nie wyciekają; świadek: strefy konsoli ('tab', 'select_empire') i nagłówek sekcji
+//   I5  i18n: etykieta wiersza w PL i EN; `intel.crewCapacity` oraz klucze dawnej strony (fleetVsLimit, combatUnits,
+//       reserveHulls — usunięte w KZ) nieobecne w obu słownikach; w `src/` (poza testami) brak `knownCrewCapacity` i
+//       `intel.crewCapacity`
 //
+// KZ (ARC KONSOLE): dawne I4 (`_drawRight`, linia „jednostek bojowych” jako KONTROLA) przecelowane na konsolę — strona
+// 2-kolumnowa i jej klucze usunięte; I5a pinuje etykietę konsoli zamiast klucza z miejscami na liczby.
 // ⚠ Fail-first: na kodzie sprzed zmiany piny I1–I5 są czerwone; zielone po obu stronach — świadkowie i KONTROLA.
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -18,7 +22,7 @@ import gameState from '../../core/GameState.js';
 import debugLog from '../../core/DebugLog.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
 import { IntelOverlay } from '../../ui/IntelOverlay.js';
-import { t, setLocale, getLocale } from '../../i18n/i18n.js';
+import { t } from '../../i18n/i18n.js';
 import PL from '../../i18n/pl.js';
 import EN from '../../i18n/en.js';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -96,45 +100,71 @@ console.log('\nI3 — bramka `detailed` i odświeżanie');
     `I3d: imperium bez „detailed” — brak liczb floty (${e2?.level ?? 'brak rekordu'}); świadek: imperium z „detailed” je ma`);
 }
 
-// ── I4 — panel Wywiadu, blok „Siła wojskowa” ───────────────────────────────────────────────────
-console.log('\nI4 — panel Wywiadu rysuje linię flota / limit');
-{
-  const texts = [];
+// ── I4 — konsola Wywiadu, inspektor „Siła wojskowa” ───────────────────────────────────────────
+// KZ: dawna strona 2-kolumnowa (`_drawRight`) usunięta — ta sama treść (okręty uzbrojone / limit floty z rekordu wywiadu)
+// żyje w inspektorze konsoli: wiersz klucz–wartość `intel.console.armedLimit` z wartością „A / L”. Rysunek przez publiczne
+// `draw()` na atrapie ctx; cyfry w kratce (`drawTabular`) idą po glifie — wywołania na tej samej linii bazowej sklejane w
+// jedną linię (wiersz kv rysuje najpierw wartość, potem klucz: linia = „A / L” + etykieta).
+console.log('\nI4 — konsola Wywiadu rysuje wiersz flota / limit (inspektor)');
+const drawConsole = (kosmos) => {
+  const lines = [];
+  let lastY = null;
   const ctx = new Proxy({}, {
     get: (o, k) => {
-      if (k === 'fillText') return (s) => texts.push(String(s));
+      if (k === 'fillText') return (s, x, y) => {
+        if (lastY !== null && y === lastY && lines.length) lines[lines.length - 1] += String(s); else lines.push(String(s));
+        lastY = y;
+      };
       if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
       if (k in o) return o[k];
       return () => {};
     },
     set: (o, k, v) => { o[k] = v; return true; },
   });
+  const saved = window.KOSMOS;
+  window.KOSMOS = kosmos;
   const ov = new IntelOverlay();
-  ov._selectedId = E1;
-  quiet(() => ov._drawRight(ctx, 0, 0, 900, 1200));
+  try {
+    ov.show();
+    ov._selectedId = E1;
+    quiet(() => ov.draw(ctx, 1600, 1041));
+  } finally { window.KOSMOS = saved; }
+  return { ov, lines };
+};
+{
   const rec = gameState.get(`intel.${E1}`);
-  const want = t('intel.fleetVsLimit', rec?.knownArmedHulls, rec?.knownFleetLimit);
-  assert(texts.some((s) => s.includes(t('intel.combatUnits', rec?.knownMilitary))),
-    `I4a (KONTROLA): blok „Siła wojskowa” jest rysowany (linia „${t('intel.combatUnits', rec?.knownMilitary)}”)`);
-  assert(!want.startsWith('intel.') && texts.some((s) => s.includes(want)),
-    `I4b: linia „${want}” w bloku „Siła wojskowa”`);
-  assert(!texts.some((s) => /wolna załoga|free crew|intel\.crewCapacity/.test(s)), 'I4c: napisu „wolna załoga” nie ma');
+  const LBL = t('intel.console.armedLimit');
+  const A = rec?.knownArmedHulls, L = rec?.knownFleetLimit;
+  const det = drawConsole(K);
+  const isKit = det.ov._hitZones.some((z) => z.type === 'tab') && det.ov._hitZones.some((z) => z.type === 'select_empire' && z.data?.empireId === E1);
+  const milHdr = det.lines.includes(t('intel.militaryStrength').toUpperCase());
+  assert(isKit && milHdr && rec?.level === 'detailed',
+    `I4a (świadek): konsola Wywiadu (strefy 'tab' + wiersz ${E1}) rysuje sekcję „${t('intel.militaryStrength')}” dla rekordu „${rec?.level}”`);
+  assert(A === 3 && L === 2 && det.lines.includes(`${A} / ${L}${LBL}`),
+    `I4b: wiersz „${LBL}: ${A} / ${L}” w inspektorze (z rekordu wywiadu)`);
+  assert(det.lines.length > 10 && !det.lines.some((s) => /wolna załoga|free crew|intel\.crewCapacity/i.test(s)), 'I4c: napisu „wolna załoga” nie ma (świadek: konsola narysowała tekst)');
+  // MGŁA: ten sam rekord (liczby floty zostają w rekordzie) poniżej `detailed` — wiersz pokazuje maskę, liczby nie wyciekają.
+  const fogged = { ...K, gameState: { get: (p) => (p === 'intel' ? { [E1]: { ...rec, level: 'contact' } } : K.gameState.get(p)) } };
+  const con = drawConsole(fogged);
+  assert(con.lines.includes(`???${LBL}`) && !con.lines.some((s) => s.includes(`${A} / ${L}`)),
+    'I4d: MGŁA — przy „contact” wiersz floty to „???”, liczb A / L nie ma (te same dane w rekordzie)');
 }
 
 // ── I5 — i18n i sprzątanie ─────────────────────────────────────────────────────────────────────
 console.log('\nI5 — PL / EN i sprzątanie starego odczytu');
 {
-  const prev = getLocale();
-  const both = {};
-  for (const loc of ['pl', 'en']) { setLocale(loc); both[loc] = t('intel.fleetVsLimit', 7, 9); }
-  setLocale(prev);
-  assert(['pl', 'en'].every((l) => both[l].includes('7') && both[l].includes('9') && !both[l].startsWith('intel.'))
-    && both.pl !== both.en, `I5a: PL „${both.pl}”; EN „${both.en}”`);
+  // KZ: dawny klucz z miejscami na liczby (strona sprzed konsoli) zastąpiony etykietą wiersza konsoli; liczby formatuje kod.
+  const KEY = 'intel.console.armedLimit';
+  const both = { pl: PL[KEY], en: EN[KEY] };
+  assert(['pl', 'en'].every((l) => typeof both[l] === 'string' && both[l].length > 0) && both.pl !== both.en,
+    `I5a: etykieta wiersza floty — PL „${both.pl}”; EN „${both.en}”`);
   // Słowniki czytane wprost (bez funkcji tłumaczącej — `check-i18n` liczy jej wywołania w całym `src/`, także w testach).
-  const OLD = ['intel', 'crewCapacity'].join('.');
-  const inDict = [PL, EN].map((d) => Object.prototype.hasOwnProperty.call(d, OLD));
-  assert(inDict.every((x) => x === false) && Object.prototype.hasOwnProperty.call(PL, 'intel.reserveHulls'),
-    `I5b: klucz ${OLD} usunięty z obu słowników (pl ${inDict[0]}, en ${inDict[1]}); świadek: sąsiedni klucz jest`);
+  // KZ: klucze dawnego bloku „Siła wojskowa” (tylko strona sprzed konsoli) usunięte z obu słowników razem z nią.
+  const OLD = [['intel', 'crewCapacity'], ['intel', 'fleetVsLimit'], ['intel', 'combatUnits'], ['intel', 'reserveHulls']].map((p) => p.join('.'));
+  const inDict = OLD.filter((k) => [PL, EN].some((d) => Object.prototype.hasOwnProperty.call(d, k)));
+  const witness = ['intel.console.reserve', 'intel.militaryStrength'].every((k) => [PL, EN].every((d) => Object.prototype.hasOwnProperty.call(d, k)));
+  assert(inDict.length === 0 && witness,
+    `I5b: klucze ${OLD.join(', ')} nieobecne w obu słownikach (zostały: [${inDict.join(', ')}]); świadek: klucze konsoli są`);
   const files = [];
   const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) { if (!p.includes(`${path.sep}testing`)) walk(p); } else if (/\.(m?js)$/.test(n)) files.push(p); } };
   walk(SRC);

@@ -3,7 +3,7 @@
 // Zasady:
 //  • lista — DZISIEJSZY zbiór i kolejność Dyplomacji (relacje z wywiadem ≥ `rumor`, napięcie malejąco); treść wiersza i mgła —
 //    wspólne `EmpireListLogic.empireRowView` (te same reguły co Wywiad, bez forka);
-//  • akcje — LUSTRO reguł `DiplomacyOverlay._drawRight` (te same warunki włączenia, te same typy stref i dane); powód wyłączenia
+//  • akcje — reguły dawnej strony Dyplomacji (usuniętej w KZ; te same warunki włączenia, te same typy stref i dane); powód wyłączenia
 //    to tekst podpowiedzi, nie nowa reguła;
 //  • Finding 724 — postawa AI (`fsm.state`) i klucze zdarzeń pamięci idą przez etykiety i18n; nieznany przyszły klucz → czytelna
 //    etykieta ogólna, nigdy surowe id.
@@ -86,7 +86,7 @@ export function opinionTone(op) { const v = Math.round(Number(op) || 0); return 
 export function tensionTone(ten) { const v = Number(ten) || 0; return v >= 60 ? 'alert' : v >= 40 ? 'dim' : 'primary'; }
 
 /**
- * Akcje relacji — LUSTRO `DiplomacyOverlay._drawRight` (wiersze 1–3, kolejność slotów jak dziś). Każda pozycja: `type` = typ
+ * Akcje relacji — reguły dawnej strony Dyplomacji (wiersze 1–3, kolejność slotów jak dziś). Każda pozycja: `type` = typ
  * strefy trafienia (`declare_war`, `offer_peace`, `send_envoy`, `propose_trade` | `toggle_auto_trade`, `propose_pact` |
  * `renew_pact`, `propose_alliance`), `label`, `enabled`, `tone` ('danger' | 'primary'), `reason` (tekst podpowiedzi wyłączonej).
  * @param {{ empireId:string, rel:object, isContact:boolean, hasEnvoyVessel:boolean, hasTreaty:(id:string)=>boolean,

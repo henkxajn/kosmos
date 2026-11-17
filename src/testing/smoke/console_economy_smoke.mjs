@@ -351,13 +351,13 @@ console.log('G — czipy grupy');
     assert(kitOn.every((h) => h === 0), `G8 consoleKit ON: brak pasa subnav nad Budżetem, Przepływami, Produkcją, Handlem (${kitOn.join(', ')})`);
     F.consoleKit = false;
     const kitOff = ECO_IDS.map(subnav);
-    // kontrola: te same warunki, ekrany z flagą zestawu (Wywiad / Dyplomacja / Wojna) mają wtedy pas
-    const ctrl = ['intel', 'diplomacy', 'war'].map(subnav);
+    // kontrola (KZ): te same warunki, grupa Nauki (Technologie / Obserwatorium — poza arcem, nie konsola) ma wtedy pas
+    const ctrl = ['tech', 'observatory'].map(subnav);
     F.consoleKit = true;
     // świadek: id Ekonomii są w grupie nawigacji (bez trwałości dostałyby pas)
     const grouped = ECO_IDS.every((id) => CPD.isGroupedId?.(id) === true);
     assert(grouped && kitOff.every((h) => h === 0), `G9 consoleKit OFF: nadal brak pasa nad grupą Ekonomii (${kitOff.join(', ')}; id w grupie: ${grouped})`);
-    assert(ctrl.every((h) => h > 0), `G9b kontrola: consoleKit OFF — Wywiad / Dyplomacja / Wojna mają pas (${ctrl.join(', ')})`);
+    assert(ctrl.every((h) => h > 0), `G9b kontrola: consoleKit OFF — Technologie / Obserwatorium (nie konsola) mają pas (${ctrl.join(', ')})`);
   } else assert(false, 'G8 CivPanelDrawer importuje się');
   // trwałość: isKitScreen bez flag
   if (CL?.isKitScreen) {
@@ -365,11 +365,11 @@ console.log('G — czipy grupy');
     const noFlags = ECO_IDS.filter((id) => CL.isKitScreen(id, {}) !== true || CL.isKitScreen(id, { consoleKit: false }) !== true
       || CL.isKitScreen(id, undefined) !== true);
     assert(noFlags.length === 0, `G10 isKitScreen(budget / flows / trade / economy) = true bez flag i przy consoleKit false${noFlags.length ? ' — nie: ' + noFlags.join(',') : ''}`);
-    const OTHER = ['intel', 'shipyard', 'diplomacy', 'war'];
-    const allOn = { consoleKit: true, consoleIntel: true, consoleShipyard: true, consoleDiplomacy: true };
-    const ctrlBad = OTHER.filter((id) => CL.isKitScreen(id, {}) !== false || CL.isKitScreen(id, { ...allOn, consoleKit: false }) !== false
-      || CL.isKitScreen(id, allOn) !== true);
-    assert(ctrlBad.length === 0, `G11 kontrola: intel / shipyard / diplomacy / war nadal wymagają flag (bez flag false, z flagami true)${ctrlBad.length ? ' — źle: ' + ctrlBad.join(',') : ''}`);
+    // kontrola (KZ): ekrany spoza konsoli (Nauka, Kolonie) nie są ekranem zestawu — ani bez flag, ani z dowolnymi flagami
+    const OTHER = ['tech', 'observatory', 'colony'];
+    const anyOn = { consoleKit: true, consoleTech: true, consoleObservatory: true, consoleColony: true };
+    const ctrlBad = OTHER.filter((id) => CL.isKitScreen(id, {}) !== false || CL.isKitScreen(id, anyOn) !== false);
+    assert(ctrlBad.length === 0, `G11 kontrola: tech / observatory / colony nie są ekranami zestawu (bez flag i z flagami)${ctrlBad.length ? ' — źle: ' + ctrlBad.join(',') : ''}`);
   } else assert(false, 'G10 ConsoleLayoutLogic.isKitScreen importuje się');
 }
 

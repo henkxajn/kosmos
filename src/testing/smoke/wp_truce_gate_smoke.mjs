@@ -25,6 +25,11 @@
 //   nie dorobić trzeciego magicznego stringa obok `player_action` i `player_war_panel`
 //   (rejestr #294). Pin T4 trzyma tę ścieżkę żywą.
 //
+// ⚠ ARC KONSOLE KZ: panel Dyplomacji to WYŁĄCZNIE konsola (dawne `_drawRight` usunięte). T5 rysuje
+//   prawdziwy `draw()` konsoli; lustro `canWar` żyje w `DiplomacyConsoleLogic.diplomacyActions`.
+//   W rozejmie czip ⚔ zostaje WIDOCZNY ze strefą `action_blocked`, której powód to TEN SAM klucz,
+//   którym odmawia silnik (`diplo.reject.truceHolds`) — kanon „widoczny+zablokowany”.
+//
 // Uruchom: node src/testing/smoke/wp_truce_gate_smoke.mjs
 
 import '../headless/env.js';           // MUSI być pierwszy (window/localStorage/THREE)
@@ -36,6 +41,7 @@ import gameState from '../../core/GameState.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { DiplomacySystem } from '../../systems/DiplomacySystem.js';
 import { DiplomacyOverlay } from '../../ui/DiplomacyOverlay.js';
+import { t } from '../../i18n/i18n.js';
 
 // Stała rodzi się w C2 — namespace'owo (statyczny import nieistniejącego eksportu wywala
 // CAŁY plik na linkowaniu ESM i żaden pin nie dostaje koloru przy fail-first).
@@ -190,39 +196,45 @@ console.log('\nT5 — lustro w panelu: `canWar` gaśnie w rozejmie (WYKONANIOWO)
   const dipl = world(600);
   assert(intoTruce(dipl, 'emp_t5'), 'T5a (KONTROLA PINU): rozejm stoi');
 
+  // Atrapa `ctx`: każda nieznana metoda = no-op (konsola woła więcej metod płótna niż dawna strona).
   const ctxStub = new Proxy({}, {
-    get: (_t, k) => {
-      if (k === 'fillText' || k === 'strokeText') return () => {};
-      if (k === 'measureText') return () => ({ width: 10 });
-      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
-      if (typeof k === 'string'
-        && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) {
-        return () => {};
-      }
-      return undefined;
+    get: (o, k) => {
+      if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop: () => {} });
+      if (k in o) return o[k];
+      return () => {};
     },
-    set: () => true,
+    set: (o, k, v) => { o[k] = v; return true; },
   });
   const zonesFor = (id) => {
     const ov = new DiplomacyOverlay();
+    ov.visible = true;
     ov._selectedId = id;
-    ov._hitZones = [];
-    try { ov._drawRight(ctxStub, 0, 0, 640, 720); } catch { /* zgłosi T5b */ }
-    return ov._hitZones.map(z => z.type);
+    try { ov.draw(ctxStub, 1600, 1041); } catch { /* zgłosi T5b */ }
+    return ov._hitZones ?? [];
   };
+  const types = (zs) => zs.map(z => z.type);
+  const blockedWar = (zs) => zs.find(z => z.type === 'action_blocked' && z.data?.action === 'declare_war') ?? null;
 
-  const truceZones = zonesFor('emp_t5');
-  assert(truceZones.length > 0,
-    'T5b (KONTROLA PINU): panel REALNIE narysował hit-zony (' + truceZones.length + ') — '
+  const truceZ = zonesFor('emp_t5');
+  const truceZones = types(truceZ);
+  assert(truceZones.includes('tab') && truceZones.includes('select'),
+    'T5b (KONTROLA PINU): konsola REALNIE narysowała hit-zony (' + truceZones.length + ', w tym tab + select) — '
     + 'inaczej brak `declare_war` myliłby się z brakiem rysowania');
-  assert(!truceZones.includes('declare_war'),
-    'T5c: w rozejmie NIE MA hit-zony `declare_war` — kanon „widoczny+zablokowany" (' + truceZones.join(', ') + ')');
+  const truceLeft = Math.max(1, Math.ceil(dipl.listPlayerRelations().find(r => r.empireId === 'emp_t5')?.truceYearsLeft ?? 0));
+  const blk = blockedWar(truceZ);
+  assert(!truceZones.includes('declare_war') && !!blk && blk.data.reason === t('diplo.reject.truceHolds', truceLeft),
+    'T5c: w rozejmie NIE MA hit-zony `declare_war`; czip widoczny z podpowiedzią — powód = klucz odmowy silnika ('
+    + JSON.stringify(blk?.data?.reason) + ') — kanon „widoczny+zablokowany"');
 
   // KONTROLA: w POKOJU ta sama ścieżka zonę wystawia — inaczej T5c mierzyłby martwy panel.
   dipl.relations.setStatus('player', 'emp_t5', 'peace', {}, 'kontrola');
-  const peaceZones = zonesFor('emp_t5');
-  assert(peaceZones.includes('declare_war'),
-    'T5d (KONTROLA PINU): w POKOJU hit-zona `declare_war` JEST (' + peaceZones.join(', ') + ')');
+  const peaceZ = zonesFor('emp_t5');
+  const peaceZones = types(peaceZ);
+  assert(peaceZones.includes('declare_war') && !blockedWar(peaceZ)
+    && peaceZ.find(z => z.type === 'declare_war')?.data?.empireId === 'emp_t5',
+    'T5d (KONTROLA PINU): w POKOJU hit-zona `declare_war` JEST (na to imperium), podpowiedzi blokady brak ('
+    + peaceZones.join(', ') + ')');
 }
 
 // ════════════════════════════════════════════════════════════════════════════

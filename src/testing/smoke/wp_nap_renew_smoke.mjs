@@ -28,9 +28,14 @@
 //
 // ⚠ C2 DOKŁADA WARSTWĘ PANELU (T10) — DO TEGO SAMEGO PLIKU, nie do nowego: cała mechanika
 //   odnowienia mieszka tutaj, a slot jest jej jedyną powierzchnią. `DiplomacyOverlay` IMPORTUJE
-//   się pod node, więc panel pinujemy WYKONANIEM (prawdziwy `_drawRight` + prawdziwy
+//   się pod node, więc panel pinujemy WYKONANIEM (prawdziwy `draw()` + prawdziwy
 //   `handleClick` na atrapie `ctx`) — wzór `wp_treaty_slot` T1/T4. Pin źródłowy powiedziałby
 //   tylko, że kod zawiera napis; tu mierzymy, co gracz WIDZI i co robi jego klik.
+//   Od ARC KONSOLE KZ `draw()` rysuje WYŁĄCZNIE konsolę (dawne `_drawRight` usunięte): slot paktu
+//   to czip akcji inspektora (`[ 🛡 … ]`, wielkie litery), reguły slotu żyją w
+//   `DiplomacyConsoleLogic.diplomacyActions`, a odczyt silnika w `DiplomacyConsoleView`. Szary czip
+//   ma strefę `action_blocked` (podpowiedź z powodem, bez skutku), a tło konsoli łapie każdy klik
+//   w ramie — „klik w szary przycisk” jest więc POCHŁONIĘTY (handleClick=true), ale bez skutku (T10d5).
 //
 // ⚠ SLOT MA TRZY ETYKIETY, NIE DWIE. Stan „poza oknem” i stan „odmówili” to RÓŻNE FAKTY
 //   (pierwszy: pakt ma jeszcze czas; drugi: pakt JEST w oknie, ale świeża odmowa blokuje),
@@ -410,29 +415,26 @@ console.log('\nT9 — piny źródłowe: liczba producentów i jedno źródło ra
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\nT10 — PANEL: slot paktu ma trzy etykiety i jedną klikalną ścieżkę (C2)');
 {
-  // Atrapa `ctx` + prawdziwy `_drawRight` — wzór `wp_treaty_slot`. NIE wołamy `draw()`, bo
-  // `_drawLeft` sięga po `intelSys.isAtLeast`, którego ten stub nie ma (i nie musi).
-  const ctxStub = new Proxy({}, {
-    get: (_t, k) => {
-      if (k === 'measureText') return () => ({ width: 10 });
-      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
-      if (typeof k === 'string' && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) return () => {};
-      return undefined;
+  // Atrapa `ctx` (każda nieznana metoda = no-op) + prawdziwy `draw()` konsoli — wzór `wp_treaty_slot`.
+  // `show()` NIE wołamy (sięga po `intelSys.isAtLeast`, którego ten stub nie ma) — wybór ustawiamy sami.
+  const recCtx = (texts) => new Proxy({}, {
+    get: (o, k) => {
+      if (k === 'fillText' || k === 'strokeText') return (s) => texts.push(String(s));
+      if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop: () => {} });
+      if (k in o) return o[k];
+      return () => {};
     },
-    set: () => true,
+    set: (o, k, v) => { o[k] = v; return true; },
   });
   const render = (ov, id) => {
     const texts = [];
     ov._selectedId = id;
-    ov._hitZones = [];
     ov.visible = true;                    // `handleClick` wraca `false`, gdy overlay niewidoczny
-    const ctx = new Proxy(ctxStub, {
-      get: (target, k) => (k === 'fillText' || k === 'strokeText') ? ((s) => texts.push(String(s))) : Reflect.get(target, k),
-      set: () => true,
-    });
     let threw = null;
-    try { ov._drawRight(ctx, 0, 0, 640, 720); } catch (e) { threw = e?.message ?? 'throw'; }
-    return { texts, zones: ov._hitZones.map(z => z.type), hits: ov._hitZones, threw };
+    try { ov.draw(recCtx(texts), 1600, 1041); } catch (e) { threw = e?.message ?? 'throw'; }
+    const hits = ov._hitZones ?? [];
+    return { texts, zones: hits.map(z => z.type), hits, blocked: hits.filter(z => z.type === 'action_blocked').map(z => z.data?.action), threw };
   };
   // Przycisk paktu poznajemy po glifie 🛡 — chip statusu i pozostałe przyciski mają inne glify
   // (lekcja `wp_treaty_slot` T4: szukanie po SŁOWIE trafiało w chip, nie w przycisk).
@@ -449,12 +451,12 @@ console.log('\nT10 — PANEL: slot paktu ma trzy etykiety i jedną klikalną śc
     assert(dipl.listPlayerRelations().some(r => r.empireId === 'p_none'),
       'T10a0 (KONTROLA PINU): fixture stworzył rekord relacji — panel ma co rysować');
     const r = render(new DiplomacyOverlay(), 'p_none');
-    assert(r.threw === null, 'T10a (KONTROLA PINU): `_drawRight` przeszedł bez wyjątku' + (r.threw ? ' — ' + r.threw : ''));
+    assert(r.threw === null, 'T10a (KONTROLA PINU): `draw()` konsoli przeszedł bez wyjątku' + (r.threw ? ' — ' + r.threw : ''));
     assert(r.texts.length > 0 && r.zones.length > 0,
       'T10a2 (KONTROLA PINU): panel REALNIE narysował (' + r.texts.length + ' napisów, '
       + r.zones.length + ' stref) — inaczej brak etykiety myliłby się z brakiem rysowania');
     const b = pactBtn(r);
-    assert(!!b && /Pakt o nieagresji/.test(b) && !/ODNÓW/.test(b),
+    assert(!!b && /PAKT O NIEAGRESJI/.test(b) && !/ODNÓW/.test(b),
       'T10b: bez paktu slot mówi „zaproponuj”, jak dotąd — ' + JSON.stringify(b));
     assert(r.zones.includes('propose_pact') && !r.zones.includes('renew_pact'),
       'T10b2: … i wystawia strefę `propose_pact`, a `renew_pact` NIE ISTNIEJE (' + r.zones.join(', ') + ')');
@@ -498,21 +500,27 @@ console.log('\nT10 — PANEL: slot paktu ma trzy etykiety i jedną klikalną śc
     //   „Pakt o nieagresji”, więc „nie mówi odmówili” jest prawdą z niczego). Zmierzone fail-firstem.
     assert(!!b && /ODNÓW ZA/.test(b) && !/ODMÓWILI/.test(b),
       'T10d3: … i NIE mówi „odmówili” — to inny fakt, więc inna etykieta');
-    assert(!!b && /ODNÓW ZA/.test(b) && !r.zones.includes('renew_pact') && !r.zones.includes('propose_pact'),
-      'T10d4: kanon „widoczny+zablokowany” — napis JEST (świadek), strefy nie ma ('
+    assert(!!b && /ODNÓW ZA/.test(b) && !r.zones.includes('renew_pact') && !r.zones.includes('propose_pact')
+      && r.blocked.includes('renew_pact'),
+      'T10d4: kanon „widoczny+zablokowany” — napis JEST (świadek), strefy akcji nie ma, jest podpowiedź `action_blocked` ('
       + r.zones.join(', ') + ')');
 
     // Klik W TO SAMO MIEJSCE, w którym stan 2 MIAŁ strefę: prawdziwy `handleClick`, zero skutku.
+    // Konsola pochłania klik (strefa podpowiedzi / tło ramy ⇒ handleClick=true) — mierzymy SKUTEK.
     const before = JSON.stringify(dipl.relations.getTreaties('player', 'p_far'));
-    let clicked = null;
+    const cdBefore = dipl.getRefusalYearsLeft('p_far', 'non_aggression');
+    let clicked = null, hitThere = null;
     if (geom) {
       const ov = new DiplomacyOverlay();
       render(ov, 'p_far');
+      hitThere = ov._hitTest(geom.x + geom.w / 2, geom.y + geom.h / 2);
       clicked = ov.handleClick(geom.x + geom.w / 2, geom.y + geom.h / 2);
     }
-    assert(clicked === false && JSON.stringify(dipl.relations.getTreaties('player', 'p_far')) === before,
-      'T10d5: klik w SZARY przycisk (te same współrzędne, w których stan 2 ma strefę) nie robi NIC — '
-      + 'handleClick=' + clicked + ', rekord bit w bit');
+    assert(hitThere?.type === 'action_blocked' && hitThere.data?.action === 'renew_pact'
+      && JSON.stringify(dipl.relations.getTreaties('player', 'p_far')) === before
+      && dipl.getRefusalYearsLeft('p_far', 'non_aggression') === cdBefore,
+      'T10d5: klik w SZARY przycisk (te same współrzędne, w których stan 2 ma strefę) trafia w podpowiedź i nie robi NIC — '
+      + 'strefa=' + hitThere?.type + ', handleClick=' + clicked + ', rekord i stempel odmowy bit w bit');
   }
 
   // ── stan 2'': pakt w oknie, ale ŚWIEŻA ODMOWA ──
@@ -530,8 +538,8 @@ console.log('\nT10 — PANEL: slot paktu ma trzy etykiety i jedną klikalną śc
       'T10e2: slot mówi „odmówili” i ile lat blokady — ' + JSON.stringify(b));
     assert(!!b && /ODMÓWILI/.test(b) && !/ODNÓW ZA/.test(b),
       'T10e3: … i NIE udaje „jeszcze za wcześnie” — pakt JEST w oknie, blokuje odmowa');
-    assert(!!b && /ODMÓWILI/.test(b) && !r.zones.includes('renew_pact'),
-      'T10e4: strefa zdjęta, a napis JEST (świadek) — (' + r.zones.join(', ') + ')');
+    assert(!!b && /ODMÓWILI/.test(b) && !r.zones.includes('renew_pact') && r.blocked.includes('renew_pact'),
+      'T10e4: strefa akcji zdjęta (jest podpowiedź `action_blocked`), a napis JEST (świadek) — (' + r.zones.join(', ') + ')');
   }
 
   // ── licznik CAŁKOWITY przy wejściu UŁAMKOWYM ──
@@ -586,16 +594,21 @@ console.log('\nT10 — PANEL: slot paktu ma trzy etykiety i jedną klikalną śc
     assert(plain.length > 0 && !/\{0\}/.test(plain),
       'T10i2[' + f + ']: aktywna etykieta NIE ma licznika — nie ma czego liczyć');
   }
-  const uiSrc = readClean('ui', 'DiplomacyOverlay.js');
-  assert(/canRenewTreaty\s*\?\.\(|canRenewTreaty\(/.test(uiSrc),
-    'T10j: panel PYTA silnik (`canRenewTreaty`) — dostępność jest LUSTREM bramki, nie drugą kopią progów');
-  assert(/NAP_RENEW_WINDOW_YEARS/.test(uiSrc),
-    'T10j2: … a okno czyta z JEDNEGO źródła wartości (import stałej), nie z literału');
-  const rowStart = uiSrc.indexOf("const hasPact");
-  const row3 = rowStart < 0 ? '' : uiSrc.slice(rowStart, uiSrc.indexOf("'renew_pact'") + 200);
-  assert(row3.length > 0 && !/>\s*3\b/.test(row3),
-    'T10j3 (TRIPWIRE): w slocie NIE MA porównania z liczbą 3 — gdyby było, przesunięcie okna '
-    + 'w pliku balansu rozjechałoby panel z silnikiem');
+  // Od KZ: odczyt silnika — widok konsoli (`DiplomacyConsoleView`), reguły slotu — `DiplomacyConsoleLogic`.
+  const uiSrc = readClean('ui', 'DiplomacyConsoleView.js');
+  const logicSrc = readClean('ui', 'DiplomacyConsoleLogic.js');
+  assert(/canRenewTreaty\s*\?\.\(|canRenewTreaty\(/.test(uiSrc) && /canRenewPact:[^\n]*canRenewTreaty/.test(uiSrc),
+    'T10j: panel PYTA silnik (`canRenewTreaty` → `canRenewPact`) — dostępność jest LUSTREM bramki, nie drugą kopią progów');
+  assert(/import \{[^}]*NAP_RENEW_WINDOW_YEARS[^}]*\} from '\.\.\/data\/OpinionModifierData\.js'/.test(uiSrc)
+    && /napWindowYears:\s*NAP_RENEW_WINDOW_YEARS/.test(uiSrc),
+    'T10j2: … a okno czyta z JEDNEGO źródła wartości (import stałej → `napWindowYears`), nie z literału');
+  const viewStart = uiSrc.indexOf('const hasPact');
+  const viewRow = viewStart < 0 ? '' : uiSrc.slice(viewStart, uiSrc.indexOf('napWindowYears', viewStart) + 120);
+  const logicStart = logicSrc.indexOf("if (p.hasTreaty('non_aggression'))");
+  const logicRow = logicStart < 0 ? '' : logicSrc.slice(logicStart, logicSrc.indexOf("'renew_pact'", logicStart) + 200);
+  assert(viewRow.length > 0 && logicRow.includes('p.napWindowYears') && !/>\s*3\b/.test(viewRow) && !/>\s*3\b/.test(logicRow),
+    'T10j3 (TRIPWIRE): w slocie (widok + logika) NIE MA porównania z liczbą 3 — próg idzie przez `napWindowYears` '
+    + '(świadek); gdyby był literał, przesunięcie okna w pliku balansu rozjechałoby panel z silnikiem');
 }
 
 console.log('\n=== WYNIK: ' + pass + ' PASS / ' + fail + ' FAIL (z ' + (pass + fail) + ') ===');

@@ -45,15 +45,15 @@ export const CONSOLE_SCREEN_SPECS = {};
 // Ekrany przebudowane na zestawie konsoli (id overlayu → klucz flagi `FEATURES`, D-K-20). Ekran zestawu rysuje własny nagłówek
 // z czipami podzakładek — pas subnav grupy nie jest wtedy rysowany ani trafiany, a overlay zaczyna się tuż pod górną belką;
 // pasek walki siada w gnieździe nagłówka (D-K-17). Każdy wpis wymaga też `consoleKit` (żywa, przyciemniona scena za tekstem).
-// K2: Dyplomacja i Wojny (jedna flaga rodziny) — z Wywiadem cała grupa Dyplomacji jest na czipach nagłówka.
 // K7-A: Dowództwo (`fleet`) — czipy zakładek w nagłówku zamiast własnego paska zakładek (pasa subnav Dowództwo nie miało).
-export const CONSOLE_KIT_SCREENS = Object.freeze({ intel: 'consoleIntel', shipyard: 'consoleShipyard',
-  diplomacy: 'consoleDiplomacy', war: 'consoleDiplomacy', fleet: 'consoleCommand' });
+export const CONSOLE_KIT_SCREENS = Object.freeze({ shipyard: 'consoleShipyard', fleet: 'consoleCommand' });
 
 // KZ-E — ekrany, których flaga stała się trwała (stara ścieżka usunięta): zawsze ekran zestawu, bez flagi i bez `consoleKit`
 // (`consoleKit` steruje dalej tylko sceną za tekstem). Grupa Ekonomii: Budżet, Przepływy, Handel (Handel + Rynek), Produkcja
 // (`economy`) — pięć czipów nagłówka, bez pasa subnav. KZ-Civ: Cywilizacja i Sfera Dysona (czipy grupy Cywilizacji).
-export const PERMANENT_KIT_SCREENS = Object.freeze(['budget', 'flows', 'trade', 'economy', 'civilization', 'dyson']);
+// KZ-Dipl: Dyplomacja, Wywiad, Wojny (czipy grupy Dyplomacji).
+export const PERMANENT_KIT_SCREENS = Object.freeze(['budget', 'flows', 'trade', 'economy', 'civilization', 'dyson',
+  'diplomacy', 'intel', 'war']);
 
 /** Czy overlay `id` rysuje się teraz jako ekran zestawu konsoli (flagi czytane w chwili wywołania). */
 export function isKitScreen(id, features) {

@@ -7,8 +7,12 @@
 // Po C2 doszedł trzeci: ⚔ jest wyszarzony w rozejmie, ale nie mówił DLACZEGO ani JAK DŁUGO.
 //
 // ⚠ PIN JEST WYKONANIOWY — `DiplomacyOverlay` importuje się pod node, więc przepuszczamy
-//   PRAWDZIWY `_drawRight` przez atrapę `ctx` i czytamy, co poszło do `fillText`. Pin
+//   PRAWDZIWY `draw()` przez atrapę `ctx` i czytamy, co poszło do `fillText`. Pin
 //   źródłowy powiedziałby tylko, że kod zawiera napis; tu mierzymy, co gracz WIDZI.
+//   Od ARC KONSOLE KZ `draw()` rysuje WYŁĄCZNIE konsolę (`DiplomacyConsoleView`; dawne
+//   `_drawRight` usunięte): slot traktatu siedzi w inspektorze, czip ⚔ w akcjach inspektora
+//   (napis w nawiasach `[ … ]`, wielkie litery), status w bohaterze jako `[ ROZEJM — N lat ]`.
+//   Wyszarzony czip ma strefę `action_blocked` (podpowiedź z powodem) zamiast `declare_war`.
 //
 // ⚠ JEDNA FORMUŁA TERMINU, NIE DWIE. Panel i ticker odpowiadają na to samo pytanie („kiedy
 //   ten traktat się kończy"), a D-DS-3 każe wyprowadzać brak pola w locie. Druga kopia tego
@@ -74,34 +78,30 @@ const addWar = (id) => {
                  casusBelli: 'border_incident', exhaustion: { player: 60, [id]: 60 }, captures: [] });
 };
 
-const ctxStub = new Proxy({}, {
-  get: (_t, k) => {
-    if (k === 'measureText') return () => ({ width: 10 });
-    if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
-    if (typeof k === 'string'
-      && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) {
+// Atrapa płótna: każda nieznana metoda = no-op; `fillText`/`strokeText` → zapis tekstu.
+// Szerokość tekstu ∝ długość (6 px/znak) — slot mieści się w inspektorze bez obcinania.
+function recCtx(texts) {
+  return new Proxy({}, {
+    get: (o, k) => {
+      if (k === 'fillText' || k === 'strokeText') return (s) => texts.push(String(s));
+      if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop: () => {} });
+      if (k in o) return o[k];
       return () => {};
-    }
-    return undefined;
-  },
-  set: () => true,
-});
-/** Prawdziwy `_drawRight` → { texts, zones }. */
+    },
+    set: (o, k, v) => { o[k] = v; return true; },
+  });
+}
+/** Prawdziwy `draw()` konsoli Dyplomacji (okno bramki 1600×1041) → { texts, zones, blocked }. */
 function render(id) {
   const texts = [];
   const ov = new DiplomacyOverlay();
+  ov.visible = true;
   ov._selectedId = id;
-  ov._hitZones = [];
-  const ctx = new Proxy(ctxStub, {
-    get: (target, k) => {
-      if (k === 'fillText' || k === 'strokeText') return (s) => texts.push(String(s));
-      return Reflect.get(target, k);
-    },
-    set: () => true,
-  });
   let threw = null;
-  try { ov._drawRight(ctx, 0, 0, 640, 720); } catch (e) { threw = e?.message ?? 'throw'; }
-  return { texts, zones: ov._hitZones.map(z => z.type), threw };
+  try { ov.draw(recCtx(texts), 1600, 1041); } catch (e) { threw = e?.message ?? 'throw'; }
+  const hz = ov._hitZones ?? [];
+  return { texts, zones: hz.map(z => z.type), blocked: hz.filter(z => z.type === 'action_blocked').map(z => z.data?.action), threw };
 }
 const slotOf = (texts) => texts.find(s => s.trim().startsWith('•')) ?? null;
 
@@ -113,9 +113,9 @@ console.log('T1 — NOWY pakt: nazwa przez t() + „od N, do roku N+10"');
   dipl.signTreaty('emp_s1', { id: 'non_aggression' });
 
   const r = render('emp_s1');
-  assert(r.threw === null, 'T1a (KONTROLA PINU): `_drawRight` przeszedł bez wyjątku' + (r.threw ? ' — ' + r.threw : ''));
-  assert(r.texts.length > 0,
-    'T1b (KONTROLA PINU): panel REALNIE narysował (' + r.texts.length + ' wywołań) — inaczej brak '
+  assert(r.threw === null, 'T1a (KONTROLA PINU): `draw()` konsoli przeszedł bez wyjątku' + (r.threw ? ' — ' + r.threw : ''));
+  assert(r.texts.length > 0 && r.zones.includes('tab') && r.zones.includes('select'),
+    'T1b (KONTROLA PINU): konsola REALNIE narysowała (' + r.texts.length + ' wywołań, strefy tab + select) — inaczej brak '
     + 'napisu myliłby się z brakiem rysowania');
 
   const slot = slotOf(r.texts);
@@ -144,12 +144,13 @@ console.log('\nT2 — D-DS-3: stary rekord BEZ pola pokazuje termin z TEJ SAMEJ 
     'T2b: slot POKAZUJE wyprowadzony termin ' + (400 + NAP_YEARS) + ' — ' + JSON.stringify(slot));
 
   // ⚠ JEDNA FORMUŁA: panel i ticker wołają tę samą funkcję, a nie dwie kopie rachunku.
+  //   Od KZ slot rysuje widok konsoli (`DiplomacyConsoleView`) — to on jest „panelem”.
   const modSrc  = readClean('systems', 'diplomacy', 'RelationsModel.js');
-  const uiSrc   = readClean('ui', 'DiplomacyOverlay.js');
+  const uiSrc   = readClean('ui', 'DiplomacyConsoleView.js');
   assert(/export function treatyExpiryYear/.test(modSrc),
     'T2c: formuła terminu jest NAZWANĄ, eksportowaną funkcją (`treatyExpiryYear`)');
-  assert(/treatyExpiryYear\s*\(/.test(uiSrc),
-    'T2d: PANEL woła tę funkcję, a nie liczy własnej kopii');
+  assert(/treatyExpiryYear\s*\(/.test(uiSrc) && /import \{[^}]*treatyExpiryYear[^}]*\} from '\.\.\/systems\/diplomacy\/RelationsModel\.js'/.test(uiSrc),
+    'T2d: PANEL (widok konsoli) importuje i woła tę funkcję, a nie liczy własnej kopii');
   const tickBody = modSrc.slice(modSrc.indexOf('tickTreatyExpiry(year)'));
   assert(/treatyExpiryYear\s*\(/.test(tickBody.slice(0, 600)),
     'T2e: TICKER woła tę samą funkcję — jedno źródło „kiedy ten traktat się kończy"');
@@ -186,16 +187,18 @@ console.log('\nT4 — ⚔ w rozejmie: szary, z licznikiem CAŁKOWITYM; po rozejm
   const r = render('emp_s4');
   // ⚠ PRZYCISK, NIE CHIP. Chip statusu też brzmi „ROZEJM — 10 lat” (`diplo.truceYearsLeft`),
   //   więc szukanie po samym słowie trafiało w NIEGO — pierwsza wersja tego pinu mierzyła
-  //   chip i czerwieniła się z niewłaściwego powodu. Przycisk poznajemy po glifie ⚔.
+  //   chip i czerwieniła się z niewłaściwego powodu. Przycisk poznajemy po glifie ⚔
+  //   (konsola: czip akcji `[ ⚔ … ]`; status w bohaterze `[ ROZEJM — 10 lat ]`).
   const warBtn = r.texts.find(s => s.includes('⚔')) ?? null;
-  assert(r.texts.some(s => /\[ROZEJM — 10 lat\]/.test(s)),
+  assert(r.texts.some(s => /\[ ROZEJM — 10 lat \]/.test(s)),
     'T4a2 (KONTROLA PINU): chip statusu istnieje OSOBNO i to NIE on jest mierzony niżej');
   assert(!!warBtn && /ROZEJM/.test(warBtn),
     'T4b: przycisk mówi DLACZEGO nie można — ' + JSON.stringify(warBtn));
   assert(!!warBtn && /ROZEJM — 10 L\./.test(warBtn),
     'T4c: licznik jest CAŁKOWITY (nie surowy float) — ' + JSON.stringify(warBtn));
-  assert(!r.zones.includes('declare_war'),
-    'T4d: hit-zona zdjęta — kanon „widoczny+zablokowany" (' + r.zones.join(', ') + ')');
+  assert(!r.zones.includes('declare_war') && r.blocked.includes('declare_war'),
+    'T4d: hit-zona akcji zdjęta, czip widoczny z podpowiedzią (`action_blocked`) — kanon „widoczny+zablokowany" ('
+    + r.zones.join(', ') + ')');
 
   // KONTROLA: po rozejmie etykieta wraca i zona jest.
   dipl.relations.setStatus('player', 'emp_s4', 'peace', {}, 'kontrola');
@@ -203,8 +206,8 @@ console.log('\nT4 — ⚔ w rozejmie: szary, z licznikiem CAŁKOWITYM; po rozejm
   const warBtn2 = r2.texts.find(s => s.includes('⚔')) ?? null;
   assert(!!warBtn2 && /WYPOWIEDZ WOJN/.test(warBtn2) && !/ROZEJM/.test(warBtn2),
     'T4e (KONTROLA PINU): po rozejmie etykieta jak dawniej — ' + JSON.stringify(warBtn2));
-  assert(r2.zones.includes('declare_war'),
-    'T4f (KONTROLA PINU): i hit-zona wraca (' + r2.zones.join(', ') + ')');
+  assert(r2.zones.includes('declare_war') && !r2.blocked.includes('declare_war'),
+    'T4f (KONTROLA PINU): i hit-zona wraca, podpowiedź blokady znika (' + r2.zones.join(', ') + ')');
 }
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -1,6 +1,6 @@
-// WarConsoleView — Wojny na zestawie konsoli (ARC KONSOLE K2, docs/design/CONSOLES_PLAN.md §1.2; FEATURES.consoleDiplomacy).
+// WarConsoleView — Wojny na zestawie konsoli (ARC KONSOLE K2, docs/design/CONSOLES_PLAN.md §1.2; na stałe od KZ).
 //
-// Wołane przez `WarOverlay.draw`, gdy `isKitScreen('war')`. Szablon 4-strefowy (D-K-1):
+// Wołane przez `WarOverlay.draw` (jedyna ścieżka od KZ). Szablon 4-strefowy (D-K-1):
 //  (1) nagłówek — WOJNY + czipy grupy [ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ] + [ x ];
 //  (2) lista — wojny (dzisiejsza kolejność: aktywne, potem od najnowszej): przeciwnik, status, wyczerpanie obu stron, lata wojny;
 //  (3) bohater — przeciąganie liny wyczerpania (ty kontra oni) z dzisiejszymi liczbami albo — przy negocjacjach — stół pokoju

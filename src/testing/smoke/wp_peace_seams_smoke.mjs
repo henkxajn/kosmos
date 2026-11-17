@@ -49,6 +49,8 @@
 //       CHWILI PODPISU, nie rekordu. Oba piny mierzą świeżo podpisany rekord i dokładnie to teraz
 //       mówią; NEW **T5j** jest ich kontrolą. ⚠ **T5g NIE jest ruszany** — pinuje, GDZIE mieszka
 //       termin (`>= 3` wystąpień w modelu), a odnowienie tylko dokłada wystąpienia.
+//       ⚠ KZ (ARC KONSOLE): slot T5i rysuje dziś inspektor konsoli Dyplomacji (`ov.draw()` →
+//       `DiplomacyConsoleView`), bo stary `_drawRight` usunięto; szukany napis i inwariant bez zmian.
 //
 // Uruchom: node src/testing/smoke/wp_peace_seams_smoke.mjs
 
@@ -449,8 +451,11 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
   //     slot panelu — renderuje `tr.id` i `tr.signedYear`, a te są w OBU kształtach.
   //
   // ⚠ SLOT MIERZONY WYKONANIEM, nie regexem: `DiplomacyOverlay` importuje się pod node,
-  //   więc przepuszczamy PRAWDZIWY `_drawRight` przez atrapę `ctx` i czytamy, co poszło do
+  //   więc przepuszczamy PRAWDZIWE `draw()` przez atrapę `ctx` i czytamy, co poszło do
   //   `fillText`. Pin źródłowy powiedziałby tylko, że kod zawiera napis.
+  // ⚠ KZ (ARC KONSOLE): stary 2-kolumnowy panel (`_drawRight`) USUNIĘTY — Dyplomacja to wyłącznie
+  //   konsola, slot traktatu rysuje inspektor (`DiplomacyConsoleView.drawInspector`, sekcja traktatów).
+  //   Inwariant bez zmian: stary rekord renderuje się po NAZWIE z rokiem podpisania.
   {
     const L = 'emp_wp0_legacy';
     const regBefore = window.KOSMOS.empireRegistry;
@@ -482,25 +487,26 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
       + '(w tym bramka `declareWar`) jest poprawnych bez zmian');
 
     const painted = [];
-    const ctxStub = new Proxy({}, {
-      get: (_t, k) => {
+    // Atrapa konsoli: zapisane właściwości wracają przy odczycie, nieznane metody to no-op (konsola woła ich więcej
+    // niż stary panel — poświata, gradienty, przycinanie).
+    const store = {};
+    const ctxStub = new Proxy(store, {
+      get: (o, k) => {
         if (k === 'fillText' || k === 'strokeText') return (s) => painted.push(String(s));
         if (k === 'measureText') return () => ({ width: 10 });
-        if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
-        if (typeof k === 'string'
-          && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) {
-          return () => {};
-        }
-        return undefined;
+        if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop: () => {} });
+        if (k in o) return o[k];
+        return () => {};
       },
-      set: () => true,
+      set: (o, k, v) => { o[k] = v; return true; },
     });
     const ov = new DiplomacyOverlay();
+    ov.visible = true;
     ov._selectedId = L;
     let threw = null;
-    try { ov._drawRight(ctxStub, 0, 0, 640, 720); } catch (e) { threw = e?.message ?? 'throw'; }
+    try { ov.draw(ctxStub, 1280, 833); } catch (e) { threw = e?.message ?? 'throw'; }
     assert(threw === null,
-      'T5i (KONTROLA PINU): `_drawRight` przeszedł na starym rekordzie bez wyjątku'
+      'T5i (KONTROLA PINU): konsola Dyplomacji (`draw`) przeszła na starym rekordzie bez wyjątku'
       + (threw ? ' — ' + threw : ''));
     assert(painted.length > 0,
       'T5i (KONTROLA PINU): panel REALNIE coś narysował (' + painted.length + ' wywołań `fillText`) — '

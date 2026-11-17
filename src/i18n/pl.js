@@ -3491,12 +3491,10 @@ export default {
   'diplo.state.peace':      'POKÓJ',
   'diplo.state.truce':      'ROZEJM',
   'diplo.state.war':        'WOJNA',
-  'diplo.header':           '🤝 DYPLOMACJA',
   'diplo.empty1':           'Nie znamy jeszcze żadnych',
   'diplo.empty2':           'obcych cywilizacji.',
   'diplo.empty3':           'Zbuduj obserwatorium (O)',
   'diplo.empty4':           'lub wyślij statek rozpoznawczy.',
-  'diplo.tension':          'napięcie',
   'diplo.tensionFull':      'Napięcie (bliskość wojny)',
   'diplo.selectEmpire':     'Wybierz imperium z listy',
   'diplo.ultimatumWarn':    '⚠ ULTIMATUM — {0} lat do wojny',
@@ -3601,11 +3599,8 @@ export default {
   'intel.none':             '(brak)',
   'intel.capital':          'stolica',
   'intel.militaryStrength': 'Siła wojskowa',
-  'intel.combatUnits':      '{0} jednostek bojowych',
   // W2-7 — potencjał obok siły. {0} rezerwy w tych samych jednostkach co siła.
   // AI STRIKES BACK S1 (SB19) — flota / limit: {0} uzbrojonych kadłubów imperium (każdy stan służby), {1} limit floty.
-  'intel.reserveHulls':     '+ {0} w rezerwie (bez załóg)',
-  'intel.fleetVsLimit':     'okręty uzbrojone: {0} / limit floty: {1}',
   // W1-3c — ciągły odczyt układu sił w panelu intelu (odpowiedź PRZED decyzją, nie po).
   'intel.powerBalance':           'Układ sił',
   'intel.powerBalanceDominant':   'miażdżysz ich (+{0}%)',
@@ -3613,7 +3608,6 @@ export default {
   'intel.powerBalanceBalanced':   'równowaga',
   'intel.powerBalanceWeaker':     'są silniejsi (+{0}%)',
   'intel.powerBalanceOutmatched': 'miażdżą cię (+{0}%)',
-  'intel.powerBalanceYours':      'twoja siła: {0}',
   // ARC KONSOLE K0b — Finding 725 (napisy wpisane w kod) + etykiety konsoli Wywiadu
   'intel.needsGroundScan':        '(wymaga skanu naziemnego)',
   'intel.recentIncidents':        'Ostatnie incydenty',
@@ -3633,7 +3627,7 @@ export default {
   'intel.console.mapTheirs':      'ich znane układy',
   'intel.console.mapLy':          '{0} ly',   // K0b-1 — odległość / podziałka mini-mapy
 
-  // ── ARC KONSOLE K2 — Dyplomacja + Wojny na zestawie konsoli (FEATURES.consoleDiplomacy) ──
+  // ── ARC KONSOLE K2 — Dyplomacja + Wojny na zestawie konsoli (na stałe od KZ) ──
   'diplo.console.title':               'Dyplomacja',
   'diplo.console.empires':             'Imperia',
   'diplo.console.relation':            'Relacja',
@@ -3683,17 +3677,12 @@ export default {
   'warConsole.reason.peaceCooldown':   'Odrzucili pokój — kolejna propozycja za {0} l.',
 
   // === WarOverlay ===
-  'warOverlay.title':            '⚔ WOJNY',
   'warOverlay.noActiveWars':     'Nie prowadzisz aktywnych wojen.',
   'warOverlay.declareHint':      'Wypowiedz wojnę z panelu Dyplomacji (D).',
   'warOverlay.statusActive':     '⚔ AKTYWNA',
   'warOverlay.statusEnded':      '☮ ZAKOŃCZONA',
   'warOverlay.selectWar':        'Wybierz wojnę z listy',
-  'warOverlay.warVsTitle':       '⚔ WOJNA vs {0}',
-  'warOverlay.tagActive':        '[AKTYWNA]',
-  'warOverlay.tagEnded':         '[ZAKOŃCZONA]',
   'warOverlay.casusBelli':       'Casus Belli',   // Finding 725 — nagłówek był literałem w WarOverlay
-  'warOverlay.declaredYear':     'Wypowiedziana: rok {0}',
   'warOverlay.exhaustionHeader': 'Wyczerpanie wojenne',
   'warOverlay.player':           'Gracz',
   'warOverlay.battlesHeader':    'Bitwy ({0})',
@@ -3704,8 +3693,6 @@ export default {
   'warOverlay.battleLosses':     'Straty: obcy {0}, gracz {1} (tur: {2})',
   'warOverlay.btnProposePeace':  '☮ ZAPROPONUJ POKÓJ',
   'warOverlay.btnPeaceCooldown': '☮ POKÓJ — ZA {0} L.',
-  'warOverlay.btnForceBattle':   '⚡ WYMUŚ STARCIE (debug)',
-  'warOverlay.btnForceInvasion': '🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)',
 
   // === Stół pokoju (WP-4 C1) — warunki terytorialne propozycji ===
   'peaceTable.title':            'Stół pokoju',

@@ -539,12 +539,7 @@ export const GAME_CONFIG = {
     //     tiki biegną) i `opaque` — kandydaci na ustawienie wydajności dla słabszych GPU; zestaw `ConsoleKit` / `ConsoleLayoutLogic`.
     //   OFF = dzisiejsze zachowanie co do bitu (półprzezroczyste tła, scena renderowana pod każdą zakładką).
     consoleKit: true,
-    //   consoleIntel (K0b, D-K-6): ON (razem z consoleKit) = Wywiad na szablonie 4-strefowym zestawu — nagłówek z czipami grupy
-    //     Dyplomacja/Wywiad/Wojny zamiast pasa subnav, lista imperiów (wspólna z Dyplomacją od K2), dossier i układ sił w strefie
-    //     bohatera, inspektor (znane systemy, wojsko, incydenty); tekst bez wypełnionych paneli na żywej scenie; pasek walki
-    //     w gnieździe nagłówka (D-K-17). Mgła wojny jak dziś (keeper `console_intel_smoke`).
-    //   OFF = dzisiejszy Wywiad co do bitu (poza Findingiem 725 — trzy napisy przez t(), polski tekst bez zmian).
-    consoleIntel: true,
+    //   (consoleIntel — usunięta w KZ-Dipl: Wywiad jest na stałe konsolą, `PERMANENT_KIT_SCREENS`)
     //   shipHologram (K1a, D-K-4/7/10/11): ON = gospodarze mogą używać `ShipHologramRenderer` (hologram statku: własny offscreen
     //     WebGLRenderer → drawImage w prostokąt bohatera, obwódka fresnela + linie skanowania + krawędzie w roli `primary`, sylwetka
     //     Canvas 2D jako fallback). W K1a jedynym gospodarzem jest podgląd `KOSMOS.debug.holo` (Stocznia — K1c).
@@ -556,14 +551,7 @@ export const GAME_CONFIG = {
     //     [ WYCZYŚĆ ]), pas (budowy + Surge, oczekujące, rezerwa). Te same typy stref i handlery co dziś.
     //   OFF = dzisiejsza Stocznia co do bitu.
     consoleShipyard: true,
-    //   consoleDiplomacy (K2, D-K-20; Findingi 724, 725-wojny, 727, 735): ON (razem z consoleKit) = Dyplomacja i Wojny na szablonie
-    //     4-strefowym — cała grupa [ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ] ma czipy w nagłówku (pasa subnav już nie ma). Dyplomacja: wspólna
-    //     lista imperiów (EmpireListLogic, jak Wywiad), bohater = opinia i napięcie jako instrumenty + status + mini-mapa (ta sama mgła),
-    //     inspektor = rozbicie opinii, traktaty, pamięć (etykiety zamiast id silnika), czipy akcji z dzisiejszymi regułami; pas =
-    //     ultimatum / komunikat. Wojny: lista wojen, bohater = stół pokoju albo przeciąganie liny wyczerpania, inspektor = casus belli,
-    //     bitwy, [ ZAPROPONUJ POKÓJ ]; przyciski debug WYMUŚ STARCIE / DESANT tylko jako KOSMOS.debug.war.forceBattle() / forceInvasion().
-    //   OFF = dzisiejsza Dyplomacja i Wojny co do bitu (z przyciskami debug — do KZ).
-    consoleDiplomacy: true,
+    //   (consoleDiplomacy — usunięta w KZ-Dipl: Dyplomacja i Wojny są na stałe konsolą, `PERMANENT_KIT_SCREENS`)
     //   (consoleEconomy — usunięta w KZ-E: grupa Ekonomii jest na stałe konsolą, `PERMANENT_KIT_SCREENS` w ConsoleLayoutLogic.js)
     //   (consoleCivilization — usunięta w KZ-Civ: Cywilizacja i Sfera Dysona są na stałe konsolą, `PERMANENT_KIT_SCREENS`)
     //   consoleCommand (K7-A, D-K-14, D-K-20): ON (razem z consoleKit) = Dowództwo na szablonie 4-strefowym — czipy zakładek

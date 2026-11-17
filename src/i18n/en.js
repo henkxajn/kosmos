@@ -3488,12 +3488,10 @@ export default {
   'diplo.state.peace':      'PEACE',
   'diplo.state.truce':      'TRUCE',
   'diplo.state.war':        'WAR',
-  'diplo.header':           '🤝 DIPLOMACY',
   'diplo.empty1':           'We do not yet know any',
   'diplo.empty2':           'alien civilizations.',
   'diplo.empty3':           'Build an observatory (O)',
   'diplo.empty4':           'or send a recon ship.',
-  'diplo.tension':          'tension',
   'diplo.tensionFull':      'Tension (proximity to war)',
   'diplo.selectEmpire':     'Select an empire from the list',
   'diplo.ultimatumWarn':    '⚠ ULTIMATUM — {0} yrs to war',
@@ -3598,11 +3596,8 @@ export default {
   'intel.none':             '(none)',
   'intel.capital':          'capital',
   'intel.militaryStrength': 'Military strength',
-  'intel.combatUnits':      '{0} combat units',
   // W2-7 — potential beside force. {0} reserve in the same units as strength.
   // AI STRIKES BACK S1 (SB19) — fleet / limit: {0} armed hulls of the empire (any service state), {1} fleet limit.
-  'intel.reserveHulls':     '+ {0} in reserve (uncrewed)',
-  'intel.fleetVsLimit':     'armed warships: {0} / fleet limit: {1}',
   // W1-3c — continuous balance-of-power readout in the intel panel (answers BEFORE the decision).
   'intel.powerBalance':           'Balance of power',
   'intel.powerBalanceDominant':   'you dominate (+{0}%)',
@@ -3610,7 +3605,6 @@ export default {
   'intel.powerBalanceBalanced':   'balanced',
   'intel.powerBalanceWeaker':     'they are stronger (+{0}%)',
   'intel.powerBalanceOutmatched': 'they dominate (+{0}%)',
-  'intel.powerBalanceYours':      'your strength: {0}',
   // ARC KONSOLE K0b — Finding 725 (hard-coded literals) + Intel console labels
   'intel.needsGroundScan':        '(requires a ground scan)',
   'intel.recentIncidents':        'Recent incidents',
@@ -3630,7 +3624,7 @@ export default {
   'intel.console.mapTheirs':      'their known systems',
   'intel.console.mapLy':          '{0} ly',   // K0b-1 — odległość / podziałka mini-mapy
 
-  // ── ARC KONSOLE K2 — Dyplomacja + Wojny na zestawie konsoli (FEATURES.consoleDiplomacy) ──
+  // ── ARC KONSOLE K2 — Dyplomacja + Wojny na zestawie konsoli (na stałe od KZ) ──
   'diplo.console.title':               'Diplomacy',
   'diplo.console.empires':             'Empires',
   'diplo.console.relation':            'Relation',
@@ -3680,17 +3674,12 @@ export default {
   'warConsole.reason.peaceCooldown':   'They refused peace — next offer in {0} yrs',
 
   // === WarOverlay ===
-  'warOverlay.title':            '⚔ WARS',
   'warOverlay.noActiveWars':     'You are not waging any active wars.',
   'warOverlay.declareHint':      'Declare war from the Diplomacy panel (D).',
   'warOverlay.statusActive':     '⚔ ACTIVE',
   'warOverlay.statusEnded':      '☮ ENDED',
   'warOverlay.selectWar':        'Select a war from the list',
-  'warOverlay.warVsTitle':       '⚔ WAR vs {0}',
-  'warOverlay.tagActive':        '[ACTIVE]',
-  'warOverlay.tagEnded':         '[ENDED]',
   'warOverlay.casusBelli':       'Casus Belli',   // Finding 725 — nagłówek był literałem w WarOverlay
-  'warOverlay.declaredYear':     'Declared: year {0}',
   'warOverlay.exhaustionHeader': 'War exhaustion',
   'warOverlay.player':           'Player',
   'warOverlay.battlesHeader':    'Battles ({0})',
@@ -3701,8 +3690,6 @@ export default {
   'warOverlay.battleLosses':     'Losses: alien {0}, player {1} (turns: {2})',
   'warOverlay.btnProposePeace':  '☮ OFFER PEACE',
   'warOverlay.btnPeaceCooldown': '☮ PEACE — IN {0} Y.',
-  'warOverlay.btnForceBattle':   '⚡ FORCE BATTLE (debug)',
-  'warOverlay.btnForceInvasion': '🪖 FORCE INVASION (debug — skips space battle)',
 
   // === Peace table (WP-4 C1) — territorial terms of a proposal ===
   'peaceTable.title':            'Peace table',

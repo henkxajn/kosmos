@@ -3,7 +3,7 @@
 // Lista wojen i liczby to DZISIEJSZE dane panelu Wojen (wyczerpanie obu stron, rok wypowiedzenia, bitwy); nowe są tylko odczyty
 // pochodne z tych samych pól: lata wojny (rok gry − rok wypowiedzenia) i przeciąganie liny (różnica wyczerpania).
 // Finding 735: «WYMUŚ STARCIE / DESANT (debug)» nie są rysowane na konsoli; te same funkcje woła `KOSMOS.debug.war.*`
-// i stara ścieżka (flaga OFF, do KZ) — `forceWarBattle` / `forceWarInvasion` niżej są JEDYNYM kodem obu dźwigni.
+// (stara ścieżka z przyciskami usunięta w KZ) — `forceWarBattle` / `forceWarInvasion` niżej są JEDYNYM kodem obu dźwigni.
 //
 // Bez DOM i canvas (dźwignie czytają `window.KOSMOS` w chwili wywołania) — testowalne pod node.
 
@@ -78,7 +78,7 @@ export function peaceActionView(war, cdYears, t) {
     reason: ready ? null : t('warConsole.reason.peaceCooldown', cdYears) };
 }
 
-// ── Dźwignie debug (Finding 735) — jedyny kod «wymuś starcie / desant»; woła je stara ścieżka i KOSMOS.debug.war.* ──
+// ── Dźwignie debug (Finding 735) — jedyny kod «wymuś starcie / desant»; woła je KOSMOS.debug.war.* ──
 
 /** Debug: rozstrzygnij bitwę wojny natychmiast (niezależnie od ticku / pauzy). Zwraca wynik `warSystem.forceBattle`. */
 export function forceWarBattle(warId) {

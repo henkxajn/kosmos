@@ -1,6 +1,6 @@
-// DiplomacyConsoleView — Dyplomacja na zestawie konsoli (ARC KONSOLE K2, docs/design/CONSOLES_PLAN.md §1.2; FEATURES.consoleDiplomacy).
+// DiplomacyConsoleView — Dyplomacja na zestawie konsoli (ARC KONSOLE K2, docs/design/CONSOLES_PLAN.md §1.2; na stałe od KZ).
 //
-// Wołane przez `DiplomacyOverlay.draw`, gdy `isKitScreen('diplomacy')`. Szablon 4-strefowy (D-K-1):
+// Wołane przez `DiplomacyOverlay.draw` (jedyna ścieżka od KZ). Szablon 4-strefowy (D-K-1):
 //  (1) nagłówek — DYPLOMACJA + czipy grupy [ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ] (klik = openPanel, jak pas subnav) + [ x ];
 //  (2) lista — WSPÓLNA lista imperiów K0b (`empireRowView` + `drawEmpireList`), dzisiejszy zbiór i kolejność Dyplomacji;
 //      prawy napis wiersza = stan relacji · napięcie (dziś widoczne od `rumor`);
@@ -69,7 +69,7 @@ function scaleBar(ctx, x, y, w, frac, roles, { tone = 'primary', from = 0, ticks
   ctx.restore();
 }
 
-/** Zbiera dane świata dla zaznaczonej relacji (te same odczyty co `DiplomacyOverlay._drawRight`). */
+/** Zbiera dane świata dla zaznaczonej relacji (te same odczyty co dawna strona Dyplomacji, usunięta w KZ). */
 function relationData(ov, K) {
   const dipl = K?.diplomacySystem;
   const intelSys = K?.intelSystem;

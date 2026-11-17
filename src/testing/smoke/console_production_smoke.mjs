@@ -288,15 +288,15 @@ console.log('C — pięć stron zestawu, subnav');
   assert(JSON.stringify(tabs) === JSON.stringify(['budget', 'economy', 'trade', 'market', 'flows']), `C2 Produkcja ma pięć czipów grupy (${tabs.join(',')})`);
   assert(!!CL && CL.isKitScreen('trade', F) && CL.isKitScreen('economy', F), 'C3 Handel / Rynek (overlay trade) i Produkcja są w rejestrze ekranów zestawu');
   const ECO = ['budget', 'economy', 'trade', 'flows'];
-  assert(!!CL && ECO.every((id) => CL.isKitScreen(id, {})) && CL.isKitScreen('intel', {}) === false,
-    'C3b grupa Ekonomii jest ekranem zestawu bez żadnej flagi (kontrola: Wywiad bez flag — nie)');
+  assert(!!CL && ECO.every((id) => CL.isKitScreen(id, {})) && CL.isKitScreen('tech', {}) === false,
+    'C3b grupa Ekonomii jest ekranem zestawu bez żadnej flagi (kontrola: Technologie — nie konsola — nie)');
   if (CPD) {
     const h = (kit) => { F.consoleKit = kit; const v = ECO.map((id) => { window.KOSMOS.overlayManager.active = id; return CPD.getSubNavHeight(); }); F.consoleKit = true; return v; };
     const on = h(true), noKit = h(false);
-    F.consoleKit = false; window.KOSMOS.overlayManager.active = 'diplomacy';
+    F.consoleKit = false; window.KOSMOS.overlayManager.active = 'tech';
     const ctrl = CPD.getSubNavHeight(); F.consoleKit = true;
     assert(on.every((v) => v === 0), `C4 brak pasa subnav nad stronami grupy Ekonomii (${on})`);
-    assert(ctrl > 0 && noKit.every((v) => v === 0), `C5 bez consoleKit też brak pasa (${noKit}); świadek — Dyplomacja bez consoleKit ma pas (${ctrl})`);
+    assert(ctrl > 0 && noKit.every((v) => v === 0), `C5 bez consoleKit też brak pasa (${noKit}); świadek — Technologie (nie konsola) mają pas (${ctrl})`);
   } else assert(false, 'C4 CivPanelDrawer importuje się');
 }
 

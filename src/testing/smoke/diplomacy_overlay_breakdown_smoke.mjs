@@ -1,21 +1,24 @@
-// D1 C4 (WOJNA I POKÓJ 1.0) — render-smoke prawej kolumny DiplomacyOverlay.
+// D1 C4 (WOJNA I POKÓJ 1.0) — render-smoke danych relacji w DiplomacyOverlay.
 // Uruchom: node src/testing/smoke/diplomacy_overlay_breakdown_smoke.mjs
 //
 // Cel: wychwycić błędy RUNTIME UI (klucze t(), tokeny THEME, dostęp do danych) oraz
-// zweryfikować BUDŻET PIONOWY — prawa kolumna nie ma scrolla, więc treść nie może
+// zweryfikować BUDŻET PIONOWY — inspektor nie ma scrolla, więc treść nie może
 // wypychać pasma akcji za panel. ctx to rejestrator: zbiera fillText/fillRect,
 // pozostałe wywołania są no-op.
 //
-// Pokrywa: liczba opinii ze znakiem + kolor lerpowany, pasmo statusu, rozbicie
+// ARC KONSOLE KZ: `draw()` rysuje WYŁĄCZNIE konsolę (dawna prawa kolumna usunięta). Ten sam
+// świat, te same intencje — piny czytają to, co rysuje konsola: etykiety instrumentów i nagłówki
+// stref WIELKIMI literami (eyebrow), liczby cyframi w kratce (osobne fillText na jednej linii
+// bazowej — sklejane w `lines`), kolor liczby = rola palety konsoli (dodatnia primary, ujemna
+// alert) zamiast koloru lerpowanego, pamięć — etykiety zdarzeń (Finding 724), a nie surowe klucze.
+//
+// Pokrywa: liczba opinii ze znakiem + rola koloru, pasmo statusu, rozbicie
 // (limit 5 + „+N", ∞ dla trwałych, „(zanika za N l.)" dla zanikających), chip
-// [ROZEJM — N lat], pamięć ograniczona do 3, brak reliktów (pasek zaufania,
-// legenda progów), akcje przypięte do dołu W GRANICACH panelu przy 1280×720,
-// parytet i18n wszystkich diplo.mod.* + nowych kluczy.
+// [ ROZEJM — N lat ], pamięć ograniczona do 3, brak reliktów (pasek zaufania,
+// legenda progów), 6 czipów akcji przypiętych do dołu inspektora W GRANICACH panelu,
+// parytet i18n wszystkich diplo.mod.* + kluczy UI, które konsola czyta.
 
 import '../headless/env.js';   // MUST be first
-// ARC KONSOLE K2 — keeper przypina DZISIEJSZY panel (flaga OFF); konsolę pinuje console_diplomacy_smoke.
-import { GAME_CONFIG } from '../../config/GameConfig.js';
-GAME_CONFIG.FEATURES.consoleDiplomacy = false;
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };
@@ -26,6 +29,10 @@ const { DiplomacySystem }  = await import('../../systems/DiplomacySystem.js');
 const { DiplomacyOverlay } = await import('../../ui/DiplomacyOverlay.js');
 const { OPINION_MODIFIERS } = await import('../../data/OpinionModifierData.js');
 const { setLocale } = await import('../../i18n/i18n.js');
+const { THEME } = await import('../../config/ThemeConfig.js');
+const { consoleRoles } = await import('../../ui/ConsoleRolesLogic.js');
+const { CONSOLE_KIT } = await import('../../ui/ConsoleKit.js');
+const roles = consoleRoles(THEME);
 const plDict = (await import('../../i18n/pl.js')).default;
 const enDict = (await import('../../i18n/en.js')).default;
 
@@ -46,7 +53,16 @@ function makeCtx() {
   };
   return ctx;
 }
-const said = (ctx, frag) => ctx.texts.some(t => t.s.includes(frag));
+// Konsola rysuje liczby cyframi w kratce: kolejne fillText na tej samej linii bazowej sklejamy w jedną linię.
+const lines = (ctx) => {
+  const out = [];
+  for (const t of ctx.texts) {
+    const last = out[out.length - 1];
+    if (last && last.y === t.y) last.s += t.s; else out.push({ s: t.s, y: t.y, x: t.x, fill: t.fill });
+  }
+  return out;
+};
+const said = (ctx, frag) => ctx.texts.some(t => t.s.includes(frag)) || lines(ctx).some(l => l.s.includes(frag));
 
 // ── Świat ───────────────────────────────────────────────────────────────────
 const empires = new Map();
@@ -108,15 +124,15 @@ ok('draw() nie rzuca przy 1280×720', threw === null || (console.error(threw), f
 console.log('--- U1: liczba opinii i pasmo ---');
 {
   const expected = dipl.getOpinionOfPlayer('emp_a');
-  ok(`opinia narysowana ze znakiem (+${expected})`, said(ctx, `+${Math.round(expected)}`));
-  ok('etykieta „Opinia o nas"', said(ctx, plDict['diplo.opinionLabel']));
-  ok('nagłówek rozbicia „Dlaczego"', said(ctx, plDict['diplo.opinionBreakdown']));
+  ok(`opinia narysowana ze znakiem (+${expected})`, lines(ctx).some(l => l.s === `+${Math.round(expected)}`));
+  ok('etykieta „Opinia o nas" (instrument, wielkie litery)', said(ctx, plDict['diplo.opinionLabel'].toUpperCase()));
+  ok('nagłówek rozbicia „Dlaczego" (eyebrow, wielkie litery)', said(ctx, plDict['diplo.opinionBreakdown'].toUpperCase()));
   ok('pasmo statusu = friendly (opinia wysoko dodatnia)', said(ctx, plDict['diplo.status.friendly']));
-  // Kolor liczby lerpowany — dodatnia opinia musi być zielonawa (G > R).
-  const numTxt = ctx.texts.find(t => t.s === `+${Math.round(expected)}`);
-  const m = /rgb\((\d+),(\d+),(\d+)\)/.exec(numTxt?.fill ?? '');
-  ok('liczba opinii ma kolor lerpowany rgb() z G > R (dodatnia = zielonawa)',
-    !!m && Number(m[2]) > Number(m[1]));
+  // Kolor liczby = rola palety konsoli: dodatnia opinia → primary (świadek: ujemne wartości rozbicia → alert).
+  const numLine = lines(ctx).find(l => l.s === `+${Math.round(expected)}`);
+  const negLine = ctx.texts.find(t => t.s === '-');   // znak wartości rozbicia (kratka cyfr: osobny glif)
+  ok(`liczba opinii w roli primary (${numLine?.fill}); ujemna wartość rozbicia w roli alert (${negLine?.fill})`,
+    !!numLine && numLine.fill === roles.primary && !!negLine && negLine.fill === roles.alert && roles.primary !== roles.alert);
 }
 
 // ── Rozbicie ────────────────────────────────────────────────────────────────
@@ -149,8 +165,8 @@ console.log('--- U2: rozbicie modyfikatorów ---');
 
 // ── Napięcie ────────────────────────────────────────────────────────────────
 console.log('--- U3: pasek napięcia ---');
-ok('etykieta „Napięcie (bliskość wojny)"', said(ctx, plDict['diplo.tensionFull']));
-ok('wartość napięcia „45 / 100"', said(ctx, '45 / 100'));
+ok('etykieta „Napięcie (bliskość wojny)" (instrument, wielkie litery)', said(ctx, plDict['diplo.tensionFull'].toUpperCase()));
+ok('wartość napięcia „45” z jednostką „/ 100” na jednej linii', lines(ctx).some(l => l.s === '45/ 100'));
 
 // ── Relikty usunięte ────────────────────────────────────────────────────────
 console.log('--- U4: relikty po starym modelu ---');
@@ -162,10 +178,13 @@ ok('BRAK diplo.recentIncidents (zastąpione diplo.memory)', plDict['diplo.recent
 
 // ── Pamięć ──────────────────────────────────────────────────────────────────
 console.log('--- U5: pamięć relacji ---');
-ok('nagłówek „Pamięć relacji"', said(ctx, plDict['diplo.memory']));
+ok('nagłówek „Pamięć relacji" (eyebrow, wielkie litery)', said(ctx, plDict['diplo.memory'].toUpperCase()));
 {
-  const memRows = ctx.texts.filter(t => /territorial_violation/.test(t.s));
-  ok(`pokazane 3 najnowsze wpisy z 6 (${memRows.length})`, memRows.length === 3);
+  // Finding 724 — wpis pamięci rysowany ETYKIETĄ zdarzenia, nigdy surowym kluczem
+  const memLabel = plDict['diplo.memEvent.territorialViolation'];
+  const memRows = ctx.texts.filter(t => t.s === memLabel);
+  ok(`pokazane 3 najnowsze wpisy z 6 (${memRows.length}), etykietą „${memLabel}”, bez surowego klucza`,
+    !!memLabel && memRows.length === 3 && !said(ctx, 'territorial_violation'));
 }
 
 // ── Chip rozejmu ────────────────────────────────────────────────────────────
@@ -179,7 +198,7 @@ console.log('--- U6: chip statusu z licznikiem rozejmu ---');
   const c2 = makeCtx();
   overlay.draw(c2, W, H);
   const yearsLeft = dipl.getTruceYearsLeft('emp_t');
-  ok(`chip pokazuje [ROZEJM — ${yearsLeft} lat]`, said(c2, `ROZEJM — ${yearsLeft.toFixed(0)}`));
+  ok(`chip pokazuje [ ROZEJM — ${yearsLeft} lat ]`, said(c2, `[ ROZEJM — ${yearsLeft.toFixed(0)} lat ]`));
   ok('rozbicie po pokoju zawiera „Świeża pamięć wojny"', said(c2, plDict['diplo.mod.recentWar']));
   ok('…i NIE zawiera już „Stan wojny"', !said(c2, plDict['diplo.mod.atWar']));
   overlay._selectedId = 'emp_a';
@@ -191,18 +210,24 @@ console.log('--- U7: budżet pionowy (akcje przypięte, klikalne) ---');
   for (const [ww, hh] of [[1280, 720], [1600, 900], [1280, 800]]) {
     const c3 = makeCtx();
     overlay.draw(c3, ww, hh);
-    const zones = overlay._hitZones.filter(z => ['declare_war', 'offer_peace', 'send_envoy', 'propose_trade', 'toggle_auto_trade', 'propose_pact', 'propose_alliance'].includes(z.type));
+    // 6 czipów akcji: włączone (typ akcji) + wyłączone (strefa podpowiedzi `action_blocked`)
+    const zones = overlay._hitZones.filter(z => ['declare_war', 'offer_peace', 'send_envoy', 'propose_trade', 'toggle_auto_trade', 'propose_pact', 'renew_pact', 'propose_alliance', 'action_blocked'].includes(z.type));
     const bounds = overlay._getOverlayBounds(ww, hh);
     const inside = zones.every(z => z.y >= bounds.oy && (z.y + z.h) <= bounds.oy + bounds.oh);
-    ok(`${ww}×${hh}: wszystkie strefy akcji (${zones.length}) W GRANICACH panelu`, zones.length > 0 && inside);
+    ok(`${ww}×${hh}: wszystkie 6 stref akcji (${zones.length}) W GRANICACH panelu`, zones.length === 6 && inside);
   }
-  // Pasmo akcji przypięte do dołu: najwyższy przycisk musi siedzieć w dolnej 1/4 panelu.
+  // Pasmo akcji przypięte do dołu INSPEKTORA (konsola): czipy jeden pod drugim, ⚔ pierwszy, ostatni kończy się
+  // przy dolnej krawędzi strefy inspektora — długie rozbicie (7 pozycji) nie wypycha ich ani w dół, ani za ramę.
   const c4 = makeCtx();
   overlay.draw(c4, 1280, 720);
-  const b = overlay._getOverlayBounds(1280, 720);
-  const actionZones = overlay._hitZones.filter(z => z.type === 'declare_war');
-  ok('pasmo akcji przypięte do dołu panelu',
-    actionZones.length === 1 && actionZones[0].y > b.oy + b.oh * 0.72);
+  const iz = overlay.consoleZones?.inspector;
+  const chips = overlay._hitZones.filter(z => ['declare_war', 'offer_peace', 'send_envoy', 'propose_trade', 'toggle_auto_trade', 'propose_pact', 'renew_pact', 'propose_alliance', 'action_blocked'].includes(z.type));
+  const bottom = Math.max(...chips.map(z => z.y + z.h));
+  const stacked = chips.every((z, i) => i === 0 || z.y > chips[i - 1].y);
+  const inInsp = !!iz && chips.every(z => z.x >= iz.x && z.x + z.w <= iz.x + iz.w + 0.5 && z.y >= iz.y);
+  ok(`pasmo akcji przypięte do dołu inspektora (dół czipów ${bottom}, dół strefy ${iz ? iz.y + iz.h : '?'})`,
+    chips.length === 6 && chips[0].type === 'declare_war' && stacked && inInsp
+    && iz.y + iz.h - bottom >= 0 && iz.y + iz.h - bottom <= CONSOLE_KIT.CHIP_GAP);
 }
 
 // ── i18n: parytet + kompletność katalogu ────────────────────────────────────
@@ -211,8 +236,9 @@ console.log('--- U8: i18n ---');
   const modKeys = Object.values(OPINION_MODIFIERS).map(m => m.labelKey);
   ok(`wszystkie ${modKeys.length} labelKey katalogu istnieją w pl.js`, modKeys.every(k => plDict[k]));
   ok(`…i w en.js`, modKeys.every(k => enDict[k]));
+  // KZ: krótka etykieta napięcia (wiersz listy dawnej strony) skasowana — konsola pisze stan · liczbę
   const newKeys = ['diplo.opinionLabel', 'diplo.opinionBreakdown', 'diplo.fadesIn', 'diplo.breakdownMore',
-    'diplo.truceYearsLeft', 'diplo.tension', 'diplo.tensionFull', 'diplo.memory'];
+    'diplo.truceYearsLeft', 'diplo.tensionFull', 'diplo.memory'];
   ok('nowe klucze UI w pl.js', newKeys.every(k => plDict[k]));
   ok('nowe klucze UI w en.js', newKeys.every(k => enDict[k]));
   ok('placeholdery {0} zachowane w obu językach',
@@ -248,7 +274,8 @@ console.log('--- U9: render EN ---');
   let e2 = null;
   try { overlay.draw(cEn, W, H); } catch (e) { e2 = e; }
   ok('draw() nie rzuca po przełączeniu na EN', e2 === null);
-  ok('etykiety po angielsku', said(cEn, enDict['diplo.opinionLabel']) && said(cEn, enDict['diplo.opinionBreakdown']));
+  ok('etykiety po angielsku', said(cEn, enDict['diplo.opinionLabel'].toUpperCase()) && said(cEn, enDict['diplo.opinionBreakdown'].toUpperCase())
+    && !said(cEn, plDict['diplo.opinionLabel'].toUpperCase()));
   ok('etykiety modyfikatorów po angielsku', said(cEn, enDict['diplo.mod.legacyRelations']));
   setLocale('pl');
 }

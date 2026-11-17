@@ -28,6 +28,16 @@
 //   pod node, a `draw()` przechodzi na atrapie ctx. Dlatego piny UI są tu WYKONANIOWE,
 //   nie źródłowe — poza P14, które z natury jest pinem źródłowym.
 //
+// ⚠ ARC KONSOLE / KZ — stary 2-kolumnowy panel (`_drawRight`) USUNIĘTY; panel Wojen to wyłącznie konsola
+//   (`WarConsoleView.drawWarConsole`, stół pokoju = `drawPeaceTable` w bohaterze). Piny UI przecelowane na konsolę:
+//   `drawPanel` rysuje PRAWDZIWE `ov.draw()` i otwiera stół klikiem w czip [ STÓŁ POKOJU ] (strefa `hero_mode`) — bez
+//   warunków bohater konsoli pokazuje linę wyczerpania (T0f pinuje oba stany). T8a0/T8a czytają ciało `drawPeaceTable`
+//   (funkcja modułu, nie metoda), T8b porównuje TEN SAM wiersz (po `bodyId`) przed i po przewinięciu, T8c — pasmo
+//   stołu `_consoleTableRect` (konsola prunuje do bohatera, nie do ramy panelu), T10b skanuje też widok konsoli.
+//   Nowe piny absolutne konsoli: T4f-T4h (strefy `peace_toggle` DOKŁADNIE dla ciał niezablokowanych, obie stolice
+//   `[·] … 🔒` bez strefy, dane strefy = imperium + strona), T6d-T6g (dokładny zbiór typów stref pustego stołu i stołu
+//   z warunkiem, czipy grupy → `openPanel`, `peace_bg` no-op, `close` zamyka).
+//
 // ⚠ IMPORTY DYNAMICZNE dla symboli POWSTAJĄCYCH w tym slice (lekcja WP-2/WP-3): statyczny
 //   import nieistniejącego symbolu wywala CAŁY plik na linkowaniu ESM i żaden pin nie
 //   dostaje koloru.
@@ -47,10 +57,6 @@ import { GameCore } from '../headless/GameCore.js';
 import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
 import EntityManager from '../../core/EntityManager.js';
 import { TERRITORIAL_MAX_SHARE, TERRITORIAL_BASE_VALUE } from '../../data/AcceptanceWeightData.js';
-// ARC KONSOLE K2 — keeper przypina DZISIEJSZY panel Wojen (flaga OFF); konsolę pinuje console_diplomacy_smoke.
-import { GAME_CONFIG as GC_K2 } from '../../config/GameConfig.js';
-GC_K2.FEATURES.consoleDiplomacy = false;
-
 // Klasa panelu — dynamicznie, żeby brak/awaria importu nie zabiła kolorów pinów.
 let WarOverlayMod = null;
 try { WarOverlayMod = await import('../../ui/WarOverlay.js'); } catch { /* fail-first */ }
@@ -69,24 +75,22 @@ const readRaw   = (...p) => norm(readFileSync(join(SRC, ...p), 'utf8'));
 const readClean = (...p) => stripComments(readRaw(...p));
 
 /**
- * Ciało JEDNEJ metody klasy — okno anchorowane STRUKTURALNIE (od nagłówka metody do
- * następnej metody na tym samym wcięciu).
+ * Ciało JEDNEJ funkcji modułu — okno anchorowane STRUKTURALNIE (od `function name(` do
+ * następnej funkcji / eksportu na kolumnie 0). KZ: stół rysuje `drawPeaceTable` w widoku konsoli
+ * (dawniej metoda `_drawRight` overlayu — stąd dawne `methodBody`).
  *
  * ⚠ ISTNIEJE, BO PIERWSZA WERSJA T8a ŚWIECIŁA ZIELONO NA KODZIE SPRZED NAPRAWY: okno
- *   wycinane `split('_drawRight')[2]` sięgało aż do końca pliku, więc pin łapał
+ *   wycinane `split(...)[2]` sięgało aż do końca pliku, więc pin łapał
  *   `_scrollRight` z `handleScroll` — czyli z JEDYNEGO miejsca, gdzie to pole już było.
  *   To ta sama klasa co proxy rozmiarowe w `fleet_clock_band` T4 i okno `iStart + 3000`
  *   w `return_actions_removed` A6: pin musi być anchorowany strukturą, nie odległością.
  */
-function methodBody(src, name) {
-  const i = src.indexOf('\n  ' + name + '(');
+function fnBody(src, name) {
+  const i = src.indexOf('\nfunction ' + name + '(');
   if (i < 0) return '';
   const rest = src.slice(i + 1);
-  const nl = rest.indexOf('\n');
-  if (nl < 0) return rest;
-  const tail = rest.slice(nl);
-  const j = tail.search(/\n {2}[_A-Za-z][A-Za-z0-9_]*\s*\(/);
-  return j < 0 ? rest : rest.slice(0, nl + j);
+  const j = rest.slice(1).search(/\n(function |export )/);
+  return j < 0 ? rest : rest.slice(0, j + 1);
 }
 
 function uiFiles(dir = join(SRC, 'ui'), out = []) {
@@ -157,21 +161,28 @@ function mkCtx() {
     font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: 'left', globalAlpha: 1,
   };
 }
-/** Panel z wybraną wojną, po jednym przejściu `draw`. */
+/**
+ * Panel z wybraną wojną. KZ — konsola: pierwsza klatka (bez warunków) pokazuje linę wyczerpania; stół pokoju otwiera
+ * czip [ STÓŁ POKOJU ] — klikamy go PRAWDZIWĄ ścieżką (strefa `hero_mode` z pierwszej klatki → `_onHit`), jak gracz.
+ */
 function drawPanel(K, opts = {}) {
   if (!WarOverlayMod?.WarOverlay) return null;
   const ov = new WarOverlayMod.WarOverlay();
   ov.visible = true;
   ov.show();
+  let ctx = mkCtx();
+  ov.draw(ctx, 1280, 720);
+  const firstTypes = (ov._hitZones ?? []).map(z => z.type);
+  const chip = (ov._hitZones ?? []).find(z => z.type === 'hero_mode' && z.data?.mode === 'table') ?? null;
+  if (chip) ov._onHit(chip);
   if (opts.scroll != null) ov._scrollRight = opts.scroll;
   if (opts.selected) for (const id of opts.selected) ov._selected?.add?.(id);
-  let ctx = mkCtx();
   // `passes` > 1: kolejne klatki TEGO SAMEGO panelu. Potrzebne, bo klamp scrolla na wejściu
-  // korzysta z wysokości treści zapamiętanej w POPRZEDNIEJ klatce (pierwsza klatka nowego
-  // panelu jej nie ma — wtedy klamp domyka się na końcu `_drawRight`, czyli po rysowaniu).
+  // korzysta z wysokości treści zapamiętanej w POPRZEDNIEJ klatce (pierwsza klatka stołu jej
+  // nie ma — wtedy klamp domyka się na końcu `drawPeaceTable`, czyli po rysowaniu).
   const passes = Math.max(1, opts.passes ?? 1);
   for (let i = 0; i < passes; i++) { ctx = mkCtx(); ov.draw(ctx, 1280, 720); }
-  return { ov, ctx };
+  return { ov, ctx, firstTypes, chip };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -189,6 +200,12 @@ console.log('T0 — kontrola narzędzia');
   assert(!!d && d.ctx.texts.length > 5 && d.ov._hitZones.length > 1,
     'T0d (KONTROLA PINU): panel REALNIE się narysował (napisy=' + (d?.ctx.texts.length ?? 0)
     + ', hit-zony=' + (d?.ov._hitZones.length ?? 0) + ') — bez tego brak przycisku myliłby się z brakiem rysowania');
+  // KZ — konsola: stół jest TRYBEM bohatera. Bez warunków — lina (żadnego `peace_toggle`), po czipie — stół.
+  const afterTypes = (d?.ov?._hitZones ?? []).map(z => z.type);
+  assert(!!d?.chip && d.firstTypes.includes('hero_mode') && !d.firstTypes.includes('peace_toggle')
+    && afterTypes.includes('peace_toggle') && d.ov._heroMode === 'table',
+    'T0f (KONTROLA PINU): bez warunków bohater konsoli to lina (bez `peace_toggle`); czip [ STÓŁ POKOJU ] '
+    + '(`hero_mode`) otwiera stół — piny UI niżej mierzą stół, nie linę');
   assert(TERRITORIAL_MAX_SHARE === 0.5 && TERRITORIAL_BASE_VALUE === 2,
     'T0e (KONTROLA PINU): stałe katalogu czytane z JEDNEGO źródła (MAX_SHARE=' + TERRITORIAL_MAX_SHARE
     + ', BASE=' + TERRITORIAL_BASE_VALUE + ') — T3 porównuje z nimi, nie z literałem');
@@ -318,6 +335,21 @@ console.log('T4 — STOLICA po OBU stronach (silnik + znacznik domu gracza)');
   const res = ds.evaluatePeace(EMP, { cessions: [{ bodyId: aiCapital, fromEmpireId: EMP, toEmpireId: 'player' }] });
   assert(res?.blocked === true && res?.reasonKey === 'diplo.reject.capitalNotNegotiable',
     'T4e (KONTROLA PINU): żądanie stolicy imperium = blokada `capitalNotNegotiable` — dlatego wiersz jest wyszarzony');
+
+  // KZ — konsola: wiersze stołu = DOKŁADNIE ciała do negocjacji; obie stolice widoczne (🔒), ale BEZ strefy kliku.
+  const d = drawPanel(K);
+  const toggles = (d?.ov?._hitZones ?? []).filter(z => z.type === 'peace_toggle');
+  const ids = toggles.map(z => z.data?.bodyId);
+  const negotiable = [...(table.demand ?? []), ...(table.offer ?? [])].filter(r => !r.capital).map(r => r.bodyId);
+  assert(negotiable.length >= 5 && ids.length === negotiable.length && negotiable.every(id => ids.includes(id)),
+    'T4f: konsola wystawia `peace_toggle` DOKŁADNIE dla ciał niezablokowanych (' + ids.length + ' z ' + negotiable.length + ')');
+  const texts = (d?.ctx.texts ?? []).map(x => x.t);
+  assert(aiCapital != null && home != null && !ids.includes(aiCapital) && !ids.includes(home)
+    && texts.filter(s => s.startsWith('[·]') && s.includes('🔒')).length === 2,
+    'T4g: stolica imperium i dom gracza RYSOWANE jako zablokowane (`[·] … 🔒`, 2 wiersze) i NIE klikalne');
+  const dirOk = toggles.length > 0 && toggles.every(z => z.data?.empireId === EMP
+    && z.data?.isOffer === (table.offer ?? []).some(r => r.bodyId === z.data?.bodyId));
+  assert(dirOk, 'T4h: strefa wiersza niesie imperium wojny i stronę stołu (`isOffer` = wiersz z listy OFERUJĘ)');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -368,6 +400,31 @@ console.log('T6 — tło-absorber stołu OSTATNI w `_hitZones` (bo `_hitTest` to
   const hit = row ? d.ov._hitTest(row.x + 2, row.y + 2) : null;
   assert(hit?.type === 'peace_toggle',
     'T6c (WYKONANIOWO): klik w wiersz stołu rozstrzyga się na wierszu, nie na absorberze (trafiono: ' + hit?.type + ')');
+
+  // KZ — DOKŁADNY inwentarz stref konsoli w trybie stołu (pin absolutny zamiast dawnego ON == OFF).
+  const setOf = (zs) => [...new Set(zs.map(z => z.type))].sort().join(',');
+  const BASE = ['close', 'hero_mode', 'offer_peace', 'peace_bg', 'peace_toggle', 'reparations_toggle', 'select', 'tab'];
+  assert(setOf(zones) === [...BASE].sort().join(','),
+    'T6d: pusty stół — strefy DOKŁADNIE {' + BASE.join(', ') + '} (jest: ' + setOf(zones) + ')');
+  const d2 = drawPanel(K, { selected: [row?.data?.bodyId].filter(Boolean) });
+  assert(!!row && setOf(d2?.ov?._hitZones ?? []) === [...BASE, 'peace_clear'].sort().join(','),
+    'T6e: z warunkiem na stole dochodzi DOKŁADNIE `peace_clear` (jest: ' + setOf(d2?.ov?._hitZones ?? []) + ')');
+  const tabs = zones.filter(z => z.type === 'tab').map(z => z.data?.id);
+  const opened = [];
+  const omBefore = K.overlayManager;
+  K.overlayManager = { openPanel: (id) => opened.push(id) };
+  for (const z of zones.filter(z => z.type === 'tab')) d.ov._onHit(z);
+  K.overlayManager = omBefore;
+  assert(tabs.join(',') === 'diplomacy,intel,war' && opened.join(',') === 'diplomacy,intel',
+    'T6f: czipy grupy {' + tabs.join(', ') + '} — klik przełącza na inny ekran grupy, aktywny WOJNY nic nie robi (' + opened.join(',') + ')');
+  const closeZ = zones.find(z => z.type === 'close');
+  const bgZ = zones.find(z => z.type === 'peace_bg');
+  const visBefore = d.ov.visible;
+  if (bgZ) d.ov._onHit(bgZ);
+  const visAfterBg = d.ov.visible;
+  if (closeZ) d.ov._onHit(closeZ);
+  assert(!!closeZ && !!bgZ && visBefore === true && visAfterBg === true && d.ov.visible === false,
+    'T6g: `peace_bg` to świadomy no-op (panel zostaje), `close` zamyka panel');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -391,30 +448,38 @@ console.log('T8 — F-a: scroll prawej kolumny REALNIE czytany w `draw`');
 {
   const K = boot(); giveAi(K, 8); givePlayer(K, 6); warAt(K);
 
-  const uiSrc = readClean('ui', 'WarOverlay.js');
-  const drawRightBody = methodBody(uiSrc, '_drawRight');
-  assert(drawRightBody.length > 200 && /handleScroll/.test(drawRightBody) === false,
-    'T8a0 (KONTROLA PINU): okno źródła to CIAŁO `_drawRight` (' + drawRightBody.length
-    + ' zn.), bez `handleScroll` — inaczej T8a łapałby jedyne dzisiejsze wystąpienie pola');
-  assert(/_scrollRight/.test(drawRightBody),
-    'T8a (pin ŹRÓDŁOWY): `_drawRight` odwołuje się do `_scrollRight` — do C1 pole było wyłącznie ZAPISYWANE');
+  // KZ — stół rysuje funkcja modułu `drawPeaceTable` w widoku konsoli; `handleScroll` zostaje w overlayu.
+  const viewSrc = readClean('ui', 'WarConsoleView.js');
+  const tableBody = fnBody(viewSrc, 'drawPeaceTable');
+  assert(tableBody.length > 200 && /handleScroll/.test(tableBody) === false && !/\nfunction tableRow\(/.test(tableBody),
+    'T8a0 (KONTROLA PINU): okno źródła to CIAŁO `drawPeaceTable` (' + tableBody.length
+    + ' zn.), bez `handleScroll` i bez następnej funkcji — inaczej T8a łapałby pole z innego miejsca');
+  assert(/ov\._scrollRight/.test(tableBody),
+    'T8a (pin ŹRÓDŁOWY): `drawPeaceTable` odwołuje się do `ov._scrollRight` — do C1 pole było wyłącznie ZAPISYWANE');
 
   const a = drawPanel(K, { scroll: 0 });
   const b = drawPanel(K, { scroll: 60 });
-  const row0 = (a?.ov?._hitZones ?? []).find(z => z.type === 'peace_toggle') ?? null;
-  const row1 = (b?.ov?._hitZones ?? []).find(z => z.type === 'peace_toggle') ?? null;
+  // TEN SAM wiersz po obu stronach (po `bodyId` + stronie): pierwsze wiersze po przewinięciu wypadają z pasma
+  // (`pruneZones`), więc „pierwszy znaleziony" mógłby być innym ciałem.
+  const keyOf = (z) => z.data?.bodyId + '|' + z.data?.isOffer;
+  const rowsB = new Map((b?.ov?._hitZones ?? []).filter(z => z.type === 'peace_toggle').map(z => [keyOf(z), z]));
+  const row0 = (a?.ov?._hitZones ?? []).find(z => z.type === 'peace_toggle' && rowsB.has(keyOf(z))) ?? null;
+  const row1 = row0 ? rowsB.get(keyOf(row0)) : null;
   assert(row0 && row1 && Math.abs((row0.y - row1.y) - 60) < 1.5,
     'T8b (WYKONANIOWO): przewinięcie o 60 px przesuwa wiersze stołu o 60 px w górę (Δ='
     + (row0 && row1 ? (row0.y - row1.y).toFixed(1) : 'n/d') + ')');
 
-  const bounds = b ? b.ov._getOverlayBounds(1280, 720) : null;
-  const tableZones = bounds ? (b.ov._hitZones ?? []).filter(z => z.type === 'peace_toggle') : [];
-  const above = tableZones.filter(z => z.y + z.h < bounds.oy);
+  // Przewinięcie o 120 px (≈ 6 wierszy) — pierwsze wiersze MUSZĄ wyjechać nad pasmo stołu (świadek prunowania).
+  const c = drawPanel(K, { scroll: 120 });
+  const band = c?.ov?._consoleTableRect ?? null;
+  const tableZones = band ? (c.ov._hitZones ?? []).filter(z => z.type === 'peace_toggle') : [];
+  const above = tableZones.filter(z => z.y < band.y - 0.5);
   // ⚠ ŚWIADEK OBOWIĄZKOWY: filtr na PUSTYM zbiorze przechodzi jałowo (pierwszy przebieg
   //   tego keepera świecił tu zielono dokładnie tam, gdzie stołu w ogóle nie było).
-  assert(tableZones.length > 0 && above.length === 0,
-    'T8c: stół ma hit-zony (' + tableZones.length + ') i ŻADNA nie zostaje NAD obszarem panelu '
-    + 'po przewinięciu (znaleziono ' + above.length + ')');
+  const rowsA = (a?.ov?._hitZones ?? []).filter(z => z.type === 'peace_toggle').length;
+  assert(tableZones.length > 0 && above.length === 0 && tableZones.length < rowsA,
+    'T8c: stół ma hit-zony (' + tableZones.length + ' z ' + rowsA + ' bez przewinięcia — wiersze wysunięte zostały '
+    + 'zdjęte) i ŻADNA nie zostaje NAD pasmem stołu po przewinięciu o 120 px (znaleziono ' + above.length + ')');
 
   const big = drawPanel(K, { scroll: 99999 });
   assert(big && big.ov._scrollRight < 99999,
@@ -490,10 +555,12 @@ console.log('T10 — i18n: klucze stołu w OBU słownikach');
   const miss = KEYS.filter(k => !pl.includes("'" + k + "'") || !en.includes("'" + k + "'"));
   assert(miss.length === 0,
     'T10a: wszystkie klucze stołu w pl I en' + (miss.length ? ' — brakuje: ' + miss.join(', ') : ' (' + KEYS.length + ')'));
-  const uiSrc = readClean('ui', 'WarOverlay.js');
-  const literals = (uiSrc.match(/fillText\(\s*'[^']*[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ][^']*'/g) ?? []);
-  assert(literals.length === 0,
-    'T10b: żaden polski literał nie idzie do `fillText` w panelu Wojny'
+  // KZ — konsola rysuje przez pomocnik `text(ctx, s, …)` widoku; skan obejmuje overlay i widok konsoli.
+  const uiSrc = readClean('ui', 'WarOverlay.js') + '\n' + readClean('ui', 'WarConsoleView.js');
+  const literals = (uiSrc.match(/(fillText\(\s*|\btext\(\s*\w+\s*,\s*)'[^']*[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ][^']*'/g) ?? []);
+  const textCalls = (uiSrc.match(/\btext\(\s*ctx\s*,/g) ?? []).length;
+  assert(literals.length === 0 && textCalls > 5,
+    'T10b: żaden polski literał nie idzie do `fillText` / `text()` w panelu Wojny (wywołań `text(ctx,…)`: ' + textCalls + ')'
     + (literals.length ? ' — ' + literals.slice(0, 2).join(' | ') : ''));
 }
 
