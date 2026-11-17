@@ -6,7 +6,7 @@ owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 af
 2026-11-16 — §13) — **Shipyard console DONE**; K2 delivered (`1685293` + `1f6c960`, owner PASS 2026-11-16 — §15) — **Diplomacy group DONE**; K3 delivered (`79c8ba3` + `a75a402` +
 `bd72f73`, owner PASS 2026-11-17 — §16); K4 delivered (`886b659`, owner PASS 2026-11-17 — §17) — **Economy group DONE**; KZ-E delivered (`f47b0b8` — §18); K5 delivered (`3678990` fix(743) + `e3af2db`, owner PASS 2026-11-17 — §19) — **Civilization group DONE**; K6 moved out of this arc (§16, owner 2026-11-17).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
-the K0a gate). Register: findings #723–#744 filed; **next free finding number: 745**.
+the K0a gate). Register: findings #723–#749 filed; **next free finding number: 750**.
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
 allowlist, not game code); 41 untracked files, all older than 2026-11-02, none from the combat-visuals arc.
 Handover: `C:\Users\Komputer\kosmos-handover\consoles-phase-a\` (`STOP_A.md`, `kontakt_now.html`, `shots_now/`,
@@ -321,7 +321,7 @@ Hit zones stay per screen (first-hit-wins in BaseOverlay; Command keeps its own 
 
 ## 5. Findings (next free number verified: **723**; the brief expected 612 — the CV arc filed #612–#722)
 
-This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** (K4, §17), **#743–#744** (K5, §19) and **#745–#746** (K7-A, §20). **Next free finding number: 747.**
+This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** (K4, §17), **#743–#744** (K5, §19) **#745–#746** (K7-A, §20) and **#747–#749** (K7-B, §22). **Next free finding number: 750.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
@@ -348,6 +348,9 @@ This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** 
 | **743** | ✅ K5 (`3678990`) | **Dyson 3D stage and rings lost after loading a save**: `DysonSystem.restore` never emitted `dyson:visualStageChanged` and `ThreeRenderer.switchSystem` (`_disposeAllMeshes`) zeroed `_dysonStage` — measured: stage 1 + rings before save, stage 0 and no rings after load | live probe K5 (`k5.json` `dysonBeforeSave` / `dysonAfterLoad`); `DysonSystem.restore`, `ThreeRenderer._disposeAllMeshes` | K5 — `dysonViewStage` + `ThreeRenderer._restoreDysonStage()` after restore, after `switchSystem` and on segment completion; rings only around the home star |
 | **745** | ⚪ (console path ✅ K7-A; OFF until KZ) | **Today's registry timeline labels lanes by table index**: `_drawTimelinePanel` names lane *i* after `rows[i]`, but `buildTimelineRows` skips wrecks and contacts — with wrecks shown a ship's mission bar sits next to another name (executed: Bravo's recon bar labelled «Aaa wrak») | `FleetManagerOverlay._drawTimelinePanel`; `FleetPictureLogic.buildTimelineRows` | K7-A (console labels by `entryId`) |
 | **746** | ✅ `44dd164` | **Camera following a ship on full-system recon goes to where the recon started** (owner: outliner double-click on an exploration ship in another system): `_startForeignRecon` sets `in_transit` without `vessel:launched`, so the start body's orbit stays in `OrbitalSpaceSystem`; `_tickOrbitingVessels` (on `physics:updated`, right before `_updateCameraFocus`) put the sprite on that orbit every tick → camera goal 0.17 u from the start body, ship 17–43 u away. Same root cause as part of the «POKAŻ» unreliability | live probe `reconrun` (ship in `sys_059`, time running); `ThreeRenderer._tickOrbitingVessels`, `VesselManager._startForeignRecon` | fixed at the reader: in-flight vessels skip the orbit loop (after: goal 0.02–0.08 u from the ship) |
+| **747** | ✅ K7-B `0eab554` (console path; flag-OFF screen keeps the gap until KZ) | **Fleet disband and „new fleet” unreachable in the live Command since stage 3g**: the only producer of the `fleetCreate` / `fleetDisband` zones was the dormant left list of the 2D map (removed in K7-pre); `_drawRightFleet` had rename / doctrine / retreat / orders but no disband. Fix: the list zone's „Floty” section gets `[ + NOWA FLOTA ]` (`fleetCreate` → `_handleCreateFleet`), the fleet inspector `[ ROZWIĄŻ FLOTĘ ]` (`fleetDisband` → `_handleDisbandFleet`, today's ConfirmModal); creating via bulk assign stays. Keeper `console_inspector_smoke` K (red on `407607d`). |
+| **748** | ⚪ | **Logistics-pool toggle unreachable on today's ship panel when the ship has no mission actions**: `_drawActions` returns early on an empty `getAvailableActions` list (in flight), so the pool toggle — membership is permanent, not dock-bound — is not drawn; scrap and refuel likewise. The console inspector keeps parity for the pool (no zone) and shows scrap / refuel as disabled chips with a reason. |
+| **749** | ✅ `29b7e7d` | **Ship rename input started with the label „Zmień nazwę statku”, not the ship's name**: `_renameVessel` passed `t('fleetPanel.rename')` as the initial value. Now the ship's current name (selected on open); the label only when the ship is gone. Keeper `rename_vessel_prefill_smoke` (red on `407607d`). |
 | **744** | ⚪ | **Dead leader trait `dysonProgress`**: Viktor Havel-Osei's bonus «Sfera Dysona ×3 szybciej» (`LeaderData.js:193`) is shown to the player but `DysonSystem.getDysonProgressMultiplier()` is read nowhere | `grep dysonProgress src` | later — with the new endgame design (owner 2026-11-17: Dyson's future decided there) |
 
 ## 6. Proposed cut, decisions, effort
@@ -1068,4 +1071,52 @@ Handover `C:\Users\Komputer\kosmos-handover\consoles-k7\`: `STOP_K7-A.md`, `kont
 - **Live engine (CDP mouse + keyboard, GATE-S4):** 5 themes, 1280×833, +60 ships (scroll), OFF, OFF + 60, base; after the gate:
   „POKAŻ” per state, row click, recon in another system with time running, badges under Command and Civilization, frames
   regenerated (Amber Noir, Cold Blue) — 0 page exceptions.
-- **Next:** K7-pre (remove the dormant 2D map, D-K-18), then K7-B.
+- **Next:** K7-pre (remove the dormant 2D map, D-K-18), then K7-B — both delivered (§21, §22).
+
+## 21. K7-pre — delivered (dormant 2D map and left fleet list removed from Command)
+
+**Commit `407607d` refactor(K7-pre)** (D-K-18, Finding 734) · owner decisions 2026-11-17: removal of `FEATURES.fleetRegistry` APPROVED (its OFF
+path only restored the map — deviation recorded in the commit), removal of `fleet_list_rows_smoke` APPROVED.
+- FleetManagerOverlay 7917 → 6040 LOC (src −2200 / +96, 15 files): `_drawLeft`, `_drawLeftFleets` (never called), `_drawFleetRow`,
+  `_drawCenter`, map sprites / ghost blip / view switch, map focus and zoom helpers, `_filterVessels`, their state, map-only hit handlers,
+  `FEATURES.commandTacticalMap` and `FEATURES.fleetRegistry`, GameScene's `_mapBounds` tooltip branches, 13 i18n keys.
+- Identity (draw log + hit zones + input results, 19 states × PL/EN × 2 sizes): ON identical; OFF identical except the base's first
+  frame of a fresh overlay (2 stray map column separators). Keepers re-aimed with witnesses; sweep 422/422.
+- Kept on purpose: the `fleetCreate` / `fleetDisband` handlers — their only producer was the removed list → Finding 747 (fixed in K7-B).
+
+## 22. K7-B — delivered (ship / fleet inspector on the console)
+
+**Commits `29b7e7d` fix(749)** (separate, before the feature) **and `0eab554` feat(K7-B)** · flag `FEATURES.consoleCommand` (OFF = today bit
+for bit) · owner gate PASS 2026-11-17: deviations 1–4 approved; after the gate applied: 749 fix, state-aware „no orders” line, scout tag
+`ZWD`. Handover `C:\Users\Komputer\kosmos-handover\consoles-k7\`: `STOP_K7-B.md`, `kontakt_k7b.html`, `shots/k7b/`,
+`probes/{k7b, run_k7b, sheet_k7b, mutate_k7b}`; fail-first worktrees removed.
+- **Ship inspector** (`CommandInspectorView` + pure `CommandInspectorLogic`; facts from `FleetManagerOverlay._inspectorShipFacts`, same
+  predicates as `_drawRight`): header = name (click = rename) + class + `[ STOCZNIA ]`; status line in roles (dock / orbit / transit /
+  other system); fuel, warp, endurance and hull as 2 px instruments with numbers (the game has no hull HP: `damaged` + repair progress);
+  upkeep with the concrete fix in alert role („Brakuje 252 Kr w skarbcu”); „Teraz” block (order, mission + manifest, arrival, foreign
+  orbit, recon, loop); actions as bracket chips grouped primary → orders → logistics → `[ ROZBIÓRKA ]` (alert, today's confirm);
+  technical file (modules, performance, hull description); mission log. Every impossible action = disabled chip with an i18n reason
+  (or the ready reason text of `getAvailableActions`), never a silent no-op. No orders but logistics → „Brak rozkazów w locie / na
+  orbicie / w doku / w tym stanie”.
+- **Fleet inspector and multi-selection summary** in the same language: members, slowest speed, shortest range, lowest fuel; today's
+  fleet orders (2×2), doctrine list, retreat threshold, members with fleet / own order tags; `[ ROZWIĄŻ FLOTĘ ]` (747).
+- **Dialogs from `consoleZones`:** rename (ship, fleet), new fleet, bulk-assign picker, scrap and disband confirms open at the inspector
+  (new fleet: at the list) — `dialogAnchorCss(zone, uiScale)` via `ModalAnchor.applyModalAnchor`; no `window.inner*` in handlers;
+  outside the console (flag OFF, other tabs) — today's centred dialog. Measured: inspector (1210, 113, 375) at 1600×1041,
+  (968, 90, 300) at 1280×833.
+- **Registry polish:** ROLA = role glyph + 3–4-letter tag (`cmdConsole.roleTag.*`, every role incl. envoy; scout `ZWD`), full role on
+  hover; columns empty for every visible row shrink to `MIN_COL_W` (never disappear), truncated header → full label on hover.
+- **T4 — not re-recorded, diff list: none.** T4 is the frozen zone snapshot of the removed T3 map ship panel (oracle of
+  `ship_panel_hud_smoke` H1–H3), not the Command inspector; it cannot be re-recorded from the current tree and K7-B does not change it
+  (127/0). Its 20 states are instead the oracle of the inspector keeper (zones ON == live `_drawRight`).
+- **Approved deviations (owner):** (1) enemy panel (`_drawEnemyDetails`) and (2) mission configurator (`_drawMissionConfig`) keep
+  today's drawing inside the inspector zone — reskin moves to K7-C; (3) 747 fixed on the console path only (OFF bit for bit);
+  (4) availability ON == OFF by hit zones — disabled chips are added only as chips without a zone, with a reason.
+- **Findings:** **747 ✅** (console path) · **748 ⚪** filed · **749 ✅** (`29b7e7d`). Next free: **750**.
+- **Keepers:** `console_inspector_smoke` 377/0 (I zones ON == live `_drawRight` on 26 ship states; W; D reasons PL+EN; F; K 747; M; R;
+  C; A dialogs at 1600×1041 and 1280×833; L); `rename_vessel_prefill_smoke` 7/0; `console_command_smoke` 214/0 (A: `fleetCreate`,
+  `fleetDisband` new ON types). Fail-first on `407607d`: inspector 19/122, 749 5/7. Mutations 15/15 red. Sweep 424/424, `check-i18n` PASS.
+- **Live engine (CDP mouse + keyboard, GATE-S4):** 5 themes, 1280×833, OFF, base — 0 page exceptions; undock → orbiting, auto-refuel
+  toggle and back, mission configurator, typed rename, scrap confirm opened + cancelled, fleet created from the list and disbanded with
+  confirm, multi-selection, „POKAŻ” (close + one `vessel:focus`). Frames regenerated after the gate changes.
+- **Next:** K7-C (Atlas, Logistics, Ground on the console + enemy panel and mission configurator reskin).

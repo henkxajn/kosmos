@@ -1184,3 +1184,21 @@ Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §20 (podział K7 w §6.1). Flaga
   sweep 423/423, `check-i18n` PASS; żywy silnik 0 wyjątków (5 motywów, 1280×833, +60 statków, OFF, baza, POKAŻ per stan, plakietki).
 
 Następny krok: K7-pre (usunięcie uśpionej mapy 2D, D-K-18), potem K7-B.
+
+## ARC KONSOLE — K7-pre + K7-B: inspektor statku / floty na konsoli (`407607d` + `29b7e7d` + `0eab554`, PASS właściciela 2026-11-17)
+
+Plan i rejestr: `docs/design/CONSOLES_PLAN.md` §21–§22. Flaga `FEATURES.consoleCommand` (OFF = dziś bit w bit).
+- **K7-pre:** usunięta uśpiona mapa 2D i lewa lista flot Dowództwa (FMO 7917 → 6040 LOC), flagi `commandTacticalMap` i `fleetRegistry`
+  oraz keeper `fleet_list_rows_smoke` (decyzje właściciela); tożsamość ON zmierzona w 19 stanach.
+- **Inspektor statku:** nagłówek (nazwa = zmiana nazwy), linia statusu w rolach, przyrządy (paliwo, warp, wytrzymałość, kadłub = flaga
+  uszkodzenia + naprawa), utrzymanie z konkretną naprawą, blok „Teraz”, akcje w grupach (główne → rozkazy → logistyka → rozbiórka),
+  akta techniczne, log; akcja niemożliwa = czip wyłączony z powodem; „Brak rozkazów w locie” zamiast „Brak dostępnych akcji”.
+- **Flota / zaznaczenie:** najwolniejszy, zasięg, paliwo; `[ ROZWIĄŻ FLOTĘ ]` i `[ + NOWA FLOTA ]` (747).
+- **Okna dialogowe** przy strefie konsoli (bez `window.inner*`); **ROLA** = glif + skrót (zwiadowca „ZWD”), puste kolumny zwężone.
+- **T4** nie nagrywany (migawka usuniętego panelu T3, bez zmian) — jego stany są wyrocznią keepera inspektora.
+- **Odstępstwa zatwierdzone:** panel wroga i konfigurator misji w dzisiejszym rysunku (reskin w K7-C); 747 tylko na konsoli.
+- **Findingi:** 747 ✅ (konsola), 748 ⚪, 749 ✅ (osobny `fix(749)`: pole zmiany nazwy startuje z nazwą statku).
+- **Testy:** `console_inspector_smoke` 377/0, `rename_vessel_prefill_smoke` 7/0; mutacje 15/15; sweep 424/424, `check-i18n` PASS;
+  żywy silnik 0 wyjątków (5 motywów, 1280×833, OFF, baza).
+
+Następny krok: K7-C (Atlas, Logistyka, Jednostki na konsoli + reskin panelu wroga i konfiguratora misji).
