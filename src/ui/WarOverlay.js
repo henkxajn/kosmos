@@ -10,7 +10,7 @@ import { BaseOverlay } from './BaseOverlay.js';
 // binarny (D-WPR-4), więc gracz dostaje dokładnie tyle lat, ile nałoży silnik. Precedens
 // importu pokrętła balansu do UI: `DiplomacyOverlay` i `NAP_RENEW_WINDOW_YEARS` (DS-2/C2).
 import { REPARATIONS_YEARS } from '../data/OpinionModifierData.js';
-import { applyConsoleHalo } from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawWarConsole } from './WarConsoleView.js';
 
 export class WarOverlay extends BaseOverlay {
@@ -72,7 +72,7 @@ export class WarOverlay extends BaseOverlay {
     // K2 — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
     ctx.save();
     applyConsoleHalo(ctx);
-    try { drawWarConsole(this, ctx, W, H); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => drawWarConsole(this, ctx, W, H)); } finally { ctx.restore(); }
   }
 
   _fmtVal(v) {

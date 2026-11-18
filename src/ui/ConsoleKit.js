@@ -16,6 +16,8 @@ import { bracketCornersRect } from './HudAttentionLogic.js';
 import { layoutTabular, truncateText } from './HudLabelLogic.js';
 import { clampScroll, scrollThumb, pruneZones } from './InfoPanelLayoutLogic.js';
 import { layoutButtonRows } from './LabelPinLogic.js';
+import { CONSOLE_BACKDROP, zoneLuma, haloStrength, haloFor, textRect } from './ConsoleBackdropLogic.js';   // KZ Finding 755
+import { CONSOLE_GLASS } from './ConsoleSceneLogic.js';
 
 export const CONSOLE_KIT_DEFAULTS = Object.freeze({
   BRACKET_ARM: 10,      // ramię nawiasu narożnego strefy bohatera (px)
@@ -110,6 +112,36 @@ export function applyConsoleHalo(ctx) {
   ctx.shadowBlur = b;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
+}
+
+/**
+ * KZ Finding 755 — adaptacyjna poświata tekstu konsoli: na czas `fn` (rysunek ekranu konsoli) każde `fillText` sprawdza jasność
+ * tła pod swoją linią (`ConsoleBackdropLogic` — szacunkowy prostokąt linii, ostatni pomiar płótna WebGL) i tylko nad jasnym tłem
+ * rysuje się z większą poświatą (promień + dodatkowe przebiegi cienia w kolorze tła motywu). Siła 0 (ciemne tło) albo brak
+ * pomiaru → wywołanie oryginału bez żadnej zmiany stanu ctx (rysunek co do bitu jak dotąd). Bez wypełnień i prostokątów.
+ * Działa w każdej strefie (czipy nagłówka, lista, bohater, inspektor, pas), bo przechwytuje tekst, nie strefy.
+ */
+export function withAdaptiveHalo(ctx, W, H, fn) {
+  const sample = CONSOLE_BACKDROP;
+  if (!sample.luma || !ctx || typeof ctx.fillText !== 'function') return fn();
+  const orig = ctx.fillText;
+  const bright = CONSOLE_GLASS.bright;
+  ctx.fillText = function adaptiveHaloFillText(...args) {
+    const [text, x, y] = args;
+    const t = haloStrength(zoneLuma(sample, textRect(text, x, y, this.font, this.textAlign, this.textBaseline), W, H, bright));
+    const h = haloFor(t, CONSOLE_KIT.HALO_BLUR);
+    if (!h) return orig.apply(this, args);
+    const sb = this.shadowBlur, sc = this.shadowColor, sx = this.shadowOffsetX, sy = this.shadowOffsetY;
+    this.shadowColor = THEME.bgPrimary;
+    this.shadowBlur = h.blur;
+    this.shadowOffsetX = 0;
+    this.shadowOffsetY = 0;
+    for (let i = 0; i < h.passes; i++) orig.apply(this, args);   // przebiegi poświaty (tekst nakłada się na siebie — kolor bez zmian)
+    const r = orig.apply(this, args);
+    this.shadowBlur = sb; this.shadowColor = sc; this.shadowOffsetX = sx; this.shadowOffsetY = sy;
+    return r;
+  };
+  try { return fn(); } finally { delete ctx.fillText; }
 }
 
 /** Nieprzezroczyste tło konsoli (D-K-5) — token `bgPrimary` motywu na prostokącie (domyślnie całe płótno). */

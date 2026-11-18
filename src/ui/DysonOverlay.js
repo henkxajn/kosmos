@@ -11,7 +11,7 @@
 
 import { BaseOverlay } from './BaseOverlay.js';
 import EventBus from '../core/EventBus.js';
-import { applyConsoleHalo } from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawDysonConsole } from './CivilizationConsoleView.js';
 import { applyCivChip } from './CivilizationConsoleLogic.js';
 
@@ -39,7 +39,7 @@ export class DysonOverlay extends BaseOverlay {
     // K5 — poświata za całym rysunkiem konsoli; zdjęta przez restore
     ctx.save();
     applyConsoleHalo(ctx);
-    try { drawDysonConsole(this, ctx, W, H); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => drawDysonConsole(this, ctx, W, H)); } finally { ctx.restore(); }
   }
 
   // ══════════════════════════════════════════════════════════════════════════

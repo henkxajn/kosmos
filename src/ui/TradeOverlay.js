@@ -11,7 +11,7 @@ import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { BASE_PRICE, scarcityMultiplier } from '../data/TradeValuesData.js';
 import EventBus           from '../core/EventBus.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
-import { applyConsoleHalo } from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawTradeConsole } from './TradeConsoleView.js';
 import { applyEconChip }  from './EconomyConsoleLogic.js';
 import { tradeColonyOptions, pickTradeColony } from './TradeConsoleLogic.js';
@@ -211,7 +211,7 @@ export class TradeOverlay extends BaseOverlay {
     // K3-B — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
     ctx.save();
     applyConsoleHalo(ctx);
-    try { drawTradeConsole(this, ctx, W, H); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => drawTradeConsole(this, ctx, W, H)); } finally { ctx.restore(); }
   }
 
   _empireName(emp, fallbackId) {

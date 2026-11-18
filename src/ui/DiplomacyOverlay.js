@@ -8,7 +8,7 @@ import { BaseOverlay } from './BaseOverlay.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { canDoEnvoy, hasWeapons } from '../entities/Vessel.js';
-import { applyConsoleHalo } from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawDiplomacyConsole } from './DiplomacyConsoleView.js';
 
 // DS-1 / C3 — JEDNO miejsce, w którym id traktatu spotyka się ze swoją nazwą.
@@ -66,7 +66,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     // K2 — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
     ctx.save();
     applyConsoleHalo(ctx);
-    try { drawDiplomacyConsole(this, ctx, W, H, { treatyNameKey: TREATY_NAME_KEY }); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => drawDiplomacyConsole(this, ctx, W, H, { treatyNameKey: TREATY_NAME_KEY })); } finally { ctx.restore(); }
   }
 
   _onHit(zone) {

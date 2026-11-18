@@ -108,6 +108,7 @@ import { planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle,
 import { readHudLayers } from '../ui/HudLayerChipsLogic.js';
 import { hudRoleHex } from '../ui/HudPalette.js';
 import { glassFilterCss, CONSOLE_GLASS, CONSOLE_HIDDEN_MAP_BADGES, consoleHidesMapBadges } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a — tło konsoli (D-K-5 poprawione)
+import { CONSOLE_BACKDROP, CONSOLE_BACKDROP_KNOBS, clearBackdropSample, lumaGridFromRgba, sampleSignature, samplerAction } from '../ui/ConsoleBackdropLogic.js';   // KZ Finding 755
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -4576,6 +4577,8 @@ export class ThreeRenderer {
           if (undoFlight) undoFlight();
         }
         this._sceneRenderFrames++;
+        // KZ Finding 755 — pomiar jasności tła pod konsolą (bufor WebGL ważny tuż po renderze, w tym samym zadaniu)
+        this._sampleConsoleBackdrop();
         // ARC CV-7 — nagrywarka rolek (F10): kopia klatki płótna 3D TUŻ PO renderze (bufor WebGL ważny w tym samym zadaniu).
         this._cvDir?.reel?.onFrame();
         if (this._fxStatsRun) this._fxStatsEnd();     // ARC CV-2a — po pełnej klatce (wszystkie przebiegi composera)
@@ -4611,6 +4614,119 @@ export class ThreeRenderer {
       }
       this._consoleFilterCss = css;
     }
+  }
+
+  /**
+   * KZ Finding 755 — pomiar jasności tła pod konsolą dla poświaty tekstu (`ConsoleBackdropLogic.samplerAction` decyduje).
+   * WebGL2 (ścieżka główna): co `SAMPLE_MS` zlecenie na GPU — rozwiązanie MSAA bufora domyślnego (blit 1:1), zmniejszenie do siatki
+   * (blit LINEAR), `readPixels` do PBO (asynchronicznie) + fence; w kolejnych klatkach `clientWaitSync(fence, 0, 0)` — bez czekania;
+   * dane odbierane dopiero, gdy GPU skończy. Klatka nigdy nie blokuje się na odczycie. Bez WebGL2: odczyt przez płótno 2D tylko przy
+   * otwarciu konsoli i ruchu kamery. Bez konsoli / błąd → pomiar wyczyszczony (tekst wraca do poświaty bazowej).
+   */
+  _sampleConsoleBackdrop() {
+    const covered = this._consoleCovered === true;
+    const gl = this.renderer?.getContext?.() ?? null;
+    if (this._bdAsyncOk == null) {
+      this._bdAsyncOk = !!(gl && typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext
+        && typeof gl.fenceSync === 'function');
+    }
+    const camSig = covered && !this._bdAsyncOk ? this._bdCameraSig() : '';
+    const act = samplerAction({ covered, wasCovered: this._bdWasCovered === true, now: performance.now(), lastAt: this._bdAt ?? 0,
+      pending: !!this._bdFence, hasSample: !!CONSOLE_BACKDROP.luma, asyncOk: this._bdAsyncOk, camMoved: camSig !== (this._bdCamLast ?? '') });
+    this._bdWasCovered = covered;
+    try {
+      if (act === 'clear') { this._bdDropFence(gl); clearBackdropSample(); this._bdSig = ''; }
+      else if (act === 'poll') this._bdPoll(gl);
+      else if (act === 'start') this._bdStart(gl);
+      else if (act === 'fallback') { this._bdCamLast = camSig; this._bdFallback(); }
+    } catch (e) { this._bdDropFence(gl); clearBackdropSample(); }
+  }
+
+  /** KZ 755 — zlecenie odczytu asynchronicznego (GPU): blit 1:1 (MSAA → zwykły bufor), blit do siatki, readPixels do PBO, fence. */
+  _bdStart(gl) {
+    const t0 = performance.now();
+    const gw = Math.max(4, Math.round(CONSOLE_BACKDROP_KNOBS.GRID_W)), gh = Math.max(4, Math.round(CONSOLE_BACKDROP_KNOBS.GRID_H));
+    const cw = gl.drawingBufferWidth, ch = gl.drawingBufferHeight;
+    let R = this._bdGl;
+    if (!R || R.cw !== cw || R.ch !== ch || R.gw !== gw || R.gh !== gh) {
+      this._bdFreeGl(gl);
+      const rb = (fmt, w, h) => { const r = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, r); gl.renderbufferStorage(gl.RENDERBUFFER, fmt, w, h); return r; };
+      const fb = (r) => { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, r); return f; };
+      const rbA = rb(gl.getContextAttributes()?.alpha ? gl.RGBA8 : gl.RGB8, cw, ch), rbB = rb(gl.RGBA8, gw, gh);
+      const fbA = fb(rbA), fbB = fb(rbB);
+      const pbo = gl.createBuffer(); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, gw * gh * 4, gl.STREAM_READ);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); gl.bindRenderbuffer(gl.RENDERBUFFER, null); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      R = this._bdGl = { cw, ch, gw, gh, rbA, rbB, fbA, fbB, pbo, buf: new Uint8Array(gw * gh * 4) };
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, R.fbA);
+    gl.blitFramebuffer(0, 0, cw, ch, 0, 0, cw, ch, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, R.fbA);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, R.fbB);
+    gl.blitFramebuffer(0, 0, cw, ch, 0, 0, gw, gh, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, R.fbB);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, R.pbo);
+    gl.readPixels(0, 0, gw, gh, gl.RGBA, gl.UNSIGNED_BYTE, 0);   // cel = PBO (offset 0) → bez czekania na GPU
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this._bdFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+    this._bdAt = t0;
+    CONSOLE_BACKDROP.mode = 'async';
+    this._bdNoteCost(performance.now() - t0);
+  }
+
+  /** KZ 755 — odbiór odczytu: fence sprawdzany z limitem 0 (bez czekania); gotowy → kopia z PBO → siatka jasności. */
+  _bdPoll(gl) {
+    const st = gl.clientWaitSync(this._bdFence, 0, 0);
+    if (st === gl.TIMEOUT_EXPIRED) return;
+    if (st === gl.WAIT_FAILED) { this._bdDropFence(gl); return; }
+    const t0 = performance.now();
+    const R = this._bdGl;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, R.pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, R.buf);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this._bdDropFence(gl);
+    this._bdStore(lumaGridFromRgba(R.buf, R.gw, R.gh, true), R.gw, R.gh);
+    this._bdNoteCost(performance.now() - t0);
+  }
+
+  /** KZ 755 — bez WebGL2: odczyt przez płótno 2D (synchroniczny) — wołany WYŁĄCZNIE przy otwarciu konsoli i ruchu kamery. */
+  _bdFallback() {
+    const t0 = performance.now();
+    const gw = Math.max(4, Math.round(CONSOLE_BACKDROP_KNOBS.GRID_W)), gh = Math.max(4, Math.round(CONSOLE_BACKDROP_KNOBS.GRID_H));
+    if (!this._bdCanvas) { this._bdCanvas = document.createElement('canvas'); this._bdCtx = this._bdCanvas.getContext('2d'); }
+    if (this._bdCanvas.width !== gw || this._bdCanvas.height !== gh) { this._bdCanvas.width = gw; this._bdCanvas.height = gh; }
+    const c = this._bdCtx;
+    c.clearRect(0, 0, gw, gh);
+    c.drawImage(this.renderer.domElement, 0, 0, gw, gh);
+    this._bdStore(lumaGridFromRgba(c.getImageData(0, 0, gw, gh).data, gw, gh), gw, gh);
+    CONSOLE_BACKDROP.mode = 'fallback';
+    this._bdNoteCost(performance.now() - t0);
+  }
+
+  _bdStore(luma, gw, gh) {
+    CONSOLE_BACKDROP.gw = gw; CONSOLE_BACKDROP.gh = gh; CONSOLE_BACKDROP.luma = luma; CONSOLE_BACKDROP.at = performance.now();
+    const sig = sampleSignature(luma);
+    if (sig !== this._bdSig) { this._bdSig = sig; const u = window.KOSMOS?.uiManager; if (u) u._dirty = true; }
+  }
+
+  /** Koszt CPU wywołań próbnika w klatce (ms; raport bramki — ścieżka async ≈ 0). */
+  _bdNoteCost(ms) { CONSOLE_BACKDROP.costMs = ms; }
+
+  _bdDropFence(gl) { if (this._bdFence && gl) { try { gl.deleteSync(this._bdFence); } catch (e) { /* kontekst utracony */ } } this._bdFence = null; }
+
+  _bdFreeGl(gl) {
+    const R = this._bdGl; if (!R || !gl) { this._bdGl = null; return; }
+    this._bdDropFence(gl);
+    gl.deleteFramebuffer(R.fbA); gl.deleteFramebuffer(R.fbB); gl.deleteRenderbuffer(R.rbA); gl.deleteRenderbuffer(R.rbB); gl.deleteBuffer(R.pbo);
+    this._bdGl = null;
+  }
+
+  /** Sygnatura kamery (fallback bez WebGL2: pomiar tylko, gdy się zmieni). */
+  _bdCameraSig() {
+    const e = this.camera?.matrixWorld?.elements;
+    return e ? Array.from(e, (v) => v.toFixed(3)).join(',') : '';
   }
 
   /**

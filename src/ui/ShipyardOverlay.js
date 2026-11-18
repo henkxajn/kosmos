@@ -19,7 +19,7 @@ import { RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { getName }        from '../i18n/i18n.js';
 import EventBus           from '../core/EventBus.js';
-import { applyConsoleHalo } from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawShipyardConsole, shipyardConsoleScroll, paintHeroContent, heroScrimAlpha } from './ShipyardConsoleView.js';
 import { ShipHologramRenderer } from '../renderer/ShipHologramRenderer.js';
 import { HOLO_TUNING, HOLO_POSE_DEFAULT, dragPose, isDragMove, isDoubleTap } from '../renderer/ShipHologramLogic.js';
@@ -174,7 +174,7 @@ export class ShipyardOverlay extends BaseOverlay {
     // K1c-A — konsola (poświata K0b za całym rysunkiem; zdjęta przez restore). KZ-Shipyard: jedyna ścieżka.
     ctx.save();
     applyConsoleHalo(ctx);
-    try { drawShipyardConsole(this, ctx, W, H); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => drawShipyardConsole(this, ctx, W, H)); } finally { ctx.restore(); }
   }
 
   // ── Tooltip oczekującego zamówienia (brakujące zasoby) ─────────────────────

@@ -11,7 +11,7 @@ import { t, getName, getDesc } from '../i18n/i18n.js';
 // W1-3c — czysty opis układu sił (pasmo + procent); logika poza widokiem, żeby dała się testować.
 import { describePowerBalance } from '../utils/ThreatMath.js';
 import { consoleZones, consoleClockRect, insetRect, CONSOLE_SCREEN_SPECS } from './ConsoleLayoutLogic.js';
-import { drawConsoleHeader, drawZoneFrame, drawZoneRule, drawEyebrow, drawKvRow, drawBar, drawTabular, applyConsoleHalo } from './ConsoleKit.js';
+import { drawConsoleHeader, drawZoneFrame, drawZoneRule, drawEyebrow, drawKvRow, drawBar, drawTabular, applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { consoleRoles } from './ConsoleRolesLogic.js';
 import { NAV_GROUPS, CIV_TABS, getNavGroup } from './CivPanelDrawer.js';
 import { sortIntelEntries, empireRowView, intelDossier, pairFractions, INTEL_LEVELS, INTEL_LEVEL_LABEL_KEY, INTEL_MASK, intelRank,
@@ -57,7 +57,7 @@ export class IntelOverlay extends BaseOverlay {
     // K0b (A) — poświata za całym rysunkiem konsoli; zdjęta przez restore (pasek walki i reszta UI bez niej)
     ctx.save();
     applyConsoleHalo(ctx);
-    try { this._drawConsole(ctx, W, H); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => this._drawConsole(ctx, W, H)); } finally { ctx.restore(); }
   }
 
   // ══ ARC KONSOLE K0b — Wywiad na zestawie konsoli (na stałe od KZ) ═══════════════════════════════════════════════════════

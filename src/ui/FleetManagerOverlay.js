@@ -48,7 +48,7 @@ import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getDesc, getShort, getLocale } from '../i18n/i18n.js';
 // ARC KONSOLE K7-A — Dowództwo na szablonie konsoli (KZ-Command: jedyna ścieżka, flaga consoleCommand zdjęta)
-import { applyConsoleHalo } from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawCommandConsole } from './CommandConsoleView.js';
 import { defaultRegistryFilter, searchInputCss, focusPlan } from './CommandConsoleLogic.js';
 import { dialogAnchorCss } from './CommandInspectorLogic.js';
@@ -331,7 +331,7 @@ export class FleetManagerOverlay {
     // KZ-Command: jedyna ścieżka (dawny pasek zakładek, rejestr pełnej szerokości i strony bez szablonu usunięte).
     ctx.save();
     applyConsoleHalo(ctx);
-    try { drawCommandConsole(this, ctx, W, H); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => drawCommandConsole(this, ctx, W, H)); } finally { ctx.restore(); }
   }
 
   // DOM <input> ręcznego wpisania ilości towaru (wzór EconomyOverlay._openOneShotQtyInput).

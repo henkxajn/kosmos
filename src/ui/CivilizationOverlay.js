@@ -6,7 +6,7 @@
 
 import { BaseOverlay }           from './BaseOverlay.js';
 import { LEADERS }               from '../data/LeaderData.js';
-import { applyConsoleHalo }      from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo }      from './ConsoleKit.js';
 import { drawCivilizationConsole } from './CivilizationConsoleView.js';
 import { applyCivChip }          from './CivilizationConsoleLogic.js';
 
@@ -34,7 +34,7 @@ export class CivilizationOverlay extends BaseOverlay {
     // K5 — poświata za całym rysunkiem konsoli; zdjęta przez restore
     ctx.save();
     applyConsoleHalo(ctx);
-    try { drawCivilizationConsole(this, ctx, W, H); } finally { ctx.restore(); }
+    try { withAdaptiveHalo(ctx, W, H, () => drawCivilizationConsole(this, ctx, W, H)); } finally { ctx.restore(); }
   }
 
   // ══════════════════════════════════════════════════════════════════════════

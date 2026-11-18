@@ -16,7 +16,7 @@ import EntityManager     from '../core/EntityManager.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import { t, getName } from '../i18n/i18n.js';
 import { getIconPath } from './ResourceIcons.js';
-import { applyConsoleHalo } from './ConsoleKit.js';
+import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawEconomyConsole } from './EconomyConsoleView.js';
 import { drawProductionConsole } from './ProductionConsoleView.js';
 import { applyEconChip, taxEffect } from './EconomyConsoleLogic.js';
@@ -452,8 +452,10 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.save();
     applyConsoleHalo(ctx);
     try {
-      if (page === 'economy') drawProductionConsole(this, ctx, W, H);   // K4 — Produkcja
-      else drawEconomyConsole(this, ctx, W, H, page);
+      withAdaptiveHalo(ctx, W, H, () => {
+        if (page === 'economy') drawProductionConsole(this, ctx, W, H);   // K4 — Produkcja
+        else drawEconomyConsole(this, ctx, W, H, page);
+      });
     } finally { ctx.restore(); }
   }
 
