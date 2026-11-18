@@ -1224,3 +1224,20 @@ Flaga `FEATURES.consoleCommand` (OFF = dziś bit w bit, 15 stanów identycznych 
   jednostek i etykieta zaopatrzenia przez i18n (tylko wyświetlanie). Keeper 387/0, mutacje 9/9 + 5/5, żywy silnik 0 wyjątków.
 
 Następny krok: KZ (flagi na stałe, ścieżki OFF usunięte); 750 i 755 trafiają tam.
+
+## ARC KONSOLE — KZ: wszystkie konsole na stałe + Finding 755 (smoke właściciela PASS 2026-11-18) — ARC KONSOLE ZAMKNIĘTY
+
+- **Commity:** `d4bb003` KZ-Civ (Cywilizacja + Dyson) · `8e67ba2` KZ-Dipl (Dyplomacja, Wywiad, Wojny) · `8701aa8` KZ-Shipyard
+  (flagi `consoleShipyard` + `shipHologram`; U → Stocznia zawsze) · `eff0233` KZ-Command (`consoleCommand`; FleetManagerOverlay
+  6519 → 3012 linii, graf wywołań skryptem) · `d3a8d16` KZ-Kit (`consoleKit`; tło = dawny tryb `live` z ustawieniami właściciela,
+  `glass` / `opaque` usunięte) · `5d2e7fd` fix(755).
+- **Metoda:** jak KZ-E — tylko ścieżka konsoli, gałęzie OFF i wszystko, czego używały tylko one, usunięte; keepery ON-vs-OFF →
+  bezwzględne piny konsoli; tożsamość dziennika rysowania i stref wobec `99bc358` przy 1600×1041 i 1280×833 = 0 różnych.
+- **755:** poświata tekstu konsoli rośnie tylko nad jasnym tłem (per linia, wszystkie strefy), bez prostokątów; pomiar jasności
+  asynchroniczny (WebGL2: blit → PBO → fence, klatka nigdy nie czeka) — próbnik ≈ 0,07 ms na klatkę (wersja synchroniczna 4–16 ms).
+- **Findingi:** zamknięte usunięciem 745 i część OFF 747; 755 ✅; zgłoszone 756 (`createUnit` przyjmuje nieznany archetyp),
+  757 (samodzielny ekran U bez gospodarza), 758 (EN Scrap / Disband).
+- **Testy:** sweep 426/426, `check-i18n` PASS; żywy silnik (wszystkie ekrany i strony, Stocznia, Dowództwo, Rynek z placówką)
+  0 błędów strony przy obu rozmiarach.
+- **Zamknięcie arcu:** CONSOLES_PLAN.md §25 — poza arcem: Kolonie / ekran planety, Nauka / Obserwatorium, mechanika wyboru stoczni
+  (§14), endgame / Dyson; otwarte: 730, 736, 740, 741, 744, 748, 750, 756–758.

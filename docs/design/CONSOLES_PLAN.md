@@ -1,12 +1,15 @@
 # CONSOLES — visual reform of the full-screen tabs (plan and findings registry)
 
+> **ARC CONSOLES CLOSED 2026-11-18** — every full-screen tab is permanently a console; all `console*` flags and OFF paths are
+> removed (KZ-E §18, KZ §24). Close-out, out-of-arc topics and the open findings list: **§25**.
+
 Status: **Phase A closed; K0a delivered (`8a820d2`, owner PASS 2026-11-16 — §8); K0b delivered (`c36ac18` + `b4b71a4`,
 owner PASS 2026-11-16 — §9); K1a delivered (`3f41ba3`, owner OK 2026-11-16 after one look round — §10); K1b delivered (`574ee3f`, owner PASS
 2026-11-16 after three review rounds — §11); K1c-A delivered (`301b66b`, owner PASS 2026-11-16 — §12); K1c-B delivered (`eb59908`, owner PASS
 2026-11-16 — §13) — **Shipyard console DONE**; K2 delivered (`1685293` + `1f6c960`, owner PASS 2026-11-16 — §15) — **Diplomacy group DONE**; K3 delivered (`79c8ba3` + `a75a402` +
 `bd72f73`, owner PASS 2026-11-17 — §16); K4 delivered (`886b659`, owner PASS 2026-11-17 — §17) — **Economy group DONE**; KZ-E delivered (`f47b0b8` — §18); K5 delivered (`3678990` fix(743) + `e3af2db`, owner PASS 2026-11-17 — §19) — **Civilization group DONE**; K6 moved out of this arc (§16, owner 2026-11-17).** Phase A
 (read-only audit) delivered 2026-11-16; decisions D-K-5…D-K-20 signed by the owner 2026-11-16 (§6.2; D-K-5 amended at
-the K0a gate). Register: findings #723–#749 filed; **next free finding number: 750**.
+the K0a gate). Register: findings #723–#758 filed; **next free finding number: 759** (§25).
 Anchor: `e5e422c` (HEAD = main). Tree at audit time: the only tracked change was `.claude/settings.local.json` (harness
 allowlist, not game code); 41 untracked files, all older than 2026-11-02, none from the combat-visuals arc.
 Handover: `C:\Users\Komputer\kosmos-handover\consoles-phase-a\` (`STOP_A.md`, `kontakt_now.html`, `shots_now/`,
@@ -321,7 +324,7 @@ Hit zones stay per screen (first-hit-wins in BaseOverlay; Command keeps its own 
 
 ## 5. Findings (next free number verified: **723**; the brief expected 612 — the CV arc filed #612–#722)
 
-This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** (K4, §17), **#743–#744** (K5, §19) **#745–#746** (K7-A, §20) and **#747–#749** (K7-B, §22). **Next free finding number: 750.**
+This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** (K4, §17), **#743–#744** (K5, §19) **#745–#746** (K7-A, §20) and **#747–#749** (K7-B, §22), **#750–#755** (K7-C, §23), **#756–#758** (KZ, §24). **Next free finding number: 759.**
 
 | # | Status | Finding | Evidence | Step |
 |---|---|---|---|---|
@@ -346,12 +349,17 @@ This plan files **#723–#737** (Phase A), **#738–#741** (K3, §16), **#742** 
 | **741** | ⚪ | **AI partner colonies may hold 0 Kr, so SELL on Rynek can be dead**: settlement needs `aiCol.credits ≥ total`; on GATE-S4 the partner colony shows 0 Kr — check whether AI colony credits ever accumulate | `TradeOrderBoard._settle`; AI colony `credits` | audit later (economy) |
 | **742** | ✅ K4 (console path) · KZ-E (the flag-OFF payload without `colonyId` is gone) | **Production export toggles changed the wrong colony**: today's [ Przyjmuj ] and tier chips emit `factory:setExportEnabled` / `setExportTier` without a colony, and `FactorySystem` applies them to the ACTIVE colony (`window.KOSMOS.factorySystem === this`) while the page shows the colony picked in the filter — a click on another colony's prefs silently changed the active colony's | `EconomyOverlay._handleFactoryBtn` export cases; `FactorySystem` listeners | K4 — the console sends `colonyId`; the listener honours it (`exportTarget`), no `colonyId` = today's behaviour |
 | **743** | ✅ K5 (`3678990`) | **Dyson 3D stage and rings lost after loading a save**: `DysonSystem.restore` never emitted `dyson:visualStageChanged` and `ThreeRenderer.switchSystem` (`_disposeAllMeshes`) zeroed `_dysonStage` — measured: stage 1 + rings before save, stage 0 and no rings after load | live probe K5 (`k5.json` `dysonBeforeSave` / `dysonAfterLoad`); `DysonSystem.restore`, `ThreeRenderer._disposeAllMeshes` | K5 — `dysonViewStage` + `ThreeRenderer._restoreDysonStage()` after restore, after `switchSystem` and on segment completion; rings only around the home star |
-| **745** | ⚪ (console path ✅ K7-A; OFF until KZ) | **Today's registry timeline labels lanes by table index**: `_drawTimelinePanel` names lane *i* after `rows[i]`, but `buildTimelineRows` skips wrecks and contacts — with wrecks shown a ship's mission bar sits next to another name (executed: Bravo's recon bar labelled «Aaa wrak») | `FleetManagerOverlay._drawTimelinePanel`; `FleetPictureLogic.buildTimelineRows` | K7-A (console labels by `entryId`) |
+| **745** | ✅ KZ `eff0233` (closed by removal — the flag-OFF registry and `_drawTimelinePanel` are gone; console labels by `entryId`) | **Today's registry timeline labels lanes by table index**: `_drawTimelinePanel` names lane *i* after `rows[i]`, but `buildTimelineRows` skips wrecks and contacts — with wrecks shown a ship's mission bar sits next to another name (executed: Bravo's recon bar labelled «Aaa wrak») | `FleetManagerOverlay._drawTimelinePanel`; `FleetPictureLogic.buildTimelineRows` | K7-A (console labels by `entryId`) |
 | **746** | ✅ `44dd164` | **Camera following a ship on full-system recon goes to where the recon started** (owner: outliner double-click on an exploration ship in another system): `_startForeignRecon` sets `in_transit` without `vessel:launched`, so the start body's orbit stays in `OrbitalSpaceSystem`; `_tickOrbitingVessels` (on `physics:updated`, right before `_updateCameraFocus`) put the sprite on that orbit every tick → camera goal 0.17 u from the start body, ship 17–43 u away. Same root cause as part of the «POKAŻ» unreliability | live probe `reconrun` (ship in `sys_059`, time running); `ThreeRenderer._tickOrbitingVessels`, `VesselManager._startForeignRecon` | fixed at the reader: in-flight vessels skip the orbit loop (after: goal 0.02–0.08 u from the ship) |
-| **747** | ✅ K7-B `0eab554` (console path; flag-OFF screen keeps the gap until KZ) | **Fleet disband and „new fleet” unreachable in the live Command since stage 3g**: the only producer of the `fleetCreate` / `fleetDisband` zones was the dormant left list of the 2D map (removed in K7-pre); `_drawRightFleet` had rename / doctrine / retreat / orders but no disband. Fix: the list zone's „Floty” section gets `[ + NOWA FLOTA ]` (`fleetCreate` → `_handleCreateFleet`), the fleet inspector `[ ROZWIĄŻ FLOTĘ ]` (`fleetDisband` → `_handleDisbandFleet`, today's ConfirmModal); creating via bulk assign stays. Keeper `console_inspector_smoke` K (red on `407607d`). |
+| **747** | ✅ K7-B `0eab554` (console path) · KZ `eff0233` (the flag-OFF screen without disband is gone) | **Fleet disband and „new fleet” unreachable in the live Command since stage 3g**: the only producer of the `fleetCreate` / `fleetDisband` zones was the dormant left list of the 2D map (removed in K7-pre); `_drawRightFleet` had rename / doctrine / retreat / orders but no disband. Fix: the list zone's „Floty” section gets `[ + NOWA FLOTA ]` (`fleetCreate` → `_handleCreateFleet`), the fleet inspector `[ ROZWIĄŻ FLOTĘ ]` (`fleetDisband` → `_handleDisbandFleet`, today's ConfirmModal); creating via bulk assign stays. Keeper `console_inspector_smoke` K (red on `407607d`). |
 | **748** | ⚪ | **Logistics-pool toggle unreachable on today's ship panel when the ship has no mission actions**: `_drawActions` returns early on an empty `getAvailableActions` list (in flight), so the pool toggle — membership is permanent, not dock-bound — is not drawn; scrap and refuel likewise. The console inspector keeps parity for the pool (no zone) and shows scrap / refuel as disabled chips with a reason. |
 | **749** | ✅ `29b7e7d` | **Ship rename input started with the label „Zmień nazwę statku”, not the ship's name**: `_renameVessel` passed `t('fleetPanel.rename')` as the initial value. Now the ship's current name (selected on open); the label only when the ship is gone. Keeper `rename_vessel_prefill_smoke` (red on `407607d`). |
 | **744** | ⚪ | **Dead leader trait `dysonProgress`**: Viktor Havel-Osei's bonus «Sfera Dysona ×3 szybciej» (`LeaderData.js:193`) is shown to the player but `DysonSystem.getDysonProgressMultiplier()` is read nowhere | `grep dysonProgress src` | later — with the new endgame design (owner 2026-11-17: Dyson's future decided there) |
+| **750** | ⚪ | **Atlas «set as mission target» branch unreachable since K7-pre**: `map_body` sets the configurator target only when `_missionConfig.step === 'select'`, which cannot hold on the Atlas page (`_switchTab` drops it) | `FleetManagerOverlay._handleHit` `map_body` | K7-C (§23); not flag-bound — open |
+| **755** | ✅ KZ `5d2e7fd` | **Console text loses readability over a bright backdrop** (star glow / lit body close up behind list, inspector, header chips, hero lines) | owner gate K7-C; f755 frames | KZ (§24): adaptive text halo + async luminance sampling |
+| **756** | ⚪ | **`GroundUnitManager.createUnit` accepts a non-existent archetype id silently** (no error, no refusal reason); not called by the game today | KZ-B live probe staging | — |
+| **757** | ⚪ | **The standalone U screen has no in-game host**: U routes to the Shipyard (KZ-Shipyard), `UIManager._hitTestCivPanel` / `_drawCivPanel` have no callers, so `UnitDesignOverlay.draw` / `_drawShipDesigner` / the pinned footer are unreachable (the instance stays live as the shared editor) | KZ-Shipyard keeper report | candidate removal step |
+| **758** | ⚪ | **EN label mismatch**: console inspector chip «Scrap (75% refund)» (`cmdInsp.scrap`) vs the confirm title «Disband (75% refund)» (`fleet.disbandReturn`); PL consistent | KZ-Command keeper report | — |
 
 ## 6. Proposed cut, decisions, effort
 
@@ -1193,3 +1201,61 @@ three owner changes applied after the gate (below). Handover `C:\Users\Komputer\
   unit selected, 0 page exceptions.
 - **Next:** remaining arc steps per §6.1 — KZ (flags permanent, OFF paths removed) for Command, Civilization and the other screens; 750 and
   755 go there.
+
+## 24. KZ — delivered (all console flags permanent, OFF paths removed; Finding 755)
+
+Owner smoke PASS 2026-11-18 (KZ-Civ, KZ-Dipl, KZ-Shipyard, KZ-Command, KZ-Kit); 755 approved after a second iteration.
+Method per screen (as KZ-E §18): console path only, OFF branches and everything only they use deleted (grep proof + LOC in each
+commit body), ON-vs-OFF keepers turned into absolute console pins (exact zone sets, click = effect), removed pins listed with a
+reason in the keeper headers, mutations red, draw log + hit zones identical to `99bc358` at 1600×1041 and 1280×833 with the
+failing control (`c3e8468`, `fleet_ground` red).
+
+| Commit | Step | Product (net) | Keepers / proof |
+|---|---|---|---|
+| `d4bb003` | KZ-Civ — Civilization + Dyson; flag `consoleCivilization` | −1086 | `console_civilization` 60/0; mutations 8/8 |
+| `8e67ba2` | KZ-Dipl — Diplomacy, Intel, War; flags `consoleDiplomacy`, `consoleIntel` | −1548 | 13 keepers; mutations 51/51 |
+| `8701aa8` | KZ-Shipyard — flags `consoleShipyard` + `shipHologram`; U → Shipyard unconditionally | −535 | 6 keepers; mutations 16/16 |
+| `eff0233` | KZ-Command — flag `consoleCommand`; FleetManagerOverlay 6519 → 3012 (35 unreachable methods by a call-graph script, 6 producer-less `case`s, 30 i18n keys) | −3573 | 23 keepers; mutations 33/33 |
+| `d3a8d16` | KZ-Kit — flag `consoleKit`; backdrop = former `live` mode with the owner's settings (bright 0.4, blur 0, sat 1, scrim 0; Observatory exempt); `glass` / `opaque` removed; tune helpers kept | −59 | 3 keepers; mutations 10/10 |
+| `5d2e7fd` | fix(755) — adaptive console text halo + async luminance sampling | +312 | `console_backdrop_smoke` 53/0; mutations 11/11 + 8/8 |
+
+- **Permanence:** all 11 console screens are in `PERMANENT_KIT_SCREENS`; `CONSOLE_KIT_SCREENS` is empty (kept for a future
+  flagged screen). No `FEATURES.console*` key is left.
+- **Call-graph lesson (KZ-Command):** the first pass did not recognise one-line methods and swallowed `_fleetActionDef` into a
+  neighbour's range — the console configurator threw; a group-B keeper caught it before commit. Fixed script + a configurator
+  draw pin + mutation.
+- **755 (approved approach):** while a console draws, `fillText` estimates its line rect (monospace, no `measureText`) and reads
+  the seen luminance under it (85th percentile of a 48×28 grid × filter brightness); strength 0 below 0.08, full at 0.30; halo
+  2 → 7 px + 1–2 extra shadow passes; strength 0 → the original call, no ctx change. No fills or rectangles (the first
+  iteration — a zone dim — read as a grey rectangle and was dropped). Sampling: WebGL2 async readback every 200 ms (MSAA resolve
+  blit, downsample blit, `readPixels` into a PBO + fence, polled with `clientWaitSync(…, 0)`); fallback without WebGL2 only on
+  console open / camera move. Measured: sampler mean 0.06–0.08 ms per frame, max 0.9 ms (the synchronous first version cost
+  4–16 ms per sample); UI draw +0.02–0.1 ms; dark-backdrop control identical call for call.
+- **Live engine (CDP, 1600×1041 + 1280×833):** every console screen and page with one action; Shipyard design saved from the UI,
+  [BUDUJ] → one `fleet:buildRequest`, hologram drag, [PLAN], U → Shipyard; Command configurator, POKAŻ, Jednostki wheel; Trade
+  market with an outpost active; close — 0 page errors.
+- **Findings:** closed by removal 745, the OFF part of 747 (and 735 OFF part, 739, 742 in KZ-Dipl / KZ-E); 755 ✅; filed 756
+  (`createUnit` accepts an unknown archetype), 757 (standalone U screen has no host), 758 (EN Scrap / Disband labels).
+  Notes for other registries: Finding 159 (`map_body` first-hit) no longer has a carrier in Command; the `return_home` branch of
+  `_handleAction` has no producer (sweep 127). Sweep 426/426, `check-i18n` PASS (FleetManagerOverlay literal ratchet 3 → 0).
+
+## 25. ARC CONSOLES — CLOSED (2026-11-18)
+
+**Delivered:** K0a console kit + live dimmed backdrop (§8) · K0b Intel template (§9) · K1a ship hologram (§10) · K1b Workshop
+normalizer (§11) · K1c-A/B Shipyard console (§12–13) · K2 Diplomacy + War (§15) · K3 Budget, Flows, Trade (§16) · K4 Production
+(§17) · KZ-E Economy permanent (§18) · K5 Civilization + Dyson (§19) · K7-A Command registry (§20) · K7-pre dormant 2D map removed
+(§21) · K7-B ship / fleet inspector (§22) · K7-C enemy panel, mission setup, Atlas, Logistics, Ground (§23) · KZ all flags permanent
++ Finding 755 (§24).
+
+**Out of this arc (own audit, plan and owner sign-off):**
+- **Colonies / planet-screen arc** — the Colonies tab and the planet screen (ColonyOverlay V1/V2, `_stationMode`) were not reskinned.
+- **Science / Observatory arc** — Tech and Observatory stay grouped non-console screens (K6 moved out, §16).
+- **Shipyard choice mechanics** — §14 (pick any capable shipyard, build and reserve at that shipyard; data / save / AI impact).
+- **Endgame / Dyson topic** — Dyson progression and its leader trait (744) belong to the endgame design, not to the UI arc.
+
+**Open findings at close:** 730 🟠 (scene renders under every tab — live backdrop cost accepted; a low-GPU mode would be designed
+anew) · 736 ⚪ (combat strip overflows the header slot with 2–3 battles) · 740 ⚪ (founding an outpost switches the active colony)
+· 741 ⚪ (AI partner colonies may hold 0 Kr — SELL can be dead) · 744 ⚪ (dead leader trait `dysonProgress`) · 748 ⚪ (logistics-pool
+toggle unreachable for ships without mission actions — console keeps parity) · 750 ⚪ (Atlas «set as mission target» branch
+unreachable) · 756 ⚪ · 757 ⚪ · 758 ⚪; earlier minors still open: 726 (U-screen module labels — see 757), 728, 729, 731, 733, 734
+(remaining dormant code outside Command). **Next free finding number: 759.**
