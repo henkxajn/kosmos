@@ -19,6 +19,15 @@
 //     palety klasy gwiazdy), żeby dwa światy tego samego archetypu nigdy nie wyglądały identycznie,
 //   • CS-11 (gazowe olbrzymy) — `gasPreset` (D-CS-5: domyślnie i awaryjnie DZISIEJSZY wygląd).
 // ⚠ Wartości `field`, `atmosphere`, `clouds` to PLACEHOLDERY — strojone w CS-4 / CS-6 (nie są pinowane keeperami).
+// CS-4a (SurfaceField, plan §3.4) — `field` strojony na arkuszu kontaktowym; przepis = id archetypu. Pokrętła:
+//   octaves, freq (bazowa częstotliwość), warp (zniekształcenie domeny), ridge (grzbiety), relief (amplituda ciał bez
+//   atmosfery), continent (udział niskiej częstotliwości — kontynenty), craterDensity / craterScale / craterDepth,
+//   basinChance (szansa wielkiego basenu z ziarna), polarCapBias (próg czap: 0 → t < 0.06, 1 → t < 0.26),
+//   seaFromWaterCoverage (terran: morze = zapisane waterCoverage) albo seaShare (stały udział cieczy), tropic / wetBias,
+//   islands (ocean), lava / calderas (volcanic), volcanoes (hothouse), polarLow (jeziora Tytana przy biegunach),
+//   maria (Księżyc), scarps (Merkury), veins (żyły planetoid), patches (ciemne plamy), cracks (lineae), paterae (Io),
+//   regional (gęstość kraterów: stare wyżyny vs równiny), lavaPlains (scorched: ciemne gładkie równiny lawowe),
+//   rifts / oldIce (ice: ryfty, regiony starego lodu i gładkich równin).
 //
 // ── Reguły dopasowania (`match`) ──────────────────────────────────────────────────────────────────────────────
 // Wiersz ma listę klauzul; klauzula pasuje, gdy WSZYSTKIE jej warunki są spełnione. Wynik wiersza = najwyższy
@@ -141,7 +150,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: ['breathable'], flux: [FLUX_HZ_OUTER, FLUX_HOT], priority: 60 },      // oddychalny w HZ
     ],
     // ZAWSZE ma oceany: pokrycie wodą = zapisane `waterCoverage` (pasmo `waterBand`, WATER_BANDS).
-    field: { octaves: 6, warp: 0.35, ridge: 0.5, craterDensity: 0.0, seaFromWaterCoverage: true, polarCapBias: 0.5 },
+    field: { octaves: 6, warp: 0.35, ridge: 0.5, craterDensity: 0.0, seaFromWaterCoverage: true, polarCapBias: 0.5, continent: 1.0, freq: 1.6 },
     biomes: [
       { class: 'deep_sea', terrain: 'ocean', colorRole: 'deepSea' },
       { class: 'shallow_sea', terrain: 'ocean', colorRole: 'shallowSea' },
@@ -163,7 +172,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       // Rzadki z założenia (wygląd świata-oceanu niesie zwykle terran `oceanic`): dużo wody w HZ.
       { atmosphere: WITH_ATM, flux: [FLUX_HZ_OUTER, FLUX_HOT], h2o: [WATER_RICH_H2O, null], priority: 65 },
     ],
-    field: { octaves: 5, warp: 0.3, ridge: 0.3, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.4 },
+    field: { octaves: 5, warp: 0.3, ridge: 0.3, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.4, seaShare: 0.9, islands: 0.25, continent: 0.4, freq: 1.7 },
     biomes: [
       { class: 'deep_sea', terrain: 'ocean', colorRole: 'deepSea' },
       { class: 'shallow_sea', terrain: 'ocean', colorRole: 'shallowSea' },
@@ -182,7 +191,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: ['breathable'], flux: [FLUX_WARM, null], h2o: [JUNGLE_H2O_MIN, null], priority: 61 },
       { atmosphere: ['breathable'], tempC: [JUNGLE_TEMP_MIN_C, null], h2o: [JUNGLE_H2O_MIN, null], priority: 61 },
     ],
-    field: { octaves: 6, warp: 0.45, ridge: 0.35, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.15 },
+    field: { octaves: 6, warp: 0.45, ridge: 0.35, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.15, seaShare: 0.18, wetBias: 0.15, tropic: 0.5, continent: 0.6, freq: 1.5 },
     biomes: [
       { class: 'shallow_sea', terrain: 'ocean', colorRole: 'shallowSea' },
       { class: 'swamp', terrain: 'forest', colorRole: 'swamp' },
@@ -200,7 +209,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: ['breathable'], tempC: [JUNGLE_TEMP_MIN_C, null], h2o: [null, JUNGLE_H2O_MIN], priority: 61 },
       { planetType: ROCKY, atmosphere: ['thin'], h2o: [null, WATER_RICH_H2O], flux: [FLUX_FROST, null], priority: 40 },  // Mars-like
     ],
-    field: { octaves: 5, warp: 0.25, ridge: 0.45, craterDensity: 0.15, seaFromWaterCoverage: false, polarCapBias: 0.3 },
+    field: { octaves: 5, warp: 0.25, ridge: 0.45, craterDensity: 0.35, seaFromWaterCoverage: false, polarCapBias: 0.3, basinChance: 0.5, freq: 1.2 },
     biomes: [
       { class: 'dune_sea', terrain: 'desert', colorRole: 'sand' },
       { class: 'salt_flat', terrain: 'desert', colorRole: 'salt' },
@@ -218,12 +227,15 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: ['breathable'], flux: [null, FLUX_HZ_OUTER], priority: 62 },                   // oddychalny poza HZ = śnieżka
       { planetType: ROCKY, atmosphere: ['none', 'thin'], h2o: [WATER_RICH_H2O, null], flux: [null, FLUX_HZ_OUTER], priority: 40 },  // zamarznięta woda
     ],
-    field: { octaves: 5, warp: 0.2, ridge: 0.6, craterDensity: 0.1, seaFromWaterCoverage: false, polarCapBias: 1.0 },
+    field: { octaves: 5, warp: 0.2, ridge: 0.6, craterDensity: 0.1, seaFromWaterCoverage: false, polarCapBias: 1.0, rifts: 1.0, oldIce: 1.0, freq: 1.4 },
     biomes: [
       { class: 'ice_plain', terrain: 'ice_sheet', colorRole: 'ice' },
       { class: 'cryo_volcano', terrain: 'mountains', colorRole: 'blueIce' },
       { class: 'fractured_ridge', terrain: 'mountains', colorRole: 'blueIce' },
       { class: 'exposed_rock', terrain: 'wasteland', colorRole: 'rock' },
+      { class: 'old_ice', terrain: 'ice_sheet', colorRole: 'oldIce' },          // CS-4a: ciemniejszy stary lód
+      { class: 'smooth_plain', terrain: 'ice_sheet', colorRole: 'smoothIce' },    // CS-4a: gładkie zamarznięte równiny
+      { class: 'rift', terrain: 'wasteland', colorRole: 'rift' },                 // CS-4a: ryfty / szczeliny
     ],
     atmosphere: { tint: '#cfe6ff', density: 0.25 }, clouds: { coverage: 0.15 },
     gridClass: 'by_mass',
@@ -234,7 +246,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { planetType: ROCKY, tempC: [LAVA_TEMP_MIN_C, null], priority: 50 },                                         // świat lawy
       { planetType: ROCKY, mass: [SUPER_EARTH_MASS, null], atmosphere: ['thin'], flux: [FLUX_FROST, null], priority: 50 },  // super-Ziemia, wygazowanie
     ],
-    field: { octaves: 6, warp: 0.3, ridge: 0.7, craterDensity: 0.05, seaFromWaterCoverage: false, polarCapBias: 0.0 },
+    field: { octaves: 6, warp: 0.3, ridge: 0.7, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.0, lava: 1.0, calderas: 0.35, freq: 1.5 },
     biomes: [
       { class: 'lava_field', terrain: 'volcano', colorRole: 'lava' },
       { class: 'caldera', terrain: 'volcano', colorRole: 'lava' },
@@ -251,7 +263,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       // Wenus-like: gęsta atmosfera przy strumieniu powyżej zewnętrznej krawędzi HZ (tam cieplarnia działa).
       { planetType: ROCKY, atmosphere: DENSE, flux: [FLUX_HZ_OUTER, null], priority: 60 },
     ],
-    field: { octaves: 5, warp: 0.4, ridge: 0.4, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.0 },
+    field: { octaves: 5, warp: 0.4, ridge: 0.4, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.0, volcanoes: 0.3, freq: 1.2 },
     biomes: [
       { class: 'acid_flats', terrain: 'wasteland', colorRole: 'acid' },
       { class: 'sulphur_volcano', terrain: 'volcano', colorRole: 'sulphur' },
@@ -267,7 +279,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       // Tytan-like: gęsta atmosfera poza HZ (zimna mgła); tu trafiają też lodowe planety z gęstą atmosferą.
       { atmosphere: DENSE, flux: [null, FLUX_HZ_OUTER], priority: 60 },
     ],
-    field: { octaves: 5, warp: 0.3, ridge: 0.35, craterDensity: 0.05, seaFromWaterCoverage: false, polarCapBias: 0.6 },
+    field: { octaves: 5, warp: 0.3, ridge: 0.35, craterDensity: 0.05, seaFromWaterCoverage: false, polarCapBias: 0.6, seaShare: 0.07, polarLow: 0.3, freq: 1.4 },
     biomes: [
       { class: 'methane_lake', terrain: 'ocean', colorRole: 'methaneLake' },
       { class: 'hydrocarbon_dunes', terrain: 'desert', colorRole: 'tholin' },
@@ -285,7 +297,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: ['none'], flux: [FLUX_HOT, null], priority: 50 },
       { atmosphere: ['none'], tempC: [SCORCHED_TEMP_MIN_C, null], priority: 50 },
     ],
-    field: { octaves: 5, warp: 0.1, ridge: 0.45, craterDensity: 0.55, seaFromWaterCoverage: false, polarCapBias: 0.0 },
+    field: { octaves: 5, warp: 0.1, ridge: 0.45, craterDensity: 0.55, seaFromWaterCoverage: false, polarCapBias: 0.0, scarps: 1.0, basinChance: 0.5, regional: 0.9, lavaPlains: 1.0, relief: 0.3, tropic: 0.5, freq: 1.3 },
     biomes: [
       { class: 'sunbaked_plain', terrain: 'wasteland', colorRole: 'bakedRock' },
       { class: 'crater_floor', terrain: 'crater', colorRole: 'darkRock' },
@@ -301,7 +313,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: ['none'], priority: 30 },   // bezatmosferyczny, słabe światło (Księżyc / Kallisto)
       { priority: 0 },                          // fallback rodziny planet
     ],
-    field: { octaves: 5, warp: 0.1, ridge: 0.4, craterDensity: 0.6, seaFromWaterCoverage: false, polarCapBias: 0.2 },
+    field: { octaves: 5, warp: 0.1, ridge: 0.4, craterDensity: 0.6, seaFromWaterCoverage: false, polarCapBias: 0.2, basinChance: 0.3, regional: 0.8, relief: 0.25, freq: 1.3 },
     biomes: [
       { class: 'regolith_plain', terrain: 'wasteland', colorRole: 'regolith' },
       { class: 'crater_floor', terrain: 'crater', colorRole: 'darkRock' },
@@ -318,12 +330,13 @@ export const BODY_ARCHETYPES = Object.freeze([
       // atmosfera wyrównuje dzień/noc (hothouse / cryo_haze). Flaga tidallyLocked jest zapisana zawsze.
       { planetType: ROCKY, tidallyLocked: true, atmosphere: ['none', 'thin'], priority: 55 },
     ],
-    field: { octaves: 5, warp: 0.25, ridge: 0.45, craterDensity: 0.2, seaFromWaterCoverage: false, polarCapBias: 0.0 },
+    field: { octaves: 5, warp: 0.25, ridge: 0.45, craterDensity: 0.2, seaFromWaterCoverage: false, polarCapBias: 0.0, freq: 1.4 },
     biomes: [
       { class: 'day_side_scorched', terrain: 'desert', colorRole: 'sand' },
       { class: 'terminator_band', terrain: 'tundra', colorRole: 'tundra' },
       { class: 'night_ice', terrain: 'ice_sheet', colorRole: 'ice' },
       { class: 'substellar_rock', terrain: 'wasteland', colorRole: 'darkRock' },
+      { class: 'terminator_sea', terrain: 'ocean', colorRole: 'shallowSea' },     // CS-4a: woda w terminatorze (≈ ½ ziaren)
     ],
     atmosphere: { tint: '#c0a0ff', density: 0.35 }, clouds: { coverage: 0.25 },
     gridClass: 'by_mass',
@@ -358,7 +371,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { moonType: ['rocky'], priority: 10 },   // Księżyc-like
       { priority: 0 },                         // fallback rodziny moon
     ],
-    field: { octaves: 5, warp: 0.1, ridge: 0.35, craterDensity: 0.7, seaFromWaterCoverage: false, polarCapBias: 0.2 },
+    field: { octaves: 5, warp: 0.1, ridge: 0.35, craterDensity: 0.7, seaFromWaterCoverage: false, polarCapBias: 0.2, maria: 1.0, basinChance: 0.25, regional: 0.5, relief: 0.25, freq: 1.3 },
     biomes: [
       { class: 'highlands', terrain: 'wasteland', colorRole: 'highland' },
       { class: 'maria', terrain: 'wasteland', colorRole: 'mare' },
@@ -375,7 +388,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       // Io-like: skalisty, wewnętrzny księżyc gazowego olbrzyma — grzanie pływowe.
       { moonType: ['rocky'], parentType: ['gas'], moonZone: ['inner'], priority: 40 },
     ],
-    field: { octaves: 5, warp: 0.25, ridge: 0.5, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.0 },
+    field: { octaves: 5, warp: 0.25, ridge: 0.5, craterDensity: 0.0, seaFromWaterCoverage: false, polarCapBias: 0.0, paterae: 0.35, freq: 1.3 },
     biomes: [
       { class: 'sulphur_plain', terrain: 'wasteland', colorRole: 'sulphur' },
       { class: 'lava_lake', terrain: 'volcano', colorRole: 'lava' },
@@ -393,7 +406,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { moonType: ['icy'], parentType: ['gas'], moonZone: ['inner', 'mid'], priority: 40 },
       { moonType: ['icy'], parentType: ['ice'], moonZone: ['inner'], priority: 40 },
     ],
-    field: { octaves: 5, warp: 0.15, ridge: 0.65, craterDensity: 0.05, seaFromWaterCoverage: false, polarCapBias: 1.0 },
+    field: { octaves: 5, warp: 0.15, ridge: 0.65, craterDensity: 0.05, seaFromWaterCoverage: false, polarCapBias: 1.0, cracks: 1.0, freq: 1.3 },
     biomes: [
       { class: 'ice_plain', terrain: 'ice_sheet', colorRole: 'ice' },
       { class: 'lineae', terrain: 'tundra', colorRole: 'rustLine' },
@@ -406,7 +419,7 @@ export const BODY_ARCHETYPES = Object.freeze([
   {
     id: 'icy_cratered', family: 'moon', nameKey: 'archetype.icy_cratered.name',
     match: [{ moonType: ['icy'], priority: 10 }],   // Kallisto-like (zewnętrzny, stara skorupa)
-    field: { octaves: 5, warp: 0.15, ridge: 0.45, craterDensity: 0.65, seaFromWaterCoverage: false, polarCapBias: 1.0 },
+    field: { octaves: 5, warp: 0.15, ridge: 0.45, craterDensity: 0.85, seaFromWaterCoverage: false, polarCapBias: 1.0, patches: 1.0, regional: 0.7, relief: 0.2, freq: 1.3 },
     biomes: [
       { class: 'ice_plain', terrain: 'ice_sheet', colorRole: 'dirtyIce' },
       { class: 'crater_floor', terrain: 'crater', colorRole: 'dirtyIce' },
@@ -423,7 +436,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: WITH_ATM, tempC: [null, 0], priority: 50 },
       { atmosphere: WITH_ATM, flux: [null, FLUX_HZ_OUTER], priority: 50 },
     ],
-    field: { octaves: 5, warp: 0.3, ridge: 0.35, craterDensity: 0.05, seaFromWaterCoverage: false, polarCapBias: 0.6 },
+    field: { octaves: 5, warp: 0.3, ridge: 0.35, craterDensity: 0.05, seaFromWaterCoverage: false, polarCapBias: 0.6, seaShare: 0.04, polarLow: 0.3, freq: 1.4 },
     biomes: [
       { class: 'methane_lake', terrain: 'ocean', colorRole: 'methaneLake' },
       { class: 'hydrocarbon_dunes', terrain: 'desert', colorRole: 'tholin' },
@@ -443,7 +456,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       carbonaceous: { base: '#3b3633', accent: '#5a4e44' },
       silicate:     { base: '#8c7b68', accent: '#b3a089' },
     },
-    field: { octaves: 4, warp: 0.05, ridge: 0.3, craterDensity: 0.8, seaFromWaterCoverage: false, polarCapBias: 0.0 },
+    field: { octaves: 4, warp: 0.05, ridge: 0.3, craterDensity: 0.8, seaFromWaterCoverage: false, polarCapBias: 0.0, veins: 1.0, relief: 0.4, craterScale: 0.7, craterDepth: 0.16, freq: 1.6 },
     biomes: [
       { class: 'regolith', terrain: 'wasteland', colorRole: 'regolith' },
       { class: 'solid_rock', terrain: 'mountains', colorRole: 'rock' },
@@ -464,7 +477,7 @@ export const BODY_ARCHETYPES = Object.freeze([
     palettes: {
       icy:          { base: '#c9d6de', accent: '#8a9aa6' },
     },
-    field: { octaves: 4, warp: 0.08, ridge: 0.35, craterDensity: 0.7, seaFromWaterCoverage: false, polarCapBias: 0.0 },
+    field: { octaves: 4, warp: 0.08, ridge: 0.35, craterDensity: 0.7, seaFromWaterCoverage: false, polarCapBias: 0.0, patches: 1.0, relief: 0.4, craterScale: 0.7, craterDepth: 0.16, freq: 1.6 },
     biomes: [
       { class: 'frost_regolith', terrain: 'ice_sheet', colorRole: 'ice' },
       { class: 'dirty_ice', terrain: 'wasteland', colorRole: 'dirtyIce' },

@@ -13,6 +13,8 @@
 //                 (dotychczasowy → 0, seedowany → większość). CS-3a-fix: tryb świata, nie bieżąca flaga —
 //                 przełączenie flagi po starcie nie zmienia wyniku.
 //
+//   csSurface() / csSurfaceAll() — CS-4a: podgląd powierzchni (SurfacePreviewDebug.js).
+//
 // Wywołanie: `csWorlds()` / `csPeek()` / `csArchetypes()` (window) albo `KOSMOS.debug.csWorlds()` itd.
 // Importowalne pod node (bez THREE) — keeper colony_sphere_seeds_smoke wykonuje oba pomocniki.
 
@@ -23,6 +25,7 @@ import { SURFACE_SEED_KINDS } from '../utils/SurfaceSeed.js';
 import { BODY_ARCHETYPES, ARCHETYPE_FAMILIES } from '../data/BodyArchetypes.js';
 import { familyOf, planetoidPaletteOf } from '../utils/BodyArchetypeLogic.js';
 import { HOMEWORLD_TEMP_MIN_C, HOMEWORLD_TEMP_MAX_C } from '../utils/HomeworldClimate.js';
+import { csSurface, csSurfaceAll } from './SurfacePreviewDebug.js';   // CS-4a — podgląd powierzchni
 
 function bodyTypeOf(body, kind) {
   if (kind === 'planet')    return body.planetType ?? '?';
@@ -255,5 +258,5 @@ export function colonySphereDebugHelpers() {
     console.log('[csLifeTick]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll };
 }
