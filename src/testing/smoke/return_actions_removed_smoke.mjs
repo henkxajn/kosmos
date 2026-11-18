@@ -16,10 +16,18 @@
 //   statek na obcej orbicie, ten sam cel. Zamiar bez zmian (zdolność powrotu z mapy zostaje); wzór — `galaxy_warp_ui` T6.
 //
 // A1  PIN   — `return_home` nie wychodzi z `_getAvailableActions` w ŻADNYM stanie
-// A2  PIN   — trzy strefy powrotu nie są renderowane przez żaden panel
+// A2  PIN   — trzy strefy powrotu nie są renderowane przez żaden panel (żywe: inspektor konsoli + panel statku HUD)
+//             i nie mają producenta ani handlera nigdzie w `src/`
 // A3  KONTROLA — mapa galaktyki DALEJ wysyła statek z obcej orbity do domu (menu gwiazdy domu, G3)
 // A4  KONTROLA — `canOrder`: obca orbita OK, `in_transit` odmowa (bramka nietknięta)
-// A5  KONTROLA — silnikowa ścieżka powrotu (handler `foreign_return`) DALEJ dyspozycjonuje skok
+// A5  KONTROLA — silnikowa ścieżka powrotu (`OrderService.issueReturn`, `FleetActions.return_home`) DALEJ dyspozycjonuje skok
+//
+// ⚠ PRZECELOWANE (KZ-Command — dawny panel `_drawRight`, strefy `interstellar_return` / `foreign_return` /
+//   `foreign_return_from_recon` i ich wrapper `_dispatchReturnJump` usunięte z FMO; strefy nie miały producenta od (a')):
+//   A2 renderuje ŻYWE powierzchnie panelu statku — inspektor konsoli Dowództwa (`CommandInspectorView.drawInspector`) i panel
+//   statku HUD (`ShipPanelHudLogic.buildShipPanelModel`) — i dokłada pin całego produktu (napis typu strefy nie występuje
+//   w kodzie `src/`, świadek `'cluster_switch'`); A5 — „sweep 127” się dokonał: silnikowa droga powrotu to fasada
+//   `OrderService.issueReturn` (i bliźniak `FleetActions.return_home`), obie przez `returnJumpTransactional`.
 // A6  PIN ŹRÓDŁOWY — komentarze w `issueOrder` nie powołują się już na przycisk powrotu
 // A7  ZAPIS SKUTKU — lista akcji statku `in_transit` robi się PUSTA (PPM jedyną powierzchnią)
 //
@@ -40,6 +48,11 @@ globalThis.localStorage = {
 };
 
 const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
+const IV                      = await import('../../ui/CommandInspectorView.js');
+const { consoleRoles }        = await import('../../ui/ConsoleRolesLogic.js');
+const L5                      = await import('../../ui/ShipPanelHudLogic.js');
+const { OrderService }        = await import('../../systems/OrderService.js');
+const { FLEET_ACTIONS }       = await import('../../data/FleetActions.js');
 const { getAvailableActions } = await import('../../data/FleetActions.js');
 const { WarpRouteSystem }     = await import('../../systems/WarpRouteSystem.js');
 
@@ -103,14 +116,16 @@ function makeCtx(drawn) {
   };
 }
 
+/** Żywe powierzchnie panelu statku: inspektor konsoli (strefy z rysunku) + panel statku HUD (strefy modelu). */
 function renderRight(mission) {
   vessels.clear(); vessels.set('v_1', makeVessel({ mission }));
-  const o = Object.create(FleetManagerOverlay.prototype);
-  o._selectedVesselId = 'v_1'; o._hitZones = []; o._rightViewH = 0; o._rightContentH = 0;
-  o._collapsedFleets = new Set(); o._collapsedSections = new Set();
+  const o = new FleetManagerOverlay();
+  o._selectedVesselId = 'v_1'; o._hitZones = []; o._cmdDisabled = []; o._cmdTip = null;
   const drawn = [];
-  o._drawRight(makeCtx(drawn), 600, 60, 320, 700, vesselManager, missionSystem, colonyManager, 'planet_home');
-  return { drawn, zones: o._hitZones.map(z => z.type) };
+  IV.drawInspector(o, makeCtx(drawn), { x: 900, y: 60, w: 294, h: 4000 }, consoleRoles(),
+    { vMgr: vesselManager, ms: missionSystem, colMgr: colonyManager, activePid: 'planet_home' });
+  const hud = L5.modelZones(L5.buildShipPanelModel(vessels.get('v_1'), { K: globalThis.KOSMOS, fmo: o })).map(z => z.type);
+  return { drawn, zones: [...o._hitZones.map(z => z.type), ...hud], insp: o._hitZones.map(z => z.type), hud };
 }
 
 // ── A1 — akcja `return_home` nie wychodzi z listy akcji ───────────────────────────────────────
@@ -134,9 +149,28 @@ for (const [label, r] of [['Interstellar Arrival', arrival], ['orbita obcego cia
   const rets = r.zones.filter(z => /return/i.test(z));
   ok(rets.length === 0, `ekran „${label}" bez stref powrotu (znaleziono: ${JSON.stringify(rets)})`);
 }
-ok(arrival.zones.includes('cluster_switch'),
-  'KONTROLA PINU: ekran Interstellar Arrival FAKTYCZNIE się narysował (ma cluster_switch) — ' +
+ok(arrival.insp.includes('cluster_switch') && arrival.hud.includes('cluster_switch'),
+  'KONTROLA PINU: ekran Interstellar Arrival FAKTYCZNIE się narysował na obu powierzchniach (ma cluster_switch) — ' +
   'brak stref powrotu nie bierze się z braku rysowania');
+// Pin całego produktu: trzy typy stref powrotu nie występują jako napis w kodzie `src/` (komentarze zdjęte, bez `src/testing/`
+// i `src/lib/`) — ani producent, ani `case` handlera. Świadek: `'cluster_switch'` (producent + handler) JEST w tym samym tekście.
+{
+  const { readdirSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const strip = (t) => t.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const files = [];
+  const walk = (d) => { for (const n of readdirSync(d)) { const f = join(d, n); if (statSync(f).isDirectory()) { if (n !== 'testing' && n !== 'lib') walk(f); } else if (n.endsWith('.js')) files.push(f); } };
+  walk(root);
+  const code = files.map((f) => strip(readFileSync(f, 'utf8'))).join('\n');
+  const hits = ['interstellar_return', 'foreign_return', 'foreign_return_from_recon'].filter((z) => code.includes(`'${z}'`));
+  ok(files.length > 100 && code.includes("case 'cluster_switch':") && code.includes("zone('cluster_switch'") && hits.length === 0,
+    `strefy powrotu bez producenta i bez handlera w CAŁYM src/ (plików ${files.length}; trafienia: ${JSON.stringify(hits)})`);
+  const P = FleetManagerOverlay.prototype;
+  ok(typeof P._dispatchReturnJump === 'undefined' && typeof P._toastReturnFailed === 'function',
+    'FMO: wrapper `_dispatchReturnJump` usunięty razem z jedynymi wołającymi; komunikat odmowy `_toastReturnFailed` zostaje');
+}
 
 // ── A3 — KONTROLA: mapa galaktyki dalej wysyła do domu (POJEDYNCZY PUNKT AWARII) ──────────────
 header('A3 KONTROLA — menu gwiazdy domu w trybie galaktyki wysyła statek z obcej orbity do domu');
@@ -162,15 +196,21 @@ ok(wrs.canOrder(makeVessel({ position: { state: 'in_transit', dockedAt: null, x:
   'statek w locie in-system: dalej odmowa in_transit (bramka nietknięta)');
 
 // ── A5 — KONTROLA: silnikowa ścieżka powrotu ŻYJE (usuwamy przycisk, nie zdolność) ────────────
-header('A5 KONTROLA — handler foreign_return dalej dyspozycjonuje skok');
+// KZ-Command: handler strefy `foreign_return` usunięty (sweep 127 — martwy kod); silnikową drogą powrotu jest fasada
+// `OrderService.issueReturn` (żywa konsumentka: `FleetManagerOverlay._handleAction`) i jej bliźniak `FleetActions.return_home`.
+header('A5 KONTROLA — OrderService.issueReturn i FleetActions.return_home dalej dyspozycjonują skok do domu');
 vessels.clear(); vessels.set('v_1', makeVessel());
 warpCalls = [];
-const o5 = Object.create(FleetManagerOverlay.prototype);
-o5._hitZones = [];
-o5._handleHit({ type: 'foreign_return', data: { vesselId: 'v_1', fromSystemId: 'sys_home' } });
+const os5 = new OrderService();
+const r5 = os5.issueReturn('v_1');
+ok(r5 === true || r5?.ok === true, `OrderService.issueReturn z obcej orbity: przyjęte (${JSON.stringify(r5)})`);
+ok(warpCalls.length === 1 && warpCalls[0].id === 'v_1' && warpCalls[0].sys === 'sys_home',
+  `fasada wydała skok do domu (${JSON.stringify(warpCalls)})`);
+vessels.clear(); vessels.set('v_1', makeVessel());
+warpCalls = [];
+FLEET_ACTIONS.return_home.execute(vessels.get('v_1'), { vesselManager, missionSystem });
 ok(warpCalls.length === 1 && warpCalls[0].sys === 'sys_home',
-  `ścieżka silnikowa nietknięta — skok do domu wydany (${JSON.stringify(warpCalls)}); ` +
-  'dead code sprząta osobny sweep 127, nie ten commit');
+  `bliźniak FleetActions.return_home też wydaje skok do domu (${JSON.stringify(warpCalls)})`);
 
 // ── A6 — PIN ŹRÓDŁOWY: komentarze issueOrder już nie kłamią ───────────────────────────────────
 header('A6 PIN ŹRÓDŁOWY — issueOrder nie powołuje się na przycisk powrotu');

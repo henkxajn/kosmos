@@ -34,6 +34,8 @@
 //       bez zmian; kolejność kliku przy ON — panel przed kartą walki (rysunek = klik)
 //   (S12 — przeszkoda kart z prostokąta panelu, Finding 544 — usunięty w T4-2 razem z kartą ciała i panelem stacji)
 //   S13 STROJENIE 1 (Finding 547) — PL „🗑 Rozbiórka (zwrot 75%)”; tytuł okna potwierdzenia z tego samego klucza
+//       (KZ-Command: S13c czyta etykietę przycisku z czipu panelu statku HUD — dawny `_drawActions` usunięty; S13d — czip
+//       inspektora konsoli w PL mówi to samo)
 //   ⚠ S4k (strojenie 1) — bramka kliku panelu w `_vesselPanelClick` (wołana z `handleClick` przed / po karcie walki).
 //
 // ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `shipPanelOutliner` na stałe ON —
@@ -650,9 +652,29 @@ header('S13 strojenie 1 (Finding 547) — PL „Rozbiórka”, tytuł potwierdze
   setLocale('pl');
   ok(plTxt === '🗑 Rozbiórka (zwrot 75%)' && !/Disband/.test(plTxt), `S13a PL: „${plTxt}” — bez angielskiego słowa`);
   ok(enTxt === '🗑 Disband (75% refund)', `S13b KONTROLA: EN bez zmian („${enTxt}”)`);
+  // KZ-Command: przycisk dawnego panelu `_drawActions` (FMO) usunięty — etykietę przycisku czytamy WYKONANIEM z żywych
+  //   producentów: czip panelu statku HUD (`buildShipPanelModel`) i czip inspektora konsoli (`shipActionGroups`).
   const conf = body(FMO_SRC, '  async _confirmVesselDisband(vessel) {');
-  ok(/title:\s*t\('fleet\.disbandReturn'\)/.test(conf) && /ctx\.fillText\(t\('fleet\.disbandReturn'\), dbx \+ 8, cy \+ 16\)/.test(FMO_SRC),
-    'S13c KONTROLA: tytuł okna potwierdzenia i etykieta przycisku — ten sam klucz (`fleet.disbandReturn`; od T3)');
+  let hudLabel = null, inspKey = null;
+  try {
+    const L5 = await import('../../ui/ShipPanelHudLogic.js');
+    const CIL = await import('../../ui/CommandInspectorLogic.js');
+    const vD = { id: 'v_d', name: 'D', shipId: 'hull_small', colonyId: 'p_d', modules: [], fuel: { current: 1, max: 1 },
+      position: { state: 'docked', dockedAt: 'p_d', x: 0, y: 0 } };
+    const KD = { colonyManager: { getColony: () => ({ planetId: 'p_d' }), _getShipyardLevel: () => 1, activePlanetId: 'p_d' }, vesselManager: {} };
+    hudLabel = (L5.buildShipPanelModel(vD, { K: KD, fmo: null })?.chips ?? []).find((c) => c.id === 'disband' && c.enabled)?.label ?? null;
+    inspKey = CIL.shipActionGroups({ vesselId: 'v_d', docked: true, dockedAt: 'p_d', canDisband: true, hasShipyard: true, actions: [] })
+      .destructive.find((c) => c.id === 'disband' && c.zone?.type === 'disband')?.labelKey ?? null;
+  } catch { /* pin padnie */ }
+  ok(/title:\s*t\('fleet\.disbandReturn'\)/.test(conf) && hudLabel === plTxt,
+    `S13c KONTROLA: tytuł okna potwierdzenia i etykieta czipu panelu statku HUD — ten sam klucz (\`fleet.disbandReturn\`; czip: „${hudLabel}”)`);
+  setLocale('pl'); const inspPL = inspKey ? t(inspKey) : null;
+  setLocale('en'); const inspEN = inspKey ? t(inspKey) : null;
+  setLocale('pl');
+  // ⚠ Tylko PL (przedmiot Findingu 547): EN inspektora mówi „Scrap”, a tytuł potwierdzenia „Disband” — rozjazd sprzed
+  //   KZ-Command (K7-B), zgłoszony jako kandydat na finding, nie pinowany jako kontrakt.
+  ok(!!inspKey && inspPL === plTxt.replace(/^🗑\s*/, '') && !/Disband|Scrap/.test(inspPL) && !!inspEN && inspEN !== inspKey,
+    `S13d inspektor konsoli (PL): czip Rozbiórki mówi to samo co tytuł potwierdzenia, bez ikony i bez angielskiego słowa (${inspKey}: „${inspPL}”; EN „${inspEN}”)`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

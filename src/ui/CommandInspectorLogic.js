@@ -1,10 +1,10 @@
-// ARC KONSOLE K7-B — inspektor statku / floty na konsoli Dowództwa: czysta logika (FEATURES.consoleCommand).
+// ARC KONSOLE K7-B — inspektor statku / floty na konsoli Dowództwa: czysta logika (KZ-Command: jedyna ścieżka Dowództwa, flaga zdjęta).
 //
 // Bez DOM, bez canvasu, bez window. Widok (`CommandInspectorView`) zbiera FAKTY z żywego stanu (te same predykaty co dzisiejszy
 // panel `_drawRight` / `_drawRightFleet`), a tu fakty → grupy czipów akcji. Każdy czip niesie DZISIEJSZĄ strefę trafień
 // (typ + dane bez zmian; handler `_handleHit` bez zmian) albo — gdy akcja jest niemożliwa — powód (klucz i18n albo gotowy,
 // już przetłumaczony tekst z `getAvailableActions`). Zasada: strefa jest dokładnie tam, gdzie dzisiejszy panel ją emituje
-// (dostępność ON == OFF); czip wyłączony nigdy nie ma strefy (brak cichych no-opów — zawsze powód z tym, co zrobić).
+// (dostępność = dawny panel statku); czip wyłączony nigdy nie ma strefy (brak cichych no-opów — zawsze powód z tym, co zrobić).
 
 /** Kolejność grup akcji w inspektorze statku (główna na górze, niszcząca na końcu w roli alert). */
 export const SHIP_ACTION_GROUPS = Object.freeze(['primary', 'orders', 'logistics', 'destructive']);

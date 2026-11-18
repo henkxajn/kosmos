@@ -32,6 +32,12 @@
 //   D2  GRANICA (A1): trzy zmierzone wiersze — pełna kolonia/średni, placówka/średni, placówka/mały
 //   D3  SEDNO + KONTROLE: koniec gry na produkcyjnej kadencji `ColonyManager._tickPlayerViability`
 //
+// ⚠ PRZECELOWANE (KZ-Command — dawny panel `_drawRight` i katalog `_drawAtlasCatalog` usunięte z FMO): „rejestr” =
+//   inspektor konsoli Dowództwa (`CommandInspectorView.drawInspector` na fakty `_inspectorShipFacts` — ta sama instancja
+//   FMO, strefy z prawdziwego rysunku), „wiersz Atlasu” = strona Atlas Gwiazd konsoli rysowana PEŁNĄ ścieżką
+//   `FleetManagerOverlay.draw` (zakładka `atlas` → `drawCommandConsole` → `drawAtlasPage`): lista ciał układu (`atlasSelect`)
+//   i czip inspektora Atlasu „przekieruj” (strefa `map_body` z `atlasActions`), kliknięty wprost swoją strefą.
+//
 // Uruchom: node src/testing/smoke/foreign_actions_smoke.mjs
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -45,6 +51,8 @@ import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import { OrderService } from '../../systems/OrderService.js';
 import { FleetSystem } from '../../systems/FleetSystem.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
+import { drawInspector } from '../../ui/CommandInspectorView.js';
+import { consoleRoles } from '../../ui/ConsoleRolesLogic.js';
 import { buildShipPanelModel, runShipPanelAction } from '../../ui/ShipPanelHudLogic.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../../data/FleetActions.js';
 import { systemIdOf } from '../../utils/SystemScope.js';
@@ -174,16 +182,22 @@ function atlasTo(w, v, body) {          // trasa „wiersz Atlasu" (jedyny żywy
 }
 const isStateB = (v, bodyId) => v.position.state === 'orbiting' && v.position.dockedAt === bodyId && v.mission == null && v.status === 'idle';
 const model = (w, v, fmo) => buildShipPanelModel(v, { K: w.K, fmo, features: GAME_CONFIG.FEATURES });
-/** Strefy prawego panelu REJESTRU (`FleetManagerOverlay._drawRight`) dla statku — prawdziwy rysunek na atrapie ctx. */
+const proxyCtx = () => new Proxy({}, { get: (_, k) => (k === 'measureText' ? (s) => ({ width: String(s).length * 6 })
+  : k === 'getTransform' ? () => ({ a: 1, d: 1 })
+  : (k === 'createLinearGradient' || k === 'createRadialGradient' || k === 'createConicGradient') ? () => ({ addColorStop() {} })
+  : () => {}), set: () => true });
+/** Strefy inspektora REJESTRU konsoli Dowództwa (`CommandInspectorView.drawInspector`) dla statku — prawdziwy rysunek na atrapie ctx. */
 function rightZones(w, v) {
-  const o = makeFmo(); o._selectedVesselId = v.id; o._rightViewH = 0; o._rightContentH = 0;
-  o._collapsedFleets = o._collapsedFleets ?? new Set(); o._collapsedSections = o._collapsedSections ?? new Set();
-  const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? (s) => ({ width: String(s).length * 6 })
-    : k === 'getTransform' ? () => ({ a: 1, d: 1 })
-    : (k === 'createLinearGradient' || k === 'createRadialGradient' || k === 'createConicGradient') ? () => ({ addColorStop() {} })
-    : () => {}), set: () => true });
-  o._drawRight(ctx, 600, 60, 320, 900, w.vm, w.K.missionSystem, w.K.colonyManager, w.K.colonyManager.activePlanetId);
+  const o = makeFmo(); o._selectedVesselId = v.id; o._cmdDisabled = []; o._cmdTip = null;
+  drawInspector(o, proxyCtx(), { x: 900, y: 60, w: 294, h: 4000 }, consoleRoles(),
+    { vMgr: w.vm, ms: w.K.missionSystem, colMgr: w.K.colonyManager, activePid: w.K.colonyManager.activePlanetId });
   return o._hitZones;
+}
+/** Strona Atlas Gwiazd konsoli — pełna ścieżka `draw` (zakładka `atlas`); zwraca strefy klatki. */
+function atlasPageZones(o) {
+  o._visible = true; o._activeTab = 'atlas'; o._cmdDisabled = []; o._cmdTip = null;
+  o.draw(proxyCtx(), 1600, 1000);
+  return o._hitZones.slice();
 }
 const FOREIGN = ['foreign_recon_body', 'foreign_recon_system', 'foreign_colonize', 'foreign_unload'];
 const hudForeign = (w, v) => (model(w, v, makeFmo())?.chips ?? []).filter(c => FOREIGN.includes(c.id));
@@ -435,21 +449,22 @@ header('D4 SEDNO — „Pełny Skan" przy ciele BEZ mapy kolonii: GŁOŚNA odmow
 header('K5 KONTROLA — trasa Atlas (jedyny żywy producent przekierowania) działa od końca do końca');
 {
   const w = toStateA(); w.K.activeSystemId = w.sysB;
-  const o = makeFmo();
-  const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? (s) => ({ width: String(s).length * 6 }) : (k === 'getTransform' ? () => ({ a: 1, d: 1 }) : (k === 'createLinearGradient' || k === 'createRadialGradient') ? () => ({ addColorStop() {} }) : () => {})), set: () => true });
-  o._drawAtlasCatalog(ctx, 0, 0, 900, 4000);
-  const rows = o._hitZones.filter(z => z.type === 'map_body').map(z => z.data.bodyId);
-  ok(rows.includes(w.Xb.id) && rows.every(id => EntityManager.get(id)?.systemId === w.sysB),
-    `Atlas rysuje wiersze ciał układu B (${rows.length}, w tym Xb)`);
-  const fmo = makeFmo(); fmo._selectedVesselId = w.CS.id;
+  const fmo = makeFmo(); fmo._selectedVesselId = w.CS.id; fmo._atlasSelectedBodyId = w.Xb.id;
+  const page = atlasPageZones(fmo);
+  const rows = [...new Set(page.filter(z => z.type === 'atlasSelect').map(z => z.data.bodyId))];
+  ok(rows.length > 1 && rows.includes(w.Xb.id) && rows.every(id => EntityManager.get(id)?.systemId === w.sysB),
+    `Atlas konsoli rysuje wiersze ciał układu B (${rows.length}, w tym Xb)`);
+  const redirZone = page.find(z => z.type === 'map_body' && z.data?.bodyId === w.Xb.id) ?? null;
+  ok(!!redirZone && fmo._atlasBodyFacts(w.Xb).redirect === true,
+    `inspektor Atlasu: czip „przekieruj” na Xb ma strefę map_body, a statek w stanie A ją przyjmuje (redirect=${fmo._atlasBodyFacts(w.Xb).redirect})`);
   // D1-C — świadek PRZED akcją (migawka, nie odczyt obiektu po kliku): w stanie A ani panel statku, ani rejestr
   //   nie mają akcji obcych.
   const hudIds = () => hudForeign(w, w.CS).map(c => c.id + (c.enabled ? '' : '(off)'));
   const regIds = () => regForeign(w, w.CS).map(z => z.type);
   const preHud = hudIds(), preReg = regIds(), preMission = w.CS.mission ? `${w.CS.mission.type}/${w.CS.mission.phase}` : null;
-  fmo._handleHit({ type: 'map_body', data: { bodyId: w.Xb.id } });
+  if (redirZone) fmo._handleHit(redirZone);
   tickUntil(w.K, () => w.CS.mission?.phase === 'orbiting_body', 80, 0.02);
-  ok(w.CS.mission?.type === 'exploration' && w.CS.position.dockedAt === w.Xb.id, 'klik wiersza Atlas → przekierowanie → exploration/orbiting_body przy Xb');
+  ok(w.CS.mission?.type === 'exploration' && w.CS.position.dockedAt === w.Xb.id, 'klik czipu Atlasu (jego strefa) → przekierowanie → exploration/orbiting_body przy Xb');
   header('D1-C KONTROLA — stan C (trasa Atlas) DOKŁADNIE jak dziś, w panelu statku I w rejestrze');
   ok(preMission === 'interstellar_jump/in_system' && preHud.length === 0 && preReg.length === 0,
     `świadek PRZED klikiem: stan A (${preMission}), panel ${J(preHud)}, rejestr ${J(preReg)} — bez akcji obcych`);
@@ -457,7 +472,7 @@ header('K5 KONTROLA — trasa Atlas (jedyny żywy producent przekierowania) dzia
   ok(J(postHud) === J(['foreign_recon_body', 'foreign_recon_system', 'foreign_colonize']),
     `panel statku w stanie C: dokładnie Recon ciała / Recon układu / Kolonizuj (aktywne) — ${J(postHud)}`);
   ok(J([...postReg].sort()) === J(['foreign_colonize', 'foreign_recon_body', 'foreign_recon_system']),
-    `rejestr (FleetManagerOverlay._drawRight) w stanie C: te same trzy strefy — ${J(postReg)}`);
+    `rejestr (inspektor konsoli, drawInspector) w stanie C: te same trzy strefy — ${J(postReg)}`);
   const m = model(w, w.CS, fmo);
   const e = findEntry(m, ['foreign_colonize'], []);
   execEntry(w, fmo, w.CS, e, w.Xb.id);

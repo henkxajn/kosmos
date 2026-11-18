@@ -19,11 +19,19 @@
 // T5  foreign_recon + odmowa                → abortForeignRecon POZA transakcją (statek sprawny)
 // T6  helper — tabela prawdy sukces/odmowa/wyjątek/brak statku
 // T7  ścieżka LOKALNA (dom) nietknięta
-// T8  FMO — oba przyciski panelu obcego układu (interstellar_return / foreign_return)
+// T8  FMO — rozkaz return_home przez żywą strefę `action` (fasada + komunikat); dawne strefy powrotu = no-op
 // T9  FMO — komunikat o odmowie (jeden słownik z _warpErrLabel, zero nowych kluczy i18n)
 // T10 pin ŹRÓDŁOWY — nigdzie poza dokowaniem nie fałszujemy `position.state='docked'` (+ kontrola pinu)
-// T11 PRAWDZIWY planer — gracz na ekranie „Interstellar Arrival" dostaje POWÓD („Za mało rdzeni warp")
-// T12 pin RENDERU — ekran „Interstellar Arrival" NIE ma osobnego przycisku (nie ma piątego producenta)
+// T11 PRAWDZIWY planer — rozkaz powrotu z FMO dostaje POWÓD („Za mało rdzeni warp") i ślad w Dzienniku
+// T12 pin RENDERU — panel przylotu (inspektor konsoli + panel statku HUD) NIE ma przycisku powrotu; strefy powrotu bez
+//     producenta w całym `src/`
+//
+// ⚠ KZ-Command (dawny panel `_drawRight` i jego strefy `interstellar_return` / `foreign_return` / `foreign_return_from_recon`
+//   usunięte razem z wrapperem `_dispatchReturnJump` — strefy nie miały producenta od Findingu 145 (a')): T8 / T11 jadą
+//   żywą konsumentką rozkazu w FMO — strefą `action` (`actionId: 'return_home'`) → `_handleAction` → `OrderService.issueReturn`
+//   (transakcja `returnJumpTransactional`, `utils/ReturnJump.js`) → `_toastReturnFailed`; T10 — FMO deleguje do fasady
+//   (zero surowego `dispatchInterstellar`), transakcję wołają OrderService i FleetActions; T12 renderuje ŻYWE powierzchnie
+//   panelu statku (`CommandInspectorView.drawInspector` i `ShipPanelHudLogic.buildShipPanelModel`) zamiast `_drawRight`.
 // T13 debugLog — cisza po odmowie jest Z KONSTRUKCJI (audyt AI nie zna zdarzeń floty) + kontrola pinu
 //
 // Uruchom: node src/testing/smoke/return_home_no_brick_smoke.mjs
@@ -49,6 +57,9 @@ const { canLaunchFromCurrent } = await import('../../utils/SpaceportCheck.js');
 const { returnJumpTransactional, jumpSucceeded } = await import('../../utils/ReturnJump.js');
 const { FLEET_ACTIONS }        = await import('../../data/FleetActions.js');
 const { FleetManagerOverlay }  = await import('../../ui/FleetManagerOverlay.js');
+const IV                       = await import('../../ui/CommandInspectorView.js');
+const { consoleRoles }         = await import('../../ui/ConsoleRolesLogic.js');
+const L5                       = await import('../../ui/ShipPanelHudLogic.js');
 const { WarpRouteSystem }      = await import('../../systems/WarpRouteSystem.js');
 const { WARP_ROUTE_REASONS }   = await import('../../utils/WarpRoutePlanner.js');
 const { t }                    = await import('../../i18n/i18n.js');
@@ -261,25 +272,40 @@ reset(); vessels.set('v_1', makeVessel({ systemId: 'sys_home' }));
 os.issueReturn('v_1');
 ok(startReturnCalls === 1, 'brak ekspedycji → startReturn (jak dotąd)');
 
-// ── T8 — FMO: przyciski „Powrót do bazy" w panelu obcego układu ───────────────────────────────
-header('T8 FleetManagerOverlay — przyciski „Powrót do bazy" w panelu obcego układu');
+// ── T8 — FMO: rozkaz „Powrót do bazy" przez żywą strefę `action` ──────────────────────────────
+// KZ-Command: jedyna konsumentka rozkazu powrotu w FMO to strefa `action` → `_handleAction` → `OrderService.issueReturn`
+// → `_toastReturnFailed`. ⚠ Producenci strefy `action` (czipy inspektora konsoli i panelu statku HUD) biorą actionId
+// z `getAvailableActions`, z której `return_home` wypadło w (a') — pin trzyma KONTRAKT konsumentki (fasada + transakcja
+// + komunikat), nie osiągalność przycisku (tej nie ma — `return_actions_removed_smoke` A1).
+header('T8 FleetManagerOverlay — rozkaz return_home przez żywą strefę `action` (fasada, transakcja, komunikat)');
 const fmo = Object.create(FleetManagerOverlay.prototype);
 const toasts = [];
 const onToast = d => toasts.push(d);
 EventBus.on('ui:toast', onToast);
+{
+  reset(); vessels.set('v_1', makeVessel());
+  const v = vessels.get('v_1');
+  const before = snapOf(v);
+  toasts.length = 0;
+  fmo._handleHit({ type: 'action', data: { actionId: 'return_home', vessel: v } });
+  // Strefa idzie przez fasadę (OrderService.issueReturn → issueWarp), bo TYLKO ona niesie POWÓD odmowy —
+  // dlatego mierzymy wywołanie planera, nie surowego dyspozytora.
+  ok(warpCalls === 1, 'action/return_home: skok realnie próbowany PRZEZ FASADĘ (powód dostępny)');
+  ok(dispatchCalls === 0, 'action/return_home: zero surowych wywołań dispatchInterstellar');
+  ok(same(snapOf(v), before), 'action/return_home: stan bez zmian po odmowie');
+  ok(canLaunchFromCurrent(v).ok === true && stillOrderable(v).ok === true, 'action/return_home: statek nadal mobilny');
+  ok(toasts.length === 1, 'action/return_home: gracz DOSTAJE komunikat o odmowie');
+}
+// Dawne strefy panelu obcego układu — bez producenta (T12) i bez handlera: klik NIE omija transakcji żadną boczną drogą.
+// Świadek: ten sam statek i ta sama atrapa wyżej SKACZĄ przez strefę `action` (warpCalls === 1).
 for (const zoneType of ['interstellar_return', 'foreign_return', 'foreign_return_from_recon']) {
   reset(); vessels.set('v_1', makeVessel());
   const v = vessels.get('v_1');
   const before = snapOf(v);
   toasts.length = 0;
   fmo._handleHit({ type: zoneType, data: { vesselId: 'v_1', fromSystemId: 'sys_home' } });
-  // Po dogrywce te przyciski idą przez fasadę (OrderService.issueWarp), bo TYLKO ona niesie
-  // POWÓD odmowy — dlatego mierzymy wywołanie planera, nie surowego dyspozytora.
-  ok(warpCalls === 1, `${zoneType}: skok realnie próbowany PRZEZ FASADĘ (powód dostępny)`);
-  ok(dispatchCalls === 0, `${zoneType}: zero surowych wywołań dispatchInterstellar`);
-  ok(same(snapOf(v), before), `${zoneType}: stan bez zmian po odmowie`);
-  ok(canLaunchFromCurrent(v).ok === true && stillOrderable(v).ok === true, `${zoneType}: statek nadal mobilny`);
-  ok(toasts.length === 1, `${zoneType}: gracz DOSTAJE komunikat o odmowie`);
+  ok(warpCalls === 0 && dispatchCalls === 0 && toasts.length === 0 && same(snapOf(v), before),
+     `${zoneType}: strefa usunięta — klik nie skacze żadną drogą (planer ${warpCalls}, dyspozytor ${dispatchCalls}, komunikaty ${toasts.length})`);
 }
 
 // ── T9 — komunikat: jeden słownik z _warpErrLabel, zero nowych kluczy ─────────────────────────
@@ -315,9 +341,16 @@ for (const [label, file] of SITES) {
 const vmHits = (codeOf('../../systems/VesselManager.js').match(FAKE_DOCK) ?? []).length;
 ok(vmHits === 2, `kontrola pinu: regex ŻYJE — dwie PRAWDZIWE ścieżki dokowania w VesselManager `
    + `(dockAtColony + dockAtStation) nadal go wyzwalają (trafień=${vmHits})`);
-// KONTROLA PINU — wszystkie trzy pliki faktycznie wołają transakcję.
-for (const [label, file] of SITES) {
+// KONTROLA PINU — transakcję wołają OBA silnikowe wejścia rozkazu; FMO (KZ-Command: wrapper `_dispatchReturnJump` usunięty)
+// deleguje do fasady `OrderService.issueReturn` i nie ma własnego, surowego skoku.
+for (const [label, file] of SITES.slice(0, 2)) {
   ok(/returnJumpTransactional\s*\(/.test(codeOf(file)), `${label}: skok idzie przez transakcję`);
+}
+{
+  const fmoCode = codeOf('../../ui/FleetManagerOverlay.js');
+  ok(/orderService\.issueReturn\(vessel\.id\)/.test(fmoCode) && !/dispatchInterstellar\s*\(/.test(fmoCode)
+     && !/_dispatchReturnJump/.test(fmoCode) && !/returnJumpTransactional/.test(fmoCode),
+     'FleetManagerOverlay: powrót deleguje do fasady (`orderService.issueReturn`) — zero surowego dispatchInterstellar i własnej kopii transakcji');
 }
 
 // ── T11 — PRAWDZIWY planer: gracz dostaje POWÓD, nie samo „nie można" ─────────────────────────
@@ -335,69 +368,91 @@ const toasts11 = [];
 const onToast11 = d => toasts11.push(d);
 EventBus.on('ui:toast', onToast11);
 const EXPECTED = `${t('fleet.warpOrderFailed')} — ${t('fleet.warpErrFuel')}`;
-for (const zoneType of ['interstellar_return', 'foreign_return', 'foreign_return_from_recon']) {
-  reset(); vessels.set('v_1', makeVessel());   // warpFuel.current = 0, trasa 6 ly istnieje
+// KZ-Command: rozkaz jedzie żywą strefą `action` (dawne strefy powrotu usunięte — T8). Dwa kształty misji przy obcym ciele:
+// panel przylotu (interstellar_jump / in_system) i orbita ciała (exploration / orbiting_body).
+for (const [label, mission] of [
+  ['przylot', { type: 'interstellar_jump', phase: 'in_system', toSystemId: 'sys_061', fromSystemId: 'sys_home' }],
+  ['orbita ciała', null],
+]) {
+  reset(); vessels.set('v_1', mission ? makeVessel({ mission }) : makeVessel());   // warpFuel.current = 0, trasa 6 ly istnieje
   const v = vessels.get('v_1');
   const before = snapOf(v);
   toasts11.length = 0; journal.length = 0;
-  fmo11._handleHit({ type: zoneType, data: { vesselId: 'v_1', fromSystemId: 'sys_home' } });
+  fmo11._handleHit({ type: 'action', data: { actionId: 'return_home', vessel: v } });
   ok(toasts11.length === 1 && toasts11[0].text === EXPECTED,
-     `${zoneType}: komunikat niesie POWÓD (dostał: "${toasts11[0]?.text ?? 'BRAK'}")`);
-  ok(same(snapOf(v), before), `${zoneType}: stan bez zmian (transakcja trzyma)`);
+     `${label}: komunikat niesie POWÓD (dostał: "${toasts11[0]?.text ?? 'BRAK'}")`);
+  ok(same(snapOf(v), before), `${label}: stan bez zmian (transakcja trzyma)`);
   ok(journal.length === 1 && journal[0].channel === 'fleet' && journal[0].severity === 'warn',
-     `${zoneType}: TRWAŁY ślad w Dzienniku, kanał floty (toast jest ulotny)`);
-  ok(v.warpRoute == null, `${zoneType}: planer nie zostawia niedokończonej trasy`);
+     `${label}: TRWAŁY ślad w Dzienniku, kanał floty (toast jest ulotny)`);
+  ok(v.warpRoute == null, `${label}: planer nie zostawia niedokończonej trasy`);
 }
-// KONTROLA — z paliwem ten sam przycisk MUSI wystartować (inaczej pinujemy zepsuty przycisk).
+// KONTROLA — z paliwem ten sam rozkaz MUSI wystartować (inaczej pinujemy zepsuty przycisk).
 reset(); vessels.set('v_1', makeVessel({ warpFuel: { current: 4, max: 4, consumption: 0.5 } }));
 warpOk = true; toasts11.length = 0;
 const v11 = vessels.get('v_1');
-fmo11._handleHit({ type: 'interstellar_return', data: { vesselId: 'v_1', fromSystemId: 'sys_home' } });
+fmo11._handleHit({ type: 'action', data: { actionId: 'return_home', vessel: v11 } });
 ok(toasts11.length === 0 && v11.mission?.type === 'interstellar_jump',
    'kontrola: z pełnym bakiem powrót WYCHODZI (zero komunikatu o odmowie)');
 EventBus.off('ui:toast', onToast11);
 window.KOSMOS.warpRouteSystem = savedWrs;
 delete window.KOSMOS.eventLogSystem;
 
-// ── T12 — pin RENDERU: ekran „Interstellar Arrival" nie ma własnego, piątego przycisku ────────
-// Live-gate rozsądnie podejrzewał piątą implementację. Pin trzyma odpowiedź: ten ekran (nagłówek
-// + „Switch view" + „Return to base") jest rysowany przez _drawRight i wystawia DOKŁADNIE
-// hit-zonę `interstellar_return` — jedną z tych, które idą przez transakcję.
-header('T12 pin renderu — który ekran wystawia którą hit-zonę');
+// ── T12 — pin RENDERU: panel przylotu nie ma własnego, piątego przycisku ─────────────────────
+// Live-gate rozsądnie podejrzewał piątą implementację. Pin trzyma odpowiedź na ŻYWYCH powierzchniach panelu statku
+// (KZ-Command: dawny `_drawRight` usunięty): inspektor konsoli Dowództwa (`CommandInspectorView.drawInspector`, fakty
+// `_inspectorShipFacts` / `_inspectorShipInfo`) i panel statku HUD (`ShipPanelHudLogic.buildShipPanelModel`). Ekran przylotu
+// (linia „przybył do" + „Przełącz widok") nie wystawia ŻADNEJ strefy powrotu; trzy dawne typy stref powrotu nie mają
+// producenta nigdzie w `src/`.
+header('T12 pin renderu — żywe powierzchnie panelu statku nie wystawiają powrotu');
 function renderPanel(mission) {
   reset(); vessels.set('v_1', makeVessel({ mission }));
-  const o = Object.create(FleetManagerOverlay.prototype);
-  o._selectedVesselId = 'v_1'; o._hitZones = []; o._rightViewH = 0; o._rightContentH = 0;
-  o._collapsedFleets = new Set(); o._collapsedSections = new Set();
+  const o = new FleetManagerOverlay();
+  o._selectedVesselId = 'v_1'; o._hitZones = []; o._cmdDisabled = []; o._cmdTip = null;
   const drawn = [];
-  const ctx = {
-    fillStyle: '', strokeStyle: '', lineWidth: 0, font: '11px mono', textAlign: '', textBaseline: '', globalAlpha: 1,
-    fillRect(){}, strokeRect(){}, beginPath(){}, arc(){}, fill(){}, stroke(){}, moveTo(){}, lineTo(){},
-    closePath(){}, save(){}, restore(){}, clip(){}, rect(){}, setLineDash(){}, getTransform(){ return { a: 1, d: 1 }; },
-    fillText(txt){ drawn.push(String(txt)); }, measureText(s2){ return { width: String(s2).length * 6 }; },
-    createRadialGradient(){ return { addColorStop(){} }; }, createConicGradient(){ return { addColorStop(){} }; },
-    createLinearGradient(){ return { addColorStop(){} }; }, drawImage(){}, ellipse(){},
-    quadraticCurveTo(){}, bezierCurveTo(){},
-  };
-  o._drawRight(ctx, 600, 60, 320, 700, vesselManager, window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'planet_home');
-  return { drawn, zones: o._hitZones.map(z => z.type) };
+  const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? (s2) => ({ width: String(s2).length * 6 })
+    : k === 'fillText' ? (txt) => drawn.push(String(txt))
+    : k === 'getTransform' ? () => ({ a: 1, d: 1 })
+    : (k === 'createLinearGradient' || k === 'createRadialGradient' || k === 'createConicGradient') ? () => ({ addColorStop() {} })
+    : () => {}), set: () => true });
+  IV.drawInspector(o, ctx, { x: 900, y: 60, w: 294, h: 4000 }, consoleRoles(),
+    { vMgr: vesselManager, ms: window.KOSMOS.missionSystem, colMgr: window.KOSMOS.colonyManager, activePid: 'planet_home' });
+  const m = L5.buildShipPanelModel(vessels.get('v_1'), { K: window.KOSMOS, fmo: o });
+  return { drawn, zones: o._hitZones.map(z => z.type), hud: L5.modelZones(m).map(z => z.type), hudInfo: (m?.info ?? []).map(i => i.text) };
 }
+const arrivedTxt = t('fleet.arrivedAt', 'Obcy');
 const arrival = renderPanel({ type: 'interstellar_jump', phase: 'in_system', toSystemId: 'sys_061', fromSystemId: 'sys_home', targetName: 'Obcy' });
-ok(arrival.drawn.some(x => x.includes(t('fleet.interstellarArrival'))), 'ekran „Interstellar Arrival" faktycznie się rysuje');
-ok(arrival.zones.includes('cluster_switch'), 'ma „Switch view" (to ten ekran z opisu live-gate)');
-const arrivalReturns = arrival.zones.filter(z => /return/i.test(z));
+ok(arrival.drawn.some(x => x.includes(arrivedTxt)) && arrival.hudInfo.some(x => x.includes(arrivedTxt)),
+   'ekran przylotu faktycznie się rysuje (linia „przybył do" w inspektorze konsoli i w panelu statku HUD)');
+ok(arrival.zones.includes('cluster_switch') && arrival.hud.includes('cluster_switch'),
+   'ma „Switch view" na obu powierzchniach (to ten ekran z opisu live-gate)');
+const arrivalReturns = [...arrival.zones, ...arrival.hud].filter(z => /return/i.test(z));
 // ⚠ ODWRÓCONE ŚWIADOMIE w (a', Finding 145). Pin mierzył PRZEDROZBIÓRKOWY kontrakt renderu
 //   („który ekran wystawia który przycisk powrotu") i kosztował jedną rundę live-gate'u, bo bez
 //   niego brak przycisku mylił się z brakiem rysowania. Po (a') przycisków NIE MA — intencja
 //   pinu (żadnego PIĄTEGO producenta) żyje dalej w `return_actions_removed_smoke` A2, a tutaj
 //   zostaje jako STRAŻNIK REGRESJI: gdyby ktoś przywrócił przycisk, ten pin padnie.
-ok(arrivalReturns.length === 0,
-   `ekran „Interstellar Arrival" NIE ma juz przycisku powrotu (znaleziono: ${JSON.stringify(arrivalReturns)})`);
+ok(arrival.zones.length > 3 && arrival.hud.length > 3 && arrivalReturns.length === 0,
+   `ekran przylotu NIE ma przycisku powrotu na żadnej powierzchni (stref: konsola ${arrival.zones.length}, HUD ${arrival.hud.length}; powrotu: ${JSON.stringify(arrivalReturns)})`);
 const orbitingBody = renderPanel({ type: 'exploration', phase: 'orbiting_body', targetId: 'planet_foreign', originId: 'sys_home' });
-const obReturns = orbitingBody.zones.filter(z => /return/i.test(z));
-ok(obReturns.length === 0,
-   `ekran orbity obcego ciala NIE ma juz przycisku powrotu (znaleziono: ${JSON.stringify(obReturns)})`);
-ok(!orbitingBody.zones.includes('cluster_switch'), 'ekran orbity NIE ma „Switch view" (to dwa różne ekrany)');
+const obReturns = [...orbitingBody.zones, ...orbitingBody.hud].filter(z => /return/i.test(z));
+ok(orbitingBody.zones.includes('action') && orbitingBody.hud.length > 3 && obReturns.length === 0,
+   `ekran orbity obcego ciala NIE ma przycisku powrotu — świadek: lista rozkazów (action) narysowana (stref: konsola ${orbitingBody.zones.length} ${JSON.stringify(orbitingBody.zones)}, HUD ${orbitingBody.hud.length}; powrotu: ${JSON.stringify(obReturns)})`);
+ok(!orbitingBody.zones.includes('cluster_switch') && !orbitingBody.hud.includes('cluster_switch'),
+   'ekran orbity NIE ma „Switch view" (to dwa różne ekrany)');
+// Producent w całym `src/` (kod bez komentarzy, bez `src/testing/`): napis typu strefy nie występuje nigdzie.
+{
+  const { readdirSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const files = [];
+  const walk = (d) => { for (const n of readdirSync(d)) { const f = join(d, n); if (statSync(f).isDirectory()) { if (n !== 'testing' && n !== 'lib') walk(f); } else if (n.endsWith('.js')) files.push(f); } };
+  walk(root);
+  const code = files.map(f => stripComments(readFileSync(f, 'utf8').replace(/\r\n/g, '\n'))).join('\n');
+  const hits = ['interstellar_return', 'foreign_return', 'foreign_return_from_recon'].filter(z => code.includes(`'${z}'`));
+  ok(files.length > 100 && code.includes("'cluster_switch'") && hits.length === 0,
+     `typy stref powrotu bez producenta i bez handlera w całym src/ (plików ${files.length}; świadek \'cluster_switch\' obecny; trafienia: ${JSON.stringify(hits)})`);
+}
 
 // ── T13 — cisza w debugLog jest Z KONSTRUKCJI (mierzone, nie wyczytane) ───────────────────────
 // Live-gate wywnioskował z pustego `debugLog.tail()`, że rozkaz nie przeszedł żadną ze znanych

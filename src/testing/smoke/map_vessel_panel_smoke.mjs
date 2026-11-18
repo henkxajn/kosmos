@@ -15,10 +15,13 @@
 //   `PanelDockLogic`, `ColonyModalLogic`).
 //
 // KONTROLE (muszą być zielone PRZED i PO zmianie — inaczej harness jest jałowy)
-//   C1  `_drawRight` prowadzalny headless, zbiór stref NIEPUSTY i zawiera `action` orbit+transport
+//   C1  inspektor rejestru prowadzalny headless, zbiór stref NIEPUSTY i zawiera `action` orbit+transport
 //   C2  `isVisible` świeżego FMO = false (pole rozłączne z `overlayManager.active`)
-//   C3  `_drawRight` z `_selectedFleetId` renderuje gałąź FLOTY (dowód, że P7 mierzy różnicę)
-//   C6  golden prawej kolumny Rejestru (regresja — musi przeżyć adapter)
+//   C3  inspektor z `_selectedFleetId` renderuje gałąź FLOTY (dowód, że P7 mierzy różnicę)
+//   C6  golden inspektora rejestru (regresja — dwa rysunki tej samej instancji dają ten sam zbiór)
+//   ⚠ KZ-Command: „prawa kolumna Rejestru” = inspektor konsoli Dowództwa (`CommandInspectorView.drawInspector`, fakty
+//     `_inspectorShipFacts` / `_inspectorShipInfo` — dawny `_drawRight` usunięty z FMO); C1 / C3 / C6 i P-mount przepięte na
+//     niego, zbiór akcji zadokowanego statku bez zmian (orbit + transport; P13 porównuje z nim populację mapy).
 //
 // PINY (mają PAŚĆ przed zmianą, przejść po niej)
 //   P1  `drawVesselPanel` istnieje i daje zbiór stref ≡ `_drawRight` (typ + actionId)
@@ -189,10 +192,14 @@ const actionIds = (zones) => zones.filter((z) => z.type === 'action').map((z) =>
 const FOOTER_TYPES = new Set(['mvpRetreat', 'mvpFleet', 'mvpDock']);
 const sigBody = (zones) => sig(zones.filter((z) => !FOOTER_TYPES.has(z.type)));
 
+// KZ-Command: inspektor rejestru konsoli (żywy następca `_drawRight`) — ta sama instancja FMO, obszar 300 × 800 px.
+let IV = null, ROLES = null;
+try { IV = await import('../../ui/CommandInspectorView.js'); ROLES = (await import('../../ui/ConsoleRolesLogic.js')).consoleRoles(); } catch { /* piny padną */ }
 function overlayDraw(fmo) {
-  fmo._hitZones = [];
-  fmo._drawRight(stubCtx(), 1600, 100, 300, 800,
-    window.KOSMOS.vesselManager, window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home');
+  fmo._hitZones = []; fmo._cmdDisabled = []; fmo._cmdTip = null;
+  const K = window.KOSMOS;
+  IV?.drawInspector?.(fmo, stubCtx(), { x: 1600, y: 100, w: 300, h: 800 }, ROLES,
+    { vMgr: K.vesselManager, ms: K.missionSystem, colMgr: K.colonyManager, activePid: 'p_home' });
   return [...fmo._hitZones];
 }
 
@@ -225,7 +232,7 @@ const t5ModelTypes = (fmo, vessel) => (L5?.modelZones?.(L5.buildShipPanelModel(v
 const t6GroupTypes = (vessels) => (L6?.modelZones?.(L6.buildGroupPanelModel(vessels, { K: window.KOSMOS, leadId: vessels[0]?.id ?? null })) ?? []).map((z) => z.type);
 
 // ═══ C1 — baseline: `_drawRight` headless, NIEPUSTY, z konkretnymi akcjami ═══════════════════
-header('C1  KONTROLA — baseline prawej kolumny Rejestru (anty-jałowość dla P1/P6)');
+header('C1  KONTROLA — baseline inspektora rejestru konsoli (anty-jałowość dla P13)');
 let GOLDEN = null, GOLDEN_ACTIONS = null;
 {
   world();
@@ -233,7 +240,7 @@ let GOLDEN = null, GOLDEN_ACTIONS = null;
   fmo._selectedVesselId = 'v_1';
   const zones = overlayDraw(fmo);
   GOLDEN = sig(zones); GOLDEN_ACTIONS = actionIds(zones);
-  ok(zones.length > 0, `_drawRight produkuje strefy (jest: ${zones.length})`);
+  ok(zones.length > 0, `inspektor rejestru (drawInspector) produkuje strefy (jest: ${zones.length})`);
   ok(GOLDEN_ACTIONS.includes('orbit') && GOLDEN_ACTIONS.includes('transport'),
      `baseline zawiera akcje orbit+transport (jest: ${JSON.stringify(GOLDEN_ACTIONS)})`);
 }
@@ -246,7 +253,7 @@ header('C2  KONTROLA — świeży FMO jest niewidoczny (pole rozłączne z overl
 }
 
 // ═══ C3 — gałąź floty JEST inna (dowód, że P7 mierzy różnicę, a nie nic) ═════════════════════
-header('C3  KONTROLA — `_selectedFleetId` przełącza `_drawRight` na gałąź FLOTY');
+header('C3  KONTROLA — `_selectedFleetId` przełącza inspektor rejestru na gałąź FLOTY');
 let FLEET_BRANCH_SIG = null;
 {
   world();
@@ -259,6 +266,9 @@ let FLEET_BRANCH_SIG = null;
   FLEET_BRANCH_SIG = sig(zones);
   ok(JSON.stringify(FLEET_BRANCH_SIG) !== JSON.stringify(GOLDEN),
      'gałąź floty daje INNY zbiór stref niż gałąź statku (bez tego P7 byłby jałowy)');
+  // KZ-Command — świadek: „inny” to naprawdę gałąź floty (rozkazy floty z `fleetActionGroups`), nie pusty rysunek.
+  ok(FLEET_BRANCH_SIG.includes('fleetMoveToPoint') && !FLEET_BRANCH_SIG.some((q) => q.startsWith('action')),
+     `świadek: gałąź floty ma rozkazy floty i nie ma akcji statku (${JSON.stringify(FLEET_BRANCH_SIG)})`);
   delete window.KOSMOS.fleetSystem;
 }
 
@@ -282,7 +292,7 @@ header('P4  PIN — mutex: 0 → none · 1 → vessel · ≥2 → group');
 }
 
 // ═══ C6 — regresja prawej kolumny Rejestru ═══════════════════════════════════════════════════
-header('C6  KONTROLA — golden prawej kolumny Rejestru nietknięty');
+header('C6  KONTROLA — golden inspektora rejestru nietknięty');
 {
   world();
   const fmo = new FleetManagerOverlay();
@@ -326,9 +336,12 @@ header('P-mount  PIN ŹRÓDŁOWY — adapter jest ZAMONTOWANY w UIManagerze');
   ok(!code.includes('drawVesselPanelXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
   const fmoSrcM = readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf-8')
     .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
-  ok(!/drawVesselPanel\(|_drawVesselPanelFooter\(|handleVesselPanelClick\(|handleVesselPanelScroll\(|_vesselPanelRect|MVP_FOOTER_H/.test(fmoSrcM)
-     && /_handleVesselPanelFooter\(zone\) \{/.test(fmoSrcM) && /_drawRight\(ctx, x, y, w, h, vMgr, ms, colMgr, activePid, opts = \{\}\) \{/.test(fmoSrcM),
-     'FMO: adapter dawnego panelu statku nad mapą usunięty (T4-3); `_handleVesselPanelFooter` (cele footera T5) i `_drawRight` zostają');
+  // KZ-Command: `_drawRight` usunięty — rejestr rysuje inspektor konsoli na faktach FMO (`_inspectorShipFacts`).
+  const ivSrc = readFileSync(new URL('../../ui/CommandInspectorView.js', import.meta.url), 'utf-8');
+  ok(!/drawVesselPanel\(|_drawVesselPanelFooter\(|handleVesselPanelClick\(|handleVesselPanelScroll\(|_vesselPanelRect|MVP_FOOTER_H|_drawRight\(/.test(fmoSrcM)
+     && /_handleVesselPanelFooter\(zone\) \{/.test(fmoSrcM) && /_inspectorShipFacts\(vessel, ms, colMgr, activePid\) \{/.test(fmoSrcM)
+     && /export function drawInspector\(ov, ctx, r, roles, env\)/.test(ivSrc) && /ov\._inspectorShipFacts\(/.test(ivSrc),
+     'FMO: adapter dawnego panelu statku nad mapą usunięty (T4-3), `_drawRight` usunięty (KZ-Command); `_handleVesselPanelFooter` (cele footera T5) i fakty inspektora konsoli (`_inspectorShipFacts` ← `drawInspector`) zostają');
 }
 
 // ═══ P8 — scalenie docka 2→1 jest CZYSTYM PRZERZUTEM, nie zmianą zachowania ═══════════════

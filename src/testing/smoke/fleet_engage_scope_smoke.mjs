@@ -432,12 +432,17 @@ header('T12 ŹRÓDŁO — CRLF-safe, komentarze zdjęte');
          && /export function describeOrderFail\(/.test(cfSrc),
     'T12b2 `describeFleetOrderRefusal` zdefiniowane RAZ, obok `describeOrderFail` (CameraFrame.js)');
   // K7-pre (D-K-18): listy MAPY 2D (keyed na kamerze, świadomie poza 166) usunięte razem z mapą — pin „tej powierzchni
-  // nie ma”, ze świadkiem żywego prototypu (`_drawRegistry`), żeby lista kamery nie wróciła po cichu.
+  // nie ma”, żeby lista kamery nie wróciła po cichu.
+  // KZ-Command: świadek przepięty z `_drawRegistry` (dawny rejestr pełnej szerokości, usunięty) na ŻYWY rejestr —
+  //   `FleetManagerOverlay.draw` woła `drawCommandConsole` (CommandConsoleView), a ten rysuje tabelę statków (`drawHeroTable`).
   const drawSrc = stripComments(fmoSrc);
   const P = FleetManagerOverlay.prototype;
-  assert(typeof P._drawRegistry === 'function' && typeof P._drawLeft === 'undefined' && typeof P._drawCenter === 'undefined'
+  const ccvSrc = stripComments(readSrc('ui/CommandConsoleView.js'));
+  assert(/drawCommandConsole\(this, ctx, W, H\)/.test(stripComments(P.draw.toString()))
+         && /export function drawCommandConsole\(/.test(ccvSrc) && /function drawHeroTable\(/.test(ccvSrc)
+         && typeof P._drawRegistry === 'undefined' && typeof P._drawLeft === 'undefined' && typeof P._drawCenter === 'undefined'
          && !/const enemyVisible = /.test(drawSrc),
-    'T12c/T12d (K7-pre) listy mapy 2D (`_drawLeft` / `_drawCenter` / `enemyVisible`) usunięte — świadek: `_drawRegistry` istnieje');
+    'T12c/T12d (K7-pre) listy mapy 2D (`_drawLeft` / `_drawCenter` / `enemyVisible`) usunięte — świadek: `draw` → `drawCommandConsole` (rejestr konsoli)');
   assert(!('commandTacticalMap' in (GAME_CONFIG.FEATURES ?? {})) && !('fleetRegistry' in (GAME_CONFIG.FEATURES ?? {})),
     'T12f (K7-pre) flagi `commandTacticalMap` i `fleetRegistry` usunięte — REJESTR jest jedyną treścią SYSTEM TACTICAL');
 }

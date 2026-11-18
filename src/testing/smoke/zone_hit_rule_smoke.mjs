@@ -14,6 +14,12 @@
 //   H2  `pickStarZone` / `resolveStratcomZone`: gdy wygrala warstwa gwiazd — najblizszy srodek (dwa przypadki, dwie odpowiedzi)
 //   H3  Dowodztwo: prawdziwy `handleClick` FMO trafia absorber, nie strefe pod nim (regula miedzywarstwowa w overlayu)
 //   H4  ⚠ PIN LIMITU: `map_body` (zakladka taktyczna) — pierwsze trafienie, jak przed Findingiem 109
+// ⚠ PRZECELOWANE (KZ-Command — Dowodztwo wylacznie konsola): petla hovera `map_body` w `handleMouseMove` i pole `_mapHoverBody`
+//   usuniete (jedynym czytelnikiem byl dymek ciala dawnego ekranu). H4 pinuje teraz: H4a hover konsoli (`_kitHoverZone`) idzie ta
+//   sama regula wierzchniej strefy co klik (H3) — przy nakladajacych sie `map_body` wygrywa wierzchnia; H4b `_mapHoverBody` nie
+//   jest juz pisane (swiadek: H4a ustawil `_kitHoverZone`); H4c LIMIT E4 (pierwsze trafienie `map_body`) nie ma juz nosiciela w
+//   Dowodztwie — ostatni odbiorca `map_body` (dymek encji Atlasu, `resolveHoverInfo` → `findHitZone`) bierze WIERZCHNIA strefe;
+//   przejaw Findingu 159 w Dowodztwie zniknal razem z petla hovera (do zamkniecia w jego rejestrze).
 
 import '../headless/env.js';           // MUSI byc pierwszy
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
@@ -59,7 +65,7 @@ console.log('H3 — FleetManagerOverlay.handleClick: absorber wygrywa ze strefa 
     const o = Object.create(FleetManagerOverlay.prototype);
     o._visible = true; o._bounds = { x: 0, y: 0, w: 1280, h: 720 }; o._hitZones = zones;
     o._mapDragging = false; o._mapDragWasDrag = false; o._missionConfig = null; o._activeTab = 'tactical';
-    o._mapHoverBody = null; o._hoverVesselId = null;
+    o._hoverVesselId = null;
     let picked = null; o._handleHit = (z) => { picked = z; };
     return { o, picked: () => picked };
   };
@@ -70,17 +76,37 @@ console.log('H3 — FleetManagerOverlay.handleClick: absorber wygrywa ze strefa 
   assert(b.picked()?.type === 'vessel', `H3 KONTROLA PINU: bez absorbera ten sam klik trafia strefe pod spodem (trafil: ${b.picked()?.type})`);
 }
 
-// ── H4 — PIN LIMITU: map_body nietkniety ────────────────────────────────────
-console.log('H4 — ⚠ PIN LIMITU (E4): map_body zostaje pierwszo-trafieniowy');
+// ── H4 — hover konsoli i dymek Atlasu = regula wierzchniej strefy; LIMIT E4 bez nosiciela ─────────────────────
+console.log('H4 — hover konsoli (`_kitHoverZone`) i dymek Atlasu jak klik; LIMIT E4 (pierwsze trafienie) bez nosiciela');
 {
   const b1 = { x: 89, y: 89, w: 22, h: 22, type: 'map_body', data: { bodyId: 'body_1' } };
   const b2 = { x: 104, y: 89, w: 22, h: 22, type: 'map_body', data: { bodyId: 'body_2' } };
-  const o = Object.create(FleetManagerOverlay.prototype);
-  o._visible = true; o._bounds = { x: 0, y: 0, w: 1280, h: 720 }; o._hitZones = [b1, b2];
-  o._mapDragging = false; o._missionConfig = null; o._activeTab = 'tactical'; o._mapHoverBody = null; o._hoverVesselId = null;
-  o.handleMouseMove(109, 100);   // blizej b2, ale first-match daje b1
-  assert(o._mapHoverBody?.bodyId === 'body_1',
-    'H4: map_body dalej rozstrzyga sie PIERWSZYM trafieniem — ta sama klasa co 109, poza zakresem (Finding 159)');
+  const mkO = (zones, tab = 'tactical') => {
+    const o = Object.create(FleetManagerOverlay.prototype);
+    o._visible = true; o._bounds = { x: 0, y: 0, w: 1280, h: 720 }; o._hitZones = zones;
+    o._missionConfig = null; o._activeTab = tab; o._hoverVesselId = null;
+    return o;
+  };
+  const o = mkO([b1, b2]);
+  o.handleMouseMove(109, 100);   // obie strefy pod kursorem
+  assert(o._kitHoverZone === b2, `H4a: hover konsoli = wierzchnia strefa (ostatnia pushowana, jak klik H3) (jest: ${o._kitHoverZone?.data?.bodyId})`);
+  const c = mkO([b1]);
+  c.handleMouseMove(109, 100);
+  assert(c._kitHoverZone === b1, 'H4a KONTROLA PINU: pojedyncza strefa pod kursorem — hover ja zna');
+  assert(!('_mapHoverBody' in o) && !('_mapHoverBody' in c), 'H4b: `_mapHoverBody` nie jest juz pisane (petla hovera mapy usunieta)');
+  // dymek encji Atlasu (`findHitZone`) — wierzchnia strefa; pierwsze trafienie (LIMIT E4) nie ma juz nosiciela w Dowodztwie
+  const EM = (await import('../../core/EntityManager.js')).default;
+  EM.add({ id: 'body_1', type: 'planet', name: 'Jeden', x: 0, y: 0, systemId: 'sys_home' });
+  EM.add({ id: 'body_2', type: 'planet', name: 'Dwa', x: 0, y: 0, systemId: 'sys_home' });
+  const at = mkO([b1, b2], 'atlas');
+  const info = at.resolveHoverInfo(109, 100);
+  const tid = info?.target?.entityId ?? null;
+  assert(info?.kind === 'entity' && tid === 'body_2',
+    `H4c: dymek Atlasu rozstrzyga nakladajace sie map_body WIERZCHNIA strefa — przejaw Findingu 159 w Dowodztwie zniknal (jest: ${info?.kind}/${tid})`);
+  const at2 = mkO([b1], 'atlas');
+  const i2 = at2.resolveHoverInfo(109, 100);
+  const t2 = i2?.target?.entityId ?? null;
+  assert(t2 === 'body_1', `H4c KONTROLA PINU: sama b1 → body_1 (wynik nie jest stala) (jest: ${t2})`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

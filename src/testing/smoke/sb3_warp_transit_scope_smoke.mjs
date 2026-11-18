@@ -162,13 +162,15 @@ header('T3 — źródło: ProximitySystem i ObservatorySystem bez własnej koerc
   const obs = strip(readFileSync('src/systems/ObservatorySystem.js', 'utf8').replace(/\r\n/g, '\n'));
 
   // KONTROLA PINU: zdejmowanie komentarzy działa i zostawia kod (inaczej „brak wzorca” byłby jałowy).
-  assert(/_drawRegistry\(ctx/.test(fmo) && /_checkPair\(v1, v2\) \{/.test(prox) && /_tickVesselDetection\(/.test(obs),
-    'T3-0 KONTROLA PINU: kod po zdjęciu komentarzy zawiera `_drawRegistry` (FMO), `_checkPair` i `_tickVesselDetection`');
+  // KZ-Command: świadek FMO przepięty z `_drawRegistry` (dawny rejestr pełnej szerokości — usunięty) na żywe wywołanie
+  //   rejestru konsoli w `draw` (`drawCommandConsole`).
+  assert(/drawCommandConsole\(this, ctx, W, H\)/.test(fmo) && /_checkPair\(v1, v2\) \{/.test(prox) && /_tickVesselDetection\(/.test(obs),
+    'T3-0 KONTROLA PINU: kod po zdjęciu komentarzy zawiera `drawCommandConsole` (FMO), `_checkPair` i `_tickVesselDetection`');
   assert(!/\?\? 'sys_home'/.test(prox) && /const sameSystem = isSameSystemStrict\(v1, v2\);/.test(prox),
     'T3d TRIPWIRE: ProximitySystem nie ma własnej koercji `?? \'sys_home\'` — para z kanonu fail-closed');
   assert(!/\(v\.systemId \?\? sysId\)/.test(obs) && /if \(systemIdOf\(v\) !== sysId\) continue;/.test(obs),
     'T3e TRIPWIRE: ObservatorySystem filtruje układ statku kanonem `systemIdOf`');
-  // K7-pre: filtry mapy 2D z koercją `?? 'sys_home'` usunięte z mapą — nie wracają (świadek: T3-0 `_drawRegistry`).
+  // K7-pre: filtry mapy 2D z koercją `?? 'sys_home'` usunięte z mapą — nie wracają (świadek: T3-0 `drawCommandConsole`).
   assert(!/\(v\.systemId \?\? 'sys_home'\) === sysId/.test(fmo) && !/\(v\.systemId \?\? 'sys_home'\) !== sysId/.test(fmo),
     'T3f (K7-pre) filtry mapy 2D `FleetManagerOverlay` z koercją kamery usunięte razem z mapą');
 }

@@ -17,6 +17,10 @@
 // pasmo `_consoleScrollRects.reserve`). Usunięte bez zamiennika: brak. Pułapka §S18 dotyczyła starej kolumny; konsola przycina
 // strefy pasa przez `pruneZones` — T3 pinuje to wykonaniem.
 //   T4  §S19 — oś służby jest rysowana PRZED early returnem (rezerwa ma czym wyjść z magazynu)
+//       KZ-Command: dawny panel `_drawActions` (FMO) usunięty — pułapka §S19 (oś służby za listą akcji) pinowana na ŻYWYCH
+//       powierzchniach panelu statku: inspektor konsoli Dowództwa (`CommandInspectorView.drawInspector`, fakty
+//       `_inspectorShipFacts`) i panel statku HUD (`ShipPanelHudLogic.buildShipPanelModel`): przycisk osi służby przy PUSTEJ
+//       liście akcji, przed siatką akcji, jeden kierunek naraz, brak w trakcie przejścia.
 //   T5  brak nowego slotu nawigacji (7, niezmiennie)
 //   T6  komplet kluczy i18n w OBU językach — powody odmowy są mapowane JAWNIE, więc
 //        `check-i18n` ich nie widzi i literówka doszłaby do gracza jako surowy kod
@@ -24,6 +28,9 @@
 import '../headless/env.js';           // MUSI być pierwszy (window/document/THREE + seeded RNG)
 import { ShipyardOverlay } from '../../ui/ShipyardOverlay.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
+import { drawInspector } from '../../ui/CommandInspectorView.js';
+import { consoleRoles } from '../../ui/ConsoleRolesLogic.js';
+import { buildShipPanelModel, modelZones } from '../../ui/ShipPanelHudLogic.js';
 import { NAV_GROUPS } from '../../ui/CivPanelDrawer.js';
 import PL from '../../i18n/pl.js';
 import EN from '../../i18n/en.js';
@@ -180,46 +187,52 @@ console.log('T3 — §S18: strefa wypchnięta scrollem poza pasmo jest PRZYCINAN
 }
 
 // ── T4 — §S19: oś służby przed early returnem ───────────────────────────────────────────────
-console.log('T4 — §S19: „Wycofaj/Rozmieść" rysowane PRZED early returnem pustej listy akcji');
+console.log('T4 — §S19: „Wycofaj/Rozmieść" na żywych powierzchniach panelu statku — także przy PUSTEJ liście akcji');
 {
   const stored = stubVessel('v_s', 'p_home', 'stored');
   const active = stubVessel('v_a', 'p_home', 'active');
-  stubWorld([stored, active]);
-
-  const fmo = new FleetManagerOverlay();
-
-  // (a) ŚCIEŻKA EARLY RETURN — `getAvailableActions` zwraca pustą listę. Wymuszamy ją stanem
-  //     pozycji spoza trzech znanych wartości: to jedyne tanie wejście w tę gałąź headless
-  //     (każdy docked/orbiting/in_transit ma co najmniej jedną akcję), a mierzymy nie sam
-  //     stan, tylko to, czy przycisk PRZEŻYWA `return` w środku metody.
-  fmo._hitZones = [];
   const inert = stubVessel('v_inert', 'p_home', 'stored', { position: { state: 'none', dockedAt: 'p_home', x: 0, y: 0 } });
-  fmo._drawActions(mockCtx(), 0, 0, 300, 8, inert, null, window.KOSMOS.colonyManager, 'p_home');
-  assert(zonesOfType(fmo, 'deploy_vessel').length === 1,
-    'T4a: przycisk JEST, choć lista akcji jest pusta i metoda kończy się wcześniej — to jest cały sens §S19');
+  const mobil = stubVessel('v_m', 'p_home', 'mobilizing', { mobilizeProgress: 0.5, mobilizeTarget: 'active' });
+  stubWorld([stored, active, inert, mobil]);
+
+  /** Obie żywe powierzchnie dla statku: strefy inspektora konsoli (kolejność rysunku) i strefy modelu panelu HUD. */
+  const surfaces = (v) => {
+    const fmo = new FleetManagerOverlay();
+    fmo._selectedVesselId = v.id; fmo._hitZones = []; fmo._cmdDisabled = []; fmo._cmdTip = null;
+    drawInspector(fmo, mockCtx(), { x: 0, y: 0, w: 300, h: 4000 }, consoleRoles(),
+      { vMgr: window.KOSMOS.vesselManager, ms: null, colMgr: window.KOSMOS.colonyManager, activePid: 'p_home' });
+    const facts = fmo._inspectorShipFacts(v, null, window.KOSMOS.colonyManager, 'p_home');
+    const m = buildShipPanelModel(v, { K: window.KOSMOS, fmo });
+    return { insp: fmo._hitZones.map((z) => z.type), hud: modelZones(m).map((z) => z.type), actions: facts.actions.length, hudOrders: m?.orders?.items?.length ?? -1 };
+  };
+  const cnt = (arr, t) => arr.filter((x) => x === t).length;
+
+  // (a) ŚCIEŻKA PUSTEJ LISTY AKCJI — `getAvailableActions` zwraca pustą listę. Wymuszamy ją stanem pozycji spoza trzech
+  //     znanych wartości: to jedyne tanie wejście headless (każdy docked/orbiting/in_transit ma co najmniej jedną akcję),
+  //     a mierzymy nie sam stan, tylko to, czy przycisk osi służby PRZEŻYWA brak akcji.
+  const a = surfaces(inert);
+  assert(a.actions === 0 && a.hudOrders === 0, `T4a świadek: lista akcji PUSTA na obu powierzchniach (fakty ${a.actions}, HUD ${a.hudOrders})`);
+  assert(cnt(a.insp, 'deploy_vessel') === 1 && cnt(a.hud, 'deploy_vessel') === 1,
+    'T4a: przycisk Rozmieść JEST (inspektor konsoli i panel HUD), choć lista akcji jest pusta — to jest cały sens §S19');
 
   // (b) ŚCIEŻKA NORMALNA — przycisk osi służby rejestruje się PRZED siatką akcji.
-  fmo._hitZones = [];
-  fmo._drawActions(mockCtx(), 0, 0, 300, 8, stored, null, window.KOSMOS.colonyManager, 'p_home');
-  const dep = zonesOfType(fmo, 'deploy_vessel');
-  assert(dep.length === 1,
-    `T4b: kadłub w REZERWIE dostaje przycisk także przy niepustej liście akcji (${dep.length})`);
-  const firstActionIdx = fmo._hitZones.findIndex(z => z.type === 'action');
-  const deployIdx = fmo._hitZones.findIndex(z => z.type === 'deploy_vessel');
-  assert(firstActionIdx === -1 || deployIdx < firstActionIdx,
-    `T4b: oś służby zarejestrowana PRZED siatką akcji (idx ${deployIdx} < ${firstActionIdx}) — kolejność jest tu kontraktem`);
+  const b = surfaces(stored);
+  assert(b.actions > 0 && cnt(b.insp, 'deploy_vessel') === 1 && cnt(b.hud, 'deploy_vessel') === 1,
+    `T4b: kadłub w REZERWIE dostaje przycisk także przy NIEPUSTEJ liście akcji (akcji: ${b.actions})`);
+  const order = (arr) => ({ dep: arr.indexOf('deploy_vessel'), act: arr.indexOf('action') });
+  const oi = order(b.insp), oh = order(b.hud);
+  assert(oi.act > 0 && oh.act > 0 && oi.dep < oi.act && oh.dep < oh.act,
+    `T4b: oś służby zarejestrowana PRZED siatką akcji (inspektor ${oi.dep} < ${oi.act}, HUD ${oh.dep} < ${oh.act}) — kolejność jest tu kontraktem`);
 
-  fmo._hitZones = [];
-  fmo._drawActions(mockCtx(), 0, 0, 300, 8, active, null, window.KOSMOS.colonyManager, 'p_home');
-  assert(zonesOfType(fmo, 'withdraw_vessel').length === 1,
-    'T4: okręt W SŁUŻBIE dostaje przycisk WYCOFAJ (ta sama oś, drugi kierunek)');
-  assert(zonesOfType(fmo, 'deploy_vessel').length === 0,
+  const c = surfaces(active);
+  assert(cnt(c.insp, 'withdraw_vessel') === 1 && cnt(c.hud, 'withdraw_vessel') === 1,
+    'T4: okręt W SŁUŻBIE dostaje przycisk WYCOFAJ na obu powierzchniach (ta sama oś, drugi kierunek)');
+  assert(cnt(c.insp, 'deploy_vessel') === 0 && cnt(c.hud, 'deploy_vessel') === 0,
     'T4 KONTROLA PINU: …i NIE dostaje przy tym „Rozmieść" (jeden przycisk, nie dwa)');
 
-  fmo._hitZones = [];
-  const mobil = stubVessel('v_m', 'p_home', 'mobilizing', { mobilizeProgress: 0.5, mobilizeTarget: 'active' });
-  fmo._drawActions(mockCtx(), 0, 0, 300, 8, mobil, null, window.KOSMOS.colonyManager, 'p_home');
-  assert(zonesOfType(fmo, 'deploy_vessel').length === 0 && zonesOfType(fmo, 'withdraw_vessel').length === 0,
+  const d = surfaces(mobil);
+  assert(d.insp.length > 0 && cnt(d.insp, 'deploy_vessel') + cnt(d.insp, 'withdraw_vessel') === 0
+    && cnt(d.hud, 'deploy_vessel') + cnt(d.hud, 'withdraw_vessel') === 0,
     'T4: w trakcie przejścia NIE MA przycisku (jest pasek) — rozkaz w połowie drogi byłby dwuznaczny');
 }
 

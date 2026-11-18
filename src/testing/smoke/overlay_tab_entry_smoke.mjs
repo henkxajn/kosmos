@@ -38,6 +38,11 @@
 //   z zakladka) na `_atlasScrollY` (zerowany przy wejsciu na atlas z innej zakladki); T6 — w keymapie zostaje JEDEN wpis
 //   {id, opts}: 'k'; G i M nie sa w keymapie (przelaczaja tryb galaktyki w `GameScene` przez `isGalaxyToggleKey` — M od G5),
 //   flaga `galaxyView` usunieta, wiec stanu OFF nie ma. Fixture `mkOverlay` bez pol Stratcomu.
+// ⚠ PRZECELOWANE (KZ-Command — Dowodztwo wylacznie konsola): `_openRegistrySearch()` nie bierze juz strefy — pole stoi na
+//   prostokacie `_cmdRects.search` z ostatniego rysunku konsoli (dawne pole z `window.inner*` usuniete), wiec fixture ustawia
+//   `_cmdRects.search` + `_uiScale`, a T1/T3/T5 wolaja `_openRegistrySearch()` bez argumentu; T2 otwiera pole ilosci zywa
+//   sciezka konsoli (z prostokatem pola `kitBox`, jak strefa `logi_good_qty_input` z `CommandPagesView`). Pole `_mapHoverBody`
+//   (usuniete razem z dymkiem ciala mapy) zniknelo z fixture.
 
 import '../headless/env.js';           // MUSI byc pierwszy
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
@@ -46,6 +51,9 @@ import { isGalaxyToggleKey } from '../../ui/GalaxyModeLogic.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
+
+const SEARCH_ZONE = { x: 100, y: 50, w: 120, h: 16 };
+const QTY_BOX = { w: 34, h: 20 };   // prostokat pola ilosci (dane strefy `logi_good_qty_input` konsoli)
 
 // Instancja BEZ konstruktora — testujemy wejscie w zakladke, nie cykl zycia overlaya
 // (konstruktor subskrybuje EventBus i nic z tego nie jest tu potrzebne).
@@ -61,8 +69,10 @@ function mkOverlay(tab = 'tactical') {
   o._logiGoods = { food: 40 };
   o._logiColDropdown = null;
   o._logiGoodDropdownOpen = false;
-  o._mapHoverBody = null;
   o._rightScrollY = 0;
+  // konsola: prostokat szukajki z ostatniego rysunku (`CommandConsoleView` → `_cmdRects.search`) i skala UI
+  o._cmdRects = { search: { ...SEARCH_ZONE } };
+  o._uiScale = 1;
   o._atlasScrollY = 0;
   o._missionConfig = null;
   o._targetScrollOffset = 0;
@@ -71,14 +81,13 @@ function mkOverlay(tab = 'tactical') {
 }
 
 const inDom = (el) => !!el && document.body.children.includes(el);
-const SEARCH_ZONE = { x: 100, y: 50, w: 120, h: 16 };
 
 // ── T1 — rdzen: osiagalna sciezka defektu (wyszukiwarka Rejestru bez `blur`) ──
 console.log('\nT1 — wyszukiwarka Rejestru + wejscie na zakladke atlas przez open({tab})');
 {
   const o = mkOverlay('tactical');
   o._registryFilter.search = 'zmija';
-  o._openRegistrySearch(SEARCH_ZONE);
+  o._openRegistrySearch();
   const el = o._registrySearchEl;
   assert(inDom(el), 'kontrola pinu: input wyszukiwarki jest w DOM przed wejsciem');
   assert(typeof el.onblur !== 'function',
@@ -95,7 +104,7 @@ console.log('\nT1 — wyszukiwarka Rejestru + wejscie na zakladke atlas przez op
 console.log('\nT2 — pole ilosci i drop-downy Logistyki + wejscie na zakladke atlas przez open({tab})');
 {
   const o = mkOverlay('logistics');
-  o._openLogiQtyInput('food', 100, 100);
+  o._openLogiQtyInput('food', 100, 100, QTY_BOX);
   o._logiColDropdown = 'from';
   o._logiGoodDropdownOpen = true;
   const el = o._logiQtyInput;
@@ -113,14 +122,15 @@ console.log('\nT2 — pole ilosci i drop-downy Logistyki + wejscie na zakladke a
 console.log('\nT3 — kontrola pinu: _switchTab i close() nadal sprzataja (straznik regresji)');
 {
   const a = mkOverlay('logistics');
-  a._openLogiQtyInput('food', 100, 100);
+  a._openLogiQtyInput('food', 100, 100, QTY_BOX);
+  assert(inDom(a._logiQtyInput), '_switchTab: kontrola pinu — input w DOM przed przelaczeniem');
   const ea = a._logiQtyInput;
   a._switchTab('atlas');
   assert(!inDom(ea), '_switchTab: input usuniety');
   assert(a._activeTab === 'atlas', '_switchTab: zakladka zmieniona');
 
   const b = mkOverlay('tactical');
-  b._openRegistrySearch(SEARCH_ZONE);
+  b._openRegistrySearch();
   const eb = b._registrySearchEl;
   b.close();
   assert(!inDom(eb), 'close(): input usuniety');
@@ -147,8 +157,9 @@ console.log('\nT4 — PIN DECYZJI: early-return `_switchTab` zostaje (to nie jes
 console.log('\nT5 — klawisz K: intencja wejscia nie zostaje zjedzona przez `_switchTab`');
 {
   const o = mkOverlay('atlas');
-  o._openRegistrySearch(SEARCH_ZONE);
+  o._openRegistrySearch();
   const el = o._registrySearchEl;
+  assert(inDom(el), 'K: kontrola pinu — input wyszukiwarki w DOM przed wejsciem');
   o.open({ focusSection: 'wreck' });
 
   assert(o._activeTab === 'tactical', 'K: zakladka taktyczna');

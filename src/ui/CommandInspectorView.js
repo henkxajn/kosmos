@@ -1,10 +1,10 @@
-// ARC KONSOLE K7-B — inspektor statku / floty na konsoli Dowództwa: rysunek (FEATURES.consoleCommand).
+// ARC KONSOLE K7-B — inspektor statku / floty na konsoli Dowództwa: rysunek (KZ-Command: jedyna ścieżka Dowództwa, flaga zdjęta).
 //
 // Wołane z `CommandConsoleView.drawInspectorZone` (strefa inspektora `consoleZones`). Treść = dzisiejszy panel `_drawRight`
 // (statek, flota, wrak; od K7-C także wróg i konfigurator misji), język konsoli: bez wypełnionych paneli
 // i przycisków, tekst w rolach konsoli, przyrządy jako cienkie paski z liczbami, akcje jako czipy w nawiasach pogrupowane
 // (główne → rozkazy → logistyka → niszczące w roli alert). Strefy trafień: DZISIEJSZE typy i dane (handlery bez zmian),
-// fakty z `FleetManagerOverlay._inspectorShipFacts` (te same predykaty co panel OFF). Akcja niemożliwa = czip wyłączony
+// fakty z `FleetManagerOverlay._inspectorShipFacts` (te same predykaty co dawny panel statku). Akcja niemożliwa = czip wyłączony
 // z powodem w podpowiedzi (`ov._cmdDisabled`), nigdy cichy brak reakcji.
 
 import { THEME } from '../config/ThemeConfig.js';

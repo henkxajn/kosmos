@@ -1,6 +1,6 @@
-// ARC KONSOLE K7-A — Dowództwo na szablonie konsoli: rysunek (FEATURES.consoleCommand).
+// ARC KONSOLE K7-A — Dowództwo na szablonie konsoli: rysunek (KZ-Command: jedyna ścieżka Dowództwa, flaga zdjęta).
 //
-// Wołane przez `FleetManagerOverlay.draw`, gdy `isKitScreen('fleet')`. Szablon 4-strefowy (kierunek podpisany przez właściciela):
+// Wołane przez `FleetManagerOverlay.draw` (jedyna ścieżka rysunku Dowództwa od KZ-Command). Szablon 4-strefowy (kierunek podpisany przez właściciela):
 //   nagłówek — tytuł + czipy zakładek Dowództwa (zastępują własny pasek zakładek; strefa `tab` z dzisiejszym `data.tab`) + [ x ]
 //   lista     — szukajka (DOM `<input>` z prostokąta strefy), grupowanie, floty, układy, role, sekcje — z licznikami
 //   bohater   — tabela statków (12 dzisiejszych kolumn, sort, grupy, pole wyboru, „Pokaż”), linia kontekstu, pasek zbiorczy
@@ -52,7 +52,7 @@ const fit = (ctx, s, w) => truncateText(String(s ?? ''), Math.max(0, w), (q) => 
 const inside = (r, x, y) => !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 const push = (ov, x, y, w, h, type, data = {}) => ov._hitZones.push({ x, y, w, h, type, data });
 
-/** Etykiety ról i układów (te same klucze co ścieżka OFF). */
+/** Etykiety ról i układów (te same klucze co dawny rejestr pełnej szerokości). */
 const roleLabel = (role) => (role ? t(`fleetPicture.role.${role}`) : '—');
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -273,7 +273,6 @@ function drawHeroTable(ov, ctx, hz, roles, d) {
   // (d) Wiersze + grupy
   const table = { x, y, w, h: Math.max(0, inner.y + inner.h - y) };
   ov._cmdRects.table = table;
-  ov._registryRects = { table: { x: hz.x, y: table.y, w: hz.w, h: table.h }, timeline: null };
   const items = d.items;
   const rowH = CMD.ROW_H;
   const contentH = items.length * rowH;

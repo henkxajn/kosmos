@@ -1,4 +1,4 @@
-// ARC KONSOLE K7-C — czysta logika ostatnich stron Dowództwa na konsoli (FEATURES.consoleCommand): panel wroga,
+// ARC KONSOLE K7-C — czysta logika ostatnich stron Dowództwa na konsoli (KZ-Command: jedyna ścieżka): panel wroga,
 // konfigurator misji, Atlas Gwiazd, Logistyka, Jednostki. Bez rysunku, bez `window`; wołający podaje fakty.
 // Zasada: akcja niemożliwa = czip wyłączony z powodem i18n (co zrobić), nigdy cichy brak reakcji; dostępność == ścieżka OFF.
 

@@ -21,6 +21,12 @@
 // f-3 KONTROLA — klik ciała na mapie dalej przekierowuje (zdolność „leć do innego ciała" żyje)
 // f-4 KONTROLA — nic IN-SYSTEM-SPECYFICZNEGO nie zniknęło (⚠ gałąź nie jest bramkowana układem)
 //
+// ⚠ PRZECELOWANE (KZ-Command — dawny panel `_drawRight` usunięty z FMO razem z martwymi `case` stref
+//   `interstellar_redirect` / `foreign_redirect`): `renderRight` rysuje ŻYWE powierzchnie panelu statku — inspektor konsoli
+//   Dowództwa (`CommandInspectorView.drawInspector`, fakty `_inspectorShipFacts`) i panel statku HUD
+//   (`ShipPanelHudLogic.buildShipPanelModel`); f-1 dokłada pin całego produktu: oba typy stref list nie występują jako napis
+//   w kodzie `src/` (ani producent, ani handler; świadek `'map_body'`). f-2 wymaga akcji obcych na OBU powierzchniach.
+//
 // Uruchom: node src/testing/smoke/foreign_panel_slim_smoke.mjs
 
 globalThis.window = globalThis;
@@ -38,6 +44,9 @@ globalThis.localStorage = {
 const EventBus              = (await import('../../core/EventBus.js')).default;
 const EntityManager         = (await import('../../core/EntityManager.js')).default;
 const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
+const IV                    = await import('../../ui/CommandInspectorView.js');
+const { consoleRoles }      = await import('../../ui/ConsoleRolesLogic.js');
+const L5                    = await import('../../ui/ShipPanelHudLogic.js');
 const { VesselManager }     = await import('../../systems/VesselManager.js');
 const { GAME_CONFIG }       = await import('../../config/GameConfig.js');
 
@@ -111,14 +120,17 @@ function makeCtx(drawn) {
     quadraticCurveTo() {}, bezierCurveTo() {},
   };
 }
+/** Żywe powierzchnie panelu statku: inspektor konsoli (strefy rysunku) i panel statku HUD (strefy modelu). */
 function renderRight(mission, over = {}) {
   makeVessel({ mission, ...over });
-  const o = Object.create(FleetManagerOverlay.prototype);
-  o._selectedVesselId = 'v_1'; o._hitZones = []; o._rightViewH = 0; o._rightContentH = 0;
-  o._collapsedFleets = new Set(); o._collapsedSections = new Set();
+  const o = new FleetManagerOverlay();
+  o._selectedVesselId = 'v_1'; o._hitZones = []; o._cmdDisabled = []; o._cmdTip = null;
   const drawn = [];
-  o._drawRight(makeCtx(drawn), 600, 60, 320, 700, vm, KOSMOS.missionSystem, colonyManager, 'p_home');
-  return { drawn, zones: o._hitZones.map(z => z.type), overlay: o };
+  IV.drawInspector(o, makeCtx(drawn), { x: 900, y: 60, w: 294, h: 4000 }, consoleRoles(),
+    { vMgr: vm, ms: KOSMOS.missionSystem, colMgr: colonyManager, activePid: 'p_home' });
+  const insp = o._hitZones.map(z => z.type);
+  const hud = L5.modelZones(L5.buildShipPanelModel(vm.getVessel('v_1'), { K: KOSMOS, fmo: o })).map(z => z.type);
+  return { drawn, zones: [...insp, ...hud], insp, hud, overlay: o };
 }
 
 const FOREIGN = { type: 'exploration', phase: 'orbiting_body', targetId: 'p_far', originId: 'sys_home' };
@@ -132,13 +144,28 @@ for (const [label, r] of [['Interstellar Arrival', rArr], ['orbita ciała', rOrb
   const lists = r.zones.filter(z => z === 'interstellar_redirect' || z === 'foreign_redirect');
   ok(lists.length === 0, `„${label}" bez enumeracji ciał (znaleziono: ${JSON.stringify(lists)})`);
 }
-ok(rArr.zones.includes('cluster_switch'),
-  'KONTROLA PINU: ekran przylotu FAKTYCZNIE się narysował — brak list to filtr, nie brak rysowania');
+ok(rArr.insp.includes('cluster_switch') && rArr.hud.includes('cluster_switch'),
+  'KONTROLA PINU: ekran przylotu FAKTYCZNIE się narysował (obie powierzchnie) — brak list to filtr, nie brak rysowania');
+{
+  // Pin całego produktu (kod `src/` bez komentarzy, bez `src/testing/` i `src/lib/`): typy stref list nie występują jako napis.
+  const { readFileSync, readdirSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const strip = (t) => t.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const files = [];
+  const walk = (d) => { for (const n of readdirSync(d)) { const f = join(d, n); if (statSync(f).isDirectory()) { if (n !== 'testing' && n !== 'lib') walk(f); } else if (n.endsWith('.js')) files.push(f); } };
+  walk(root);
+  const code = files.map((f) => strip(readFileSync(f, 'utf8'))).join('\n');
+  const hits = ['interstellar_redirect', 'foreign_redirect'].filter((z) => code.includes(`'${z}'`));
+  ok(files.length > 100 && code.includes("case 'map_body':") && hits.length === 0,
+    `enumeracje ciał bez producenta i bez handlera w CAŁYM src/ (plików ${files.length}; świadek: handler map_body; trafienia: ${JSON.stringify(hits)})`);
+}
 
 // ── f-2 — akcje kontekstowe RYSUJĄ SIĘ i DYSPOZYCJONUJĄ ───────────────────────────────────────
 header('f-2 KONTROLA — Recon / Kolonizuj / Rozładuj: narysowane ORAZ żywe');
 for (const zt of ['foreign_recon_body', 'foreign_recon_system', 'foreign_colonize', 'foreign_unload']) {
-  ok(rOrb.zones.includes(zt), `strefa ${zt} DALEJ renderowana`);
+  ok(rOrb.insp.includes(zt) && rOrb.hud.includes(zt), `strefa ${zt} DALEJ renderowana (inspektor konsoli i panel statku HUD)`);
 }
 // …i naprawdę dyspozycjonują (klik → producent), a nie tylko istnieją.
 const fired = [];
@@ -191,7 +218,8 @@ ok(!rHome.zones.some(z => z === 'interstellar_redirect' || z === 'foreign_redire
   'brak enumeracji także w układzie własnym — ZMIERZONE: gałąź exploration/orbiting_body NIE JEST ' +
   'bramkowana układem, tylko KSZTAŁTEM MISJI, więc lista pojawiała się i „u siebie". Usunięcie ' +
   'obejmuje oba przypadki, a redundancja (klik ciała na mapie) działa w obu.');
-ok(rHome.zones.length > 0, `KONTROLA PINU: panel in-system dalej coś wystawia (${rHome.zones.length} stref)`);
+ok(rHome.insp.length > 0 && rHome.hud.length > 0,
+  `KONTROLA PINU: panel in-system dalej coś wystawia (konsola ${rHome.insp.length}, HUD ${rHome.hud.length} stref)`);
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 if (fail > 0) process.exitCode = 1;

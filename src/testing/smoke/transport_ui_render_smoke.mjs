@@ -1,5 +1,9 @@
 // MVP Zlecenia Transportowe — render-smoke zakładki LOGISTYKA (FleetManagerOverlay).
-// Uruchom: node src/testing/smoke/tmp_transport_ui_render_smoke.mjs
+// Uruchom: node src/testing/smoke/transport_ui_render_smoke.mjs
+//
+// KZ-Command — Logistyka jest wyłącznie stroną konsoli (flaga consoleCommand zdjęta, dawna dwukolumnowa strona usunięta):
+// anulowanie zlecenia jest w inspektorze WYBRANEGO zlecenia (klik `logiSelect` → `logi_cancel`), kreator w inspektorze przy
+// wyborze „nowe”, a kółko przewija kreator nad prostokątem inspektora z rysunku (`_logiKitRects.insp`, nie `_contentBounds`).
 //
 // Cel: wychwycić błędy RUNTIME UI (złe tokeny THEME, klucze t(), dostęp do danych,
 // sygnatury) których syntax-check nie łapie. env.js daje proxy-canvas (no-op draw).
@@ -21,9 +25,7 @@ import { OrderService }    from '../../systems/OrderService.js';
 import { TransportOrderSystem } from '../../systems/TransportOrderSystem.js';
 import { FleetManagerOverlay }  from '../../ui/FleetManagerOverlay.js';
 import { GAME_CONFIG }          from '../../config/GameConfig.js';
-// K7-C: ten keeper pilnuje DZISIEJSZEJ strony Logistyki (flaga OFF). Strona na konsoli (anulowanie w inspektorze wybranego
-// zlecenia, pole ilości z `consoleZones`) — `console_command_pages_smoke` sekcja L.
-GAME_CONFIG.FEATURES.consoleCommand = false;
+// Strona Logistyki na konsoli (akcje vs stany, pole ilości z `consoleZones`) — także `console_command_pages_smoke` sekcja L.
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => {
@@ -132,8 +134,19 @@ clickZone(createZ);
 ok('zlecenie utworzone (goods Fe:20)', tos.getOrders().length === 1 && tos.getOrders()[0].goods.Fe === 20);
 ok('builder zresetowany (goods puste, from/to zostają)', Object.keys(overlay._logiGoods).length === 0 && overlay._logiFrom === 'F' && overlay._logiTo === 'T');
 overlay.draw(ctx, W, H);
-clickZone(zonesOf('logi_cancel')[0]);
+ok('kreator: bez wybranego zlecenia brak strefy anulowania (anulowanie w inspektorze zlecenia)', zonesOf('logi_cancel').length === 0);
+const newId = tos.getOrders()[0]?.id;
+const selZ = zonesOf('logiSelect').find(z => z.data.orderId === newId);
+ok('lista zleceń: nowe zlecenie wybieralne', !!selZ);
+if (selZ) clickZone(selZ);
+ok('klik wiersza wybiera zlecenie', overlay._logiSelectedOrderId === newId);
+overlay.draw(ctx, W, H);
+const cancelZ = zonesOf('logi_cancel').find(z => z.data.orderId === newId);
+ok('inspektor zlecenia: strefa anulowania tego zlecenia', !!cancelZ);
+if (cancelZ) clickZone(cancelZ);
 ok('zlecenie anulowane', tos.getOrders().length === 0);
+overlay.draw(ctx, W, H);
+ok('anulowane zlecenie → z powrotem kreator', overlay._logiSelectedOrderId === 'new' && zonesOf('logi_create').length + zonesOf('logi_to_dropdown_toggle').length > 0);
 
 // ── Statki + fazy w karcie zlecenia ──────────────────────────────────────────
 const hauler = vesselManager.createAndRegister('hull_small', 'F', { name: 'Wozak', cargoMax: 100, fuel: 1000, fuelMax: 1000 });
@@ -172,21 +185,26 @@ overlay.draw(ctx, W, H);
 ok('drop-down kolonii zawiera B (sys_beta)', zonesOf('logi_col_pick').some(z => z.data.colonyId === 'B'));
 overlay._logiColDropdown = null;
 
-// ── Scroll lewej kolumny (mały viewport → overflow) ──────────────────────────
+// ── Scroll kreatora w inspektorze konsoli (mały viewport → overflow) ─────────
 for (let i = 0; i < 8; i++) {
   const id = `C${i}`;
   EntityManager.add({ id, name: `Kolonia ${i}`, type: 'planet', planetType: 'rocky', radius: 1, mass: 1,
     atmosphere: 'breathable', temperatureK: 280, systemId: 'sys_home', x: 100 + i * 20, y: 50, explored: true, deposits: [] });
   colonyManager.createColony(id, { food: 100, water: 100 }, 1, 100);
 }
+// konsola: kreator (inspektor) wysoki dopiero z kilkoma towarami — kolonie z listy wyboru siedzą w drop-downie
+overlay._logiGoods = { Fe: 10, Cu: 10, food: 10, water: 10, power_cells: 10 };
 overlay._logiBuilderScrollY = 0;
 const smallH = 360;
 overlay.draw(ctx, W, smallH);
 ok('builder: zawartość przekracza widok (scrollowalna)', overlay._logiBuilderContentH > overlay._logiBuilderViewH);
 const before = overlay._logiBuilderScrollY;
-const cb = overlay._contentBounds;
-overlay.handleScroll(30, cb.x + 20, cb.y + cb.h / 2);
-ok('scroll lewej kolumny zwiększa offset', overlay._logiBuilderScrollY > before);
+const ins = overlay._logiKitRects?.insp;
+ok('świadek: prostokąt kreatora (inspektor konsoli) z rysunku', !!ins);
+const ordersBefore = overlay._logiOrdersScrollY ?? 0;
+if (ins) overlay.handleScroll(30, ins.x + 20, ins.y + ins.h / 2);
+ok('kółko nad kreatorem zwiększa jego offset', overlay._logiBuilderScrollY > before);
+ok('kółko nad kreatorem nie rusza listy zleceń', (overlay._logiOrdersScrollY ?? 0) === ordersBefore);
 overlay.draw(ctx, W, smallH);
 ok('draw() po scrollu nie rzuca', true);
 

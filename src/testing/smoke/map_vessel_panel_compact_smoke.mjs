@@ -18,7 +18,7 @@
 //   informacyjny — zero stref klikalnych, zero `return`, zero zmiennych czytanych niżej).
 //
 // KONTROLE (zielone PRZED i PO zmianie — inaczej harness jest jałowy)
-//   C1  panel BEZ `compact` ma pełną kartę katalogową (`contentH` ≈ 550, akcja ~y+456)
+//   C1  panel BEZ `compact` ma pełną kartę katalogową (`contentH` ≈ 550, akcja ~y+456) — od KZ-Command: inspektor rejestru
 //   C2  zbiór akcji jest NIEPUSTY i zawiera zmierzone id (dwa puste panele też są „równe")
 //
 // PINY (mają PAŚĆ przed zmianą, przejść po niej)
@@ -57,6 +57,16 @@
 //     usunięte): K1 / Z / K2 — mierzone wywołania etykiet na `#ui-canvas` to etykiety CTRL (`_drawAllLabels`), etykiety mapy
 //     — warstwa HUD pod `#ui-canvas` (pin porządku canvasów); E1 — wykonanie domyślnych podwarstw warstwy HUD zamiast
 //     dawnego `MapLabelLayer.draw`.
+//
+// ⚠ PRZECELOWANE (KZ-Command — `_drawRight` z gałęzią `{ compact }` usunięty z FMO razem z dawnym panelem rejestru):
+//   „Rejestr” = inspektor konsoli Dowództwa (`CommandInspectorView.drawInspector`), „panel mapy (kompakt)” = panel statku HUD
+//   T5 (`ShipPanelHudLayer.prepare` / `draw`, model `ShipPanelHudLogic.buildShipPanelModel`) — to on jest dziś małym panelem
+//   nad mapą. C1 — inspektor rejestru jest PEŁNY (akta techniczne; > 400 px treści); C2 — jego zbiór akcji niepusty (transport);
+//   E1 — RDZEŃ: panel HUD ma DOKŁADNIE te same akcje co inspektor rejestru (+ Cargo); R1 — panel HUD jest istotnie krótszy
+//   niż inspektor (< 400 px, o > 150 px mniej) i ma wejście w rozkazy; R2 — krok `select` konfiguratora: panel HUD mieści cele
+//   w 400 px, a inspektor rejestru (kontrola) rysuje te same cele w WYŻSZEJ treści.
+//   USUNIĘTY: E3 (`{compact:false}` ≡ brak `opts`) — parametru `opts` nie ma już nigdzie (`_drawRight` usunięty, `UIManager`
+//   nie buduje argumentu — pin M), więc kontrakt kill-switcha nie ma przedmiotu.
 //
 // ⚠ PIN M ODWRÓCONY 2026-09-09 (`false` → `true`): flaga dostała default-ON po zdanym
 //   live-gate'cie B1 (6/6) i gate'cie kolejności malowania (4/4, `23523af`). Stary kształt
@@ -150,38 +160,62 @@ const actionIds = (z) => z.filter((q) => q.type === 'action').map((q) => q.data.
 const sigGeom = (z) => z.map((q) => q.type + (q.data?.actionId ? ':' + q.data.actionId : '')
   + '@' + Math.round(q.x) + ',' + Math.round(q.y) + ',' + Math.round(q.w) + ',' + Math.round(q.h)).sort();
 
-/** `_drawRight` wprost w obszarze (20, 100, w, h) — `opts === null` — bez argumentu `opts` (jak Rejestr). */
-function draw(opts, w = 300, h = 700) {
+// KZ-Command — żywe powierzchnie: inspektor rejestru konsoli i panel statku HUD (T5), ten sam fixture `orbiting`.
+let IV = null, ROLES = null, Y5 = null, L5 = null;
+try { IV = await import('../../ui/CommandInspectorView.js'); ROLES = (await import('../../ui/ConsoleRolesLogic.js')).consoleRoles(); } catch { /* piny padną */ }
+try { Y5 = await import('../../ui/ShipPanelHudLayer.js'); L5 = await import('../../ui/ShipPanelHudLogic.js'); } catch { /* piny padną */ }
+
+/** Atrapa ctx z fontem (pomiar 0,6 em na znak) — renderer T5 czyta rozmiar fontu. */
+function fontCtx() {
+  let font = '10px monospace';
+  return new Proxy({}, {
+    get(o, k) {
+      if (k === 'font') return font;
+      if (k === 'measureText') return (str) => ({ width: [...String(str)].length * (Number(/(\d+(?:\.\d+)?)px/.exec(font)?.[1]) || 10) * 0.6 });
+      if (k === 'canvas') return { width: 1920, height: 1080 };
+      if (k in o) return o[k];
+      return typeof k === 'string' ? () => {} : undefined;
+    },
+    set(o, k, v) { if (k === 'font') font = v; else o[k] = v; return true; },
+  });
+}
+
+/** Inspektor rejestru konsoli w obszarze (20, 100, 300, h); `cfg` — konfigurator misji. Wyjątek rysunku = wynik `threw`. */
+function inspDraw(h = 700, cfg = null) {
   world();
   const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  fmo._hitZones = [];
+  fmo._selectedVesselId = 'v_1'; fmo._missionConfig = cfg ? { ...cfg } : null;
+  fmo._hitZones = []; fmo._cmdDisabled = []; fmo._cmdTip = null;
   const K = window.KOSMOS;
-  if (opts === null) fmo._drawRight(stubCtx(), 20, 100, w, h, K.vesselManager, K.missionSystem, K.colonyManager, 'p_home');
-  else               fmo._drawRight(stubCtx(), 20, 100, w, h, K.vesselManager, K.missionSystem, K.colonyManager, 'p_home', opts);
-  return { fmo, zones: [...fmo._hitZones], contentH: fmo._rightContentH ?? -1 };
+  let threw = null;
+  try {
+    IV.drawInspector(fmo, fontCtx(), { x: 20, y: 100, w: 300, h }, ROLES,
+      { vMgr: K.vesselManager, ms: K.missionSystem, colMgr: K.colonyManager, activePid: 'p_home' });
+  } catch (e) { threw = e?.message ?? String(e); }
+  return { fmo, zones: [...fmo._hitZones], contentH: fmo._rightContentH ?? -1, threw };
 }
 
-function overlayDraw() {
+/** Panel statku HUD (T5, prawdziwy `ShipPanelHudLayer`): rozmiar, strefy klatki (w 930, 60) i model. */
+function hudDraw(cfg = null) {
   world();
   const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  fmo._hitZones = [];
-  fmo._drawRight(stubCtx(), 1600, 100, 300, 800, window.KOSMOS.vesselManager,
-    window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home');
-  return { fmo, zones: [...fmo._hitZones], contentH: fmo._rightContentH ?? -1 };
+  fmo._selectedVesselId = 'v_1'; fmo._missionConfig = cfg ? { ...cfg } : null;
+  const lay = new Y5.ShipPanelHudLayer();
+  const ctx = fontCtx();
+  const sz = lay.prepare({ ctx, K: window.KOSMOS, fmo, vesselId: 'v_1', maxH: 4000, features: GAME_CONFIG.FEATURES });
+  if (sz) lay.draw(ctx, { x: 930, y: 60, w: sz.w, h: sz.h }, {});
+  const model = L5.buildShipPanelModel(window.KOSMOS.vesselManager.getVessel('v_1'), { K: window.KOSMOS, fmo, features: GAME_CONFIG.FEATURES });
+  return { sz, zones: [...(lay._zones ?? [])], model };
 }
+const hudActionIds = (m) => (m?.orders?.items ?? []).filter((c) => c.enabled && c.zone?.type === 'action').map((c) => c.zone.data.actionId).sort();
 
-// ═══ C1 — baseline: bez `compact` karta katalogowa JEST ══════════════════════════════════════
-header('C1  KONTROLA — bez `compact` panel ma pełną kartę katalogową');
+// ═══ C1 — baseline: inspektor rejestru jest PEŁNY ═══════════════════════════════════════════
+header('C1  KONTROLA — inspektor rejestru konsoli ma pełną treść (akta techniczne)');
 let FULL = null;
 {
-  const r = draw(null);
+  const r = inspDraw();
   FULL = r;
-  ok(r.contentH > 500, `contentH pełnego panelu > 500 (jest: ${Math.round(r.contentH)})`);
-  const a = r.zones.filter((z) => z.type === 'action').sort((p, q) => p.y - q.y)[0];
-  ok(!!a && (a.y - 100) > 400,
-     `pierwsza akcja leży NISKO — pod kartą katalogową (jest: y+${a ? Math.round(a.y - 100) : '?'})`);
+  ok(!r.threw && r.contentH > 400, `contentH inspektora rejestru > 400 (jest: ${Math.round(r.contentH)}${r.threw ? '; wyjątek: ' + r.threw : ''})`);
 }
 
 // ═══ C2 — zbiór akcji NIEPUSTY i konkretny (anty-jałowość dla E1) ════════════════════════════
@@ -194,94 +228,57 @@ let BASE_ACTIONS = null;
      `zawiera zmierzone id `.concat(`(transport) — jest: ${JSON.stringify(BASE_ACTIONS)}`));
 }
 
-// ═══ E1 — RÓWNOŚĆ: compact ≡ Rejestr co do ZBIORU AKCJI ══════════════════════════════════════
-// ⚠ To jest rdzeń slice'u B: kompakt UKRYWA informacje, ale NIE ODBIERA ŻADNEJ AKCJI.
+// ═══ E1 — RÓWNOŚĆ: panel mapy (HUD) ≡ Rejestr co do ZBIORU AKCJI ═════════════════════════════
+// ⚠ To jest rdzeń slice'u B: mały panel nad mapą UKRYWA informacje, ale NIE ODBIERA ŻADNEJ AKCJI.
 //   Gdyby zaczął, „pełny zestaw akcji" byłby nieprawdą, a panel — trzecią, uboższą powierzchnią.
-header('E1  PIN — zbiór akcji w `compact` ≡ zbiór akcji Rejestru (ta sama metoda, ta sama instancja)');
+header('E1  PIN — zbiór akcji panelu statku HUD ≡ zbiór akcji inspektora rejestru (ten sam statek, ta sama klatka świata)');
 {
-  const reg = overlayDraw();
-  const cmp = draw({ compact: true });
+  const reg = inspDraw();
+  const hud = hudDraw();
   const aReg = actionIds(reg.zones);
-  const aCmp = actionIds(cmp.zones);
+  const aHud = hudActionIds(hud.model);
   ok(aReg.length > 0 && aReg.includes('transport'),
      `KONTROLA: Rejestr ma niepusty, konkretny zbiór akcji (${JSON.stringify(aReg)})`);
-  ok(JSON.stringify(aCmp) === JSON.stringify(aReg),
-     `compact ma DOKŁADNIE te same akcje co Rejestr (compact: ${JSON.stringify(aCmp)}, rejestr: ${JSON.stringify(aReg)})`);
-  // Cargo to AKCJA (strefa `cargo_load`), nie karta katalogowa — musi przeżyć kompakt.
-  ok(cmp.zones.some((z) => z.type === 'cargo_load'),
-     'compact ZACHOWUJE przycisk Cargo (to afordancja akcji, nie karta katalogowa)');
+  ok(JSON.stringify(aHud) === JSON.stringify(aReg),
+     `panel HUD ma DOKŁADNIE te same akcje co Rejestr (HUD: ${JSON.stringify(aHud)}, rejestr: ${JSON.stringify(aReg)})`);
+  // Cargo to AKCJA (strefa `cargo_load`), nie karta katalogowa — musi przeżyć mały panel.
+  ok(hud.zones.some((z) => z.zone?.type === 'cargo_load') && reg.zones.some((z) => z.type === 'cargo_load'),
+     'panel HUD ZACHOWUJE przycisk Cargo (to afordancja akcji, nie karta katalogowa) — jak Rejestr');
 }
 
-// ═══ E3 — KILL-SWITCH PRZEŻYWA FLIP: `{compact:false}` ≡ brak `opts`, CO DO PIKSELA ══════════
-// PYTANIE, NA KTÓRE TEN PIN ODPOWIADA: po flipie na default-ON `UIManager` przekazuje
-// `{ compact: false }` (jawne false), a NIE pomija `opts` — bo argument jest zawsze budowany
-// (`{ compact: GAME_CONFIG.FEATURES?.mapVesselPanelCompact === true }`). Zgaszenie flagi
-// w RUNTIME musi więc dać kolumnę A, a nie „prawie A".
-// ⚠ E2 tego NIE POKRYWA: tamten pin porównuje Rejestr z panelem BEZ `opts` (`draw(null)`) —
-//   czyli ścieżkę, którą po flipie chodzi Rejestr, a NIE ścieżkę wyłączonego kill-switcha.
-//   Różnica jest jedną linią w `_drawRight` (`opts.compact === true`), ale to właśnie ta linia
-//   jest tu kontraktem, a niesprawdzony kontrakt to kill-switch, który „powinien" działać.
-// ⚠ Znowu NIE jest to pin fail-first tego commitu (przechodzi po obu stronach) — to
-//   potwierdzenie warunku, na którym flip stoi.
-header('E3  PIN — runtime OFF (`{compact:false}`) = kolumna A bit w bit (kontrola: `true` różni się)');
-{
-  const noOpts = draw(null);
-  const offFlg = draw({ compact: false });
-  const onFlg  = draw({ compact: true });
-  const sNo  = sigGeom(noOpts.zones);
-  const sOff = sigGeom(offFlg.zones);
-  const sOn  = sigGeom(onFlg.zones);
+// (E3 — `{compact:false}` ≡ brak `opts` — usunięty w KZ-Command: parametru `opts` i gałęzi `compact` nie ma już nigdzie.)
 
-  ok(sNo.length > 0 && noOpts.contentH > 500,
-     `KONTROLA ANTY-JAŁOWA: baza to PEŁNY panel, nie pustka (${sNo.length} stref, contentH ${Math.round(noOpts.contentH)})`);
-  ok(JSON.stringify(sOff) === JSON.stringify(sNo),
-     `sygnatura Z GEOMETRIĄ identyczna (${sOff.length} vs ${sNo.length} stref)`);
-  ok(Math.round(offFlg.contentH) === Math.round(noOpts.contentH),
-     `contentH identyczne (${Math.round(noOpts.contentH)} = ${Math.round(offFlg.contentH)})`);
-  // KONTROLA KIERUNKU — bez niej pin przeszedłby także wtedy, gdyby `compact` NIC nie robił.
-  ok(JSON.stringify(sOn) !== JSON.stringify(sNo),
-     `KONTROLA: `.concat(`{compact:true} RÓŻNI się od bazy (contentH ${Math.round(onFlg.contentH)} vs ${Math.round(noOpts.contentH)})`));
+// ═══ R1 — RENDER: panel mapy jest realnie KRÓTKI ═════════════════════════════════════════════
+header('R1  PIN — panel statku HUD jest istotnie krótszy niż inspektor rejestru, a rozkazy są w zasięgu');
+{
+  const full = inspDraw();
+  const hud = hudDraw();
+  const h = hud.sz?.h ?? Infinity;
+  ok(h < full.contentH - 150, `panel HUD krótszy o > 150 px (inspektor ${Math.round(full.contentH)} → HUD ${Math.round(h)})`);
+  ok(h < 400, `panel HUD mieści się w „małym" budżecie (<400 px, jest ${Math.round(h)})`);
+  // Wejście w rozkazy (akordeon „Rozkazy”) i Cargo — klikalne chipy w obrębie panelu (karta katalogowa nie wypycha akcji).
+  const chips = hud.zones.filter((z) => z.kind === 'chip' && z.y >= 60 && z.y + z.h <= 60 + h);
+  ok(chips.some((z) => z.zone?.type === 'cargo_load') && chips.some((z) => z.id === 'orders' && !z.zone),
+     `panel HUD: chip Cargo i wejście w rozkazy w obrębie panelu (${chips.map((z) => z.zone?.type ?? z.id).join(', ')})`);
 }
 
-// ═══ R1 — RENDER: compact realnie skraca panel ═══════════════════════════════════════════════
-header('R1  PIN — `compact` SKRACA panel: karta katalogowa znika, akcje idą do góry');
+// ═══ R2 — PICKER: krok `select` mieści się w ~400 px ═════════════════════════════════════════
+// Decyzja właściciela: panel ROŚNIE na czas wyboru celu i wraca po potwierdzeniu. Pin sprawdza, czy mały panel nad mapą
+// MIEŚCI krok wyboru — inaczej ta decyzja jest nierealizowalna.
+header('R2  PIN — krok `select` panelu statku HUD mieści listę celów (≤ 400 px)');
 {
-  const full = draw(null);
-  const cmp  = draw({ compact: true });
-  ok(cmp.contentH < full.contentH - 150,
-     `contentH spada istotnie (${Math.round(full.contentH)} → ${Math.round(cmp.contentH)})`);
-  const aFull = full.zones.filter((z) => z.type === 'action').sort((p, q) => p.y - q.y)[0];
-  const aCmp  = cmp.zones.filter((z) => z.type === 'action').sort((p, q) => p.y - q.y)[0];
-  ok(!!aCmp, 'compact NADAL ma strefę akcji (nie wycięliśmy akcji razem z kartą)');
-  ok(!!aFull && !!aCmp && (aCmp.y - 100) < (aFull.y - 100) - 150,
-     `pierwsza akcja wędruje do góry (y+${Math.round(aFull.y - 100)} → y+${Math.round(aCmp.y - 100)})`);
-  // Karta katalogowa ZNIKA — mierzone przez BRAK jej pionu, nie przez brak stref (ona ich nie ma).
-  ok(cmp.contentH < 400, `panel mieści się w „małym" budżecie (<400 px, jest ${Math.round(cmp.contentH)})`);
-}
-
-// ═══ R2 — PICKER: krok `select` mieści się w ~360 px ═════════════════════════════════════════
-// Decyzja właściciela: panel ROŚNIE do ~360 px na czas wyboru celu i wraca do kompaktu po
-// potwierdzeniu. Pin sprawdza, czy 360 px WYSTARCZA — inaczej ta decyzja jest nierealizowalna.
-header('R2  PIN — krok `select` mieści listę celów w ~360 px');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  fmo._missionConfig = { actionId: 'transport', targetId: null, step: 'select' };
-  fmo._hitZones = [];
-  fmo._drawRight(stubCtx(), 20, 100, 300, 360, window.KOSMOS.vesselManager, window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home', { compact: true });
-  const targets = fmo._hitZones.filter((z) => z.type === 'select_target');
-  ok(targets.length >= 1, `picker emituje >=1 cel przy h=360 (jest: ${targets.length})`);
-  ok(fmo._rightContentH <= 360 + 40,
-     `treść kroku select mieści się w oknie ~360 px (contentH ${Math.round(fmo._rightContentH)})`);
-  // KONTROLA: bez `compact` ten sam krok NIE mieści się — czyli 360 px to zasługa kompaktu.
-  world();
-  const fmo2 = new FleetManagerOverlay();
-  fmo2._selectedVesselId = 'v_1';
-  fmo2._missionConfig = { actionId: 'transport', targetId: null, step: 'select' };
-  fmo2._drawRight(stubCtx(), 20, 100, 300, 360, window.KOSMOS.vesselManager, window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home');
-  ok(fmo2._rightContentH > 360,
-     `KONTROLA: bez kompaktu ten sam krok NIE mieści się w 360 px (contentH ${Math.round(fmo2._rightContentH)})`);
+  const CFG = { actionId: 'transport', targetId: null, step: 'select' };
+  const hud = hudDraw(CFG);
+  const targets = (hud.model?.config?.rows ?? []).filter((r) => r.enabled && r.zone?.type === 'select_target');
+  const drawnT = hud.zones.filter((z) => z.zone?.type === 'select_target');
+  ok(targets.length >= 1 && drawnT.length === targets.length, `picker HUD emituje >=1 cel i rysuje każdy (model ${targets.length}, klatka ${drawnT.length})`);
+  ok((hud.sz?.h ?? Infinity) <= 400, `panel HUD w kroku select mieści się w ~400 px (h ${Math.round(hud.sz?.h ?? -1)})`);
+  // KONTROLA: inspektor rejestru rysuje te same cele, ale w WYŻSZEJ treści — mały panel to zasługa panelu HUD.
+  //   Wyjątek rysunku konfiguratora konsoli (`drawConfigurator`) = czerwony pin z jego treścią — żywa ścieżka, nie atrapa.
+  const reg = inspDraw(360, CFG);
+  const regT = reg.zones.filter((z) => z.type === 'select_target');
+  ok(!reg.threw && regT.length >= 1 && reg.contentH > (hud.sz?.h ?? Infinity),
+     `KONTROLA: inspektor rejestru w kroku select rysuje cele (${regT.length}) w wyższej treści (contentH ${Math.round(reg.contentH)} > HUD ${Math.round(hud.sz?.h ?? -1)})${reg.threw ? ' — WYJĄTEK RYSUNKU: ' + reg.threw : ''}`);
 }
 
 // ═══ M — (T4) flagi trybu kompaktowego i panelu statku nad mapą usunięte ═══════════════════════

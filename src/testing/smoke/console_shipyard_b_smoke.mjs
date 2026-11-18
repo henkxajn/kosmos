@@ -23,6 +23,8 @@
 // w keeperze; U1b «flagi OFF → ekran U» → U1b `routeOverlayId('unit_design', …)` = shipyard dla {} / consoleKit OFF / bez argumentu,
 // inne id bez zmian; U1e «flaga OFF — U otwiera ekran U» → U1e consoleKit OFF — OverlayManager i tak otwiera Stocznię. Usunięte bez
 // zamiennika: brak.
+// KZ-Command — U1f przepięty: pinował `FleetManagerOverlay._drawGroundTab … _groundPanel.draw(` (usunięta zakładka Naziemne);
+// teraz strona Jednostek konsoli (`CommandPagesView` → `ov._groundFacts()`) i `_withGroundColony` → panel overlayu U.
 //   F726 projektant U: kategorie tarcz i desantu z etykietą i ikoną
 
 import '../headless/env.js';           // MUSI być pierwszy (window/document/THREE + seeded RNG)
@@ -474,9 +476,13 @@ await sec(async () => {
   F.consoleKit = true;
   assert(om.active === 'shipyard' && om.overlays.shipyard.visible && !om.overlays.unit_design.visible,
     'U1e: trwałe — przy consoleKit OFF U nadal otwiera Stocznię (ekran U nie wraca)');
+  // KZ-Command: dawna zakładka Naziemne (`_drawGroundTab` → `_groundPanel.draw`) usunięta — Dowództwo → Jednostki to strona konsoli
+  // (`CommandPagesView` czyta `ov._groundFacts()`), która rekrutuje przez panel zarejestrowanego overlayu U (`_withGroundColony`)
   const fm = strip(src('../../ui/FleetManagerOverlay.js')), co = strip(src('../../ui/ColonyOverlay.js')), um = strip(src('../../scenes/UIManager.js'));
-  assert(/_drawGroundTab\([\s\S]{0,300}_groundPanel\.draw\(/.test(fm) && /GroundUnitPanel/.test(co) && /register\('unit_design', new UnitDesignOverlay\(\)\)/.test(um),
-    'U1f (kontrola): projektant naziemny — Dowództwo → Naziemne i szkic Kolonii bez zmian; overlay U nadal zarejestrowany');
+  const pv = strip(src('../../ui/CommandPagesView.js'));
+  assert(/_withGroundColony\(fn\) \{[\s\S]{0,200}_getDesignEditor\(\)\?\._groundPanel/.test(fm) && /overlays\?\.unit_design/.test(fm)
+    && /ov\._groundFacts\(\)/.test(pv) && /GroundUnitPanel/.test(co) && /register\('unit_design', new UnitDesignOverlay\(\)\)/.test(um),
+    'U1f (kontrola): projektant naziemny — Dowództwo → Jednostki (strona konsoli przez panel overlayu U) i szkic Kolonii bez zmian; overlay U nadal zarejestrowany');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

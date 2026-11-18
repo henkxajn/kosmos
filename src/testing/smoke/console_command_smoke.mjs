@@ -1,9 +1,12 @@
-// ARC KONSOLE K7-A — keeper: Dowództwo na szablonie konsoli (FEATURES.consoleCommand). Plan: docs/design/CONSOLES_PLAN.md (K7).
+// ARC KONSOLE K7-A — keeper: Dowództwo na szablonie konsoli (KZ-Command: jedyna ścieżka, flaga zdjęta). Plan: docs/design/CONSOLES_PLAN.md (K7).
 //
 // Sekcje (każda degraduje, nie przerywa — symbole nowego kodu przez import przestrzeni nazw / dynamiczny import):
-//   A  dostępność akcji ON ⊇ OFF (inwentarz stref trafień: rejestr, zaznaczenie wielokrotne, akcja zbiorcza, inspektor) + te same skutki
-//   B  sort / filtr: kolejność wierszy tabeli ON == OFF == FleetRegistryLogic dla tego samego wejścia (kilka kolumn, kierunki, filtry)
-//   C  czipy nagłówka zastępują pasek zakładek, przełączenie zachowuje stan rejestru; gniazdo walki; brak pasa subnav
+//   A  inwentarz stref konsoli ABSOLUTNY: dokładne typy z licznościami i klucze danych per stan (12 stanów rejestru —
+//      zamrożone z bazy 8701aa8, gdzie ścieżka ON była ⊇ OFF pod dawnym pinem A; zbiór zkey 1:1 z obecnym rysunkiem);
+//      każdy z 33 typów klikany przez `handleClick` ze SKUTKIEM (stan, wywołany handler / system, zdarzenie)
+//   B  sort / filtr: kolejność wierszy tabeli == FleetRegistryLogic dla tego samego wejścia (kilka kolumn, kierunki, filtry)
+//   C  czipy nagłówka zastępują pasek zakładek, przełączenie zachowuje stan rejestru; gniazdo walki; brak pasa subnav;
+//      TRWAŁOŚĆ — 'fleet' ekranem zestawu bez flag i przy consoleKit false, brak klucza consoleCommand, FMO bez kitOn / isKitScreen
 //   D  wyłączona akcja ma powód i18n (zbiorcza bez zaznaczenia, „Pokaż” w tranzycie, kontakt tylko do odczytu) — klucze PL + EN
 //   S  pole szukania DOM: prostokąt ze strefy listy przy 1600×1041 i 1280×833, bez `window.inner*` w handlerze
 //   G  geometria stref (bez nakładania, nad zegarem, strefy trafień w ramie)
@@ -12,10 +15,15 @@
 //   M  wiele statków: przewijanie tabeli, strefy tylko w pasie widoku
 //   N  brak surowych id / snake_case w tekście konsoli
 //   X  przewijanie po strefach konsoli (lista / tabela / pas = zoom / inspektor)
-//   F  (po bramce K7-A) klik wiersza = TYLKO zaznaczenie (bez `vessel:focus`; OFF bez zmian — kontrola); „POKAŻ” = plan z żywego
+//   F  (po bramce K7-A) klik wiersza = TYLKO zaznaczenie (bez `vessel:focus`; świadek: POKAŻ emituje); „POKAŻ” = plan z żywego
 //      statku per stan (dok → ciało / stacja, orbita i lot → statek, inny układ → przełączenie, tranzyt / nieznany układ → powód)
 //      i jego wykonanie (kolejność: zamknięcie → przełączenie → zaznaczenie → `vessel:focus`; odmowa = bez kamery)
 // Bez pinów na stałe rysunku (kolory, odstępy).
+//
+// KZ-Command — piny ON vs OFF przepięte na absolutne: A (ON ⊇ OFF per stan → dokładne typy + klucze danych; „te same skutki ON ==
+// OFF” → tabela skutków 33 typów), A multi (pola wyboru ON == OFF → jedno na wiersz własny tabeli), B (ON == OFF → == logika),
+// C (OFF nie jest ekranem zestawu / brak stref konsoli → trwałość), F row (kontrola OFF „klik leci kamerą” → świadek POKAŻ).
+// Usunięte bez zamiennika: brak.
 
 import '../headless/env.js';   // MUSI być pierwszy
 import { GAME_CONFIG } from '../../config/GameConfig.js';
@@ -40,7 +48,7 @@ const header = (s) => console.log('\n── ' + s);
 const safe = (name, fn) => { try { fn(); } catch (e) { fail++; console.log(`  ✗ FAIL: ${name} rzuciło: ${e.message}`); } };
 
 const FEAT = GAME_CONFIG.FEATURES;
-const setFlag = (on) => { FEAT.consoleKit = true; FEAT.consoleCommand = on; };
+FEAT.consoleKit = true;   // scena za tekstem; Dowództwo od niej nie zależy (C — trwałość)
 
 // ── fikstura świata ───────────────────────────────────────────────────────────────────────────────────────────────
 const AU = 100;
@@ -120,8 +128,7 @@ function mockCtx() {
 }
 
 const W = 1280, H = 833;   // logiczne px przy 1600×1041 (skala 1.25) i 1280×833 (skala 1)
-function mk({ on, vessels = world(), setup = null } = {}) {
-  setFlag(on);
+function mk({ vessels = world(), setup = null } = {}) {
   const ov = new FleetManagerOverlay();
   installKosmos(ov, vessels);
   ov._visible = true;
@@ -129,8 +136,7 @@ function mk({ on, vessels = world(), setup = null } = {}) {
   if (setup) setup(ov);
   return ov;
 }
-function draw(ov, on) {
-  setFlag(on);
+function draw(ov) {
   const ctx = mockCtx();
   ov.draw(ctx, W, H);
   return ctx;
@@ -139,7 +145,7 @@ const stable = (d) => JSON.stringify(d ?? {}, (k, v) => (typeof v === 'function'
 const zkey = (z) => `${z.type}|${stable(Object.fromEntries(Object.entries(z.data ?? {}).sort()))}`;
 const zoneSet = (ov) => new Set(ov._hitZones.map(zkey));
 
-// Stany do porównania ON vs OFF (ten sam setup na dwóch instancjach)
+// Stany rejestru (inwentarz A)
 const STATES = {
   plain: null,
   multi: (o) => { o._multiSelectedIds.add('v_0'); o._multiSelectedIds.add('v_2'); },
@@ -155,78 +161,158 @@ const STATES = {
   multiAndSel: (o) => { o._multiSelectedIds.add('v_1'); window.KOSMOS.uiManager.setSelectedVesselId('v_0'); },
 };
 
-// ═══ A — dostępność akcji ON ⊇ OFF ═════════════════════════════════════════════════════════════════════════════════
-header('A  inwentarz stref trafień: każda akcja OFF istnieje ON (te same typy i dane)');
-const ON_ONLY_OK = new Set(['registryClearFilters', 'fleetCreate', 'fleetDisband']);   // K7-B: [ + NOWA FLOTA ] i [ ROZWIĄŻ FLOTĘ ] (Finding 747)
-const OFF_ONLY_OK = new Set();   // pasek zakładek → czipy (ten sam typ `tab`), mapa 2D usunięta (K7-pre)
+// ═══ A — inwentarz stref konsoli (absolutny) ══════════════════════════════════════════════════════════════════════
+header('A  inwentarz stref konsoli: dokładne typy (liczności) i klucze danych per stan');
+// Zamrożone z bazy 8701aa8 (ścieżka konsoli, która tam była ⊇ ścieżki OFF pod dawnym pinem A); obecny rysunek = baza 1:1.
+const EXPECT_TYPES = {
+  plain: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 9, vesselMultiToggle: 9 },
+  multi: { close: 1, fleetAssignMenuOpen: 2, fleetClearMultiSelect: 2, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 11, vesselMultiToggle: 9 },
+  wrecksContacts: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 10, vesselMultiToggle: 9 },
+  groupFleet: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 2, registryGroupMode: 3, registryGroupToggle: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 9, vesselMultiToggle: 9 },
+  groupSystem: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 6, registryGroupFleet: 1, registryGroupMode: 3, registryGroupToggle: 6, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 7, vesselMultiToggle: 7 },
+  filterSystem: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 4, registryFocus: 2, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 2, vesselMultiToggle: 2 },
+  filterRole: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 2, registryChipSystem: 3, registryClearFilters: 1, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1 },
+  search: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 2, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySearchClear: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 2, vesselMultiToggle: 2 },
+  selFleet: { close: 1, fleetBackToList: 1, fleetCreate: 1, fleetDisband: 1, fleetEngage: 1, fleetMemberSelect: 2, fleetMoveToPoint: 1, fleetRename: 1, fleetReturnBase: 1, fleetSetDoctrine: 4, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 9, vesselMultiToggle: 9 },
+  selWreck: { close: 1, fleetCreate: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, tab: 4, timelineCollapse: 1, vessel: 10, vesselMultiToggle: 9 },
+  selVessel: { action: 1, back_to_shipyard: 1, close: 1, fleetCreate: 1, manual_refuel: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, rename: 1, tab: 4, timelineCollapse: 1, toggle_refuel_auto: 1, undock: 1, vessel: 9, vesselMultiToggle: 9 },
+  multiAndSel: { action: 1, back_to_shipyard: 1, close: 1, fleetAssignMenuOpen: 1, fleetClearMultiSelect: 1, fleetCreate: 1, manual_refuel: 1, registryChipKind: 2, registryChipRole: 1, registryChipSystem: 3, registryFocus: 8, registryGroupFleet: 1, registryGroupMode: 3, registrySearch: 1, registrySort: 12, rename: 1, tab: 4, timelineCollapse: 1, toggle_refuel_auto: 1, undock: 1, vessel: 9, vesselMultiToggle: 9 },
+};
+// klucze danych każdego typu (te same we wszystkich stanach)
+const EXPECT_KEYS = { action: 'actionId,vessel', back_to_shipyard: '', close: '', fleetAssignMenuOpen: '', fleetBackToList: '', fleetClearMultiSelect: '',
+  fleetCreate: '', fleetDisband: 'fleetId', fleetEngage: 'fleetId', fleetMemberSelect: 'vesselId', fleetMoveToPoint: 'fleetId', fleetRename: 'fleetId',
+  fleetReturnBase: 'fleetId', fleetSetDoctrine: 'doctrine,fleetId', manual_refuel: 'vesselId', registryChipKind: 'field', registryChipRole: 'role',
+  registryChipSystem: 'key', registryClearFilters: '', registryFocus: 'systemId,vesselId', registryGroupFleet: 'fleetId', registryGroupMode: 'mode',
+  registryGroupToggle: 'key', registrySearch: '', registrySearchClear: '', registrySort: 'col', rename: 'vesselId', tab: 'tab', timelineCollapse: '',
+  toggle_refuel_auto: 'vesselId', undock: 'vesselId', vessel: 'vesselId', vesselMultiToggle: 'vesselId' };
+const typeCounts = (ov) => { const m = {}; for (const z of ov._hitZones) m[z.type] = (m[z.type] ?? 0) + 1; return Object.fromEntries(Object.entries(m).sort()); };
+const diffCounts = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]).map((k) => `${k}:${a[k] ?? 0}≠${b[k] ?? 0}`);
 for (const [name, setup] of Object.entries(STATES)) {
   safe(`A ${name}`, () => {
-    const off = mk({ on: false, setup }); draw(off, false);
-    const on = mk({ on: true, setup }); draw(on, true);
-    const so = zoneSet(off), sn = zoneSet(on);
-    ok(so.size > 0, `A ${name}: świadek — OFF ma strefy (${so.size})`);
-    ok(!!on.consoleZones && off.consoleZones == null, `A ${name}: świadek — ON rysuje konsolę, OFF dzisiejszy ekran`);
-    const missing = [...so].filter((k) => !sn.has(k) && !OFF_ONLY_OK.has(k.split('|')[0]));
-    ok(missing.length === 0, `A ${name}: brak akcji OFF na konsoli: ${missing.slice(0, 6).join(' ; ')}`);
-    const extraTypes = [...new Set([...sn].filter((k) => !so.has(k)).map((k) => k.split('|')[0]))]
-      .filter((t) => !ON_ONLY_OK.has(t) && !['registryChipSystem', 'registryChipRole', 'registryGroupFleet', 'vessel', 'fleetAssignMenuOpen', 'fleetClearMultiSelect'].includes(t));
-    ok(extraTypes.length === 0, `A ${name}: nowe typy stref ON spoza listy: ${extraTypes.join(',')}`);
+    const on = mk({ setup }); draw(on);
+    ok(!!on.consoleZones?.frame && on._hitZones.length > 0, `A ${name}: świadek — rysunek konsoli ze strefami (${on._hitZones.length})`);
+    const got = typeCounts(on), want = EXPECT_TYPES[name];
+    ok(stable(got) === stable(want), `A ${name}: typy stref i liczności == zamrożone (${diffCounts(got, want).join(' ; ')})`);
+    const badKeys = on._hitZones.filter((z) => Object.keys(z.data ?? {}).sort().join(',') !== EXPECT_KEYS[z.type]).map((z) => `${z.type}{${Object.keys(z.data ?? {}).join(',')}}`);
+    ok(badKeys.length === 0, `A ${name}: klucze danych stref == zamrożone (${[...new Set(badKeys)].join(' ; ')})`);
   });
 }
-// zaznaczenie wielokrotne i akcja zbiorcza: te same strefy, te same skutki
+// zaznaczenie wielokrotne i akcja zbiorcza: pole wyboru na każdym wierszu własnym tabeli, skutek kliku
 safe('A multi', () => {
-  const on = mk({ on: true }); draw(on, true);
-  ok(!!on.consoleZones, 'A multi: świadek — ON rysuje konsolę');
+  const on = mk(); draw(on);
+  ok(!!on.consoleZones, 'A multi: świadek — rysunek konsoli');
   const tog = on._hitZones.filter((z) => z.type === 'vesselMultiToggle');
-  const off = mk({ on: false }); draw(off, false);
-  const togOff = off._hitZones.filter((z) => z.type === 'vesselMultiToggle');
-  ok(tog.length > 0 && tog.length === togOff.length, `A: pola wyboru ON == OFF (${tog.length} vs ${togOff.length})`);
-  ok(!on._hitZones.some((z) => z.type === 'fleetAssignMenuOpen'), 'A: bez zaznaczenia brak strefy „Przypisz” (wyłączona, jak OFF)');
+  const rowIds = on._hitZones.filter((z) => z.type === 'vessel' && z.x < on.consoleZones.inspector.x).map((z) => z.data.vesselId);
+  ok(tog.length > 0 && tog.length === rowIds.length && tog.every((z) => rowIds.includes(z.data.vesselId)),
+    `A: pole wyboru na każdym wierszu tabeli (${tog.length} vs ${rowIds.length} wierszy)`);
+  ok(!on._hitZones.some((z) => z.type === 'fleetAssignMenuOpen'), 'A: bez zaznaczenia brak strefy „Przypisz” (wyłączona z powodem — D)');
   const z = tog.find((q) => q.data.vesselId === 'v_2');
-  on._handleHit(z); off._handleHit(togOff.find((q) => q.data.vesselId === 'v_2'));
-  ok(on._multiSelectedIds.has('v_2') && off._multiSelectedIds.has('v_2'), 'A: klik pola wyboru zaznacza (ON == OFF)');
-  draw(on, true); draw(off, false);
-  ok(on._hitZones.some((q) => q.type === 'fleetAssignMenuOpen') && off._hitZones.some((q) => q.type === 'fleetAssignMenuOpen'),
-    'A: po zaznaczeniu „Przypisz do floty” osiągalne ON i OFF');
+  on._handleHit(z);
+  ok(on._multiSelectedIds.has('v_2'), 'A: klik pola wyboru zaznacza');
+  draw(on);
+  ok(on._hitZones.some((q) => q.type === 'fleetAssignMenuOpen'), 'A: po zaznaczeniu „Przypisz do floty” osiągalne');
   const clr = on._hitZones.find((q) => q.type === 'fleetClearMultiSelect');
   on._handleHit(clr);
-  ok(on._multiSelectedIds.size === 0, 'A: „Wyczyść zaznaczenie” czyści (dzisiejszy handler)');
+  ok(on._multiSelectedIds.size === 0, 'A: „Wyczyść zaznaczenie” czyści');
 });
 // inspektor przy zaznaczeniu wielokrotnym bez wyboru = podsumowanie z akcjami zbiorczymi i nazwami (klik = wybór)
 safe('A inspector multi', () => {
   const inInsp = (ov) => { const r = ov.consoleZones.inspector; return ov._hitZones.filter((z) => z.x >= r.x && z.x + z.w <= r.x + r.w + 1 && z.y >= r.y); };
-  const on = mk({ on: true, setup: STATES.multi }); draw(on, true);
+  const on = mk({ setup: STATES.multi }); draw(on);
   ok(!!on.consoleZones, 'A insp: świadek — ON rysuje konsolę');
   const zi = on.consoleZones ? inInsp(on) : [];
   ok(zi.some((z) => z.type === 'fleetAssignMenuOpen') && zi.some((z) => z.type === 'fleetClearMultiSelect'), 'A insp: akcje zbiorcze w inspektorze');
   ok(['v_0', 'v_2'].every((id) => zi.some((z) => z.type === 'vessel' && z.data.vesselId === id)), 'A insp: nazwy zaznaczonych klikalne (wybór)');
-  const one = mk({ on: true, setup: STATES.multiAndSel }); draw(one, true);
+  const one = mk({ setup: STATES.multiAndSel }); draw(one);
   const zo = one.consoleZones ? inInsp(one) : [];
   ok(!zo.some((z) => z.type === 'fleetClearMultiSelect'), 'A insp: kontrola — z wybranym statkiem inspektor pokazuje statek, nie podsumowanie');
 });
 
-// skutki stref rejestru ON == OFF (ten sam handler, te same dane)
-safe('A effects', () => {
-  for (const type of ['registrySort', 'registryChipSystem', 'registryChipRole', 'registryGroupMode', 'registryChipKind']) {
-    const on = mk({ on: true }); draw(on, true);
-    const off = mk({ on: false }); draw(off, false);
-    ok(!!on.consoleZones, `A ${type}: świadek — ON rysuje konsolę`);
-    const zs = off._hitZones.filter((z) => z.type === type);
-    ok(zs.length > 0, `A ${type}: świadek — OFF ma strefę`);
-    for (const zo of zs.slice(0, 3)) {
-      const zn = on._hitZones.find((q) => zkey(q) === zkey(zo));
-      if (!zn) { ok(false, `A ${type}: brak strefy ON ${zkey(zo)}`); continue; }
-      on._handleHit(zn); off._handleHit(zo);
-    }
-    ok(stable(on._registryFilter) === stable(off._registryFilter) && stable(on._registrySort) === stable(off._registrySort)
-      && on._registryGroupMode === off._registryGroupMode, `A ${type}: stan po kliknięciach ON == OFF`);
-  }
-});
+// ═══ A klik — każdy typ strefy konsoli przez `handleClick` ze SKUTKIEM ═════════════════════════════════════════════
+header('A klik  każdy z typów inwentarza klikany przez handleClick — skutek (stan / handler / system / zdarzenie)');
+const focusEv = [];
+EventBus.on('vessel:focus', (p) => focusEv.push(p?.vesselId));
+const clickAt = (ov, z) => ov.handleClick(z.x + z.w / 2, z.y + z.h / 2);
+const spyOn = (ov, name) => { const calls = []; ov[name] = (...a) => { calls.push(a); }; return calls; };
+const pick = (zs, f) => zs.find(f) ?? null;
+const K_ = () => window.KOSMOS;
+const EFFECTS = {
+  close: (ov, zs) => { clickAt(ov, zs[0]); return ov._visible === false; },
+  fleetCreate: (ov, zs) => { const c = spyOn(ov, '_handleCreateFleet'); clickAt(ov, zs[0]); return c.length === 1; },
+  registryChipKind: (ov, zs) => { const z = zs[0]; const b = !!ov._registryFilter[z.data.field]; clickAt(ov, z); return ov._registryFilter[z.data.field] === !b; },
+  registryChipRole: (ov, zs) => { const z = pick(zs, (q) => q.data.role !== ov._registryFilter.role); clickAt(ov, z); return ov._registryFilter.role === z.data.role; },
+  registryChipSystem: (ov, zs) => { const z = pick(zs, (q) => q.data.key !== ov._registryFilter.systemKey); clickAt(ov, z); return ov._registryFilter.systemKey === z.data.key; },
+  registryFocus: (ov, zs) => { const c = spyOn(ov, '_focusVesselKit'); const z = zs[0]; clickAt(ov, z); return c.length === 1 && c[0][0] === z.data.vesselId; },
+  registryGroupFleet: (ov, zs) => { clickAt(ov, zs[0]); return K_().uiManager.getSelectedFleetId() === zs[0].data.fleetId; },
+  registryGroupMode: (ov, zs) => { const z = pick(zs, (q) => q.data.mode !== ov._registryGroupMode); clickAt(ov, z); return ov._registryGroupMode === z.data.mode; },
+  registrySearch: (ov, zs) => {
+    clickAt(ov, zs[0]); const el = ov._registrySearchEl; const okEl = !!el && document.body.children.includes(el);
+    ov._closeRegistrySearch(); return okEl;
+  },
+  registrySort: (ov, zs) => {
+    const z = pick(zs, (q) => q.data.col !== ov._registrySort.col); clickAt(ov, z);
+    const first = ov._registrySort.col === z.data.col && ov._registrySort.dir === 1;
+    clickAt(ov, z); return first && ov._registrySort.col === z.data.col && ov._registrySort.dir === -1;
+  },
+  tab: (ov, zs) => { const z = pick(zs, (q) => q.data.tab !== ov._activeTab); clickAt(ov, z); return ov._activeTab === z.data.tab; },
+  timelineCollapse: (ov, zs) => { const b = !!ov._timelineCollapsed; clickAt(ov, zs[0]); return !!ov._timelineCollapsed === !b; },
+  vessel: (ov, zs) => {
+    const z = pick(zs, (q) => q.data.vesselId !== ov._selectedVesselId && q.x < ov.consoleZones.inspector.x);
+    focusEv.length = 0; clickAt(ov, z); return ov._selectedVesselId === z.data.vesselId && focusEv.length === 0;
+  },
+  vesselMultiToggle: (ov, zs) => {
+    const z = pick(zs, (q) => !ov._multiSelectedIds.has(q.data.vesselId)); clickAt(ov, z);
+    const on = ov._multiSelectedIds.has(z.data.vesselId); clickAt(ov, z); return on && !ov._multiSelectedIds.has(z.data.vesselId);
+  },
+  fleetAssignMenuOpen: (ov, zs) => { const c = spyOn(ov, '_handleAssignMultiToFleet'); clickAt(ov, zs[0]); return c.length === 1; },
+  fleetClearMultiSelect: (ov, zs) => { const n = ov._multiSelectedIds.size; clickAt(ov, zs[0]); return n > 0 && ov._multiSelectedIds.size === 0; },
+  registryGroupToggle: (ov, zs) => { const z = zs[0]; const b = ov._registryCollapsedGroups.has(z.data.key); clickAt(ov, z); return ov._registryCollapsedGroups.has(z.data.key) === !b; },
+  registryClearFilters: (ov, zs) => { const b = ov._registryFilter.role; clickAt(ov, zs[0]); return b !== null && ov._registryFilter.role === null && ov._registryFilter.search === ''; },
+  registrySearchClear: (ov, zs) => { const b = ov._registryFilter.search; clickAt(ov, zs[0]); return b !== '' && ov._registryFilter.search === ''; },
+  fleetBackToList: (ov, zs) => { const b = K_().uiManager.getSelectedFleetId(); clickAt(ov, zs[0]); return b === 'fl_a' && K_().uiManager.getSelectedFleetId() === null; },
+  fleetDisband: (ov, zs) => { const c = spyOn(ov, '_handleDisbandFleet'); clickAt(ov, zs[0]); return c.length === 1 && c[0][0] === zs[0].data.fleetId; },
+  fleetEngage: (ov, zs) => { const c = spyOn(ov, '_handleFleetEngage'); clickAt(ov, zs[0]); return c.length === 1 && c[0][0] === zs[0].data.fleetId; },
+  fleetMoveToPoint: (ov, zs) => { const c = spyOn(ov, '_handleFleetMoveToPoint'); clickAt(ov, zs[0]); return c.length === 1 && c[0][0] === zs[0].data.fleetId; },
+  fleetReturnBase: (ov, zs) => { const c = spyOn(ov, '_handleFleetReturnBase'); clickAt(ov, zs[0]); return c.length === 1 && c[0][0] === zs[0].data.fleetId; },
+  fleetRename: (ov, zs) => { const c = spyOn(ov, '_handleRenameFleet'); clickAt(ov, zs[0]); return c.length === 1 && c[0][0] === zs[0].data.fleetId; },
+  fleetMemberSelect: (ov, zs) => {
+    const z = zs[0]; focusEv.length = 0; clickAt(ov, z);
+    return ov._selectedVesselId === z.data.vesselId && K_().uiManager.getSelectedFleetId() === null && focusEv.includes(z.data.vesselId);
+  },
+  fleetSetDoctrine: (ov, zs) => {
+    const c = []; K_().fleetSystem.setDoctrine = (...a) => c.push(a);
+    const z = zs[0]; clickAt(ov, z); return c.length === 1 && c[0][0] === z.data.fleetId && c[0][1] === z.data.doctrine;
+  },
+  action: (ov, zs) => { const c = spyOn(ov, '_handleAction'); clickAt(ov, zs[0]); return c.length === 1 && c[0][0]?.actionId === zs[0].data.actionId; },
+  back_to_shipyard: (ov, zs) => {
+    const c = []; K_().overlayManager.openPanel = (id) => c.push(id);
+    clickAt(ov, zs[0]); return c.join() === 'shipyard' && ov._selectedVesselId === null;
+  },
+  manual_refuel: (ov, zs) => { const c = []; K_().vesselManager.manualRefuel = (id) => c.push(id); clickAt(ov, zs[0]); return c.join() === zs[0].data.vesselId; },
+  rename: (ov, zs) => { const c = spyOn(ov, '_renameVessel'); clickAt(ov, zs[0]); return c.length === 1 && c[0][0] === zs[0].data.vesselId; },
+  toggle_refuel_auto: (ov, zs) => {
+    const v = K_().vesselManager.getVessel(zs[0].data.vesselId); const b = v.refuelAutomatically ?? true;
+    clickAt(ov, zs[0]); return v.refuelAutomatically === !b;
+  },
+  undock: (ov, zs) => { const c = []; K_().vesselManager.undockToOrbit = (id) => c.push(id); clickAt(ov, zs[0]); return c.join() === zs[0].data.vesselId; },
+};
+const ALL_TYPES = Object.keys(EXPECT_KEYS);
+ok(ALL_TYPES.length === 33 && ALL_TYPES.every((t) => typeof EFFECTS[t] === 'function') && Object.keys(EFFECTS).length === ALL_TYPES.length,
+  `A klik: tabela skutków pokrywa dokładnie typy inwentarza (${Object.keys(EFFECTS).length}/${ALL_TYPES.length})`);
+for (const type of ALL_TYPES) {
+  safe(`A klik ${type}`, () => {
+    const stName = Object.keys(EXPECT_TYPES).find((n) => EXPECT_TYPES[n][type]);
+    const ov = mk({ setup: STATES[stName] }); draw(ov);
+    const zs = ov._hitZones.filter((q) => q.type === type);
+    ok(zs.length > 0 && typeof EFFECTS[type] === 'function', `A klik ${type}: świadek — strefa w stanie ${stName}`);
+    if (zs.length && EFFECTS[type]) ok(EFFECTS[type](ov, zs) === true, `A klik ${type}: skutek kliknięcia (${stName}, ${stable(zs[0].data)})`);
+  });
+}
 
 // ═══ B — sort / filtr ON == OFF ═══════════════════════════════════════════════════════════════════════════════════
-header('B  kolejność wierszy tabeli ON == OFF == FleetRegistryLogic');
-const tableOrder = (ov, on) => {
-  const hero = on ? ov.consoleZones?.hero : null;
+header('B  kolejność wierszy tabeli == FleetRegistryLogic');
+const tableOrder = (ov) => {
+  const hero = ov.consoleZones?.hero;
   return ov._hitZones.filter((z) => z.type === 'vessel' && (!hero || (z.x >= hero.x && z.x <= hero.x + hero.w)))
     .map((z) => z.data.vesselId);
 };
@@ -234,25 +320,28 @@ for (const [col, dir, filt] of [['name', 1, null], ['name', -1, null], ['fuel', 
   ['role', 1, { systemKey: 'sys_home' }], ['fleet', 1, { search: 'o' }]]) {
   safe(`B ${col}`, () => {
     const setup = (o) => { o._registrySort = { col, dir }; Object.assign(o._registryFilter, filt ?? {}); };
-    const on = mk({ on: true, setup }); draw(on, true);
-    const off = mk({ on: false, setup }); draw(off, false);
-    const a = tableOrder(on, true), b = tableOrder(off, false);
+    const on = mk({ setup }); draw(on);
+    const a = tableOrder(on);
     const rows = RL.sortRows(RL.filterRows(RL.buildRegistryRows(window.KOSMOS.vesselManager.getAllVessels(), on._registryCtx()), on._registryFilter), col, dir)
       .filter((r) => r.kind !== 'contact').map((r) => r.id);
-    ok(b.length > 1, `B ${col}/${dir}: świadek — OFF ma ≥ 2 wiersze (${b.length})`);
-    ok(!!on.consoleZones?.hero, `B ${col}/${dir}: świadek — ON rysuje tabelę w strefie bohatera`);
-    ok(a.join() === b.join(), `B ${col}/${dir}: ON == OFF (${a.join()} vs ${b.join()})`);
-    ok(a.join() === rows.join(), `B ${col}/${dir}: ON == logika (${a.join()} vs ${rows.join()})`);
+    ok(a.length > 1, `B ${col}/${dir}: świadek — tabela ma ≥ 2 wiersze (${a.length})`);
+    ok(!!on.consoleZones?.hero, `B ${col}/${dir}: świadek — tabela w strefie bohatera`);
+    ok(a.join() === rows.join(), `B ${col}/${dir}: kolejność == logika (${a.join()} vs ${rows.join()})`);
   });
 }
 
 // ═══ C — czipy zastępują pasek zakładek, stan zostaje ═════════════════════════════════════════════════════════════
 header('C  czipy nagłówka, przełączanie zakładek, stan rejestru, gniazdo walki');
 safe('C', () => {
-  ok(LAY.isKitScreen?.('fleet', { consoleKit: true, consoleCommand: true }) === true, 'C: fleet jest ekranem zestawu przy ON');
-  ok(LAY.isKitScreen?.('fleet', { consoleKit: true, consoleCommand: false }) === false, 'C: OFF — nie jest');
-  const on = mk({ on: true, setup: (o) => { o._registryFilter.systemKey = 'sys_b'; o._registrySort = { col: 'fuel', dir: -1 }; o._multiSelectedIds.add('v_1'); } });
-  const ctx = draw(on, true);
+  // trwałość (KZ-Command): 'fleet' zawsze ekranem zestawu — bez flag, przy consoleKit false, bez argumentu; rejestr flag pusty
+  ok(LAY.isKitScreen?.('fleet', {}) === true && LAY.isKitScreen?.('fleet', { consoleKit: false }) === true && LAY.isKitScreen?.('fleet') === true,
+    'C: fleet jest ekranem zestawu zawsze (bez flag, consoleKit false, bez argumentu)');
+  ok(LAY.PERMANENT_KIT_SCREENS?.includes('fleet') && !('fleet' in (LAY.CONSOLE_KIT_SCREENS ?? { fleet: 1 })) && !('consoleCommand' in FEAT),
+    'C: fleet w PERMANENT_KIT_SCREENS, nie w CONSOLE_KIT_SCREENS; brak klucza consoleCommand w FEATURES');
+  ok(LAY.isKitScreen?.('tech', {}) === false && LAY.isKitScreen?.('observatory', { consoleKit: true }) === false,
+    'C: świadek — predykat nie jest stały (Technologie / Obserwatorium nie są ekranem zestawu)');
+  const on = mk({ setup: (o) => { o._registryFilter.systemKey = 'sys_b'; o._registrySort = { col: 'fuel', dir: -1 }; o._multiSelectedIds.add('v_1'); } });
+  const ctx = draw(on);
   const tabs = on._hitZones.filter((z) => z.type === 'tab').map((z) => z.data.tab);
   const expect = ['tactical', 'ground', 'atlas', ...(FEAT.transportOrders ? ['logistics'] : [])];
   ok(tabs.join() === expect.join(), `C: czipy = dzisiejsze zakładki (${tabs.join()})`);
@@ -262,25 +351,37 @@ safe('C', () => {
   ok(titleTxt.length === 0, 'C: brak dawnego paska zakładek (etykieta bez nawiasów czipa nie jest rysowana)');
   on._handleHit(on._hitZones.find((z) => z.type === 'tab' && z.data.tab === 'atlas'));
   ok(on._activeTab === 'atlas', 'C: klik czipa przełącza zakładkę (dzisiejszy `_switchTab`)');
-  draw(on, true);
+  draw(on);
   ok(on._hitZones.some((z) => z.type === 'tab' && z.data.tab === 'tactical'), 'C: czipy widoczne na stronie Atlasu');
   on._handleHit(on._hitZones.find((z) => z.type === 'tab' && z.data.tab === 'tactical'));
   ok(on._registryFilter.systemKey === 'sys_b' && on._registrySort.col === 'fuel' && on._multiSelectedIds.has('v_1'),
     'C: filtr, sort i zaznaczenie przeżywają przełączenie zakładek');
-  const off = mk({ on: false }); draw(off, false);
-  ok(off.consoleZones == null, 'C: OFF — brak stref konsoli (pasek walki jak dziś)');
+  // trwałość rysunku: przy consoleKit false i przy pustych FEATURES Dowództwo dalej rysuje konsolę z czipami
+  const saved = { ...FEAT };
+  try {
+    for (const [tag, patch] of [['consoleKit false', { consoleKit: false }], ['FEATURES {}', null]]) {
+      if (patch) Object.assign(FEAT, patch); else for (const k of Object.keys(FEAT)) delete FEAT[k];
+      const o2 = mk(); draw(o2);
+      ok(!!o2.consoleZones?.frame && o2._hitZones.filter((z) => z.type === 'tab').length >= 3, `C: ${tag} — Dowództwo dalej konsolą (strefy + czipy)`);
+      Object.assign(FEAT, saved);
+    }
+  } finally { Object.assign(FEAT, saved); }
+  const fsrc = fs.readFileSync(fileURLToPath(new URL('../../ui/FleetManagerOverlay.js', import.meta.url)), 'utf8').replace(/\r\n/g, '\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*/g, '$1');
+  ok(/drawCommandConsole\(this, ctx, W, H\)/.test(fsrc), 'C: świadek — FMO rysuje przez drawCommandConsole');
+  ok(!/\bkitOn\b|\bisKitScreen\b|consoleCommand/.test(fsrc), 'C: FMO bez kitOn / isKitScreen / consoleCommand (kod bez komentarzy)');
 });
 
 // ═══ D — wyłączone akcje z powodem i18n ═══════════════════════════════════════════════════════════════════════════
 header('D  wyłączona akcja = powód i18n (PL + EN)');
 safe('D', () => {
-  const on = mk({ on: true }); draw(on, true);
+  const on = mk(); draw(on);
   const dis = on._cmdDisabled ?? [];
   ok(dis.some((d) => d.reasonKey === 'cmdConsole.bulkNeed'), 'D: „Przypisz do floty” bez zaznaczenia → powód');
   ok(dis.some((d) => d.reasonKey === 'cmdConsole.focusTransit'), 'D: „Pokaż” dla statku w tranzycie → powód');
   ok(!on._hitZones.some((z) => z.type === 'registryFocus' && z.data.vesselId === 'v_tr'), 'D: tranzyt bez strefy „Pokaż” (jak OFF)');
   ok(on._hitZones.some((z) => z.type === 'registryFocus' && z.data.vesselId === 'v_0'), 'D: kontrola — zadokowany ma „Pokaż”');
-  const on2 = mk({ on: true, setup: (o) => { o._registryFilter.showContacts = true; } }); draw(on2, true);
+  const on2 = mk({ setup: (o) => { o._registryFilter.showContacts = true; } }); draw(on2);
   ok((on2._cmdDisabled ?? []).some((d) => d.reasonKey === 'cmdConsole.contactHint'), 'D: kontakt wroga → podpowiedź (nie cichy brak reakcji)');
   ok(!on2._hitZones.some((z) => z.data?.vesselId === 'v_en'), 'D: kontakt bez akcji (jak OFF)');
   const keys = new Set([...dis, ...(on2._cmdDisabled ?? [])].map((d) => d.reasonKey));
@@ -298,7 +399,7 @@ for (const [iw, ih, sc] of [[1600, 1041, 1.25], [1280, 833, 1]]) {
     globalThis.innerWidth = iw; globalThis.innerHeight = ih;
     const ce = document.createElement;
     document.createElement = (tag) => { const el = ce(tag); if (String(tag) === 'input') el.style = {}; return el; };
-    const on = mk({ on: true }); draw(on, true);
+    const on = mk(); draw(on);
     ok(Math.abs((on._uiScale ?? 0) - sc) < 1e-9, `S ${iw}×${ih}: skala UI z rysunku = ${sc} (${on._uiScale})`);
     globalThis.innerWidth = 333; globalThis.innerHeight = 222;   // handler nie może czytać okna
     const z = on._hitZones.find((q) => q.type === 'registrySearch');
@@ -327,12 +428,15 @@ safe('S src', () => {
   const m = src.match(/_openRegistrySearchKit\(rect\) \{([\s\S]*?)\n  \}/);
   ok(!!m, 'S: świadek — metoda pola konsoli istnieje');
   ok(!!m && !/window\.inner/.test(m[1].replace(/\/\/.*$/gm, '')), 'S: brak window.inner* w handlerze pola konsoli');
+  const o = src.match(/\n  _openRegistrySearch\(\) \{([\s\S]*?)\n  \}/);
+  ok(!!o && /this\._cmdRects\?\.search/.test(o[1]) && /_openRegistrySearchKit\(/.test(o[1]) && !/window\.inner|innerWidth|innerHeight/.test(o[1].replace(/\/\/.*$/gm, '')),
+    'S: `_openRegistrySearch()` bez argumentu — tylko pole konsoli (`_cmdRects.search`), bez window.inner*');
 });
 
 // ═══ G — geometria stref ═════════════════════════════════════════════════════════════════════════════════════════
 header('G  strefy konsoli: bez nakładania, nad zegarem, trafienia w ramie');
 safe('G', () => {
-  const on = mk({ on: true, setup: (o) => { o._multiSelectedIds.add('v_0'); } }); draw(on, true);
+  const on = mk({ setup: (o) => { o._multiSelectedIds.add('v_0'); } }); draw(on);
   const z = on.consoleZones;
   ok(!!z?.hero && !!z?.list && !!z?.inspector && !!z?.strip, 'G: 4 strefy + pas');
   ok(LAY.zonesOverlap?.([z.list, z.hero, z.inspector, z.strip]) === false, 'G: strefy się nie nakładają');
@@ -364,7 +468,7 @@ safe('L', () => {
     ok(wide.scale === 1 && wide.cols.find((c) => c.id === 'fuel').w === CL.CMD_FIXED_COLS.fuel, 'L: szeroko — dzisiejsze szerokości');
   }
   const vs = world();
-  const ov = mk({ on: true, vessels: vs });
+  const ov = mk({ vessels: vs });
   const rows = RL.buildRegistryRows(vs, ov._registryCtx());
   const f = { systemKey: null, role: 'warship', search: '', showWrecks: true, showContacts: false };
   const c = CL.facetCounts?.(rows, f);
@@ -397,14 +501,14 @@ safe('L', () => {
 // ═══ E — pusta tabela po filtrze ═════════════════════════════════════════════════════════════════════════════════
 header('E  pusty wynik filtra → „wyczyść filtry”');
 safe('E', () => {
-  const on = mk({ on: true, setup: (o) => { o._registryFilter.search = 'qqqq'; o._registryFilter.role = 'warship'; } });
-  const ctx = draw(on, true);
+  const on = mk({ setup: (o) => { o._registryFilter.search = 'qqqq'; o._registryFilter.role = 'warship'; } });
+  const ctx = draw(on);
   const z = on._hitZones.find((q) => q.type === 'registryClearFilters');
   ok(!!z, 'E: strefa „wyczyść filtry” przy pustym wyniku');
   ok(ctx.log.some((l) => l[0] === 'fillText' && l[1] === PL['cmdConsole.emptyFiltered']), 'E: powód pustej tabeli wypisany');
   if (z) on._handleHit(z);
   ok(on._registryFilter.search === '' && on._registryFilter.role === null, 'E: klik przywraca filtr domyślny');
-  draw(on, true);
+  draw(on);
   ok(!on._hitZones.some((q) => q.type === 'registryClearFilters'), 'E: kontrola — z wierszami brak strefy');
 });
 
@@ -412,13 +516,13 @@ safe('E', () => {
 header('M  wiele statków: przewijanie tabeli');
 safe('M', () => {
   const vs = world(60);
-  const on = mk({ on: true, vessels: vs }); draw(on, true);
+  const on = mk({ vessels: vs }); draw(on);
   const tbl = on._cmdRects.table;
   const first = on._hitZones.filter((q) => q.type === 'vessel').length;
   ok(first > 5 && first < 60, `M: widać część wierszy (${first})`);
   const h = on.consoleZones.hero;
   for (let i = 0; i < 40; i++) on.handleScroll(200, h.x + 20, h.y + h.h / 2);
-  draw(on, true);
+  draw(on);
   ok(on._registryScroll > 0, `M: tabela przewinięta (${on._registryScroll})`);
   const last = RL.sortRows(RL.filterRows(RL.buildRegistryRows(vs, on._registryCtx()), on._registryFilter), 'name', 1).at(-1).id;
   ok(on._hitZones.some((q) => q.type === 'vessel' && q.data.vesselId === last), 'M: na dole widać ostatni wiersz');
@@ -428,8 +532,8 @@ safe('M', () => {
 // ═══ N — brak surowych id ═════════════════════════════════════════════════════════════════════════════════════════
 header('N  brak surowych id / snake_case w tekście konsoli');
 safe('N', () => {
-  const on = mk({ on: true, setup: (o) => { o._registryFilter.showWrecks = true; o._registryFilter.showContacts = true; o._registryGroupMode = 'fleet'; o._multiSelectedIds.add('v_0'); } });
-  const ctx = draw(on, true);
+  const on = mk({ setup: (o) => { o._registryFilter.showWrecks = true; o._registryFilter.showContacts = true; o._registryGroupMode = 'fleet'; o._multiSelectedIds.add('v_0'); } });
+  const ctx = draw(on);
   const texts = ctx.log.filter((l) => l[0] === 'fillText').map((l) => l[1]);
   ok(texts.length > 30, `N: świadek — konsola pisze tekst (${texts.length})`);
   const bad = texts.filter((s) => /\b(v_\d+|sys_[a-z]+|fl_[a-z]+|p_home|[a-z]+_[a-z]+_[a-z]+)\b/.test(s) || /\b[a-z]+\.[a-z]+[A-Z]\w*\b/.test(s));
@@ -439,7 +543,7 @@ safe('N', () => {
 // ═══ X — przewijanie po strefach ═════════════════════════════════════════════════════════════════════════════════
 header('X  kółko myszy po strefach konsoli');
 safe('X', () => {
-  const on = mk({ on: true, vessels: world(40) }); draw(on, true);
+  const on = mk({ vessels: world(40) }); draw(on);
   const z = on.consoleZones;
   const so = on._scrollOffset ?? 0;
   on.handleScroll(120, z.list.x + 10, z.list.y + z.list.h - 10);
@@ -451,7 +555,7 @@ safe('X', () => {
     on.handleScroll(120, tl.vx0 + 20, tl.y + tl.h / 2);
     ok(on._timelineYears.endYear - on._timelineYears.startYear > before.endYear - before.startYear, 'X: pas = zoom osi');
   }
-  window.KOSMOS.uiManager.setSelectedVesselId('v_0'); draw(on, true);
+  window.KOSMOS.uiManager.setSelectedVesselId('v_0'); draw(on);
   on._rightContentH = 2000; on._rightViewH = 300; on._rightScrollY = 0;
   on.handleScroll(120, z.inspector.x + 20, z.inspector.y + 40);
   ok(on._rightScrollY > 0, 'X: inspektor przewija panel statku');
@@ -465,17 +569,18 @@ header('F  klik wiersza bez kamery; POKAŻ = plan z żywego statku per stan');
 const focusLog = [];
 EventBus.on('vessel:focus', (p) => focusLog.push(p?.vesselId));
 safe('F row', () => {
-  for (const on of [true, false]) {
-    const ov = mk({ on }); draw(ov, on);
-    const z = ov._hitZones.find((q) => q.type === 'vessel' && q.data.vesselId === 'v_0');
-    ok(!!z, `F ${on ? 'ON' : 'OFF'}: świadek — strefa wiersza`);
-    focusLog.length = 0;
-    setFlag(on);
-    if (z) ov._handleHit(z);
-    ok(ov._selectedVesselId === 'v_0', `F ${on ? 'ON' : 'OFF'}: klik wiersza zaznacza`);
-    if (on) ok(focusLog.length === 0, `F ON: klik wiersza NIE emituje vessel:focus (${focusLog.join()})`);
-    else ok(focusLog.includes('v_0'), 'F OFF: kontrola — dzisiejszy klik wiersza leci kamerą');
-  }
+  const ov = mk(); draw(ov);
+  const z = ov._hitZones.find((q) => q.type === 'vessel' && q.data.vesselId === 'v_0');
+  ok(!!z, 'F: świadek — strefa wiersza');
+  focusLog.length = 0;
+  if (z) ov._handleHit(z);
+  ok(ov._selectedVesselId === 'v_0', 'F: klik wiersza zaznacza');
+  ok(focusLog.length === 0, `F: klik wiersza NIE emituje vessel:focus (${focusLog.join()})`);
+  // świadek (zamiast dawnej kontroli OFF): ten sam nasłuch widzi vessel:focus z „POKAŻ” tego wiersza
+  const f = ov._hitZones.find((q) => q.type === 'registryFocus' && q.data.vesselId === 'v_0');
+  focusLog.length = 0;
+  if (f) ov._handleHit(f);
+  ok(focusLog.includes('v_0'), `F: świadek — „POKAŻ” tego wiersza emituje vessel:focus (${focusLog.join()})`);
 });
 safe('F plan', () => {
   const P = CL.focusPlan;
@@ -505,7 +610,7 @@ safe('F plan', () => {
 safe('F exec', () => {
   const vs = world();
   vs.push(mkVessel('v_far', 'Daleki', { systemId: 'sys_b', position: { state: 'orbiting', dockedAt: null, x: 5, y: 5 } }));
-  const ov = mk({ on: true, vessels: vs }); draw(ov, true);
+  const ov = mk({ vessels: vs }); draw(ov);
   const seq = [];
   let refuse = false;
   window.KOSMOS.uiManager.overlayManager = { closeActive: () => seq.push('close') };
@@ -531,7 +636,7 @@ safe('F exec', () => {
   const z = ov._hitZones.find((q) => q.type === 'registryFocus' && q.data.vesselId === 'v_tr');
   ok(!z, 'F: tranzyt bez strefy POKAŻ (wyłączone z powodem)');
   // przez strefę z klatki: odmowa przełączenia = bez kamery; statek, który zmienił układ po narysowaniu — plan z żywego statku
-  draw(ov, true);
+  draw(ov);
   const zFar = ov._hitZones.find((q) => q.type === 'registryFocus' && q.data.vesselId === 'v_far');
   ok(!!zFar && zFar.data.systemId === 'sys_b', 'F: świadek — strefa POKAŻ statku z innego układu');
   seq.length = 0; refuse = true;

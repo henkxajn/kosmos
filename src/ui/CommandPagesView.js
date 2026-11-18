@@ -1,4 +1,4 @@
-// ARC KONSOLE K7-C — strony Dowództwa na konsoli: Atlas Gwiazd, Logistyka, Jednostki (FEATURES.consoleCommand).
+// ARC KONSOLE K7-C — strony Dowództwa na konsoli: Atlas Gwiazd, Logistyka, Jednostki (KZ-Command: jedyna ścieżka Dowództwa, flaga zdjęta).
 //
 // Wołane z `CommandConsoleView.drawCommandConsole` dla zakładek innych niż rejestr. Szablon 4-strefowy (lista · bohater ·
 // inspektor · pas), żywa przyciemniona scena za tekstem (żadna strona nie stoi już na nieprzezroczystym tle), kolory tylko
@@ -78,7 +78,7 @@ const body = (rect, top) => ({ x: rect.x, y: rect.y + top + 4, w: rect.w, h: Mat
 // ATLAS GWIAZD — ciała aktywnego układu (lista ↔ orrery zsynchronizowane jednym `_atlasSelectedBodyId`)
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-/** Dane Atlasu tej klatki (te same wpisy katalogu co strona OFF). */
+/** Dane Atlasu tej klatki (te same wpisy katalogu co dawna strona Atlasu). */
 export function atlasPageData(ov) {
   const K = window.KOSMOS;
   const colMgr = K?.colonyManager;

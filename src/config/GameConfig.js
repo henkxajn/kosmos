@@ -544,13 +544,7 @@ export const GAME_CONFIG = {
     //   (consoleDiplomacy — usunięta w KZ-Dipl: Dyplomacja i Wojny są na stałe konsolą, `PERMANENT_KIT_SCREENS`)
     //   (consoleEconomy — usunięta w KZ-E: grupa Ekonomii jest na stałe konsolą, `PERMANENT_KIT_SCREENS` w ConsoleLayoutLogic.js)
     //   (consoleCivilization — usunięta w KZ-Civ: Cywilizacja i Sfera Dysona są na stałe konsolą, `PERMANENT_KIT_SCREENS`)
-    //   consoleCommand (K7-A, D-K-14, D-K-20): ON (razem z consoleKit) = Dowództwo na szablonie 4-strefowym — czipy zakładek
-    //     [ TAKTYKA SYSTEMU ] [ JEDNOSTKI ] [ ATLAS GWIAZD ] [ LOGISTYKA ] w nagłówku zamiast własnego paska zakładek. Rejestr: lista = szukajka,
-    //     grupowanie, floty, układy, role, sekcje (z licznikami), bohater = tabela statków (12 kolumn, sort, grupy, zaznaczenie
-    //     wielokrotne, pasek zbiorczy), inspektor = dzisiejszy panel statku / floty (reskin K7-B) albo podsumowanie zaznaczenia,
-    //     pas = oś czasu misji dla zaznaczenia. Naziemne / Atlas / Logistyka — dzisiejsze strony pod czipami (K7-C).
-    //   OFF = dzisiejsze Dowództwo co do bitu.
-    consoleCommand: true,
+    //   (consoleCommand — usunięta w KZ-Command: Dowództwo jest na stałe konsolą, `PERMANENT_KIT_SCREENS`)
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

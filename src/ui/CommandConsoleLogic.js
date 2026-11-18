@@ -1,4 +1,4 @@
-// ARC KONSOLE K7-A — Dowództwo na szablonie konsoli: czysta logika (FEATURES.consoleCommand).
+// ARC KONSOLE K7-A — Dowództwo na szablonie konsoli: czysta logika (KZ-Command: jedyna ścieżka Dowództwa, flaga zdjęta).
 //
 // Bez DOM, bez canvasu, bez window — wejście z FleetManagerOverlay / CommandConsoleView, wyjście = dane do rysunku i strefy.
 // Filtry, sort i grupowanie zostają w `FleetRegistryLogic` (te same funkcje co ścieżka OFF — wynik ON == OFF z konstrukcji);

@@ -201,11 +201,19 @@ const VAR_KEYS = ['fleet.clusterExplored', 'fleet.clusterUnexplored', 'fleet.sca
 // ═══ C6 ══════════════════════════════════════════════════════════════════════
 header('C6  KONTROLE — co ZOSTAJE (zielone po obu stronach)');
 {
+  // KZ-Command: dawny panel `_drawRight` usunięty — producentem strefy panelu przylotu jest inspektor konsoli
+  //   (`CommandInspectorLogic.shipActionGroups`, czip `cluster_switch`). Powrót skokiem: transakcja (Finding 125) żyje w
+  //   `utils/ReturnJump.js` (OrderService.issueReturn + FleetActions.return_home); wrapper FMO `_dispatchReturnJump` odszedł
+  //   razem z jedynymi wołającymi (strefy powrotu bez producenta); komunikat odmowy (`_toastReturnFailed`, `_warpErrLabel`) zostaje.
   const fmo = readClean('src/ui/FleetManagerOverlay.js') ?? '', sp = readClean('src/ui/ShipPanelHudLogic.js') ?? '';
-  ok(/case 'cluster_switch':/.test(fmo) && /type: 'cluster_switch'/.test(fmo) && /chip\('cluster_switch'/.test(sp),
-    'C6a: `cluster_switch` zostaje — handler w FMO, producent w panelu przylotu (`_drawRight`) i czip panelu statku');
-  ok(['_dispatchReturnJump', '_toastReturnFailed', '_warpErrLabel'].every((n) => new RegExp(`^\\s{2}${n}\\s*\\(`, 'm').test(fmo)),
-    'C6b: FMO zostawia powrót skokiem (Finding 125: `_dispatchReturnJump`, `_toastReturnFailed`, `_warpErrLabel`); kropka „?” odeszła z mapą 2D (K7-pre)');
+  const cil = readClean('src/ui/CommandInspectorLogic.js') ?? '';
+  ok(/case 'cluster_switch':/.test(fmo) && /zone\('cluster_switch', \{ systemId: f\.interstellarSwitch \}\)/.test(cil) && /chip\('cluster_switch'/.test(sp),
+    'C6a: `cluster_switch` zostaje — handler w FMO, producent w inspektorze konsoli (panel przylotu) i czip panelu statku HUD');
+  const os = readClean('src/systems/OrderService.js') ?? '', fa = readClean('src/data/FleetActions.js') ?? '';
+  ok(['_toastReturnFailed', '_warpErrLabel'].every((n) => new RegExp(`^\\s{2}${n}\\s*\\(`, 'm').test(fmo))
+      && /returnJumpTransactional\(vessel,/.test(os) && /returnJumpTransactional\(vessel,/.test(fa)
+      && /export function returnJumpTransactional\(/.test(readClean('src/utils/ReturnJump.js') ?? ''),
+    'C6b: powrót skokiem zostaje (Finding 125: transakcja `returnJumpTransactional` w OrderService i FleetActions; komunikat FMO `_toastReturnFailed` / `_warpErrLabel`); kropka „?” odeszła z mapą 2D (K7-pre)');
   const hit = readClean('src/ui/StratcomHitLogic.js') ?? '', hc = readClean('src/renderer/HolotableCamera.js') ?? '';
   const trl = readClean('src/ui/TerritoryRenderLogic.js') ?? '', gw = readClean('src/ui/GalaxyWarpLogic.js') ?? '', orng = readClean('src/utils/ObservatoryRange.js') ?? '';
   const exp = (src, names) => names.every((n) => new RegExp(`^export (?:function|const) ${n}\\b`, 'm').test(src));

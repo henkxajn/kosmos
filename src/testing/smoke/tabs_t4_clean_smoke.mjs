@@ -25,6 +25,9 @@
 // ⚠ PRZECELOWANE 2026-10-28 (ARKUSZ HUD B-Z — flagi HUD na stałe ON, `MapLabelLayer` usunięty): C6a — warstwa HUD zostaje
 //   bez flag (dawniej: flagi ARKUSZA HUD zostają i są ON); C6b — `MapLabelLayer` (plakietki ścieżki `hudLabels` OFF, decyzja
 //   Q1 z T4) zniknął razem z flagą — czystość B-Z pinuje `hud_bz_clean_smoke`.
+// ⚠ PRZECELOWANE (KZ-Command — Dowództwo wyłącznie konsolą): C6c — `FleetManagerOverlay._drawRight` (dawny panel statku
+//   Rejestru) usunięty; treść panelu statku Dowództwa rysuje `CommandInspectorView.drawInspector` z faktów
+//   `_inspectorShipFacts`; cele chipów panelu T5 (`_handleVesselPanelFooter`, `_handleHit`) zostają.
 //
 // Uruchom: node src/testing/smoke/tabs_t4_clean_smoke.mjs
 
@@ -229,8 +232,10 @@ header('C6  KONTROLE — co ZOSTAJE (zielone po obu stronach)');
   const ui = readClean('src/scenes/UIManager.js') ?? '';
   const fcp = readClean('src/ui/FleetCommandPanel.js') ?? '', fgp = readClean('src/ui/FleetGroupPanel.js') ?? '';
   const sp = readClean('src/ui/StationPanel.js') ?? '';
-  ok(/^\s{2}_drawRight\s*\(/m.test(fmo) && /^\s{2}_handleVesselPanelFooter\s*\(/m.test(fmo),
-    'C6c: `FleetManagerOverlay._drawRight` (Rejestr Dowództwa, tryb kompaktowy — źródło treści panelu T5) i `_handleVesselPanelFooter` (cel chipów T5) zostają');
+  const civ = readClean('src/ui/CommandInspectorView.js') ?? '';
+  ok(/^\s{2}_handleVesselPanelFooter\s*\(/m.test(fmo) && /^\s{2}_handleHit\s*\(/m.test(fmo) && /^\s{2}_inspectorShipFacts\s*\(/m.test(fmo)
+    && /export function drawInspector\s*\(/.test(civ) && /ov\._inspectorShipFacts\(/.test(civ),
+    'C6c: panel statku Dowództwa = `CommandInspectorView.drawInspector` (fakty `_inspectorShipFacts`); `_handleVesselPanelFooter` i `_handleHit` (cele chipów T5) zostają');
   ok(/^\s{2}_onHit\s*\(/m.test(fcp) && /^\s{2}_onHit\s*\(/m.test(fgp) && /^\s{2}_onHit\s*\(/m.test(sp),
     'C6d: `_onHit` dawnych paneli floty, grupy i stacji zostaje (cele chipów paneli T6 i przypięcia stacji)');
   ok(/window\.KOSMOS\.stationPanel\s*=/.test(ui) && /window\.KOSMOS\.fleetGroupPanel\s*=/.test(ui) && /window\.KOSMOS\.fleetCommandPanel\s*=/.test(ui),

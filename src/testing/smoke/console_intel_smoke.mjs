@@ -22,6 +22,7 @@
 // Bez pinów na stałych rysowania. Moduły jeszcze nieistniejące importowane dynamicznie (pin degraduje, nie przerywa).
 // KZ — usunięte piny ścieżki OFF: C5 (OFF = dawny Wywiad), S1/S3 części „bez consoleIntel — nie / pas wraca”, P4 „flaga OFF”,
 // I3 (OFF rysuje napisy), R4 (OFF bez cienia), R5 część OFF; zastąpione świadkami trwałości i rysunkiem konsoli.
+// KZ-Command — świadek S1 „fleet za flagą” zastąpiony grupą Nauki (tech / observatory, nigdy ekran zestawu): Dowództwo jest trwałe.
 
 import '../headless/env.js';
 import { readFileSync } from 'node:fs';
@@ -249,10 +250,12 @@ try {
     const isK = (id, f) => safe(() => CL.isKitScreen(id, f), null);
     const GROUP = ['diplomacy', 'intel', 'war'];
     const perm = GROUP.every((id) => CL?.PERMANENT_KIT_SCREENS?.includes(id) && isK(id, {}) === true && isK(id, { consoleKit: false }) === true && isK(id, undefined) === true);
-    // świadkowie: predykat nie jest stały (ekran z flagą bez flag — nie, z flagami — tak; ekran spoza zestawu — nie)
-    const witness = isK('fleet', {}) === false && isK('fleet', { consoleKit: true, consoleCommand: true }) === true && isK('tech', {}) === false;
+    // świadkowie (KZ-Command: Dowództwo też trwałe — świadkiem jest grupa Nauki): predykat nie jest stały — Technologie /
+    // Obserwatorium nigdy nie są ekranem zestawu (bez flag i z dowolnymi flagami), Wywiad tak
+    const anyOn = { consoleKit: true, consoleTech: true, consoleObservatory: true };
+    const witness = ['tech', 'observatory'].every((id) => isK(id, {}) === false && isK(id, anyOn) === false);
     assert(perm && witness && !('consoleIntel' in F) && !('consoleDiplomacy' in F),
-      'S1 isKitScreen: Dyplomacja / Wywiad / Wojny zawsze (bez flag, consoleKit false); flag consoleIntel / consoleDiplomacy brak; świadek: fleet za flagą, tech — nie');
+      'S1 isKitScreen: Dyplomacja / Wywiad / Wojny zawsze (bez flag, consoleKit false); flag consoleIntel / consoleDiplomacy brak; świadek: tech / observatory — nigdy');
     const BAND_Y = 40;   // wnętrze pasa subnav (pod górną belką)
     const sub = (active, kit = true) => {
       setKit(kit);

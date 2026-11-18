@@ -19,7 +19,9 @@
 //      → ten sam statek w kadrze (KONTROLA)
 //   M5 Dok taktyczny: prześwit z `MapInsets.BOTTOM_STRIP_H` (pin źródłowy) — liczby bez zmian (wykonanie, KONTROLA)
 //   M6 `LayoutConfig` bez `TACTICAL_DOCK_CLOCK_CLEARANCE`
-//   M7 Dowództwo: `TIME_STRIP_H = BOTTOM_STRIP_H` (pin źródłowy)
+//   M7 Dowództwo (KZ-Command — przecelowane): konsola Dowództwa ustępuje pasowi przez `consoleClockRect` (ConsoleLayoutLogic,
+//      wysokość = `MapInsets.BOTTOM_STRIP_H`, pin źródłowy + wykonanie); FleetManagerOverlay bez własnej stałej pasa
+//      (`TIME_STRIP_H` usunięta razem z dawnym ekranem) i rysuje Dowództwo przez `drawCommandConsole`, który woła `consoleClockRect`
 //   M8 kadr „Obserwuj” (`ThreeRenderer._computeWatchFit`, pin źródłowy — moduł nie importuje się pod node): lewo,
 //      prawo i dół z jednego odczytu `getMapInsets`; bez `OUTLINER_W` i bez sumy pasków nawigacji
 //   M9 UIManager: martwy tekst powiadomień usunięty (`_drawNotifications` bez wywołań, `_notifications` bez pisarza)
@@ -134,10 +136,23 @@ header('M5–M10  jedno źródło pasa dolnego i wcięć — Dok, LayoutConfig, 
     `M5b KONTROLA: liczby Doku bez zmian — rezerwa ${dock.getReservedHeight()}, pas od y ${lay.y}`);
   ok(!('TACTICAL_DOCK_CLOCK_CLEARANCE' in LC) && 'BOTTOM_RESERVED' in LC,
     'M6 SEDNO: `LayoutConfig` bez `TACTICAL_DOCK_CLOCK_CLEARANCE` (wysokość pasa tylko w `MapInsets`)');
+  // KZ-Command: dawny ekran Dowództwa (`TIME_STRIP_H`, `contentH = oh - TAB_H - TIME_STRIP_H`) usunięty — pas zegara konsoli
+  // liczy `consoleClockRect` z jednego źródła (`MapInsets.BOTTOM_STRIP_H`)
   const fmo = src('../../ui/FleetManagerOverlay.js');
-  ok(/import \{ BOTTOM_STRIP_H \} from '\.\/MapInsets\.js';/.test(fmo) && /const TIME_STRIP_H = BOTTOM_STRIP_H;/.test(fmo)
-    && /contentH = oh - TAB_H - TIME_STRIP_H/.test(fmo),
-    'M7 SEDNO: Dowództwo — `TIME_STRIP_H = BOTTOM_STRIP_H` z `MapInsets` (dawniej 20 na sztywno); treść dalej ustępuje pasowi');
+  const cll = src('../../ui/ConsoleLayoutLogic.js');
+  const ccv = src('../../ui/CommandConsoleView.js');
+  const iFn = cll.indexOf('export function consoleClockRect(');
+  const clockFn = iFn < 0 ? '' : cll.slice(iFn, cll.indexOf('\n}\n', iFn));
+  ok(/import \{ BOTTOM_STRIP_H \} from '\.\/MapInsets\.js';/.test(cll) && clockFn.length > 0
+    && /h: BOTTOM_STRIP_H \}/.test(clockFn) && /- BOTTOM_STRIP_H;/.test(clockFn) && !/\b20\b/.test(clockFn),
+    'M7a SEDNO: konsola — `consoleClockRect` liczy pas z `MapInsets.BOTTOM_STRIP_H` (bez liczby na sztywno)');
+  const CLL = await import('../../ui/ConsoleLayoutLogic.js');
+  const rc = CLL.consoleClockRect?.(W, H, 6);
+  ok(!!rc && rc.h === MI.BOTTOM_STRIP_H && rc.y + rc.h === H - NAV,
+    `M7b wykonanie: pas zegara konsoli = BOTTOM_STRIP_H tuż nad paskiem nawigacji (${JSON.stringify(rc)})`);
+  ok(!/TIME_STRIP_H\s*=|BOTTOM_STRIP_H/.test(fmo) && /drawCommandConsole\(this, ctx, W, H\)/.test(fmo)
+    && /clock: consoleClockRect\(W, H, NAV_GROUPS\.length\)/.test(ccv),
+    'M7c SEDNO: Dowództwo bez własnej stałej pasa — rysuje konsola (`drawCommandConsole`), która woła `consoleClockRect`');
   // CV-Z — przecelowane świadomie: kadr „Obserwuj” bez sceny (`_computeWatchFit`) usunięty; kadr to `_stageWatchFit` (ten sam odczyt wcięć).
   const wf = body(src('../../renderer/ThreeRenderer.js'), '  _stageWatchFit(enc) {');
   ok(/watchSafeRect\(/.test(wf) && /const ins = getMapInsets\(window\.KOSMOS\);/.test(wf)

@@ -1,19 +1,27 @@
-// ARC KONSOLE K7-B — keeper: inspektor statku / floty na konsoli Dowództwa (FEATURES.consoleCommand). Plan: docs/design/CONSOLES_PLAN.md (K7).
+// ARC KONSOLE K7-B — keeper: inspektor statku / floty na konsoli Dowództwa (KZ-Command: jedyna ścieżka, flaga zdjęta). Plan: docs/design/CONSOLES_PLAN.md (K7).
 //
 // Sekcje (każda degraduje, nie przerywa — symbole nowego kodu przez dynamiczny import):
-//   I  dostępność akcji ON == OFF: strefy inspektora konsoli (`drawInspector`) == strefy dzisiejszego panelu `_drawRight`
-//      dla stanów statku (20 stanów migawki T4 + uszkodzony, mało paliwa, inny układ) — te same typy i dane
-//   W  integracja: pełny rysunek konsoli (flaga ON) z wybranym statkiem niesie strefy inspektora; OFF bez zmian
+//   I  dostępność akcji ABSOLUTNA: strefy inspektora konsoli (`drawInspector`) == zamrożony multizbiór (typ + dane) dla 26 stanów
+//      statku (20 stanów migawki T4 + uszkodzony, mało paliwa, inny układ, …) — zamrożone z bazy 8701aa8, gdzie były == dawnemu
+//      panelowi `_drawRight` (pin I bazy); obecny rysunek = baza 1:1 (poza konfiguratorem — zob. niżej)
+//   W  integracja: pełny rysunek Dowództwa z wybranym statkiem niesie strefy i czipy inspektora konsoli (także przy consoleKit false)
 //   D  akcja niemożliwa = czip wyłączony z powodem i18n (PL + EN, bez surowych id), bez strefy
-//   F  flota: strefy ON ⊇ OFF (`_drawRightFleet`), jedyny nowy typ = `fleetDisband`; anulowanie bez rozkazu z powodem
+//   F  flota: strefy inspektora floty == zamrożony multizbiór (baza: ⊇ dawnego `_drawRightFleet` + `fleetDisband`); anulowanie
+//      bez rozkazu z powodem
 //   K  Finding 747: `fleetCreate` (lista „Floty”) i `fleetDisband` (inspektor floty) osiągalne na konsoli i trafiają do handlerów
 //   M  podsumowanie zaznaczenia wielokrotnego: najwolniejszy / zasięg / najmniej paliwa + dzisiejsze akcje zbiorcze
 //   R  kolumna ROLA: forma skrócona dla każdej roli (PL + EN), pełna nazwa w podpowiedzi
 //   C  kolumny puste dla wszystkich widocznych wierszy — minimum, nigdy nie znikają
 //   A  okna dialogowe (zmiana nazwy, rozbiórka, rozwiązanie floty, nowa flota) z prostokąta strefy konsoli przy 1600×1041
-//      i 1280×833, bez `window.inner*` w handlerach; poza konsolą — dzisiejsze okno na środku
+//      i 1280×833, bez `window.inner*` w handlerach; kotwica bez warunku flagi (consoleKit false — ta sama); inna zakładka — null
 //   L  czysta logika (grupy akcji, podsumowanie grupy, przyrząd, kadłub, utrzymanie z konkretną naprawą, kotwica)
 // Bez pinów na stałe rysunku.
+//
+// KZ-Command — piny ON vs OFF przepięte: I (== `_drawRight`) → zamrożony multizbiór per stan; W (OFF = dzisiejszy panel) → trwałość
+// (consoleKit false też konsola); F (⊇ `_drawRightFleet`) → zamrożony multizbiór floty; A „flaga OFF → brak kotwicy” → kotwica
+// przy consoleKit false = ta sama + pin źródłowy `_dialogAnchor` bez kitOn / isKitScreen. Usunięte bez zamiennika: brak.
+// ⚠ Stany config_select / config_confirm / config_home (I, D) są CZERWONE na drzewie KZ-Command: `CommandInspectorView.drawConfigurator`
+//   woła `ov._fleetActionDef`, które KZ-Command usunął z FleetManagerOverlay — konfigurator misji rzuca TypeError (regresja produktu).
 
 import '../headless/env.js';   // MUSI być pierwszy
 import { GAME_CONFIG } from '../../config/GameConfig.js';
@@ -163,15 +171,42 @@ function scene(name) {
 const env = () => { const K = window.KOSMOS; return { vMgr: K.vesselManager, ms: K.missionSystem, colMgr: K.colonyManager, activePid: 'p_home' }; };
 const BODY = { x: 900, y: 100, w: 294, h: 6000 };
 
-function offZones(name) {
-  const { s, ov } = scene(name);
-  return withFeat(s.features ?? {}, () => {
-    ov._hitZones = [];
-    const e = env();
-    ov._drawRight(mockCtx(), BODY.x, BODY.y, BODY.w, BODY.h, e.vMgr, e.ms, e.colMgr, e.activePid);
-    return ov._hitZones.slice();
-  });
-}
+// Strefa w zapisie zamrożonym: typ(klucz=wartość,…) — dane posortowane, `vessel` jako id, bez współrzędnych suwaka
+const short = (z) => {
+  const d = { ...(z.data ?? {}) };
+  if (d.vessel && typeof d.vessel === 'object') d.vessel = d.vessel.id;
+  return `${z.type}(${Object.keys(d).filter((k) => k !== 'sliderX' && k !== 'sliderW').sort().map((k) => `${k}=${d[k]}`).join(',')})`;
+};
+// Zamrożone z bazy 8701aa8 (`drawInspector`, tam == dawnemu panelowi `_drawRight` / `_drawRightFleet` + `fleetDisband`)
+const EXPECT_I = {
+  hangar: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  dock_noyard: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  dock_colonists: ["action(actionId=colonize,vessel=v_1)", "action(actionId=load_colonists,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "action(actionId=transport_passenger,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)", "unload_colonists(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  orbit: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  flight: ["back_to_shipyard()", "cancel_movement_order(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  combat: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cancel_movement_order(vesselId=v_1)", "cargo_load(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  foreign_orbit: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "foreign_colonize(targetId=p_far,vesselId=v_1)", "foreign_recon_body(targetId=p_far,vesselId=v_1)", "foreign_recon_system(vesselId=v_1)", "foreign_unload(targetId=p_far,vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  interstellar: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "cluster_switch(systemId=sys_B)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  foreign_recon: ["abort_foreign_recon(vesselId=v_1)", "back_to_shipyard()", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  loop: ["back_to_shipyard()", "cancel_loop(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  reserve: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "deploy_vessel(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)"],
+  mobilizing: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)"],
+  rally_none: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rally_assign_open(currentRallyId=null,vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  rally_member: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rally_assign_open(currentRallyId=poi_1,vesselId=v_1)", "rally_assign_remove(rallyId=poi_1,vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  pool: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rename(vesselId=v_1)", "toggle_logistics_pool(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  immobilized: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  blocked: ["back_to_shipyard()", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  config_select: ["back_to_shipyard()", "cancel_config()", "cargo_load(vesselId=v_1)", "rename(vesselId=v_1)", "select_target(targetId=p_two,targetSystemId=sys_home)", "undock(vesselId=v_1)"],
+  config_confirm: ["back_to_shipyard()", "cancel_config()", "cargo_load(vesselId=v_1)", "change_target()", "confirm_mission()", "rename(vesselId=v_1)", "toggle_repeat()", "undock(vesselId=v_1)"],
+  config_home: ["back_to_shipyard()", "cancel_config()", "cargo_load(vesselId=v_1)", "change_target()", "confirm_mission()", "rename(vesselId=v_1)", "set_return_cargo()", "toggle_repeat()", "undock(vesselId=v_1)"],
+  damaged: ["action(actionId=found_outpost,vessel=v_1)", "action(actionId=orbit,vessel=v_1)", "action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "disband(vesselId=v_1)", "manual_refuel(vesselId=v_1)", "rename(vesselId=v_1)", "toggle_refuel_auto(vesselId=v_1)", "undock(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  low_fuel: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  other_system: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "foreign_recon_body(targetId=p_far,vesselId=v_1)", "foreign_recon_system(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  foreign_unexplored: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "foreign_recon_body(targetId=p_far,vesselId=v_1)", "foreign_recon_system(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  foreign_analyzed: ["action(actionId=transport,vessel=v_1)", "back_to_shipyard()", "cargo_load(vesselId=v_1)", "foreign_colonize(targetId=p_far,vesselId=v_1)", "foreign_recon_system(vesselId=v_1)", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+  pool_flight: ["back_to_shipyard()", "rename(vesselId=v_1)", "withdraw_vessel(vesselId=v_1)"],
+};
+const EXPECT_FLEET = ["fleetBackToList()", "fleetDisband(fleetId=fl_a)", "fleetEngage(fleetId=fl_a)", "fleetMemberSelect(vesselId=v_1)", "fleetMemberSelect(vesselId=v_2)", "fleetMoveToPoint(fleetId=fl_a)", "fleetRename(fleetId=fl_a)", "fleetRetreatThreshold(fleetId=fl_a)", "fleetReturnBase(fleetId=fl_a)", "fleetSetDoctrine(doctrine=engage_in_range,fleetId=fl_a)", "fleetSetDoctrine(doctrine=hold_position,fleetId=fl_a)", "fleetSetDoctrine(doctrine=kite,fleetId=fl_a)", "fleetSetDoctrine(doctrine=retreat_at_50,fleetId=fl_a)"];
 function onDraw(name, setup = null) {
   const { s, ov } = scene(name);
   return withFeat(s.features ?? {}, () => {
@@ -183,36 +218,40 @@ function onDraw(name, setup = null) {
   });
 }
 
-// ═══ I — dostępność ON == OFF ═════════════════════════════════════════════════════════════════════════════════════
-header('I  strefy inspektora konsoli == strefy panelu `_drawRight` (stany statku)');
+// ═══ I — dostępność absolutna ═════════════════════════════════════════════════════════════════════════════════════
+header('I  strefy inspektora konsoli == zamrożony multizbiór (stany statku)');
+ok(Object.keys(EXPECT_I).length === Object.keys(STATES).length && Object.keys(STATES).every((n) => Array.isArray(EXPECT_I[n])),
+  `I świadek — zamrożone stany = stany keepera (${Object.keys(EXPECT_I).length})`);
 for (const name of Object.keys(STATES)) {
   await safe(`I ${name}`, () => {
-    const off = ms(offZones(name));
-    const on = ms(onDraw(name).zones);
-    ok(off.length > 0, `I ${name}: świadek — panel OFF ma strefy (${off.length})`);
-    const missing = off.filter((k, i, a) => on.filter((q) => q === k).length < a.filter((q) => q === k).length);
-    const extra = on.filter((k, i, a) => off.filter((q) => q === k).length < a.filter((q) => q === k).length);
-    ok(missing.length === 0, `I ${name}: akcje OFF bez strefy na konsoli: ${[...new Set(missing)].join(' ; ')}`);
-    ok(extra.length === 0, `I ${name}: strefy konsoli spoza panelu OFF: ${[...new Set(extra)].join(' ; ')}`);
+    const want = EXPECT_I[name] ?? [];
+    const got = onDraw(name).zones.map(short).sort();
+    ok(want.length > 0, `I ${name}: świadek — oczekiwane strefy (${want.length})`);
+    const missing = want.filter((k, i, a) => got.filter((q) => q === k).length < a.filter((q) => q === k).length);
+    const extra = got.filter((k, i, a) => want.filter((q) => q === k).length < a.filter((q) => q === k).length);
+    ok(missing.length === 0, `I ${name}: akcje bez strefy na konsoli: ${[...new Set(missing)].join(' ; ')}`);
+    ok(extra.length === 0, `I ${name}: strefy konsoli spoza zamrożonego zbioru: ${[...new Set(extra)].join(' ; ')}`);
   });
 }
 
 // ═══ W — integracja z pełnym rysunkiem konsoli ═══════════════════════════════════════════════════════════════════
-header('W  pełny rysunek Dowództwa: inspektor konsoli ON, dzisiejszy panel OFF');
+header('W  pełny rysunek Dowództwa: inspektor konsoli (zawsze — także przy consoleKit false)');
 await safe('W', () => {
-  for (const on of [true, false]) {
+  for (const kit of [true, false]) {
     const { ov } = scene('hangar');
     window.KOSMOS.uiManager.setSelectedVesselId('v_1');
-    FEAT.consoleKit = true; FEAT.consoleCommand = on;
+    FEAT.consoleKit = kit;
     ov._visible = true; ov._activeTab = 'tactical';
     const ctx = mockCtx();
     ov.draw(ctx, 1280, 833);
-    const types = new Set(ov._hitZones.map((z) => z.type));
-    ok(types.has('undock') && types.has('disband') && types.has('rename'), `W ${on ? 'ON' : 'OFF'}: strefy statku w rysunku (undock, disband, rename)`);
+    const insp = ov.consoleZones?.inspector;
+    const inInsp = (z) => !!insp && z.x >= insp.x - 1 && z.x + z.w <= insp.x + insp.w + 1;
+    const types = new Set(ov._hitZones.filter(inInsp).map((z) => z.type));
+    ok(types.has('undock') && types.has('disband') && types.has('rename'), `W consoleKit ${kit}: strefy statku w strefie inspektora konsoli (undock, disband, rename)`);
     const consoleText = ctx.log.some((s) => s === `[ ${t('cmdInsp.undock').toUpperCase()} ]`);
-    ok(consoleText === on, `W ${on ? 'ON' : 'OFF'}: czip konsoli „${t('cmdInsp.undock')}” ${on ? 'jest' : 'nieobecny (dzisiejszy panel)'}`);
+    ok(consoleText, `W consoleKit ${kit}: czip konsoli „${t('cmdInsp.undock')}” jest`);
   }
-  FEAT.consoleCommand = true;
+  FEAT.consoleKit = true;
 });
 
 // ═══ D — powody wyłączonych akcji ════════════════════════════════════════════════════════════════════════════════
@@ -254,7 +293,7 @@ await safe('D konkret', () => {
 });
 
 // ═══ F — flota ════════════════════════════════════════════════════════════════════════════════════════════════════
-header('F  inspektor floty: ON ⊇ OFF, jedyny nowy typ `fleetDisband`');
+header('F  inspektor floty: strefy == zamrożony multizbiór (z `fleetDisband`)');
 const FLEET = { id: 'fl_a', name: 'Pierwsza', memberIds: ['v_1', 'v_2'], activeOrder: null, doctrine: 'retreat_at_50', retreatThreshold: 0.3 };
 function fleetScene() {
   world(ship(), { fleets: [FLEET] }, [ship({ id: 'v_2', name: 'Druga', fuel: { current: 6, max: 60, consumption: 2 } })]);
@@ -263,17 +302,13 @@ function fleetScene() {
   return ov;
 }
 await safe('F', () => {
-  const off = fleetScene(); off._hitZones = [];
-  off._drawRightFleet(mockCtx(), BODY.x, BODY.y, BODY.w, BODY.h, FLEET);
   const on = fleetScene(); on._hitZones = []; on._cmdDisabled = [];
   const ctx = mockCtx();
   IV.drawInspector(on, ctx, BODY, consoleRoles(), env());
-  const so = ms(off._hitZones), sn = ms(on._hitZones);
-  ok(so.length > 0, `F świadek — OFF ma strefy (${so.length})`);
-  const missing = so.filter((k) => !sn.includes(k));
-  ok(missing.length === 0, `F akcje floty OFF na konsoli: brak ${missing.join(' ; ')}`);
-  const extraTypes = [...new Set(sn.filter((k) => !so.includes(k)).map((k) => k.split('|')[0]))];
-  ok(extraTypes.length === 1 && extraTypes[0] === 'fleetDisband', `F nowe typy: ${extraTypes.join(',')} (oczekiwane: fleetDisband)`);
+  const sn = on._hitZones.map(short).sort();
+  ok(EXPECT_FLEET.length > 0 && sn.length > 0, `F świadek — strefy floty (${sn.length})`);
+  ok(JSON.stringify(sn) === JSON.stringify(EXPECT_FLEET), `F strefy floty == zamrożone\n      jest: ${sn.join(' ; ')}`);
+  ok(sn.some((k) => k.startsWith('fleetDisband(')), 'F rozwiązanie floty na konsoli (Finding 747)');
   ok(on._cmdDisabled.some((d) => d.reasonKey === 'cmdInsp.reasonNoFleetOrder'), 'F anulowanie bez rozkazu: wyłączone z powodem (dziś: brak strefy)');
   const all = ctx.log.join('');   // liczby kratki cyfr rysowane znak po znaku
   ok(all.includes('30.0 AU'), 'F podsumowanie: najmniejszy zasięg (v_2: 60/2 = 30 AU)');
@@ -284,7 +319,7 @@ await safe('F', () => {
 header('K  Finding 747: nowa flota (lista) i rozwiązanie floty (inspektor) osiągalne i trafiają do handlerów');
 await safe('K', () => {
   const ov = fleetScene();
-  FEAT.consoleKit = true; FEAT.consoleCommand = true;
+  FEAT.consoleKit = true;
   ov._visible = true; ov._activeTab = 'tactical';
   ov.draw(mockCtx(), 1280, 833);
   const zc = ov._hitZones.find((z) => z.type === 'fleetCreate');
@@ -306,7 +341,7 @@ header('M  podsumowanie zaznaczenia: najwolniejszy / zasięg / paliwo + akcje zb
 await safe('M', () => {
   world(ship(), {}, [ship({ id: 'v_2', name: 'Druga', fuel: { current: 6, max: 60, consumption: 2 } })]);
   const ov = new FleetManagerOverlay();
-  FEAT.consoleKit = true; FEAT.consoleCommand = true;
+  FEAT.consoleKit = true;
   window.KOSMOS.uiManager.setSelectedVesselId(null);
   ov._selectedVesselId = null; ov._visible = true; ov._activeTab = 'tactical';
   ov._multiSelectedIds.add('v_1'); ov._multiSelectedIds.add('v_2');
@@ -371,7 +406,7 @@ for (const [iw, ih, sc] of [[1600, 1041, 1.25], [1280, 833, 1]]) {
     const restore = realStyleDom();
     try {
       const ov = fleetScene();
-      FEAT.consoleKit = true; FEAT.consoleCommand = true;
+      FEAT.consoleKit = true;
       ov._visible = true; ov._activeTab = 'tactical';
       ov.draw(mockCtx(), Math.round(iw / sc), Math.round(ih / sc));
       const z = ov.consoleZones;
@@ -398,10 +433,12 @@ for (const [iw, ih, sc] of [[1600, 1041, 1.25], [1280, 833, 1]]) {
         ok(exp.left + exp.width <= iw && exp.top < ih && exp.left >= 0, `A ${iw} ${label}: okno w oknie przeglądarki`);
         document.body.removeChild(o);
       }
-      // poza konsolą (flaga OFF) — dzisiejsze okno na środku
-      FEAT.consoleCommand = false;
-      ok(ov._dialogAnchor('inspector') === null, `A ${iw} flaga OFF: brak kotwicy (okno na środku jak dziś)`);
-      FEAT.consoleCommand = true;
+      // trwałość (KZ-Command): kotwica nie zależy od flag — przy consoleKit false ta sama co przy true
+      const a1 = ov._dialogAnchor('inspector');
+      FEAT.consoleKit = false;
+      const a0 = ov._dialogAnchor('inspector');
+      FEAT.consoleKit = true;
+      ok(!!a1 && JSON.stringify(a0) === JSON.stringify(a1), `A ${iw} consoleKit false: ta sama kotwica (${JSON.stringify(a0)})`);
       ov._activeTab = 'atlas';
       ok(ov._dialogAnchor('inspector') === null, `A ${iw} inna zakładka: brak kotwicy`);
     } finally { restore(); }
@@ -416,6 +453,8 @@ await safe('A źródło', () => {
     ok(b.length > 0, `A źródło: świadek ${fn}`);
     ok(!/window\.inner|innerWidth|innerHeight/.test(b), `A źródło: ${fn} bez window.inner*`);
   }
+  const da = body('_dialogAnchor');
+  ok(da.length > 0 && /consoleZones/.test(da) && !/kitOn|isKitScreen|FEATURES|consoleCommand/.test(da), 'A źródło: `_dialogAnchor` bez warunku flagi (tylko reguła zakładki / anyTab)');
   const a = { left: 10, top: 20, width: 300 };
   const ov1 = { style: {} }, p1 = { style: {} };
   ok(MA.applyModalAnchor?.(ov1, p1, a) === true && p1.style.left === '10px' && ov1.style.justifyContent === 'flex-start', 'A applyModalAnchor: panel na kotwicy');

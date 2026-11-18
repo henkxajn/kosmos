@@ -5,7 +5,13 @@
 // przebijała przez niego mapa 3D i dolna krawędź ramki tworzyła linię tnącą ekran.
 // Wariant 1: tło/ramka overlayu schodzą do paska nawigacji (H-42), a TREŚĆ nadal ustępuje zegarowi
 // (contentH bez zmian → żadna zakładka się nie przelicza).
-// Uruchom: node src/testing/smoke/tmp_fleet_clock_band_smoke.mjs
+// Uruchom: node src/testing/smoke/fleet_clock_band_smoke.mjs
+//
+// KZ-Command — Dowództwo jest wyłącznie konsolą: T2 / T3 pinowały dawny ekran (contentH 602, nieprzezroczyste tło `#000`
+// w pasie zegara), którego nie ma. Teraz: T2 — klaster zegara konsoli (`consoleZones.clock`) = realny prostokąt
+// BottomControlBar, a każda strefa konsoli nad zegarem (w poziomie) kończy się na jego górnej krawędzi (świadek: ≥ 1 taka
+// strefa); T3 — rama konsoli schodzi do paska nawigacji (żadna krawędź nie tnie ekranu na górze zegara), a strefy obok
+// zegara wchodzą w pas (świadek: ≥ 1) — pas nie jest pustą dziurą. T1 / T4 / T5 bez zmian.
 
 globalThis.localStorage = { _s: {}, getItem(k){ return this._s[k] ?? null; }, setItem(k,v){ this._s[k]=String(v); }, removeItem(k){ delete this._s[k]; } };
 globalThis.window = globalThis;
@@ -17,9 +23,8 @@ if (!globalThis.KOSMOS) globalThis.KOSMOS = {};
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; } else { fail++; console.log('  ✗ FAIL:', m); } };
 
-// ARC KONSOLE K7-A — keeper przypina DZISIEJSZE Dowództwo (flaga OFF); konsolę (strefy nad zegarem) pinuje console_command_smoke.
+// KZ-Command: jedyna ścieżka Dowództwa = konsola (flaga consoleCommand zdjęta).
 const { GAME_CONFIG } = await import('../../config/GameConfig.js');
-GAME_CONFIG.FEATURES.consoleCommand = false;
 const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
 const { BottomControlBar } = await import('../../ui/BottomControlBar.js');
 const { COSMIC, BOTTOM_RESERVED } = await import('../../config/LayoutConfig.js');
@@ -75,19 +80,30 @@ const bottom = ov._bounds.y + ov._bounds.h;
 ok(bottom === navTop, `T1: dół overlayu styka się z paskiem nawigacji (${bottom} === ${navTop})`);
 ok(bottom === H - BOTTOM_RESERVED, `T1: rezerwa = BOTTOM_RESERVED, jak w BaseOverlay (${bottom} === ${H - BOTTOM_RESERVED})`);
 
-// ── T2: treść NADAL ustępuje zegarowi (dolne akcje prawego panelu osiągalne scrollem) ──
-const contentBottom = ov._contentBounds.y + ov._contentBounds.h;
-ok(contentBottom === stripTop, `T2: dół TREŚCI = góra zegara (${contentBottom} === ${stripTop})`);
-ok(ov._contentBounds.h === 602, `T2: contentH bez zmian względem stanu sprzed fixa (${ov._contentBounds.h} === 602)`);
+// ── T2: treść konsoli ustępuje zegarowi tylko tam, gdzie zegar leży (prawy slot) ──
+const bar0 = new BottomControlBar();
+bar0.draw(mockCtx(), W, H, KOSMOS.uiManager._timeState);
+const z = ov.consoleZones ?? {};
+const clock = z.clock;
+const realClock = bar0._bgRect;
+ok(!!clock && !!realClock && clock.x === realClock.x && clock.y === realClock.y && clock.w === realClock.w && clock.h === realClock.h,
+  `T2: klaster zegara konsoli = prostokąt BottomControlBar (${JSON.stringify(clock)} vs ${JSON.stringify(realClock)})`);
+const ZONES = ['list', 'hero', 'inspector', 'strip'].map((k) => [k, z[k]]).filter(([, r]) => !!r);
+ok(ZONES.length === 4, `T2: świadek — 4 strefy konsoli (${ZONES.length})`);
+const overClock = ZONES.filter(([, r]) => clock && r.x < clock.x + clock.w && r.x + r.w > clock.x);
+ok(overClock.length >= 1, `T2: świadek — strefy nad zegarem w poziomie (${overClock.map(([k]) => k).join(',')})`);
+for (const [k, r] of overClock) ok(r.y + r.h <= stripTop, `T2: ${k} kończy się nad zegarem (${r.y + r.h} <= ${stripTop})`);
 
-// ── T3: pas 20 px jest realnie zamalowany na CAŁEJ szerokości ───────────────
-// (dawniej: nic go nie rysowało poza slotem zegara → przebijała mapa 3D)
+// ── T3: pas zegara nie jest dziurą ani linią tnącą ekran ──
+// (dawniej: dół ramki na górze zegara + niezamalowany pas → przebijała mapa 3D, linia przez cały ekran)
 const bandY = stripTop + STRIP_H / 2;   // środek dawnej dziury
-const covers = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
-const opaqueBg = ctx.rects.filter(r => r.fill === '#000');
-for (const px of [4, 320, 640, 900, 1080]) {
-  ok(opaqueBg.some(r => covers(r, px, bandY)), `T3: pas zegara zamalowany tłem overlayu w x=${px}`);
-}
+const fr = z.frame;
+ok(!!fr && fr.y + fr.h === navTop, `T3: rama konsoli schodzi do paska nawigacji (${fr ? fr.y + fr.h : '—'} === ${navTop})`);
+const besideClock = ZONES.filter(([, r]) => !overClock.some(([, q]) => q === r));
+ok(besideClock.length >= 1, `T3: świadek — strefy obok zegara (${besideClock.map(([k]) => k).join(',')})`);
+// dolny rząd stref obok zegara (lista, pas osi) sięga w pas — przestrzeń obok zegara jest używana, nie pusta
+const lowBeside = Math.max(...besideClock.map(([, r]) => r.y + r.h));
+ok(lowBeside > stripTop, `T3: strefy obok zegara wchodzą w pas (dół ${lowBeside} > ${stripTop})`);
 
 // ── T4: pas zegara ZAKOTWICZONY DOKŁADNIE w ostatnim (prawym) slocie nawigacji ──
 // Niezależne od liczby slotów: C7 zdjął slot Populacji (7→6) → ostatni slot szerszy i zaczyna

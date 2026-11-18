@@ -1,19 +1,29 @@
-// ARC KONSOLE K7-C — keeper: ostatnie strony Dowództwa na konsoli (FEATURES.consoleCommand). Plan: docs/design/CONSOLES_PLAN.md (K7).
+// ARC KONSOLE K7-C — keeper: ostatnie strony Dowództwa na konsoli (KZ-Command: jedyna ścieżka, flaga zdjęta). Plan: docs/design/CONSOLES_PLAN.md (K7).
 //
 // Sekcje (każda degraduje, nie przerywa — symbole nowego kodu przez dynamiczny import):
-//   E  panel wroga: strefy ON == OFF (`_drawEnemyDetails`); MGŁA — kontakt niezidentyfikowany bez nazwy / imperium / kadłuba
-//   G  konfigurator misji: strefy ON == OFF (`_drawMissionConfig`) w każdym stanie (wybór celu, potwierdzenie, brak paliwa,
-//      inny układ, powtarzanie + ładunek powrotny); niemożliwe = czip wyłączony z powodem i18n
-//   A  Atlas: akcje ciała ON ⊇ OFF (map_body, atlas_report), lista ↔ orrery, mgła (nazwa niezbadanego), cel konfiguratora
-//   L  Logistyka: akcje ON == OFF (kreator, drop-downy, zlecenia), pole ilości z `consoleZones` przy 1600×1041 i 1280×833,
-//      wąskie gardło w roli alert
-//   N  Jednostki: akcje ON == OFF (kafle, rekrutacja), kolonia strony lokalna (globalna nietknięta), rekrutacja w niej,
-//      inne hosty GroundUnitPanel bez zmian (dziennik + strefy), czipy zachowują stan stron
+//   E  panel wroga: strefy == zamrożone; MGŁA — kontakt niezidentyfikowany bez nazwy / imperium / kadłuba
+//   G  konfigurator misji: strefy == zamrożone w każdym stanie (wybór celu, potwierdzenie, brak paliwa, inny układ, powtarzanie +
+//      ładunek powrotny); niemożliwe = czip wyłączony z powodem i18n; PEŁNY rysunek Dowództwa z aktywnym konfiguratorem nie rzuca
+//      i niesie strefy konfiguratora w inspektorze (klasa regresji „ov._fleetActionDef is not a function”), klik WYŚLIJ / ANULUJ
+//   A  Atlas: akcje ciała per ciało układu (map_body, atlas_report tylko przy zbadanych), lista ↔ orrery, mgła, cel konfiguratora
+//   L  Logistyka: akcje == zamrożone (kreator, drop-downy, zlecenia; katalog drop-downu = reguła niezależna z danych), pole
+//      ilości z `consoleZones` przy 1600×1041 i 1280×833, wąskie gardło w roli alert
+//   N  Jednostki: akcje == zamrożone (kafle, rekrutacja), kolonia strony lokalna (globalna nietknięta), rekrutacja w niej,
+//      inne hosty GroundUnitPanel bez zmian (dziennik + strefy niezależne od consoleKit), czipy zachowują stan stron
 //   P  po bramce (właściciel): wszystkie złoża ciała w inspektorze Atlasu; miniatury modeli jednostek (glif tylko bez zasobu);
 //      Finding 753 — żaden host GroundUnitPanel bez surowych id archetypów; Finding 751 — kotwica okna ładunku i raportu ciała;
 //      Finding 754 — każdy archetyp rozwiązuje się do istniejącego GLB; siatka kafli ≈2× w strefie bohatera bez nakładania
 //   R  powody i etykiety: klucze istnieją w PL i EN, nie są surowymi id
 // Bez pinów na stałe rysunku.
+//
+// KZ-Command — piny ON vs OFF przepięte na absolutne (zamrożone z bazy 8701aa8, gdzie ścieżka konsoli była == / ⊇ dawnych stron
+// pod pinami E/G/L/N bazy; obecny rysunek = baza 1:1): E (== `_drawEnemyDetails`), G (== `_drawMissionConfig`), L (== dawna strona
+// Logistyki; katalog drop-downu = ALL_RESOURCES bez research/energy + COMMODITIES), L orders (anulowanie == OFF → każde zlecenie
+// ma w inspektorze dokładnie swoje `logi_cancel`), N (== dawna zakładka Naziemne), A (ciała / raporty z OFF → ciała układu z
+// EntityManager, raport ⇔ zbadane), N hosts (flaga ON / OFF → consoleKit true / false), P 751 (flaga OFF → null ⇒ consoleKit
+// false = ta sama kotwica). Usunięte: świadkowie rysunku OFF („OFF też anonimowy”, „OFF nie pokazuje nazwy”, „OFF rysuje
+// dzisiejszy katalog” — klucz fleet.catalogHeaderFull usunięty z i18n, „wiersz OFF ma 3 najbogatsze”) — strony OFF nie ma;
+// zamiast katalogu: FMO bez `_drawAtlasCatalog`, a każda strona stoi w ramie konsoli.
 
 import '../headless/env.js';   // MUSI być pierwszy
 import { GAME_CONFIG } from '../../config/GameConfig.js';
@@ -120,6 +130,38 @@ const ms = (arr) => arr.map(norm).sort();
 const env = () => { const K = window.KOSMOS; return { vMgr: K.vesselManager, ms: K.missionSystem, colMgr: K.colonyManager, activePid: 'p_home' }; };
 const BODY = { x: 900, y: 100, w: 294, h: 6000 };
 const sameMulti = (a, b) => a.length === b.length && a.every((k, i) => k === b[i]);
+// Strefa w zapisie zamrożonym: typ(klucz=wartość,…) — dane posortowane
+const short = (z) => { const d = z.data ?? {}; return `${z.type}(${Object.keys(d).sort().map((k) => `${k}=${d[k]}`).join(',')})`; };
+// Zamrożone z bazy 8701aa8 (ścieżka konsoli; tam == dawnym stronom pod pinami E/G/L/N)
+const EXPECT_E = {
+  tracked: ["back_to_shipyard()"],
+  unidentified: ["back_to_shipyard()"],
+};
+const EXPECT_G = {
+  select: ["cancel_config()", "select_target(targetId=m_one,targetSystemId=null)", "select_target(targetId=p_far,targetSystemId=sys_B)", "select_target(targetId=p_two,targetSystemId=null)"],
+  select_none: ["cancel_config()"],
+  confirm: ["cancel_config()", "change_target()", "confirm_mission()", "toggle_repeat()"],
+  no_fuel: ["cancel_config()", "change_target()", "toggle_repeat()"],
+  repeat_colony: ["cancel_config()", "change_target()", "confirm_mission()", "set_return_cargo()", "toggle_repeat()"],
+  repeat_body: ["cancel_config()", "change_target()", "confirm_mission()", "toggle_repeat()"],
+  cross_system: ["cancel_config()", "change_target()", "confirm_mission()", "toggle_repeat()"],
+  no_options: ["cancel_config()", "change_target()", "confirm_mission()"],
+};
+const EXPECT_L = {
+  empty: ["logi_from_dropdown_toggle||||", "logi_good_dropdown_toggle||||", "logi_to_dropdown_toggle||||"],
+  goods: ["logi_create||||", "logi_from_dropdown_toggle||||", "logi_good_dec|Fe|||", "logi_good_dec|food|||", "logi_good_dropdown_toggle||||", "logi_good_inc|Fe|||", "logi_good_inc|food|||", "logi_good_qty_input|Fe|||", "logi_good_qty_input|food|||", "logi_good_remove|Fe|||", "logi_good_remove|food|||", "logi_to_dropdown_toggle||||"],
+  same: ["logi_from_dropdown_toggle||||", "logi_good_dec|Fe|||", "logi_good_dropdown_toggle||||", "logi_good_inc|Fe|||", "logi_good_qty_input|Fe|||", "logi_good_remove|Fe|||", "logi_to_dropdown_toggle||||"],
+  no_goods: ["logi_from_dropdown_toggle||||", "logi_good_dropdown_toggle||||", "logi_to_dropdown_toggle||||"],
+  no_to: ["logi_from_dropdown_toggle||||", "logi_good_dec|Fe|||", "logi_good_dropdown_toggle||||", "logi_good_inc|Fe|||", "logi_good_qty_input|Fe|||", "logi_good_remove|Fe|||", "logi_to_dropdown_toggle||||"],
+  col_dd: ["logi_col_dropdown_bg||||", "logi_col_dropdown_close||||", "logi_col_pick||p_far|from|", "logi_col_pick||p_home|from|", "logi_from_dropdown_toggle||||", "logi_good_dropdown_toggle||||", "logi_to_dropdown_toggle||||"],
+  good_dd: ["logi_dropdown_bg||||", "logi_dropdown_close||||", "logi_from_dropdown_toggle||||", "logi_good_dropdown_toggle||||", "logi_good_pick|Cu|||", "logi_good_pick|C|||", "logi_good_pick|Fe|||", "logi_good_pick|Hv|||", "logi_good_pick|H|||", "logi_good_pick|Li|||", "logi_good_pick|Nt|||", "logi_good_pick|Si|||", "logi_good_pick|Ti|||", "logi_good_pick|Xe|||", "logi_good_pick|android_worker|||", "logi_good_pick|antimatter_cells|||", "logi_good_pick|automation_droid|||", "logi_good_pick|basic_supplies|||", "logi_good_pick|civilian_goods|||", "logi_good_pick|compact_bioreactor|||", "logi_good_pick|conductor_bundles|||", "logi_good_pick|electronic_systems|||", "logi_good_pick|extraction_systems|||", "logi_good_pick|food|||", "logi_good_pick|fuel|||", "logi_good_pick|metamaterials|||", "logi_good_pick|military_supplies|||", "logi_good_pick|neurostimulants|||", "logi_good_pick|orbital_shells|||", "logi_good_pick|plasma_cores|||", "logi_good_pick|polymer_composites|||", "logi_good_pick|power_cells|||", "logi_good_pick|pressure_modules|||", "logi_good_pick|propulsion_systems|||", "logi_good_pick|quantum_cores|||", "logi_good_pick|quantum_processors|||", "logi_good_pick|reactive_armor|||", "logi_good_pick|semiconductor_arrays|||", "logi_good_pick|structural_alloys|||", "logi_good_pick|warp_cores|||", "logi_good_pick|water|||", "logi_to_dropdown_toggle||||"],
+};
+const EXPECT_L_ORDER = { 7: ["logi_cancel||||7"], 8: ["logi_cancel||||8"] };
+const EXPECT_N = {
+  open: ["ground:recruit|shock_infantry", "ground:select_tile|aa_platform", "ground:select_tile|garrison_unit", "ground:select_tile|ground_supply_unit", "ground:select_tile|medic_unit", "ground:select_tile|recon_drone", "ground:select_tile|rocket_artillery", "ground:select_tile|shock_infantry"],
+  no_barracks: ["ground:select_tile|aa_platform", "ground:select_tile|garrison_unit", "ground:select_tile|ground_supply_unit", "ground:select_tile|medic_unit", "ground:select_tile|recon_drone", "ground:select_tile|rocket_artillery", "ground:select_tile|shock_infantry"],
+  no_pop: ["ground:select_tile|aa_platform", "ground:select_tile|garrison_unit", "ground:select_tile|ground_supply_unit", "ground:select_tile|medic_unit", "ground:select_tile|recon_drone", "ground:select_tile|rocket_artillery", "ground:select_tile|shock_infantry"],
+};
 
 function onInspector(ov) {
   ov._hitZones = []; ov._cmdDisabled = []; ov._cmdTip = null;
@@ -130,22 +172,18 @@ function onInspector(ov) {
 const reasonsOf = (dis) => dis.map((d) => d.reasonKey).filter(Boolean);
 
 // ═══ E — panel wroga ══════════════════════════════════════════════════════════════════════════════════════════════
-header('E  panel wroga: strefy ON == OFF; mgła tożsamości');
+header('E  panel wroga: strefy == zamrożone; mgła tożsamości');
 for (const [name, contacts] of [['tracked', { v_en: 'contact' }], ['unidentified', {}]]) {
   await safe(`E ${name}`, () => {
     world([ship(), enemy()], { contacts });
     const ov = new FleetManagerOverlay();
     ov._selectedVesselId = 'v_en';
-    ov._hitZones = [];
-    const offCtx = mockCtx();
-    ov._drawEnemyDetails(offCtx, BODY.x, BODY.y, BODY.w, BODY.h, window.KOSMOS.vesselManager.getVessel('v_en'));
-    const off = ms(ov._hitZones);
     const on = onInspector(ov);
-    ok(off.length > 0, `E ${name}: świadek — panel OFF ma strefy (${off.length})`);
-    ok(sameMulti(off, ms(on.zones)), `E ${name}: strefy ON == OFF (${ms(on.zones).join(' ; ')} vs ${off.join(' ; ')})`);
+    const got = on.zones.map(short).sort();
+    ok(EXPECT_E[name].length > 0, `E ${name}: świadek — oczekiwane strefy (${EXPECT_E[name].length})`);
+    ok(sameMulti(EXPECT_E[name], got), `E ${name}: strefy == zamrożone (${got.join(' ; ')})`);
     const text = on.log.join('\n');
     if (name === 'unidentified') {
-      ok(offCtx.log.some((s) => s.includes(t('intel.unidentifiedContact'))), 'E unidentified: świadek — OFF też anonimowy');
       for (const leak of ['Krwawy Grot', 'Hegemonia Vex', t('cmdPages.enemy.hull'), t('cmdPages.enemy.position')]) ok(!text.includes(leak), `E unidentified: mgła — brak „${leak}” na konsoli`);
       ok(text.includes(t('intel.unidentifiedContact')), 'E unidentified: nagłówek „niezidentyfikowany kontakt”');
       ok(text.includes(t('cmdPages.enemy.noActionsHint').slice(0, 20)), 'E unidentified: gdzie wydać rozkaz (bez cichego braku)');
@@ -165,7 +203,7 @@ await safe('E logic', () => {
 });
 
 // ═══ G — konfigurator misji ═══════════════════════════════════════════════════════════════════════════════════════
-header('G  konfigurator: strefy ON == OFF w każdym stanie; niemożliwe = powód');
+header('G  konfigurator: strefy == zamrożone w każdym stanie; niemożliwe = powód; pełny rysunek nie rzuca');
 const TARGETS = [
   { id: 'p_two', name: 'Wtora', type: 'planet', reachable: true, explored: true, sameSystem: true, distAU: 2 },
   { id: 'm_one', name: 'Luna', type: 'moon', reachable: true, explored: false, sameSystem: true, distAU: 0.1 },
@@ -187,18 +225,14 @@ for (const [name, st] of Object.entries(CFG)) {
   await safe(`G ${name}`, () => {
     world([ship(st.v)]);
     const mk = () => { const ov = new FleetManagerOverlay(); ov._selectedVesselId = 'v_1'; ov._missionConfig = { ...st.cfg }; ov._getValidTargets = () => (st.targets ?? TARGETS); return ov; };
-    const ovOff = mk();
-    ovOff._hitZones = [];
-    const v = window.KOSMOS.vesselManager.getVessel('v_1');
-    ovOff._drawMissionConfig(mockCtx(), BODY.x, BODY.y, BODY.w, BODY.h, 0, v, window.KOSMOS.missionSystem, window.KOSMOS.colonyManager);
-    const off = ms(ovOff._hitZones.filter((z) => CFG_TYPES.has(z.type)));
     const ovOn = mk();
     const on = onInspector(ovOn);
-    const onCfg = ms(on.zones.filter((z) => CFG_TYPES.has(z.type)));
-    ok(off.length > 0, `G ${name}: świadek — konfigurator OFF ma strefy (${off.length})`);
-    ok(sameMulti(off, onCfg), `G ${name}: strefy konfiguratora ON == OFF\n      ON : ${onCfg.join(' ; ')}\n      OFF: ${off.join(' ; ')}`);
-    if (st.expectZone) ok(onCfg.some((k) => k.startsWith(st.expectZone + '|')), `G ${name}: świadek strefy ${st.expectZone}`);
-    if (st.noZone) ok(!onCfg.some((k) => k.startsWith(st.noZone + '|')), `G ${name}: brak strefy ${st.noZone} (ON i OFF)`);
+    const onCfg = on.zones.filter((z) => CFG_TYPES.has(z.type)).map(short).sort();
+    const want = EXPECT_G[name] ?? [];
+    ok(want.length > 0, `G ${name}: świadek — oczekiwane strefy konfiguratora (${want.length})`);
+    ok(sameMulti(want, onCfg), `G ${name}: strefy konfiguratora == zamrożone\n      jest     : ${onCfg.join(' ; ')}\n      oczekiwane: ${want.join(' ; ')}`);
+    if (st.expectZone) ok(onCfg.some((k) => k.startsWith(st.expectZone + '(')), `G ${name}: świadek strefy ${st.expectZone}`);
+    if (st.noZone) ok(!onCfg.some((k) => k.startsWith(st.noZone + '(')), `G ${name}: brak strefy ${st.noZone}`);
     if (st.expectReason) ok(reasonsOf(on.disabled).includes(st.expectReason), `G ${name}: czip wyłączony z powodem ${st.expectReason} (${reasonsOf(on.disabled).join(',')})`);
     for (const k of reasonsOf(on.disabled)) usedKeys.add(k);
     // kroki z góry na dół: tytuł konfiguratora przed czipem „Wyślij”, „Anuluj” na końcu
@@ -208,6 +242,32 @@ for (const [name, st] of Object.entries(CFG)) {
     ok(iT >= 0 && iS > iT && iC > iS, `G ${name}: kolejność czytania tytuł → … → WYŚLIJ → ANULUJ (${iT}, ${iS}, ${iC})`);
   });
 }
+// pełny rysunek Dowództwa (draw → konsola → inspektor → konfigurator): nie rzuca, strefy konfiguratora w strefie inspektora,
+// klik WYŚLIJ / ANULUJ przez handleClick ma skutek (regresja KZ-Command: `ov._fleetActionDef` usunięte, konfigurator rzucał)
+await safe('G draw', () => {
+  for (const [name, cfg, need] of [['select', { actionId: 'transport', targetId: null, step: 'select' }, ['cancel_config', 'select_target']],
+    ['confirm', { actionId: 'transport', targetId: 'p_two', step: 'confirm' }, ['cancel_config', 'change_target', 'confirm_mission']]]) {
+    world([ship()]);
+    const ov = new FleetManagerOverlay();
+    ov._selectedVesselId = 'v_1'; ov._missionConfig = { ...cfg }; ov._getValidTargets = () => TARGETS;
+    ov._visible = true; ov._activeTab = 'tactical';
+    let err = null;
+    try { withFeat({ consoleKit: true }, () => ov.draw(mockCtx(), 1600, 1041)); } catch (e) { err = e.message; }
+    ok(err === null, `G draw ${name}: pełny rysunek z aktywnym konfiguratorem nie rzuca (${err ?? 'ok'})`);
+    const ins = ov.consoleZones?.inspector;
+    const inIns = (ov._hitZones ?? []).filter((z) => ins && z.x >= ins.x - 1 && z.x + z.w <= ins.x + ins.w + 1);
+    ok(need.every((ty) => inIns.some((z) => z.type === ty)), `G draw ${name}: strefy konfiguratora w inspektorze (${need.join(', ')}; jest ${[...new Set(inIns.map((z) => z.type))].join(',')})`);
+    if (name === 'confirm') {
+      let sent = 0; ov._executeMission = () => { sent++; };
+      const zs = inIns.find((z) => z.type === 'confirm_mission');
+      if (zs) ov.handleClick(zs.x + zs.w / 2, zs.y + zs.h / 2);
+      ok(sent === 1, 'G draw confirm: klik WYŚLIJ → `_executeMission`');
+      const zc = inIns.find((z) => z.type === 'cancel_config');
+      if (zc) ov.handleClick(zc.x + zc.w / 2, zc.y + zc.h / 2);
+      ok(ov._missionConfig === null, 'G draw confirm: klik ANULUJ zamyka konfigurator');
+    }
+  }
+});
 await safe('G logic', () => {
   ok(typeof PG.configSteps === 'function', 'G logic: configSteps istnieje');
   const s1 = PG.configSteps('select', false).map((q) => q.state).join(',');
@@ -224,8 +284,8 @@ await safe('G logic', () => {
 });
 
 // ═══ A — Atlas Gwiazd ═════════════════════════════════════════════════════════════════════════════════════════════
-function pageDraw(tab, ov, { on = true, W = 1600, H = 1041 } = {}) {
-  return withFeat({ consoleKit: true, consoleCommand: on }, () => {
+function pageDraw(tab, ov, { W = 1600, H = 1041 } = {}) {
+  return withFeat({ consoleKit: true }, () => {
     ov._visible = true; ov._activeTab = tab;
     const ctx = mockCtx();
     ov.draw(ctx, W, H);
@@ -233,19 +293,20 @@ function pageDraw(tab, ov, { on = true, W = 1600, H = 1041 } = {}) {
   });
 }
 const zoneOf = (zones, type, pred = () => true) => zones.find((z) => z.type === type && pred(z.data ?? {}));
-header('A  Atlas: akcje ON ⊇ OFF per ciało; lista ↔ orrery; mgła; cel konfiguratora');
+header('A  Atlas: akcje per ciało układu; lista ↔ orrery; mgła; cel konfiguratora');
 await safe('A', () => {
   world([ship(), ship({ id: 'v_2', name: 'Zwiad', position: { state: 'in_transit', x: 2 * AU, y: 0.5 * AU } })]);
   const ov = new FleetManagerOverlay();
-  const off = pageDraw('atlas', ov, { on: false });
-  const offBodies = [...new Set(off.zones.filter((z) => z.type === 'map_body').map((z) => z.data.bodyId))];
-  const offReport = new Set(off.zones.filter((z) => z.type === 'atlas_report').map((z) => z.data.bodyId));
-  ok(offBodies.length >= 3, `A: świadek — strona OFF ma wiersze ciał (${offBodies.length})`);
-  ok(offReport.size >= 1 && offReport.size < offBodies.length, `A: świadek — raport OFF tylko przy zbadanych (${offReport.size}/${offBodies.length})`);
+  // ciała aktywnego układu (dawna strona OFF: te same 3 wiersze z map_body; raport tylko przy zbadanych — baza 8701aa8)
+  const bodies = ['p_home', 'm_one', 'p_two'];
+  const reportable = new Set(bodies.filter((id) => EntityManager.get(id)?.explored === true));
+  ok(reportable.size === 2 && !reportable.has('m_one'), `A: świadek — raport możliwy przy zbadanych (${[...reportable].join(',')})`);
   const on0 = pageDraw('atlas', ov);
+  const listed = [...new Set(on0.zones.filter((z) => z.type === 'atlasSelect').map((z) => z.data.bodyId))].sort();
+  ok(listed.join() === [...bodies].sort().join(), `A: lista / orrery = ciała układu (${listed.join(',')})`);
   ok(!on0.zones.some((z) => z.type === 'map_body'), 'A: bez wyboru — akcje ciała dopiero w inspektorze wybranego');
   ok(on0.log.some((s) => s.includes(t('cmdPages.atlas.selectHint'))), 'A: bez wyboru — podpowiedź „wybierz ciało”');
-  for (const id of offBodies) {
+  for (const id of bodies) {
     const listZ = on0.zones.filter((z) => z.type === 'atlasSelect' && z.data.bodyId === id);
     ok(listZ.length >= 2, `A ${id}: wybór na liście i na orrery (${listZ.length} strefy atlasSelect)`);
     // klik listy → stan → inspektor ma dzisiejsze akcje tego ciała
@@ -254,7 +315,7 @@ await safe('A', () => {
     ok(ov._atlasSelectedBodyId === id, `A ${id}: klik listy wybiera ciało`);
     ok(!!zoneOf(on.zones, 'map_body', (d) => d.bodyId === id), `A ${id}: map_body w inspektorze (dzisiejsza akcja wiersza)`);
     const rep = !!zoneOf(on.zones, 'atlas_report', (d) => d.bodyId === id);
-    ok(rep === offReport.has(id), `A ${id}: raport ON == OFF (${rep})`);
+    ok(rep === reportable.has(id), `A ${id}: raport ⇔ ciało zbadane (${rep})`);
     if (!rep) ok(on.disabled.some((d) => d.reasonKey === 'cmdPages.atlas.reasonReportUnexplored'), `A ${id}: raport wyłączony z powodem`);
     // klik orrery → ten sam stan (synchronizacja)
     ov._atlasSelectedBodyId = null;
@@ -266,7 +327,6 @@ await safe('A', () => {
   ov._atlasSelectedBodyId = 'm_one';
   const fog = pageDraw('atlas', ov);
   ok(!fog.log.some((s) => s.includes('Luna')), 'A: mgła — nazwa niezbadanego ciała nie wycieka (lista, orrery, inspektor)');
-  ok(off.log.every((s) => !s.includes('Luna')), 'A: świadek — OFF też nie pokazuje nazwy');
   ok(fog.log.some((s) => s.includes('???')), 'A: mgła — „???” zamiast nazwy');
   // statek w locie zaznaczony na orrery, stolica podpisana
   ok(fog.log.some((s) => s.includes('◆')), 'A: stolica zaznaczona na orrery');
@@ -279,9 +339,9 @@ await safe('A', () => {
   ov._handleHit(zoneOf(cfg.zones, 'map_body', (d) => d.bodyId === 'p_two'));
   ok(ov._missionConfig?.step === 'confirm' && ov._missionConfig?.targetId === 'p_two', 'A: czip ustawia cel konfiguratora (krok potwierdzenia)');
   ov._missionConfig = null;
-  // żadna strona Dowództwa nie stoi na nieprzezroczystym tle: Atlas ON nie woła dzisiejszej strony
-  ok(!on0.log.some((s) => s === t('fleet.catalogHeaderFull')), 'A: ON nie rysuje dzisiejszego katalogu');
-  ok(off.log.some((s) => s === t('fleet.catalogHeaderFull')), 'A: świadek — OFF rysuje dzisiejszy katalog');
+  // dawny katalog Atlasu (nieprzezroczysta strona) usunięty; fakty ciała zostają (inspektor konsoli)
+  ok(typeof FleetManagerOverlay.prototype._drawAtlasCatalog === 'undefined' && typeof FleetManagerOverlay.prototype._atlasBodyFacts === 'function',
+    'A: FMO bez `_drawAtlasCatalog` (świadek: `_atlasBodyFacts` jest)');
   for (const k of ['cmdPages.atlas.reasonReportUnexplored', 'cmdPages.atlas.actTarget', 'cmdPages.atlas.actShow', 'cmdPages.atlas.actReport', 'cmdPages.atlas.selectHint']) usedKeys.add(k);
 });
 await safe('A logic', () => {
@@ -296,7 +356,11 @@ await safe('A logic', () => {
 });
 
 // ═══ L — Logistyka ════════════════════════════════════════════════════════════════════════════════════════════════
-header('L  Logistyka: akcje ON ⊇ OFF w każdym stanie; pole ilości z `consoleZones`; wąskie gardło');
+header('L  Logistyka: akcje == zamrożone w każdym stanie; pole ilości z `consoleZones`; wąskie gardło');
+const { ALL_RESOURCES } = await import('../../data/ResourcesData.js');
+const { COMMODITIES } = await import('../../data/CommoditiesData.js');
+// reguła katalogu drop-downu (niezależna od widoku): fizyczne surowce (bez research / energy) + wszystkie towary
+const CATALOG = [...Object.keys(ALL_RESOURCES).filter((id) => id !== 'research' && id !== 'energy'), ...Object.keys(COMMODITIES)].sort();
 const LTYPES = (z) => z.type.startsWith('logi_');
 const lkey = (z) => `${z.type}|${z.data?.goodId ?? ''}|${z.data?.colonyId ?? ''}|${z.data?.which ?? ''}|${z.data?.orderId ?? ''}`;
 function logiWorld(orders = [], pool = 2) {
@@ -318,11 +382,15 @@ for (const [name, st] of Object.entries(LSTATES)) {
   await safe(`L ${name}`, () => {
     logiWorld();
     const mk = () => { const ov = new FleetManagerOverlay(); ov._logiGoods = {}; st.setup(ov); return ov; };
-    const off = pageDraw('logistics', mk(), { on: false }).zones.filter(LTYPES).map(lkey).sort();
     const on = pageDraw('logistics', mk());
     const onK = on.zones.filter(LTYPES).map(lkey).sort();
-    ok(off.length > 0, `L ${name}: świadek — strona OFF ma strefy logi_* (${off.length})`);
-    ok(sameMulti(off, onK), `L ${name}: akcje ON == OFF\n      ON : ${onK.join(' ; ')}\n      OFF: ${off.join(' ; ')}`);
+    const isPick = (k) => k.startsWith('logi_good_pick|');
+    const want = (EXPECT_L[name] ?? []).filter((k) => !isPick(k));
+    ok(want.length > 0, `L ${name}: świadek — oczekiwane strefy logi_* (${want.length})`);
+    ok(sameMulti(want, onK.filter((k) => !isPick(k))), `L ${name}: akcje == zamrożone\n      jest     : ${onK.filter((k) => !isPick(k)).join(' ; ')}\n      oczekiwane: ${want.join(' ; ')}`);
+    const picks = onK.filter(isPick).map((k) => k.split('|')[1]).sort();
+    if (name === 'good_dd') ok(picks.length > 30 && picks.join() === CATALOG.join(), `L good_dd: katalog drop-downu = reguła z danych (${picks.length} vs ${CATALOG.length})`);
+    else ok(picks.length === 0, `L ${name}: bez otwartego drop-downu brak pozycji katalogu`);
     if (st.reason) ok(on.disabled.some((d) => d.reasonKey === st.reason), `L ${name}: niemożliwe = powód ${st.reason}`);
     for (const d of on.disabled) if (d.reasonKey) usedKeys.add(d.reasonKey);
   });
@@ -333,8 +401,6 @@ await safe('L orders', () => {
     { id: 8, fromColonyId: 'p_home', toColonyId: 'p_far', goods: { food: 50 }, delivered: {}, assignments: [] },
   ];
   logiWorld(orders, 0);
-  const offZ = pageDraw('logistics', new FleetManagerOverlay(), { on: false }).zones.filter((z) => z.type === 'logi_cancel').map(lkey).sort();
-  ok(offZ.length === 2, `L orders: świadek — OFF ma anulowanie per zlecenie (${offZ.length})`);
   const ov = new FleetManagerOverlay();
   const r0 = pageDraw('logistics', ov);
   const sel = r0.zones.filter((z) => z.type === 'logiSelect');
@@ -345,12 +411,22 @@ await safe('L orders', () => {
     ov._handleHit(sel.find((z) => z.data.orderId === id));
     ok(ov._logiSelectedOrderId === id, `L orders: wybór #${id}`);
     const r = pageDraw('logistics', ov);
-    onZ.push(...r.zones.filter((z) => z.type === 'logi_cancel').map(lkey));
+    const cz = r.zones.filter((z) => z.type === 'logi_cancel').map(lkey);
+    onZ.push(...cz);
+    ok(sameMulti(EXPECT_L_ORDER[id], cz), `L orders #${id}: inspektor zlecenia — dokładnie jego anulowanie (${cz.join(';')})`);
     ok(!r.zones.some((z) => z.type === 'logi_create'), `L orders #${id}: inspektor zlecenia, nie kreator`);
     if (id === 8) ok(r.log.some((s) => s.includes(t('cmdPages.logi.alertNoPool'))), 'L orders #8: wąskie gardło (pusta pula) w roli alert');
     if (id === 7) ok(r.log.some((s) => s.includes('40 / 100')), 'L orders #7: postęp per towar');
   }
-  ok(sameMulti(offZ, onZ.sort()), `L orders: anulowanie ON == OFF (${onZ.join(';')})`);
+  ok(onZ.length === 2, `L orders: anulowanie osiągalne dla każdego zlecenia (${onZ.join(';')})`);
+  const cancels = [];
+  window.KOSMOS.transportOrderSystem.cancelOrder = (oid) => cancels.push(oid);
+  ov._logiSelectedOrderId = 8;
+  const r8 = pageDraw('logistics', ov);
+  const z8 = r8.zones.find((z) => z.type === 'logi_cancel');
+  if (z8) ov.handleClick(z8.x + z8.w / 2, z8.y + z8.h / 2);
+  ok(cancels.join() === '8', `L orders: klik anulowania → transportOrderSystem.cancelOrder(8) (${cancels.join()})`);
+  ov._logiSelectedOrderId = 7;
   usedKeys.add('cmdPages.logi.alertNoPool'); usedKeys.add('cmdPages.logi.alertQueued'); usedKeys.add('cmdPages.logi.alertWaiting');
   // zniknięte zlecenie → kreator
   ov._logiSelectedOrderId = 99;
@@ -373,7 +449,7 @@ await safe('L qty', () => {
     ok(within, `L qty ${cw}×${ch}: pole ilości w strefie inspektora konsoli`);
     window.innerWidth = 333; window.innerHeight = 222;   // handler nie może czytać okna
     document.createElement = (tag) => { const el = origCreate(tag); el.style = {}; el.focus = () => {}; el.select = () => {}; return el; };
-    if (z) withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(z));
+    if (z) withFeat({ consoleKit: true }, () => ov._handleHit(z));
     const inp = ov._logiQtyInput;
     document.createElement = origCreate;
     window.innerWidth = iw; window.innerHeight = ih;
@@ -400,7 +476,7 @@ await safe('L logic', () => {
 });
 
 // ═══ N — Jednostki (Naziemne) ════════════════════════════════════════════════════════════════════════════════════
-header('N  Jednostki: akcje ON == OFF (kafle, rekrutacja); kolonia strony lokalna; rekrutacja celuje w nią; inne hosty bez zmian');
+header('N  Jednostki: akcje == zamrożone (kafle, rekrutacja); kolonia strony lokalna; rekrutacja celuje w nią; inne hosty bez zmian');
 const GP = await imp('../../ui/GroundUnitPanel.js');
 function groundWorld({ barracksLv = 1, freePops = 5, units = [] } = {}) {
   const col2 = { planetId: 'p_two', name: 'Wtora', isOutpost: false, systemId: 'sys_home', groundUnitQueues: [],
@@ -430,12 +506,12 @@ for (const [name, opt] of [['open', {}], ['no_barracks', { barracksLv: 0 }], ['n
   await safe(`N ${name}`, () => {
     ok(typeof GP.GroundUnitPanel === 'function', 'N: GroundUnitPanel importuje się pod node (pin wykonaniem)');
     groundWorld(opt);
-    const off = pageDraw('ground', new FleetManagerOverlay(), { on: false }).zones.filter((z) => GTYPES.has(z.type)).map(gkey).sort();
     const ovOn = new FleetManagerOverlay();
     const on = pageDraw('ground', ovOn);
     const onK = on.zones.filter((z) => GTYPES.has(z.type)).map(gkey).sort();
-    ok(off.filter((k) => k.startsWith('ground:select_tile')).length >= 6, `N ${name}: świadek — OFF ma kafle archetypów (${off.length})`);
-    ok(sameMulti(off, onK), `N ${name}: akcje ON == OFF\n      ON : ${onK.join(' ; ')}\n      OFF: ${off.join(' ; ')}`);
+    const want = EXPECT_N[name] ?? [];
+    ok(want.filter((k) => k.startsWith('ground:select_tile')).length >= 6, `N ${name}: świadek — oczekiwane kafle archetypów (${want.length})`);
+    ok(sameMulti(want, onK), `N ${name}: akcje == zamrożone\n      jest     : ${onK.join(' ; ')}\n      oczekiwane: ${want.join(' ; ')}`);
     if (name !== 'open') {
       ok(!onK.some((k) => k.startsWith('ground:recruit')), `N ${name}: rekrutacja niemożliwa — bez strefy`);
       const rk = on.disabled.map((d) => d.reasonKey).filter(Boolean);
@@ -462,20 +538,20 @@ await safe('N colony', () => {
   const r2 = pageDraw('ground', ov);
   ok(ov._groundSelUnitId === 'gu_1' && r2.log.some((s) => s.toUpperCase().includes(t('cmdPages.ground.state').toUpperCase())), 'N colony: wybór jednostki → inspektor jednostki (stan)');
   // kafel archetypu zdejmuje wybór jednostki; rekrutacja celuje w kolonię strony
-  withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(r2.zones.find((z) => z.type === 'ground:select_tile' && z.data.archetypeId === 'shock_infantry')));
+  withFeat({ consoleKit: true }, () => ov._handleHit(r2.zones.find((z) => z.type === 'ground:select_tile' && z.data.archetypeId === 'shock_infantry')));
   ok(ov._groundSelUnitId === null, 'N colony: kafel archetypu → inspektor archetypu');
   const r3 = pageDraw('ground', ov);
   const rec = r3.zones.find((z) => z.type === 'ground:recruit');
   ok(!!rec, 'N colony: świadek — strefa rekrutacji');
-  withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(rec));
+  withFeat({ consoleKit: true }, () => ov._handleHit(rec));
   ok(calls.length === 1 && calls[0].pid === 'p_two', `N colony: rekrutacja w kolonii strony (${JSON.stringify(calls)})`);
   const panel = window.KOSMOS.overlayManager.overlays.unit_design._groundPanel;
   ok(panel._getColonyDep()?.planetId === 'p_home', 'N colony: źródło kolonii panelu przywrócone po klik (inne hosty bez zmian)');
 });
 await safe('N hosts', () => {
   // inne hosty panelu: rysunek UnitDesignOverlay-podobny (globalna kolonia) i ColonyOverlay-podobny (wstrzyknięta) — identyczny
-  // dziennik i strefy przy fladze ON i OFF (flaga konsoli nie przecieka do panelu); plik panelu bez śladu K7-C.
-  const run = (flag, inject) => withFeat({ consoleKit: true, consoleCommand: flag }, () => {
+  // dziennik i strefy przy consoleKit true i false (stan konsoli nie przecieka do panelu); plik panelu bez śladu K7-C.
+  const run = (flag, inject) => withFeat({ consoleKit: flag }, () => {
     const { editor, col2 } = groundWorld();
     const p = inject ? new GP.GroundUnitPanel({ addHit: (x, y, w, h, type, data) => editor._addHit(x, y, w, h, `ground:${type}`, data), getColony: () => col2 }) : editor._groundPanel;
     editor._hitZones = [];
@@ -486,7 +562,7 @@ await safe('N hosts', () => {
   for (const inject of [false, true]) {
     const a = run(true, inject), b = run(false, inject);
     ok(a.length > 200, `N hosts ${inject ? 'kolonia' : 'edytor'}: świadek — panel rysuje (${a.length} zn.)`);
-    ok(a === b, `N hosts ${inject ? 'kolonia' : 'edytor'}: dziennik + strefy identyczne ON / OFF`);
+    ok(a === b, `N hosts ${inject ? 'kolonia' : 'edytor'}: dziennik + strefy identyczne przy consoleKit true / false`);
   }
   const src = fs.readFileSync(fileURLToPath(new URL('../../ui/GroundUnitPanel.js', import.meta.url)), 'utf8');
   ok(!/K7-C|consoleCommand|isKitScreen/.test(src), 'N hosts: GroundUnitPanel nie zna konsoli');
@@ -501,7 +577,7 @@ await safe('N chips', () => {
     const r = pageDraw(tab, ov);
     const tz = r.zones.filter((z) => z.type === 'tab').map((z) => z.data.tab);
     ok(['tactical', 'ground', 'atlas', 'logistics'].every((x) => tz.includes(x)), `N chips ${tab}: 4 czipy zakładek`);
-    ok(!r.log.includes(t('fleet.catalogHeaderFull')), `N chips ${tab}: żadna strona na dzisiejszym nieprzezroczystym tle`);
+    ok(!!ov.consoleZones?.frame && !!ov.consoleZones?.inspector, `N chips ${tab}: strona w ramie konsoli (strefy konsoli)`);
   }
   ok(ov._atlasSelectedBodyId === 'p_two' && ov._groundColonyId === 'p_two' && ov._registryFilter.search === 'frach', 'N chips: stan stron zachowany po obiegu');
 });
@@ -513,18 +589,32 @@ await safe('P deposits', () => {
   const rich = { id: 'p_rich', type: 'planet', name: 'Bogata', x: 5 * AU, y: 0, systemId: 'sys_home', orbital: { a: 5, e: 0, T: 9, M: 0 }, explored: true, planetType: 'rocky',
     deposits: RES.map((r, i) => ({ resourceId: r, richness: 0.9 - i * 0.12, remaining: 1000 + i })).concat([{ resourceId: 'Pt', richness: 0.5, remaining: 0 }]) };
   world([ship()], { bodies: [rich] });
-  const off = pageDraw('atlas', new FleetManagerOverlay(), { on: false });
   const ov = new FleetManagerOverlay();
   ov._atlasSelectedBodyId = 'p_rich';
   const on = pageDraw('atlas', ov);
   const names = RES.map((r) => ov._atlasBodyFacts(EntityManager.get('p_rich')).deposits.find((d) => d.id === r)?.name ?? r);
-  const offDep = off.log.filter((s) => /★/.test(s) && RES.some((r) => s.includes(r)));
-  ok(offDep.length === 1 && (offDep[0].match(/★+/g) ?? []).length === 3, `P deposits: świadek — wiersz OFF ma 3 najbogatsze (${offDep[0] ?? '—'})`);
+  ok(ov._atlasBodyFacts(EntityManager.get('p_rich')).deposits.length >= RES.length, 'P deposits: świadek — fakty ciała mają wszystkie złoża');
   ok(names.every((n) => on.log.some((s) => s === n)), `P deposits: inspektor wypisuje wszystkie ${RES.length} złoża (${names.join(', ')})`);
   ok(!on.log.some((s) => s === (ov._atlasBodyFacts(EntityManager.get('p_rich')).deposits.find((d) => d.id === 'Pt')?.name ?? '§')), 'P deposits: wyczerpane złoże pominięte (jak dziś)');
   ov._atlasSelectedBodyId = 'm_one';
   const fog = pageDraw('atlas', ov);
   ok(!fog.log.some((s) => /★/.test(s)), 'P deposits: niezbadane ciało — złoża ukryte (mgła)');
+});
+await safe('P atlas scroll', () => {
+  // kółko na Atlasie konsoli: nad inspektorem ciała przewija inspektor (pełna lista złóż), nad listą — listę; gałęzie rozłączne
+  world([ship()]);
+  const ov = new FleetManagerOverlay();
+  ov._atlasSelectedBodyId = 'p_home';
+  pageDraw('atlas', ov);
+  const ins = ov._atlasKitRects?.insp, lst = ov._contentBounds;
+  ok(!!ins && !!lst, 'P atlas scroll: świadek — prostokąty inspektora i listy z rysunku');
+  ov._atlasInspContentH = 5000; ov._atlasInspViewH = 200; ov._atlasInspScrollY = 0;
+  ov._atlasContentH = 5000; ov._atlasVisibleH = 200; ov._atlasScrollY = 0;
+  if (ins) withFeat({ consoleKit: true }, () => ov.handleScroll(60, ins.x + ins.w / 2, ins.y + ins.h / 2));
+  ok(ov._atlasInspScrollY > 0 && ov._atlasScrollY === 0, `P atlas scroll: kółko nad inspektorem przewija inspektor (${ov._atlasInspScrollY}), nie listę (${ov._atlasScrollY})`);
+  const y0 = ov._atlasInspScrollY;
+  if (lst) withFeat({ consoleKit: true }, () => ov.handleScroll(60, lst.x + 4, lst.y + 4));
+  ok(ov._atlasScrollY > 0 && ov._atlasInspScrollY === y0, `P atlas scroll: kółko nad listą przewija listę (${ov._atlasScrollY}), nie inspektor`);
 });
 await safe('P art', () => {
   const { editor } = groundWorld({ units: [{ id: 'gu_1', planetId: 'p_home', owner: 'player', archetypeId: 'shock_infantry', currentHP: 15, hpMax: 15, status: 'idle' }] });
@@ -532,7 +622,7 @@ await safe('P art', () => {
   const imgs = {};
   editor._groundPanel._ensureSprite = (id) => (imgs[id] ??= { id, complete: true, _kosmosAsset: ready.has(id) ? 'glb' : id === 'aa_platform' ? 'loading' : 'missing' });
   const ov = new FleetManagerOverlay();
-  const r = withFeat({ consoleKit: true, consoleCommand: true }, () => {
+  const r = withFeat({ consoleKit: true }, () => {
     ov._visible = true; ov._activeTab = 'ground';
     const ctx = mockCtx(); const drawn = [];
     ctx.drawImage = (img) => { drawn.push(img?.id ?? '?'); };
@@ -640,7 +730,7 @@ await safe('P scroll', () => {
     let guard = 0, prev = -1;
     while (guard++ < 200 && ov._groundUnitScrollY !== prev) {
       prev = ov._groundUnitScrollY;
-      withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(60, mx, my));
+      withFeat({ consoleKit: true }, () => ov.handleScroll(60, mx, my));
       r = pageDraw('ground', ov, { W: vp.W, H: vp.H });
       const rz = r.zones.filter((z) => z.type === 'groundUnit');
       rz.forEach((z) => seen.add(z.data.unitId));
@@ -652,29 +742,29 @@ await safe('P scroll', () => {
     const last = r.zones.filter((z) => z.type === 'groundUnit');
     ok(last.some((z) => z.data.unitId === `gu_${N - 1}`) && !last.some((z) => z.data.unitId === 'gu_0'), `${tag}: na dole listy ostatnia widoczna, pierwszej brak`);
     // przewinięcie trzymane w klamrze: po dojściu do dołu i nadmiarze kółka jeden ruch w górę od razu odsłania wcześniejszy wiersz
-    for (let k = 0; k < 20; k++) withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(60, mx, my));
+    for (let k = 0; k < 20; k++) withFeat({ consoleKit: true }, () => ov.handleScroll(60, mx, my));
     pageDraw('ground', ov, { W: vp.W, H: vp.H });
-    withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(-60, mx, my));
+    withFeat({ consoleKit: true }, () => ov.handleScroll(-60, mx, my));
     const up = pageDraw('ground', ov, { W: vp.W, H: vp.H }).zones.filter((z) => z.type === 'groundUnit');
     ok(up.some((z) => !last.some((q) => q.data.unitId === z.data.unitId)), `${tag}: nadmiar kółka w dół nie „martwi” kółka w górę`);
     pageDraw('ground', ov, { W: vp.W, H: vp.H });
-    for (let k = 0; k < 20; k++) withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(60, mx, my));
+    for (let k = 0; k < 20; k++) withFeat({ consoleKit: true }, () => ov.handleScroll(60, mx, my));
     pageDraw('ground', ov, { W: vp.W, H: vp.H });
     // wybór jednostki z dołu listy po przewinięciu
     const bz = last.find((z) => z.data.unitId === `gu_${N - 1}`);
-    if (bz) withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(bz));
+    if (bz) withFeat({ consoleKit: true }, () => ov._handleHit(bz));
     r = pageDraw('ground', ov, { W: vp.W, H: vp.H });
     ok(ov._groundSelUnitId === `gu_${N - 1}` && r.log.some((q) => q.toUpperCase().includes(t('cmdPages.ground.state').toUpperCase())), `${tag}: wybór ostatniej jednostki po przewinięciu → inspektor jednostki`);
     // kółko nad kaflami nie przewija tabeli; kafel klikalny przy przewiniętej tabeli
     const s0 = ov._groundUnitScrollY;
     const tz = r.zones.find((z) => z.type === 'ground:select_tile');
-    withFeat({ consoleKit: true, consoleCommand: true }, () => ov.handleScroll(-60, tz.x + 4, tz.y + 4));
+    withFeat({ consoleKit: true }, () => ov.handleScroll(-60, tz.x + 4, tz.y + 4));
     ok(ov._groundUnitScrollY === s0, `${tag}: kółko nad kaflami nie rusza tabeli`);
-    withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(tz));
+    withFeat({ consoleKit: true }, () => ov._handleHit(tz));
     ok(ov._groundSelUnitId === null, `${tag}: kafel po przewinięciu → inspektor archetypu`);
     // zmiana kolonii → tabela od góry
     const cz = r.zones.find((z) => z.type === 'groundColony' && z.data.colonyId === 'p_two');
-    withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(cz));
+    withFeat({ consoleKit: true }, () => ov._handleHit(cz));
     ok(!!cz && ov._groundUnitScrollY === 0, `${tag}: zmiana kolonii zeruje przewinięcie`);
   }
 });
@@ -712,7 +802,7 @@ await safe('P names', () => {
       ok(r0.log.some((q) => q.includes('Krwawe Lisy')), `P names ${lang}: nazwa własna bez zmian`);
       ok(!r0.log.some((q) => q === 'shock_infantry' || q.startsWith('shock_infantry')), `P names ${lang}: surowe id jako nazwa → nazwa i18n`);
       const sup = units.find((u) => u.archetypeId === 'ground_supply_unit');
-      withFeat({ consoleKit: true, consoleCommand: true }, () => ov._handleHit(r0.zones.find((z) => z.type === 'groundUnit' && z.data.unitId === sup.id)));
+      withFeat({ consoleKit: true }, () => ov._handleHit(r0.zones.find((z) => z.type === 'groundUnit' && z.data.unitId === sup.id)));
       const r1 = pageDraw('ground', ov);
       ok(ov._groundSelUnitId === sup.id, `P names ${lang}: świadek — wybrana jednostka zaopatrzenia`);
       ok(r1.log.filter((q) => q.includes(want('ground_supply_unit'))).length >= 2, `P names ${lang}: inspektor — tytuł nazwą i18n`);
@@ -726,11 +816,11 @@ await safe('P 751', () => {
   const ov = new FleetManagerOverlay();
   pageDraw('atlas', ov, { W: 1280, H: 833 });
   ov._uiScale = 1.25;
-  const a = withFeat({ consoleKit: true, consoleCommand: true }, () => ov._dialogAnchor('inspector', { anyTab: true, minWcss: 520 }));
+  const a = withFeat({ consoleKit: true }, () => ov._dialogAnchor('inspector', { anyTab: true, minWcss: 520 }));
   const fr = ov.consoleZones.frame;
   ok(!!a && a.width >= 520 && a.left + a.width <= Math.round((fr.x + fr.w) * 1.25) + 1, `P 751: raport ciała przy strefie inspektora Atlasu, w ramie (${JSON.stringify(a)})`);
-  ok(withFeat({ consoleKit: true, consoleCommand: true }, () => ov._dialogAnchor('inspector')) === null, 'P 751: bez `anyTab` poza rejestrem — jak w K7-B (null)');
-  ok(withFeat({ consoleKit: true, consoleCommand: false }, () => ov._dialogAnchor('inspector', { anyTab: true, minWcss: 520 })) === null, 'P 751: flaga OFF → okno na środku (null)');
+  ok(withFeat({ consoleKit: true }, () => ov._dialogAnchor('inspector')) === null, 'P 751: bez `anyTab` poza rejestrem — jak w K7-B (null)');
+  ok(JSON.stringify(withFeat({ consoleKit: false }, () => ov._dialogAnchor('inspector', { anyTab: true, minWcss: 520 }))) === JSON.stringify(a), 'P 751: consoleKit false → ta sama kotwica (bez warunku flagi)');
   const rd = (f) => fs.readFileSync(fileURLToPath(new URL(`../../ui/${f}`, import.meta.url)), 'utf8').replace(/\r\n/g, '\n')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*/g, '$1');
   ok(/applyModalAnchor\(overlay, panel, options\.anchor \?\? null\)/.test(rd('CargoLoadModal.js')), 'P 751: okno ładunku stosuje kotwicę');

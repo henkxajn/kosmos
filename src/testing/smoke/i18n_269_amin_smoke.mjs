@@ -28,6 +28,11 @@
 // ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4-4, `TABS_REFORM_PLAN.md` §5.10): tooltip 3D statku (`_showVesselTooltip`)
 //   usunięty razem z importem kanonu w rendererze — trzecim site'em stanu jest jego NASTĘPCA, rozwinięcie etykiety statku
 //   (`HudLabelLayer._t1Vessel` → `buildShipEntry`, kanon `VesselStatus`); pin „renderer bez literałów” zostaje.
+// ⚠ PRZECELOWANE (KZ-Command — Dowództwo wyłącznie konsolą): T3 — `FleetManagerOverlay._drawEnemyDetails` (dawny panel wroga,
+//   linia „Stan: …”) usunięty; panel wroga rysuje konsola: fakty `FleetManagerOverlay._enemyFacts` (stateKey z kanonu
+//   `vesselStatusLabelKey`) → `CommandPagesLogic.enemyRows` → `CommandInspectorView.drawInspector` (wiersz „Stan” / „State” +
+//   słowo kanonu). Wykonanie pinuje teraz: stateKey faktów = klucz kanonu, a rysunek inspektora konsoli wypisuje etykietę wiersza
+//   i DOKŁADNIE słowo kanonu tego tokenu (żadnego słowa innego tokenu ani dawnych literałów).
 // ⚠ Fail-first w REALNYM `git worktree` na `59cbc2c` (reguła Findingu 270: źródło czytane po
 //   normalizacji `\r\n → \n`; keeper ma przechodzić w drzewie autora (CRLF) i w świeżym checkoucie (LF)).
 //
@@ -41,6 +46,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
+import { consoleRoles } from '../../ui/ConsoleRolesLogic.js';
 
 // Kanon — import owinięty: pin ma DEGRADOWAĆ, nie przerywać (lekcja legu D).
 let Canon = null;
@@ -143,7 +149,7 @@ header('T2  278a — fleet.cancelReason.replaced/manual w PL i EN, linia Dzienni
 }
 
 // ═══ T3 — statusy: decyzja (i) KANON ═══════════════════════════════════════════════════════
-header('T3  statusy (i) — _drawEnemyDetails WYKONANIEM: „Stan:" = słowo kanonu w PL i EN; wiersz wroga + tooltip 3D bez literałów');
+header('T3  statusy (i) — panel wroga konsoli WYKONANIEM: wiersz „Stan” = słowo kanonu w PL i EN; wiersz wroga + tooltip 3D bez literałów');
 {
   // Dawne literały tych trzech site'ów (HEAD 59cbc2c).
   const OLD_WORDS = ['W hangarze', 'W locie', 'Bezczynny', 'w hangarze', 'w locie'];
@@ -182,25 +188,36 @@ header('T3  statusy (i) — _drawEnemyDetails WYKONANIEM: „Stan:" = słowo kan
     in_space:   mk('e_drf',  { state: 'orbiting',   dockedAt: null, x: 400, y: 0 }),
     unknown:    mk('e_unk',  { state: 'exploring',  dockedAt: null, x: 500, y: 0 }),
   };
-  // Wróg musi być ROZPOZNANY (contact+), inaczej panel jest anonimowy i linii „Stan:" nie ma.
-  globalThis.window.KOSMOS = { intelSystem: { getVesselContact: () => ({ quality: 'contact' }) } };
-  const stateLine = (vessel) => {
+  // Wróg musi być ROZPOZNANY (contact+), inaczej panel jest anonimowy i wiersza „Stan” nie ma.
+  const IV = await import('../../ui/CommandInspectorView.js').catch(() => ({}));
+  const vmap = new Map(Object.values(SHAPES).map((v) => [v.id, v]));
+  globalThis.window.KOSMOS = { intelSystem: { getVesselContact: () => ({ quality: 'contact' }) }, homePlanet: { id: 'p1', x: 0, y: 0 },
+    vesselManager: { getVessel: (id) => vmap.get(id) ?? null, getAllVessels: () => [...vmap.values()] },
+    uiManager: { getSelectedVesselId: () => null, setSelectedVesselId() {} } };
+  globalThis.KOSMOS = globalThis.window.KOSMOS;
+  const ov = new FleetManagerOverlay();
+  // rysunek panelu wroga na konsoli: wszystkie teksty `fillText` inspektora dla wybranego wroga
+  const enemyTexts = (vessel) => {
     const ctx = capCtx();
-    try { FleetManagerOverlay.prototype._drawEnemyDetails.call({ _hitZones: [] }, ctx, 0, 0, 320, 400, vessel); }
-    catch (e) { return `THROW ${e.message}`; }
-    return ctx.__texts.find((s) => s.startsWith('Stan:')) ?? '(brak linii Stan:)';
+    ov._selectedVesselId = vessel.id; ov._selectedFleetId = null; ov._hitZones = []; ov._cmdDisabled = []; ov._missionConfig = null;
+    try { IV.drawInspector(ov, ctx, { x: 0, y: 0, w: 320, h: 600 }, consoleRoles(), { vMgr: window.KOSMOS.vesselManager }); }
+    catch (e) { return [`THROW ${e.message}`]; }
+    return ctx.__texts;
   };
   for (const loc of ['pl', 'en']) {
     setLocale(loc);
+    const allWords = Object.keys(SHAPES).map((k) => (Canon ? t(labelKey(k)) : null));
     for (const [tok, v] of Object.entries(SHAPES)) {
-      const line = stateLine(v);
       const want = Canon ? t(labelKey(tok)) : null;
-      ok(!!want && line === `Stan: ${want}`,
-         `${loc}/${tok}: „Stan:" = słowo kanonu ${J(want)} (jest: ${J(line)})`);
+      ok(!!Canon && ov._enemyFacts(v)?.stateKey === labelKey(tok), `${loc}/${tok}: fakty wroga — stateKey = klucz kanonu (${J(ov._enemyFacts(v)?.stateKey)})`);
+      const texts = enemyTexts(v);
+      const others = allWords.filter((w) => w && w !== want && texts.includes(w));
+      ok(!!want && texts.includes(t('cmdPages.enemy.state')) && texts.includes(want) && others.length === 0,
+         `${loc}/${tok}: wiersz „${t('cmdPages.enemy.state')}” = słowo kanonu ${J(want)} (inne słowa kanonu: ${J(others)}; ${texts[0]?.startsWith('THROW') ? texts[0] : texts.length + ' tekstów'})`);
+      if (tok === 'docked' || tok === 'in_transit') {
+        ok(!OLD_WORDS.some((w) => texts.some((q) => q.includes(w))), `${loc}/${tok}: panel wroga bez dawnych literałów`);
+      }
     }
-    const dockedLine = stateLine(SHAPES.docked), moveLine = stateLine(SHAPES.in_transit);
-    ok(!OLD_WORDS.some((w) => dockedLine.includes(w) || moveLine.includes(w)),
-       `${loc}: linie docked/in_transit bez dawnych literałów (${J(dockedLine)} / ${J(moveLine)})`);
   }
 
   // Piny ŹRÓDŁOWE — wiersz wroga w liście Command (FMO) i tooltip 3D (ThreeRenderer).
