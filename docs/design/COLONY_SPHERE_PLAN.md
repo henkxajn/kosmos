@@ -1323,6 +1323,19 @@ which `_calcPotential` may decay the homeworld's `lifeScore`. Reachable at 1 y/s
 frozen, so the look does not change. Owner decision (2026-11-18): fixed in a separate small fix step together with #768,
 before CS-PHYS (not part of D-CS-19).
 
+**Finding 770 ✅ closed (fix step 770+768, 2026-11-18).** `LifeSystem` recomputes each planet with its own system's star
+(`starOf`, `ownStarTempC`); homeworlds (player + every AI empire, picked by the bootstrap rule from `homeSystemId`) pass
+`guardHomeworldTempC` (`src/utils/HomeworldClimate.js`): formula in 5–35 °C → formula; else the current clamped value; both
+out of band (save corrupted by the old bug) → 10 / 25 °C. Flag `FEATURES.lifeTempOwnStar` (default true, OFF = old path
+bit-identical). Measured: 5 player homes F 22 / M 10 / K 21→20.7 / M 13 / K 14 stay in band over 3 checks (OFF: 43.5 / −130.6 /
+20.7 / −100.7 / −22.3); 40 foreign planets equal generation values (OFF 40/40 wrong). Keeper `life_temperature_smoke` (24 pins,
+fail-first 14 red, 10 mutants killed). Known limitation: a destroyed empire's homeworld loses the protection. The lifeScore rise
+on AI homeworlds has no gameplay effect (LifeSystem is legacy). Debug: `csTemp()`, `csLifeTick()`.
+**Owner light check (2026-11-18): PASS** — existing save, home Tycho I (GJ-2653 M): csTemp out of band 0, temperatureC 10;
+csLifeTick ×2 10 → 10, life 100 → 100, changed 0; console over a bright scene 2 min: 0 READ-usage warnings (#768 ✅), glow adapts.
+CS-PHYS no longer carries 770; when temperatures become generation-time frozen it switches `LifeSystem._recalcTemp` off.
+Idea (not scheduled): reuse LifeSystem as a life generator for the player to discover in unowned systems.
+
 **Gate log — owner light check (live browser, 2026-11-18): PASS.**
 1. Old save (pre-CS-3b, galaxySeed 1533524380, world legacy): log `[CS-3b] archetyp nadany: 611`; `csArchetypes`
    missingArchetypes 0, terranWaterBands missing 0, 21 rows, tidallyLocked 10/95.
