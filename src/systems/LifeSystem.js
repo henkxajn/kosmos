@@ -6,6 +6,8 @@ import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { lifeBonus } from '../data/ElementsData.js';
 import { t }         from '../i18n/i18n.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { pickHomeworldBody, guardHomeworldTempC } from '../utils/HomeworldClimate.js';
 
 // Etapy ewolucji życia (lifeScore 0-100)
 // Klucze i18n etapów życia — label obliczany dynamicznie przez getLabel()
@@ -68,12 +70,15 @@ export class LifeSystem {
   // ── Pętla sprawdzania ─────────────────────────────────────────
   _checkAll() {
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    EntityManager.getByTypeInSystem('planet', sysId).forEach(planet => this._tick(planet));
+    // Finding 770 — zbiór światów macierzystych liczony raz na sprawdzenie (flaga OFF → null, stara ścieżka)
+    const homes = GAME_CONFIG.FEATURES.lifeTempOwnStar === true ? this.homeworldIds() : null;
+    EntityManager.getByTypeInSystem('planet', sysId).forEach(planet => this._tick(planet, homes));
   }
 
-  _tick(planet) {
+  _tick(planet, homes = null) {
     // 1. Przelicz temperaturę wg bieżącej orbity (może się zmieniła przez akcje gracza)
-    this._recalcTemp(planet);
+    if (homes) this._recalcTempOwnStar(planet, homes);
+    else       this._recalcTemp(planet);
 
     const prevScore = planet.lifeScore;
     const prevStage = LifeSystem.getStageFor(prevScore);
@@ -128,6 +133,50 @@ export class LifeSystem {
     planet.temperatureC        = T_base_C + (greenhouse[planet.atmosphere] ?? 0);
     planet.temperatureK        = planet.temperatureC + 273.15;
     planet.surface.temperature = planet.temperatureC;
+  }
+
+  // ── Finding 770 (FEATURES.lifeTempOwnStar) — ten sam wzór, gwiazda WŁASNEGO układu ciała ──
+  // Gwiazda domowa (this.star) była stosowana do każdego układu; tu gwiazda z EntityManager wg systemId ciała
+  // (brak gwiazdy → gwiazda domowa, jak dotąd). Świat macierzysty: wynik przez strażnika pasma clampu z generacji.
+  starOf(planet) {
+    return EntityManager.getStarOfSystem(planet.systemId ?? 'sys_home') ?? this.star;
+  }
+
+  // Temperatura [°C], którą przeliczenie zapisałoby na ciele (bez zapisu) — wzór jak _recalcTemp.
+  ownStarTempC(planet, homes) {
+    const a     = planet.orbital.a;
+    const T_rad = 278
+      * Math.pow(1 - planet.albedo, 0.25)
+      * Math.pow(this.starOf(planet).luminosity, 0.25)
+      / Math.sqrt(a);
+    const greenhouse = { none: 0, thin: 15, breathable: 20, dense: 60, thick: 35 };
+    const computedC  = T_rad - 273.15 + (greenhouse[planet.atmosphere] ?? 0);
+    // Strażnik tylko dla oddychalnego świata macierzystego (makeHomeworldBreathable zawsze ustawia 'breathable')
+    if (homes?.has(planet.id) && planet.atmosphere === 'breathable') {
+      return guardHomeworldTempC(computedC, planet.temperatureC);
+    }
+    return computedC;
+  }
+
+  _recalcTempOwnStar(planet, homes) {
+    planet.temperatureC        = this.ownStarTempC(planet, homes);
+    planet.temperatureK        = planet.temperatureC + 273.15;
+    planet.surface.temperature = planet.temperatureC;
+  }
+
+  // Światy macierzyste (id ciał): dom gracza + dom każdego imperium AI — ciało wybrane regułą bootstrapu
+  // z planet układu homeSystemId (niezależnie od tego, kto dziś posiada kolonię).
+  homeworldIds() {
+    const K   = window.KOSMOS ?? {};
+    const ids = new Set();
+    if (K.homePlanet?.id) ids.add(K.homePlanet.id);
+    for (const emp of K.empireRegistry?.listAll?.() ?? []) {
+      const sys = emp?.homeSystemId ? K.starSystemManager?.getSystem?.(emp.homeSystemId) : null;
+      if (!sys) continue;
+      const body = pickHomeworldBody((sys.planetIds ?? []).map(id => EntityManager.get(id)).filter(Boolean));
+      if (body) ids.add(body.id);
+    }
+    return ids;
   }
 
   // ── Potencjał życia [0.0 – 1.0] ──────────────────────────────

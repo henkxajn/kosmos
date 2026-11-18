@@ -22,6 +22,7 @@ import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { SURFACE_SEED_KINDS } from '../utils/SurfaceSeed.js';
 import { BODY_ARCHETYPES, ARCHETYPE_FAMILIES } from '../data/BodyArchetypes.js';
 import { familyOf, planetoidPaletteOf } from '../utils/BodyArchetypeLogic.js';
+import { HOMEWORLD_TEMP_MIN_C, HOMEWORLD_TEMP_MAX_C } from '../utils/HomeworldClimate.js';
 
 function bodyTypeOf(body, kind) {
   if (kind === 'planet')    return body.planetType ?? '?';
@@ -122,6 +123,41 @@ export function colonySphereLegacyDiff() {
   return { differ, stars: stars.length };
 }
 
+// Finding 770 — LifeSystem gry (GameScene) albo harnessu (keeper podaje K.lifeSystem).
+function lifeSystemOf(K) {
+  return K.lifeSystem ?? K.gameScene?.lifeSystem ?? null;
+}
+
+const round1 = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
+
+/**
+ * Finding 770 — temperatury ciał aktywnego układu: gwiazda układu ciała, temperatureC, pasmo clampu (światy
+ * macierzyste) i wartość, którą zapisze najbliższe sprawdzenie LifeSystem (tylko planety; flaga ON).
+ */
+export function colonySphereTempRows(systemId) {
+  const K = window.KOSMOS ?? {};
+  const ls = lifeSystemOf(K);
+  const flagOn = GAME_CONFIG.FEATURES.lifeTempOwnStar === true;
+  const homes = ls?.homeworldIds?.() ?? new Set();
+  const rows = [];
+  for (const kind of ['planet', 'moon', 'planetoid']) {
+    for (const b of EntityManager.getByTypeInSystem(kind, systemId)) {
+      const st = EntityManager.getStarOfSystem(b.systemId ?? 'sys_home');
+      const home = homes.has(b.id);
+      rows.push({
+        name: b.name, kind, star: st ? `${st.name} ${st.spectralType ?? ''}`.trim() : null,
+        temperatureC: round1(b.temperatureC),
+        homeworld: home ? (b.id === K.homePlanet?.id ? 'player' : 'ai') : '',
+        clamp: home ? `${HOMEWORLD_TEMP_MIN_C}..${HOMEWORLD_TEMP_MAX_C}` : '',
+        nextCheckC: (kind === 'planet' && flagOn && ls?.ownStarTempC) ? round1(ls.ownStarTempC(b, homes)) : null,
+      });
+    }
+  }
+  return rows;
+}
+
+const outOfBand = (r) => r.homeworld && !(r.temperatureC >= HOMEWORLD_TEMP_MIN_C && r.temperatureC <= HOMEWORLD_TEMP_MAX_C);
+
 export function colonySphereDebugHelpers() {
   const csWorlds = () => {
     const K = window.KOSMOS ?? {};
@@ -178,5 +214,46 @@ export function colonySphereDebugHelpers() {
     summary.rows = rows;
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes };
+  // Finding 770 — csTemp(): temperatury aktywnego układu; homeworldsOutOfBand ma być 0.
+  const csTemp = () => {
+    const K = window.KOSMOS ?? {};
+    const systemId = K.activeSystemId ?? 'sys_home';
+    const rows = colonySphereTempRows(systemId);
+    const summary = {
+      systemId,
+      lifeTempOwnStar: GAME_CONFIG.FEATURES.lifeTempOwnStar === true,
+      bodies: rows.length,
+      homeworlds: rows.filter(r => r.homeworld).map(r => `${r.name}=${r.temperatureC}`),
+      homeworldsOutOfBand: rows.filter(outOfBand).length,
+    };
+    console.log('[csTemp]', JSON.stringify(summary));
+    console.table(rows);
+    return summary;
+  };
+  // Finding 770 — csLifeTick(): jedno sprawdzenie LifeSystem TERAZ (to samo, co co 1000 lat gry: temperatura + życie).
+  const csLifeTick = () => {
+    const K = window.KOSMOS ?? {};
+    const ls = lifeSystemOf(K);
+    if (!ls) { console.warn('[csLifeTick] brak LifeSystem'); return null; }
+    const systemId = K.activeSystemId ?? 'sys_home';
+    const planets = EntityManager.getByTypeInSystem('planet', systemId);
+    const before = new Map(planets.map(p => [p.id, { t: round1(p.temperatureC), life: p.lifeScore ?? 0 }]));
+    ls._checkAll();
+    const homes = ls.homeworldIds?.() ?? new Set();
+    const homeworlds = planets.filter(p => homes.has(p.id)).map(p => ({
+      name: p.name, tempBefore: before.get(p.id).t, tempAfter: round1(p.temperatureC),
+      lifeBefore: before.get(p.id).life, lifeAfter: p.lifeScore ?? 0,
+    }));
+    const summary = {
+      systemId,
+      lifeTempOwnStar: GAME_CONFIG.FEATURES.lifeTempOwnStar === true,
+      planets: planets.length,
+      changed: planets.filter(p => before.get(p.id).t !== round1(p.temperatureC)).length,
+      homeworlds,
+      homeworldsOutOfBand: homeworlds.filter(h => !(h.tempAfter >= HOMEWORLD_TEMP_MIN_C && h.tempAfter <= HOMEWORLD_TEMP_MAX_C)).length,
+    };
+    console.log('[csLifeTick]', JSON.stringify(summary));
+    return summary;
+  };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick };
 }

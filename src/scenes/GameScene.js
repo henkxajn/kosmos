@@ -2446,6 +2446,8 @@ export class GameScene {
     window.csWorlds = window.KOSMOS.debug?.csWorlds;
     window.csPeek   = window.KOSMOS.debug?.csPeek;
     window.csArchetypes = window.KOSMOS.debug?.csArchetypes;   // CS-3b
+    window.csTemp       = window.KOSMOS.debug?.csTemp;         // Finding 770 — temperatury aktywnego układu
+    window.csLifeTick   = window.KOSMOS.debug?.csLifeTick;     // Finding 770 — jedno sprawdzenie LifeSystem teraz
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,

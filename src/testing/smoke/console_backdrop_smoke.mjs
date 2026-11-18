@@ -11,6 +11,7 @@
 //   W  wykonanie poświaty adaptacyjnej na atrapie ctx (ciemno → oryginał bez zmian stanu; jasno → większa poświata; brak
 //      prostokątów) + piny źródła: 9 ekranów konsoli wpiętych; próbnik ASYNC (blit → readPixels do PBO → fence, odbiór bez
 //      czekania) — ścieżka klatki nigdy nie czyta pikseli synchronicznie; W7 tabela samplerAction (fallback nigdy na zegar)
+//   W8 Finding 768: nowy magazyn PBO (bufferData STREAM_READ) przed każdym readPixels — bez ostrzeżenia Chrome co próbkę
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 import { readFileSync } from 'node:fs';
@@ -160,6 +161,15 @@ console.log('\n── W wpięcie: poświata tekstu, renderer, overlaye ──');
   assert(start.includes('gl.blitFramebuffer(0, 0, cw, ch, 0, 0, cw, ch, gl.COLOR_BUFFER_BIT, gl.NEAREST)') && start.includes('gl.blitFramebuffer(0, 0, cw, ch, 0, 0, gw, gh, gl.COLOR_BUFFER_BIT, gl.LINEAR)'),
     'W4 zmniejszenie na GPU: rozwiązanie MSAA 1:1, potem blit do siatki');
   assert(poll.includes('lumaGridFromRgba(R.buf, R.gw, R.gh, true)'), 'W4 dane z readPixels odwracane w pionie (początek w lewym dolnym rogu)');
+  // Finding 768 — każde zlecenie zakłada NOWY magazyn PBO (STREAM_READ) między związaniem R.pbo a readPixels; bez tego Chrome
+  //   ostrzega przy każdej próbce (kopia cienia bufora READ z poprzedniego fence unieważniona zapisem).
+  const iBind = start.lastIndexOf('gl.bindBuffer(gl.PIXEL_PACK_BUFFER, R.pbo)'), iRp = start.indexOf('gl.readPixels(');
+  const respec = iBind >= 0 && iRp > iBind ? start.slice(iBind, iRp) : '';
+  assert(respec.includes('gl.bufferData(gl.PIXEL_PACK_BUFFER, gw * gh * 4, gl.STREAM_READ);') && (respec.match(/gl\.\w+\(/g) ?? []).length === 2
+    && (start.match(/gl\.bufferData\(/g) ?? []).length === 2,
+    'W8 (768) zlecenie: bufferData(PIXEL_PACK_BUFFER, gw·gh·4, STREAM_READ) tuż przed readPixels, po związaniu R.pbo (+ alokacja = 2)');
+  assert(start.indexOf('gl.bufferData(') >= 0 && start.indexOf('gl.bufferData(') < start.indexOf('R = this._bdGl = {')
+    && !/STREAM_DRAW|DYNAMIC_|STATIC_/.test(start), 'W8 (768) kontrola: alokacja przy (re)tworzeniu zasobów zostaje, jedyny rodzaj użycia = STREAM_READ');
   assert(main.includes('catch (e) { this._bdDropFence(gl); clearBackdropSample(); }') && /act === 'clear'\) \{ this\._bdDropFence\(gl\); clearBackdropSample\(\);/.test(main),
     'W4 bez konsoli / błąd → fence zwolniony, pomiar wyczyszczony');
   assert(tr.includes('if (sig !== this._bdSig) { this._bdSig = sig; const u = window.KOSMOS?.uiManager; if (u) u._dirty = true; }'), 'W4 zmiana pomiaru → jedna klatka UI');

@@ -54,6 +54,11 @@ export const GAME_CONFIG = {
     //     ślad traces/CS3a-sysgen-off-baseline.json). Stare zapisy nietknięte w obu stanach —
     //     ciała są zapisywane w całości. Zmiana w konsoli działa dla NOWEJ gry / nowo generowanego układu.
     seededSystems:        false,
+    // ── Finding 770 — LifeSystem przelicza temperaturę planet z gwiazdą WŁASNEGO układu ciała, a światy macierzyste
+    //    (gracza i AI) zostają w paśmie clampu z generacji 5–35 °C (src/utils/HomeworldClimate.js).
+    // OFF: stara ścieżka bit w bit (gwiazda domowa dla każdego układu, bez strażnika — dom przy gwieździe M: 10 → −131 °C).
+    // Czytana przy każdym sprawdzeniu LifeSystem (co 1000 lat gry) — przełączenie w konsoli działa od razu.
+    lifeTempOwnStar:      true,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
     // ⚠ W3-8 — `fleetMaterialization` i `unifiedAggregator` USUNIĘTE razem z warstwą

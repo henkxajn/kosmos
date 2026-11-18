@@ -4666,6 +4666,9 @@ export class ThreeRenderer {
     gl.blitFramebuffer(0, 0, cw, ch, 0, 0, gw, gh, gl.COLOR_BUFFER_BIT, gl.LINEAR);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, R.fbB);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, R.pbo);
+    // Finding 768 — nowy magazyn PBO przy każdym zleceniu: Chrome trzyma kopię cienia bufora READ przy fence, a
+    // readPixels do TEGO SAMEGO magazynu ją unieważniało → ostrzeżenie wydajności co próbkę (≈5,5/s pod konsolą).
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, gw * gh * 4, gl.STREAM_READ);
     gl.readPixels(0, 0, gw, gh, gl.RGBA, gl.UNSIGNED_BYTE, 0);   // cel = PBO (offset 0) → bez czekania na GPU
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
