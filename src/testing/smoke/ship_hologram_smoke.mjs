@@ -279,10 +279,10 @@ console.log('\n── H7 pokrętła, flaga, haki UIManagera ──');
   assert(t.edgeAngle === 89 && t.edgeAlpha === 0 && t.rim === L?.HOLO_TUNING_DEFAULTS?.rim && !('bogus' in t) && t.spin === 1.5, 'H7 pokrętła w klamrze, nie-liczby i obce klucze pominięte');
   assert(L?.HOLO_TUNING_DEFAULTS?.edgeAngle === 30 && L?.HOLO_TUNING_DEFAULTS?.budgetMs === 4 && L?.HOLO_TUNING_DEFAULTS?.xray === 0,
     'H7 domyślne po oglądaniu właściciela: próg 30°, budżet 4 ms, xray 0');
-  assert(!('shipHologram' in GAME_CONFIG.FEATURES) && 'consoleKit' in GAME_CONFIG.FEATURES, 'H7 trwałość: klucza shipHologram nie ma w FEATURES (świadek: consoleKit jest)');
+  assert(!('shipHologram' in GAME_CONFIG.FEATURES) && 'smallBodies' in GAME_CONFIG.FEATURES, 'H7 trwałość: klucza shipHologram nie ma w FEATURES (świadek: inna flaga jest)');
   const ui = stripComments(src('../../scenes/UIManager.js'));
   const pred = ui.slice(ui.indexOf('isConsoleSceneActive() {'), ui.indexOf('consoleSceneActive({', ui.indexOf('isConsoleSceneActive() {')));
-  assert(/consoleKit !== true\) return false;\s*if \(this\._holoDebug\?\.isOpen === true\) return true;/.test(pred), 'H7 podgląd = scena konsoli (po fladze consoleKit)');
+  assert(/^isConsoleSceneActive\(\) \{\s*if \(this\._holoDebug\?\.isOpen === true\) return true;/.test(pred) && !pred.includes('FEATURES'), 'H7 podgląd = scena konsoli (pierwsza instrukcja predykatu; KZ-Kit: bez flagi consoleKit)');
   assert(ui.includes('if (this._holoDebug?.isOpen) this._holoDebug.draw(ctx, W, H);') && ui.includes('|| (this._holoDebug?.isAnimating?.() ?? false)'), 'H7 rysunek i animacja podglądu w UIManager');
   const D = await tryImport('../../debug/ShipHologramDebug.js');
   const uiStub = { _dirty: false, _holoDebug: null };

@@ -627,7 +627,7 @@ export class GameScene {
       // Finding 663 — KOSMOS.debug.rendezvousPlace(0.8) (zaznaczony statek 0,8 AU za najbliższą planetą; drugi argument 1 — przed),
       // rendezvousInfo() (wynik „Lecisz do planety” dla ciał układu) — src/debug/RendezvousDebug.js.
       ...rendezvousDebugHelpers({ getSaveSystem: () => this.saveSystem }),
-      // ARC KONSOLE K0a — KOSMOS.debug.consoleKit.scene() / on() / off() / tune({…}) / tuneLayout({…}) / reset() — src/debug/ConsoleKitDebug.js.
+      // ARC KONSOLE K0a — KOSMOS.debug.consoleKit.scene() / tune / tuneKit({…}) / tuneLayout({…}) / reset() — src/debug/ConsoleKitDebug.js.
       ...consoleKitDebugHelpers({ getRenderer: () => this.threeRenderer }),
       // ARC KONSOLE K1a — KOSMOS.debug.holo.open() / next() / prev() / plan() / spin() / silhouette() / info() / close(),
       //   pokrętła KOSMOS.debug.holo.tune.edgeAngle = 50 (edgeAlpha, rim, scan, spin, budgetMs, xray) — src/debug/ShipHologramDebug.js.

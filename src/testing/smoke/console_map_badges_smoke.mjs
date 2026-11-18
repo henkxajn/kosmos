@@ -43,9 +43,9 @@ const body = m?.[1] ?? '';
 for (const f of FAMILIES) ok(new RegExp(`\\b${f}\\s*:\\s*\\(\\)\\s*=>`).test(body), `R: rodzina ${f} ma czytelnika`);
 ok(/for \(const key of CONSOLE_HIDDEN_MAP_BADGES\)/.test(body), 'R: iteracja po liście z logiki (jedno źródło)');
 ok(/o\.visible = false; hidden\.push\(o\)/.test(body) && /for \(const o of hidden\) o\.visible = true/.test(body), 'R: gaś widoczne, przywróć dokładnie zgaszone');
-const loop = src.match(/const sceneSkip = this\._consoleBackdropTick\(\);([\s\S]*?)this\._sceneRenderFrames\+\+;/)?.[1] ?? '';
+const loop = src.match(/this\._consoleBackdropTick\(\);([\s\S]*?)this\._sceneRenderFrames\+\+;/)?.[1] ?? '';   // KZ-Kit: tik tła bez decyzji o pominięciu
 ok(loop.length > 0, 'R: świadek — fragment pętli renderu');
-ok(/const undoBadges = consoleHidesMapBadges\(this\._consoleMode != null\) \? this\._hideConsoleMapBadges\(\) : null;/.test(loop), 'R: warunek = predykat konsoli (ten sam stan co tło)');
+ok(/const undoBadges = consoleHidesMapBadges\(this\._consoleCovered === true\) \? this\._hideConsoleMapBadges\(\) : null;/.test(loop), 'R: warunek = predykat konsoli (ten sam stan co filtr tła, `_consoleCovered`)');
 const iU = loop.indexOf('undoBadges = '), iR = loop.indexOf('this._composer.render()'), iF = loop.indexOf('if (undoBadges) undoBadges();');
 ok(iU >= 0 && iR > iU && iF > iR && /finally \{[\s\S]*if \(undoBadges\) undoBadges\(\);/.test(loop), 'R: gaszenie przed composerem, cofnięcie w finally po renderze');
 

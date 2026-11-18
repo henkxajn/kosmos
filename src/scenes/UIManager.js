@@ -94,7 +94,7 @@ import {
   hitTestSubNav,
   NAV_GROUPS,
 } from '../ui/CivPanelDrawer.js';
-import { consoleTabIds, consoleSceneActive, consoleBgMode, consoleScrimAlpha, CONSOLE_GLASS } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a (D-K-5)
+import { consoleTabIds, consoleSceneActive, consoleScrimAlpha, CONSOLE_GLASS } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a (D-K-5)
 import { CONSOLE_SCREEN_SPECS, isKitScreen } from '../ui/ConsoleLayoutLogic.js';
 import { combatSlotInsets } from '../ui/CombatStripLogic.js';   // ARC KONSOLE K0b (D-K-17) — pasek walki w gnieździe nagłówka konsoli
 
@@ -493,12 +493,11 @@ export class UIManager {
 
   // ── ARC KONSOLE K0a (D-K-5, Finding 730) — konsola zasłania scenę ──
   /**
-   * Czy otwarta zakładka zasłania scenę 3D (`FEATURES.consoleKit`, czytana w chwili użycia): wtedy `_draw` maluje
-   * nieprzezroczyste tło `bgPrimary`, a ThreeRenderer pomija przebieg composera (tiki biegną). Ten sam predykat dla obu
-   * stron — renderer pyta co klatkę. Flaga OFF → false (dzisiejsze zachowanie co do bitu).
+   * Czy otwarta zakładka-konsola leży nad sceną 3D: wtedy `_draw` maluje zasłonę `bgPrimary` (krycie `scrim`), a ThreeRenderer
+   * nakłada filtr CSS na płótno WebGL i gasi plakietki mapy. Ten sam predykat dla obu stron — renderer pyta co klatkę.
+   * KZ-Kit: bez flagi `consoleKit` (na stałe).
    */
   isConsoleSceneActive() {
-    if (GAME_CONFIG.FEATURES.consoleKit !== true) return false;
     // ARC KONSOLE K1a — podgląd hologramu (`KOSMOS.debug.holo.open()`) leży nad tą samą żywą, przyciemnioną sceną co konsole.
     if (this._holoDebug?.isOpen === true) return true;
     const om = this.overlayManager;
@@ -506,7 +505,6 @@ export class UIManager {
     const ov = id ? om.overlays[id] : null;
     if (!this._consoleTabIds) this._consoleTabIds = consoleTabIds(NAV_GROUPS);
     return consoleSceneActive({
-      enabled: true,
       civMode: !!window.KOSMOS?.civMode,
       globeOpen: !!window.KOSMOS?.planetGlobeOpen,
       cleanView: !!this._cleanView,
@@ -2471,13 +2469,11 @@ export class UIManager {
     const civMode = !!window.KOSMOS?.civMode;
     const globeOpen = !!window.KOSMOS?.planetGlobeOpen;
 
-    // ARC KONSOLE K0a (D-K-5) — otwarta zakładka: nieprzezroczyste tło konsoli na CAŁYM płótnie PRZED wszystkim (paski,
-    // overlay i klaster zegara malują się na nim); scena 3D pod spodem nie renderuje się (ThreeRenderer, ten sam predykat).
-    // Tryb tła (D-K-5 poprawione): opaque — pełne krycie; glass / live — zasłona o kryciu ze specyfikacji ekranu albo pokrętła.
+    // ARC KONSOLE K0a (D-K-5 poprawione) — otwarta zakładka: zasłona `bgPrimary` na CAŁYM płótnie PRZED wszystkim (paski,
+    // overlay i klaster zegara malują się na niej), krycie ze specyfikacji ekranu albo pokrętła `scrim` (domyślnie 0).
     if (this.isConsoleSceneActive()) {
-      const opaque = consoleBgMode(CONSOLE_GLASS) === 'opaque';
       ctx.save();
-      ctx.globalAlpha = opaque ? 1 : consoleScrimAlpha(CONSOLE_SCREEN_SPECS[this.overlayManager.active], CONSOLE_GLASS);
+      ctx.globalAlpha = consoleScrimAlpha(CONSOLE_SCREEN_SPECS[this.overlayManager.active], CONSOLE_GLASS);
       ctx.fillStyle = THEME.bgPrimary;
       ctx.fillRect(0, 0, W, H);
       ctx.restore();

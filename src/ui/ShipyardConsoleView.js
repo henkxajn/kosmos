@@ -24,7 +24,7 @@ import { isEnemyVessel } from '../entities/Vessel.js';
 import { consoleZones, consoleClockRect, insetRect, CONSOLE_SCREEN_SPECS } from './ConsoleLayoutLogic.js';
 import { drawConsoleHeader, drawZoneFrame, drawZoneRule, drawEyebrow, drawKvRow, drawBar, drawInstrument, drawChipRow,
   drawList, drawSelectBrackets, chipLabel, CONSOLE_KIT, applyConsoleHalo, drawTabular } from './ConsoleKit.js';
-import { consoleBgMode, consoleScrimAlpha, CONSOLE_GLASS } from './ConsoleSceneLogic.js';
+import { consoleScrimAlpha, CONSOLE_GLASS } from './ConsoleSceneLogic.js';
 import { consoleRoles } from './ConsoleRolesLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
 import { truncateText } from './HudLabelLogic.js';
@@ -363,7 +363,7 @@ function drawHero(ov, ctx, hero, roles, ed, w) {
 export function heroScrimAlpha() {
   const u = window.KOSMOS?.uiManager;
   if (!u?.isConsoleSceneActive?.()) return 0;
-  return consoleBgMode(CONSOLE_GLASS) === 'opaque' ? 1 : consoleScrimAlpha(CONSOLE_SCREEN_SPECS.shipyard, CONSOLE_GLASS);
+  return consoleScrimAlpha(CONSOLE_SCREEN_SPECS.shipyard, CONSOLE_GLASS);
 }
 
 /** Etykieta modułu w liście roli («Laser ×6»). */

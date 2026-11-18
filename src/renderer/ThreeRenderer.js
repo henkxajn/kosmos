@@ -107,7 +107,7 @@ import { planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle,
 // (D-HUD-16). Radar, trasy i etykiety rysuje warstwa HUD 2D (`HudLayer`); od B-Z bez flag HUD i bez dawnych ścieżek 3D.
 import { readHudLayers } from '../ui/HudLayerChipsLogic.js';
 import { hudRoleHex } from '../ui/HudPalette.js';
-import { consoleBackdrop, consoleBgMode, glassFilterCss, CONSOLE_GLASS, CONSOLE_HIDDEN_MAP_BADGES, consoleHidesMapBadges } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a — tło szkła (D-K-5 poprawione)
+import { glassFilterCss, CONSOLE_GLASS, CONSOLE_HIDDEN_MAP_BADGES, consoleHidesMapBadges } from '../ui/ConsoleSceneLogic.js';   // ARC KONSOLE K0a — tło konsoli (D-K-5 poprawione)
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -4444,9 +4444,8 @@ export class ThreeRenderer {
   // ── Pętla renderowania ────────────────────────────────────────
   _startLoop() {
     // ARC CV-8b — bramka `_renderingEnabled` (BattleView3D zawieszał główną scenę na czas kina) wycofana razem z kinem.
-    // ARC KONSOLE K0a — liczniki klatek: wyrenderowane / pominięte pod konsolą (keeper, bramka: `KOSMOS.debug.consoleKit.scene()`).
+    // ARC KONSOLE K0a — licznik wyrenderowanych klatek (keeper, bramka: `KOSMOS.debug.consoleKit.scene()`).
     this._sceneRenderFrames = 0;
-    this._sceneSkipFrames = 0;
     const loop = () => {
       requestAnimationFrame(loop);
 
@@ -4563,27 +4562,22 @@ export class ThreeRenderer {
         // Pipeline HDR: Render → Bloom(próg 1.0) → OutputPass (ACES+sRGB).
         // Fallback: bezpośredni render gdy composer padł (ACES aplikuje renderer, brak bloomu).
         // ARC GALAXY G2-1 — w trakcie lotu obiekty układu gasną TYLKO na czas renderu (cofnięte zaraz po nim).
-        // ARC KONSOLE K0a (D-K-5, Finding 730) — otwarta zakładka zasłania scenę nieprzezroczystym tłem: pomijamy WYŁĄCZNIE
-        // przebieg composera (wszystkie tiki wyżej już przeszły — powtórka walki, reżyser CV, kamera, zegary). Stan ciągnięty
-        // co klatkę z UIManagera (ten sam predykat, którym UI maluje tło) — pierwsza klatka po zamknięciu renderuje się świeżo.
-        const sceneSkip = this._consoleBackdropTick();
-        if (sceneSkip) {
-          this._sceneSkipFrames++;
-        } else {
-          const undoFlight = this._galaxyFlight ? this._applyFlightFade() : null;
-          // ARC KONSOLE K7-A — plakietki mapy gasną pod każdą konsolą tylko na czas renderu (cofnięte zaraz po nim)
-          const undoBadges = consoleHidesMapBadges(this._consoleMode != null) ? this._hideConsoleMapBadges() : null;
-          try {
-            if (this._composer) this._composer.render();
-            else this.renderer.render(this.scene, this.camera);
-          } finally {
-            if (undoBadges) undoBadges();
-            if (undoFlight) undoFlight();
-          }
-          this._sceneRenderFrames++;
-          // ARC CV-7 — nagrywarka rolek (F10): kopia klatki płótna 3D TUŻ PO renderze (bufor WebGL ważny w tym samym zadaniu).
-          this._cvDir?.reel?.onFrame();
+        // ARC KONSOLE K0a (D-K-5 poprawione) — pod otwartą konsolą scena renderuje się dalej (filtr CSS płótna, `_consoleBackdropTick`);
+        // stan ciągnięty co klatkę z UIManagera (ten sam predykat, którym UI maluje zasłonę). KZ-Kit: bez pomijania composera.
+        this._consoleBackdropTick();
+        const undoFlight = this._galaxyFlight ? this._applyFlightFade() : null;
+        // ARC KONSOLE K7-A — plakietki mapy gasną pod każdą konsolą tylko na czas renderu (cofnięte zaraz po nim)
+        const undoBadges = consoleHidesMapBadges(this._consoleCovered === true) ? this._hideConsoleMapBadges() : null;
+        try {
+          if (this._composer) this._composer.render();
+          else this.renderer.render(this.scene, this.camera);
+        } finally {
+          if (undoBadges) undoBadges();
+          if (undoFlight) undoFlight();
         }
+        this._sceneRenderFrames++;
+        // ARC CV-7 — nagrywarka rolek (F10): kopia klatki płótna 3D TUŻ PO renderze (bufor WebGL ważny w tym samym zadaniu).
+        this._cvDir?.reel?.onFrame();
         if (this._fxStatsRun) this._fxStatsEnd();     // ARC CV-2a — po pełnej klatce (wszystkie przebiegi composera)
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
@@ -4593,26 +4587,22 @@ export class ThreeRenderer {
   }
 
   /**
-   * ARC KONSOLE K0a (D-K-5) — czy pominąć przebieg composera w tej klatce: pyta UIManager (`isConsoleSceneActive` — flaga
-   * `FEATURES.consoleKit`, otwarta zakładka, Obserwatorium zwolnione). Brak UIManagera albo błąd → renderuj (fail-open).
+   * ARC KONSOLE K0a (D-K-5) — czy konsola leży nad sceną w tej klatce: pyta UIManager (`isConsoleSceneActive` — otwarta zakładka,
+   * Obserwatorium zwolnione). Brak UIManagera albo błąd → false (fail-open: scena bez filtra).
    */
-  _consoleSceneSkip() {
+  _consoleSceneCovered() {
     try { return window.KOSMOS?.uiManager?.isConsoleSceneActive?.() === true; }
     catch (e) { return false; }
   }
 
   /**
-   * ARC KONSOLE K0a (D-K-5 poprawione — szkło) — decyzja tła na tę klatkę: filtr CSS płótna WebGL (glass / live) i pominięcie
-   * composera (glass po jednej świeżej klatce, opaque od razu; live — nigdy). Zwraca `true` = pomiń composer. Filtr pisany do
-   * stylu TYLKO przy zmianie (flaga OFF → nigdy nie dotyka DOM). Pokrętła `CONSOLE_GLASS` czytane co klatkę.
+   * ARC KONSOLE K0a (D-K-5 poprawione) — filtr CSS płótna WebGL pod konsolą (pokrętła `CONSOLE_GLASS` czytane co klatkę), pisany do
+   * stylu TYLKO przy zmianie. KZ-Kit: jedyny tryb tła (dawny `live`); bez pomijania composera.
    */
   _consoleBackdropTick() {
-    const covered = this._consoleSceneSkip();
-    const mode = consoleBgMode(CONSOLE_GLASS);
-    const bd = consoleBackdrop({ covered, mode, wasCovered: this._consoleWasCovered === true });
-    this._consoleWasCovered = covered && mode !== 'live';   // następna klatka szkła pod konsolą — już bez świeżego renderu
-    this._consoleMode = covered ? mode : null;
-    const css = bd.filter ? glassFilterCss(CONSOLE_GLASS) : '';
+    const covered = this._consoleSceneCovered();
+    this._consoleCovered = covered;
+    const css = covered ? glassFilterCss(CONSOLE_GLASS) : '';
     if (css !== (this._consoleFilterCss ?? '')) {
       const el = this.renderer?.domElement;
       if (el?.style) {
@@ -4621,7 +4611,6 @@ export class ThreeRenderer {
       }
       this._consoleFilterCss = css;
     }
-    return bd.skip;
   }
 
   /**
@@ -4646,11 +4635,10 @@ export class ThreeRenderer {
     return () => { for (const o of hidden) o.visible = true; };
   }
 
-  /** ARC KONSOLE K0a — liczniki klatek pętli: `{ rendered, skipped, skipping, mode, filter, badgesHidden }` (keeper, pomiar bramki). */
+  /** ARC KONSOLE K0a — stan tła konsoli: `{ rendered, covered, filter, badgesHidden }` (keeper, pomiar bramki). */
   getConsoleSceneStats() {
-    return { rendered: this._sceneRenderFrames ?? 0, skipped: this._sceneSkipFrames ?? 0, skipping: this._consoleSceneSkip()
-      && consoleBgMode(CONSOLE_GLASS) !== 'live', mode: this._consoleMode ?? null, filter: this._consoleFilterCss ?? '',
-      badgesHidden: this._consoleMode != null ? (this._consoleBadgesHidden ?? 0) : 0 };
+    return { rendered: this._sceneRenderFrames ?? 0, covered: this._consoleCovered === true, filter: this._consoleFilterCss ?? '',
+      badgesHidden: this._consoleCovered === true ? (this._consoleBadgesHidden ?? 0) : 0 };
   }
 
   // Żywe gazowce (C1a) — dwa uniformy odświeżane co klatkę, niezależnie od pauzy gry:

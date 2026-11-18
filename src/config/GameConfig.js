@@ -533,12 +533,7 @@ export const GAME_CONFIG = {
     //   ma skutku; przełączniki `KOSMOS.debug.cv*` wycofanych flag zwracają { retired: true }.
 
     // ── ARC KONSOLE (docs/design/CONSOLES_PLAN.md, D-K-20 — flaga na rodzinę ekranów, czytana W CHWILI UŻYCIA) ──
-    //   consoleKit (K0a, D-K-5 poprawione, Finding 730): ON = otwarta zakładka (członkowie grup nawigacji + U, bez Obserwatorium)
-    //     ma za sobą żywy, ostry, przyciemniony świat (tryb `live`, `ConsoleSceneLogic.CONSOLE_GLASS`: filtr CSS `brightness(0.4)` na
-    //     płótnie WebGL, bez rozmycia i zasłony; scena renderuje się dalej); tryby debug `glass` (zamrożona scena — composer pominięty,
-    //     tiki biegną) i `opaque` — kandydaci na ustawienie wydajności dla słabszych GPU; zestaw `ConsoleKit` / `ConsoleLayoutLogic`.
-    //   OFF = dzisiejsze zachowanie co do bitu (półprzezroczyste tła, scena renderowana pod każdą zakładką).
-    consoleKit: true,
+    //   (consoleKit — usunięta w KZ-Kit: żywa, przyciemniona scena za konsolą na stałe — `ConsoleSceneLogic.CONSOLE_GLASS`)
     //   (consoleIntel — usunięta w KZ-Dipl: Wywiad jest na stałe konsolą, `PERMANENT_KIT_SCREENS`)
     //   (shipHologram, consoleShipyard — usunięte w KZ-Shipyard: Stocznia jest na stałe konsolą z hologramem, `PERMANENT_KIT_SCREENS`)
     //   (consoleDiplomacy — usunięta w KZ-Dipl: Dyplomacja i Wojny są na stałe konsolą, `PERMANENT_KIT_SCREENS`)
