@@ -431,6 +431,7 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `territory:merged { ownerId, from, to }` (bąble się zrosły — spadek liczby pętli przy niezmniejszonej liczbie źródeł) | TerritoryField | ⛔ **ZERO konsumentów od G5** (rozbłysk izolinii mieszkał w zakładce Stratcom); emisję pinuje `galaxy_territory_smoke` B3 |
 | `colony:capturedByPlayer { planetId, colonyName, previousOwner, isOutpost, reason }` (gracz przejmuje ciało AI po desancie) | ColonyManager (`captureColonyForPlayer`) | TerritoryService (invalidacja indeksu), GameScene |
 | `colony:listChanged {}` — ⚠ teraz emitowane TAKŻE przez `registerHomePlanet` i `restore` (były ciche → TerritoryService cache'ował indeks bez kolonii gracza; fix B3) | ColonyManager | TerritoryService, listy UI |
+| `surface:ready { key, bodyId, systemId, lod, w, h, ms, source }` (mapa powierzchni ciała wstawiona do cache; `source` = `worker` / `main`) | SurfaceCache (`_finish`, CS-4b) | — (CS-6 renderer mapy układu, CS-7 bohater kolonii) |
 
 ---
 

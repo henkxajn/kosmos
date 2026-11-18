@@ -1529,6 +1529,164 @@ rifts / old-ice structure. `SURFACE_FIELD_VERSION` = 2. The terran buildable-sha
 hazy_moon share a recipe (haze covers them); tidally_locked day side always centred on the map (fine once the body is
 oriented to its star).
 
+### 3.5 CS-4b — surface worker + SurfaceCache (2026-11-18; not committed, owner check pending)
+
+Surfaces are baked off the main thread, cached under a byte budget and served by priority. **Nothing renders differently**:
+the only consumers are the debug preview (`csSurface` / `csSurfaceAll` now go through the cache) and an inert
+`prefetchSystem()` hook for CS-6. Gameplay terrain (`evalAt` at tile centres, CS-5) is **not** routed through the worker
+or the cache. No critical file touched (`GameConfig.js` untouched: the budget is a constant in `SurfaceCache.js`).
+
+**Files.** `src/workers/surface.worker.js` (new), `src/systems/SurfaceCache.js` (new), `src/debug/SurfacePreviewDebug.js`
+(csSurface / csSurfaceAll via the cache, new `csCache`), `src/debug/ColonySphereDebug.js` (helpers return `csCache` and
+`csNextSystem`), `src/scenes/GameScene.js` (import, `KOSMOS.surfaceCache = new SurfaceCache()` with dispose of a
+previous instance, aliases `window.csCache` / `window.csNextSystem`), keeper `src/testing/smoke/colony_sphere_cache_smoke.mjs`
+(new), keeper `colony_sphere_surface_smoke` B7 whitelist (+ SurfaceCache, worker), probe
+`src/testing/headless/probe-cs4b-cache.mjs` (new; `--owner` replays the owner one-liners), probe-cs4a `--game` awaits the now
+asynchronous helpers, `docs/ARCHITECTURE.md` event table (+ `surface:ready`).
+
+**Worker** (`new Worker(new URL('../workers/surface.worker.js', import.meta.url), {type:'module'})`, created lazily on
+the first request). Import graph = `{surface.worker.js, SurfaceField.js}` only (module workers do not inherit the
+importmap, §1.I). Protocol: start → `{type:'ready', version}`; `{type:'bake', jobId, seed, arch:{id, family, field,
+biomes}, params:{waterCoverage, palette}, w, h}` → `{type:'baked', jobId, w, h, ms, version, buffer}` (RGBA8 = e, m, t,
+a; buffer **transferred**) or `{type:'error', jobId, message}` (the worker survives). The worker keeps one archetype
+row object per id (SurfaceField's WeakMap / context caches stay small).
+
+**SurfaceCache API** (the single entry point; `KOSMOS.surfaceCache`):
+- `request(body, lod = lodOf(body), priority) → Promise<map | null>` — never rejects; `null` = no surface (gas, no seed,
+  unknown LOD), job dropped (other system) or cache disposed. Same key already queued → the same promise (priority raised).
+- `get(body, lod) → map | null` — synchronous, refreshes LRU, does not count hits / misses (CS-6 may poll per frame).
+- `map = {key, bodyId, systemId, lod, w, h, data: Uint8Array RGBA8, bytes, ms, source: 'worker' | 'main'}`.
+- Key = `surfaceSeed | archetype | v<SURFACE_FIELD_VERSION> | waterCoverage/palette | lod` (`surfaceKeyOf`, pure).
+- LODs = `LOD_SIZES`: `hero` 1024×512, `body` 256×128 (planets, moons), `planetoid` 128×64; `lodOf(body)`.
+- Priorities `SURFACE_PRIORITY = {HERO: 300, FOCUS: 200, SYSTEM: 100}`; `surfaceSystemPriority(body)` = SYSTEM + planet 60
+  / moon 30 / planetoid 0 + min(29, 2·visualRadius). One job in flight → a new hero overtakes queued LODs after the
+  current bake at the latest.
+- `setActiveSystem(id)` (wired to `system:switched`): queued non-hero jobs of other systems resolve `null`; an in-flight
+  non-hero result for a system no longer active is **not cached** (cannot displace the current system); hero jobs survive.
+- LRU by bytes: `SURFACE_CACHE_BUDGET_BYTES = 20 MiB` (one constant); after every insert `bytesUsed ≤ budget`; a map larger
+  than the whole budget is returned but not cached.
+- `prefetchSystem(systemId)` — queues LOD maps of every surface body of a system (inert until CS-6 calls it).
+- `clear()` (game load), `dispose()` (scene restart: queue → null, worker terminated, unsubscribed). Return to title and
+  game load are full page reloads today; GameScene disposes a previous instance before creating a new one.
+- `snapshot()` → `csCache()`: mode, workerAlive, entries, bytesUsed / budget, queue, inFlight, hits, misses, evictions,
+  evictedBytes, staleDropped, staleDiscarded, oversize, errors, workerFailures, avg ms per LOD (worker / main), bytes per system.
+- **Event `surface:ready {key, bodyId, systemId, lod, w, h, ms, source}`** — emitted after a map is inserted into the cache
+  (not for dropped / discarded jobs; a throwing listener is caught).
+- **Fail-soft:** factory throws / no Worker API / worker `error` or `messageerror` / no `ready` or no answer within
+  `SURFACE_WORKER_TIMEOUT_MS` (15 s) / worker reports a different `SURFACE_FIELD_VERSION` → **one** console warning, the
+  in-flight job is re-queued, every job is baked on the main thread with the same SurfaceField (bit-identical), one job
+  per macrotask (`schedule` option; default `setTimeout(…, 0)`). A single bake error inside a live worker → that job is
+  re-baked on the main thread, the worker stays. Never throws into the game.
+
+**Debug.** `csSurfaceAll()` lists the active system's surface bodies in priority order with placeholders, requests each
+at its LOD and fills thumbnails as results arrive (label: name · archetype · ms · W worker / M main / C cache; header:
+progress, wall ms, Σ bake, sources). `csSurface()` requests the selected body's **hero** map (1024×512, HERO priority).
+Both return `{…, done: Promise}` (summary logged when done). `csCache()` prints the snapshot. `csNextSystem()` switches
+the view to the next already-generated system (a new game has home + the AI home systems) via `switchActiveSystem`;
+it generates nothing (it does show an AI system the player has not discovered — test games only).
+
+**Measurements** (real game in headless Chrome over CDP: title → seeded new game → wait for the intro to end →
+`node src/testing/headless/probe-cs4b-cache.mjs`; SwiftShader, so the game itself renders at ≈ 100–117 ms/frame and the
+frame columns are only comparable within a row; long tasks = `PerformanceObserver('longtask')`, > 50 ms on the main
+thread). Clean run 3 (home system 62 surface bodies = 27 at 256×128 + 35 at 128×64); runs 1–2 (49 and 39 bodies) agree
+on every conclusion (run 1 started during the intro, whose mouse lockdown and texture gate polluted its idle row).
+
+| Phase | Wall ms | Σ bake ms | First map ms | Main-thread long tasks (count / max / Σ ms) | Max frame ms |
+|---|---|---|---|---|---|
+| P0 idle 3 s (reference) | — | — | — | **0 / 0 / 0** | 167 |
+| P1 whole system via **worker** (cold worker) | 3110 | 3006 | 133 | **0 / 0 / 0** | 124 |
+| P4 same system on the **main thread** (fallback) | 3269 | 2941 | 82 | **27 / 123 / 2323** | 120 |
+| P3 hero 1024×512 via worker (warm) | 1135 | 1135 | — | **0** | 117 |
+| P4 hero on the main thread | 1156 | 1150 | — | **1 / 1149 / 1149** (one 1.08 s frame) | 1079 |
+| P2 hero requested with 61 LODs queued | hero after **1221** (bake 1135; 1 LOD done before it) | — | — | — | — |
+| P6 owner path `csSurfaceAll()` (cache + preview compose) | 3140 | 2960 | — | **0 / 0 / 0** | 137 |
+| P6 owner path `csSurface()` hero | 1014 | 1014 | — | 1 / 107 / 107 | 117 |
+| P6 second `csSurfaceAll()` (all 62 cache hits) | 279 | 0 | — | — | — |
+| P7/P8 systems 2…6 `csSurfaceAll()` (55–58 bodies each) | 2254–2552 | 2168–2456 | — | **0 / 0 / 0** in all five | 117–133 |
+
+- **Main thread stays smooth with the worker:** zero long tasks while a whole system or a hero map is generated (three
+  runs). The fallback produces ≈ one long task per body (max ≈ 100–123 ms) and blocks ≈ 0.7–1.15 s for a hero map.
+- **Worker vs main totals:** Σ bake is equal within noise on the same bodies (3006 vs 2941 ms run 3; 2187 vs 1971 and
+  2212 vs 1943 in runs 1–2, i.e. worker +2…+14 %); wall time is ≈ the same (one worker, one job in flight; message latency
+  is negligible against 18–90 ms bakes). Per body in the game: body LOD ≈ 80–90 ms, planetoid ≈ 15–19 ms, hero ≈ 1.0–1.1 s,
+  i.e. ≈ 1.5× the CS-4a bench numbers (34–65 ms / 11–12 ms / 0.5–0.9 s), which were measured on an idle page: in the game
+  the CPU is shared with SwiftShader's render threads (the main-thread fallback in the game is equally slower).
+- **Time to fill a system:** ≈ 2.3–3.1 s for 55–62 bodies (first thumbnail after ≈ 130 ms incl. cold worker start).
+  **Time to the hero:** ≈ 1.0–1.1 s alone; ≈ 1.2 s with a full LOD queue (it overtakes all queued LODs).
+- **Bit-identical:** worker vs main-thread maps of the whole system compared byte for byte: 63/63, 40/40, 50/50 (incl. hero).
+- **Stale jobs:** switching system 120 ms into a 58-body fill → 56 queued jobs dropped, 1 in-flight result discarded, the
+  old system keeps only the 1 map finished before the switch; the new system fills completely.
+- Long tasks right after `switchActiveSystem` (10–26 in the 3 s after a switch, also with no surface work) belong to the
+  system switch itself (scene / texture rebuild), not to the cache; the fills that follow have none.
+
+**Memory and budget** (cache bytes = typed arrays; GPU copies come with CS-6):
+
+| After | Entries | Bytes held | Evictions |
+|---|---|---|---|
+| system 1 LOD (62 bodies) | 62 | 4.47 MiB | 0 |
+| + hero (2 MiB) | 63 | 6.47 MiB | 0 |
+| + system 2 | 121 | 10.06 MiB | 0 |
+| + system 3 | 179 | 13.66 MiB | 0 |
+| + system 4 | 235 | 17.38 MiB | 0 |
+| + system 5 | 290 | 18.81 MiB | 1 (the hero, oldest) |
+| + system 6 | 328 | 19.91 MiB | 18 (oldest home LODs) |
+
+One system's LOD set = **3.2–5.1 MiB** (128 KiB per planet / moon, 32 KiB per planetoid; 39–67 bodies; runs 1–3). **Verdict: the ≈ 20 MiB budget
+holds** with margin — it keeps the hero + the active system + **≈ 3–4 previous systems** (the §1.I estimate assumed ≈ 6 MiB
+per system, real sets are smaller because most bodies are 32 KiB planetoids). It was never exceeded (max 20 873 216 of
+20 971 520 B). No GPU contingency needed. `SURFACE_CACHE_BUDGET_BYTES` stays 20 MiB; CS-6 may lower it if GPU copies
+become the real memory cost.
+
+**Keepers** (`colony_sphere_cache_smoke`, 55 PASS): C1 worker = main bit for bit — (a) the worker module in-process with a
+`self` shim and `structuredClone`d messages for 7 bodies (body / planetoid / hero), buffer transferred, a bad job → `error`
+and the worker lives; (b) a **real thread** (node `worker_threads` + a Web-Worker adapter) through SurfaceCache: 7/7 maps
+from `worker` = 7/7 from `main`; C2 worker import graph = {worker, SurfaceField}, no document / window / localStorage /
+importScripts / THREE / GAME_CONFIG / EventBus (witness: the same scanner sees EventBus / EntityManager / BodyArchetypes
+from SurfaceCache), worker URL + `{type:'module'}`; C3 LRU — budget never exceeded (every step + 160-request random
+stress incl. 2 MiB heroes over budget), eviction order with get-refresh, same key → hit without a bake, changed
+SURFACE_FIELD_VERSION / waterCoverage / palette / LOD / seed / archetype → miss, oversize not cached; C4 priority — most
+important LOD first, hero overtakes queued LODs, then planet > moon > planetoid; system switch: queued old LODs → null,
+in-flight old result not cached, hero survives, new system next; `surface:ready` only for inserted maps; dedup → same
+promise; dispose terminates the worker; C5 fail-soft — factory throws / worker error mid-job / wrong field version /
+silent worker (watchdog) / bake error in the worker (twice) / no Worker API under node → one warning, main-thread result
+bit for bit, no exception; a throwing `surface:ready` listener is caught; gas / no seed / unknown LOD → null; C6 no wiring
+— only GameScene (import + dispose + `new SurfaceCache()` + `csCache` alias) and `src/debug/` import SurfaceCache, nobody
+outside debug calls request / get / prefetchSystem, SurfaceCache imports only bake + constants from SurfaceField (no
+evalAt / classify), only SurfaceCache references the worker file; C7 `prefetchSystem` queues exactly the system's surface
+bodies; helpers return `csCache`, `csSurfaceAll` goes through the cache.
+**Fail-first** in a real `git worktree --detach 6c063d6`: **22 FAIL / 2 PASS**, no abort (the 2 PASS are the exclusion pins
+"nobody outside GameScene / debug imports / calls SurfaceCache", whose witness is red on the base). **21 mutations, all
+killed** (each a clean FAIL, none a hang): worker imports EventBus, no transfer list, w/h swapped; key without version,
+without waterCoverage; LRU evicts newest; get() does not refresh; evict only after overflow; oversize cached; FIFO ignores
+priority; switch keeps old queue; stale result cached; crash loses the in-flight job; warn every time; no version check on
+`ready`; no watchdog; `surface:ready` not emitted; SurfaceCache imports evalAt; prefetch ignores the system; GameScene
+prefetches; csSurfaceAll bakes on the main thread. `colony_sphere_surface_smoke` 33 PASS (B7 whitelist: + SurfaceCache,
+worker). Headless note: `env.js` defers `setTimeout(…, 0)` to the Ticker flush, so SurfaceCache takes a `schedule` option and
+the keeper passes a real node timer.
+
+**Owner check (light loop; Polish script in chat).** Validated headless on the live engine (`probe-cs4b-cache.mjs --owner`:
+the exact quote-free one-liners after the intro; thumbnails progressive — 2–3 canvases and the rest placeholders after
+400 ms; close button works in every system; `csNextSystem()` cycles home → 2 AI home systems → home, last pass all cache
+hits; 0 warnings, 0 exceptions). Evictions do not occur within the 3 systems a fresh game has (≈ 10–15 MiB); they are shown
+by the probe (systems 5–6). Note: during the new-game intro fly-in the game swallows every mouse event in the capture
+phase (GameScene lockdown, pre-existing) — the overlay's × works only after the intro.
+
+**Gate log (owner check, 2026-11-18): PASS** on a seeded test game. (1) `csSurfaceAll()` home (34 bodies, 31 shown):
+W 31 / M 0, wall 758 ms, camera smooth while filling; second call C 31, 57 ms. (2) `csCache()`: 31 maps, 2.00 / 20.00 MiB,
+worker OK, avg worker ms body 46 / planetoid 11. (3) `csSurface()` hero New Earth (terran oceanic 0.737): 1024×512,
+606 ms, worker. (4) `csNextSystem()` → sys_054 (40 maps, W only, 1263 ms) → 7.22 MiB; → sys_063 (54 maps, W only,
+1532 ms) → 11.06 MiB; evictions 0, errors 0, worker failures 0. (5) Back home: all C, 71 ms.
+
+**Carried forward (owner feedback):**
+- **CS-6 (MUST):** colours look repetitive across bodies and systems — the preview palette is fixed per biome. CS-6 adds
+  per-body colour variation: hue / saturation / albedo from `surfaceSeed`, star-class tint, palette variants within each
+  archetype (e.g. desert rust → ochre → grey, ice white → blue → beige, oceans navy → teal). No two bodies of the same
+  archetype may look the same.
+- **CS-6:** the old texture pipeline still rebakes on every system switch ("Rebake: N tekstur") — the shared surface path
+  replaces it.
+- **CS-7:** the hero map takes ≈ 0.6–1.1 s — show the upscaled LOD map immediately and swap in the hero map when ready;
+  prefetch the player's capital hero map in idle time after game start.
+
 ---
 
 ## 4. Decisions for Filip (recommendation first)
