@@ -2,7 +2,7 @@
 
 Recorded after the CONSOLES arc closed (`d393d21`). Each finding's truth stays in its own arc registry
 (`CONSOLES_PLAN.md` §5 / §25); this file is a work queue: the problem, where it lives, status, owner decision and
-the ready next step. Before starting any item: run its keeper / `git log -S`, re-measure. Next free finding number: **759**.
+the ready next step. Before starting any item: run its keeper / `git log -S`, re-measure. Next free finding number: **770**. (#769 — system-seed mode read from the live flag — ✅ closed in CS-3a-fix, `COLONY_SPHERE_PLAN.md` §3.2.)
 
 ## Findings
 
@@ -18,6 +18,7 @@ the ready next step. Before starting any item: run its keeper / `git log -S`, re
 | **756** | ⚪ | `GroundUnitManager.createUnit` silently accepts a non-existent archetype id (no error, no refusal reason); not called by the game today | `GroundUnitManager.createUnit` | — | Guard + reason, keeper red on an unknown id |
 | **757** | ⚪ | Standalone U screen has no in-game host (U routes to Shipyard); `UnitDesignOverlay.draw` / `_drawShipDesigner` / pinned footer and `UIManager._drawCivPanel` / `_hitTestCivPanel` unreachable (instance stays as shared editor). Covers 726 | `UnitDesignOverlay.js`, `UIManager.js` | — | Candidate removal step (keep the shared editor) |
 | **758** | ⚪ | EN label mismatch: inspector chip «Scrap (75% refund)» vs confirm title «Disband (75% refund)»; PL consistent | `en.js` `cmdInsp.scrap`, `fleet.disbandReturn` | — | One-line i18n fix + `check-i18n` |
+| **768** | 🟠 | Chrome perf warning «READ-usage buffer was written, then fenced, but written again before being read back» ≈5.5/s under any console (pre-existing since 755) | `ThreeRenderer.js:4657/4669/4672/4687` `_bdStart` / `_bdPoll` (one reused STREAM_READ PBO) | — | `bufferData(PIXEL_PACK_BUFFER, size, STREAM_READ)` before `readPixels` in `_bdStart` (measured 0 warnings) + backdrop keeper pin; record in `COLONY_SPHERE_PLAN.md` §3.2 |
 
 ## Art / assets
 
