@@ -205,9 +205,9 @@ try {
     await page.evaluate(`document.querySelector('#fs-start').click(), true`);
     await page.waitFor(`typeof window.csSurfaceAll === 'function' && typeof window.csSurface === 'function' && window.KOSMOS?.galaxyData?.seed !== undefined`, 'GameScene');
     await sleep(2500);
-    g.all = await page.evaluate('csSurfaceAll()');
+    g.all = await page.evaluate('csSurfaceAll().done');   // CS-4b: pomocniki asynchroniczne (SurfaceCache) → { …, done }
     g.allOverlay = await page.evaluate(`document.querySelectorAll('#cs-surface-preview canvas').length`);
-    g.home = await page.evaluate('csSurface()');
+    g.home = await page.evaluate('csSurface()?.done');
     g.homeOverlay = await page.evaluate(`document.querySelectorAll('#cs-surface-preview canvas').length`);
     // Zaznaczenie innego ciała (księżyc albo planetoida) przez EventBus jak klik w mapę — potem csSurface().
     g.other = await page.evaluate(`(async () => {
@@ -216,7 +216,7 @@ try {
       const b = [...EM.getByType('moon'), ...EM.getByType('planetoid')].find(x => (x.systemId ?? 'sys_home') === sys);
       if (!b) return null;
       KOSMOS.threeRenderer._selectedEntityId = b.id;
-      return csSurface();
+      return await csSurface()?.done;
     })()`);
     g.closeButton = await page.evaluate(`(() => { const b = document.querySelector('[data-action="cs-surface-close"]'); if (!b) return false; b.click(); return !document.getElementById('cs-surface-preview'); })()`);
     g.exceptions = exc.slice();

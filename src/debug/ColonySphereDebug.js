@@ -13,7 +13,11 @@
 //                 (dotychczasowy → 0, seedowany → większość). CS-3a-fix: tryb świata, nie bieżąca flaga —
 //                 przełączenie flagi po starcie nie zmienia wyniku.
 //
-//   csSurface() / csSurfaceAll() — CS-4a: podgląd powierzchni (SurfacePreviewDebug.js).
+//   csSurface() / csSurfaceAll() — CS-4a: podgląd powierzchni (SurfacePreviewDebug.js); CS-4b: przez SurfaceCache.
+//   csCache() — CS-4b: stan SurfaceCache (wpisy, bajty / budżet, trafienia, wyrzucenia, kolejka, worker).
+//   csNextSystem() — CS-4b: przełącza widok na NASTĘPNY już wygenerowany układ (w nowej grze: domy imperiów AI) tą
+//                    samą drogą co mapa galaktyki (`switchActiveSystem`). Niczego nie generuje; tylko kontrola właściciela
+//                    (pokazuje układ AI, którego gracz jeszcze nie odkrył — używać na grze testowej).
 //
 // Wywołanie: `csWorlds()` / `csPeek()` / `csArchetypes()` (window) albo `KOSMOS.debug.csWorlds()` itd.
 // Importowalne pod node (bez THREE) — keeper colony_sphere_seeds_smoke wykonuje oba pomocniki.
@@ -25,7 +29,7 @@ import { SURFACE_SEED_KINDS } from '../utils/SurfaceSeed.js';
 import { BODY_ARCHETYPES, ARCHETYPE_FAMILIES } from '../data/BodyArchetypes.js';
 import { familyOf, planetoidPaletteOf } from '../utils/BodyArchetypeLogic.js';
 import { HOMEWORLD_TEMP_MIN_C, HOMEWORLD_TEMP_MAX_C } from '../utils/HomeworldClimate.js';
-import { csSurface, csSurfaceAll } from './SurfacePreviewDebug.js';   // CS-4a — podgląd powierzchni
+import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';   // CS-4a / CS-4b — podgląd powierzchni + stan cache
 
 function bodyTypeOf(body, kind) {
   if (kind === 'planet')    return body.planetType ?? '?';
@@ -258,5 +262,18 @@ export function colonySphereDebugHelpers() {
     console.log('[csLifeTick]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll };
+  // CS-4b — csNextSystem(): następny wygenerowany układ (kolejność id), cyklicznie.
+  const csNextSystem = () => {
+    const K = window.KOSMOS ?? {};
+    const ssm = K.starSystemManager;
+    const ids = (ssm?.getAllSystems?.() ?? []).map(sd => String(sd.systemId ?? sd.id)).filter(Boolean).sort();
+    const from = K.activeSystemId ?? 'sys_home';
+    if (ids.length < 2) { console.warn('[csNextSystem] brak innego wygenerowanego układu', ids); return { from, to: null, systems: ids.length }; }
+    const to = ids[(ids.indexOf(String(from)) + 1) % ids.length];
+    const ok = ssm.switchActiveSystem(to) === true;
+    const summary = { from, to: ok ? to : null, systems: ids.length, index: ids.indexOf(to) + 1 };
+    console.log('[csNextSystem]', JSON.stringify(summary));
+    return summary;
+  };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll, csCache, csNextSystem };
 }

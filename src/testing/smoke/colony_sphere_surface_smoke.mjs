@@ -18,7 +18,8 @@
 //     tidally_locked strona nocna lodowa (woda tylko w terminatorze, ≈ ½ ziaren — CS-4a tuning); icy_cracked ma
 //     lineae; jungle: las dominuje.
 // B6  bakeEquirect vs evalAt w środkach pikseli: zgodność biomu ≥ 99% (trygonometria vs arytmetyka, kwantyzacja 8 bit).
-// B7  Bez podpięcia: żaden plik gry poza src/debug/ nie importuje SurfaceField / SurfacePreviewLogic (świadek: debug
+// B7  Bez podpięcia: żaden plik gry poza src/debug/ (i od CS-4b SurfaceCache + surface.worker) nie importuje SurfaceField /
+//     SurfacePreviewLogic (świadek: debug
 //     importuje); GameScene ma tylko aliasy csSurface / csSurfaceAll. Literały złotego kąta = Math.cos/sin (test).
 // B8  Pomocniki konsoli: SurfacePreviewDebug importowalny pod node; previewBody na ciele z ziarnem; helpers CS
 //     zwracają csSurface / csSurfaceAll.
@@ -237,7 +238,11 @@ function walk(dir, out = []) {
 }
 const files = walk(path.join(REPO, 'src')).map(p => path.relative(REPO, p).replace(/\\/g, '/'));
 const importers = files.filter(f => /(SurfaceField|SurfacePreviewLogic)\.js['"]/.test(strip(read(f))));
-const wired = importers.filter(f => !f.startsWith('src/debug/') && !f.startsWith('src/testing/') && f !== 'src/utils/SurfacePreviewLogic.js');
+// CS-4b: SurfaceCache (jedyne wejście do map) i jego worker importują SurfaceField z założenia; ich własny brak
+// podpięcia pilnuje colony_sphere_cache_smoke (C6).
+const CS4B_OWNERS = ['src/systems/SurfaceCache.js', 'src/workers/surface.worker.js'];
+const wired = importers.filter(f => !f.startsWith('src/debug/') && !f.startsWith('src/testing/') && f !== 'src/utils/SurfacePreviewLogic.js'
+  && !CS4B_OWNERS.includes(f));
 assert(importers.includes('src/debug/SurfacePreviewDebug.js'), 'świadek: SurfacePreviewDebug importuje SurfaceField');
 assert(wired.length === 0, `żaden plik gry (systems / renderer / ui / scenes / …) nie importuje SurfaceField${wired.length ? ' — ' + wired.join(', ') : ''}`);
 const gs = strip(read('src/scenes/GameScene.js'));

@@ -185,6 +185,7 @@ import { shipHologramDebugHelpers } from '../debug/ShipHologramDebug.js'; // ARC
 import { warDebugHelpers } from '../debug/WarDebug.js';   // ARC KONSOLE K2 (Finding 735) — wymuś starcie / desant tylko z konsoli przeglądarki
 import { civConsoleDebugHelpers } from '../debug/CivConsoleDebug.js';   // ARC KONSOLE K5 — pomocniki bramki Cywilizacji / Dysona
 import { colonySphereDebugHelpers } from '../debug/ColonySphereDebug.js'; // ARC COLONY SPHERE CS-3a — csWorlds() / csPeek() (bez cudzysłowów)
+import { SurfaceCache } from '../systems/SurfaceCache.js'; // ARC COLONY SPHERE CS-4b — mapy powierzchni (worker + LRU); dziś tylko podgląd debug
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -2450,6 +2451,12 @@ export class GameScene {
     window.csLifeTick   = window.KOSMOS.debug?.csLifeTick;     // Finding 770 — jedno sprawdzenie LifeSystem teraz
     window.csSurface    = window.KOSMOS.debug?.csSurface;      // CS-4a — podgląd powierzchni zaznaczonego ciała
     window.csSurfaceAll = window.KOSMOS.debug?.csSurfaceAll;   // CS-4a — miniatury wszystkich ciał układu
+    // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
+    // Dziś czyta go tylko podgląd debug (csSurface / csSurfaceAll / csCache); renderer podepnie CS-6 / CS-7.
+    window.KOSMOS.surfaceCache?.dispose?.();
+    window.KOSMOS.surfaceCache = new SurfaceCache();
+    window.csCache      = window.KOSMOS.debug?.csCache;        // CS-4b — stan SurfaceCache
+    window.csNextSystem = window.KOSMOS.debug?.csNextSystem;   // CS-4b — widok na następny wygenerowany układ (kontrola)
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,
