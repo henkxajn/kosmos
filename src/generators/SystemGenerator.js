@@ -14,6 +14,7 @@ import { GAME_CONFIG, STAR_TYPES, PLANET_TYPE_CONFIG } from '../config/GameConfi
 import EntityManager     from '../core/EntityManager.js';
 import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition, getMoonComposition, WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
+import { combineSeeds, hashStringToInt } from '../utils/SeedMath.js';
 
 // Bonus cieplarniany wg typu atmosfery (°C)
 // thick zachowany dla backward compat (stare save'y)
@@ -52,11 +53,110 @@ function hashString(str) {
   return h;
 }
 
+// ARC COLONY SPHERE CS-3a (D-CS-17) — sól strumienia RNG układu z galaxySeed. Inna niż sól
+// ziarna powierzchni (SurfaceSeed.js), więc fizyka i powierzchnia ciała nie korelują.
+const SYSTEM_RNG_SALT = 0x5E5D0017;
+// CS-3a-fix — osobny strumień mutacji planety domowej po generacji (temperatura, złoża Ti): ten sam
+// galaxySeed → identyczny świat startowy, a strumień ciał układu zostaje nietknięty.
+const HOMEWORLD_MUTATION_SALT = 0x5E5D0018;
+const HOME_SYSTEM_RNG_ID = 'sys_home';
+
+/**
+ * CS-3a-fix — AWARYJNE ziarno galaktyki. Używane WYŁĄCZNIE, gdy świat jest seedowany, a galaxySeed nie
+ * dotarł do generatora (uszkodzony zapis albo błąd kolejności startu). Nigdy po cichu: każde użycie
+ * zwiększa licznik `SystemGenerator.emergencySeedUses()` i loguje `console.error('[CS-3a] …')`
+ * (raz na układ). Generacja i skan dostają to samo ziarno, więc dalej są spójne — ale NIE jest to
+ * ziarno dotychczasowe `hashString(starId)`.
+ */
+export const EMERGENCY_GALAXY_SEED = 0;
+const _emergency = { uses: 0, logged: new Set() };
+
 export class SystemGenerator {
+
+  /**
+   * D-CS-17: ziarno strumienia RNG układu = f(galaxySeed, systemId). Jedno źródło dla układu
+   * domowego (`'sys_home'`) i obcych (`galaxyStar.id`). Zwraca int32 (mulberry32 i tak robi `| 0`).
+   */
+  static seededRngSeed(galaxySeed, systemId) {
+    return combineSeeds(SYSTEM_RNG_SALT, galaxySeed | 0, hashStringToInt(systemId)) | 0;
+  }
+
+  /**
+   * CS-3a-fix — kontekst ziarna układów ŚWIATA: `{ galaxySeed, seeded }` z rekordu `galaxyData`
+   * (jedyny właściciel: `seed` + stempel `seededSystems`, oba w zapisie). Tryb świata zapada RAZ przy
+   * jego tworzeniu — bieżąca flaga FEATURES.seededSystems NIE zmienia trybu istniejącego świata
+   * (inaczej flaga przełączona po starcie daje skan niezgodny z generacją: bramka CS-3a krok 5).
+   *   stempel `seededSystems: true` → seedowany (brak liczby `seed` → ścieżka awaryjna z błędem);
+   *   rekord z seedem bez stempla → świat dotychczasowy (nowa gra przy OFF, każdy stary zapis);
+   *   brak rekordu świata → decyduje flaga (ON → seedowany bez seeda → ścieżka awaryjna, nie cicha).
+   */
+  static worldSeedContext(galaxyData) {
+    const seed = galaxyData?.seed;
+    const galaxySeed = (typeof seed === 'number' && Number.isFinite(seed)) ? seed : null;
+    if (galaxyData?.seededSystems === true) return { galaxySeed, seeded: true };
+    if (galaxyData && galaxySeed !== null) return { galaxySeed, seeded: false };
+    return { galaxySeed: null, seeded: GAME_CONFIG.FEATURES.seededSystems === true };
+  }
+
+  /** CS-3a-fix — ile razy użyto ścieżki awaryjnej (świat seedowany bez galaxySeed). Keeper / sonda: 0. */
+  static emergencySeedUses() { return _emergency.uses; }
+
+  /**
+   * CS-3a-fix — galaxySeed do losowania układu `systemId` w kontekście `seedCtx`, albo null = ścieżka
+   * dotychczasowa (świat nieseedowany / brak kontekstu — dawne API bez drugiego argumentu).
+   */
+  _galaxySeedFor(seedCtx, systemId) {
+    if (seedCtx?.seeded !== true) return null;
+    const g = seedCtx.galaxySeed;
+    if (typeof g === 'number' && Number.isFinite(g)) return g;
+    _emergency.uses++;
+    if (!_emergency.logged.has(systemId)) {
+      _emergency.logged.add(systemId);
+      console.error(`[CS-3a] świat seedowany bez galaxySeed (${systemId}) — awaryjne ziarno `
+        + `EMERGENCY_GALAXY_SEED=${EMERGENCY_GALAXY_SEED}, NIE ziarno dotychczasowe. Błąd kolejności startu albo uszkodzony zapis.`);
+    }
+    return EMERGENCY_GALAXY_SEED;
+  }
+
+  /**
+   * Ziarno strumienia obcego układu — JEDYNA decyzja dla generateForStar i peekCountsForStar
+   * (liczby skanu muszą się zgadzać z generacją). Świat nieseedowany → dotychczasowe hashString(starId).
+   */
+  _foreignRngSeed(starId, seedCtx) {
+    const g = this._galaxySeedFor(seedCtx, starId);
+    return g === null ? hashString(starId) : SystemGenerator.seededRngSeed(g, starId);
+  }
+
+  /** Ziarno strumienia układu domowego: null = dotychczasowy, nieseedowany Math.random. */
+  _homeRngSeed(seedCtx) {
+    const g = this._galaxySeedFor(seedCtx, HOME_SYSTEM_RNG_ID);
+    return g === null ? null : SystemGenerator.seededRngSeed(g, HOME_SYSTEM_RNG_ID);
+  }
+
+  /** CS-3a-fix — ziarno strumienia mutacji planety domowej (null = Math.random wołającego, jak dotąd). */
+  _homeMutationRngSeed(seedCtx) {
+    const g = this._galaxySeedFor(seedCtx, HOME_SYSTEM_RNG_ID);
+    return g === null ? null : combineSeeds(HOMEWORLD_MUTATION_SALT, g | 0, hashStringToInt(HOME_SYSTEM_RNG_ID)) | 0;
+  }
 
   // Wygeneruj kompletny układ: gwiazda + protoplanety + księżyce + dysk + pasy
   // Zwraca: { star, planets, moons, planetesimals, asteroids, comets, planetoids }
-  generate() {
+  // CS-3a (D-CS-17): `{ galaxySeed, seeded: true }` (decyzja świata, nie bieżąca flaga) → cała generacja
+  // ciał (z depozytami) na mulberry32(seededRngSeed(galaxySeed, 'sys_home')), jak generateForStar.
+  // `seeded` różne od true → dokładnie dotychczasowa ścieżka (Math.random bez podmiany).
+  generate(seedCtx = {}) {
+    const rngSeed = this._homeRngSeed(seedCtx);
+    if (rngSeed === null) return this._generateHomeBodies();
+    const origRandom = Math.random;
+    Math.random = mulberry32(rngSeed);
+    try {
+      return this._generateHomeBodies();
+    } finally {
+      Math.random = origRandom;
+    }
+  }
+
+  _generateHomeBodies() {
     const star          = this.generateStar();
     const planets       = this.generateProtoPlanets(star);
     const moons         = this.generateMoonsForPlanets(planets, star);
@@ -686,8 +786,25 @@ export class SystemGenerator {
   // Wybiera najlepszą planetę rocky w HZ i ustawia lifeScore=100.
   // DiskPhaseSystem = MATURE od startu (stabilny układ, bez perturbacji/kolizji).
   // Zwraca standardowy wynik + civPlanetId (id planety z cywilizacją).
-  generateCivScenario() {
-    const result = this.generate();
+  // CS-3a: `opts` = kontekst ziarna świata `{ galaxySeed, seeded }` przekazywany do generate() (D-CS-17).
+  // CS-3a-fix: przy `seeded: true` mutacje planety domowej po generacji (makeHomeworldBreathable — temperatura,
+  // regeneracja złóż Ti) biegną na OSOBNYM strumieniu z galaxySeed (HOMEWORLD_MUTATION_SALT), więc ten sam
+  // galaxySeed daje identyczny świat startowy. Inaczej — Math.random wołającego, jak dotąd (OFF bit w bit).
+  generateCivScenario(opts = {}) {
+    const result = this.generate(opts);
+    const mutSeed = this._homeMutationRngSeed(opts);
+    if (mutSeed === null) return this._applyCivHomeworld(result);
+    const origRandom = Math.random;
+    Math.random = mulberry32(mutSeed);
+    try {
+      return this._applyCivHomeworld(result);
+    } finally {
+      Math.random = origRandom;
+    }
+  }
+
+  // Mutacje planety cywilizacji po generacji układu domowego (wydzielone z generateCivScenario, CS-3a-fix).
+  _applyCivHomeworld(result) {
     const { star, planets } = result;
     const hz = star.habitableZone;
 
@@ -814,9 +931,11 @@ export class SystemGenerator {
   // Seeded PRNG z galaxyStar.id → deterministyczny układ.
   // Parametryzacja: typ spektralny → masa/luminosity → HZ → typy planet.
   // Encje dodawane do EntityManager (jak generate()).
-  generateForStar(galaxyStar) {
-    // Seeded PRNG → deterministyczna generacja
-    const seed = hashString(galaxyStar.id);
+  // CS-3a (D-CS-17): `seedCtx` = kontekst ziarna świata `{ galaxySeed, seeded }`
+  // (SystemGenerator.worldSeedContext(galaxyData)); brak → ziarno dotychczasowe (dawne API).
+  generateForStar(galaxyStar, seedCtx) {
+    // Seeded PRNG → deterministyczna generacja (ziarno: _foreignRngSeed — wspólne z peekCountsForStar)
+    const seed = this._foreignRngSeed(galaxyStar.id, seedCtx);
     const rng  = mulberry32(seed);
 
     // Nadpisz Math.random tymczasowo (generate() i podsystemy używają Math.random)
@@ -878,8 +997,10 @@ export class SystemGenerator {
   //   (każdy generator zużywa RNG — zmiana kolejności/pominięcie = rozjazd liczb).
   //   Pomijamy tylko EntityManager.add() i _generateDepositsForAll() (są PO generacji ciał,
   //   nie wpływają na długości tablic). generateId() jedynie inkrementuje licznik (bez RNG).
-  peekCountsForStar(galaxyStar) {
-    const seed = hashString(galaxyStar.id);
+  //   CS-3a: ziarno WYŁĄCZNIE przez _foreignRngSeed (to samo co generateForStar) — wołający podaje
+  //   ten sam kontekst świata, którego użyłby generateAndRegister (worldSeedContext(galaxyData)).
+  peekCountsForStar(galaxyStar, seedCtx) {
+    const seed = this._foreignRngSeed(galaxyStar.id, seedCtx);
     const rng  = mulberry32(seed);
     const origRandom = Math.random;
     Math.random = rng;

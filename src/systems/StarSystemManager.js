@@ -14,6 +14,7 @@ import EntityManager from '../core/EntityManager.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { DepositSystem }   from './DepositSystem.js';
 import { isSystemExplored, HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
+import { assignSurfaceSeeds } from '../utils/SurfaceSeed.js';
 
 export class StarSystemManager {
   constructor() {
@@ -91,17 +92,23 @@ export class StarSystemManager {
    *   `markSystemExplored` — jedynego pisarza kanonu.
    *
    * @param {Object} galaxyStar — wpis z GalaxyGenerator (id, name, spectralType, mass, luminosity, ...)
+   * @param {Object} [galaxyData] — rekord świata (`seed` + stempel `seededSystems`), z którego pochodzi
+   *   `galaxyStar`. Wołający, który go ma, podaje go JAWNIE (CS-3a-fix); domyślnie leniwy dostęp 4X.
    * @returns {StarSystemData}
    */
-  generateAndRegister(galaxyStar) {
+  generateAndRegister(galaxyStar, galaxyData = window.KOSMOS?.galaxyData) {
     const systemId = galaxyStar.id;
 
     // Już wygenerowany?
     if (this._systems.has(systemId)) return this._systems.get(systemId);
 
-    // Wygeneruj układ z seeded PRNG (deterministyczny z galaxyStar.id)
+    // Wygeneruj układ z seeded PRNG (deterministyczny z galaxyStar.id; w świecie seedowanym także
+    // z galaxySeed — D-CS-17). Tryb i seed pochodzą z REKORDU ŚWIATA (worldSeedContext), nie z bieżącej
+    // flagi — ta sama droga co ObservatorySystem → peekCountsForStar (CS-3a-fix).
+    const seedCtx = SystemGenerator.worldSeedContext(galaxyData);
+    const galaxySeed = seedCtx.galaxySeed;
     const generator = new SystemGenerator();
-    const result = generator.generateForStar(galaxyStar);
+    const result = generator.generateForStar(galaxyStar, seedCtx);
 
     // Oznacz encje systemId
     result.star.systemId = systemId;
@@ -110,6 +117,10 @@ export class StarSystemManager {
     result.planetoids.forEach(p => p.systemId = systemId);
     result.asteroids.forEach(a => a.systemId = systemId);
     result.comets.forEach(c => c.systemId = systemId);
+
+    // CS-3a — ziarna powierzchni: czysty hash PO generacji (nie rzut ze strumienia układu),
+    // ordinal = indeks w tablicy generatora (kolejność wstawienia do EntityManager).
+    assignSurfaceSeeds({ planet: result.planets, moon: result.moons, planetoid: result.planetoids }, galaxySeed);
 
     const sysData = {
       systemId,
@@ -133,6 +144,21 @@ export class StarSystemManager {
     });
 
     return sysData;
+  }
+
+  /**
+   * CS-3a — `surfaceSeed ??=` dla WSZYSTKICH planet / księżyców / planetoid w EntityManager.
+   * Wołane raz przy starcie sceny, gdy `galaxyData.seed` już istnieje: nowa gra (układ domowy
+   * powstaje PRZED galaktyką) i wczytanie (stary zapis bez ziaren). Ordinal = indeks ciała danego
+   * rodzaju w jego układzie w kolejności EntityManager == kolejności zapisu (SurfaceSeed.js).
+   * @returns {number} liczba nadanych ziaren
+   */
+  assignMissingSurfaceSeeds(galaxySeed) {
+    return assignSurfaceSeeds({
+      planet:    EntityManager.getByType('planet'),
+      moon:      EntityManager.getByType('moon'),
+      planetoid: EntityManager.getByType('planetoid'),
+    }, galaxySeed);
   }
 
   // ── Przełączanie aktywnego układu ──────────────────────────────────────────

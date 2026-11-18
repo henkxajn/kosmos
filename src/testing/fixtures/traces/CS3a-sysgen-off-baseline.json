@@ -1,0 +1,104 @@
+{
+ "recordedFrom": "bf5a08d",
+ "schema": {
+  "stars": [
+   "sys_001",
+   "sys_017",
+   "sys_037",
+   "sys_052",
+   "sys_071"
+  ],
+  "homeSeeds": [
+   "cs3a-home-1",
+   "cs3a-home-2",
+   "cs3a-home-3"
+  ],
+  "smallBodies": false
+ },
+ "digest": {
+  "foreign": {
+   "sys_001": {
+    "sha256": "7468bc7fd2c43f588ca6f65b3ca90244b1eb5aab29c2583277c31919cdae14bf",
+    "planets": 8,
+    "moons": 14,
+    "planetoids": 21
+   },
+   "sys_017": {
+    "sha256": "19953dfbfb526d6bd0d3293da4f7188011e62608bd58fa236a1515986eae6432",
+    "planets": 10,
+    "moons": 19,
+    "planetoids": 20
+   },
+   "sys_037": {
+    "sha256": "4ceafab76d37e906deb7faaa9022011c16e2de64909cf8cb31089a2ee17f183f",
+    "planets": 5,
+    "moons": 9,
+    "planetoids": 36
+   },
+   "sys_052": {
+    "sha256": "b8874b009dc1a07fb719a63aa7b2fa86a36d0c1c2ca1c85941dfc29fb2949e99",
+    "planets": 9,
+    "moons": 17,
+    "planetoids": 26
+   },
+   "sys_071": {
+    "sha256": "49ae92b803a612f27a394cde91e8e1b6287ead0deca8e941a3671378738efffa",
+    "planets": 11,
+    "moons": 19,
+    "planetoids": 39
+   }
+  },
+  "peek": {
+   "sys_001": {
+    "planets": 8,
+    "moons": 14,
+    "planetoids": 21,
+    "total": 43
+   },
+   "sys_017": {
+    "planets": 10,
+    "moons": 19,
+    "planetoids": 20,
+    "total": 49
+   },
+   "sys_037": {
+    "planets": 5,
+    "moons": 9,
+    "planetoids": 36,
+    "total": 50
+   },
+   "sys_052": {
+    "planets": 9,
+    "moons": 17,
+    "planetoids": 26,
+    "total": 52
+   },
+   "sys_071": {
+    "planets": 11,
+    "moons": 19,
+    "planetoids": 39,
+    "total": 69
+   }
+  },
+  "home": {
+   "cs3a-home-1": {
+    "sha256": "6331e901657e942e57425b725ea38990880edbdc9e4b45fa11fc9054ef82e59a",
+    "planets": 5,
+    "moons": 11,
+    "planetoids": 19
+   },
+   "cs3a-home-2": {
+    "sha256": "c57f893b02153f8a461f386f2361720ca39ce3b013560ee8d87012fe847ff724",
+    "planets": 6,
+    "moons": 18,
+    "planetoids": 39
+   },
+   "cs3a-home-3": {
+    "sha256": "30b1d0a9a731bfac60c15bdeb6686291080ca126a8942594173afe18dab8dfab",
+    "planets": 11,
+    "moons": 17,
+    "planetoids": 32
+   }
+  }
+ }
+}

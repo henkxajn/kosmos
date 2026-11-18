@@ -620,7 +620,8 @@ export class EmpireColonyBootstrap {
     // Wygeneruj system (uses generateForStar w środku — deterministic seed
     // z hashString(galaxyStar.id), seeded PRNG, Math.random temporarily overridden
     // w try/finally — bezpieczne dla reszty kodu).
-    const sysData = ssMgr.generateAndRegister(galaxyStar);
+    // CS-3a-fix: rekord świata (seed + tryb układów) podany JAWNIE — ten sam, z którego wzięto galaxyStar.
+    const sysData = ssMgr.generateAndRegister(galaxyStar, galaxy);
 
     // Gracz nie ma free intel na system AI — musi zrobić własny recon.
     // (IntelSystem.initForAllEmpires inicjalizuje level='unknown'.)

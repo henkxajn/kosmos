@@ -46,6 +46,14 @@ export const GAME_CONFIG = {
     // Planetoidy (teksturowane, grywalne) zostają. Flip true → pełna generacja.
     // Zero migracji save (i tak nie zapisywane). RNG generatorów nietknięty.
     smallBodies:          false,
+    // ── ARC COLONY SPHERE CS-3a (D-CS-17) — fizyczne ciała różne w każdej nowej grze ──
+    // ON: strumień RNG obcego układu = f(galaxySeed, starId) zamiast samego hashString(starId),
+    //     a układ domowy losowany z mulberry32(f(galaxySeed, 'sys_home')) zamiast gołego Math.random.
+    //     peekCountsForStar idzie TĄ SAMĄ ścieżką ziarna (SystemGenerator._foreignRngSeed).
+    // OFF (default): generacja bit w bit jak przed krokiem (keeper colony_sphere_seeds_smoke S2,
+    //     ślad traces/CS3a-sysgen-off-baseline.json). Stare zapisy nietknięte w obu stanach —
+    //     ciała są zapisywane w całości. Zmiana w konsoli działa dla NOWEJ gry / nowo generowanego układu.
+    seededSystems:        false,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
     // ⚠ W3-8 — `fleetMaterialization` i `unifiedAggregator` USUNIĘTE razem z warstwą

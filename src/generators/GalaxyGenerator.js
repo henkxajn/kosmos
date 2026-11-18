@@ -97,9 +97,13 @@ export class GalaxyGenerator {
    *   `GalaxyGenerator.mintSeed()`. Wczytanie: seed z zapisanego `galaxyData`.
    * @param {string} [starName] — nazwa gwiazdy gracza (dla home system)
    * @param {string} [spectralType] — typ spektralny gwiazdy gracza
-   * @returns {{seed: number, systems: Array}} GalaxyData — `seed` DO UTRWALENIA
+   * @param {{seededSystems?: boolean}} [opts] — ARC COLONY SPHERE CS-3a-fix: `seededSystems: true` stempluje
+   *   świat (`galaxyData.seededSystems = true`) — ciała układów obcych losowane z `seed` (D-CS-17). Decyzja
+   *   zapada RAZ, przy tworzeniu świata (GameScene.start / GameCore.boot), i jedzie z `galaxyData` do zapisu;
+   *   generacja i skan czytają stempel, nie bieżącą flagę. Brak / false → pole NIE powstaje (kształt jak dotąd).
+   * @returns {{seed: number, systems: Array, seededSystems?: true}} GalaxyData — `seed` DO UTRWALENIA
    */
-  static generate(seed, starName = 'Sol', spectralType = 'G') {
+  static generate(seed, starName = 'Sol', spectralType = 'G', { seededSystems = false } = {}) {
     // Loud-fail zamiast cichego fallbacku: seed nie-liczbowy dałby albo stałą
     // galaktykę (dokładnie ten defekt, który GALAXY_SEED naprawia), albo galaktykę
     // bez utrwalonego seeda (R2). Wołających jest dokładnie trzech i wszyscy podają
@@ -203,6 +207,8 @@ export class GalaxyGenerator {
 
     // `seed` w zwrotce = wartość UŻYTA przez PRNG (znormalizowana), nie surowy argument.
     // To ona jedzie do zapisu i to z niej odtwarzamy galaktykę przy wczytaniu.
-    return { seed: seedI32, systems };
+    const galaxy = { seed: seedI32, systems };
+    if (seededSystems === true) galaxy.seededSystems = true;   // CS-3a-fix — stempel świata (tylko ON)
+    return galaxy;
   }
 }

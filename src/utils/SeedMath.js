@@ -35,6 +35,23 @@ export function mixSeed(n) {
   return (z ^ (z >>> 15)) >>> 0;
 }
 
+/**
+ * Łączy KILKA strukturalnych wejść w jedno ziarno uint32 (ARC COLONY SPHERE, CS-3a).
+ *
+ * `mixSeed` przyjmuje jedną liczbę; tu potrzebujemy np. (sól, galaxySeed, hash systemId, rodzaj,
+ * ordinal). Łańcuch finalizerów: każde wejście najpierw przez `mixSeed`, potem XOR do stanu i
+ * znów finalizer — kolejność wejść MA znaczenie (combineSeeds(a, b) ≠ combineSeeds(b, a)), a dwa
+ * bliskie wejścia (ordinal 0 i 1) dają rozrzucone wyniki. Bez stanu, bez `Math.random`.
+ *
+ * @param {...number} parts — liczby całkowite (ujemne int32 są poprawne)
+ * @returns {number} uint32
+ */
+export function combineSeeds(...parts) {
+  let h = 0x9E3779B9;
+  for (const p of parts) h = mixSeed(((h ^ mixSeed(p)) >>> 0) + 0x6D2B79F5);
+  return h;
+}
+
 /** Hash stringa do int32 — ten sam wariant, którego używa reszta projektu (djb2-ish). */
 export function hashStringToInt(str) {
   const s = String(str ?? '');

@@ -7,6 +7,7 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { AudioSystem } from './systems/AudioSystem.js';
 import { loadTheme, THEME } from './config/ThemeConfig.js';
 import { initCrt } from './ui/CrtOverlay.js';
+import { GAME_CONFIG } from './config/GameConfig.js';
 
 // Inicjalizacja i18n — import wymusza rejestrację słowników
 import './i18n/i18n.js';
@@ -23,6 +24,11 @@ window.KOSMOS = {
     fleetMapLabelsVisible: true,   // Obraz Operacyjny F1 — plakietki flotowe na mapie 3D
   },
 };
+
+// ARC COLONY SPHERE CS-3a — ten sam obiekt, który GameScene.start() i tak wystawia jako KOSMOS.gameConfig,
+// dostępny JUŻ na ekranie tytułowym: flaga ścieżki nowej gry (np. FEATURES.seededSystems) musi być ustawiona
+// PRZED „Nowa gra”, a każde wyjście do tytułu przeładowuje stronę (flagi wracają z pliku).
+window.KOSMOS.gameConfig = GAME_CONFIG;
 
 // Uruchom ekran tytułowy
 const uiCanvas    = document.getElementById('ui-canvas');

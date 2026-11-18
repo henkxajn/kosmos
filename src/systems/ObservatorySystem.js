@@ -543,7 +543,8 @@ export class ObservatorySystem {
     }
     const gs = this._getGalaxyStar(systemId);
     if (!gs) return null;
-    return new SystemGenerator().peekCountsForStar(gs);
+    // CS-3a(-fix): ten sam kontekst świata (seed + tryb z galaxyData), którego użyje StarSystemManager.generateAndRegister.
+    return new SystemGenerator().peekCountsForStar(gs, SystemGenerator.worldSeedContext(window.KOSMOS?.galaxyData));
   }
 
   // ── Tick skanowania ───────────────────────────────────────────────────

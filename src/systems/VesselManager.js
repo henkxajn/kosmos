@@ -3116,7 +3116,7 @@ export class VesselManager {
 
       // Leniwa generacja układu (jeśli jeszcze nie wygenerowany)
       if (ssMgr && targetStar && !ssMgr.getSystem(m.toSystemId)) {
-        ssMgr.generateAndRegister(targetStar);
+        ssMgr.generateAndRegister(targetStar, gd);   // CS-3a-fix: rekord świata jawnie
       }
 
       // Finding 187 — TO PRZYLOT ODKRYWA UKŁAD, NIE JEGO GENERACJA. Dwie rzeczy naraz:

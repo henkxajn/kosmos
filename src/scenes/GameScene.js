@@ -184,6 +184,7 @@ import { consoleKitDebugHelpers } from '../debug/ConsoleKitDebug.js';   // ARC K
 import { shipHologramDebugHelpers } from '../debug/ShipHologramDebug.js'; // ARC KONSOLE K1a — podgląd hologramu statku
 import { warDebugHelpers } from '../debug/WarDebug.js';   // ARC KONSOLE K2 (Finding 735) — wymuś starcie / desant tylko z konsoli przeglądarki
 import { civConsoleDebugHelpers } from '../debug/CivConsoleDebug.js';   // ARC KONSOLE K5 — pomocniki bramki Cywilizacji / Dysona
+import { colonySphereDebugHelpers } from '../debug/ColonySphereDebug.js'; // ARC COLONY SPHERE CS-3a — csWorlds() / csPeek() (bez cudzysłowów)
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -222,10 +223,20 @@ export class GameScene {
     // Generowanie / przywrócenie układu
     window._updateLoading?.(10, 'Generowanie układu...');
     const savedData = window.KOSMOS?.savedData || null;
+    // CS-3a (D-CS-17) — przy seededSystems ON nowa gra mintuje seed galaktyki PRZED układem domowym
+    // (układ domowy jest z niego losowany), a mint niżej (GALAXY_SEED, gałąź isNewGame) bierze TĘ
+    // SAMĄ wartość. OFF → null: kolejność i liczba rzutów Math.random dokładnie jak dotąd.
+    // CS-3a-fix — TO jest jedyna decyzja o trybie układów świata: flaga czytana RAZ, tutaj. Pre-mint ≠ null
+    // ⇔ świat seedowany: dom losowany z tego seeda, a galaktyka dostaje stempel `seededSystems` (niżej) —
+    // generacja i skan czytają potem stempel z galaxyData, nie bieżącą flagę (przełączenie po starcie nic
+    // nie zmienia w istniejącym świecie).
+    const preMintedGalaxySeed = (!savedData && GAME_CONFIG.FEATURES.seededSystems)
+      ? GalaxyGenerator.mintSeed()
+      : null;
     const { star, planets, moons = [], planetesimals, asteroids = [], comets = [], planetoids = [] } =
       savedData
         ? this._restoreSystem(savedData, cx, cy)
-        : this._generateFreshSystem(cx, cy);
+        : this._generateFreshSystem(cx, cy, preMintedGalaxySeed);
 
     this.star = star;
 
@@ -637,6 +648,9 @@ export class GameScene {
       ...warDebugHelpers({ getUIManager: () => this.uiManager }),
       // ARC KONSOLE K5 — KOSMOS.debug.civConsole.state() / stageDyson() / stageStock(1) / stageStock(0) / unlockFactions() — src/debug/CivConsoleDebug.js.
       ...civConsoleDebugHelpers({ getRenderer: () => this.threeRenderer, getUIManager: () => this.uiManager }),
+      // ARC COLONY SPHERE CS-3a — KOSMOS.debug.csWorlds() (ciała aktywnego układu: rodzaj, typ, ordinal, surfaceSeed),
+      //   csPeek() (peekCountsForStar vs encje dla wygenerowanych układów obcych); aliasy window.csWorlds / window.csPeek.
+      ...colonySphereDebugHelpers(),
       // #640 / #675 — okna ogłoszeń (bez cudzysłowów; pokrętła na sesję — F5 przywraca wartości domyślne):
       //   KOSMOS.debug.battleGrace(1.5)   — okno łaski przed banerem i linią bitwy w rundach oglądanego starcia (0 = bez okna,
       //                                     ogłoszenie od razu — jak przed krokiem); bez argumentu — odczyt (rundy i ms).
@@ -2405,7 +2419,8 @@ export class GameScene {
     const isNewGame = !savedData?.civ4x?.galaxyData;
     if (isNewGame) {
       window.KOSMOS.galaxyData = GalaxyGenerator.generate(
-        GalaxyGenerator.mintSeed(), star.name, star.spectralType
+        preMintedGalaxySeed ?? GalaxyGenerator.mintSeed(), star.name, star.spectralType,
+        { seededSystems: preMintedGalaxySeed !== null }   // CS-3a-fix — stempel świata (ta sama decyzja co dom)
       );
       console.log(`[GALAXY_SEED] Nowa galaktyka — seed ${window.KOSMOS.galaxyData.seed}`);
     } else {
@@ -2416,6 +2431,16 @@ export class GameScene {
     // zmintowane albo wczytane (obie gałęzie wyżej). Wczytanie nie przechodzi przez switchSystem
     // (StarSystemManager.restore wymusza dom), więc to wywołanie pokrywa ścieżkę wczytania. Przy fladze OFF — no-op.
     this.threeRenderer?.setSkyGalaxy?.(window.KOSMOS.galaxyData);
+
+    // CS-3a — ziarna powierzchni (`??=`) dla wszystkich ciał w EntityManager: nowa gra (układ domowy
+    // powstał przed galaktyką) i wczytanie (stary zapis bez ziaren). Obce układy generowane później
+    // dostają ziarna w StarSystemManager.generateAndRegister.
+    const surfaceSeedsAssigned = this.starSystemManager.assignMissingSurfaceSeeds(window.KOSMOS.galaxyData?.seed);
+    console.log(`[CS-3a] surfaceSeed nadane: ${surfaceSeedsAssigned} · seededSystems=${GAME_CONFIG.FEATURES.seededSystems}`
+      + ` · świat=${window.KOSMOS.galaxyData?.seededSystems === true ? 'seedowany' : 'dotychczasowy'}`);
+    // Aliasy bramki: `csWorlds()` / `csPeek()` wprost w konsoli (bez KOSMOS.debug., bez argumentów).
+    window.csWorlds = window.KOSMOS.debug?.csWorlds;
+    window.csPeek   = window.KOSMOS.debug?.csPeek;
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,
@@ -4961,7 +4986,10 @@ export class GameScene {
 
   // ── Generowanie / przywracanie układu ─────────────────────────
 
-  _generateFreshSystem(cx, cy) {
+  // CS-3a: `galaxySeed` = seed zmintowany przed układem domowym (tylko seededSystems ON; inaczej null
+  // i generateCivScenario idzie dotychczasową, nieseedowaną ścieżką). POWER TEST zostaje nieseedowany.
+  // CS-3a-fix: `seeded` = (galaxySeed !== null) — ta sama decyzja świata co stempel galaktyki w start().
+  _generateFreshSystem(cx, cy, galaxySeed = null) {
     const generator = new SystemGenerator();
 
     // POWER TEST — scenariusz testowy z dużym układem
@@ -4969,7 +4997,7 @@ export class GameScene {
     const isBoosted   = window.KOSMOS?.scenario === 'civilization_boosted';
     const result = isPowerTest
       ? generator.generatePowerTestScenario()
-      : generator.generateCivScenario();
+      : generator.generateCivScenario({ galaxySeed: galaxySeed ?? undefined, seeded: galaxySeed !== null });
 
     // Zachowaj id planety z cywilizacją do auto-kolonizacji
     this._civPlanetId = result.civPlanetId;
@@ -5167,6 +5195,9 @@ export class GameScene {
       p.explored         = pd.explored         || false;
       p.analyzed         = pd.analyzed         ?? pd.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       p.systemId         = pd.systemId         ?? 'sys_home';
+      // CS-3a — ziarno powierzchni z zapisu; brak (stary zapis) → null, a `??=` nada je
+      // StarSystemManager.assignMissingSurfaceSeeds po ustaleniu galaxyData (start()).
+      p.surfaceSeed      = pd.surfaceSeed      ?? null;
       // Przywróć złoża z save (v6)
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));
@@ -5202,6 +5233,7 @@ export class GameScene {
       m.explored = md.explored || false;
       m.analyzed = md.analyzed ?? md.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       m.systemId = md.systemId ?? 'sys_home';
+      m.surfaceSeed = md.surfaceSeed ?? null;   // CS-3a
       // Przywróć złoża z save (v6)
       if (md.deposits?.length > 0) {
         m.deposits = md.deposits.map(d => ({ ...d }));
@@ -5233,6 +5265,7 @@ export class GameScene {
       p.explored = pd.explored || false;
       p.analyzed = pd.analyzed ?? pd.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       p.systemId = pd.systemId ?? 'sys_home';
+      p.surfaceSeed = pd.surfaceSeed ?? null;   // CS-3a
       // Przywróć złoża z save
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));

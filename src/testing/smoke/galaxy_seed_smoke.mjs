@@ -271,8 +271,16 @@ console.log('--- T9: niezmienniki strukturalne (mint tylko pod isNewGame; headle
   };
 
   const gameScene = read('scenes', 'GameScene.js');
+  // ARC COLONY SPHERE CS-3a (D-CS-17): przy FEATURES.seededSystems ON nowa gra mintuje seed PRZED
+  // układem domowym (układ domowy jest z niego losowany), a gałąź isNewGame zjada TĘ SAMĄ wartość
+  // (`preMintedGalaxySeed ?? GalaxyGenerator.mintSeed()`). Dlatego dwa miejsca w tekście, ale na
+  // każdej ścieżce co najwyżej JEDEN mint: pre-mint wyłącznie przy `!savedData` (podzbiór isNewGame)
+  // i fladze ON, a mint w gałęzi isNewGame tylko gdy pre-mintu nie było. Każde trzecie wywołanie
+  // albo pre-mint bez tych bramek łamie R2 → pin pada.
   const mintHits = (gameScene.match(/GalaxyGenerator\.mintSeed\(/g) ?? []).length;
-  ok('GameScene mintuje DOKŁADNIE raz', mintHits === 1);
+  ok('GameScene: dokładnie dwa miejsca mintu (pre-mint CS-3a + gałąź isNewGame)', mintHits === 2);
+  ok('pre-mint CS-3a bramkowany `!savedData && seededSystems` (podzbiór isNewGame, OFF = brak)',
+    /\(\s*!savedData\s*&&\s*GAME_CONFIG\.FEATURES\.seededSystems\s*\)\s*\?\s*GalaxyGenerator\.mintSeed\(\)/.test(gameScene));
 
   const iIf   = gameScene.indexOf('if (isNewGame) {', gameScene.indexOf('const isNewGame = !savedData?.civ4x?.galaxyData;'));
   const newBranch  = blockAt(gameScene, gameScene.indexOf('{', iIf));
@@ -282,6 +290,8 @@ console.log('--- T9: niezmienniki strukturalne (mint tylko pod isNewGame; headle
   ok('gałąź isNewGame istnieje i daje się wyciąć po nawiasach', newBranch.length > 0);
   ok('gałąź wczytania istnieje i daje się wyciąć po nawiasach', loadBranch.length > 0);
   ok('mint leży WEWNĄTRZ gałęzi isNewGame (R2)', newBranch.includes('GalaxyGenerator.mintSeed('));
+  ok('gałąź isNewGame mintuje tylko gdy nie było pre-mintu (jeden mint na ścieżkę)',
+    /preMintedGalaxySeed\s*\?\?\s*GalaxyGenerator\.mintSeed\(\)/.test(newBranch));
   // Sam mint nie wystarcza — wynik MUSI trafić do galaxyData, inaczej nie ma czego utrwalić.
   ok('gałąź isNewGame PRZYPISUJE wynik do window.KOSMOS.galaxyData',
     /window\.KOSMOS\.galaxyData\s*=\s*GalaxyGenerator\.generate\(/.test(newBranch));

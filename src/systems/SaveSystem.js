@@ -302,6 +302,8 @@ export class SaveSystem {
       analyzed: p.analyzed || false,
       // Układ gwiezdny (Etap 40)
       systemId: p.systemId ?? 'sys_home',
+      // CS-3a — ziarno powierzchni (uint32; null = nienadane → `??=` przy wczytaniu, SurfaceSeed.js)
+      surfaceSeed: p.surfaceSeed ?? null,
       // Złoża (Etap 26 — gospodarka)
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
@@ -334,6 +336,7 @@ export class SaveSystem {
       surfaceGravity:    m.surfaceGravity ?? null,
       atmosphere:        m.atmosphere || 'none',
       systemId:          m.systemId ?? 'sys_home',
+      surfaceSeed:       m.surfaceSeed ?? null,   // CS-3a
       deposits: m.deposits ? m.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,
@@ -362,6 +365,7 @@ export class SaveSystem {
       explored:          p.explored || false,
       analyzed:          p.analyzed || false,
       systemId:          p.systemId ?? 'sys_home',
+      surfaceSeed:       p.surfaceSeed ?? null,   // CS-3a
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,

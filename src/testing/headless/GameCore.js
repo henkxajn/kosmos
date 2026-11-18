@@ -78,6 +78,7 @@ import { DirectorProduction } from '../../systems/director/DirectorProduction.js
 
 import { SystemGenerator }   from '../../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../../generators/GalaxyGenerator.js';
+import { GAME_CONFIG }       from '../../config/GameConfig.js';   // CS-3a-fix — decyzja świata seededSystems
 import { EmpireGenerator }   from '../../generators/EmpireGenerator.js';
 
 import { BUILDINGS }         from '../../data/BuildingsData.js';
@@ -146,7 +147,11 @@ export class GameCore {
 
     // ── Generowanie układu (scenariusz civilization) ──
     const gen = new SystemGenerator();
-    const result = gen.generateCivScenario();
+    // CS-3a (D-CS-17): galaxySeed harnessu znany PRZED układem domowym — przy seededSystems ON
+    // układ domowy jest z niego losowany; OFF → ignorowany (dotychczasowy Math.random harnessu).
+    // CS-3a-fix: flaga czytana RAZ (decyzja świata); ta sama wartość stempluje galaktykę niżej.
+    const worldSeededSystems = GAME_CONFIG.FEATURES.seededSystems === true;
+    const result = gen.generateCivScenario({ galaxySeed, seeded: worldSeededSystems });
     const { star, planets, moons = [], planetesimals = [], asteroids = [], comets = [], planetoids = [] } = result;
     this._civPlanetId = result.civPlanetId;
     star.x = 0;
@@ -312,7 +317,9 @@ export class GameCore {
     // GALAXY_SEED: seed wchodzi JAWNYM parametrem `boot({ galaxySeed })`, domyślnie
     // stałym (HEADLESS_GALAXY_SEED). W harnessie NIE MA ścieżki mintowania losowego —
     // to jest cała mitygacja R1 (reprodukowalność BALANS / turniejów botów).
-    K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType);
+    K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType, { seededSystems: worldSeededSystems });
+    // CS-3a — ziarna powierzchni układu domowego (ten sam pass co GameScene.start()).
+    this.starSystemManager.assignMissingSurfaceSeeds(K.galaxyData.seed);
     K.unitDesigns = [];
     // solo: pomijamy spawn obcych imperiów (izolacja solo ekonomii + brak agresji AI).
     // Poniższe initForAllEmpires to no-op przy pustym rejestrze (iterują listAll()=[]);
