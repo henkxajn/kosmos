@@ -15,6 +15,7 @@ import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { DepositSystem }   from './DepositSystem.js';
 import { isSystemExplored, HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
 import { assignSurfaceSeeds } from '../utils/SurfaceSeed.js';
+import { assignBodyArchetype, archetypeContext } from '../utils/BodyArchetypeLogic.js';
 
 export class StarSystemManager {
   constructor() {
@@ -122,6 +123,12 @@ export class StarSystemManager {
     // ordinal = indeks w tablicy generatora (kolejność wstawienia do EntityManager).
     assignSurfaceSeeds({ planet: result.planets, moon: result.moons, planetoid: result.planetoids }, galaxySeed);
 
+    // CS-3b — tidallyLocked + archetyp ciała: czysta funkcja zapisanych parametrów + klasy gwiazdy, PO ziarnach
+    // (remis rozstrzyga surfaceSeed), bez rzutów RNG. Zamrożone od teraz (D-CS-2).
+    // CS-3b-v2: kontekst = gwiazda (klasa + jasność → strumień), rodzice i strefy księżyców układu.
+    const starCtx = archetypeContext(result.star, result.planets, result.moons);
+    for (const b of [...result.planets, ...result.moons, ...result.planetoids]) assignBodyArchetype(b, starCtx);
+
     const sysData = {
       systemId,
       galaxyStar,
@@ -159,6 +166,42 @@ export class StarSystemManager {
       moon:      EntityManager.getByType('moon'),
       planetoid: EntityManager.getByType('planetoid'),
     }, galaxySeed);
+  }
+
+  /**
+   * CS-3b — `tidallyLocked ??=` i `bodyArchetype ??=` dla WSZYSTKICH planet / księżyców / planetoid w EntityManager.
+   * Wołane raz przy starcie sceny ZARAZ PO `assignMissingSurfaceSeeds` (archetyp potrzebuje ziarna do remisu):
+   * nowa gra — układ domowy PO mutacjach planety domowej (makeHomeworldBreathable), więc dom gracza dostaje archetyp
+   * z parametrów po mutacji; wczytanie — stary zapis bez archetypów. Gwiazda = encja 'star' z tym samym systemId.
+   * Ciało, które ma już archetyp, ZACHOWUJE go (D-CS-2).
+   * CS-3b-v2: kontekst per układ (archetypeContext: jasność gwiazdy, rodzice + strefy księżyców). Dom gracza jest
+   * terran przez klauzulę biosfery (lifeScore 100 z generateCivScenario, priorytet 90); dom AI — w bootstrapie.
+   * @returns {number} liczba nadanych archetypów
+   */
+  assignMissingArchetypes() {
+    const starById = new Map();
+    for (const st of EntityManager.getByType('star')) {
+      const sid = st.systemId ?? HOME_SYSTEM_ID;
+      if (!starById.has(sid)) starById.set(sid, st);
+    }
+    const bySys = new Map();   // systemId → ciała układu per rodzaj
+    for (const kind of ['planet', 'moon', 'planetoid']) {
+      for (const b of EntityManager.getByType(kind)) {
+        const sid = b.systemId ?? HOME_SYSTEM_ID;
+        if (!bySys.has(sid)) bySys.set(sid, { planet: [], moon: [], planetoid: [] });
+        bySys.get(sid)[kind].push(b);
+      }
+    }
+    let assigned = 0;
+    for (const [sid, g] of bySys) {
+      const ctx = archetypeContext(starById.get(sid) ?? null, g.planet, g.moon);
+      for (const kind of ['planet', 'moon', 'planetoid']) {
+        for (const b of g[kind]) {
+          if (assignBodyArchetype(b, ctx)) assigned++;
+        }
+      }
+    }
+    return assigned;
   }
 
   // ── Przełączanie aktywnego układu ──────────────────────────────────────────

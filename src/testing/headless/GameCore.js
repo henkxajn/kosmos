@@ -320,6 +320,8 @@ export class GameCore {
     K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType, { seededSystems: worldSeededSystems });
     // CS-3a — ziarna powierzchni układu domowego (ten sam pass co GameScene.start()).
     this.starSystemManager.assignMissingSurfaceSeeds(K.galaxyData.seed);
+    // CS-3b — archetyp ciała + tidallyLocked (ten sam pass co GameScene.start(), zaraz po ziarnach).
+    this.starSystemManager.assignMissingArchetypes();
     K.unitDesigns = [];
     // solo: pomijamy spawn obcych imperiów (izolacja solo ekonomii + brak agresji AI).
     // Poniższe initForAllEmpires to no-op przy pustym rejestrze (iterują listAll()=[]);

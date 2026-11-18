@@ -28,6 +28,7 @@ import { stampUnownedTiles } from '../utils/TileOwnership.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { DepositSystem } from './DepositSystem.js';
+import { assignBodyArchetype } from '../utils/BodyArchetypeLogic.js';
 
 // Bazowy próg safety stock per tier (musi pasować do FactorySystem.getSafetyStockTarget).
 // Bonus = target - base, aplikowany przez setDemandBonus.
@@ -105,6 +106,20 @@ export class EmpireColonyBootstrap {
     //     home AI utykał — CivilizationSystem._updatePopGrowth hard-stopuje wzrost gdy
     //     !canLiveOutside i pop≥housing → freeze 8→8→8. Reuse mechanizmu gracza.
     SystemGenerator.makeHomeworldBreathable(homePlanet);
+
+    // 2b'. CS-3b — archetyp ciała domu AI z parametrów PO mutacji (parytet z domem gracza, którego archetyp nadaje
+    //      pass startowy po generateCivScenario). generateAndRegister wybrał go na parametrach SPRZED
+    //      makeHomeworldBreathable; to mutacja generacyjna w tym samym starcie świata (ciało nie było jeszcze
+    //      pokazane), więc jedyny dozwolony ponowny wybór — D-CS-2 (zamrożenie) dotyczy dryfu w trakcie gry.
+    //      CS-3b-v2 (właściciel, pkt 5): dom KAŻDEGO imperium jest terran — `homeworld: true`; pasmo wody też od nowa.
+    homePlanet.bodyArchetype = null;
+    homePlanet.waterBand = null;
+    homePlanet.waterCoverage = null;
+    const homeStar = EntityManager.get(sysData.starEntityId);
+    assignBodyArchetype(homePlanet, {
+      spectralType: homeStar?.spectralType ?? null,
+      luminosity:   homeStar?.luminosity ?? null,
+    }, { homeworld: true });
 
     // 2c. W2-1b — GWARANTOWANE ZŁOŻE Ti (orzeczenie właściciela 2026-08-15).
     //     Domyka decyzję odłożoną w S3.1b („Gwarancja Ti celowo POMINIĘTA — osobna decyzja").

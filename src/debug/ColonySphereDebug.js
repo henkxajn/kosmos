@@ -1,7 +1,11 @@
-// ColonySphereDebug — pomocniki konsoli bramki ARC COLONY SPHERE, krok CS-3a.
+// ColonySphereDebug — pomocniki konsoli bramki ARC COLONY SPHERE, kroki CS-3a / CS-3b / CS-3b-v2.
 //
 //   csWorlds()  — AKTYWNY układ: seed galaktyki, stan flagi seededSystems, po wierszu na ciało
-//                 (rodzaj, typ, ordinal, surfaceSeed). Bez argumentów, bez cudzysłowów.
+//                 (rodzaj, typ, ordinal, surfaceSeed, archetype, tidallyLocked — CS-3b; waterBand, waterCoverage,
+//                 palette — CS-3b-v2). Bez argumentów, bez cudzysłowów.
+//   csArchetypes() — CS-3b: rozkład archetypów ciał po WSZYSTKICH wygenerowanych układach bieżącej gry, per rodzina
+//                 (liczby i %), plus ciała bez archetypu i udział tidallyLocked wśród planet; CS-3b-v2: wszystkie
+//                 archetypy v2 (księżyce ×5, planetoidy ×2), palety planetoid i podział pasm wody terran.
 //   csPeek()    — dla KAŻDEGO wygenerowanego układu obcego: liczby z peekCountsForStar (kontekst świata
 //                 z galaxyData — seed + stempel seededSystems, czyli to, co pokazałby skan) vs liczby encji
 //                 w EntityManager. Plus `starsDifferFromLegacySeed` — ile z 71 gwiazd daje w TYM świecie
@@ -9,13 +13,15 @@
 //                 (dotychczasowy → 0, seedowany → większość). CS-3a-fix: tryb świata, nie bieżąca flaga —
 //                 przełączenie flagi po starcie nie zmienia wyniku.
 //
-// Wywołanie: `csWorlds()` / `csPeek()` (window) albo `KOSMOS.debug.csWorlds()` / `KOSMOS.debug.csPeek()`.
+// Wywołanie: `csWorlds()` / `csPeek()` / `csArchetypes()` (window) albo `KOSMOS.debug.csWorlds()` itd.
 // Importowalne pod node (bez THREE) — keeper colony_sphere_seeds_smoke wykonuje oba pomocniki.
 
 import EntityManager from '../core/EntityManager.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { SURFACE_SEED_KINDS } from '../utils/SurfaceSeed.js';
+import { BODY_ARCHETYPES, ARCHETYPE_FAMILIES } from '../data/BodyArchetypes.js';
+import { familyOf, planetoidPaletteOf } from '../utils/BodyArchetypeLogic.js';
 
 function bodyTypeOf(body, kind) {
   if (kind === 'planet')    return body.planetType ?? '?';
@@ -30,10 +36,46 @@ export function colonySphereWorldRows(systemId) {
     let ordinal = 0;
     for (const b of EntityManager.getByType(kind)) {
       if ((b.systemId ?? 'sys_home') !== systemId) continue;
-      rows.push({ kind, type: bodyTypeOf(b, kind), ordinal: ordinal++, name: b.name, surfaceSeed: b.surfaceSeed ?? null });
+      rows.push({
+        kind, type: bodyTypeOf(b, kind), ordinal: ordinal++, name: b.name, surfaceSeed: b.surfaceSeed ?? null,
+        archetype: b.bodyArchetype ?? null, tidallyLocked: b.tidallyLocked ?? null,   // CS-3b
+        waterBand: b.waterBand ?? null, waterCoverage: b.waterCoverage ?? null,       // CS-3b-v2 (terran)
+        palette: kind === 'planetoid' ? planetoidPaletteOf(b) : null,                 // CS-3b-v2
+      });
     }
   }
   return rows;
+}
+
+/**
+ * CS-3b — rozkład archetypów po wszystkich ciałach w EntityManager (= wszystkie wygenerowane układy gry).
+ * CS-3b-v2: + `palettes` (planetoidy: paleta → liczba) i `waterBands` (terran: pasmo → liczba).
+ * @returns {{ systems: number, bodies: number, missing: number, tidallyLocked: string, families: Object,
+ *            palettes: Object, waterBands: Object }}
+ */
+export function colonySphereArchetypeCensus() {
+  const families = {};
+  for (const f of ARCHETYPE_FAMILIES) {
+    families[f] = { total: 0, counts: Object.fromEntries(BODY_ARCHETYPES.filter(a => a.family === f).map(a => [a.id, 0])) };
+  }
+  const systems = new Set();
+  let bodies = 0, missing = 0, planets = 0, locked = 0;
+  const palettes = { metallic: 0, carbonaceous: 0, silicate: 0, icy: 0 };
+  const waterBands = { oceanic: 0, balanced: 0, continental: 0, missing: 0 };
+  for (const kind of SURFACE_SEED_KINDS) {
+    for (const b of EntityManager.getByType(kind)) {
+      bodies++;
+      systems.add(b.systemId ?? 'sys_home');
+      if (kind === 'planet') { planets++; if (b.tidallyLocked === true) locked++; }
+      const fam = families[familyOf(kind, b.planetType)];
+      if (b.bodyArchetype == null || !(b.bodyArchetype in fam.counts)) { missing++; continue; }
+      fam.total++;
+      fam.counts[b.bodyArchetype]++;
+      if (kind === 'planetoid') { const pal = planetoidPaletteOf(b); palettes[pal] = (palettes[pal] ?? 0) + 1; }
+      if (b.bodyArchetype === 'terran') { const wb = b.waterBand ?? 'missing'; waterBands[wb] = (waterBands[wb] ?? 0) + 1; }
+    }
+  }
+  return { systems: systems.size, bodies, missing, tidallyLocked: `${locked}/${planets}`, families, palettes, waterBands };
 }
 
 /** Porównanie peek vs encje dla wygenerowanych układów obcych. */
@@ -94,6 +136,8 @@ export function colonySphereDebugHelpers() {
       bodies: rows.length,
       missingSeeds: missing,
       uniqueSeeds: new Set(rows.map(r => r.surfaceSeed)).size,
+      missingArchetypes: rows.filter(r => r.archetype == null).length,   // CS-3b — ma być 0
+      terranWithoutWaterBand: rows.filter(r => r.archetype === 'terran' && r.waterBand == null).length,   // CS-3b-v2 — 0
     };
     console.log('[csWorlds]', JSON.stringify(summary));
     console.table(rows);
@@ -115,5 +159,24 @@ export function colonySphereDebugHelpers() {
     console.table(rows);
     return summary;
   };
-  return { csWorlds, csPeek };
+  const csArchetypes = () => {
+    const c = colonySphereArchetypeCensus();
+    const summary = {
+      galaxySeed: window.KOSMOS?.galaxyData?.seed ?? null,
+      worldSeeded: window.KOSMOS?.galaxyData?.seededSystems === true,
+      systems: c.systems, bodies: c.bodies, missingArchetypes: c.missing, tidallyLocked: c.tidallyLocked,
+      planetoidPalettes: c.palettes, terranWaterBands: c.waterBands,   // CS-3b-v2
+    };
+    console.log('[csArchetypes]', JSON.stringify(summary));
+    const rows = [];
+    for (const [family, f] of Object.entries(c.families)) {
+      for (const [id, n] of Object.entries(f.counts)) {
+        rows.push({ family, archetype: id, count: n, pct: f.total ? +(100 * n / f.total).toFixed(1) : 0 });
+      }
+    }
+    console.table(rows);
+    summary.rows = rows;
+    return summary;
+  };
+  return { csWorlds, csPeek, csArchetypes };
 }

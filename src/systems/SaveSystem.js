@@ -304,6 +304,12 @@ export class SaveSystem {
       systemId: p.systemId ?? 'sys_home',
       // CS-3a — ziarno powierzchni (uint32; null = nienadane → `??=` przy wczytaniu, SurfaceSeed.js)
       surfaceSeed: p.surfaceSeed ?? null,
+      // CS-3b — rotacja związana + archetyp ciała (zamrożony, D-CS-2; null = nienadane → `??=` przy wczytaniu)
+      tidallyLocked: p.tidallyLocked ?? null,
+      bodyArchetype: p.bodyArchetype ?? null,
+      // CS-3b-v2 — pasmo wody terran (zamrożone; null = nie-terran albo nienadane)
+      waterBand:     p.waterBand ?? null,
+      waterCoverage: p.waterCoverage ?? null,
       // Złoża (Etap 26 — gospodarka)
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
@@ -337,6 +343,8 @@ export class SaveSystem {
       atmosphere:        m.atmosphere || 'none',
       systemId:          m.systemId ?? 'sys_home',
       surfaceSeed:       m.surfaceSeed ?? null,   // CS-3a
+      tidallyLocked:     m.tidallyLocked ?? null, // CS-3b
+      bodyArchetype:     m.bodyArchetype ?? null, // CS-3b
       deposits: m.deposits ? m.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,
@@ -366,6 +374,8 @@ export class SaveSystem {
       analyzed:          p.analyzed || false,
       systemId:          p.systemId ?? 'sys_home',
       surfaceSeed:       p.surfaceSeed ?? null,   // CS-3a
+      tidallyLocked:     p.tidallyLocked ?? null, // CS-3b
+      bodyArchetype:     p.bodyArchetype ?? null, // CS-3b
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,

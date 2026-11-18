@@ -2438,9 +2438,14 @@ export class GameScene {
     const surfaceSeedsAssigned = this.starSystemManager.assignMissingSurfaceSeeds(window.KOSMOS.galaxyData?.seed);
     console.log(`[CS-3a] surfaceSeed nadane: ${surfaceSeedsAssigned} · seededSystems=${GAME_CONFIG.FEATURES.seededSystems}`
       + ` · świat=${window.KOSMOS.galaxyData?.seededSystems === true ? 'seedowany' : 'dotychczasowy'}`);
+    // CS-3b — archetyp ciała + tidallyLocked (`??=`) ZARAZ PO ziarnach (remis rozstrzyga surfaceSeed). Nowa gra: dom
+    // gracza już po makeHomeworldBreathable (generateCivScenario), więc archetyp z parametrów po mutacji.
+    const archetypesAssigned = this.starSystemManager.assignMissingArchetypes();
+    console.log(`[CS-3b] archetyp nadany: ${archetypesAssigned}`);
     // Aliasy bramki: `csWorlds()` / `csPeek()` wprost w konsoli (bez KOSMOS.debug., bez argumentów).
     window.csWorlds = window.KOSMOS.debug?.csWorlds;
     window.csPeek   = window.KOSMOS.debug?.csPeek;
+    window.csArchetypes = window.KOSMOS.debug?.csArchetypes;   // CS-3b
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,
@@ -5198,6 +5203,11 @@ export class GameScene {
       // CS-3a — ziarno powierzchni z zapisu; brak (stary zapis) → null, a `??=` nada je
       // StarSystemManager.assignMissingSurfaceSeeds po ustaleniu galaxyData (start()).
       p.surfaceSeed      = pd.surfaceSeed      ?? null;
+      // CS-3b — zapisany archetyp jest prawdą (D-CS-2); brak → null, `??=` w StarSystemManager.assignMissingArchetypes.
+      p.tidallyLocked    = pd.tidallyLocked    ?? null;
+      p.bodyArchetype    = pd.bodyArchetype    ?? null;
+      p.waterBand        = pd.waterBand        ?? null;   // CS-3b-v2
+      p.waterCoverage    = pd.waterCoverage    ?? null;   // CS-3b-v2
       // Przywróć złoża z save (v6)
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));
@@ -5234,6 +5244,8 @@ export class GameScene {
       m.analyzed = md.analyzed ?? md.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       m.systemId = md.systemId ?? 'sys_home';
       m.surfaceSeed = md.surfaceSeed ?? null;   // CS-3a
+      m.tidallyLocked = md.tidallyLocked ?? null;   // CS-3b
+      m.bodyArchetype = md.bodyArchetype ?? null;   // CS-3b
       // Przywróć złoża z save (v6)
       if (md.deposits?.length > 0) {
         m.deposits = md.deposits.map(d => ({ ...d }));
@@ -5266,6 +5278,8 @@ export class GameScene {
       p.analyzed = pd.analyzed ?? pd.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       p.systemId = pd.systemId ?? 'sys_home';
       p.surfaceSeed = pd.surfaceSeed ?? null;   // CS-3a
+      p.tidallyLocked = pd.tidallyLocked ?? null;   // CS-3b
+      p.bodyArchetype = pd.bodyArchetype ?? null;   // CS-3b
       // Przywróć złoża z save
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));
