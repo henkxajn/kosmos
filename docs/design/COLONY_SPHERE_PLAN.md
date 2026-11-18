@@ -102,6 +102,14 @@ inspector shows the building's **category icon** as a placeholder (same slot, sa
 
 This resolves §5 risk 10.
 
+**Owner feedback on CS-3b (2026-11-18) — signed for CS-3b-v2.**
+
+| Decision | Signed text |
+|---|---|
+| **D-CS-1 (revised, signed 2026-11-18)** | Realistic and diverse worlds. Archetypes are selected primarily from physical drivers (stellar flux at the orbit, atmosphere, `composition.H2O`, mass, parent body, moon position among the parent's moons); stored temperature is a secondary input. Planets: terran (always oceanic, stored frozen `waterBand` oceanic ~60% / balanced ~25% / continental ~15% + exact `waterCoverage`), jungle, desert, ice, volcanic, **hothouse** (replaces `toxic`), **cryo_haze** (new), **scorched** (new), barren, tidally_locked, ocean (rare). Moons ×5: rocky_cratered, volcanic_moon, icy_cracked, icy_cratered, hazy_moon. Planetoids: metallic / carbonaceous / silicate + icy palette. Gas giants unchanged. The homeworld of every empire is terran. CS-6 adds visual variants within each archetype. Implemented in CS-3b-v2 (§3.3). |
+| **D-CS-1 v2 (archetypes v2, signed ✅ 2026-11-18 after the light check)** | 21 rows incl. hothouse replacing toxic, cryo_haze, scorched, 5 moon archetypes, planetoid_icy, terran waterBand 60/25/15 — as implemented in §3.3.1. |
+| **D-CS-19 (signed ✅ 2026-11-18)** | Option (b) extended with orbits — step **CS-PHYS** after CS-6 (§3 table, §4). Finding 770 is fixed earlier, in a separate small fix step together with #768. |
+
 ---
 
 ## 1. Findings
@@ -781,6 +789,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-3b** | MECH | Opus | `BodyArchetypes` data + selector (12 archetypes, D-CS-1) + the stored **tidally-locked** boolean (`??=` from stored orbit + star); `archetype` stored and frozen at first assignment (D-CS-2), `??=` on restore. Keepers: determinism, archetype distribution over a generated galaxy (headless), save round-trip | CS-3a |
 | **CS-4** | MECH | Opus | `SurfaceField` pure ESM (noise port), worker + main fallback, `SurfaceCache` LRU. Keepers: worker = main bit-identical; `evalAt` uses no trig (source pin) and is cross-checked with a fixed vector set. **Headless Chrome measurement** of bake cost per LOD, worker throughput per system, memory → fixes the budgets in §1.I or triggers the GPU contingency | CS-3b |
 | **CS-6** | VIS | **Fable** | `SurfaceShader` + archetype looks; system-map planets/moons/planetoids switched under `FEATURES.sharedSurface` (lazy LOD, archetype placeholder colour while pending); normals from elevation; per-body atmosphere tint + clouds (V-275). Contact sheet: every archetype × 3 star classes × day/terminator; system-map frames vs today. Headless GLSL compile probe with a failing control | CS-4 (independent of CS-5). Changes **only the system map**; the colony screen is unchanged until CS-7. The V-253 mismatch exists today, so this order is no regression |
+| **CS-PHYS** | MECH | Opus 5.5 | D-CS-19 (b)+orbits: physical temperature model at generation (greenhouse by atmosphere AND flux incl. runaway/collapse, thick<dense inversion fixed, airless day/night extremes for display, tidal + parent heating for moons) + `minOrbitAU` scaled by stellar luminosity (M systems get HZ planets). Behind a `FEATURES` flag (OFF = today bit-identical), new worlds only, no save migration, BALANS run, heavy gate | CS-6 |
 | **CS-1a** | MECH (refactor) | Opus | `TileGraph` interface + `FlatHexTileGraph`; key helpers (`parseKey`/`formatKey`); move the **systems** class-1 sites (Building, GroundUnit, Combat, Army, Invasion, Garrison/Planner, Supply, AutoExpander, Bootstrap, Withdrawal, TileOwnership, Anomaly/Resource/Impact/RandomEvent key parse, ColonyGrid, Vessel/VesselManager). Keepers: equivalence over all tiles of every size class; headless trace bit-identical | CS-0 (scheduled after CS-6 by the signed order) |
 | **CS-1b** | MECH (refactor) | Opus | Remaining class-1 sites in UI/renderer/tests (ColonyOverlay C1, CargoLoadModal, UnitCard, BattleGroup, PlanetGlobeRenderer keys, test helpers); fix #764 and #765 on the way | CS-1a |
 | **CS-2** | MECH (refactor) | Opus | Grid-geometry gameplay rules behind TileGraph, still bit-identical on flat: `latitudeBand` (BuildingSystem latitude + `tileR` derived from tile), one polar-penalty canon (×3 → 1, `_inferRows` gone), `isLandingEdge`, `stepDirection` (seam teleport/facing), RandomEvent equator fallback, `_gridHeight` removal, StrikeSquadron origin fallback → `TileGraph.anyTile()`. **Gate: owner live gate on a real save — flat game unchanged.** This is the gate before any visual work depends on TileGraph | CS-1b |
@@ -976,6 +985,354 @@ warnings, correct data, keeps the async design): re-specify the storage right be
 - D-CS-18 signed. Finding 769 ✅ closed. Finding 768 🟠 stays open (owner decides separately; queue row in
   `FINDINGS_BACKLOG.md`).
 
+### 3.3 CS-3b — body archetypes (2026-11-18; not committed, owner check pending)
+
+> The rules, table and distribution below are CS-3b **v1**. Owner feedback replaced them with **v2** (§3.3.1:
+> flux-driven selection, 21 archetypes, `toxic` → `hothouse`, 5 moon archetypes, terran water bands).
+
+Data only. Nothing renders differently: the renderer does not read the new fields (keeper pin), and the gas giant bake
+uniforms are bit-identical to `0286487` (keeper A6).
+
+**Files.**
+- `src/data/BodyArchetypes.js` (pure data, no imports): 15 rows = the 12 D-CS-1 surface archetypes + 3 gas rows. Each
+  row: `id`, `family`, `nameKey` (i18n), `match` clauses, `field` (noise parameters), `biomes` (class → one of the 10
+  terrains of §1.E, D-CS-3), `atmosphere {tint, density}`, `clouds {coverage}`, `gridClass`; planetoid `palettes` per
+  `planetoidType`; gas `gasPreset`. `field` / `atmosphere` / `clouds` are **placeholders**, tuned in CS-4 / CS-6, not pinned.
+  `GRID_TILE_COUNTS` is the one D-CS-8 table (`planetoid 92, moon 92, gas 92, hot_rocky 162, small_rocky 162,
+  large_rocky 252, largest_cap 362`; small/large split at 1.5 M⊕).
+- `src/utils/BodyArchetypeLogic.js` (pure; imports only the data file and `SeedMath`): `select`, `candidatesFor`,
+  `deriveTidallyLocked`, `bodyParamsOf`, `gridClassFor`, `assignBodyArchetype` (`??=`).
+- Body fields: **`bodyArchetype`** (string) and **`tidallyLocked`** (boolean). The field is not called `archetype`
+  because `empire.archetype` (EmpireData `ARCHETYPES`) is read in ~25 places.
+
+**Selection.** Clauses of a row match when all their conditions hold; a row scores the highest `priority` among its
+matching clauses; the highest score in the body's family wins. Ranges are open on both ends (`min < v < max`). Equal
+top scores are a tie, decided only by `surfaceSeed` (`mixSeed(seed ^ salt) % n`, table order). Ties happen on purpose
+where two rows of equal priority overlap (for example terran/jungle at 25–30 °C). Every family has one condition-free
+fallback clause (priority 0), so the selector is total. Inputs: `planetType` / `moonType` / `planetoidType`, surface
+temperature °C, `atmosphere`, `composition.H2O` (% mass), mass (M⊕), `lifeScore`, `tidallyLocked`.
+
+| Archetype | Family | Clause (priority) |
+|---|---|---|
+| terran | planet | breathable + lifeScore ≥ 50 (**90**) · breathable, −25 < T < 30 (60) |
+| ocean | planet | thin/breathable/dense/thick, 0 < T < 60, H2O > 8 (65) |
+| jungle | planet | breathable, 25 < T < 80, H2O > 2.5 (60) |
+| desert | planet | breathable, 25 < T < 80, H2O < 2.5 (60) · rocky/hot_rocky, thin, H2O < 3, −80 < T < 150 (40) |
+| ice | planet | breathable, T < −20 (60) · planetType ice (45) · rocky/hot_rocky, H2O > 8, T < 0 (40) |
+| tidally_locked | planet | rocky/hot_rocky + tidallyLocked (55) |
+| volcanic | planet | rocky/hot_rocky, T > 150 (50) · rocky/hot_rocky, mass > 4.5, thin/dense/thick, T > −60 (50) |
+| toxic | planet | rocky/hot_rocky, dense/thick, T > −30 (50) |
+| barren | planet | atmosphere none (30) · fallback (0) |
+| gas_warm → preset `gas_warm` | gas | T > −73 (10) |
+| gas_temperate → preset `gas_giant` | gas | fallback (0) |
+| gas_cold → preset `gas_cold` | gas | T < −193 (10) |
+| rocky_moon | moon | moonType rocky (10) · fallback (0) |
+| icy_moon | moon | moonType icy (10) |
+| planetoid (palette = `planetoidType`) | planetoid | fallback (0) |
+
+The gas thresholds are the `resolveTextureType` thresholds (`PlanetTextureUtils.js`), pinned on both sides.
+`GasGiantShader` still picks its preset from `resolveTextureType`, not from the archetype (D-CS-5).
+
+**tidallyLocked.** `planet` and `a < TIDAL_LOCK_BASE_AU · ∛M_class` with `TIDAL_LOCK_BASE_AU = 0.85` and the
+class mass from `STAR_TYPES` (`M 0.3, K 0.7, G 1.0, F 1.4`; unknown class → 1.0). Lock radius: M 0.569, K 0.755,
+G 0.850, F 0.951 AU. The shape (∝ M★^(1/3)) is the Peale/Gladman synchronisation radius at a fixed system age. The base is
+calibrated to the game's compressed inner orbits: the generator places no planet inside ≈0.55 AU (M), 0.56 (K),
+0.71 (G), 1.22 (F) (5 seeds × 72 systems), so a physical base of ≈0.3–0.5 AU would lock no planet at all. Moons and
+planetoids: `false` (a moon is locked to its planet, not to the star). Eccentricity is ignored (game e ≤ 0.09). Pure
+function of the stored orbit and star class: no RNG.
+
+**Assignment (all after `surfaceSeed`, never in the generator, 0 RNG draws).**
+- Foreign systems: `StarSystemManager.generateAndRegister`, right after `assignSurfaceSeeds`, with the system star.
+- Home system and old saves: `StarSystemManager.assignMissingArchetypes()` (star = the `star` entity with the same
+  `systemId`), called right after `assignMissingSurfaceSeeds` in `GameScene.start()` (log `[CS-3b] archetyp nadany: N`)
+  and in `GameCore.boot()`. In a new game this runs after `generateCivScenario`, that is after `makeHomeworldBreathable`.
+- **AI homes.** `EmpireColonyBootstrap` mutates the AI home (`makeHomeworldBreathable`) after `generateAndRegister`
+  has already picked the archetype from the pre-mutation parameters. The bootstrap clears and re-selects the archetype
+  of that one body right after the mutation. This is the only re-selection; it happens during world creation, before the
+  body is ever shown. Without it, AI homes came out `desert` / `tidally_locked` (mutation M9). D-CS-2 (freeze) applies
+  from there on.
+- Frozen (D-CS-2): `assignBodyArchetype` is `??=`. Later drift of temperature, atmosphere, orbit or `lifeScore` never
+  re-selects.
+- Save: `_serializePlanet` / `_serializeMoon` / `_serializePlanetoid` write both fields (`null` when unset).
+  `_restoreSystem` reads `?? null`, and the start-up pass fills the gaps. No save version bump (`CURRENT_VERSION` 101).
+  The canonical fixture gets an archetype for 364/364 bodies; re-save + reload is stable.
+- Debug: `csWorlds()` gains `archetype` and `tidallyLocked` columns and `missingArchetypes` in its summary;
+  `csArchetypes()` prints the distribution over all generated systems of the current game (per family, counts, %).
+
+**Headless distribution (all 72 systems, seeded world).** `node src/testing/headless/probe-cs3b-archetypes.mjs`. Seeds:
+the harness seed plus the four owner gate seeds of CS-3a. Real game path (`registerHomeSystem` → seeds → archetypes →
+`generateAndRegister` × 71). AI home mutations are not part of the census (they run in the boot column).
+
+| Planet family | −2102099243 | 612055237 | 572914822 | 813683454 | 1640489291 | Σ | % |
+|---|---|---|---|---|---|---|---|
+| terran | 10 | 10 | 11 | 8 | 14 | 53 | 2.8 |
+| ocean | 0 | 0 | 0 | 0 | 0 | 0 | **0.0** |
+| jungle | 3 | 2 | 0 | 1 | 4 | 10 | 0.5 |
+| desert | 46 | 38 | 31 | 41 | 29 | 185 | 9.6 |
+| ice | 168 | 185 | 202 | 186 | 182 | 923 | **48.1** |
+| volcanic | 23 | 9 | 14 | 15 | 16 | 77 | 4.0 |
+| toxic | 11 | 15 | 8 | 13 | 13 | 60 | 3.1 |
+| barren | 75 | 63 | 87 | 71 | 70 | 366 | 19.1 |
+| tidally_locked | 46 | 55 | 46 | 49 | 49 | 245 | 12.8 |
+
+| Other families (Σ over 5 seeds) | count | % |
+|---|---|---|
+| gas_warm / gas_temperate / gas_cold | 0 / 318 / 430 | **0.0** / 42.5 / 57.5 |
+| rocky_moon / icy_moon | 2548 / 2561 | 49.9 / 50.1 (two-archetype family: structural) |
+| planetoid | 10088 | 100 |
+
+Bodies per seed: 3639 / 3468 / 3465 / 3736 / 3556, 0 without an archetype. tidallyLocked: 269 / 2667 planets = 10.1%
+(gas giants included); 24 of them are breathable and stay in the terran family.
+
+**Homeworld archetype per seed** (player = census and `GameCore.boot`; AI = boot, after the bootstrap mutation):
+
+| Seed | Player home | AI homes |
+|---|---|---|
+| −2102099243 | terran (F star, 1.457 AU, 22 °C, H2O 6%) | terran (locked), **ocean** (locked) |
+| 612055237 | terran (M, 1.05 AU, 10 °C, H2O 30.7%) | terran (locked), terran |
+| 572914822 | terran (K, 0.59 AU, **locked**) | terran, terran (locked) |
+| 813683454 | terran (M, 0.55 AU, **locked**, H2O 25.4%) | **ocean** (locked), terran (locked) |
+| 1640489291 | terran (K, 0.753 AU, **locked**) | terran (locked) ×2 |
+
+The player home is terran in 5/5 seeds through the biosphere clause (`lifeScore` 100 set by `generateCivScenario`).
+Without that clause, M-star homes (H2O 25–31%) would be `ocean` (mutation M18). AI homes have `lifeScore` 0, so 2/10
+are `ocean` (habitable, but more ocean tiles later in CS-5).
+
+**Outliers and open questions for the owner (not tuned; recommendation first).**
+1. **`ice` 48.1% of planets (> 40%).** 586 are `planetType 'ice'` (30.5% alone), 337 are frozen water-rich rocky
+   planets. Cause: the generator is cold-heavy (85.0% of planets, gas included, orbit beyond 2× the HZ inner edge). Options: *(a, recommended)*
+   `planetType 'ice'` with a dense atmosphere → `toxic` (Titan-like haze; −197 → ice ≈ 38%, toxic ≈ 13%);
+   *(b)* frozen rocky → `ice` only below −100 °C (ice ≈ 42.5%); *(c)* keep (physically honest).
+2. **`ocean` never appears in a generated galaxy.** Liquid-water temperatures and H2O > 8% never meet in the
+   generator: H2O-rich rocky planets sit beyond the frost line, and breathable worlds carry H2O 2–3%. Only mutated
+   AI homes reach it. Measured alternative: ocean = breathable + H2O ≥ 3 (`hasWater`) + 0 < T < 40 → 3 planets in 5
+   galaxies (0.16%), so a rule change alone does not make ocean worlds common. Options: *(a, recommended)* keep (ocean
+   = rare look, mostly AI homes) and decide in CS-4/CS-6 whether ocean coverage should come from the surface sea level
+   instead; *(b)* generator-side water (composition templates) — a physics/balance change outside this step.
+3. **`gas_warm` never appears**, the same as today: no gas giant is warmer than −73 °C, so the `gas_warm` shader
+   preset is unused today too. The mapping is faithful (D-CS-5); a change belongs in CS-11.
+4. **Tidal lock vs breathable.** 3/5 player homes and 8/10 AI homes are tidally locked (K/M stars). Breathable worlds
+   stay in the terran family; the flag is stored, so CS-6 can still use it (for example a fixed terminator). *Option:*
+   let `tidally_locked` win over the breathable rows (priority 61); homes would then be eyeball worlds in ≈60% of games.
+5. **AI homes `ocean` vs player `terran`.** The asymmetry comes from `lifeScore` (player 100, AI 0). *Option:* the AI
+   bootstrap could set the same biosphere marker, so that every civilisation homeworld is terran.
+
+**Keeper** `src/testing/smoke/colony_sphere_archetypes_smoke.mjs` (A1–A10, 116 pins). Trace
+`src/testing/fixtures/traces/CS3b-world-baseline.json` (recorded with this keeper's `--record` on a
+`git worktree --detach 0286487`), helper `src/testing/headless/GasUniformsDigest.mjs` (a process-local
+`registerHooks` resolve hook replaces `three` only for `GasGiantShader` / `PlanetTextureUtils` / `PlanetShader`; the
+tracked stub is not touched).
+- Fail-first on the base worktree: 37 red / 11 green. The 11 green are controls: trace loaded, witness, schema, seeded
+  world identical to the base apart from the new fields (3 seeds), gas uniforms = base, renderer pin, CS-3a OFF trace.
+- 19 mutations, all killed (tie without seed, tie via `Math.random`, missing planet / planetoid fallback, freeze removed,
+  `generateAndRegister` without assignment, GameCore without the pass, pass before seeds, save without the field,
+  restore without the field, AI home without re-selection, moons locked, gas threshold −80, tidal lock drawing
+  `Math.random`, missing EN key, pass ignoring the star, tie with seed 0, missing `csArchetypes` alias, missing
+  biosphere clause).
+- Sweep `node src/testing/smoke/run-all.mjs --quiet`: 428/428 OK, 0 FAIL. `node tools/check-i18n.mjs`: PASS.
+
+#### 3.3.1 CS-3b-v2 — realistic + diverse archetypes (2026-11-18; not committed, owner away)
+
+Owner feedback: the CS-3b galaxy was too uniform (ice 48%, barren 19%, locked 13%, terran+jungle 3%, ocean 0%).
+D-CS-1 revised (§0b). Data + selector only: no visual change, no physics change, colony grid untouched, gas bake
+uniforms still bit-identical to `0286487` (keeper A6).
+
+**Part 1 — temperature model audit (read + measure; physics unchanged).**
+- Planets: `SystemGenerator._makePlanet` (`src/generators/SystemGenerator.js:345-349`): `T_eq = 278·(1−albedo)^¼·L^¼/√a`
+  (`:436-437`), albedo per `planetType` (`GameConfig.js:707+`), plus a **flat additive greenhouse** per atmosphere
+  `GREENHOUSE = { none 0, thin 15, breathable 20, dense 60, thick 35 }` °C (`:21`; `thick` < `dense` — inverted).
+  Atmosphere is rolled from `T_base_C` (`getAtmosphere :482`). Orbit change: `_adjustOrbit :418-430` (same formula).
+- Moons: `_makeMoon :1139-1149`: `T_eq` from the **parent's** orbit, albedo icy 0.6 / rocky 0.12, same flat greenhouse;
+  no tidal or parent heating. Moon atmospheres only when cold (`getAtmosphereMoon :508`).
+- Planetoids: `:707-712`: `T_eq` only, airless.
+- Homeworld: `makeHomeworldBreathable :751-775` clamps to 5–35 °C (Earth-like) regardless of the orbit.
+- Later: `LifeSystem._recalcTemp` (`src/systems/LifeSystem.js:117-131`) re-applies the same formula (its own copy of the
+  greenhouse table) to every planet of the **active** system every 1000 game years (`CHECK_INTERVAL :28`), with the
+  **home** star (`this.star`, `:32`) → **Finding 770** below.
+- No day/night (airless) model, no runaway greenhouse, no tidal heating anywhere.
+
+Headless table (`node src/testing/headless/probe-cs3b-temperature.mjs`, 5 seeds × 72 systems; zones by the stored class
+HZ: inner `a < hz.min`, hz, outer `≤ 2.2·hz.max`, frost beyond; moons use the parent's `a`). °C min / median / max (n):
+
+| Body | Atmosphere | inner | hz | outer | frost |
+|---|---|---|---|---|---|
+| rocky | none | −4 / 39 / 67 (22) | −85 / −21 / 28 (74) | −144 / −108 / −51 (150) | −237 / −156 / −134 (29) |
+| rocky | thin | 6 / 39 / 82 (33) | −62 / −6 / 53 (170) | −130 / −90 / −36 (421) | −213 / −143 / −114 (93) |
+| rocky | breathable | 16 / 41 / 56 (9) | −37 / 1 / 54 (75) | −71 / −44 / 13 (31) | 10 (1, home) |
+| rocky | dense/thick | 114 / 117 / 125 (5) | −25 / 11 / 84 (18) | −86 / −43 / 2 (164) | −150 / −97 / −73 (37) |
+| ice | none / thin / dense | — | — | −160…−60 (38) | −243…−84 (548) |
+| gas | none | — | — | −155 / −131 / −107 (19) | −242 / −198 / −138 (729) |
+| moon rocky | none | −4 / 29 / 70 (61) | −83 / −19 / 41 (346) | −145 / −103 / −48 (750) | −240 / −187 / −127 (1265) |
+| moon rocky / icy | thin | — | −53 / −49 / −49 (2) | −136…−41 (56) | −231…−112 (154) |
+| moon icy | none | — | — | −168 / −148 / −119 (117) | −246 / −206 / −150 (2358) |
+| planetoid | none | — | −43 (1) | −146 / −115 / −51 (120) | −252 / −221 / −124 (9967) |
+
+Owner-rule violations (rule / bodies it applies to):
+
+| Rule | Test | Violations |
+|---|---|---|
+| R1 airless and not close to the star is very cold | `none`, `a ≥ hz.min`, T > 0 °C | 101 / 16044 (0.6%) |
+| R1b airless close to the star is Mercury-hot | `none`, `a < 0.5·hz.min`, T < 100 °C | 0 / **0** (no body exists that close) |
+| R2 atmosphere in the HZ is temperate | thin/breathable in HZ, T ∉ (−20, 50) | 83 / 247 (33.6%) |
+| R3 dense/thick is greenhouse-hot | dense/thick at `a ≤ hz.max`, T < 100 °C | 18 / 23 (78.3%) |
+| R4 distant moon with atmosphere is below zero | moon, atmosphere, parent `a > hz.max`, T ≥ 0 | 0 / 210 |
+
+Structural facts found by the same probe: **M-star systems have 0 planets in their HZ** (0/684; `minOrbitAU =
+max(0.35, 0.15 + 0.4·M★)` = 0.35 AU = the M HZ outer edge, `SystemGenerator.js:269`); `hot_rocky` exists once in
+5 galaxies; the class HZ is fixed while luminosity varies ×0.41–2.07 per star (`L ∝ M⁴`, `:213`), so the stored HZ and
+the real flux disagree. Homeworld clamp vs the formula: F 1.457 AU 22 → 43.5 °C, **M 1.05 AU 10 → −130.6 °C**,
+K 0.59 AU 21 → 20.7, **M 0.55 AU 13 → −100.7**, K 0.753 AU 14 → −22.3 (what `LifeSystem` writes on its first check).
+Options and gameplay consequences: **D-CS-19** in §4.
+
+**Part 2 — archetypes v2.** Files: `src/data/BodyArchetypes.js` (21 rows), `src/utils/BodyArchetypeLogic.js`
+(`archetypeContext`, `fluxOf`, `moonZoneOfRank`, `waterBandOf`, `planetoidPaletteOf`, `HOMEWORLD_ARCHETYPE`;
+`assignBodyArchetype(body, ctx, { homeworld })`), `StarSystemManager` (per-system context in `generateAndRegister`
+and `assignMissingArchetypes`), `EmpireColonyBootstrap` (AI home → `homeworld: true`), `SaveSystem._serializePlanet` /
+`GameScene._restoreSystem` (`waterBand`, `waterCoverage`), `ColonySphereDebug`, i18n PL/EN (`toxic` key removed;
++hothouse, cryo_haze, scorched, 5 moons, planetoid_icy).
+
+Drivers: flux `S = L/a²` in S⊕ (moon: the parent's `a`; star `luminosity`, else class luminosity), thresholds
+`FLUX_HOT 1.5`, `FLUX_WARM 1.1`, `FLUX_HZ_OUTER 0.35` (= `L/hz.max²` of every class ±0.03; also the CO₂
+maximum-greenhouse limit), `FLUX_FROST 0.072` (= 2.2·hz.max), `FLUX_KUIPER = FLUX_FROST/100` (10× the frost distance).
+Moon zone = rank among the parent's moons sorted by `a`: inner `r < n/3`, mid `r < 2n/3`, outer.
+
+| Archetype | Family | Clauses (priority) |
+|---|---|---|
+| terran | planet | breathable + lifeScore ≥ 50 (90) · breathable, 0.35 < S < 1.5 (60) |
+| ocean | planet | thin/breathable/dense/thick, 0.35 < S < 1.5, H2O > 8 (65) — rare |
+| jungle | planet | breathable, H2O > 2.5, S > 1.1 or T > 35 °C (61) |
+| desert | planet | breathable, H2O < 2.5, S > 1.1 or T > 35 (61) · rocky/hot_rocky, thin, H2O < 8, S > 0.072 (40) |
+| ice | planet | breathable, S < 0.35 (62) · ice, none/thin (45) · rocky, none/thin, H2O > 8, S < 0.35 (40) |
+| hothouse | planet | rocky/hot_rocky, dense/thick, S > 0.35 (60) |
+| cryo_haze | planet | dense/thick, S < 0.35 (60) — includes ice planets with a dense atmosphere |
+| tidally_locked | planet | rocky/hot_rocky, locked, none/thin (55) |
+| volcanic | planet | rocky, T > 150 (50) · rocky, mass > 4.5, thin, S > 0.072 (50) |
+| scorched | planet | none, S > 1.5 (50) · none, T > 100 (50) |
+| barren | planet | none (30) · fallback (0) |
+| gas_warm / gas_temperate / gas_cold | gas | unchanged (`resolveTextureType` thresholds) |
+| hazy_moon | moon | atmosphere, T < 0 (50) · atmosphere, S < 0.35 (50) |
+| volcanic_moon | moon | rocky, parent gas, inner (40) |
+| icy_cracked | moon | icy, parent gas, inner/mid (40) · icy, parent ice, inner (40) |
+| icy_cratered | moon | icy (10) |
+| rocky_cratered | moon | rocky (10) · fallback (0) |
+| planetoid_icy | planetoid | carbonaceous/silicate, S < FLUX_KUIPER (10) — palette `icy` |
+| planetoid | planetoid | fallback (0) — palette = `planetoidType` |
+
+Every row keeps `nameKey` (PL + EN), family, rules, biome → one of the 10 terrains (D-CS-3), placeholder `field`,
+`atmosphere.tint`, `clouds.coverage`, `gridClass` (D-CS-8 table). Terran rows read `seaFromWaterCoverage`.
+**CS-6 must add visual variants within each archetype** (from `surfaceSeed` and star-class palettes) so that two
+worlds of the same archetype never look identical. Planetoid seed variation for CS-4/CS-6 (documented in the data file,
+not stored, not computed now): crater density ×0.6–1.4, albedo ×0.8–1.2, one giant crater on ≈1 in 6 bodies.
+
+`waterBand` / `waterCoverage` (terran only, frozen `??=`): `s = u + clamp(0.02·(H2O − 3), ±0.1)`, `u =
+mixSeed(surfaceSeed ^ salt)/2³²`; bands by share continental 15% (15–40%) · balanced 25% (40–65%) · oceanic 60%
+(65–90%); coverage linear inside the band, rounded to 0.001. Pure hash, 0 RNG draws.
+
+**Distribution** (`node src/testing/headless/probe-cs3b-archetypes.mjs`, 5 seeds × 72 systems; per-galaxy counts in
+the probe output):
+
+| Planets (n = 1919) | count | % | galaxies |
+|---|---|---|---|
+| ice | 621 | 32.4 | 5/5 |
+| cryo_haze | 395 | 20.6 | 5/5 |
+| desert | 313 | 16.3 | 5/5 |
+| tidally_locked | 203 | 10.6 | 5/5 |
+| barren | 149 | 7.8 | 5/5 |
+| volcanic | 110 | 5.7 | 5/5 |
+| terran | 81 | 4.2 | 5/5 |
+| hothouse | 26 | 1.4 | 5/5 |
+| jungle | 13 | 0.7 | 4/5 |
+| scorched | 8 | 0.4 | 4/5 |
+| ocean | 0 | 0 | 0/5 (exempt) |
+
+| Moons (n = 5109) | count | % | | Planetoid palettes (n = 10088) | count | % |
+|---|---|---|---|---|---|---|
+| rocky_cratered | 1955 | 38.3 | | metallic | 2990 | 29.6 |
+| icy_cracked | 1625 | 31.8 | | carbonaceous | 2585 | 25.6 |
+| icy_cratered | 850 | 16.6 | | icy | 2607 | 25.8 |
+| volcanic_moon | 467 | 9.1 | | silicate | 1906 | 18.9 |
+| hazy_moon | 212 | 4.1 | | | | |
+
+Gas (unchanged): gas_warm 0 / gas_temperate 318 / gas_cold 430 (exempt). Terran `waterBand` (n = 81): oceanic 60.5% ·
+balanced 25.9% · continental 13.6% (target 60/25/15 ± 7). Homeworlds: **15/15 terran** (5 player + 10 AI). tidallyLocked
+269/2667 planets. **All targets met**: max planet archetype 32.4% (≤ 35), max moon 38.3% (≤ 45), every archetype in
+≥ 3/5 galaxies except the exempt `ocean` / `gas_warm`.
+Physically limited, not forced: terran + jungle stay ≈ 5% because breathable atmospheres are ≤ 2 per system and ≈ 6% of
+rocky/ice planets in the generator; `ocean` stays 0 (no water-rich world sits in the HZ flux band); `scorched` / `hothouse`
+are rare because no planet orbits inside ≈ 0.5·hz.min (`minOrbitAU`). Changing these is generator/physics work (D-CS-19).
+
+**Look vs stored temperature** (input to D-CS-19; contradiction = terran/ocean T ≤ −10 or ≥ 60, jungle ≤ 10 or ≥ 80,
+ice/cryo_haze/icy moons > 0, hazy_moon ≥ 0, hothouse/scorched < 50): **71 / 3831** bodies — terran 43/81 (HZ worlds the
+flat model leaves frozen), hothouse 20/26 (flat +60 °C instead of a runaway greenhouse), scorched 8/8 (mean equilibrium,
+no day side); 0 for ice, cryo_haze, jungle, icy moons, hazy moons.
+
+**Decisions taken by CC while owner away — ✅ ALL 10 SIGNED by the owner (2026-11-18).**
+1. **Flux is the primary driver** for planets and planetoids; thresholds are anchored on the game's own HZ table
+   (`FLUX_HZ_OUTER` = `L/hz.max²` of every class) rather than on literature values; stored temperature is a secondary
+   clause (jungle/desert > 35 °C, volcanic > 150 °C, scorched > 100 °C, hazy_moon < 0 °C).
+2. **hothouse ↔ cryo_haze split at the HZ outer edge** (S = 0.35, the CO₂ maximum-greenhouse limit): dense rocky planets
+   beyond it (164, stored −86…2 °C) are cryo_haze, not hothouse.
+3. **Breathable beyond the HZ (S < 0.35) → ice** (snowball), breathable on the warm side (S > 1.1) → jungle / desert by
+   H2O; breathable in the HZ stays terran even when the stored temperature is −37 °C (flux wins; counted above).
+4. **tidally_locked only for none/thin atmospheres**: a dense atmosphere evens out day and night (hothouse / cryo_haze
+   win); breathable stays terran (owner OK).
+5. **Moon zones by rank** among the parent's moons (n/3, 2n/3), not by absolute distance; icy inner moons of ice giants
+   are also `icy_cracked` (Miranda/Ariel).
+6. **Icy planetoids only beyond 10× the frost line and only carbonaceous/silicate**: almost every planetoid is beyond the
+   frost line (5th percentile 1.7×), so "beyond the frost line" would make 99% icy; metallic keeps the metallic look so
+   the look agrees with the gameplay `planetoidType`. The icy look is a separate archetype id `planetoid_icy`
+   (frozen like every archetype), palette via `planetoidPaletteOf`.
+7. **Homeworlds**: AI homes are forced terran in `EmpireColonyBootstrap` (`homeworld: true`, after the mutation); the
+   player home is terran through the biosphere clause (lifeScore 100, priority 90). Old saves: the player home is terran
+   the same way; AI homes of an old save get the rules (colonies are restored after the start pass, so the pass cannot
+   know them) — almost always terran, possibly jungle/ocean/ice.
+8. **Stored ids outside the table** (`toxic`, `rocky_moon`, `icy_moon` from uncommitted CS-3b v1 test saves) are not
+   archetypes: the start pass re-selects them. Valid ids stay frozen.
+9. `waterBand` H2O shift ±0.1 max (homeworld H2O ≥ 6% leans oceanic); exact `waterCoverage` stored for CS-4/CS-6.
+10. No save version bump (`CURRENT_VERSION` 101); new planet fields `waterBand`, `waterCoverage` written as `null` when
+    unset, restored `?? null`, filled by the start pass.
+
+**Keeper** `colony_sphere_archetypes_smoke.mjs` (A1–A11, 161 pins): new pins for the v2 table, flux thresholds vs
+`STAR_TYPES`, `STAR_CLASS_LUMINOSITY`, `WATER_BANDS`, rename (no `toxic` / `rocky_moon` / `icy_moon` in data or i18n),
+totality over 1 041 600 parameter combinations incl. flux / parent / moon zone, tie witness volcanic/scorched, 32 point
+rules, `fluxOf` / moon zones, waterBand frozen under H2O drift, legacy-id re-selection, homeworld forcing, 20 000-seed
+band split ±1.5 pp, world path vs `select` with the system context, AI homes terran with bands, save/restore of the
+bands (serializer + source pin), fixture `??=` gives every terran a band, debug columns, **A11 headless galaxy**
+(5 seeds: planet ≤ 35%, moon ≤ 45%, presence ≥ 3/5, waterBand ± 7 pp, 15/15 homes terran). Trace `CS3b-world-baseline.json`
+unchanged (the v2 fields join the skipped key set; base digests still equal).
+- Fail-first on `git worktree --detach 0286487` (keeper + trace + `GasUniformsDigest.mjs` + probe copied; `three` stub
+  **copied** into the worktree's `node_modules`, no junction): **18 green / 74 red**, no abort. The 18 green are controls
+  and witnesses (trace, schema, 3 seeded worlds = base, 3 gas-uniform pins, renderer pin, CS-3a OFF trace, AI-home and
+  SaveSystem witnesses, no version bump, generator pin, fixture witnesses).
+- **24 mutations, all killed**: waterBand not frozen, waterBand via `Math.random`, AI home without `homeworld`, moon flux
+  from its own `a`, moon zones unsorted, legacy id kept, save without `waterBand`, restore without `waterCoverage`,
+  luminosity ignored, cryo_haze only beyond the frost line, `toxic` key back in pl.js, csWorlds without `waterBand`,
+  metallic planetoids icy, terran without bands, SSM pass without system context, `generateAndRegister` without context,
+  H2O gain sign flipped, ice planets with dense atmosphere → ice, band shares 50/30/20, locked over dense atmosphere,
+  hazy_moon without the atmosphere condition, freeze removed, tie via `Math.random`, AI home without re-selection.
+- Sweep `node src/testing/smoke/run-all.mjs --quiet`: **428/428 OK, 0 FAIL** (30 advisory). `node tools/check-i18n.mjs`:
+  **PASS**.
+- Debug: `csWorlds()` adds `waterBand`, `waterCoverage`, `palette` columns and `terranWithoutWaterBand` (0);
+  `csArchetypes()` lists all 21 archetypes plus `planetoidPalettes` and `terranWaterBands`.
+
+**Finding 770 🟠 (filed by this step, no step yet).** `LifeSystem._checkAll` (`src/systems/LifeSystem.js:69-72`) recomputes
+`temperatureC` of every planet of the **active** system every 1000 game years with the **home** star's luminosity
+(`this.star`, set once in `GameScene.js:309`). (a) In a foreign system it writes temperatures from the wrong star;
+(b) on the home system it undoes the homeworld clamp (M-star homes: 10 → −131 °C, 13 → −101 °C; K: 14 → −22 °C), after
+which `_calcPotential` may decay the homeworld's `lifeScore`. Reachable at 1 y/s after ≈ 17 real minutes. Archetypes are
+frozen, so the look does not change. Owner decision (2026-11-18): fixed in a separate small fix step together with #768,
+before CS-PHYS (not part of D-CS-19).
+
+**Gate log — owner light check (live browser, 2026-11-18): PASS.**
+1. Old save (pre-CS-3b, galaxySeed 1533524380, world legacy): log `[CS-3b] archetyp nadany: 611`; `csArchetypes`
+   missingArchetypes 0, terranWaterBands missing 0, 21 rows, tidallyLocked 10/95.
+2. Save → F5 → Continue: `archetyp nadany: 0`, identical counts.
+3. Seeded new game (galaxySeed -138766827): `świat=seedowany`, `archetyp nadany: 31`; missing 0, terranWaterBands
+   missing 0, planetoid palette icy present.
+4. `csWorlds`: missingArchetypes 0, terranWithoutWaterBand 0; homeworld New Earth = terran, tidallyLocked true,
+   waterBand oceanic, waterCoverage 0.701.
+5. System map + colony open: no visual change, no red console errors.
+
 ---
 
 ## 4. Decisions for Filip (recommendation first)
@@ -1051,6 +1408,35 @@ warnings, correct data, keeps the async design): re-specify the storage right be
   (≈154 MB; the height maps were never used). *Alt:* delete at CS-Z unconditionally.
 - **✅ D-CS-16 Determinism policy.** *Recommended:* gameplay terrain only from `evalAt` at tile centres (no trig);
   colonised bodies persist their terrain string. *Alt:* seed-only (smaller save, cross-browser risk §1.I).
+- **✅ D-CS-19 Make the temperature model realistic (SIGNED 2026-11-18: option (b) extended with orbits → step
+  CS-PHYS after CS-6: generation-time physical model + `minOrbitAU` scaled by stellar luminosity, behind a `FEATURES`
+  flag with OFF = today bit-identical, new worlds only, no save migration, BALANS run, heavy gate. Finding 770 is NOT
+  part of CS-PHYS — fixed earlier in a small fix step with #768; item (6) below is superseded.)** Audit in §3.3.1 Part 1. Today: equilibrium
+  temperature + a flat greenhouse table, moons from the parent's orbit, no day side, no runaway greenhouse, no tidal
+  heating; violations R2 33.6%, R3 78.3%; M systems have no HZ planet; LifeSystem re-applies the formula with the home
+  star (Finding 770). Archetypes v2 already look right from the drivers, so the visual layer does not depend on this
+  decision (71 / 3831 look-vs-temperature contradictions today).
+  - *(a) Keep.* No gameplay change, no save impact. The displayed °C keeps contradicting the look on ≈ half of the terran
+    worlds (frozen HZ worlds) and on hothouse/scorched worlds; Finding 770 stays.
+  - *(b, recommended) Physical model, generation-time only, frozen afterwards:* greenhouse as a function of atmosphere
+    **and** flux (runaway above the HZ inner edge for dense/thick → Venus 300–470 °C; CO₂ collapse beyond the HZ outer edge),
+    fix the `thick < dense` inversion, airless bodies get a day-side/night-side pair (stored mean unchanged for
+    gameplay, extremes for display), moons add tidal heating for inner moons of giants (Io/Europa) and the parent's
+    flux. Gameplay consequences: (1) **habitability** — `_calcPotential` / `LifeSystem` thresholds see different numbers:
+    HZ worlds warm up (more life emergence), dense HZ worlds become uninhabitable (hothouse); (2) **population growth**
+    and colony comfort read temperature through `CivilizationSystem` (shelter rules) and building gates — needs a
+    balance pass (BALANS harness); (3) **AI body evaluation** (Director / `AcceptanceEngine` colony scoring, bootstrap home
+    pick `_applyCivHomeworld` scores 0–50 °C) changes targets; (4) **saves**: generated bodies store temperatures, so old
+    saves keep old values unless a migration recomputes them (prefer: new worlds only, flag-gated; no migration);
+    (5) **RNG**: atmosphere is rolled from `T_base_C`, so changing the base formula changes the RNG-driven atmosphere
+    rolls → new worlds differ (fine for a new game, must be behind `FEATURES` with OFF = today bit for bit);
+    (6) fix Finding 770 in the same step (LifeSystem uses the body's own star, keeps the homeworld clamp or the new model).
+    Also consider `minOrbitAU` for M stars (so M systems can have HZ planets) — a generator change with the same flag.
+  - *(c) Display-only.* Keep stored gameplay temperatures, show a "surface range" derived from the drivers in the UI
+    (day/night, greenhouse). Zero balance risk, no save change, but two temperatures per body can confuse the player
+    and Finding 770 still needs its own fix.
+  - Recommendation: **(b)** in its own step after CS-6 (so the archetype look is settled first), behind a flag, new
+    worlds only, with a BALANS run; Finding 770 fixed in that step.
 
 ---
 

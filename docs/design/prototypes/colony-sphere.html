@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KOSMOS — prototyp: sfera kolonii (ciągła powierzchnia + siatka hex)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05070a; --panel:rgba(8,11,15,.78); --line:rgba(242,193,78,.28);
+    --amber:#f2c14e; --amber-dim:rgba(242,193,78,.55); --cyan:#5ad1e6; --red:#ff5b4f;
+    --text:#e8e2d0; --muted:#8d8a80; --glow:0 0 8px rgba(242,193,78,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;overflow:hidden}
+  canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  canvas#c.dragging{cursor:grabbing}
+  canvas#c.targeting{cursor:crosshair}
+  .glow{text-shadow:var(--glow)}
+  header{position:fixed;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:14px;padding:0 14px;
+    background:linear-gradient(180deg,rgba(5,7,10,.95),rgba(5,7,10,.55));border-bottom:1px solid var(--line);z-index:5}
+  header .title{font-weight:800;letter-spacing:.14em;color:var(--amber);text-shadow:var(--glow);white-space:nowrap}
+  header .title small{color:var(--muted);font-weight:400;letter-spacing:.06em;margin-left:8px}
+  .grp{display:flex;gap:4px;align-items:center}
+  .grp .lbl{color:var(--muted);font-size:10px;letter-spacing:.12em;margin-right:4px}
+  .chip{border:1px solid var(--line);background:rgba(242,193,78,.04);color:var(--text);padding:5px 9px;font:inherit;font-size:11px;letter-spacing:.08em;cursor:pointer;text-transform:uppercase}
+  .chip:hover{border-color:var(--amber-dim)}
+  .chip.on{background:rgba(242,193,78,.16);border-color:var(--amber);color:var(--amber);text-shadow:var(--glow)}
+  .chip:disabled{opacity:.4;cursor:not-allowed}
+  select.chip{appearance:none;padding-right:9px}
+  .spacer{flex:1}
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(3px);z-index:4;
+    transition:opacity .5s ease, transform .5s ease;overflow:auto}
+  .panel h3{margin:0;padding:9px 12px;font-size:11px;letter-spacing:.16em;color:var(--amber);border-bottom:1px solid var(--line);text-shadow:var(--glow);position:sticky;top:0;background:rgba(8,11,15,.92)}
+  .panel .sec{padding:10px 12px;border-bottom:1px solid rgba(242,193,78,.12)}
+  #left{top:58px;left:12px;width:290px;bottom:98px}
+  #right{top:58px;right:12px;width:310px;bottom:98px}
+  #strip{left:12px;right:12px;bottom:12px;height:76px;display:flex;overflow:hidden}
+  body.mode-system #left{opacity:0;transform:translateX(-30px);pointer-events:none}
+  body.mode-system #right{opacity:0;transform:translateX(30px);pointer-events:none}
+  body.mode-system #strip{opacity:0;transform:translateY(30px);pointer-events:none}
+  body.mode-system #brackets{opacity:0}
+  body.mode-system .colony-only{opacity:.35;pointer-events:none}
+  .kv{display:grid;grid-template-columns:1fr auto;gap:3px 10px}
+  .kv .k{color:var(--muted)} .kv .v{text-align:right}
+  .big{font-size:26px;font-weight:800;color:var(--amber);text-shadow:var(--glow);line-height:1}
+  .bodyname{font-size:16px;font-weight:800;letter-spacing:.08em;color:var(--text)}
+  .sub{color:var(--muted);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+  .row{display:flex;align-items:center;gap:8px}
+  .list .item{padding:9px 12px;border-bottom:1px solid rgba(242,193,78,.1);cursor:pointer;position:relative}
+  .list .item:hover{background:rgba(242,193,78,.05)}
+  .list .item.sel{background:rgba(242,193,78,.1)}
+  .list .item.sel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber);box-shadow:var(--glow)}
+  .tag{display:inline-block;border:1px solid var(--line);padding:1px 5px;font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+  .tag.amber{color:var(--amber);border-color:var(--amber-dim)} .tag.cyan{color:var(--cyan);border-color:rgba(90,209,230,.5)} .tag.red{color:var(--red);border-color:rgba(255,91,79,.5)}
+  .sw{display:inline-block;width:10px;height:10px;border:1px solid rgba(255,255,255,.25);vertical-align:-1px}
+  .bar{height:6px;background:rgba(255,255,255,.06);position:relative;flex:1}
+  .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--amber)}
+  .biorow{display:grid;grid-template-columns:12px 1fr 90px 34px;gap:6px;align-items:center;margin:3px 0}
+  .btn{display:block;width:100%;text-align:left;border:1px solid var(--line);background:rgba(242,193,78,.05);color:var(--text);padding:7px 9px;font:inherit;font-size:11px;cursor:pointer;margin-top:5px}
+  .btn:hover:not(.dis){border-color:var(--amber);background:rgba(242,193,78,.12)}
+  .btn .why{display:block;color:var(--muted);font-size:10px;margin-top:3px;line-height:1.35}
+  .btn.dis{opacity:.55;cursor:not-allowed}
+  .btn.cyan{border-color:rgba(90,209,230,.45)} .btn.cyan:hover{border-color:var(--cyan);background:rgba(90,209,230,.1)}
+  .btn.on{border-color:var(--cyan);background:rgba(90,209,230,.16);color:var(--cyan)}
+  #strip .cell{padding:8px 12px;border-right:1px solid rgba(242,193,78,.14);display:flex;flex-direction:column;justify-content:center;gap:4px}
+  #strip .q{flex:1;display:flex;gap:8px;align-items:center;overflow:hidden}
+  .qi{border:1px solid var(--line);padding:5px 8px;min-width:150px}
+  .qi .bar{margin-top:5px}
+  .qi.done{opacity:.4}
+  #brackets{position:fixed;left:316px;right:336px;top:62px;bottom:102px;pointer-events:none;z-index:3;transition:opacity .5s}
+  #brackets span{position:absolute;width:26px;height:26px;border-color:var(--amber-dim);border-style:solid}
+  #brackets .tl{left:0;top:0;border-width:2px 0 0 2px} #brackets .tr{right:0;top:0;border-width:2px 2px 0 0}
+  #brackets .bl{left:0;bottom:0;border-width:0 0 2px 2px} #brackets .br{right:0;bottom:0;border-width:0 2px 2px 0}
+  #brackets .cap{position:absolute;left:34px;top:-2px;color:var(--amber);letter-spacing:.16em;font-size:10px;text-shadow:var(--glow)}
+  #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:104px;color:var(--muted);font-size:10px;letter-spacing:.08em;z-index:3;transition:opacity .4s;white-space:nowrap}
+  body.mode-system #hint{bottom:24px}
+  #toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:rgba(20,10,8,.9);border:1px solid rgba(255,91,79,.6);color:#ffd2cc;padding:8px 14px;z-index:6;opacity:0;transition:opacity .25s;max-width:520px;text-align:center;pointer-events:none}
+  #toast.ok{border-color:rgba(90,209,230,.6);color:#d4f6fc;background:rgba(6,16,20,.9)}
+  #toast.show{opacity:1}
+  #syslabel{position:fixed;z-index:3;pointer-events:auto;cursor:pointer;transform:translate(46px,-50%);transition:opacity .3s}
+  #syslabel .b{border-left:2px solid var(--amber);padding:3px 8px;background:rgba(5,7,10,.6)}
+  body.mode-colony #syslabel{opacity:0;pointer-events:none}
+  #syscard{position:fixed;left:50%;transform:translateX(-50%);bottom:52px;z-index:4;background:var(--panel);border:1px solid var(--line);padding:10px 14px;max-width:640px;text-align:center;line-height:1.5;transition:opacity .4s}
+  body.mode-colony #syscard{opacity:0;pointer-events:none}
+  .note{color:var(--muted);font-size:10px;line-height:1.5}
+  .warn{color:#ffb4ab}
+  ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-thumb{background:rgba(242,193,78,.25)}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:10;background:var(--bg);color:var(--amber);letter-spacing:.2em}
+</style>
+</head>
+<body class="mode-colony">
+<div id="loading" class="glow">INICJALIZACJA…</div>
+<canvas id="c"></canvas>
+
+<header>
+  <div class="title">KOSMOS · KOLONIE<small>prototyp koncepcji — sfera 3D</small></div>
+  <div class="grp"><span class="lbl">WIDOK</span>
+    <button class="chip" data-view="system">Mapa układu</button>
+    <button class="chip on" data-view="colony">Kolonie</button>
+  </div>
+  <div class="grp colony-only"><span class="lbl">SOCZEWKA</span>
+    <button class="chip on" data-lens="terrain">Teren</button>
+    <button class="chip" data-lens="deposits">Złoża</button>
+    <button class="chip" data-lens="owner">Własność</button>
+  </div>
+  <div class="grp colony-only"><span class="lbl">SIATKA</span>
+    <button class="chip on" data-grid="cursor">Przy kursorze</button>
+    <button class="chip" data-grid="always">Zawsze</button>
+    <button class="chip" data-grid="off">Ukryta</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="grp"><span class="lbl">POLA</span>
+    <select class="chip" id="density"></select>
+    <button class="chip" id="reseed" title="Nowe ziarno dla aktywnego ciała">Nowe ziarno</button>
+  </div>
+</header>
+
+<aside class="panel" id="left">
+  <h3>② CIAŁA · KOLONIE</h3>
+  <div class="list" id="bodyList"></div>
+  <div id="planetCard"></div>
+</aside>
+
+<aside class="panel" id="right">
+  <h3 id="inspTitle">④ INSPEKTOR</h3>
+  <div id="insp"></div>
+</aside>
+
+<div class="panel" id="strip">
+  <div class="cell" style="min-width:140px"><div class="sub">pas · kolejka budowy</div><div id="qcount" class="glow" style="color:var(--amber);font-weight:800">0 w kolejce</div></div>
+  <div class="cell q" id="queue"></div>
+  <div class="cell" style="min-width:330px"><div class="sub">generacja powierzchni (bez plików)</div><div id="genstat" class="note"></div></div>
+</div>
+
+<div id="brackets"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span><div class="cap">③ BOHATER · SFERA</div></div>
+<div id="hint">PRZECIĄGNIJ — OBRÓT · KÓŁKO — ZOOM · KLIK — POLE · ESC — ANULUJ</div>
+<div id="toast"></div>
+<div id="syslabel"><div class="b"><div class="bodyname" id="sysName"></div><div class="sub" id="sysSub"></div></div></div>
+<div id="syscard" class="note">
+  <b style="color:var(--amber)">MAPA UKŁADU</b> — to samo ciało, ta sama powierzchnia z tego samego ziarna i ten sam shader co w zakładce Kolonie.
+  Znika tylko siatka i UI. Zbudowane miasta widać po nocnej stronie jako światła.<br>
+  <span style="color:var(--text)">Kliknij ciało albo jego etykietę, aby wejść do Kolonii.</span>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =========================================================
+   1. Seeded RNG + simplex noise (CPU)
+   ========================================================= */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function makeSimplex(rand){
+  const g=new Float32Array([1,1,0,-1,1,0,1,-1,0,-1,-1,0,1,0,1,-1,0,1,1,0,-1,-1,0,-1,0,1,1,0,-1,1,0,1,-1,0,-1,-1]);
+  const p=new Uint8Array(256);for(let i=0;i<256;i++)p[i]=i;
+  for(let i=255;i>0;i--){const j=Math.floor(rand()*(i+1));const t=p[i];p[i]=p[j];p[j]=t;}
+  const perm=new Uint8Array(512),pm=new Uint8Array(512);
+  for(let i=0;i<512;i++){perm[i]=p[i&255];pm[i]=perm[i]%12;}
+  const F3=1/3,G3=1/6;
+  return function(x,y,z){
+    const s=(x+y+z)*F3,i=Math.floor(x+s),j=Math.floor(y+s),k=Math.floor(z+s);
+    const t=(i+j+k)*G3,x0=x-(i-t),y0=y-(j-t),z0=z-(k-t);
+    let i1,j1,k1,i2,j2,k2;
+    if(x0>=y0){if(y0>=z0){i1=1;j1=0;k1=0;i2=1;j2=1;k2=0;}else if(x0>=z0){i1=1;j1=0;k1=0;i2=1;j2=0;k2=1;}else{i1=0;j1=0;k1=1;i2=1;j2=0;k2=1;}}
+    else{if(y0<z0){i1=0;j1=0;k1=1;i2=0;j2=1;k2=1;}else if(x0<z0){i1=0;j1=1;k1=0;i2=0;j2=1;k2=1;}else{i1=0;j1=1;k1=0;i2=1;j2=1;k2=0;}}
+    const x1=x0-i1+G3,y1=y0-j1+G3,z1=z0-k1+G3,x2=x0-i2+2*G3,y2=y0-j2+2*G3,z2=z0-k2+2*G3,x3=x0-1+3*G3,y3=y0-1+3*G3,z3=z0-1+3*G3;
+    const ii=i&255,jj=j&255,kk=k&255;let n=0,tt,gi;
+    tt=.6-x0*x0-y0*y0-z0*z0;if(tt>0){gi=pm[ii+perm[jj+perm[kk]]]*3;tt*=tt;n+=tt*tt*(g[gi]*x0+g[gi+1]*y0+g[gi+2]*z0);}
+    tt=.6-x1*x1-y1*y1-z1*z1;if(tt>0){gi=pm[ii+i1+perm[jj+j1+perm[kk+k1]]]*3;tt*=tt;n+=tt*tt*(g[gi]*x1+g[gi+1]*y1+g[gi+2]*z1);}
+    tt=.6-x2*x2-y2*y2-z2*z2;if(tt>0){gi=pm[ii+i2+perm[jj+j2+perm[kk+k2]]]*3;tt*=tt;n+=tt*tt*(g[gi]*x2+g[gi+1]*y2+g[gi+2]*z2);}
+    tt=.6-x3*x3-y3*y3-z3*z3;if(tt>0){gi=pm[ii+1+perm[jj+1+perm[kk+1]]]*3;tt*=tt;n+=tt*tt*(g[gi]*x3+g[gi+1]*y3+g[gi+2]*z3);}
+    return 32*n;
+  };
+}
+function fbm(N,x,y,z,oct){let a=1,f=1,s=0,w=0;for(let o=0;o<oct;o++){s+=a*N(x*f,y*f,z*f);w+=a;a*=.5;f*=2;}return s/w;}
+function ihash(x,y,z,s){let h=(Math.imul(x,374761393)+Math.imul(y,668265263)+Math.imul(z,1440662683)+Math.imul(s,144665))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967296;}
+function craterField(x,y,z,f,salt,density){
+  x*=f;y*=f;z*=f;const cx=Math.floor(x),cy=Math.floor(y),cz=Math.floor(z);let best=0;
+  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
+    const ix=cx+dx,iy=cy+dy,iz=cz+dz;
+    if(ihash(ix,iy,iz,salt)>density)continue;
+    const fx=ix+ihash(ix,iy,iz,salt+1),fy=iy+ihash(ix,iy,iz,salt+2),fz=iz+ihash(ix,iy,iz,salt+3);
+    const r=.22+.38*ihash(ix,iy,iz,salt+4);
+    const q=Math.hypot(x-fx,y-fy,z-fz)/r;
+    if(q<1.4){const v=(q<1?(q*q-1):0)+.5*Math.exp(-(((q-1)/.13)**2));if(Math.abs(v)>Math.abs(best))best=v;}
+  }
+  return best;
+}
+const smooth=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t);};
+
+/* =========================================================
+   2. Body definitions + biome tables
+   ========================================================= */
+const BIOMES={
+  planet:{
+    deep:{n:'Głęboki ocean',c:'#0a1a33',build:false,why:'pole wodne — brak gruntu',mv:Infinity},
+    shallow:{n:'Płytkie morze',c:'#164a66',build:false,why:'pole wodne — brak gruntu',mv:Infinity},
+    packice:{n:'Pak lodowy',c:'#c8d6e2',build:false,why:'dryfujący lód — brak stabilnego gruntu',mv:3},
+    ice:{n:'Lądolód',c:'#e6eef6',build:true,mv:2},
+    peaks:{n:'Szczyty',c:'#e9e9ec',build:false,why:'zbyt strome zbocza',mv:Infinity},
+    mountains:{n:'Góry',c:'#61554a',build:true,mv:3},
+    tundra:{n:'Tundra',c:'#77736a',build:true,mv:1},
+    desert:{n:'Pustynia',c:'#c19e66',build:true,mv:1},
+    steppe:{n:'Step',c:'#8c8450',build:true,mv:1},
+    plains:{n:'Równiny',c:'#55733a',build:true,mv:1},
+    forest:{n:'Las',c:'#244a20',build:true,mv:2},
+    jungle:{n:'Dżungla',c:'#164214',build:true,mv:2},
+    swamp:{n:'Mokradła',c:'#34452b',build:true,mv:2},
+  },
+  moon:{
+    highlands:{n:'Wyżyny',c:'#9a9892',build:true,mv:1},
+    mare:{n:'Morze bazaltowe',c:'#434347',build:true,mv:1},
+    craterfloor:{n:'Dno krateru',c:'#76746f',build:true,mv:1},
+    rim:{n:'Krawędź krateru',c:'#bdbbb4',build:false,why:'zbyt strome — krawędź krateru',mv:3},
+    polarice:{n:'Lód w kraterze polarnym',c:'#c6dcf2',build:true,mv:2},
+  },
+  asteroid:{
+    regolith:{n:'Regolit',c:'#6e6155',build:true,mv:1},
+    rock:{n:'Lita skała',c:'#4d4540',build:true,mv:2},
+    vein:{n:'Żyła metaliczna',c:'#a08c6a',build:true,mv:1},
+    craterfloor:{n:'Dno krateru',c:'#5d534a',build:true,mv:1},
+    rim:{n:'Krawędź krateru',c:'#8a7d70',build:false,why:'zbyt strome — krawędź krateru',mv:3},
+  }
+};
+function classify(kind,s,sea){
+  if(kind==='planet'){
+    if(s.t<.17)return s.e<sea?'packice':'ice';
+    if(s.e<sea-.05)return 'deep'; if(s.e<sea)return 'shallow';
+    const h=(s.e-sea)/(1-sea);
+    if(h>.68)return 'peaks'; if(h>.45)return 'mountains';
+    if(s.t<.32)return 'tundra';
+    if(s.m<.30)return s.t>.575?'desert':'steppe';
+    if(s.m<.55)return 'plains'; if(s.m<.75)return 'forest';
+    return s.t>.62?'jungle':'swamp';
+  }
+  if(s.a>.62)return 'rim';
+  if(s.a<.40)return (kind==='moon'&&s.t>.82)?'polarice':'craterfloor';
+  if(kind==='moon')return s.m>.5?'mare':'highlands';
+  if(s.m>.7)return 'vein'; if(s.e>.62)return 'rock'; return 'regolith';
+}
+const DEPOSITS={
+  fe:{n:'Rudy żelaza',c:'#d9783a'}, ti:{n:'Tytan',c:'#9fb7c9'}, cr:{n:'Kryształy',c:'#c77dff'},
+  d2:{n:'Deuter',c:'#4fa3ff'}, h2o:{n:'Lód wodny',c:'#bfe8ff'}, he3:{n:'Hel-3',c:'#7dffb2'},
+  pt:{n:'Metale rzadkie',c:'#ffd76a'}, node:{n:'Węzeł anomalii (pięciokąt)',c:'#ff4fd8'}
+};
+const BODIES=[
+  {id:'gaja',name:'NOWA GAJA',kind:'planet',seed:1847,n:6,role:'Kolonia stołeczna',radiusKm:6120,g:'0,96 g',temp:[-62,48]},
+  {id:'selena',name:'SELENA II',kind:'moon',seed:9023,n:5,role:'Placówka wydobywcza',radiusKm:1690,g:'0,17 g',temp:[-170,115]},
+  {id:'ceres',name:'CERES-K',kind:'asteroid',seed:4410,n:3,role:'Kopalnia planetoidy',radiusKm:470,g:'0,03 g',temp:[-110,-30]},
+];
+const BUILDINGS={
+  capital:{n:'Centrum kolonii',pop:3,light:1.0},
+  outpost:{n:'Placówka',pop:1,light:.6},
+  habitat:{n:'Habitat mieszkalny',pop:2,light:.9},
+  farm:{n:'Farma hydroponiczna',pop:0,light:.35},
+  mine:{n:'Kopalnia',pop:0,light:.45,needsDeposit:true},
+  factory:{n:'Fabryka',pop:0,light:.7},
+  power:{n:'Elektrownia fuzyjna',pop:0,light:.5},
+  barracks:{n:'Koszary',pop:0,light:.45},
+  spaceport:{n:'Port kosmiczny',pop:0,light:.8},
+  defense:{n:'Bateria obrony planetarnej',pop:0,light:.3},
+};
+const BUILDABLE=['habitat','farm','mine','factory','power','barracks','spaceport','defense'];
+
+/* =========================================================
+   3. Biome data generation (one continuous surface from seed)
+   ========================================================= */
+const TW=1024,TH=512;
+function generateSurface(body){
+  const t0=performance.now();
+  const rand=mulberry32(body.seed);
+  const N1=makeSimplex(rand),N2=makeSimplex(rand),N3=makeSimplex(rand);
+  const o=[];for(let i=0;i<9;i++)o.push(rand()*100);
+  const data=new Float32Array(TW*TH*4);
+  const kind=body.kind;
+  for(let y=0;y<TH;y++){
+    const v=(y+.5)/TH,lat=(v-.5)*Math.PI,cl=Math.cos(lat),sl=Math.sin(lat);
+    for(let x=0;x<TW;x++){
+      const u=(x+.5)/TW,lon=(u-.5)*2*Math.PI;
+      const px=Math.cos(lon)*cl,py=sl,pz=Math.sin(lon)*cl;
+      let e,m,t,a=.5;
+      if(kind==='planet'){
+        const wx=fbm(N2,px*1.2+o[0],py*1.2+o[1],pz*1.2+o[2],3),wy=fbm(N2,px*1.2+o[3],py*1.2+o[4],pz*1.2+o[5],3),wz=fbm(N2,px*1.2+o[6],py*1.2+o[7],pz*1.2+o[8],3);
+        const qx=px+.42*wx,qy=py+.42*wy,qz=pz+.42*wz;
+        e=.5+fbm(N1,qx*1.4,qy*1.4,qz*1.4,6)*.9;
+        const r=1-Math.abs(N3(qx*2.6+o[1],qy*2.6,qz*2.6));
+        e+=Math.max(0,e-.55)*r*r*r*.3;
+        m=Math.min(1,Math.max(0,.5+fbm(N3,px*2.1+o[4],py*2.1+o[5],pz*2.1+o[6],4)*1.15));
+        t=1-Math.pow(Math.abs(sl),1.9)+fbm(N2,px*3+o[7],py*3,pz*3,2)*.12;
+      }else if(kind==='moon'){
+        const base=fbm(N1,px*1.3,py*1.3,pz*1.3,5);
+        const mf=fbm(N2,px*.8+o[0],py*.8+o[1],pz*.8+o[2],3)*.5+.5;
+        m=smooth(.47,.55,mf);
+        const cr=craterField(px,py,pz,4.5,11,.55)+.65*craterField(px,py,pz,10,37,.6)+.35*craterField(px,py,pz,21,71,.6);
+        a=Math.min(1,Math.max(0,.5+cr*.35));
+        e=.55+base*.25-m*.06+cr*.06;
+        t=Math.abs(sl);
+      }else{
+        const base=fbm(N1,px*1.6,py*1.6,pz*1.6,5);
+        m=Math.pow(1-Math.abs(N2(px*3.5+o[0],py*3.5,pz*3.5)),7);
+        const cr=craterField(px,py,pz,3.5,13,.6)+.7*craterField(px,py,pz,8,41,.6);
+        a=Math.min(1,Math.max(0,.5+cr*.35));
+        e=.5+base*.4+cr*.07;
+        t=.5;
+      }
+      const k=(y*TW+x)*4;data[k]=e;data[k+1]=m;data[k+2]=t;data[k+3]=a;
+    }
+  }
+  // sea level by area-weighted quantile (target ~58% ocean)
+  let sea=0;
+  if(kind==='planet'){
+    const bins=new Float64Array(512);let tot=0;
+    for(let y=0;y<TH;y+=2){const w=Math.cos(((y+.5)/TH-.5)*Math.PI);for(let x=0;x<TW;x+=2){const e=data[(y*TW+x)*4];const b=Math.min(511,Math.max(0,Math.floor(e*512)));bins[b]+=w;tot+=w;}}
+    let acc=0;for(let b=0;b<512;b++){acc+=bins[b];if(acc/tot>=.58){sea=b/512;break;}}
+    // colder on high ground
+    for(let i=0;i<TW*TH;i++){const k=i*4;data[k+2]=Math.min(1,Math.max(0,data[k+2]-Math.max(0,data[k]-sea)*.55));}
+  }
+  return {data,sea,ms:performance.now()-t0};
+}
+function sampleSurface(surf,dir){
+  const u=Math.atan2(dir.z,dir.x)/(2*Math.PI)+.5,v=Math.asin(Math.max(-1,Math.min(1,dir.y)))/Math.PI+.5;
+  const fx=u*TW-.5,fy=Math.min(TH-1.001,Math.max(0,v*TH-.5));
+  const x0=Math.floor(fx),y0=Math.floor(fy),tx=fx-x0,ty=fy-y0;
+  const X0=((x0%TW)+TW)%TW,X1=(X0+1)%TW,Y1=Math.min(TH-1,y0+1);
+  const d=surf.data,out=[0,0,0,0];
+  for(let c=0;c<4;c++){
+    const a=d[(y0*TW+X0)*4+c],b=d[(y0*TW+X1)*4+c],e=d[(Y1*TW+X0)*4+c],f=d[(Y1*TW+X1)*4+c];
+    out[c]=(a*(1-tx)+b*tx)*(1-ty)+(e*(1-tx)+f*tx)*ty;
+  }
+  return {e:out[0],m:out[1],t:out[2],a:out[3]};
+}
+
+/* =========================================================
+   4. Geodesic hex grid (Goldberg-style dual of a subdivided icosahedron)
+   ========================================================= */
+function buildGrid(n){
+  const t=(1+Math.sqrt(5))/2;
+  const V=[[-1,t,0],[1,t,0],[-1,-t,0],[1,-t,0],[0,-1,t],[0,1,t],[0,-1,-t],[0,1,-t],[t,0,-1],[t,0,1],[-t,0,-1],[-t,0,1]].map(v=>new THREE.Vector3(...v).normalize());
+  const F=[[0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],[1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],[3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],[4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]];
+  const verts=[],keys=new Map();
+  const vid=p=>{p.normalize();const k=Math.round(p.x*2e4)+','+Math.round(p.y*2e4)+','+Math.round(p.z*2e4);let id=keys.get(k);if(id===undefined){id=verts.length;verts.push(p.clone());keys.set(k,id);}return id;};
+  const tris=[];const AB=new THREE.Vector3(),AC=new THREE.Vector3();
+  for(const [a,b,c] of F){
+    const A=V[a];AB.subVectors(V[b],A);AC.subVectors(V[c],A);const idx=[];
+    for(let i=0;i<=n;i++){idx[i]=[];for(let j=0;j<=n-i;j++){idx[i][j]=vid(A.clone().addScaledVector(AB,i/n).addScaledVector(AC,j/n));}}
+    for(let i=0;i<n;i++)for(let j=0;j<n-i;j++){tris.push([idx[i][j],idx[i+1][j],idx[i][j+1]]);if(j<n-i-1)tris.push([idx[i+1][j],idx[i+1][j+1],idx[i][j+1]]);}
+  }
+  const cent=tris.map(tr=>new THREE.Vector3().add(verts[tr[0]]).add(verts[tr[1]]).add(verts[tr[2]]).normalize());
+  const vt=verts.map(()=>[]);const nb=verts.map(()=>new Set());
+  tris.forEach((tr,ti)=>{for(let k=0;k<3;k++){vt[tr[k]].push(ti);nb[tr[k]].add(tr[(k+1)%3]);nb[tr[k]].add(tr[(k+2)%3]);}});
+  const tiles=verts.map((c,i)=>{
+    const e1=new THREE.Vector3().crossVectors(Math.abs(c.y)<.9?new THREE.Vector3(0,1,0):new THREE.Vector3(1,0,0),c).normalize();
+    const e2=new THREE.Vector3().crossVectors(c,e1);
+    const cs=vt[i].map(ti=>{const d=cent[ti].clone().sub(c);return {ti,ang:Math.atan2(d.dot(e2),d.dot(e1))};}).sort((p,q)=>p.ang-q.ang);
+    return {id:i,c,corners:cs.map(o=>cent[o.ti]),cornerIds:cs.map(o=>o.ti),nb:[...nb[i]],pent:cs.length===5};
+  });
+  return {tiles,n,count:verts.length};
+}
+
+/* =========================================================
+   5. Renderer + scene
+   ========================================================= */
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio));
+renderer.setSize(innerWidth,innerHeight);
+const floatLinear=renderer.extensions.has('OES_texture_float_linear');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.01,2000);
+const STAR=new THREE.Vector3(-34,7,20);
+const LIGHT_DIR=STAR.clone().normalize();
+scene.add(new THREE.AmbientLight(0xffffff,.12));
+const sun=new THREE.DirectionalLight(0xfff4e0,2.2);sun.position.copy(LIGHT_DIR);scene.add(sun);
+
+// starfield
+{const g=new THREE.BufferGeometry(),N=3000,pos=new Float32Array(N*3),col=new Float32Array(N*3);const r=mulberry32(7);
+ for(let i=0;i<N;i++){const u=r()*2-1,th=r()*Math.PI*2,s=Math.sqrt(1-u*u);pos.set([Math.cos(th)*s*600,u*600,Math.sin(th)*s*600],i*3);const b=.35+r()*.65,w=r();col.set([b*(w>.8?.8:1),b*.95,b*(w<.2?.8:1)],i*3);}
+ g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+ scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:1.6,sizeAttenuation:false,vertexColors:true,transparent:true,opacity:.85})));}
+// star + glow
+const starGroup=new THREE.Group();scene.add(starGroup);starGroup.position.copy(STAR);
+starGroup.add(new THREE.Mesh(new THREE.SphereGeometry(2.2,32,16),new THREE.MeshBasicMaterial({color:0xfff6e0,toneMapped:false})));
+{const cv=document.createElement('canvas');cv.width=cv.height=256;const x=cv.getContext('2d');const gr=x.createRadialGradient(128,128,0,128,128,128);
+ gr.addColorStop(0,'rgba(255,240,200,1)');gr.addColorStop(.08,'rgba(255,220,160,.7)');gr.addColorStop(.45,'rgba(255,160,80,.12)');gr.addColorStop(1,'rgba(255,140,60,0)');x.fillStyle=gr;x.fillRect(0,0,256,256);
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true}));sp.scale.set(26,26,1);starGroup.add(sp);}
+// orbit rings (system view context)
+const orbitGroup=new THREE.Group();scene.add(orbitGroup);
+function ring(radius,opacity){
+  const pts=[];const dirA=new THREE.Vector3().subVectors(new THREE.Vector3(),STAR).normalize();
+  const up=new THREE.Vector3(0,1,0);const dirB=new THREE.Vector3().crossVectors(up,dirA).normalize();
+  for(let i=0;i<=256;i++){const a=i/256*Math.PI*2;pts.push(STAR.clone().addScaledVector(dirA,Math.cos(a)*radius).addScaledVector(dirB,Math.sin(a)*radius));}
+  const l=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xf2c14e,transparent:true,opacity}));orbitGroup.add(l);
+}
+ring(STAR.length(),.35);ring(STAR.length()*.55,.12);ring(STAR.length()*1.55,.1);
+
+const planet=new THREE.Group();scene.add(planet);
+
+/* ---------- GLSL ---------- */
+const NOISE_GLSL=`
+vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 permute(vec4 x){return mod289(((x*34.0)+10.0)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+float snoise(vec3 v){
+  const vec2 C=vec2(1.0/6.0,1.0/3.0);const vec4 D=vec4(0.0,0.5,1.0,2.0);
+  vec3 i=floor(v+dot(v,C.yyy));vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz);vec3 l=1.0-g;vec3 i1=min(g.xyz,l.zxy);vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx;vec3 x2=x0-i2+C.yyy;vec3 x3=x0-D.yyy;
+  i=mod289(i);
+  vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+  float n_=0.142857142857;vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.0*floor(p*ns.z*ns.z);vec4 x_=floor(j*ns.z);vec4 y_=floor(j-7.0*x_);
+  vec4 x=x_*ns.x+ns.yyyy;vec4 y=y_*ns.x+ns.yyyy;vec4 h=1.0-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy);vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.0+1.0;vec4 s1=floor(b1)*2.0+1.0;vec4 sh=-step(h,vec4(0.0));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x);vec3 p1=vec3(a0.zw,h.y);vec3 p2=vec3(a1.xy,h.z);vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
+  vec4 m=max(0.5-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0);m=m*m;
+  return 105.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}`;
+const surfaceMat=new THREE.ShaderMaterial({
+  uniforms:{
+    uData:{value:null},uBody:{value:0},uSea:{value:.5},uLight:{value:LIGHT_DIR.clone()},
+    uRot:{value:new THREE.Matrix3()},uRelief:{value:.035},uDetail:{value:1},
+    uCities:{value:Array.from({length:64},()=>new THREE.Vector4())},uCityCount:{value:0},uCityRad:{value:.1},
+    uHostile:{value:Array.from({length:16},()=>new THREE.Vector4())},uHostileCount:{value:0},
+  },
+  vertexShader:`varying vec3 vObjN;varying vec3 vWorldPos;
+    void main(){vObjN=normalize(position);vec4 wp=modelMatrix*vec4(position,1.0);vWorldPos=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}`,
+  fragmentShader:`precision highp float;
+    uniform sampler2D uData;uniform int uBody;uniform float uSea;uniform vec3 uLight;uniform mat3 uRot;uniform float uRelief;uniform float uDetail;
+    uniform vec4 uCities[64];uniform int uCityCount;uniform float uCityRad;uniform vec4 uHostile[16];uniform int uHostileCount;
+    varying vec3 vObjN;varying vec3 vWorldPos;
+    #define PI 3.14159265359
+    ${NOISE_GLSL}
+    vec2 dirToUv(vec3 n){return vec2(atan(n.z,n.x)/(2.0*PI)+0.5,asin(clamp(n.y,-1.0,1.0))/PI+0.5);}
+    vec3 planetColor(float e,float m,float t,float sea){
+      float h=(e-sea)/(1.0-sea);
+      vec3 deep=vec3(0.02,0.07,0.16),shallow=vec3(0.06,0.25,0.36),beach=vec3(0.66,0.60,0.45);
+      vec3 desert=vec3(0.76,0.62,0.40),steppe=vec3(0.55,0.52,0.31),plains=vec3(0.33,0.45,0.22),forest=vec3(0.14,0.29,0.12);
+      vec3 jungle=vec3(0.08,0.26,0.08),swamp=vec3(0.20,0.27,0.17),tundra=vec3(0.47,0.45,0.40),mount=vec3(0.38,0.33,0.28),peak=vec3(0.90,0.90,0.92),ice=vec3(0.88,0.92,0.96);
+      vec3 ocean=mix(deep,shallow,smoothstep(sea-0.09,sea,e));
+      vec3 dry=mix(steppe,desert,smoothstep(0.53,0.62,t));
+      vec3 wet=mix(swamp,jungle,smoothstep(0.58,0.66,t));
+      vec3 land=mix(dry,plains,smoothstep(0.26,0.34,m));
+      land=mix(land,forest,smoothstep(0.51,0.59,m));
+      land=mix(land,wet,smoothstep(0.72,0.78,m));
+      land=mix(tundra,land,smoothstep(0.28,0.36,t));
+      land=mix(land,beach,(1.0-smoothstep(0.0,0.02,h))*smoothstep(0.30,0.40,t)*0.8);
+      land=mix(land,mount,smoothstep(0.41,0.49,h));
+      land=mix(land,peak,smoothstep(0.65,0.71,h));
+      vec3 col=mix(ocean,land,smoothstep(-0.002,0.002,e-sea));
+      col=mix(col,ice,1.0-smoothstep(0.14,0.20,t));
+      return col;
+    }
+    vec3 moonColor(float e,float m,float t,float a){
+      vec3 col=mix(vec3(0.60,0.59,0.57),vec3(0.26,0.26,0.28),smoothstep(0.45,0.55,m));
+      float fl=1.0-smoothstep(0.36,0.44,a);
+      col=mix(col,col*0.80,fl);
+      col=mix(col,vec3(0.76,0.75,0.72),smoothstep(0.58,0.66,a));
+      col=mix(col,vec3(0.78,0.87,0.96),smoothstep(0.79,0.85,t)*fl);
+      return col;
+    }
+    vec3 asteroidColor(float e,float m,float a){
+      vec3 col=mix(vec3(0.43,0.38,0.33),vec3(0.29,0.26,0.24),smoothstep(0.58,0.66,e));
+      col=mix(col,vec3(0.58,0.51,0.40),smoothstep(0.64,0.80,m)*0.6);
+      col=mix(col,col*0.8,1.0-smoothstep(0.36,0.44,a));
+      col=mix(col,vec3(0.58,0.52,0.46),smoothstep(0.58,0.66,a));
+      return col;
+    }
+    void main(){
+      vec3 n=normalize(vObjN);
+      vec4 d=texture2D(uData,dirToUv(n));
+      float e=d.r,m=d.g,t=d.b,a=d.a;
+      vec3 east=normalize(cross(vec3(0.0,1.0,0.0),n)+vec3(1e-4,0.0,0.0));
+      vec3 north=cross(n,east);
+      float hs=0.006;
+      float eE=texture2D(uData,dirToUv(normalize(n+east*hs))).r;
+      float eN=texture2D(uData,dirToUv(normalize(n+north*hs))).r;
+      float landMask=uBody==0?smoothstep(uSea-0.003,uSea+0.01,e):1.0;
+      vec3 nb=normalize(n-(east*(eE-e)+north*(eN-e))/hs*uRelief*landMask);
+      float dn=snoise(n*38.0);
+      float dn2=snoise(n*95.0+7.0);
+      nb=normalize(nb+(vec3(snoise(n*55.0+3.0),dn2,snoise(n*55.0+13.0)))*0.035*landMask*uDetail);
+      vec3 col;float oceanMask=0.0;float metal=0.0;
+      if(uBody==0){col=planetColor(e,m,t,uSea);oceanMask=1.0-smoothstep(uSea-0.002,uSea+0.002,e);oceanMask*=smoothstep(0.14,0.2,t);}
+      else if(uBody==1){col=moonColor(e,m,t,a);}
+      else {col=asteroidColor(e,m,a);metal=smoothstep(0.64,0.76,m);}
+      col*=1.0+(dn*0.10+dn2*0.05)*(1.0-oceanMask*0.7)*uDetail;
+      // cities (day-side tint)
+      float city=0.0;
+      for(int i=0;i<64;i++){if(i>=uCityCount)break;vec4 c=uCities[i];float dd=1.0-dot(n,c.xyz);city+=c.w*exp(-dd/(uCityRad*uCityRad*0.5));}
+      float hostile=0.0;
+      for(int i=0;i<16;i++){if(i>=uHostileCount)break;vec4 c=uHostile[i];float dd=1.0-dot(n,c.xyz);hostile+=c.w*exp(-dd/(uCityRad*uCityRad*0.5));}
+      float speck=smoothstep(0.15,0.75,snoise(n*160.0)*0.5+0.5);
+      float urban=clamp(city+hostile,0.0,1.0);
+      col=mix(col,vec3(0.40,0.39,0.38),urban*0.45*(0.3+speck));
+      col=pow(col,vec3(2.2));
+      vec3 wn=normalize(uRot*nb);vec3 wg=normalize(uRot*n);
+      float geo=dot(wg,uLight);
+      float day=smoothstep(-0.06,0.16,geo);
+      float diff=clamp(dot(wn,uLight),0.0,1.0)*smoothstep(-0.04,0.12,geo);
+      vec3 V=normalize(cameraPosition-vWorldPos);vec3 H=normalize(uLight+V);
+      float spec=(pow(max(dot(wg,H),0.0),900.0)*0.9+pow(max(dot(wg,H),0.0),40.0)*0.05)*oceanMask*day+pow(max(dot(wn,H),0.0),30.0)*0.25*metal*day;
+      vec3 lit=col*(diff*1.15+0.012)+vec3(1.0,0.95,0.85)*spec;
+      float night=1.0-day;
+      vec3 lights=vec3(1.0,0.66,0.32)*clamp(city,0.0,1.6)*(0.25+speck*1.1)*night*1.5;
+      lights+=vec3(1.0,0.30,0.25)*clamp(hostile,0.0,1.6)*(0.25+speck)*night*1.3;
+      gl_FragColor=vec4(lit+lights,1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`
+});
+const surfaceMesh=new THREE.Mesh(new THREE.SphereGeometry(1,256,128),surfaceMat);planet.add(surfaceMesh);
+
+const atmoMat=new THREE.ShaderMaterial({
+  uniforms:{uLight:{value:LIGHT_DIR.clone()},uOn:{value:1}},
+  vertexShader:`varying vec3 vN;varying vec3 vW;void main(){vN=normalize((modelMatrix*vec4(normal,0.0)).xyz);vec4 w=modelMatrix*vec4(position,1.0);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+  fragmentShader:`uniform vec3 uLight;uniform float uOn;varying vec3 vN;varying vec3 vW;
+    void main(){vec3 V=normalize(cameraPosition-vW);float f=1.0-max(dot(vN,V),0.0);float rim=pow(f,2.6);
+      float day=smoothstep(-0.35,0.45,dot(vN,uLight));
+      vec3 c=mix(vec3(0.25,0.5,1.0),vec3(0.55,0.75,1.0),rim);
+      gl_FragColor=vec4(c,rim*day*0.95*uOn);}`,
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
+});
+const atmo=new THREE.Mesh(new THREE.SphereGeometry(1.035,96,48),atmoMat);planet.add(atmo);
+
+// grid overlay
+const gridMat=new THREE.ShaderMaterial({
+  uniforms:{uHover:{value:new THREE.Vector3(0,0,1)},uR:{value:.32},uAlways:{value:0},uVis:{value:1},uColor:{value:new THREE.Color(0xf2c14e)},uHoverOn:{value:0}},
+  vertexShader:`varying vec3 vP;void main(){vP=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform vec3 uHover;uniform float uR;uniform float uAlways;uniform float uVis;uniform vec3 uColor;uniform float uHoverOn;varying vec3 vP;
+    void main(){float d=distance(vP,uHover);float a=(1.0-smoothstep(uR*0.45,uR,d))*0.8*uHoverOn;a=max(a,uAlways*0.34);gl_FragColor=vec4(uColor,a*uVis);}`,
+  transparent:true,depthWrite:false
+});
+let gridLines=null;
+// tile fill overlay
+const fillMat=new THREE.ShaderMaterial({
+  uniforms:{uVis:{value:1}},
+  vertexShader:`attribute vec4 acolor;varying vec4 vC;void main(){vC=acolor;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform float uVis;varying vec4 vC;void main(){gl_FragColor=vec4(vC.rgb,vC.a*uVis);}`,
+  transparent:true,depthWrite:false
+});
+let fillMesh=null;
+const hoverLine=new THREE.LineLoop(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xffe08a,transparent:true,opacity:.95,depthWrite:false}));
+const selLine=new THREE.LineLoop(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xf2c14e,transparent:true,opacity:1,depthWrite:false}));
+const selLine2=new THREE.LineLoop(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xf2c14e,transparent:true,opacity:.7,depthWrite:false}));
+planet.add(hoverLine,selLine,selLine2);
+const pathLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x5ad1e6,transparent:true,opacity:.95}));
+planet.add(pathLine);
+const buildGroup=new THREE.Group();planet.add(buildGroup);
+
+/* =========================================================
+   6. Body state
+   ========================================================= */
+const cache={};
+let state={bodyIdx:0,body:null,surf:null,tex:null,grid:null,tileInfo:[],buildings:new Map(),hostile:new Set(),hostileB:new Map(),
+  territory:new Set(),hostileTerr:new Set(),unit:null,lens:'terrain',grid_mode:'cursor',view:'colony',sel:-1,hover:-1,moveMode:false,queue:[],capital:-1};
+let tileR=.1;
+
+function makeTexture(surf){
+  const tex=new THREE.DataTexture(surf.data,TW,TH,THREE.RGBAFormat,THREE.FloatType);
+  tex.minFilter=tex.magFilter=floatLinear?THREE.LinearFilter:THREE.NearestFilter;
+  tex.wrapS=THREE.RepeatWrapping;tex.wrapT=THREE.ClampToEdgeWrapping;tex.generateMipmaps=false;tex.needsUpdate=true;
+  return tex;
+}
+
+function loadBody(idx,opts={}){
+  const body=BODIES[idx];
+  const key=body.id+':'+body.seed;
+  let entry=cache[key];
+  let genMs=null;
+  if(!entry){const surf=generateSurface(body);genMs=surf.ms;entry=cache[key]={surf,tex:makeTexture(surf)};}
+  const gStart=performance.now();
+  const grid=buildGrid(body.n);
+  const gridMs=performance.now()-gStart;
+  state.bodyIdx=idx;state.body=body;state.surf=entry.surf;state.tex=entry.tex;state.grid=grid;
+  tileR=Math.sqrt(4*Math.PI/grid.count/2.598);
+  // classify tiles
+  const r=mulberry32(body.seed*7+body.n);
+  state.tileInfo=grid.tiles.map(tl=>{
+    const s=sampleSurface(entry.surf,tl.c);const b=classify(body.kind,s,entry.surf.sea);
+    return {s,b,dep:pickDeposit(body.kind,b,tl.pent,r)};
+  });
+  // surface uniforms
+  const u=surfaceMat.uniforms;
+  u.uData.value=entry.tex;u.uBody.value=body.kind==='planet'?0:body.kind==='moon'?1:2;u.uSea.value=entry.surf.sea;
+  u.uRelief.value=body.kind==='planet'?.035:body.kind==='moon'?.05:.06;
+  u.uCityRad.value=tileR*1.15;
+  atmoMat.uniforms.uOn.value=body.kind==='planet'?1:0;
+  buildOverlays();
+  // colony state (kept per body+density)
+  const ckey=key+':'+body.n;
+  if(!entry.colonies)entry.colonies={};
+  if(!entry.colonies[ckey])entry.colonies[ckey]=seedColony();
+  const col=entry.colonies[ckey];
+  state.buildings=col.buildings;state.hostileB=col.hostileB;state.unit=col.unit;state.capital=col.capital;state.queue=col.queue;
+  state.sel=-1;state.hover=-1;state.moveMode=false;pathLine.geometry.setFromPoints([]);
+  rebuildBuildingMeshes();recomputeTerritory();updateCities();applyLens();updateSel();
+  renderBodyList();renderPlanetCard();renderInspector();renderQueue();
+  const gen=genMs!=null?`${genMs.toFixed(0)} ms (wygenerowano teraz)`:`z pamięci podręcznej (0 ms)`;
+  document.getElementById('genstat').innerHTML=
+    `Mapa biomów ${TW}×${TH} z ziarna <b style="color:var(--text)">${body.seed}</b>: <b style="color:var(--amber)">${gen}</b><br>`+
+    `Siatka: ${grid.count} pól (${grid.count-12} heks + 12 pięciokątów) · ${gridMs.toFixed(0)} ms · 0 plików do pobrania`;
+  document.getElementById('sysName').textContent=body.name;
+  document.getElementById('sysSub').textContent=body.role;
+  if(opts.focus!==false&&state.capital>=0)rotateTo(grid.tiles[state.capital].c,opts.instant);
+}
+function pickDeposit(kind,b,pent,r){
+  if(pent)return 'node';
+  const x=r();
+  if(kind==='planet'){
+    if(b==='mountains')return x<.22?'fe':x<.34?'ti':x<.40?'cr':null;
+    if(b==='plains'||b==='steppe'||b==='desert'||b==='tundra')return x<.07?'fe':x<.10?'cr':null;
+    if(b==='ice'||b==='packice')return x<.25?'h2o':null;
+    if(b==='shallow'||b==='deep')return x<.05?'d2':null;
+    return null;
+  }
+  if(kind==='moon'){
+    if(b==='mare')return x<.28?'he3':x<.34?'ti':null;
+    if(b==='polarice')return 'h2o';
+    if(b==='highlands'||b==='craterfloor')return x<.08?'ti':x<.12?'he3':null;
+    return null;
+  }
+  if(b==='vein')return x<.7?'pt':'fe';
+  return x<.12?'fe':x<.16?'pt':null;
+}
+
+function buildOverlays(){
+  const {tiles}=state.grid;
+  if(gridLines){planet.remove(gridLines);gridLines.geometry.dispose();}
+  if(fillMesh){planet.remove(fillMesh);fillMesh.geometry.dispose();}
+  const seen=new Set(),pts=[];const R=1.0025;
+  for(const tl of tiles){const k=tl.corners.length;for(let i=0;i<k;i++){const a=tl.cornerIds[i],b=tl.cornerIds[(i+1)%k];const key=a<b?a+'_'+b:b+'_'+a;if(seen.has(key))continue;seen.add(key);
+    const A=tl.corners[i],Bc=tl.corners[(i+1)%k];const S=5;for(let q=0;q<S;q++){pts.push(...A.clone().lerp(Bc,q/S).normalize().multiplyScalar(R).toArray(),...A.clone().lerp(Bc,(q+1)/S).normalize().multiplyScalar(R).toArray());}}}
+  const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+  gridLines=new THREE.LineSegments(lg,gridMat);gridLines.renderOrder=3;planet.add(gridLines);
+  const pos=[],idx=[];let vi=0;const Rf=1.0015;
+  const L=4;
+  for(const tl of tiles){tl.vStart=vi;const k=tl.corners.length;
+    for(let f=0;f<k;f++){
+      const A=tl.c,Bc=tl.corners[f].clone().lerp(tl.c,.05),Cc=tl.corners[(f+1)%k].clone().lerp(tl.c,.05);const g=[];
+      for(let i=0;i<=L;i++){g[i]=[];for(let j=0;j<=L-i;j++){const p=A.clone().multiplyScalar(1-i/L-j/L).addScaledVector(Bc,i/L).addScaledVector(Cc,j/L).normalize().multiplyScalar(Rf);pos.push(p.x,p.y,p.z);g[i][j]=vi++;}}
+      for(let i=0;i<L;i++)for(let j=0;j<L-i;j++){idx.push(g[i][j],g[i+1][j],g[i][j+1]);if(j<L-i-1)idx.push(g[i+1][j],g[i+1][j+1],g[i][j+1]);}
+    }
+    tl.vCount=vi-tl.vStart;}
+  const fg=new THREE.BufferGeometry();fg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  fg.setAttribute('acolor',new THREE.Float32BufferAttribute(new Float32Array(vi*4),4));fg.setIndex(idx);
+  fillMesh=new THREE.Mesh(fg,fillMat);fillMesh.renderOrder=2;planet.add(fillMesh);
+}
+
+/* ---------- graph helpers ---------- */
+function bfsWithin(starts,maxD,passFn){
+  const dist=new Map();const q=[];for(const s of starts){dist.set(s,0);q.push(s);}
+  while(q.length){const c=q.shift();const d=dist.get(c);if(d>=maxD)continue;for(const nb of state.grid.tiles[c].nb){if(dist.has(nb))continue;if(passFn&&!passFn(nb))continue;dist.set(nb,d+1);q.push(nb);}}
+  return dist;
+}
+function bInfo(i){return BIOMES[state.body.kind][state.tileInfo[i].b];}
+function aStar(from,to){
+  const T=state.grid.tiles;const cost=i=>bInfo(i).mv;
+  if(!isFinite(cost(to)))return null;
+  const h=i=>Math.acos(Math.min(1,T[i].c.dot(T[to].c)))/(tileR*1.7);
+  const open=new Map([[from,h(from)]]),g=new Map([[from,0]]),came=new Map();
+  while(open.size){let cur=-1,best=Infinity;for(const [k,v] of open)if(v<best){best=v;cur=k;}
+    if(cur===to){const p=[cur];while(came.has(p[0]))p.unshift(came.get(p[0]));return {path:p,cost:g.get(to)};}
+    open.delete(cur);
+    for(const nb of T[cur].nb){const c=cost(nb);if(!isFinite(c))continue;const ng=g.get(cur)+c;if(ng<(g.get(nb)??Infinity)){g.set(nb,ng);came.set(nb,cur);open.set(nb,ng+h(nb));}}}
+  return null;
+}
+
+/* ---------- initial colony ---------- */
+function seedColony(){
+  const T=state.grid.tiles,I=state.tileInfo,kind=state.body.kind;
+  const B=BIOMES[kind];const good=i=>B[I[i].b].build&&!T[i].pent;
+  let best=-1,bestScore=-1;
+  for(let i=0;i<T.length;i++){
+    if(!good(i))continue;const lat=Math.abs(T[i].c.y);if(lat>.62)continue;
+    const pref=kind==='planet'?({plains:3,steppe:2,forest:2,desert:1}[I[i].b]||0):1;
+    const ring=[...bfsWithin([i],2).keys()].filter(good).length;
+    const score=ring*2+pref*3-lat*4+(T[i].c.z>0?.5:0);
+    if(score>bestScore){bestScore=score;best=i;}
+  }
+  const buildings=new Map(),hostileB=new Map();
+  const cap=best;buildings.set(cap,kind==='planet'?'capital':'outpost');
+  const ring=[...bfsWithin([cap],2).entries()].filter(([i,d])=>d>0&&good(i)).sort((a,b)=>a[1]-b[1]).map(e=>e[0]);
+  const plan=kind==='planet'?['habitat','farm','factory','power','mine','spaceport','habitat','barracks','farm']:kind==='moon'?['habitat','mine','power']:['mine','mine'];
+  const used=new Set([cap]);
+  for(const type of plan){
+    let pick;
+    if(type==='mine')pick=ring.find(i=>!used.has(i)&&I[i].dep&&I[i].dep!=='node');
+    else pick=ring.find(i=>!used.has(i));
+    if(pick===undefined)continue;used.add(pick);buildings.set(pick,type);
+  }
+  let unit=null;
+  const free=[...bfsWithin([cap],3).keys()].find(i=>i!==cap&&!used.has(i)&&isFinite(B[I[i].b].mv));
+  if(free!==undefined)unit={tile:free,name:kind==='planet'?'Piechota szturmowa':'Dron zwiadowczy',path:null,prog:0};
+  if(kind==='planet'){
+    let far=-1,fd=2;for(let i=0;i<T.length;i++){if(!good(i))continue;const d=T[i].c.dot(T[cap].c);if(d<fd){fd=d;far=i;}}
+    if(far>=0){hostileB.set(far,'capital');const nb2=T[far].nb.filter(good);if(nb2[0]!==undefined)hostileB.set(nb2[0],'factory');if(nb2[2]!==undefined)hostileB.set(nb2[2],'defense');}
+  }
+  return {buildings,hostileB,unit,capital:cap,queue:[]};
+}
+function recomputeTerritory(){
+  const all=[...state.buildings.keys()];
+  state.territory=new Set(all.length?bfsWithin(all,2).keys():[]);
+  const hs=[...state.hostileB.keys()];
+  state.hostileTerr=new Set(hs.length?bfsWithin(hs,2).keys():[]);
+  for(const t of state.hostileTerr)state.territory.delete(t);
+}
+function updateCities(){
+  const T=state.grid.tiles;const arr=surfaceMat.uniforms.uCities.value;let k=0;
+  for(const [i,type] of state.buildings){if(k>=64)break;arr[k++].set(T[i].c.x,T[i].c.y,T[i].c.z,BUILDINGS[type].light);}
+  surfaceMat.uniforms.uCityCount.value=k;
+  const ha=surfaceMat.uniforms.uHostile.value;let h=0;
+  for(const [i,type] of state.hostileB){if(h>=16)break;ha[h++].set(T[i].c.x,T[i].c.y,T[i].c.z,BUILDINGS[type].light*.8);}
+  surfaceMat.uniforms.uHostileCount.value=h;
+}
+
+/* ---------- building massing (procedural low-poly) ---------- */
+const matHull=new THREE.MeshStandardMaterial({color:0xb9b6ad,roughness:.6,metalness:.25});
+const matDark=new THREE.MeshStandardMaterial({color:0x55524c,roughness:.7,metalness:.3});
+const matGlow=new THREE.MeshStandardMaterial({color:0x222222,emissive:0xf2c14e,emissiveIntensity:2.2});
+const matGlowCyan=new THREE.MeshStandardMaterial({color:0x222222,emissive:0x5ad1e6,emissiveIntensity:2});
+const matGlowRed=new THREE.MeshStandardMaterial({color:0x222222,emissive:0xff5b4f,emissiveIntensity:2.2});
+const matGlass=new THREE.MeshStandardMaterial({color:0x8fd3c7,roughness:.15,metalness:.1,transparent:true,opacity:.75,emissive:0x0b3a33,emissiveIntensity:.6});
+const holoMat=new THREE.MeshBasicMaterial({color:0x5ad1e6,wireframe:true,transparent:true,opacity:.7});
+function box(w,h,d,m,x=0,z=0,y=0){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y+h/2,z);return o;}
+function cyl(r,h,m,x=0,z=0,y=0,seg=10){const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg),m);o.position.set(x,y+h/2,z);return o;}
+function makeBuilding(type,hostile){
+  const g=new THREE.Group();const glow=hostile?matGlowRed:matGlow;
+  switch(type){
+    case 'capital':g.add(cyl(.5,.08,matDark,0,0,0,6),box(.22,.75,.22,matHull,0,0,.08),box(.16,.5,.16,matHull,.28,.05,.08),box(.15,.38,.15,matHull,-.2,.22,.08),box(.24,.035,.24,glow,0,0,.83),cyl(.012,.25,matHull,0,0,.86,4));break;
+    case 'outpost':g.add(cyl(.42,.06,matDark,0,0,0,6),new THREE.Mesh(new THREE.SphereGeometry(.24,14,8,0,Math.PI*2,0,Math.PI/2),matHull),box(.3,.03,.06,glow,0,.3,.06));g.children[1].position.y=.06;break;
+    case 'habitat':g.add(cyl(.17,.42,matHull,-.1,0),cyl(.14,.32,matHull,.18,.12),cyl(.175,.03,glow,-.1,0,.42),cyl(.145,.03,glow,.18,.12,.32));break;
+    case 'farm':{const d=new THREE.Mesh(new THREE.SphereGeometry(.32,16,8,0,Math.PI*2,0,Math.PI/2),matGlass);d.scale.y=.55;g.add(cyl(.36,.04,matDark,0,0,0,12),d);d.position.y=.04;break;}
+    case 'mine':g.add(box(.42,.14,.32,matDark),box(.07,.5,.07,matHull,.12,0,.14),box(.32,.04,.04,matHull,.0,0,.6),box(.08,.03,.08,glow,-.12,0,.14));break;
+    case 'factory':g.add(box(.5,.2,.32,matHull),box(.22,.12,.3,matDark,-.08,0,.2),cyl(.05,.45,matDark,.17,.06,.2,8),box(.5,.025,.04,glow,0,.17,.12));break;
+    case 'power':g.add(cyl(.15,.32,matHull,-.13,0,0,14),cyl(.15,.32,matHull,.17,.05,0,14),cyl(.11,.02,glowFor(hostile,true),-.13,0,.32),cyl(.11,.02,glowFor(hostile,true),.17,.05,.32));break;
+    case 'barracks':g.add(box(.55,.12,.18,matHull,0,-.1),box(.55,.12,.18,matHull,0,.14),box(.55,.02,.03,glow,0,.02,.12));break;
+    case 'spaceport':g.add(cyl(.46,.05,matDark,0,0,0,16),cyl(.32,.012,glow,0,0,.05,24),box(.05,.42,.05,matHull,.36,0,.05),box(.12,.1,.12,matHull,-.32,-.1,.05));break;
+    case 'defense':g.add(cyl(.22,.1,matDark,0,0,0,8),box(.14,.12,.18,matHull,0,0,.1),box(.05,.05,.34,matHull,0,.15,.16),box(.06,.02,.06,glow,0,-.05,.22));break;
+  }
+  return g;
+}
+function bScale(){return Math.min(tileR,.115)*1.15;}
+function glowFor(h,c){return h?matGlowRed:(c?matGlowCyan:matGlow);}
+function placeOnTile(obj,i,lift=1){
+  const c=state.grid.tiles[i].c;obj.position.copy(c).multiplyScalar(lift);
+  obj.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),c);
+  obj.scale.setScalar(bScale());
+}
+function rebuildBuildingMeshes(){
+  buildGroup.clear();
+  for(const [i,type] of state.buildings){const m=makeBuilding(type,false);placeOnTile(m,i);m.userData={tile:i};buildGroup.add(m);}
+  for(const [i,type] of state.hostileB){const m=makeBuilding(type,true);placeOnTile(m,i);buildGroup.add(m);}
+  for(const q of state.queue){if(q.done)continue;const m=makeBuilding(q.type,false);m.traverse(o=>{if(o.isMesh)o.material=holoMat;});placeOnTile(m,q.tile);q.mesh=m;buildGroup.add(m);}
+  if(state.unit){
+    const u=new THREE.Group();const cone=new THREE.Mesh(new THREE.ConeGeometry(.12,.34,4),matGlowCyan);cone.rotation.x=Math.PI;cone.position.y=.55;
+    const ringM=new THREE.Mesh(new THREE.RingGeometry(.32,.38,24),new THREE.MeshBasicMaterial({color:0x5ad1e6,side:THREE.DoubleSide,transparent:true,opacity:.85}));ringM.rotation.x=-Math.PI/2;ringM.position.y=.03;
+    const body=box(.2,.14,.28,matHull,0,0,.02);
+    u.add(cone,ringM,body);u.userData.cone=cone;state.unit.mesh=u;placeOnTile(u,state.unit.tile,1.002);buildGroup.add(u);
+  }
+}
+
+/* ---------- lens / fill colors ---------- */
+const hex2rgb=h=>{const c=new THREE.Color(h);return [c.r,c.g,c.b];};
+function setTileColor(arr,i,rgb,a){const tl=state.grid.tiles[i];for(let v=tl.vStart;v<tl.vStart+tl.vCount;v++){arr[v*4]=rgb[0];arr[v*4+1]=rgb[1];arr[v*4+2]=rgb[2];arr[v*4+3]=a;}}
+function applyLens(){
+  const attr=fillMesh.geometry.getAttribute('acolor');const arr=attr.array;arr.fill(0);
+  const T=state.grid.tiles,I=state.tileInfo;
+  if(state.lens==='deposits'){
+    for(let i=0;i<T.length;i++){const d=I[i].dep;if(d)setTileColor(arr,i,hex2rgb(DEPOSITS[d].c),.62);else setTileColor(arr,i,[0,0,0],.38);}
+  }else if(state.lens==='owner'){
+    for(const i of state.territory)setTileColor(arr,i,hex2rgb('#f2c14e'),.30);
+    for(const i of state.hostileTerr)setTileColor(arr,i,hex2rgb('#ff5b4f'),.32);
+  }
+  if(state.moveMode&&state.unit){
+    const reach=bfsWithin([state.unit.tile],6,i=>isFinite(bInfo(i).mv));
+    for(const i of reach.keys())if(state.lens!=='deposits')setTileColor(arr,i,hex2rgb('#5ad1e6'),.13);
+  }
+  attr.needsUpdate=true;
+}
+function loopPts(i,R,shrink){const tl=state.grid.tiles[i];const cs=tl.corners.map(c=>c.clone().lerp(tl.c,shrink));const out=[];const k=cs.length;
+  for(let a=0;a<k;a++){const A=cs[a],Bc=cs[(a+1)%k];for(let q=0;q<5;q++)out.push(A.clone().lerp(Bc,q/5).normalize().multiplyScalar(R));}return out;}
+function loopGeom(i,R){return new THREE.BufferGeometry().setFromPoints(loopPts(i,R,.04));}
+function updateSel(){
+  selLine.geometry.dispose();selLine2.geometry.dispose();
+  if(state.sel>=0){selLine.geometry=loopGeom(state.sel,1.004);selLine2.geometry=new THREE.BufferGeometry().setFromPoints(loopPts(state.sel,1.004,.13));}
+  else{selLine.geometry=new THREE.BufferGeometry();selLine2.geometry=new THREE.BufferGeometry();}
+}
+function updateHover(){hoverLine.geometry.dispose();hoverLine.geometry=state.hover>=0?loopGeom(state.hover,1.0035):new THREE.BufferGeometry();}
+
+/* =========================================================
+   7. UI rendering
+   ========================================================= */
+const $=id=>document.getElementById(id);
+function popOf(){let p=0;for(const t of state.buildings.values())p+=BUILDINGS[t].pop;return p;}
+function renderBodyList(){
+  $('bodyList').innerHTML=BODIES.map((b,i)=>`<div class="item ${i===state.bodyIdx?'sel':''}" data-body="${i}">
+    <div class="row"><span class="bodyname" style="font-size:13px">${b.name}</span><span class="spacer" style="flex:1"></span><span class="tag ${i===0?'amber':'cyan'}">${b.kind==='planet'?'planeta':b.kind==='moon'?'księżyc':'planetoida'}</span></div>
+    <div class="sub" style="margin-top:3px">${b.role} · ${10*b.n*b.n+2} pól</div></div>`).join('');
+  document.querySelectorAll('[data-body]').forEach(el=>el.onclick=()=>{const i=+el.dataset.body;if(i!==state.bodyIdx){loadBody(i);syncDensity();}else if(state.capital>=0)rotateTo(state.grid.tiles[state.capital].c);});
+}
+function renderPlanetCard(){
+  const T=state.grid.tiles,I=state.tileInfo,b=state.body;
+  const water=b.kind==='planet'?I.filter(x=>x.b==='deep'||x.b==='shallow').length/T.length:0;
+  const avgT=I.reduce((s,x)=>s+x.s.t,0)/I.length;const temp=Math.round(b.temp[0]+(b.temp[1]-b.temp[0])*(b.kind==='planet'?avgT:.5));
+  $('planetCard').innerHTML=`<div class="sec">
+    <div class="sub">aktywne ciało</div><div class="bodyname" style="margin:2px 0 8px">${b.name}</div>
+    <div class="row" style="gap:18px;margin-bottom:10px"><div><div class="big">${popOf()}</div><div class="sub">populacja (jedn.)</div></div><div><div class="big">${state.buildings.size}</div><div class="sub">budynki</div></div></div>
+    <div class="kv">
+      <span class="k">Promień</span><span class="v">${b.radiusKm.toLocaleString('pl-PL')} km</span>
+      <span class="k">Grawitacja</span><span class="v">${b.g}</span>
+      <span class="k">Śr. temperatura</span><span class="v">${temp}°C</span>
+      ${b.kind==='planet'?`<span class="k">Oceany</span><span class="v">${Math.round(water*100)}%</span><span class="k">Atmosfera</span><span class="v">oddychalna</span>`:`<span class="k">Atmosfera</span><span class="v">brak</span>`}
+      <span class="k">Pola siatki</span><span class="v">${T.length} (12 węzłów)</span>
+      <span class="k">Strefa kolonii</span><span class="v">${state.territory.size} pól</span>
+      <span class="k">Obrona</span><span class="v">${[...state.buildings.values()].filter(t=>t==='defense').length} bat. · ${state.unit?1:0} oddz.</span>
+    </div>
+    <button class="btn" id="btnCap">POKAŻ STOLICĘ</button>
+  </div>
+  <div class="sec note">Prototyp: dane gry są fikcyjne. Sprawdzamy wygląd i odczucie — ciągła powierzchnia, siatka jako warstwa logiczna, budowa i ruch po grafie pól.</div>`;
+  $('btnCap').onclick=()=>{if(state.capital>=0){rotateTo(state.grid.tiles[state.capital].c);select(state.capital);}};
+}
+function buildCheck(i,type){
+  const I=state.tileInfo[i],B=bInfo(i);
+  if(!B.build)return `Nie: ${B.why}.`;
+  if(state.tileInfo[i]&&state.grid.tiles[i].pent&&type!=='mine')return 'Nie: węzeł anomalii — tu tylko kopalnia (wydobycie anomalii).';
+  if(state.buildings.has(i))return `Nie: pole zajęte (${BUILDINGS[state.buildings.get(i)].n}).`;
+  if(state.hostileB.has(i)||state.hostileTerr.has(i))return 'Nie: pole w strefie obcej kolonii (Hegemonia).';
+  if(state.queue.some(q=>!q.done&&q.tile===i))return 'Nie: pole zarezerwowane w kolejce budowy.';
+  if(!state.territory.has(i))return 'Nie: poza strefą kolonii — buduj w zasięgu 2 pól od istniejących budynków (soczewka Własność).';
+  if(BUILDINGS[type].needsDeposit&&!I.dep)return 'Nie: kopalnia wymaga złoża na polu — włącz soczewkę Złoża i wybierz pole ze złożem.';
+  return null;
+}
+function renderInspector(){
+  const box=$('insp');
+  if(state.sel<0){
+    $('inspTitle').textContent='④ INSPEKTOR · PLANETA';
+    const counts={};state.tileInfo.forEach(x=>counts[x.b]=(counts[x.b]||0)+1);
+    const B=BIOMES[state.body.kind];const tot=state.tileInfo.length;
+    const rows=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="biorow"><span class="sw" style="background:${B[k].c}"></span><span>${B[k].n}</span><div class="bar"><i style="width:${v/tot*100}%"></i></div><span style="text-align:right">${v}</span></div>`).join('');
+    const deps={};state.tileInfo.forEach(x=>{if(x.dep)deps[x.dep]=(deps[x.dep]||0)+1;});
+    const drows=Object.entries(deps).map(([k,v])=>`<div class="biorow"><span class="sw" style="background:${DEPOSITS[k].c}"></span><span>${DEPOSITS[k].n}</span><span></span><span style="text-align:right">${v}</span></div>`).join('');
+    box.innerHTML=`<div class="sec"><div class="sub" style="margin-bottom:6px">teren pól — odczytany z ciągłej mapy biomów</div>${rows}</div>
+      <div class="sec"><div class="sub" style="margin-bottom:6px">złoża</div>${drows||'<span class="note">brak</span>'}</div>
+      <div class="sec note">Kliknij pole na sferze, aby zobaczyć szczegóły i budować. Kliknij oddział (cyjanowy znacznik), aby wydać rozkaz ruchu.</div>`;
+    return;
+  }
+  const i=state.sel,tl=state.grid.tiles[i],I=state.tileInfo[i],B=bInfo(i),b=state.body;
+  const elevM=Math.round((I.s.e-(b.kind==='planet'?state.surf.sea:.5))*(b.kind==='planet'?11000:6000));
+  const temp=Math.round(b.temp[0]+(b.temp[1]-b.temp[0])*(b.kind==='planet'?I.s.t:.5));
+  const own=state.territory.has(i)?'<span class="tag amber">kolonia gracza</span>':state.hostileTerr.has(i)?'<span class="tag red">Hegemonia (obca)</span>':'<span class="tag">neutralne</span>';
+  const bld=state.buildings.get(i)||state.hostileB.get(i);
+  const unitHere=state.unit&&state.unit.tile===i&&!state.unit.path;
+  $('inspTitle').textContent=`④ INSPEKTOR · POLE #${i}`;
+  let html=`<div class="sec">
+    <div class="row"><span class="sw" style="width:16px;height:16px;background:${B.c}"></span><span class="bodyname" style="font-size:14px">${B.n}</span></div>
+    <div class="sub" style="margin:4px 0 8px">${tl.pent?'pięciokąt · węzeł':'heks'} · ${tl.nb.length} sąsiadów</div>
+    <div class="kv">
+      <span class="k">Wysokość</span><span class="v">${elevM>0?'+':''}${elevM.toLocaleString('pl-PL')} m</span>
+      <span class="k">Temperatura</span><span class="v">${temp}°C</span>
+      ${b.kind==='planet'?`<span class="k">Wilgotność</span><span class="v">${Math.round(I.s.m*100)}%</span>`:''}
+      <span class="k">Koszt ruchu</span><span class="v">${isFinite(B.mv)?B.mv:'nieprzejezdne'}</span>
+      <span class="k">Złoże</span><span class="v">${I.dep?`<span class="sw" style="background:${DEPOSITS[I.dep].c}"></span> ${DEPOSITS[I.dep].n}`:'—'}</span>
+      <span class="k">Zabudowa</span><span class="v">${bld?BUILDINGS[bld].n:'—'}</span>
+      <span class="k">Strefa</span><span class="v">${own}</span>
+    </div></div>`;
+  if(unitHere){
+    html+=`<div class="sec"><div class="sub" style="margin-bottom:4px">oddział na polu</div>
+      <div class="row"><span class="tag cyan">jednostka</span><b>${state.unit.name}</b></div>
+      <button class="btn cyan ${state.moveMode?'on':''}" id="btnMove">${state.moveMode?'RUCH: KLIKNIJ POLE CELU (ESC — ANULUJ)':'ROZKAZ: RUCH'}<span class="why">Trasa liczona po grafie pól (A*). Woda i szczyty nieprzejezdne, las ×2, góry ×3.</span></button></div>`;
+  }
+  if(!bld){
+    html+=`<div class="sec"><div class="sub">budowa</div>`+BUILDABLE.map(t=>{const why=buildCheck(i,t);
+      return `<button class="btn ${why?'dis':''}" data-build="${t}" ${why?'aria-disabled="true"':''}>${BUILDINGS[t].n}${why?`<span class="why">${why}</span>`:''}</button>`;}).join('')+`</div>`;
+  }
+  box.innerHTML=html;
+  box.querySelectorAll('[data-build]').forEach(el=>el.onclick=()=>{const why=buildCheck(i,el.dataset.build);if(why){toast(why);return;}enqueue(i,el.dataset.build);});
+  const bm=$('btnMove');if(bm)bm.onclick=()=>{state.moveMode=!state.moveMode;canvas.classList.toggle('targeting',state.moveMode);applyLens();renderInspector();};
+}
+function renderQueue(){
+  const active=state.queue.filter(q=>!q.done);
+  $('qcount').textContent=`${active.length} w kolejce`;
+  $('queue').innerHTML=state.queue.length?state.queue.slice(-6).map(q=>`<div class="qi ${q.done?'done':''}"><div class="row"><b>${BUILDINGS[q.type].n}</b></div><div class="sub">pole #${q.tile} · ${q.done?'ukończono':q.started?Math.ceil((1-q.prog)*q.dur)+' s':'oczekuje'}</div><div class="bar"><i style="width:${q.prog*100}%"></i></div></div>`).join('')
+    :'<span class="note">Pusto. Wybierz pole w strefie kolonii i zbuduj coś — powstanie jako hologram, a po ukończeniu pojawi się bryła i światła miasta.</span>';
+}
+let toastT=0;function toast(msg,ok){const t=$('toast');t.textContent=msg;t.className=ok?'ok show':'show';clearTimeout(toastT);toastT=setTimeout(()=>t.className=ok?'ok':'',2600);}
+
+/* =========================================================
+   8. Actions
+   ========================================================= */
+function select(i){
+  if(state.moveMode&&state.unit&&i>=0){
+    if(i===state.unit.tile){state.moveMode=false;canvas.classList.remove('targeting');applyLens();renderInspector();return;}
+    const r=aStar(state.unit.tile,i);
+    if(!r){toast(isFinite(bInfo(i).mv)?'Brak trasy lądowej — cel odcięty wodą lub szczytami (potrzebny transport).':`Cel nieprzejezdny: ${bInfo(i).n}.`);return;}
+    state.unit.path=r.path;state.unit.step=0;state.unit.prog=0;
+    const pts=[];for(let k=0;k<r.path.length-1;k++){const a=state.grid.tiles[r.path[k]].c,b=state.grid.tiles[r.path[k+1]].c;for(let s=0;s<=8;s++)pts.push(a.clone().lerp(b,s/8).normalize().multiplyScalar(1.012));}
+    pathLine.geometry.dispose();pathLine.geometry=new THREE.BufferGeometry().setFromPoints(pts);
+    state.moveMode=false;canvas.classList.remove('targeting');applyLens();
+    toast(`Trasa: ${r.path.length-1} pól, koszt ruchu ${r.cost}.`,true);
+    state.sel=i;updateSel();renderInspector();return;
+  }
+  state.sel=i;updateSel();renderInspector();
+}
+function enqueue(i,type){
+  const q={tile:i,type,prog:0,dur:4,started:false,done:false};
+  const m=makeBuilding(type,false);m.traverse(o=>{if(o.isMesh)o.material=holoMat;});placeOnTile(m,i);q.mesh=m;buildGroup.add(m);
+  state.queue.push(q);renderQueue();renderInspector();toast(`Dodano do kolejki: ${BUILDINGS[type].n}.`,true);
+}
+function tickQueue(dt){
+  const q=state.queue.find(x=>!x.done);if(!q)return;
+  q.started=true;q.prog=Math.min(1,q.prog+dt/q.dur);
+  holoMat.opacity=.45+.3*Math.sin(performance.now()/180);
+  if(q.prog>=1){q.done=true;buildGroup.remove(q.mesh);state.buildings.set(q.tile,q.type);
+    const m=makeBuilding(q.type,false);placeOnTile(m,q.tile);m.scale.multiplyScalar(.01);m.userData.grow=0;buildGroup.add(m);growing.push(m);
+    recomputeTerritory();updateCities();applyLens();renderPlanetCard();renderInspector();toast(`Ukończono: ${BUILDINGS[q.type].n}.`,true);}
+  if(Math.random()<.2||q.done)renderQueue();
+}
+const growing=[];
+
+/* ---------- camera / views ---------- */
+let camDist=3.15;
+const SYS_POS=new THREE.Vector3(12,13,40),SYS_TGT=new THREE.Vector3(-14,3,10);
+let viewMix=1,viewTarget=1;
+function setView(v){
+  state.view=v;viewTarget=v==='colony'?1:0;
+  document.body.classList.toggle('mode-system',v==='system');document.body.classList.toggle('mode-colony',v==='colony');
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+  if(v==='system'){state.moveMode=false;canvas.classList.remove('targeting');}
+}
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+let rotAnim=null;
+function rotateTo(dirObj,instant){
+  const cur=planet.quaternion.clone();
+  const w=dirObj.clone().applyQuaternion(cur);
+  const want=new THREE.Vector3(0,.18,1).normalize();
+  const q1=new THREE.Quaternion().setFromUnitVectors(w,want);
+  const target=q1.multiply(cur);
+  if(instant){planet.quaternion.copy(target);return;}
+  rotAnim={from:cur,to:target,t:0};
+}
+
+/* =========================================================
+   9. Input
+   ========================================================= */
+const ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),sphere=new THREE.Sphere(new THREE.Vector3(),1);
+function pickTile(ev){
+  mouse.set(ev.clientX/innerWidth*2-1,-(ev.clientY/innerHeight)*2+1);ray.setFromCamera(mouse,camera);
+  const hit=ray.ray.intersectSphere(sphere,new THREE.Vector3());if(!hit)return {i:-1};
+  const local=hit.clone().applyQuaternion(planet.quaternion.clone().invert()).normalize();
+  let best=-1,bd=-2;const T=state.grid.tiles;for(let i=0;i<T.length;i++){const d=T[i].c.dot(local);if(d>bd){bd=d;best=i;}}
+  return {i:best,local};
+}
+let drag=null,vel=new THREE.Vector2();
+canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY,moved:false};canvas.setPointerCapture(e.pointerId);vel.set(0,0);rotAnim=null;});
+canvas.addEventListener('pointermove',e=>{
+  if(drag){
+    const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;
+    if(Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)>4){drag.moved=true;canvas.classList.add('dragging');}
+    if(drag.moved&&state.view==='colony'){const k=.0042*camDist/3.15;rotatePlanet(dx*k,dy*k);vel.set(dx*k,dy*k);}
+    return;
+  }
+  if(state.view!=='colony')return;
+  const p=pickTile(e);
+  if(p.i!==state.hover){state.hover=p.i;updateHover();}
+  gridMat.uniforms.uHoverOn.value=p.i>=0?1:0;if(p.local)gridMat.uniforms.uHover.value.copy(p.local);
+});
+canvas.addEventListener('pointerup',e=>{
+  canvas.classList.remove('dragging');
+  if(drag&&!drag.moved){
+    if(state.view==='system'){const p=pickTile(e);if(p.i>=0)setView('colony');}
+    else{const p=pickTile(e);if(p.i>=0)select(p.i);else{state.sel=-1;updateSel();renderInspector();}}
+    vel.set(0,0);
+  }
+  drag=null;
+});
+canvas.addEventListener('pointerleave',()=>{if(!drag){state.hover=-1;updateHover();gridMat.uniforms.uHoverOn.value=0;}});
+canvas.addEventListener('wheel',e=>{e.preventDefault();if(state.view!=='colony')return;camDist=Math.min(4.6,Math.max(1.45,camDist*(1+Math.sign(e.deltaY)*.09)));},{passive:false});
+function rotatePlanet(ax,ay){
+  const qy=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ax);
+  const qx=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),ay);
+  planet.quaternion.premultiply(qy).premultiply(qx);
+}
+addEventListener('keydown',e=>{if(e.key==='Escape'){if(state.moveMode){state.moveMode=false;canvas.classList.remove('targeting');applyLens();renderInspector();}else{state.sel=-1;updateSel();renderInspector();}}});
+$('syslabel').onclick=()=>setView('colony');
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+document.querySelectorAll('[data-lens]').forEach(b=>b.onclick=()=>{state.lens=b.dataset.lens;document.querySelectorAll('[data-lens]').forEach(x=>x.classList.toggle('on',x===b));applyLens();});
+document.querySelectorAll('[data-grid]').forEach(b=>b.onclick=()=>{state.grid_mode=b.dataset.grid;document.querySelectorAll('[data-grid]').forEach(x=>x.classList.toggle('on',x===b));});
+const dens=$('density');[3,4,5,6,7,8].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=`${10*n*n+2}`;dens.appendChild(o);});
+function syncDensity(){dens.value=state.body.n;}
+dens.onchange=()=>{state.body.n=+dens.value;loadBody(state.bodyIdx);};
+$('reseed').onclick=()=>{state.body.seed=Math.floor(Math.random()*90000)+1000;loadBody(state.bodyIdx);};
+addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();});
+
+/* =========================================================
+   10. Loop
+   ========================================================= */
+const clock=new THREE.Clock();
+const tmpPos=new THREE.Vector3(),tmpTgt=new THREE.Vector3(),rotM=new THREE.Matrix4();
+function frame(){
+  const dt=Math.min(.05,clock.getDelta());
+  // view transition
+  viewMix+=(viewTarget-viewMix)*Math.min(1,dt*2.6);if(Math.abs(viewTarget-viewMix)<.001)viewMix=viewTarget;
+  const k=ease(viewMix);
+  const colPos=new THREE.Vector3(0,0,camDist);
+  tmpPos.lerpVectors(SYS_POS,colPos,k);tmpTgt.lerpVectors(SYS_TGT,new THREE.Vector3(),k);
+  camera.position.copy(tmpPos);camera.lookAt(tmpTgt);
+  orbitGroup.children.forEach(l=>l.material.opacity=l.userData.o??(l.userData.o=l.material.opacity));
+  orbitGroup.children.forEach(l=>l.material.opacity=l.userData.o*(1-k));
+  const vis=THREE.MathUtils.smoothstep(viewMix,.75,1);
+  gridMat.uniforms.uVis.value=vis*(state.grid_mode==='off'?0:1);gridMat.uniforms.uAlways.value=state.grid_mode==='always'?1:0;
+  fillMat.uniforms.uVis.value=vis;hoverLine.material.opacity=.95*vis;selLine.material.opacity=vis;selLine2.material.opacity=.6*vis;pathLine.material.opacity=.95*vis;
+  surfaceMat.uniforms.uDetail.value=.4+.6*k;
+  // rotation
+  if(state.view==='system'&&!drag)rotatePlanetLocal(dt*.06);
+  else if(!drag&&vel.lengthSq()>1e-8){rotatePlanet(vel.x,vel.y);vel.multiplyScalar(.92);}
+  if(rotAnim){rotAnim.t=Math.min(1,rotAnim.t+dt*1.4);planet.quaternion.slerpQuaternions(rotAnim.from,rotAnim.to,ease(rotAnim.t));if(rotAnim.t>=1)rotAnim=null;}
+  planet.updateMatrixWorld();
+  surfaceMat.uniforms.uRot.value.setFromMatrix4(planet.matrixWorld);
+  // unit movement
+  const u=state.unit;
+  if(u&&u.mesh){
+    u.mesh.userData.cone.position.y=.55+Math.sin(performance.now()/260)*.06;u.mesh.userData.cone.rotation.y+=dt*1.5;
+    if(u.path){
+      u.prog+=dt*2.4/Math.max(1,bInfo(u.path[Math.min(u.path.length-1,u.step+1)]).mv);
+      if(u.prog>=1){u.prog=0;u.step++;u.tile=u.path[u.step];if(u.step>=u.path.length-1){u.path=null;pathLine.geometry.dispose();pathLine.geometry=new THREE.BufferGeometry();placeOnTile(u.mesh,u.tile,1.002);if(state.sel===u.tile)renderInspector();}}
+      if(u.path){const a=state.grid.tiles[u.path[u.step]].c,b=state.grid.tiles[u.path[u.step+1]].c;const p=a.clone().lerp(b,u.prog).normalize();
+        u.mesh.position.copy(p).multiplyScalar(1.002);u.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),p);}
+    }
+  }
+  for(let gI=growing.length-1;gI>=0;gI--){const m=growing[gI];m.userData.grow=Math.min(1,m.userData.grow+dt*2.2);m.scale.setScalar(bScale()*ease(m.userData.grow));if(m.userData.grow>=1)growing.splice(gI,1);}
+  tickQueue(dt);
+  // system label
+  if(viewMix<.6){const p=new THREE.Vector3().project(camera);const el=$('syslabel');el.style.left=((p.x+1)/2*innerWidth)+'px';el.style.top=((1-p.y)/2*innerHeight)+'px';}
+  renderer.render(scene,camera);
+  requestAnimationFrame(frame);
+}
+function rotatePlanetLocal(a){planet.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),a));}
+
+window.__proto={state,select,enqueue,setView,aStar,bfsWithin};
+/* boot */
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+setTimeout(()=>{loadBody(0,{instant:true});syncDensity();$('loading').remove();frame();},30);
+</script>
+</body>
+</html>
