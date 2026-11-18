@@ -109,6 +109,7 @@ This resolves §5 risk 10.
 | **D-CS-1 (revised, signed 2026-11-18)** | Realistic and diverse worlds. Archetypes are selected primarily from physical drivers (stellar flux at the orbit, atmosphere, `composition.H2O`, mass, parent body, moon position among the parent's moons); stored temperature is a secondary input. Planets: terran (always oceanic, stored frozen `waterBand` oceanic ~60% / balanced ~25% / continental ~15% + exact `waterCoverage`), jungle, desert, ice, volcanic, **hothouse** (replaces `toxic`), **cryo_haze** (new), **scorched** (new), barren, tidally_locked, ocean (rare). Moons ×5: rocky_cratered, volcanic_moon, icy_cracked, icy_cratered, hazy_moon. Planetoids: metallic / carbonaceous / silicate + icy palette. Gas giants unchanged. The homeworld of every empire is terran. CS-6 adds visual variants within each archetype. Implemented in CS-3b-v2 (§3.3). |
 | **D-CS-1 v2 (archetypes v2, signed ✅ 2026-11-18 after the light check)** | 21 rows incl. hothouse replacing toxic, cryo_haze, scorched, 5 moon archetypes, planetoid_icy, terran waterBand 60/25/15 — as implemented in §3.3.1. |
 | **D-CS-19 (signed ✅ 2026-11-18)** | Option (b) extended with orbits — step **CS-PHYS** after CS-6 (§3 table, §4). Finding 770 is fixed earlier, in a separate small fix step together with #768. |
+| **D-CS-20 (new, signed ✅ 2026-11-18)** | Ocean tiles on terran worlds. The terrain report (§3.4.1) shows the terran buildable share dropping from 100% today (today's terran maps have no ocean) to a median 30% (min 14%, max 79%), because terran is always oceanic (D-CS-1 v2). **Accept fewer buildable tiles for now** — fewer does not automatically mean too few; re-evaluate after in-game testing once the sphere grid is live (after CS-5 / CS-8). Ocean buildings (e.g. sea platforms via tech, possibly reusing / fixing the unreachable `force_fields` ocean unlock #762) stay an unscheduled idea, not part of this arc. No grid-size or water-band changes because of this. |
 
 ---
 
@@ -1346,6 +1347,188 @@ Idea (not scheduled): reuse LifeSystem as a life generator for the player to dis
    waterBand oceanic, waterCoverage 0.701.
 5. System map + colony open: no visual change, no red console errors.
 
+### 3.4 CS-4a — SurfaceField + owner preview (2026-11-18; not committed, owner look pending)
+
+CS-4 is split: **CS-4a** = the pure surface engine + a debug preview + measurements (this section); **CS-4b** = worker,
+`SurfaceCache` LRU, worker = main bit-identical keeper, worker throughput per system. Nothing in gameplay or the renderer
+uses `SurfaceField` yet (CS-5 / CS-6). `lib/` untouched (noise and craters ported, not edited).
+
+**Files.** `src/utils/SurfaceField.js` (engine, zero imports), `src/utils/SurfacePreviewLogic.js` (raw biome palette +
+hillshade, pure), `src/debug/SurfacePreviewDebug.js` (`csSurface()` / `csSurfaceAll()` DOM overlay),
+`src/debug/ColonySphereDebug.js` (helpers return both), `src/scenes/GameScene.js` (2 window aliases),
+`src/data/BodyArchetypes.js` (`field` knobs of the 18 surface rows tuned; a comment lists the knobs),
+keeper `src/testing/smoke/colony_sphere_surface_smoke.mjs`, probe `src/testing/headless/probe-cs4a-surface.mjs`
+(+ `cs4a-measure.mjs`), sheets `docs/design/prototypes/cs4a-archetype-sheet.png` and `cs4a-terran-waterbands.png`.
+
+**API** (all take `(seed, archetypeRow, params)`; `params` = `{waterCoverage, palette}` or the body itself):
+- `evalAt(seed, arch, params, x, y, z) → {e, m, t, a}` — gameplay path; input normalised; channels in [0, 1].
+- `classify(sample, arch, seaLevel) → {biome, terrain}` — biome from the row's table, terrain one of the 10 (D-CS-3);
+  total (null row → `wasteland`; a class not in the row → the row's first class).
+- `seaLevelOf`, `surfaceInfo` (sea level / share, recipe, seed variation incl. planetoid albedo), `prepareSurface`
+  (context: 3 seeded simplex permutations, offsets, variation, calibrated sea; LRU of 48), `fibonacciSphere(n)`.
+- `bakeEquirect(seed, arch, params, w, h) → Uint8Array` RGBA8 = e, m, t, a. Pixel (i, j): lon = ((i+0.5)/w)·2π − π,
+  lat = π/2 − ((j+0.5)/h)·π, vector (cos lon cos lat, sin lat, sin lon cos lat). `LOD_SIZES` hero 1024×512,
+  body 256×128, planetoid 128×64. `SURFACE_FIELD_VERSION` (future cache key; 2 after the tuning pass, §3.4.1).
+- Channels: e elevation (sea: e < seaLevel), m moisture / composition / feature mask (cracks, lava, veins, maria),
+  t temperature (latitude − lapse; tidally locked: illumination, substellar point = +x), a crater / dome profile
+  (0.5 none, < 0.5 floor, > 0.5 rim or cone).
+
+**Determinism approach (D-CS-16).** The gameplay path uses only `+ − × ÷ sqrt floor` plus exact `abs/min/max/imul` and
+int32 bit operations. Seeds: splitmix32 finalizer + mulberry32 Fisher–Yates permutations; crater cells via an `imul`
+hash. Fibonacci points without trig: rotation by the golden angle through a complex multiply with literal cos / sin
+constants, renormalised by `sqrt` each step. Sea level = quantile of e over 4096 Fibonacci points (sorted
+`Float64Array`), so the terran ocean share equals the stored `waterCoverage`; e never depends on the sea level.
+Measured: node and headless Chrome give **identical** values for 21 archetypes × 3 seeds × 362 points (114 093 values
+incl. biome names and sea levels). Caveat: both engines are V8; Firefox (SpiderMonkey) is not measured — the
+arithmetic-only rule is what makes the result engine-independent, pinned by source + runtime keepers.
+
+**Archetype params** (placeholders tuned on the contact sheet; the owner tunes further). Recipe = archetype id.
+
+| Archetype | Look (raw preview) | Key knobs |
+|---|---|---|
+| terran | continents + oceans from the stored `waterCoverage`, ragged polar caps, forest / plains / steppe / tundra, mountains + snowy peaks | continent 1.0, warp 0.35, ridge 0.5, polarCapBias 0.5 |
+| ocean | 90% sea, island chains | seaShare 0.9, islands 0.25 |
+| jungle | dense forest, shallow seas 18%, swamps | seaShare 0.18, wetBias 0.15, tropic 0.5 |
+| desert | Mars: dark / bright albedo regions, craters, hemispheric dichotomy, small caps, basin on ½ of seeds | craterDensity 0.35, basinChance 0.5 |
+| ice | ice plains, blue ridges / cryovolcanoes, exposed rock patches | ridge 0.6 |
+| volcanic | lava channel network + lava basins, calderas, basalt ridges, ash | lava 1.0, calderas 0.35 |
+| hothouse | cloud-free Venus: plains, highland continents, sulphur volcano cones | volcanoes 0.3 |
+| cryo_haze | Titan: polar methane lakes 7%, equatorial dunes, water-ice bedrock | seaShare 0.07, polarLow 0.3 |
+| scorched | Mercury: craters, lobate scarps, glassy basins, giant basin on ½ of seeds | scarps 1.0, basinChance 0.5 |
+| barren | grey cratered regolith, polar crater ice | craterDensity 0.6, basinChance 0.3 |
+| tidally_locked | eyeball: substellar rock, scorched day side, terminator band, ice night side | (geometry) |
+| rocky_cratered | Luna: maria + highlands, multi-scale craters | maria 1.0, craterDensity 0.7 |
+| volcanic_moon | Io: sulphur plains, paterae with lava-lake cores, silicate mountains | paterae 0.35 |
+| icy_cracked | Europa: lineae network (3 scales), chaos patches, ridged plains | cracks 1.0 |
+| icy_cratered | Callisto: saturated craters with bright rims, dark rock patches | craterDensity 0.85, patches 1.0 |
+| hazy_moon | small Titan: polar lakes 4% | seaShare 0.04 |
+| planetoid | palette per `planetoidType`; seed: craters ×0.6–1.4, albedo ×0.8–1.2, giant crater ≈ 1 in 6, metal veins strongest on metallic | veins 1.0, craterScale 0.7 |
+| planetoid_icy | frost regolith, dirty ice, craters | patches 1.0 |
+
+Gas giants are out of scope (`GasGiantShader` stays); `classify` still answers for gas rows (latitude bands) for
+totality. Known look limits for CS-6: cryo_haze and hazy_moon share a recipe (they differ by lake share only);
+tidally_locked always centres the day side at lon 0 (a variant knob for CS-6); colours are a debug palette only.
+
+**Measurements** (`node src/testing/headless/probe-cs4a-surface.mjs --measure`; median of 3 cold runs with a new seed
+each; main thread; prep = context incl. sea calibration; eval = 1000 `evalAt` on a warm context):
+
+| Archetype | LOD | node prep / LOD / hero ms | Chrome prep / LOD / hero ms | evalAt per 1000 (node / Chrome) ms |
+|---|---|---|---|---|
+| terran | 256×128 | 5.8 / 45 / 564 | 6.5 / 48 / 594 | 2.1 / 1.8 |
+| ocean | 256×128 | 6.4 / 49 / 608 | 7.3 / 52 / 651 | 2.1 / 1.9 |
+| jungle | 256×128 | 5.9 / 45 / 565 | 7.0 / 49 / 606 | 2.0 / 1.9 |
+| desert | 256×128 | 0.04 / 68 / 966 | 0.1 / 65 / 920 | 3.2 / 3.0 |
+| ice | 256×128 | 0.04 / 54 / 779 | 0.1 / 53 / 747 | 2.5 / 2.3 |
+| volcanic | 256×128 | 0.04 / 40 / 565 | 0.1 / 41 / 575 | 2.1 / 1.8 |
+| hothouse | 256×128 | 0.04 / 46 / 621 | 0.0 / 48 / 668 | 2.2 / 2.0 |
+| cryo_haze | 256×128 | 7.0 / 56 / 709 | 7.5 / 58 / 738 | 2.3 / 2.0 |
+| scorched | 256×128 | 0.05 / 39 / 562 | 0.0 / 40 / 576 | 2.2 / 2.6 |
+| barren | 256×128 | 0.04 / 37 / 538 | 0.1 / 38 / 546 | 2.0 / 1.7 |
+| tidally_locked | 256×128 | 0.03 / 44 / 628 | 0.1 / 45 / 644 | 2.1 / 2.0 |
+| rocky_cratered | 256×128 | 0.03 / 43 / 625 | 0.1 / 44 / 638 | 2.1 / 2.0 |
+| volcanic_moon | 256×128 | 0.04 / 33 / 460 | 0.0 / 34 / 484 | 1.8 / 1.8 |
+| icy_cracked | 256×128 | 0.04 / 50 / 720 | 0.1 / 53 / 759 | 2.4 / 2.2 |
+| icy_cratered | 256×128 | 0.04 / 48 / 694 | 0.0 / 48 / 707 | 2.2 / 1.9 |
+| hazy_moon | 256×128 | 7.0 / 56 / 711 | 7.7 / 58 / 745 | 2.3 / 2.0 |
+| planetoid | 128×64 | 0.05 / 11 / 625 | 0.1 / 11 / 624 | 2.1 / 1.8 |
+| planetoid_icy | 128×64 | 0.04 / 12 / 628 | 0.0 / 12 / 638 | 2.7 / 2.0 |
+
+Per family (Chrome, LOD): planets 38–65 ms, moons 34–58 ms, planetoids 11–12 ms; hero 0.48–0.92 s. Real new game (probe
+`--game`): `csSurfaceAll()` baked 45 bodies at 128×64 in 662 ms total; `csSurface()` at 512×256 ≈ 220 ms.
+**Budget verdict vs §1.I:** body LOD is inside the 30–80 ms estimate; a 52-body system (≈ 15 planets/moons at 256×128 +
+≈ 30 planetoids at 128×64) ≈ 1.1–1.3 s of main-thread JS → worker + progressive order needed (CS-4b), no GPU
+contingency. Hero 0.5–0.9 s → worker only. Gameplay tile terrain: 362 × ≈ 2 µs ≈ 0.8 ms + 6–8 ms context prep for
+bodies with a sea → main thread is fine (CS-5).
+
+**Keepers** (`colony_sphere_surface_smoke`, 33 PASS): B1 golden values (84 samples: 7 archetypes × 3 seeds × 4 points)
+bit for bit, identical after LRU eviction, bake twice identical; B2 call-graph source pin (no trig / pow / exp / log /
+`**` reachable from evalAt / classify / seaLevelOf / surfaceInfo / prepareSurface / fibonacciSphere; witness:
+bakeEquirect is flagged) + import pins; B3 runtime trap (Math.sin / cos / … throw → the gameplay path passes for all
+21 rows; witness: bake throws); B4 classify total (> 100 000 samples incl. NaN; every biome class of every row
+reachable; fallbacks); B5 terran ocean share ±5 pp on an independent point set (30 seeds, coverage 0.17–0.90, max
+1.2 pp) + coverage in the context key + archetype sanity on 162 points (no ocean on dry rows, ice ≥ 60% ice_sheet,
+volcanic ≥ 2 volcano, cryo_haze lakes ≥ 70% polar, tidally locked night side ice, Europa lineae, jungle forest-dominant);
+B6 bake vs evalAt biome agreement ≥ 99% (18 rows × 2 seeds; worst 99.26%); B7 no wiring (only `src/debug/` imports
+SurfaceField; GameScene has only the 2 aliases), golden-angle literals = Math.cos / sin, LOD sizes; B8 debug helpers
+importable under node.
+**Fail-first** in a real `git worktree --detach e630c21`: 11 FAIL / 1 PASS (the PASS is the no-wiring exclusion pin, a
+control whose witness is red on the base), no abort. **14 mutations, all killed:** sin in the terran recipe, import in
+SurfaceField, sea calibration ×0.9, classify without the first-class fallback (killed after the fallback pin was
+added), class-name typo `lineae`, permutation salt, bake latitude flipped, Math.random in offsets, SurfaceField imported
+by BuildingSystem, context key without waterCoverage, volcanic lava 0, bake quantisation ×250, `**` in clamp01, extra
+import in SurfacePreviewLogic. Sweep `run-all` 430/430 OK, `check-i18n` PASS. CS-3a OFF trace and CS-3b world
+baseline unchanged (archetypes keeper A5 / A7 green; the `field` edits are data placeholders, not pinned).
+
+**Owner check (light loop; Polish script in chat).** Seeded new game → `csSurfaceAll()` → select a few bodies →
+`csSurface()`. Expected: every body has a distinct, believable map matching its archetype. Validated headless on the
+live engine (probe `--game`: 48 bodies, 45 shown, 3 gas skipped, overlay canvases = shown, the close button removes
+the overlay, 0 page exceptions).
+
+#### 3.4.1 CS-4a tuning pass (2026-11-18; owner + reviewer feedback; not committed)
+
+Owner likes the natural randomness (a mountain-heavy homeworld stays). `SURFACE_FIELD_VERSION` 1 → **2**; golden values
+of keeper B1 **re-recorded deliberately** (intentional look change).
+
+- **Terran snow:** elevation lapse in t 0.3 → 0.12; snowy `peaks` only above a latitude-aware snowline
+  h > 0.45 + 0.7·t (t ≳ 0.79 → none, i.e. no snowy peaks in the tropics); polar caps unchanged. Measured on 3 seeds,
+  |y| < 0.5: peaks 38/100/63 → 10/28/5 samples (the rest stay `mountains`; terrain shares unchanged).
+  Preview hillshade capped (×1.25) so bright slopes no longer saturate to white.
+- **Ice:** large-scale region field (seed scale 0.6–1.3) → `old_ice` (m > 0.62, blue-grey), `smooth_plain` (m < 0.36,
+  lower, no ridges), rifts via the a channel (a > 0.74, seed strength 0.5–1.5), exposed rock only m > 0.9. Ice row gets 3
+  biome classes: `old_ice` / `smooth_plain` → ice_sheet, `rift` → wasteland. Knobs `rifts`, `oldIce`.
+- **Craters:** knob `regional` — crater density × (1 − 0.8·regional·(1 − region)), region = old highlands vs younger
+  plains (seed bias ±0.15): barren 0.8, scorched 0.9, icy_cratered 0.7, rocky_cratered 0.5. **Scorched ≠ barren:**
+  `lavaPlains` 1.0 → dark smooth lowered lava plains (`glassy_basin`, desert) + lobate scarps + cratered highlands.
+- **Seed variety:** tidally_locked — substellar direction tilted (±0.5 in lon, ±0.4 in lat), day-side size shift ±0.4,
+  band slope 0.55–1.7 (terminator width), boundary wobble 0.25–0.65, water in the terminator on ≈ ½ of seeds (new class
+  `terminator_sea` → ocean). Volcanic — low-frequency elevation (large lava lowlands vs highlands), lava network
+  frequency 0.7–1.4, strength 0.75–1.3, basin level 0.3–0.5.
+- cryo_haze vs hazy_moon unchanged (CS-6 haze).
+
+**Terrain-share report — information only, no tuning** (`node src/testing/headless/probe-cs4a-terrain-report.mjs`;
+galaxies −2102099243 and 612055237, ≤ 30 bodies per archetype per galaxy, same bodies; today = `PlanetMapGenerator`,
+new = classify(evalAt) at D-CS-8 tile counts; buildable = `TERRAIN_TYPES.buildable` = every terrain except `ocean`):
+
+| Archetype | n | today buildable (median) | new buildable min / median / max | Δ median | today top terrains % | new top terrains % |
+|---|---|---|---|---|---|---|
+| terran | 28 | 100% | 14 / 30 / 79% | **−70% ⚠** | tundra 21, plains 21, mountains 18, ice_sheet 14, desert 9 | ocean 71, mountains 10, ice_sheet 7 |
+| jungle | 7 | 100% | 80 / 83 / 85% | −17% | plains 45, mountains 26, tundra 12, desert 11, crater 9 | forest 55, mountains 17, ocean 17, plains 12 |
+| desert | 60 | 100% | 100 / 100 / 100% | 0 | ice_sheet 33, tundra 25, mountains 15, plains 7, desert 7 | desert 58, wasteland 28, mountains 8, ice_sheet 6 |
+| ice | 60 | 96% | 100 / 100 / 100% | +4% | ice_sheet 60, tundra 21, mountains 8 | ice_sheet 80, wasteland 19 |
+| volcanic | 41 | 100% | 100 / 100 / 100% | 0 | ice_sheet 31, tundra 24, mountains 17, plains 8, desert 6 | wasteland 71, volcano 18, mountains 10 |
+| hothouse | 9 | 100% | 100 / 100 / 100% | 0 | plains 27, mountains 24, desert 16, tundra 11, ice_sheet 7, crater 6 | wasteland 79, mountains 10, desert 8 |
+| cryo_haze | 60 | 93% | 90 / 93 / 97% | 0 | ice_sheet 40, tundra 23, mountains 10, ocean 7 | tundra 38, desert 26, ice_sheet 26, ocean 7 |
+| scorched | 1 | 100% | 100% | 0 | mountains 88, desert 7, crater 6 | wasteland 64, desert 24, mountains 7 |
+| barren | 56 | 100% | 100 / 100 / 100% | 0 | ice_sheet 45, mountains 29, desert 12, crater 7 | wasteland 90, crater 6 |
+| tidally_locked | 60 | 100% | 91 / 100 / 100% | 0 | mountains 23, ice_sheet 18, tundra 10, desert 9 | ice_sheet 38, desert 26, tundra 19, wasteland 11 |
+| rocky_cratered | 60 | 100% | 100 / 100 / 100% | 0 | ice_sheet 66, mountains 20, desert 8 | wasteland 91, crater 5 |
+| volcanic_moon | 60 | 100% | 100 / 100 / 100% | 0 | ice_sheet 69, mountains 19, desert 6 | wasteland 92, volcano 7 |
+| icy_cracked | 60 | 100% | 100 / 100 / 100% | 0 | ice_sheet 94 | ice_sheet 76, tundra 14, mountains 9 |
+| icy_cratered | 60 | 100% | 100 / 100 / 100% | 0 | ice_sheet 95 | ice_sheet 62, wasteland 26, crater 8, mountains 5 |
+| hazy_moon | 60 | 100% | 91 / 96 / 100% | −4% | ice_sheet 58, tundra 22, mountains 6 | tundra 37, ice_sheet 32, desert 27 |
+| planetoid | 60 | 100% | 100 / 100 / 100% | 0 | ice_sheet 58, desert 14, mountains 8, volcano 6 | wasteland 54, mountains 28, crater 15 |
+| planetoid_icy | 60 | 100% | 100 / 100 / 100% | 0 | ice_sheet 56, desert 17, mountains 6, volcano 6 | ice_sheet 52, wasteland 32, crater 11, mountains 5 |
+
+(`ocean` archetype: 0 bodies in these galaxies.) Reading: with `ocean` the only unbuildable terrain, the buildable share
+moves only where water appears. **Flag: terran −70%** — today's terran maps have no ocean at all (median 100% buildable),
+the new terran is always oceanic by design (D-CS-1 v2, waterCoverage 0.15–0.90, spread 14–79%). Jungle −17% is within
+±20%. The **terrain mix** changes much more than the buildable share (today ice_sheet / tundra dominate nearly every
+archetype; new mixes follow the archetype: wasteland on airless bodies, desert on Mars-like, volcano on lava worlds) —
+yield / building-category effects are a D-CS-8 / CS-5 question, not changed now.
+
+Results: keeper `colony_sphere_surface_smoke` 33 PASS (B5 dry list no longer includes tidally_locked: terminator water;
+bake ↔ evalAt worst 99.44%; terran ocean max 1.10 pp; ice ≥ 112/162 ice_sheet; volcanic ≥ 24/162 volcano); sweep
+430/430 OK; check-i18n PASS. Sheets regenerated (title "SurfaceField v2 (tuning pass)").
+
+**Gate log (light loop, 2026-11-18): PASS.** Owner checked the in-game preview (`csSurfaceAll` / `csSurface`: 51 bodies
+shown, home terran continental 0.371) and is happy; the owner explicitly likes the natural randomness (mountain-heavy
+homeworlds are fine). Review of the v2 sheets: PASS — terran inland snow fixed (polar caps + highest peaks only),
+scorched clearly Mercury-like, tidally_locked varies per seed incl. terminator water, volcanic varies per seed, ice has
+rifts / old-ice structure. `SURFACE_FIELD_VERSION` = 2. The terran buildable-share flag is decided by **D-CS-20**.
+**Carried to CS-6 (visual variants):** ice seeds 1 / 3 still similar; barren crater modulation weak; cryo_haze vs
+hazy_moon share a recipe (haze covers them); tidally_locked day side always centred on the map (fine once the body is
+oriented to its star).
+
 ---
 
 ## 4. Decisions for Filip (recommendation first)
@@ -1450,6 +1633,7 @@ Idea (not scheduled): reuse LifeSystem as a life generator for the player to dis
     and Finding 770 still needs its own fix.
   - Recommendation: **(b)** in its own step after CS-6 (so the archetype look is settled first), behind a flag, new
     worlds only, with a BALANS run; Finding 770 fixed in that step.
+- **✅ D-CS-20 Ocean tiles on terran worlds (SIGNED 2026-11-18).** Ocean tiles on terran worlds. The terrain report (§3.4.1) shows the terran buildable share dropping from 100% today (today's terran maps have no ocean) to a median 30% (min 14%, max 79%), because terran is always oceanic (D-CS-1 v2). **Accept fewer buildable tiles for now** — fewer does not automatically mean too few; re-evaluate after in-game testing once the sphere grid is live (after CS-5 / CS-8). Ocean buildings (e.g. sea platforms via tech, possibly reusing / fixing the unreachable `force_fields` ocean unlock #762) stay an unscheduled idea, not part of this arc. No grid-size or water-band changes because of this.
 
 ---
 
