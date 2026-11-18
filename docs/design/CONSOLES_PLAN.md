@@ -1259,3 +1259,5 @@ anew) · 736 ⚪ (combat strip overflows the header slot with 2–3 battles) · 
 toggle unreachable for ships without mission actions — console keeps parity) · 750 ⚪ (Atlas «set as mission target» branch
 unreachable) · 756 ⚪ · 757 ⚪ · 758 ⚪; earlier minors still open: 726 (U-screen module labels — see 757), 728, 729, 731, 733, 734
 (remaining dormant code outside Command). **Next free finding number: 759.**
+
+**Open items moved to [FINDINGS_BACKLOG.md](FINDINGS_BACKLOG.md)** (2026-11-18): problem, owner decision and ready next step per item.
