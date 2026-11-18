@@ -1,10 +1,10 @@
 // ShipyardConsoleLogic — czysta logika konsoli Stoczni (ARC KONSOLE, krok K1c-A; CONSOLES_PLAN.md §1.2 «Shipyard», §2 B5).
-// Zero DOM / Canvas — keeper `console_shipyard_smoke`. Rysunek: `ShipyardOverlay._drawConsole` (flaga `FEATURES.consoleShipyard`).
+// Zero DOM / Canvas — keeper `console_shipyard_smoke`. Rysunek: `ShipyardConsoleView.drawShipyardConsole`.
 //
 // • Podgląd zmiany (delta) przy najechaniu modułu w pickerze = staty(z modułem) − staty(bez niego) przez `calcShipStats` /
 //   `calcShipCost`; «bez» = bieżący projekt z pustym aktywnym slotem, «z» = ten sam projekt z modułem w aktywnym slocie.
 //   Broń i tarcze NIE są agregowane poza BattleSystem → pokazujemy surowe `damage` / `shieldHP` modułu (bez zmian mechaniki).
-// • Stan budowy szablonu — lustro dzisiejszej reguły `ShipyardOverlay._drawShipyard` (tech kadłuba → stocznia orbitalna →
+// • Stan budowy szablonu — reguła dawnej `ShipyardOverlay._drawShipyard`, usuniętej w KZ-Shipyard (tech kadłuba → stocznia orbitalna →
 //   slot), z `canBuildHullAt(hullId, 'ground')` (kolonia = stocznia naziemna). Keeper porównuje go z wykonaniem ścieżki OFF.
 // • Etykiety ról na kotwicach: `groupModulesByRole` (K1b) → jedna etykieta na niepustą rolę, moduły zliczone «Laser ×6».
 
@@ -164,7 +164,7 @@ export function shipyardGate({ hasExploration, shipyardLevel }) {
 }
 
 /**
- * Stan budowy szablonu — lustro `ShipyardOverlay._drawShipyard` (W2-4: bez warunku załogi).
+ * Stan budowy szablonu — reguła dawnej `ShipyardOverlay._drawShipyard` (W2-4: bez warunku załogi).
  * @returns {{ state:'build'|'queue'|'tech'|'orbital'|'full', canBuildNow:boolean, canQueue:boolean, canClick:boolean,
  *             techId:string|null }}
  */

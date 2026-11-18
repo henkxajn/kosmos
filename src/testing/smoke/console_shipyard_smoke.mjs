@@ -1,26 +1,38 @@
-// Keeper — ARC KONSOLE K1c-A: Stocznia na szablonie konsoli (`FEATURES.consoleShipyard`; CONSOLES_PLAN.md §1.2, Finding 723/726).
+// Keeper — ARC KONSOLE K1c-A: Stocznia na szablonie konsoli (CONSOLES_PLAN.md §1.2, Finding 723/726). KZ-Shipyard: konsola jest
+// JEDYNĄ ścieżką Stoczni (flagi `consoleShipyard` i `shipHologram` zdjęte, dawna wąska kolumna usunięta) — piny porównujące ON z OFF
+// zamienione na piny BEZWZGLĘDNE konsoli.
 //
 // Pinujemy LOGIKĘ i INWENTARZ AKCJI (wykonaniem na prawdziwych klasach — ShipyardOverlay i UnitDesignOverlay importują się pod node),
 // bez pinów na stałe rysunku:
 //   S1  delta podglądu = staty(z) − staty(bez) (`calcShipStats` / `calcShipCost`) na próbce kadłubów i modułów; broń / tarcze = surowe
 //       damage / shieldHP modułu, BEZ agregacji
 //   S2  etykiety ról: `roleStacks` przez `groupModulesByRole` (jedna na niepustą rolę, moduły zliczone, kolejność ról)
-//   S3  reguła zablokowanego kadłuba bez zmian: 🛰 ⇔ !canBuildHullAt(id, 'ground'); wybór kadłuba dalej wolny (jak dziś)
-//   S4  stan budowy szablonu = dzisiejsza reguła: macierz (tech × slot × surowce × kadłub) — strefa `build_template` ścieżki OFF
-//       istnieje ⇔ [ BUDUJ ] konsoli ma strefę (dla wczytanego, niezmienionego szablonu)
-//   S5  inwentarz akcji ON ⊇ OFF (każdy typ strefy dzisiejszej Stoczni jest osiągalny przy fladze ON) + handlery: klik w strefę ON
-//       robi to samo co dziś (emit / colonyManager / vesselManager / edytor)
-//   S6  OFF = dziś: flaga OFF → ścieżka bez stref konsoli; `isKitScreen` wymaga obu flag
-//   S7  wspólny UnitDesignOverlay (klawisz U, Command) nietknięty: jego strefy niezależne od flagi
+//   S3  reguła zablokowanego kadłuba bez zmian: 🛰 ⇔ !canBuildHullAt(id, 'ground'); wybór kadłuba dalej wolny
+//   S4  stan budowy szablonu = reguła dawnej `_drawShipyard` przepisana NIEZALEŻNIE w keeperze (eksploracja × poziom stoczni ×
+//       kolejka × surowce × kadłub, 48 przypadków): [ BUDUJ ] wiersza i inspektora mają strefę ⇔ reguła
+//   S5  inwentarz akcji konsoli = DOKŁADNY zbiór 17 typów stref z dokładnymi kluczami danych; KAŻDY typ kliknięty przez handleClick
+//       (pierwsze trafienie = ta strefa) ze SKUTKIEM: emit / colonyManager / vesselManager / odmowa do Dziennika / stan edytora / widok /
+//       USUŃ ×2 / zamknięcie; strefy bez akcji (bg, podpowiedzi) — brak skutku ze świadkiem
+//   S6  trwałość: Stocznia jest ekranem zestawu bez flag i bez consoleKit; kluczy flag nie ma w FEATURES ani w kodzie; rysunek przy
+//       consoleKit OFF to dalej konsola; usunięte symbole dawnej kolumny nie wracają; klawisz U → Stocznia bez warunku
+//   S7  wspólny UnitDesignOverlay: rysunek konsoli nie zmienia stanu edytora; edytor nie zna konsoli Stoczni
 //   S8  Finding 726: każda kategoria pickera ma ikonę i klucz PL/EN; picker konsoli nie rysuje surowego slotType
 //   S9  geometria ze stref konsoli: strefy w ramie, sekcje w swoich strefach; wejście bez window.inner*
-//   S10 bramki S0/S1 = linia banera w nagłówku (te same reguły): brak budowy, projektant osiągalny
+//   S10 bramki S0/S1 = linia banera w nagłówku: brak budowy, projektant i rezerwa osiągalne, czip wiersza niesie tekst bramki
 //   S11 etykiety na kotwicach (atrapa hologramu): jedna na niepustą rolę + lista modułów; role puste nie rysowane
 //   S12 hologram: hide() zwalnia; UIManager rysuje klatki, gdy hologram Stoczni się animuje (pin źródła)
 //   S13 przewijanie list (projekty, inspektor, pas): strefy przycięte do pasma (bez ghost-clicku)
+//
+// KZ-Shipyard — piny usunięte / przepięte (powód: pinowały ścieżkę OFF, która nie istnieje):
+//   S4a «konsola = wykonanie ścieżki OFF» → reguła niezależna w keeperze (S4a/S4b/S4c); S5a «OFF ma pełny inwentarz» i S5b «ON ⊇ OFF»
+//   → dokładny zbiór typów konsoli (S5a/S5b); S5d «klucze danych = OFF» → dokładne klucze danych per typ (S5c); S6b «jedna flaga
+//   wyłączona → stara Stocznia», S6c «OFF bez stref konsoli», S6d «OFF: ✕ w rogu ramy», S6e «flaga domyślnie ON» → piny trwałości
+//   S6a–S6g; S7a «strefy ekranu U identyczne przy ON i OFF» → S7a (rysunek konsoli nie zmienia stanu edytora); S10d «ta sama reguła
+//   co OFF» → S10d (czip wiersza niesie tekst bramki jako powód). Bez zamiennika: brak (każdy usunięty pin ma następcę).
 
 import '../headless/env.js';           // MUSI być pierwszy (window/document/THREE + seeded RNG)
 import fs from 'node:fs';
+import path from 'node:path';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { ShipyardOverlay } from '../../ui/ShipyardOverlay.js';
 import { UnitDesignOverlay } from '../../ui/UnitDesignOverlay.js';
@@ -28,7 +40,7 @@ import { HULLS } from '../../data/HullsData.js';
 import { SHIP_MODULES, UTILITY_SLOT_TYPES, calcShipStats, calcShipCost } from '../../data/ShipModulesData.js';
 import { canBuildHullAt } from '../../data/ShipBuildRules.js';
 import { ANCHOR_ROLES } from '../../data/ShipAnchorsSchema.js';
-import { isKitScreen } from '../../ui/ConsoleLayoutLogic.js';
+import * as CLL from '../../ui/ConsoleLayoutLogic.js';
 import EventBus from '../../core/EventBus.js';
 import PL from '../../i18n/pl.js';
 import EN from '../../i18n/en.js';
@@ -39,8 +51,8 @@ const AOL = await import('../../ui/ShipAnchorOverlayLogic.js').catch(() => ({}))
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
 const F = GAME_CONFIG.FEATURES;
-const FLAGS0 = { consoleKit: F.consoleKit, consoleShipyard: F.consoleShipyard, shipHologram: F.shipHologram };
-const setFlag = (on) => { F.consoleKit = true; F.consoleShipyard = on; F.shipHologram = false; };
+const KIT0 = F.consoleKit;
+const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"\\])\/\/.*$/gm, '$1');
 
 function mockCtx() {
   const texts = [], pos = [];
@@ -57,15 +69,18 @@ function mockCtx() {
 }
 
 const PID = 'p_home';
-const spy = { emits: [], surge: [], cancel: [], deploy: [] };
+const spy = { emits: [], surge: [], cancel: [], deploy: [], rejected: [] };
+const RICH = Object.fromEntries(['Fe', 'Ti', 'Cu', 'Si', 'C', 'Hv', 'Li', 'W', 'Pt', 'Xe', 'Nt',
+  'structural_alloys', 'polymer_composites', 'electronics', 'power_cells', 'conductor_bundles', 'semiconductor_wafers',
+  'reactor_core', 'quantum_cores', 'warp_cores', 'plasma_cores', 'nanotech_parts'].map((k) => [k, 99999]));
+const mkVessel = (id) => ({ id, name: `Rezerwa ${id}`, shipId: 'hull_small', isWreck: false, colonyId: PID, homeColonyId: PID,
+  serviceState: 'stored', position: { state: 'docked', dockedAt: PID }, modules: [] });
 /** Świat: kolonia ze stocznią `level`, magazyn `inv`, kolejki, zamówienia, rezerwa, szablony, edytor. */
-function stubWorld({ level = 2, tech = true, inv = null, queues = null, pending = null, reserve = true, templates = null } = {}) {
-  spy.emits = []; spy.surge = []; spy.cancel = []; spy.deploy = [];
+function stubWorld({ level = 2, tech = true, inv = null, queues = null, pending = null, reserve = ['v_r'], templates = null } = {}) {
+  spy.emits = []; spy.surge = []; spy.cancel = []; spy.deploy = []; spy.rejected = [];
   const active = new Map();
   if (level > 0) active.set('b1', { building: { id: 'shipyard' }, level });
-  const richInv = inv ?? Object.fromEntries(['Fe', 'Ti', 'Cu', 'Si', 'C', 'Hv', 'Li', 'W', 'Pt', 'Xe', 'Nt',
-    'structural_alloys', 'polymer_composites', 'electronics', 'power_cells', 'conductor_bundles', 'semiconductor_wafers',
-    'reactor_core', 'quantum_cores', 'warp_cores', 'plasma_cores', 'nanotech_parts'].map((k) => [k, 99999]));
+  const richInv = inv ?? RICH;
   const col = {
     planetId: PID, name: 'Dom', credits: 5000, civSystem: { freePops: 3 },
     buildingSystem: { _active: active },
@@ -73,9 +88,13 @@ function stubWorld({ level = 2, tech = true, inv = null, queues = null, pending 
     shipQueues: queues ?? [{ shipId: 'hull_small', progress: 1, buildTime: 3, surgeCount: 0 }],
     pendingShipOrders: pending ?? [{ id: 'po1', shipId: 'hull_small', cost: { Fe: 1e9 } }],
   };
-  const vessels = reserve ? [{ id: 'v_r', name: 'Rezerwa 1', shipId: 'hull_small', isWreck: false, colonyId: PID, homeColonyId: PID,
-    serviceState: 'stored', position: { state: 'docked', dockedAt: PID }, modules: [] }] : [];
+  const vessels = (reserve ?? []).map(mkVessel);
   const ed = new UnitDesignOverlay();
+  const vm = {
+    getAllVessels: () => vessels, getVessel: (id) => vessels.find((v) => v.id === id) ?? null,
+    getVesselUpkeepCredits: () => 30, fleetInArrears: () => false,
+    deployVessel: (id) => { spy.deploy.push(id); return { ok: true }; },
+  };
   globalThis.window.KOSMOS = {
     lang: 'pl', civMode: true,
     techSystem: { isResearched: () => tech },
@@ -84,28 +103,36 @@ function stubWorld({ level = 2, tech = true, inv = null, queues = null, pending 
       activePlanetId: PID, getColony: (id) => (id === PID ? col : null), getShipQueues: () => col.shipQueues,
       surgeShipBuild: (p, q) => spy.surge.push([p, q]), cancelPendingShip: (p, o) => spy.cancel.push([p, o]),
     },
-    vesselManager: {
-      getAllVessels: () => vessels, getVessel: (id) => vessels.find((v) => v.id === id) ?? null,
-      getVesselUpkeepCredits: () => 30, fleetInArrears: () => false,
-      deployVessel: (id) => { spy.deploy.push(id); return { ok: true }; },
-    },
+    vesselManager: vm,
     overlayManager: { overlays: { unit_design: ed } },
   };
-  return { col, ed };
+  return { col, ed, vm, vessels };
 }
 EventBus.on('fleet:buildRequest', (p) => spy.emits.push(p));
+EventBus.on('vessel:deployRejected', (p) => spy.rejected.push(p));
 
 const W = 1280, H = 833;
-function drawSy(on, setup) {
-  setFlag(on);
+function drawSy(setup) {
+  F.consoleKit = true;
   const sy = new ShipyardOverlay(); sy.visible = true;
   setup?.(sy);
   const ctx = mockCtx();
   sy.draw(ctx, W, H);
   return { sy, ctx, types: new Set(sy._hitZones.map((z) => z.type)) };
 }
-/** Projektant w stanie «wczytany szablon tpl1 + otwarty picker utility». */
+/** Projektant w stanie «wczytany szablon idx». */
 const loadTpl = (ed, idx = 0) => { ed._onHit({ type: 'edit_template', data: { index: idx } }); };
+const inRect = (q, r) => !!r && q.x >= r.x - 0.5 && q.y >= r.y - 0.5 && q.x + q.w <= r.x + r.w + 0.5 && q.y + q.h <= r.y + r.h + 0.5;
+
+// Inwentarz konsoli Stoczni (KZ-Shipyard — jedyna ścieżka): typ strefy → klucze danych
+const CONSOLE_ZONE_KEYS = {
+  bg: '', close: '',
+  tpl_row: 'index', build_template: 'enabled,hullId,modules,templateId', tpl_build_blocked: 'index,reason', delete_template: 'index,label',
+  select_hull: 'hullId', holo_view: 'mode',
+  select_slot: 'index', clear_slot: 'index', pick_module: 'moduleId', save_template: 'label', clear_design: 'label',
+  surge_ship: 'planetId,queueIndex', cancel_pending_ship: 'orderId,planetId', pending_ship_hover: 'order', deploy_vessel: 'vesselId',
+};
+const CONSOLE_TYPES = Object.keys(CONSOLE_ZONE_KEYS).sort();
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('S1 — delta podglądu = staty(z) − staty(bez)');
@@ -165,116 +192,224 @@ console.log('S3 — zablokowany kadłub: reguła canBuildHullAt bez zmian');
   assert(rows.some((r) => r.orbitalOnly) && rows.some((r) => !r.orbitalOnly), 'S3c (świadek): oba stany obecne (mały naziemny, reszta 🛰)');
   assert(rows.find((r) => r.id === 'hull_small')?.slots === '1P+2U', 'S3d: układ slotów «1P+2U»');
   stubWorld();
-  const { sy } = drawSy(true);
+  const { sy } = drawSy();
   const hz = sy._hitZones.filter((z) => z.type === 'select_hull').map((z) => z.data.hullId);
-  assert(hz.length === 6, `S3e: każdy kadłub (także 🛰) klikalny w projektancie — jak dziś (${hz.length})`);
+  assert(hz.length === 6, `S3e: każdy kadłub (także 🛰) klikalny w projektancie (${hz.length})`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('S4 — stan budowy szablonu: konsola = dzisiejsza reguła (macierz, wykonanie obu ścieżek)');
+console.log('S4 — stan budowy szablonu: konsola = reguła dawnej _drawShipyard (niezależna kopia w keeperze, 48 przypadków)');
 {
-  let cases = 0, agree = 0, onClick = 0, offClick = 0;
-  for (const hullId of ['hull_small', 'hull_frigate']) for (const tech of [true, false]) for (const full of [false, true]) for (const afford of [true, false]) {
-    const tpl = { id: 'tx', name: 'T', hullId, modules: hullId === 'hull_small' ? ['engine_chemical', null, null] : ['engine_chemical', null, null, null] };
-    const opts = { tech, templates: [tpl], level: 1, queues: full ? [{ shipId: 'hull_small', progress: 0, buildTime: 3 }] : [], inv: afford ? null : {} };
-    stubWorld(opts);
-    const off = drawSy(false).sy._hitZones.some((z) => z.type === 'build_template');
-    const { ed } = stubWorld(opts);
-    loadTpl(ed);
-    const on = drawSy(true).sy._hitZones.some((z) => z.type === 'build_template');
-    cases++; if (on === off) agree++; if (on) onClick++; if (off) offClick++;
-  }
-  assert(agree === cases, `S4a (kontrola równoważności — zielona też na bazie): [ BUDUJ ] klikalny ⇔ dzisiejszy wiersz klikalny (${agree}/${cases})`);
-  assert(offClick > 0 && offClick < cases, `S4b (świadek): macierz ma oba stany (${offClick} klikalnych z ${cases})`);
-  // zmieniony / niezapisany projekt → brak budowy (dziś buduje się tylko zapisane szablony)
+  // Reguła dawnej `ShipyardOverlay._drawShipyard` (usuniętej w KZ-Shipyard), przepisana tu NIEZALEŻNIE od `templateBuildState`:
+  // bramka S0 (eksploracja) → bramka S1 (poziom stoczni > 0) → tech kadłuba → stocznia naziemna → (stać ? wolny slot : kolejka).
+  const oldRule = ({ tech, level, queuesLen, afford, hullId }) => {
+    if (!tech || !(level > 0)) return false;
+    const hull = HULLS[hullId];
+    const hasTech = !hull.requires || tech;
+    if (!hasTech || !canBuildHullAt(hullId, 'ground')) return false;
+    return afford ? queuesLen < level : true;
+  };
+  let cases = 0, agreeRow = 0, agreeInsp = 0, expClick = 0, insWitness = 0;
+  for (const hullId of ['hull_small', 'hull_frigate']) for (const tech of [true, false]) for (const level of [0, 1, 2])
+    for (const queuesLen of [0, 1]) for (const afford of [true, false]) {
+      const tpl = { id: 'tx', name: 'T', hullId, modules: hullId === 'hull_small' ? ['engine_chemical', null, null] : ['engine_chemical', null, null, null] };
+      const queues = Array.from({ length: queuesLen }, () => ({ shipId: 'hull_small', progress: 0, buildTime: 3 }));
+      const { ed } = stubWorld({ tech, templates: [tpl], level, queues, inv: afford ? null : {} });
+      loadTpl(ed);
+      const { sy } = drawSy();
+      const lz = sy.consoleZones?.list, iz = sy.consoleZones?.inspector;
+      const row = sy._hitZones.some((z) => z.type === 'build_template' && inRect(z, lz));
+      const insp = sy._hitZones.some((z) => z.type === 'build_template' && inRect(z, iz));
+      if (sy._hitZones.some((z) => z.type === 'save_template' && inRect(z, iz))) insWitness++;
+      const exp = oldRule({ tech, level, queuesLen, afford, hullId });
+      cases++; if (row === exp) agreeRow++; if (insp === exp) agreeInsp++; if (exp) expClick++;
+    }
+  assert(agreeRow === cases, `S4a: [ BUDUJ ] wiersza projektu klikalny ⇔ reguła dawnej Stoczni (${agreeRow}/${cases})`);
+  assert(agreeInsp === cases, `S4b: [ BUDUJ ] inspektora (projekt wczytany, niezmieniony) klikalny ⇔ ta sama reguła (${agreeInsp}/${cases})`);
+  assert(expClick > 0 && expClick < cases && insWitness === cases, `S4c (świadek): macierz ma oba stany (${expClick} klikalnych z ${cases}), inspektor narysowany w każdym (${insWitness})`);
+  // zmieniony / niezapisany projekt → brak budowy (budują się tylko zapisane szablony)
   const { ed } = stubWorld();
   loadTpl(ed); ed._slotAssignments[1] = 'cargo_large';
-  const mod = drawSy(true);
+  const mod = drawSy();
   // K1c-B: czip [ BUDUJ ] w wierszu zapisanego projektu zostaje (buduje zapisany szablon) — pin dotyczy [ BUDUJ ] inspektora
   const izc = mod.sy.consoleZones?.inspector;
-  assert(!!izc && !mod.sy._hitZones.some((z) => z.type === 'build_template' && z.x >= izc.x && z.y >= izc.y),
-    'S4c: projekt zmieniony po wczytaniu → [ BUDUJ ] inspektora bez strefy');
-  assert(mod.ctx._texts.some((s) => s.includes(PL['shipyardConsole.reason.modified'])), 'S4d: powód «zmieniony» widoczny');
-  assert(L.buildTarget?.({ hullId: 'hull_small', slotAssignments: ['engine_chemical'], editingId: null, templates: [] })?.reason === 'unsaved', 'S4e: niezapisany → powód unsaved');
+  assert(!!izc && !mod.sy._hitZones.some((z) => z.type === 'build_template' && inRect(z, izc))
+    && mod.sy._hitZones.some((z) => z.type === 'build_template' && inRect(z, mod.sy.consoleZones?.list)),
+  'S4d: projekt zmieniony po wczytaniu → [ BUDUJ ] inspektora bez strefy (świadek: czip wiersza zapisanego projektu jest)');
+  assert(mod.ctx._texts.some((s) => s.includes(PL['shipyardConsole.reason.modified'])), 'S4e: powód «zmieniony» widoczny');
+  assert(L.buildTarget?.({ hullId: 'hull_small', slotAssignments: ['engine_chemical'], editingId: null, templates: [] })?.reason === 'unsaved', 'S4f: niezapisany → powód unsaved');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('S5 — inwentarz akcji ON ⊇ OFF + te same handlery');
+console.log('S5 — inwentarz akcji konsoli (dokładny) + skutek każdej akcji przez handleClick');
 {
-  const prep = (ed) => { loadTpl(ed); ed._onHit({ type: 'select_slot', data: { index: 2 } }); };
-  let w = stubWorld(); prep(w.ed);
-  const off = drawSy(false);
-  // OFF: wspólny scroll — lista szablonów leży pod pickerem; inwentarz = suma klatek na górze i na dole
-  const offZones = [...off.sy._hitZones];
-  off.sy._shipyardScrollY = 1e6;
-  for (let k = 0; k < 2; k++) { off.sy._hitZones = []; off.sy.draw(mockCtx(), W, H); }   // 2. klatka — po klamrze scrolla
-  for (const z of off.sy._hitZones) { off.types.add(z.type); offZones.push(z); }
-  w = stubWorld(); prep(w.ed);
-  const on = drawSy(true);
-  // K1c-B: [ EDYTUJ ] zastąpiony klikiem w wiersz (`tpl_row` → handler edytora `edit_template`, pin S5i)
-  const REPLACED = { edit_template: 'tpl_row' };
-  const missing = [...off.types].filter((tp) => !on.types.has(tp) && !(REPLACED[tp] && on.types.has(REPLACED[tp])));
-  assert(off.types.size >= 14, `S5a (świadek): ścieżka OFF ma pełny inwentarz (${[...off.types].sort().join(',')})`);
-  assert(missing.length === 0, `S5b: każdy typ strefy dzisiejszej Stoczni osiągalny przy ON (brak: ${missing.join(',') || '—'})`);
-  assert(on.types.has('holo_view'), 'S5c: nowe czipy [ 3D ] [ PLAN ]');
-  // dane stref: te same klucze co dziś
-  const keys = (zones, tp) => Object.keys(zones.find((z) => z.type === tp)?.data ?? {}).sort().join();
-  const same = [...off.types].filter((tp) => !['bg', 'close'].includes(tp) && !REPLACED[tp]).every((tp) => keys(offZones, tp) === keys(on.sy._hitZones, tp));
-  assert(same, 'S5d: dane każdej strefy mają dzisiejsze klucze (te same handlery)');
-  // handlery: klik ON = dzisiejszy skutek
-  const click = (tp) => { const z = on.sy._hitZones.find((q) => q.type === tp); if (z) on.sy._onHit(z); return !!z; };
-  click('build_template'); click('surge_ship'); click('cancel_pending_ship'); click('deploy_vessel');
-  assert(spy.emits.length === 1 && spy.emits[0].shipId === 'hull_small', 'S5e (kontrola handlera): [ BUDUJ ] → fleet:buildRequest (kadłub szablonu)');
-  assert(spy.surge.length === 1 && spy.cancel.length === 1 && spy.deploy.length === 1, 'S5f (kontrola handlera): Surge / anuluj / Rozmieść → colonyManager / vesselManager');
+  const TPLS = () => [
+    { id: 'tpl1', name: 'Zwiadowca', hullId: 'hull_small', modules: ['engine_chemical', 'cargo_small', null] },
+    { id: 'tpl2', name: 'Fregata', hullId: 'hull_frigate', modules: ['engine_chemical', null, null, null] },   // 🛰 → czip zablokowany
+  ];
+  const w = stubWorld({
+    level: 3,   // 2 budowy w 3 slotach → [ BUDUJ ] klikalny (stać, wolny slot)
+    templates: TPLS(),
+    queues: [{ shipId: 'hull_small', progress: 1, buildTime: 3, surgeCount: 0 }, { shipId: 'hull_small', progress: 0, buildTime: 3, surgeCount: 0 }],
+    pending: [{ id: 'po1', shipId: 'hull_small', cost: { Fe: 1e9 } }, { id: 'po2', shipId: 'hull_small', cost: { Fe: 1e9 } }],
+    reserve: ['v_r1', 'v_r2'],
+  });
   const ed = w.ed;
-  const pick = on.sy._hitZones.find((q) => q.type === 'pick_module');
-  if (pick) on.sy._onHit(pick);
-  assert(!!pick && ed._slotAssignments[2] === pick.data.moduleId, 'S5g (kontrola handlera): pick_module → wspólny edytor montuje moduł');
-  click('clear_slot');
-  assert(ed._slotAssignments.filter(Boolean).length < 3, 'S5h (kontrola handlera): clear_slot → edytor zdejmuje moduł');
-  ed._editingTemplateId = null;
-  click('tpl_row');
-  assert(ed._editingTemplateId === 'tpl1', 'S5i: wybór wiersza projektu = wczytaj do projektanta');
-  on.sy._onHit({ type: 'holo_view', data: { mode: 'plan' } });
-  assert(on.sy._holoView === 'plan', 'S5j: [ PLAN ] przełącza widok');
-  click('delete_template');
-  const afterOne = window.KOSMOS.unitDesigns.length;
-  click('delete_template');   // K1c-B — drugi klik (w oknie potwierdzenia)
-  assert(afterOne === 1 && window.KOSMOS.unitDesigns.length === 0, 'S5k: [ USUŃ ] ×2 → edytor kasuje szablon (pierwszy klik tylko uzbraja)');
-  click('close');
-  assert(on.sy.visible === false, 'S5l: [ x ] zamyka');
-}
+  loadTpl(ed); ed._onHit({ type: 'select_slot', data: { index: 2 } });
+  let now = 10000;
+  const on = drawSy((sy) => { sy._now = () => now; });
+  const sy = on.sy;
+  const types = [...on.types].sort();
+  assert(types.join() === CONSOLE_TYPES.join(), `S5a: zbiór typów stref konsoli = dokładnie ${CONSOLE_TYPES.length} typów (${types.join(',')})`);
+  assert(!on.types.has('edit_template') && on.types.size === 17, 'S5b (wykluczenie; świadek S5a): bez strefy [ EDYTUJ ] — wczytanie = klik w wiersz');
+  const badKeys = sy._hitZones.filter((z) => Object.keys(z.data ?? {}).sort().join() !== CONSOLE_ZONE_KEYS[z.type]).map((z) => z.type);
+  assert(badKeys.length === 0 && sy._hitZones.length >= 25, `S5c: dane każdej strefy mają dokładne klucze (${sy._hitZones.length} stref; złe: ${[...new Set(badKeys)].join(',') || '—'})`);
 
-// ═══════════════════════════════════════════════════════════════════════════
-console.log('S6 — OFF = dziś');
-{
-  assert(isKitScreen('shipyard', { consoleKit: true, consoleShipyard: true }) === true, 'S6a: obie flagi → konsola');
-  assert(isKitScreen('shipyard', { consoleKit: false, consoleShipyard: true }) === false
-    && isKitScreen('shipyard', { consoleKit: true, consoleShipyard: false }) === false, 'S6b: jedna wyłączona → dzisiejsza Stocznia');
-  stubWorld();
-  const off = drawSy(false);
-  assert(off.sy.consoleZones === null && !off.types.has('holo_view'), 'S6c: OFF — bez stref konsoli');
-  const b = off.sy._getOverlayBounds(W, H);
-  const close = off.sy._hitZones.find((z) => z.type === 'close');
-  assert(close && close.x === b.ox + b.ow - 28 && close.w === 22, 'S6d: OFF — dzisiejsza geometria (✕ w rogu ramy)');
-  assert(F.consoleShipyard === true || FLAGS0.consoleShipyard === true, 'S6e: flaga domyślnie ON w drzewie');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-console.log('S7 — wspólny UnitDesignOverlay nietknięty (inne hosty)');
-{
-  const snap = (on) => {
-    setFlag(on); stubWorld();
-    const ed = new UnitDesignOverlay(); ed.visible = true;
-    ed._onHit({ type: 'select_hull', data: { hullId: 'hull_medium' } });
-    ed._onHit({ type: 'select_slot', data: { index: 2 } });
-    ed.draw(mockCtx(), 1920, 1080);
-    return JSON.stringify(ed._hitZones.map((z) => [z.type, Math.round(z.x), Math.round(z.y), z.w, z.h]));
+  const clicked = new Set();
+  const redraw = () => { sy._hitZones = []; sy.draw(mockCtx(), W, H); };
+  /** Klik w środek strefy przez handleClick; zwraca strefę, gdy pierwsze trafienie to właśnie ona. */
+  const click = (type, pred = () => true) => {
+    redraw();
+    const z = sy._hitZones.find((q) => q.type === type && pred(q));
+    if (!z) return null;
+    const cx = z.x + z.w / 2, cy = z.y + z.h / 2;
+    if (sy._hitTest(cx, cy) !== z) return null;
+    const handled = sy.handleClick(cx, cy);
+    if (handled) clicked.add(type);
+    return handled ? z : null;
   };
-  const a = snap(true), b = snap(false);
-  assert(a === b && a.length > 100, 'S7a: strefy ekranu U identyczne przy ON i OFF');
-  const src = fs.readFileSync(new URL('../../ui/UnitDesignOverlay.js', import.meta.url), 'utf8');
-  assert(!/consoleShipyard|ShipyardConsole/.test(src), 'S7b: UnitDesignOverlay nie zna konsoli Stoczni');
+  const edState = () => JSON.stringify([ed._selectedHullId, ed._slotAssignments, ed._activeSlotIndex, ed._editingTemplateId]);
+  const lz = () => sy.consoleZones.list, iz = () => sy.consoleZones.inspector;
+
+  // [ BUDUJ ] wiersza i inspektora → fleet:buildRequest z kadłubem i modułami zapisanego szablonu
+  const bRow = click('build_template', (q) => inRect(q, lz()) && q.data.templateId === 'tpl1');
+  const bIns = click('build_template', (q) => inRect(q, iz()));
+  const mods1 = JSON.stringify(['engine_chemical', 'cargo_small']);
+  assert(!!bRow && !!bIns && spy.emits.length === 2 && spy.emits.every((p) => p.shipId === 'hull_small' && JSON.stringify(p.modules) === mods1),
+    `S5d: [ BUDUJ ] (wiersz i inspektor) → fleet:buildRequest {hull_small, moduły szablonu} ×2 (${spy.emits.length})`);
+  // czip zablokowany: brak skutku (świadek: strefa istnieje i została trafiona)
+  const st0 = edState(), n0 = window.KOSMOS.unitDesigns.length;
+  const blk = click('tpl_build_blocked');
+  assert(!!blk && blk.data.index === 1 && spy.emits.length === 2 && edState() === st0 && window.KOSMOS.unitDesigns.length === n0,
+    'S5e: czip [ BUDUJ ] zablokowany (🛰) — klik bez budowy, bez zmiany edytora i projektów');
+  // pas: Surge drugiej budowy, anuluj drugie zamówienie, Rozmieść drugi kadłub
+  const sg = click('surge_ship', (q) => q.data.queueIndex === 1);
+  assert(!!sg && JSON.stringify(spy.surge) === JSON.stringify([[PID, 1]]), `S5f: Surge (budowa 2) → colonyManager.surgeShipBuild(${PID}, 1) (${JSON.stringify(spy.surge)})`);
+  const cn = click('cancel_pending_ship', (q) => q.data.orderId === 'po2');
+  assert(!!cn && JSON.stringify(spy.cancel) === JSON.stringify([[PID, 'po2']]), `S5g: [ x ] zamówienia 2 → colonyManager.cancelPendingShip(${PID}, po2) (${JSON.stringify(spy.cancel)})`);
+  const dp = click('deploy_vessel', (q) => q.data.vesselId === 'v_r2');
+  assert(!!dp && JSON.stringify(spy.deploy) === JSON.stringify(['v_r2']) && spy.rejected.length === 0,
+    `S5h: Rozmieść (kadłub 2) → vesselManager.deployVessel(v_r2); sukces bez odmowy w Dzienniku (${JSON.stringify(spy.deploy)})`);
+  w.vm.deployVessel = (id) => { spy.deploy.push(id); return { ok: false, reason: 'noCrewPops' }; };
+  click('deploy_vessel', (q) => q.data.vesselId === 'v_r1');
+  const rj = spy.rejected[0];
+  assert(spy.rejected.length === 1 && rj.vesselId === 'v_r1' && rj.reason === 'noCrewPops' && rj.vessel?.id === 'v_r1',
+    'S5i: odmowa rozmieszczenia nie jest cicha — vessel:deployRejected {vesselId, vessel, reason}');
+  // podpowiedź braków: najechanie ustawia zamówienie; klik bez skutku
+  redraw();
+  const ph = sy._hitZones.find((q) => q.type === 'pending_ship_hover' && q.data.order?.id === 'po1');
+  if (ph) sy.handleMouseMove(ph.x + 4, ph.y + 4);
+  const hoverOk = sy._hoverPendingOrder?.id === 'po1';
+  const before = JSON.stringify([spy.emits.length, spy.surge, spy.cancel, spy.deploy]);
+  const phc = click('pending_ship_hover', (q) => q.data.order?.id === 'po1');
+  assert(!!ph && hoverOk && !!phc && JSON.stringify([spy.emits.length, spy.surge, spy.cancel, spy.deploy]) === before,
+    'S5j: oczekujące — najechanie wybiera zamówienie do podpowiedzi braków, klik bez akcji');
+  // widok bohatera
+  const hp = click('holo_view', (q) => q.data.mode === 'plan');
+  const afterPlan = sy._holoView;
+  const h3 = click('holo_view', (q) => q.data.mode === '3q');
+  assert(!!hp && !!h3 && afterPlan === 'plan' && sy._holoView === '3q', 'S5k: [ PLAN ] → widok plan, [ 3D ] → widok 3q');
+  // projektant (wspólny edytor overlays.unit_design)
+  click('select_slot', (q) => q.data.index === 1);
+  assert(ed._activeSlotIndex === 1, `S5l: select_slot → edytor: aktywny slot 1 (${ed._activeSlotIndex})`);
+  const pk = click('pick_module');
+  assert(!!pk && ed._slotAssignments[1] === pk.data.moduleId, `S5m: pick_module → edytor montuje moduł w slocie 1 (${pk?.data?.moduleId})`);
+  const cs = click('clear_slot', (q) => q.data.index === 1);
+  assert(!!cs && ed._slotAssignments[1] === null && ed._slotAssignments[0] === 'engine_chemical', 'S5n: clear_slot → edytor zdejmuje moduł tylko z tego slotu');
+  let saves = 0; ed._saveTemplate = () => { saves++; };
+  click('save_template');
+  assert(saves === 1, `S5o: [ ZAPISZ ] → edytor._saveTemplate (${saves})`);
+  const tr = click('tpl_row', (q) => q.data.index === 1);
+  assert(!!tr && ed._editingTemplateId === 'tpl2' && ed._selectedHullId === 'hull_frigate' && ed._slotAssignments[0] === 'engine_chemical',
+    `S5p: klik w wiersz projektu 2 = wczytaj TEN projekt do projektanta (${ed._editingTemplateId})`);
+  click('select_hull', (q) => q.data.hullId === 'hull_medium');
+  assert(ed._selectedHullId === 'hull_medium' && ed._editingTemplateId === null && ed._slotAssignments.length === HULLS.hull_medium.slots.length,
+    'S5q: select_hull → edytor: nowy kadłub, puste sloty, bez wczytanego projektu');
+  ed._slotAssignments[0] = 'engine_chemical';
+  click('clear_design');
+  assert(ed._slotAssignments.every((m) => m === null) && ed._selectedHullId === 'hull_medium', 'S5r: [ WYCZYŚĆ ] → edytor zdejmuje wszystkie moduły (kadłub zostaje)');
+  // [ USUŃ ] ×2 (pierwszy klik uzbraja, drugi w oknie potwierdzenia kasuje WŁAŚCIWY projekt)
+  click('delete_template', (q) => q.data.index === 0);
+  const afterOne = window.KOSMOS.unitDesigns.map((t) => t.id).join();
+  now += 500;
+  click('delete_template', (q) => q.data.index === 0);
+  assert(afterOne === 'tpl1,tpl2' && window.KOSMOS.unitDesigns.map((t) => t.id).join() === 'tpl2',
+    `S5s: [ USUŃ ] ×2 → kasuje projekt 1 (pierwszy klik tylko uzbraja) (${afterOne} → ${window.KOSMOS.unitDesigns.map((t) => t.id).join()})`);
+  // tło: pochłania klik, bez skutku
+  redraw();
+  const f = sy.consoleZones.frame;
+  const bgPt = [[f.x + 2, f.y + f.h - 2], [f.x + f.w - 2, f.y + f.h - 2], [f.x + 2, f.y + 2]].find(([x, y]) => sy._hitTest(x, y)?.type === 'bg');
+  const st1 = edState(), ev1 = JSON.stringify([spy.emits.length, spy.surge, spy.cancel, spy.deploy, sy._holoView, window.KOSMOS.unitDesigns.length]);
+  const bgH = bgPt ? sy.handleClick(bgPt[0], bgPt[1]) : false;
+  if (bgH) clicked.add('bg');
+  assert(!!bgPt && bgH === true && edState() === st1 && sy.visible
+    && JSON.stringify([spy.emits.length, spy.surge, spy.cancel, spy.deploy, sy._holoView, window.KOSMOS.unitDesigns.length]) === ev1,
+  'S5t: klik w tło konsoli pochłonięty (true), bez skutku');
+  click('close');
+  assert(sy.visible === false, 'S5u: [ x ] zamyka');
+  const missed = CONSOLE_TYPES.filter((tp) => !clicked.has(tp));
+  assert(missed.length === 0, `S5v: każdy typ strefy konsoli kliknięty przez handleClick (pominięte: ${missed.join(',') || '—'})`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('S6 — trwałość: Stocznia jest na stałe konsolą');
+{
+  assert(CLL.isKitScreen('shipyard', {}) === true && CLL.isKitScreen('shipyard', { consoleKit: false }) === true,
+    'S6a: isKitScreen(shipyard) bez flag i z consoleKit OFF');
+  assert((CLL.PERMANENT_KIT_SCREENS ?? []).includes('shipyard') && (CLL.PERMANENT_KIT_SCREENS ?? []).includes('diplomacy')
+    && typeof CLL.CONSOLE_KIT_SCREENS === 'object' && CLL.CONSOLE_KIT_SCREENS !== null && !('shipyard' in CLL.CONSOLE_KIT_SCREENS),
+  'S6b: shipyard w PERMANENT_KIT_SCREENS (obok diplomacy z KZ-Dipl), nie w mapie flag CONSOLE_KIT_SCREENS');
+  assert(!('consoleShipyard' in F) && !('shipHologram' in F) && 'consoleKit' in F, 'S6c: kluczy consoleShipyard / shipHologram nie ma w FEATURES (świadek: consoleKit jest)');
+  const { ed: ed6 } = stubWorld(); loadTpl(ed6);
+  F.consoleKit = false;
+  const sy = new ShipyardOverlay(); sy.visible = true;
+  sy.draw(mockCtx(), W, H);
+  F.consoleKit = true;
+  const ty = new Set(sy._hitZones.map((z) => z.type));
+  assert(!!sy.consoleZones?.hero && ty.has('holo_view') && ty.has('tpl_row') && ty.has('deploy_vessel'), 'S6d: consoleKit OFF — Stocznia dalej rysuje konsolę (strefy konsoli, czipy [ 3D ] [ PLAN ])');
+  const so = strip(fs.readFileSync(new URL('../../ui/ShipyardOverlay.js', import.meta.url), 'utf8'));
+  const gone = ['_drawShipyardBody', '_drawShipyard', '_drawReserve', '_shipyardScrollY', '_shipyardContentH', '_shipyardViewH', 'isKitScreen', 'GAME_CONFIG']
+    .filter((s) => new RegExp(`\\b${s}\\b`).test(so));
+  assert(gone.length === 0 && /drawShipyardConsole\(this, ctx, W, H\)/.test(so), `S6e: ShipyardOverlay bez symboli dawnej kolumny i bez warunku flagi; draw woła konsolę (wróciło: ${gone.join(',') || '—'})`);
+  // kod produktu (bez testów i bibliotek): żadnego odczytu flag Stoczni / hologramu
+  const root = new URL('../../', import.meta.url);
+  const files = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    const p = path.join(d, e.name);
+    if (e.isDirectory()) { if (!['testing', 'lib'].includes(e.name)) walk(p); } else if (e.name.endsWith('.js')) files.push(p);
+  } };
+  walk(path.normalize(decodeURIComponent(root.pathname.replace(/^\/([A-Za-z]:)/, '$1'))));
+  const hits = files.filter((p) => /\b(consoleShipyard|shipHologram)\b/.test(strip(fs.readFileSync(p, 'utf8')))).map((p) => path.basename(p));
+  const kitReaders = files.filter((p) => /\bconsoleKit\b/.test(strip(fs.readFileSync(p, 'utf8')))).length;
+  assert(files.length > 100 && kitReaders > 0 && hits.length === 0, `S6f: kod produktu bez consoleShipyard / shipHologram (${files.length} plików; świadek: consoleKit czytany w ${kitReaders}; trafienia: ${hits.join(',') || '—'})`);
+  assert(CLL.routeOverlayId?.('unit_design', {}) === 'shipyard' && CLL.routeOverlayId?.('unit_design', { consoleKit: false }) === 'shipyard'
+    && CLL.routeOverlayId?.('unit_design') === 'shipyard' && CLL.routeOverlayId?.('tech', {}) === 'tech',
+  'S6g: klawisz U zawsze prowadzi do Stoczni (bez flag, z consoleKit OFF, bez argumentu flag); kontrola: inne id bez zmian');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('S7 — wspólny UnitDesignOverlay (stan wspólny z konsolą)');
+{
+  const { ed } = stubWorld();
+  ed._onHit({ type: 'select_hull', data: { hullId: 'hull_medium' } });
+  ed._onHit({ type: 'select_slot', data: { index: 2 } });
+  ed._slotAssignments[0] = 'engine_ion';
+  const snap = () => JSON.stringify([ed._selectedHullId, ed._slotAssignments, ed._activeSlotIndex, ed._editingTemplateId, ed._scrollModules]);
+  const s0 = snap();
+  const on = drawSy();
+  assert(snap() === s0 && on.sy._hitZones.some((z) => z.type === 'pick_module'), 'S7a: rysunek konsoli czyta edytor, nie zmienia jego stanu (świadek: picker edytora narysowany)');
+  const src = strip(fs.readFileSync(new URL('../../ui/UnitDesignOverlay.js', import.meta.url), 'utf8'));
+  assert(!/ShipyardConsole|isKitScreen/.test(src) && /_onHit\(zone\)/.test(src), 'S7b: UnitDesignOverlay nie zna konsoli Stoczni');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -286,9 +421,9 @@ console.log('S8 — Finding 726: kategorie tarcz i desantu');
   const { ed } = stubWorld();
   ed._onHit({ type: 'select_hull', data: { hullId: 'hull_frigate' } });
   ed._onHit({ type: 'select_slot', data: { index: 1 } });
-  const on = drawSy(true);
+  const on = drawSy();
   const tx = on.ctx._texts;
-  assert(tx.some((s) => s.includes(String(PL['unitDesign.cat.shield'] ?? ' ').toUpperCase())) && tx.some((s) => s.includes(String(PL['unitDesign.cat.troop'] ?? ' ').toUpperCase())),
+  assert(tx.some((s) => s.includes(String(PL['unitDesign.cat.shield'] ?? '\u0000').toUpperCase())) && tx.some((s) => s.includes(String(PL['unitDesign.cat.troop'] ?? '\u0000').toUpperCase())),
     'S8c: picker konsoli rysuje etykiety tarcz i desantu');
   assert(!tx.some((s) => /(^|\s)(shield|troop)$/.test(s.trim())), 'S8d: bez surowego slotType');
 }
@@ -297,22 +432,20 @@ console.log('S8 — Finding 726: kategorie tarcz i desantu');
 console.log('S9 — geometria ze stref konsoli');
 {
   const { ed } = stubWorld(); loadTpl(ed); ed._onHit({ type: 'select_slot', data: { index: 1 } });
-  const on = drawSy(true);
+  const on = drawSy();
   const z = on.sy.consoleZones ?? { frame: { x: 0, y: 0, w: 0, h: 0 }, list: null, inspector: null, strip: null, hero: null };
-  const inside = (q, r) => !!r && q.x >= r.x - 0.5 && q.y >= r.y - 0.5 && q.x + q.w <= r.x + r.w + 0.5 && q.y + q.h <= r.y + r.h + 0.5;
   const zs = on.sy._hitZones.filter((q) => q.type !== 'bg');
-  assert(!!on.sy.consoleZones && zs.every((q) => inside(q, z.frame)), 'S9a: każda strefa w ramie konsoli');
-  const sect = { list: ['tpl_row', 'select_hull', 'edit_template', 'delete_template', 'build_template', 'tpl_build_blocked'], inspector: ['select_slot', 'clear_slot', 'pick_module', 'save_template', 'clear_design', 'build_template'],
+  assert(!!on.sy.consoleZones && zs.every((q) => inRect(q, z.frame)), 'S9a: każda strefa w ramie konsoli');
+  const sect = { list: ['tpl_row', 'select_hull', 'delete_template', 'build_template', 'tpl_build_blocked'], inspector: ['select_slot', 'clear_slot', 'pick_module', 'save_template', 'clear_design', 'build_template'],
     strip: ['surge_ship', 'cancel_pending_ship', 'pending_ship_hover', 'deploy_vessel'], hero: ['holo_view'] };
   const bad = [];
   // strefa w JEDNEJ z sekcji, które wymieniają jej typ (K1c-B: [ BUDUJ ] jest w wierszu projektu i w inspektorze)
   for (const q of zs) {
     const ks = Object.keys(sect).filter((k) => sect[k].includes(q.type));
-    if (ks.length && !ks.some((k) => inside(q, z[k]))) bad.push(`${q.type}∉${ks.join('|')}`);
+    if (ks.length && !ks.some((k) => inRect(q, z[k]))) bad.push(`${q.type}∉${ks.join('|')}`);
   }
   assert(bad.length === 0, `S9b: sekcje w swoich strefach (${bad.slice(0, 4).join(',') || 'ok'})`);
   assert(zs.filter((q) => Object.values(sect).flat().includes(q.type)).length >= 12, 'S9c (świadek): sprawdzono co najmniej 12 stref');
-  const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   let v = ''; try { v = strip(fs.readFileSync(new URL('../../ui/ShipyardConsoleView.js', import.meta.url), 'utf8')); } catch { v = 'window.inner'; }
   assert(!/window\.inner/.test(v) && /consoleZones\(/.test(v), 'S9d: widok bez window.inner*, geometria z consoleZones');
   assert(on.sy.handleScroll(1, z.frame.x - 50, z.frame.y + 10) === false && on.sy.handleScroll(1, z.list.x + 5, z.list.y + 40) === true,
@@ -324,17 +457,15 @@ console.log('S10 — bramki S0 / S1 jako linia banera');
 {
   for (const [gate, opts, key] of [['S1', { level: 0 }, 'fleet.shipyardNoBuild'], ['S0', { tech: false }, 'fleet.shipyardRequiresTech']]) {
     const { ed } = stubWorld(opts); loadTpl(ed);
-    const on = drawSy(true);
-    assert(on.ctx._texts.includes(PL[key]), `S10a ${gate} (kontrola — dziś ten sam tekst): baner z dzisiejszym tekstem`);
+    const on = drawSy();
+    assert(on.ctx._texts.includes(PL[key]), `S10a ${gate}: baner z tekstem bramki`);
     const hb = on.sy.consoleZones?.header;
     const at = on.ctx._pos.find((q) => q.s === PL[key]);
     assert(!!hb && !!at && at.y >= hb.y && at.y <= hb.y + hb.h, `S10e ${gate}: baner w paśmie nagłówka konsoli (y=${at?.y})`);
-    assert(!on.types.has('build_template') && !on.types.has('surge_ship') && !on.types.has('cancel_pending_ship'), `S10b ${gate} (kontrola): budowa niedostępna (jak dziś)`);
-    assert(on.types.has('select_hull') && on.types.has('select_slot') && on.types.has('deploy_vessel'), `S10c ${gate} (kontrola): projektant i rezerwa osiągalne (jak dziś)`);
-    stubWorld(opts);
-    const off = drawSy(false);
-    assert(off.types.has('select_hull') === on.types.has('select_hull') && off.types.has('build_template') === on.types.has('build_template'),
-      `S10d ${gate} (kontrola): ta sama reguła co OFF`);
+    assert(!on.types.has('build_template') && !on.types.has('surge_ship') && !on.types.has('cancel_pending_ship'), `S10b ${gate}: budowa niedostępna`);
+    assert(on.types.has('select_hull') && on.types.has('select_slot') && on.types.has('deploy_vessel'), `S10c ${gate}: projektant i rezerwa osiągalne`);
+    const bl = on.sy._hitZones.find((z) => z.type === 'tpl_build_blocked');
+    assert(!!bl && bl.data.reason === PL[key], `S10d ${gate}: czip [ BUDUJ ] wiersza zablokowany z tekstem bramki jako powodem`);
   }
 }
 
@@ -349,7 +480,7 @@ console.log('S11 — etykiety na kotwicach (atrapa hologramu)');
     anchors: () => ({ anchors: ANCHOR_ROLES.map((role, i) => ({ role, p: [i / 10 - 0.25, 0, 0], src: 'default' })) }),
     projectPoints: (pts, rect) => pts.map((p, i) => ({ i, view: '3q', x: rect.x + rect.w * (0.3 + p[0]), y: rect.y + rect.h / 2 })),
   };
-  F.consoleKit = true; F.consoleShipyard = true; F.shipHologram = true;
+  F.consoleKit = true;
   const sy = new ShipyardOverlay(); sy.visible = true; sy._holo = fake;
   const ctx = mockCtx();
   sy.draw(ctx, W, H);
@@ -372,7 +503,6 @@ console.log('S11 — etykiety na kotwicach (atrapa hologramu)');
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('S12 — UIManager: klatki przy animacji hologramu Stoczni (pin źródła)');
 {
-  const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   const u = strip(fs.readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf8'));
   assert(/this\._animating\s*=[\s\S]{0,900}overlays\.shipyard\?\.isAnimating/.test(u), 'S12a: `_animating` czyta isAnimating Stoczni');
 }
@@ -385,7 +515,7 @@ console.log('S13 — przewijanie: strefy przycięte do pasma');
   ed._onHit({ type: 'select_hull', data: { hullId: 'hull_medium' } });
   ed._slotAssignments[0] = 'engine_chemical';
   ed._onHit({ type: 'select_slot', data: { index: 2 } });
-  let on = drawSy(true);
+  const on = drawSy();
   const R = on.sy._consoleScrollRects ?? {};
   const inBand = (q, r) => !!r && q.y >= r.y - 0.5 && q.y + q.h <= r.y + r.h + 0.5;
   const rows0 = on.sy._hitZones.filter((q) => q.type === 'tpl_row');
@@ -402,6 +532,6 @@ console.log('S13 — przewijanie: strefy przycięte do pasma');
   assert(on.sy._hitZones.filter((q) => q.type === 'save_template').length === 1, 'S13e: [ ZAPISZ ] stoi poza przewijaną częścią');
 }
 
-Object.assign(F, FLAGS0);
+F.consoleKit = KIT0;
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 if (fail > 0) process.exit(1);

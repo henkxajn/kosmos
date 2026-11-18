@@ -1,7 +1,7 @@
 // ShipyardConsoleView — rysunek Stoczni na szablonie konsoli (ARC KONSOLE, krok K1c-A; CONSOLES_PLAN.md §1.2, D-K-1/4/10/17;
 // Finding 723 — Stocznia ignorowała układ 4-strefowy; 726 — picker modułów z surowymi kluczami tarcz i desantu).
 //
-// Wołane przez `ShipyardOverlay.draw`, gdy `isKitScreen('shipyard')` (flagi `consoleKit` + `consoleShipyard`). Strefy trafień mają
+// Wołane przez `ShipyardOverlay.draw` (jedyna ścieżka rysunku Stoczni od KZ-Shipyard). Strefy trafień mają
 // DZISIEJSZE typy i dane (te same handlery w `ShipyardOverlay._onHit` i we wspólnym edytorze `overlays.unit_design`); nowy jest tylko
 // `holo_view` (czipy [ 3D ] [ PLAN ]). Geometria wyłącznie z `consoleZones` (bez window.inner*), barwy wyłącznie z ról konsoli.
 //

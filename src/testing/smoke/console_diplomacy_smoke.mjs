@@ -364,8 +364,9 @@ console.log('\nG — czipy grupy [ DYPLOMACJA ] [ WYWIAD ] [ WOJNY ]');
     `G4 trwałość: bez consoleKit pas subnav nad Dyplomacją i Wywiadem nadal 0 (świadek: nad tech pas jest, wys. ${kX.h})`);
   assert(safe(() => CL.isKitScreen('diplomacy', {})) === true && safe(() => CL.isKitScreen('intel', {})) === true
     && safe(() => CL.isKitScreen('war', { consoleKit: false })) === true
-    && !('consoleDiplomacy' in F) && !('consoleIntel' in F) && safe(() => CL.isKitScreen('shipyard', {})) === false,
-    'G5 isKitScreen trwały: diplomacy / intel / war bez flag i bez consoleKit; flag consoleDiplomacy / consoleIntel nie ma (świadek: Stocznia bez flag — nie)');
+    && !('consoleDiplomacy' in F) && !('consoleIntel' in F)
+    && safe(() => CL.isKitScreen('tech', {})) === false && safe(() => CL.isKitScreen('observatory', { consoleKit: true })) === false,
+    'G5 isKitScreen trwały: diplomacy / intel / war bez flag i bez consoleKit; flag consoleDiplomacy / consoleIntel nie ma (świadek: grupa Nauki — tech / observatory — nie)');
 }
 
 // ══ W — Wojny ══

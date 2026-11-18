@@ -46,14 +46,14 @@ export const CONSOLE_SCREEN_SPECS = {};
 // z czipami podzakładek — pas subnav grupy nie jest wtedy rysowany ani trafiany, a overlay zaczyna się tuż pod górną belką;
 // pasek walki siada w gnieździe nagłówka (D-K-17). Każdy wpis wymaga też `consoleKit` (żywa, przyciemniona scena za tekstem).
 // K7-A: Dowództwo (`fleet`) — czipy zakładek w nagłówku zamiast własnego paska zakładek (pasa subnav Dowództwo nie miało).
-export const CONSOLE_KIT_SCREENS = Object.freeze({ shipyard: 'consoleShipyard', fleet: 'consoleCommand' });
+export const CONSOLE_KIT_SCREENS = Object.freeze({ fleet: 'consoleCommand' });
 
 // KZ-E — ekrany, których flaga stała się trwała (stara ścieżka usunięta): zawsze ekran zestawu, bez flagi i bez `consoleKit`
 // (`consoleKit` steruje dalej tylko sceną za tekstem). Grupa Ekonomii: Budżet, Przepływy, Handel (Handel + Rynek), Produkcja
 // (`economy`) — pięć czipów nagłówka, bez pasa subnav. KZ-Civ: Cywilizacja i Sfera Dysona (czipy grupy Cywilizacji).
-// KZ-Dipl: Dyplomacja, Wywiad, Wojny (czipy grupy Dyplomacji).
+// KZ-Dipl: Dyplomacja, Wywiad, Wojny (czipy grupy Dyplomacji). KZ-Shipyard: Stocznia (klawisz U zawsze tutaj — `routeOverlayId`).
 export const PERMANENT_KIT_SCREENS = Object.freeze(['budget', 'flows', 'trade', 'economy', 'civilization', 'dyson',
-  'diplomacy', 'intel', 'war']);
+  'diplomacy', 'intel', 'war', 'shipyard']);
 
 /** Czy overlay `id` rysuje się teraz jako ekran zestawu konsoli (flagi czytane w chwili wywołania). */
 export function isKitScreen(id, features) {
@@ -63,12 +63,12 @@ export function isKitScreen(id, features) {
 }
 
 /**
- * K1c-B (D-K-12 a) — dokąd prowadzi skrót zakładki: z konsolą Stoczni klawisz U (`unit_design`) otwiera projektanta Stoczni
- * (konsola Stoczni JEST projektantem). Projektant jednostek naziemnych zostaje w Dowództwo → Naziemne i w szkicu Kolonii.
- * Flagi OFF → id bez zmian (dzisiejszy ekran U).
+ * K1c-B (D-K-12 a) — dokąd prowadzi skrót zakładki: klawisz U (`unit_design`) otwiera projektanta Stoczni (konsola Stoczni
+ * JEST projektantem). Projektant jednostek naziemnych zostaje w Dowództwo → Naziemne i w szkicu Kolonii. KZ-Shipyard: bez
+ * warunku flagi (Stocznia jest na stałe konsolą); drugi argument zostaje dla zgodności wywołań.
  */
-export function routeOverlayId(id, features) {
-  return id === 'unit_design' && isKitScreen('shipyard', features) ? 'shipyard' : id;
+export function routeOverlayId(id, _features) {
+  return id === 'unit_design' ? 'shipyard' : id;
 }
 
 /** Strojenie stałych układu: nieznane klucze i nie-liczby pominięte; zwraca bieżące wartości. */

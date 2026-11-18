@@ -17,7 +17,14 @@
 //   T2  KONTROLA PINU: stary kontrakt 4-argumentowy → przycisk POD widokiem (defekt odtworzony)
 //   T3  ghost-click: żadna strefa treści nie nachodzi na pasek; `_hitTest` w środek trafia w ZAPISZ
 //   T4  `dropZonesInRect` — semantyka nachodzenia + izolacja po osi X (prawa połowa nietknięta)
-//   T5  host Stocznia: stopka przeżywa `pruneZones` i stoi w tym samym miejscu przy różnym scrollu
+//   T5  host Stocznia (konsola): [ ZAPISZ ] inspektora leży POZA przewijaną częścią — ta sama pozycja przy przewiniętym pickerze
+//       (kółko nad inspektorem), klik trafia w ZAPISZ i woła zapis wspólnego edytora
+//
+// KZ-Shipyard: T5 pinował dawną wąską kolumnę Stoczni (`_shipyardScrollY` + `pruneZones`) — po jej usunięciu był FAŁSZYWIE
+// ZIELONY (pole `_shipyardScrollY` nic już nie przewija, „niezmienność przy scrollu" mierzyła brak wejścia). Przepięty na konsolę
+// (`_inspScroll` przez handleScroll, pasmo `_consoleScrollRects.inspector`, świadek: picker naprawdę przewinięty). T1–T4, T6–T8
+// pinują samodzielny ekran UnitDesignOverlay (`draw` / `_drawShipDesigner`) — kod żywy pod node, ale w grze klawisz U prowadzi
+// do Stoczni (`routeOverlayId`), więc ten ekran nie ma już gospodarza (kandydat na finding).
 //   T6  rezerwa pasa: zwrócona wysokość treści pozwala wyscrollować ostatni wiersz SPOD paska
 //   T7  brak napędu: pasek wyższy, ZAPISZ bez strefy (wyszarzony), WYCZYŚĆ dalej klikalny
 //   T8  brak wybranego kadłuba → brak stopki (nie ma czego zapisywać)
@@ -26,10 +33,6 @@ import '../headless/env.js';           // MUSI być pierwszy (window/document/TH
 import { UnitDesignOverlay } from '../../ui/UnitDesignOverlay.js';
 import { ShipyardOverlay }   from '../../ui/ShipyardOverlay.js';
 import { dropZonesInRect }   from '../../ui/InfoPanelLayoutLogic.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
-// ARC KONSOLE K1c-A — ten keeper pinuje DZISIEJSZĄ Stocznię (wspólny scroll, przypięta stopka): flaga konsoli OFF.
-// Ścieżkę konsoli (ON) pinuje `console_shipyard_smoke` (S5 inwentarz, S13 przewijanie bez ghost-clicku).
-GAME_CONFIG.FEATURES.consoleShipyard = false;
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -47,6 +50,7 @@ function mockCtx() {
     _clips: clips,
   };
   ctx.rect = (x, y, w, h) => clips.push({ x, y, w, h });
+  ctx.arc = () => {}; ctx.fill = () => {}; ctx.getTransform = () => ({ a: 1 });
   return ctx;
 }
 
@@ -187,10 +191,12 @@ console.log('\nT4 — dropZonesInRect: semantyka nachodzenia + izolacja po osi X
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('\nT5 — host Stocznia: stopka przeżywa pruneZones i stoi w miejscu');
+console.log('\nT5 — host Stocznia (konsola): ZAPISZ poza przewijaną częścią inspektora');
 {
   stubWorld();
   const editor = editorMidDesign();
+  let saves = 0;
+  editor._saveTemplate = () => { saves++; };
   window.KOSMOS.overlayManager = { overlays: { unit_design: editor } };
   window.KOSMOS.colonyManager = {
     activePlanetId: 'p_home',
@@ -200,25 +206,27 @@ console.log('\nT5 — host Stocznia: stopka przeżywa pruneZones i stoi w miejsc
 
   const sy = new ShipyardOverlay();
   sy.visible = true;
-  const b = sy._getOverlayBounds(W, H);
-  const viewBottom = b.oy + b.oh;
-
-  const ys = [];
-  for (const scroll of [0, 600]) {
-    sy._shipyardScrollY = scroll;
-    sy.draw(mockCtx(), W, H);
-    const z = zoneOf(sy._hitZones, 'save_template');
-    assert(!!z, `scroll=${scroll}: ZAPISZ przetrwał przycinanie pasma (pruneZones)`);
-    if (!z) continue;
-    assert(z.y + z.h <= viewBottom + 0.5 && z.y >= b.oy,
-      `scroll=${scroll}: ZAPISZ w widocznym paśmie Stoczni`);
-    ys.push(z.y);
-  }
-  assert(ys.length === 2 && Math.abs(ys[0] - ys[1]) < 0.5,
+  sy.draw(mockCtx(), W, H);
+  const iz = sy.consoleZones?.inspector;
+  const band = sy._consoleScrollRects?.inspector;
+  const save0 = zoneOf(sy._hitZones, 'save_template');
+  const mod0 = zoneOf(sy._hitZones, 'pick_module');
+  const wheel = band ? sy.handleScroll(600, band.x + 5, band.y + 5) : false;
+  sy._hitZones = [];
+  sy.draw(mockCtx(), W, H);
+  const save1 = zoneOf(sy._hitZones, 'save_template');
+  const mod1 = zoneOf(sy._hitZones, 'pick_module');
+  const inside = (z, r) => !!z && !!r && z.x >= r.x - 0.5 && z.y >= r.y - 0.5 && z.x + z.w <= r.x + r.w + 0.5 && z.y + z.h <= r.y + r.h + 0.5;
+  assert(wheel === true && (sy._inspScroll ?? 0) > 0 && !!mod0 && !!mod1 && mod1.data.moduleId !== mod0.data.moduleId,
+    `kontrola pinu: kółko nad inspektorem naprawdę przewija picker (${mod0?.data?.moduleId} → ${mod1?.data?.moduleId})`);
+  assert(inside(save0, iz) && inside(save1, iz), 'ZAPISZ w inspektorze konsoli w obu klatkach');
+  assert(!!band && [save0, save1].every((z) => z && (z.y >= band.y + band.h - 0.5 || z.y + z.h <= band.y + 0.5)),
+    'ZAPISZ poza przewijanym pasmem inspektora (nie płynie z pickerem)');
+  assert(!!save0 && !!save1 && Math.abs(save0.y - save1.y) < 0.5 && Math.abs(save0.x - save1.x) < 0.5,
     'stopka w Stoczni scroll-invariant');
-
-  const hit = sy._hitTest(ys.length ? zoneOf(sy._hitZones, 'save_template').x + 10 : -1, ys[0] + 10);
-  assert(hit?.type === 'save_template', `klik w Stoczni trafia w ZAPISZ (dostał: ${hit?.type})`);
+  const hit = save1 ? sy._hitTest(save1.x + save1.w / 2, save1.y + save1.h / 2) : null;
+  const handled = save1 ? sy.handleClick(save1.x + save1.w / 2, save1.y + save1.h / 2) : false;
+  assert(hit?.type === 'save_template' && handled === true && saves === 1, `klik w Stoczni trafia w ZAPISZ i woła zapis edytora (dostał: ${hit?.type}, zapisów ${saves})`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

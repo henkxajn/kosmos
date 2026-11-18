@@ -1425,7 +1425,6 @@ export default {
   'fleet.atmBreathable': 'Breathable',
   'fleet.atmNone': 'None',
   'fleet.shipyardHeader': 'SHIPYARD',
-  'fleet.shipyardAnchor': '⚓ SHIPYARD',
   'fleet.shipyardRequiresExploration': '🔒 Requires: Exploration',
   'fleet.shipyardRequiresTech': '🔒 Requires technology: Exploration',
   'fleet.shipyardSelectFromList': 'Select a ship from the list on the left',
@@ -2781,7 +2780,6 @@ export default {
   'unitDesign.noTemplates': 'No designs yet. Create one above.',
   'unitDesign.needEngine': 'At least one propulsion module required.',
   'unitDesign.statsPreview': 'Stats Preview',
-  'unitDesign.noDesigns': 'No designs. Press U to open Unit Design.',
   // ARC KONSOLE K1c-A — konsola Stoczni (Finding 726: kategorie tarcz i desantu)
   'unitDesign.cat.propulsion': 'Propulsion',
   'unitDesign.cat.cargo': 'Cargo',

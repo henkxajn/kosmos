@@ -12,7 +12,6 @@
 //                                     przygaszone = domyślne gry); KOSMOS.debug.holo.anchorsInfo() — kotwice bieżącego modelu
 // Etykieta to napis debug (bez i18n).
 
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { resolveHudRoles } from '../ui/HudPalette.js';
 import { ShipHologramRenderer } from '../renderer/ShipHologramRenderer.js';
@@ -71,7 +70,6 @@ export function shipHologramDebugHelpers({ getUIManager = null } = {}) {
   return {
     holo: {
       open: () => {
-        if (GAME_CONFIG.FEATURES.shipHologram !== true) return 'FEATURES.shipHologram = false';
         viewer ??= new HologramDebugViewer({ onChange: dirty });
         viewer.open();
         const u = ui(); if (u) u._holoDebug = viewer;

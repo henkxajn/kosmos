@@ -8,9 +8,14 @@
 //          czyli DOKŁADNIE wtedy, gdy statek jest bezczynny — a więc zawsze dla rezerwy.
 // Oba pinujemy WYKONANIEM na prawdziwych klasach, nie odczytem źródła.
 //
-//   T1  sekcja Rezerwy pokazuje kadłuby bez załogi i rejestruje przycisk Rozmieść
-//   T2  przy zaległościach kolonii przycisku NIE MA (zamiast przycisku, który milczy)
-//   T3  §S18 — strefa wypchnięta scrollem poza pasmo JEST przycinana (ghost-click zażegnany)
+//   T1  kolumna Rezerwy pasa konsoli Stoczni pokazuje kadłuby bez załogi; Rozmieść klikalny i woła deployVessel(ten kadłub)
+//   T2  przy zaległościach floty przycisku NIE MA (zamiast przycisku, który milczy) — jest linia powodu, kadłub dalej na liście
+//   T3  §S18 — strefa wypchnięta scrollem kolumny Rezerwy poza pasmo JEST przycinana; klik w jej dawne miejsce nie rozmieszcza
+//
+// KZ-Shipyard: dawna wąska kolumna Stoczni (wspólny scroll `_shipyardScrollY`, sekcja `_drawReserve`) usunięta — T1–T3 przepięte
+// na rezerwę pasa konsoli (`ShipyardConsoleView`: kolumna `reserve`, przewijanie `_stripScroll.reserve` przez handleScroll,
+// pasmo `_consoleScrollRects.reserve`). Usunięte bez zamiennika: brak. Pułapka §S18 dotyczyła starej kolumny; konsola przycina
+// strefy pasa przez `pruneZones` — T3 pinuje to wykonaniem.
 //   T4  §S19 — oś służby jest rysowana PRZED early returnem (rezerwa ma czym wyjść z magazynu)
 //   T5  brak nowego slotu nawigacji (7, niezmiennie)
 //   T6  komplet kluczy i18n w OBU językach — powody odmowy są mapowane JAWNIE, więc
@@ -22,25 +27,21 @@ import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { NAV_GROUPS } from '../../ui/CivPanelDrawer.js';
 import PL from '../../i18n/pl.js';
 import EN from '../../i18n/en.js';
-import { GAME_CONFIG } from '../../config/GameConfig.js';
-// ARC KONSOLE K1c-A — ten keeper pinuje DZISIEJSZĄ Stocznię (wspólny scroll, przypięta stopka): flaga konsoli OFF.
-// Ścieżkę konsoli (ON) pinuje `console_shipyard_smoke` (S5 inwentarz, S13 przewijanie bez ghost-clicku).
-GAME_CONFIG.FEATURES.consoleShipyard = false;
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
 
-// ── Mock ctx: notuje clip-rect (pasmo treści) i nic nie rysuje ──────────────────────────────
+// ── Mock ctx: notuje clip-rect i teksty, nic nie rysuje ─────────────────────────────────────
 function mockCtx() {
-  const clips = [];
+  const clips = [], texts = [];
   const ctx = {
     font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, globalAlpha: 1,
-    textAlign: '', textBaseline: '',
-    measureText: (s) => ({ width: (s ?? '').length * 6 }),
-    fillText: () => {}, fillRect: () => {}, strokeRect: () => {},
-    beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, stroke: () => {},
-    save: () => {}, restore: () => {}, clip: () => {}, setLineDash: () => {},
-    _clips: clips,
+    textAlign: '', textBaseline: '', shadowColor: '', shadowBlur: 0,
+    measureText: (s) => ({ width: String(s ?? '').length * 6 }),
+    fillText: (s) => { texts.push(String(s)); }, fillRect: () => {}, strokeRect: () => {}, arc: () => {},
+    beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, stroke: () => {}, fill: () => {},
+    save: () => {}, restore: () => {}, clip: () => {}, setLineDash: () => {}, getTransform: () => ({ a: 1 }),
+    _clips: clips, _texts: texts,
   };
   ctx.rect = (x, y, w, h) => clips.push({ x, y, w, h });
   return ctx;
@@ -59,16 +60,20 @@ function stubVessel(id, pid, state = 'stored', extra = {}) {
   };
 }
 
-/** Minimalny świat: aktywna kolonia + rejestr statków + stawki utrzymania. */
+const deployCalls = [];
+/** Minimalny świat: aktywna kolonia ze stocznią + rejestr statków + stawki utrzymania. */
 function stubWorld(vessels, { arrears = false } = {}) {
   const pid = 'p_home';
+  deployCalls.length = 0;
   window.KOSMOS = window.KOSMOS ?? {};
+  const col = { planetId: pid, name: 'Dom', credits: 0, civSystem: { freePops: 0 },
+    buildingSystem: { _active: new Map([['b1', { building: { id: 'shipyard' }, level: 1 }]]) },
+    resourceSystem: { inventory: {}, inventorySnapshot: () => ({}) }, shipQueues: [], pendingShipOrders: [] };
   window.KOSMOS.colonyManager = {
     activePlanetId: pid,
     _getShipyardLevel: () => 1,
-    getColony: (id) => (id === pid
-      ? { planetId: pid, name: 'Dom', resourceSystem: { inventory: {} }, shipQueues: [], pendingShipOrders: [] }
-      : null),
+    getColony: (id) => (id === pid ? col : null),
+    getShipQueues: () => col.shipQueues,
   };
   window.KOSMOS.vesselManager = {
     getAllVessels: () => vessels,
@@ -77,18 +82,18 @@ function stubWorld(vessels, { arrears = false } = {}) {
     getVesselBaseUpkeepCredits: () => 300,
     isImmobilized: () => false,
     fleetInArrears: () => arrears,   // B — zatrzask imperialny (był `colonyInArrears(colonyId)`)
-    deployVessel: () => ({ ok: true }),
+    deployVessel: (id) => { deployCalls.push(id); return { ok: true }; },
     withdrawVessel: () => ({ ok: true }),
   };
   window.KOSMOS.techSystem = { isResearched: () => true };
-  window.KOSMOS.overlayManager = { overlays: {} };   // brak edytora projektów → sekcja pomijana
+  window.KOSMOS.overlayManager = { overlays: {} };   // brak edytora projektów → projektant bez kadłuba (rezerwa niezależna)
   return pid;
 }
 
 const zonesOfType = (ov, type) => ov._hitZones.filter(z => z.type === type);
 
 // ── T1 — sekcja Rezerwy pokazuje kadłuby i daje przycisk ────────────────────────────────────
-console.log('T1 — sekcja REZERWA listuje kadłuby bez załogi i rejestruje „Rozmieść"');
+console.log('T1 — kolumna REZERWA pasa konsoli listuje kadłuby bez załogi i rejestruje „Rozmieść"');
 {
   const v = stubVessel('v_1', 'p_home');
   stubWorld([v]);
@@ -99,6 +104,12 @@ console.log('T1 — sekcja REZERWA listuje kadłuby bez załogi i rejestruje „
   const deploys = zonesOfType(ov, 'deploy_vessel');
   assert(deploys.length === 1, `T1: dokładnie jeden przycisk Rozmieść (${deploys.length})`);
   assert(deploys[0]?.data?.vesselId === 'v_1', `T1: przycisk celuje w ten kadłub (${deploys[0]?.data?.vesselId})`);
+  const band = ov._consoleScrollRects?.reserve;
+  const inside = (z, r) => !!r && !!z && z.x >= r.x - 0.5 && z.y >= r.y - 0.5 && z.x + z.w <= r.x + r.w + 0.5 && z.y + z.h <= r.y + r.h + 0.5;
+  assert(inside(deploys[0], band) && inside(band, ov.consoleZones?.strip), 'T1: przycisk w kolumnie Rezerwy pasa konsoli');
+  const dz = deploys[0];
+  const handled = dz ? ov.handleClick(dz.x + dz.w / 2, dz.y + dz.h / 2) : false;
+  assert(handled === true && deployCalls.length === 1 && deployCalls[0] === 'v_1', `T1: klik Rozmieść → vesselManager.deployVessel(v_1) (${deployCalls.join(',')})`);
 
   // KONTROLA PINU: kadłub W SŁUŻBIE nie ma czego rozmieszczać — sekcja mierzy STAN, nie rejestr.
   v.serviceState = 'active';
@@ -114,9 +125,13 @@ console.log('T2 — przy długu kolonii przycisku NIE MA (a nie: jest i milczy)'
   const v = stubVessel('v_1', 'p_home');
   stubWorld([v], { arrears: true });
   const ov = new ShipyardOverlay(); ov.visible = true;
-  ov.draw(mockCtx(), 1600, 900);
+  const ctx = mockCtx();
+  ov.draw(ctx, 1600, 900);
   assert(zonesOfType(ov, 'deploy_vessel').length === 0,
     'T2: brak strefy klik przy zaległościach — martwy przycisk jest gorszy niż wyszarzony');
+  const joined = ctx._texts.join(' ');
+  assert(joined.includes(PL['fleet.deployBlockedArrears']) && ctx._texts.some((s) => s.includes('Kadłub v_1')),
+    'T2 KONTROLA PINU: kadłub dalej na liście Rezerwy, a zamiast przycisku stoi linia powodu (zaległości)');
 }
 
 // ── T3 — §S18: strefy klik są przycinane do widocznego pasma ────────────────────────────────
@@ -127,29 +142,41 @@ console.log('T3 — §S18: strefa wypchnięta scrollem poza pasmo jest PRZYCINAN
   stubWorld(many);
 
   const ov = new ShipyardOverlay(); ov.visible = true;
-  ov._shipyardScrollY = 0;
   const ctx0 = mockCtx();
   ov.draw(ctx0, 1600, 900);
   const atTop = zonesOfType(ov, 'deploy_vessel');
-  assert(atTop.length > 0, `T3 KONTROLA PINU: przy scrollu 0 przyciski istnieją (${atTop.length})`);
+  assert(atTop.length > 0 && atTop.length < many.length, `T3 KONTROLA PINU: przy scrollu 0 część przycisków istnieje, reszta przycięta (${atTop.length}/${many.length})`);
 
-  // Pasmo treści = prostokąt, którym panel clipuje rysowanie (ostatni zarejestrowany `rect`).
-  const band = ctx0._clips[ctx0._clips.length - 1];
-  assert(!!band, 'T3 KONTROLA PINU: panel rejestruje prostokąt clipa (mamy do czego porównać)');
+  // Pasmo treści = przewijana część kolumny Rezerwy (ten sam prostokąt clipuje rysunek).
+  const band = ov._consoleScrollRects?.reserve;
+  assert(!!band && ctx0._clips.some((c) => c.x === band.x && c.y === band.y && c.w === band.w && c.h === band.h),
+    'T3 KONTROLA PINU: kolumna Rezerwy clipuje rysunek do swojego pasma (mamy do czego porównać)');
   const inBand = (z) => band && z.y >= band.y - 0.5 && z.y + z.h <= band.y + band.h + 0.5;
   assert(atTop.every(inBand),
     'T3: wszystkie zarejestrowane strefy mieszczą się w widocznym paśmie — nic nie wystaje poza clip');
 
-  // Ten sam panel po przewinięciu: pierwszy kadłub wyjeżdża w górę i MUSI stracić strefę.
+  // Ten sam panel po przewinięciu kółkiem nad kolumną: pierwszy kadłub wyjeżdża w górę i MUSI stracić strefę.
   const firstId = atTop[0].data.vesselId;
-  ov._shipyardScrollY = 600;
+  const wheel = ov.handleScroll(1200, band.x + 5, band.y + 5);
+  ov._hitZones = [];
   ov.draw(mockCtx(), 1600, 900);
   const after = zonesOfType(ov, 'deploy_vessel');
+  assert(wheel === true && (ov._stripScroll?.reserve ?? 0) > 0, `T3 KONTROLA PINU: kółko nad kolumną przewija Rezerwę (${ov._stripScroll?.reserve})`);
   assert(after.every(inBand),
     'T3: po przewinięciu też nic nie wystaje poza pasmo (przycinanie działa dla obu skrajów)');
   assert(after.every(z => z.data.vesselId !== firstId),
     `T3: strefa pierwszego kadłuba (${firstId}) ZNIKNĘŁA po przewinięciu — bez tego zostawałaby klikalna „w powietrzu"`);
   assert(after.length > 0, 'T3 KONTROLA PINU: po przewinięciu jakieś przyciski nadal SĄ (nie wycięliśmy wszystkiego)');
+  // ghost-click: klik tuż NAD i tuż POD pasmem w kolumnie przycisków nie trafia w żaden Rozmieść (wiersz wypchnięty scrollem nie
+  // zostawia strefy); świadek: klik w widoczny przycisk rozmieszcza właśnie jego kadłub.
+  const cx = after[0] ? after[0].x + after[0].w / 2 : band.x + band.w - 10;
+  deployCalls.length = 0;
+  for (let d = 1; d <= 48; d++) { ov.handleClick(cx, band.y - d); ov.handleClick(cx, band.y + band.h + d); }
+  const ghost = deployCalls.slice();
+  deployCalls.length = 0;
+  if (after[0]) ov.handleClick(cx, after[0].y + after[0].h / 2);
+  assert(ghost.length === 0 && deployCalls.length === 1 && deployCalls[0] === after[0]?.data?.vesselId,
+    `T3: klik 1–48 px nad / pod pasmem nie rozmieszcza nic (ghost-click; trafienia: ${ghost.join(',') || '—'}); świadek: klik w widoczny przycisk działa`);
 }
 
 // ── T4 — §S19: oś służby przed early returnem ───────────────────────────────────────────────

@@ -1426,7 +1426,6 @@ export default {
   'fleet.atmBreathable': 'Oddychalna',
   'fleet.atmNone': 'Brak',
   'fleet.shipyardHeader': 'STOCZNIA',
-  'fleet.shipyardAnchor': '⚓ STOCZNIA',
   'fleet.shipyardRequiresExploration': '🔒 Wymaga: Eksploracja',
   'fleet.shipyardRequiresTech': '🔒 Wymaga technologii: Eksploracja',
   'fleet.shipyardSelectFromList': 'Wybierz statek z listy po lewej',
@@ -2784,7 +2783,6 @@ export default {
   'unitDesign.noTemplates': 'Brak projektów. Stwórz pierwszy powyżej.',
   'unitDesign.needEngine': 'Wymagany co najmniej jeden moduł napędowy.',
   'unitDesign.statsPreview': 'Podgląd statystyk',
-  'unitDesign.noDesigns': 'Brak projektów. Naciśnij U aby otworzyć Projektowanie.',
   // ARC KONSOLE K1c-A — konsola Stoczni (Finding 726: kategorie tarcz i desantu)
   'unitDesign.cat.propulsion': 'Napęd',
   'unitDesign.cat.cargo': 'Ładownia',

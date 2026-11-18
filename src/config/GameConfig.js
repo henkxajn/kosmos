@@ -540,17 +540,7 @@ export const GAME_CONFIG = {
     //   OFF = dzisiejsze zachowanie co do bitu (półprzezroczyste tła, scena renderowana pod każdą zakładką).
     consoleKit: true,
     //   (consoleIntel — usunięta w KZ-Dipl: Wywiad jest na stałe konsolą, `PERMANENT_KIT_SCREENS`)
-    //   shipHologram (K1a, D-K-4/7/10/11): ON = gospodarze mogą używać `ShipHologramRenderer` (hologram statku: własny offscreen
-    //     WebGLRenderer → drawImage w prostokąt bohatera, obwódka fresnela + linie skanowania + krawędzie w roli `primary`, sylwetka
-    //     Canvas 2D jako fallback). W K1a jedynym gospodarzem jest podgląd `KOSMOS.debug.holo` (Stocznia — K1c).
-    //   OFF = brak hologramu (podgląd debug odmawia), gra bez zmian co do bitu.
-    shipHologram: true,
-    //   consoleShipyard (K1c-A, D-K-20; Finding 723): ON (razem z consoleKit) = Stocznia na szablonie 4-strefowym — nagłówek z
-    //     kontekstem (kolonia, stocznia naziemna) i bramkami S0/S1 jako linią banera, lista (projekty + kadłuby), bohater (hologram
-    //     projektu z etykietami ról na kotwicach, [ 3D ] [ PLAN ]), inspektor (sloty, picker z deltą, staty, [ BUDUJ ] [ ZAPISZ ]
-    //     [ WYCZYŚĆ ]), pas (budowy + Surge, oczekujące, rezerwa). Te same typy stref i handlery co dziś.
-    //   OFF = dzisiejsza Stocznia co do bitu.
-    consoleShipyard: true,
+    //   (shipHologram, consoleShipyard — usunięte w KZ-Shipyard: Stocznia jest na stałe konsolą z hologramem, `PERMANENT_KIT_SCREENS`)
     //   (consoleDiplomacy — usunięta w KZ-Dipl: Dyplomacja i Wojny są na stałe konsolą, `PERMANENT_KIT_SCREENS`)
     //   (consoleEconomy — usunięta w KZ-E: grupa Ekonomii jest na stałe konsolą, `PERMANENT_KIT_SCREENS` w ConsoleLayoutLogic.js)
     //   (consoleCivilization — usunięta w KZ-Civ: Cywilizacja i Sfera Dysona są na stałe konsolą, `PERMANENT_KIT_SCREENS`)

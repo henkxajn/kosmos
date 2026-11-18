@@ -1,4 +1,5 @@
-// Keeper — ARC KONSOLE K1c-B: szlif konsoli Stoczni (`FEATURES.consoleShipyard`; CONSOLES_PLAN.md §10.1, §12.1, uwagi właściciela A–D).
+// Keeper — ARC KONSOLE K1c-B: szlif konsoli Stoczni (CONSOLES_PLAN.md §10.1, §12.1, uwagi właściciela A–D). KZ-Shipyard: konsola jest
+// jedyną ścieżką Stoczni (flagi `consoleShipyard` / `shipHologram` zdjęte).
 //
 // Pinujemy LOGIKĘ (wykonaniem — ShipyardOverlay, UnitDesignOverlay, OverlayManager, ConsoleKit i renderer hologramu importują się
 // pod node), bez pinów na stałe rysunku:
@@ -13,10 +14,15 @@
 //       bohatera chowa warstwę; hide() zdejmuje ją z DOM; z warstwą UIManager nie animuje
 //   L1  etykiety: żaden prostokąt etykiety nie wchodzi w obrys kadłuba, kolumny po stronach środka obrysu, bez nakładania, w prostokącie
 //   D1  wybrany projekt: nawiasy bez podkreślenia (kontrola: domyślna lista nadal podkreśla)
-//   C5  czip [ BUDUJ ] wiersza = dzisiejsza reguła (macierz 16 przypadków K1c-A, BEZ wczytywania projektu); klik buduje; wyłączony —
-//       podpowiedź z powodem
+//   C5  czip [ BUDUJ ] wiersza = reguła dawnej `_drawShipyard` przepisana niezależnie w keeperze (macierz 16 przypadków, BEZ
+//       wczytywania projektu); klik buduje; wyłączony — podpowiedź z powodem
 //   C6  [ USUŃ ] wymaga drugiego kliku w 3 s
-//   U1  U → Stocznia przy konsoli (OFF → ekran U); projektant naziemny w dzisiejszych gospodarzach
+//   U1  U → Stocznia ZAWSZE (bez flag, także z consoleKit OFF); inne klawisze bez zmian; projektant naziemny w dzisiejszych gospodarzach
+//
+// KZ-Shipyard — piny przepięte (pinowały ścieżkę OFF, której nie ma): C5a «czip wiersza ⇔ wykonanie ścieżki OFF» → reguła niezależna
+// w keeperze; U1b «flagi OFF → ekran U» → U1b `routeOverlayId('unit_design', …)` = shipyard dla {} / consoleKit OFF / bez argumentu,
+// inne id bez zmian; U1e «flaga OFF — U otwiera ekran U» → U1e consoleKit OFF — OverlayManager i tak otwiera Stocznię. Usunięte bez
+// zamiennika: brak.
 //   F726 projektant U: kategorie tarcz i desantu z etykietą i ikoną
 
 import '../headless/env.js';           // MUSI być pierwszy (window/document/THREE + seeded RNG)
@@ -26,6 +32,7 @@ import { ShipyardOverlay } from '../../ui/ShipyardOverlay.js';
 import { UnitDesignOverlay } from '../../ui/UnitDesignOverlay.js';
 import { OverlayManager } from '../../ui/OverlayManager.js';
 import { HULLS } from '../../data/HullsData.js';
+import { canBuildHullAt } from '../../data/ShipBuildRules.js';
 import { SHIP_MODULES } from '../../data/ShipModulesData.js';
 import EventBus from '../../core/EventBus.js';
 import PL from '../../i18n/pl.js';
@@ -46,7 +53,7 @@ const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { 
 const sec = async (fn) => { try { await fn(); } catch (e) { assert(false, `sekcja przerwana wyjątkiem: ${String(e?.message ?? e).slice(0, 120)}`); } };
 const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.log('  ! ' + e.message); return d; } };
 const F = GAME_CONFIG.FEATURES;
-const setFlags = (on, holo = false) => { F.consoleKit = true; F.consoleShipyard = on; F.shipHologram = holo; };
+const kitOn = () => { F.consoleKit = true; };   // KZ-Shipyard: flag Stoczni / hologramu już nie ma — tylko scena konsoli
 const src = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"\\])\/\/.*$/gm, '$1');
 
@@ -114,8 +121,8 @@ function fakeDoc() {
 }
 
 const W = 1280, H = 833;
-function drawSy(on, setup, { holo = false } = {}) {
-  setFlags(on, holo);
+function drawSy(setup) {
+  kitOn();
   const sy = new ShipyardOverlay(); sy.visible = true;
   setup?.(sy);
   const ctx = mockCtx();
@@ -141,9 +148,9 @@ await sec(async () => {
       ed._activeSlotIndex = slot;
     };
     stubWorld();
-    const a = drawSy(true, prep);
+    const a = drawSy(prep);
     const ed = window.KOSMOS.overlayManager.overlays.unit_design;
-    const b = drawSy(true, (sy) => { sy._hoverZone = { type: 'pick_module', data: { moduleId: mod } }; });
+    const b = drawSy((sy) => { sy._hoverZone = { type: 'pick_module', data: { moduleId: mod } }; });
     n++;
     if (a.sy.lastStatLayout && geo(a.sy) === geo(b.sy)) same++;
     const hdr = String(PL['shipyardConsole.deltaFor'] ?? '').split('{')[0].trim();
@@ -171,7 +178,7 @@ console.log('A1–A3 — poza bohatera: bez auto-obrotu, przeciąganie, dwuklik,
 await sec(async () => {
   const { ed } = stubWorld(); loadTpl(ed);
   const f = fakeHolo();
-  const { sy } = drawSy(true, (s) => { s._holo = f; s._createHoloLayer = () => null; }, { holo: true });
+  const { sy } = drawSy((s) => { s._holo = f; s._createHoloLayer = () => null; });
   assert(f.spin === false && f.draws >= 1, 'A1a: bohater wyłącza auto-obrót (setSpin(false)) i rysuje hologram');
   assert(!!f.pose && f.pose.yaw === 0 && f.pose.pitch === 0, 'A1b: domyślnie statyczne 3/4 (poza 0, 0)');
   const r = sy.heroHoloRect;
@@ -280,7 +287,7 @@ await sec(async () => {
   const doc = fakeDoc();
   const rafQ = [];
   let layer = null;
-  setFlags(true, true);
+  kitOn();
   const sy = new ShipyardOverlay(); sy.visible = true;
   sy._holo = f;
   sy._createHoloLayer = () => (layer = new LAY.ShipyardHoloLayer({ doc, raf: (cb) => rafQ.push(cb) }));
@@ -377,14 +384,21 @@ await sec(async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('C5 — czip [ BUDUJ ] w wierszu projektu = dzisiejsza reguła');
 await sec(async () => {
+  // Reguła dawnej `ShipyardOverlay._drawShipyard` (usuniętej w KZ-Shipyard), przepisana NIEZALEŻNIE od `templateBuildState`
+  // (poziom stoczni 1): eksploracja (bramka S0 = tech) → tech kadłuba → stocznia naziemna → (stać ? wolny slot : kolejka).
+  const oldRule = ({ tech, full, afford, hullId }) => {
+    if (!tech) return false;
+    if (HULLS[hullId].requires && !tech) return false;
+    if (!canBuildHullAt(hullId, 'ground')) return false;
+    return afford ? !full : true;
+  };
   let cases = 0, agree = 0, offClick = 0, reasonOk = 0, blocked = 0;
   for (const hullId of ['hull_small', 'hull_frigate']) for (const tech of [true, false]) for (const full of [false, true]) for (const afford of [true, false]) {
     const tpl = { id: 'tx', name: 'T', hullId, modules: hullId === 'hull_small' ? ['engine_chemical', null, null] : ['engine_chemical', null, null, null] };
     const opts = { tech, templates: [tpl], level: 1, queues: full ? [{ shipId: 'hull_small', progress: 0, buildTime: 3 }] : [], inv: afford ? null : {} };
-    stubWorld(opts);
-    const off = drawSy(false).sy._hitZones.some((z) => z.type === 'build_template');
+    const off = oldRule({ tech, full, afford, hullId });   // nazwa zostaje: «dawna Stocznia»
     stubWorld(opts);   // projekt NIE wczytany — czip wiersza działa na zapisanym szablonie
-    const on = drawSy(true);
+    const on = drawSy();
     const lz = on.sy.consoleZones?.list;
     const chip = on.sy._hitZones.find((z) => z.type === 'build_template' && lz && z.y >= lz.y && z.y <= lz.y + lz.h && z.x >= lz.x);
     cases++; if (!!chip === off) agree++; if (off) offClick++;
@@ -392,11 +406,11 @@ await sec(async () => {
     if (bl) { blocked++; if (bl.data.reason && on.ctx._texts.some((s) => s === bl.data.reason || s.startsWith(bl.data.reason.slice(0, 8)))) reasonOk++; }
     if (!!chip === !!bl) agree -= 0.5;   // dokładnie jedno z dwojga
   }
-  assert(agree === cases, `C5a: [ BUDUJ ] wiersza klikalny ⇔ dzisiejsza karta szablonu klikalna (${agree}/${cases})`);
+  assert(agree === cases, `C5a: [ BUDUJ ] wiersza klikalny ⇔ reguła dawnej karty szablonu (niezależna kopia) i dokładnie jeden z czipów BUDUJ / zablokowany (${agree}/${cases})`);
   assert(offClick > 0 && offClick < cases, `C5b (świadek): macierz ma oba stany (${offClick} z ${cases})`);
   assert(blocked === cases - offClick && reasonOk === blocked, `C5c: wyłączony czip niesie powód (ten sam tekst co w wierszu) (${reasonOk}/${blocked})`);
   stubWorld();
-  const on = drawSy(true);
+  const on = drawSy();
   const chip = on.sy._hitZones.find((z) => z.type === 'build_template');
   if (chip) on.sy._onHit(chip);
   assert(spy.emits.length === 1 && spy.emits[0].shipId === 'hull_small' && JSON.stringify(spy.emits[0].modules) === JSON.stringify(['engine_chemical', 'cargo_small']),
@@ -408,9 +422,9 @@ await sec(async () => {
   assert(ed._editingTemplateId === 'tpl1', 'C5f (kontrola — tak jak w K1c-A): klik w wiersz nadal wczytuje projekt');
   assert(!on.sy._hitZones.some((z) => z.type === 'edit_template'), 'C5g: [ EDYTUJ ] zastąpiony przez [ BUDUJ ]');
   stubWorld({ tech: false });
-  const bl = drawSy(true, (sy) => { sy._hoverZone = null; });
+  const bl = drawSy((sy) => { sy._hoverZone = null; });
   const bz = bl.sy._hitZones.find((z) => z.type === 'tpl_build_blocked');
-  const bl2 = drawSy(true, (sy) => { sy._hoverZone = bz; });
+  const bl2 = drawSy((sy) => { sy._hoverZone = bz; });
   assert(!!bz && bl2.sy._tplTooltip?.text === bz.data.reason && bl2.ctx._texts.includes(bz.data.reason), 'C5h: najechanie wyłączonego czipu pokazuje podpowiedź z powodem');
 });
 
@@ -427,7 +441,7 @@ await sec(async () => {
   const { ed } = stubWorld({ templates: [{ id: 't1', name: 'A', hullId: 'hull_small', modules: ['engine_chemical', null, null] }, { id: 't2', name: 'B', hullId: 'hull_small', modules: ['engine_chemical', null, null] }] });
   void ed;
   let now = 5000;
-  const on = drawSy(true, (sy) => { sy._now = () => now; });
+  const on = drawSy((sy) => { sy._now = () => now; });
   const del = () => on.sy._hitZones.find((z) => z.type === 'delete_template' && z.data.index === 0);
   on.sy._onHit(del());
   assert(window.KOSMOS.unitDesigns.length === 2, 'C6c: pierwszy klik nie kasuje');
@@ -442,10 +456,12 @@ await sec(async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('U1 — klawisz U → projektant Stoczni; projektant naziemny w dzisiejszych gospodarzach');
 await sec(async () => {
-  assert(CLL.routeOverlayId?.('unit_design', { consoleKit: true, consoleShipyard: true }) === 'shipyard', 'U1a: U przy konsoli Stoczni → Stocznia');
-  assert(CLL.routeOverlayId?.('unit_design', { consoleKit: true, consoleShipyard: false }) === 'unit_design'
-    && CLL.routeOverlayId?.('fleet', { consoleKit: true, consoleShipyard: true }) === 'fleet', 'U1b (kontrola): OFF → ekran U; inne klawisze bez zmian');
-  setFlags(true);
+  assert(CLL.routeOverlayId?.('unit_design', { consoleKit: true }) === 'shipyard', 'U1a: U → Stocznia');
+  assert(CLL.routeOverlayId?.('unit_design', {}) === 'shipyard' && CLL.routeOverlayId?.('unit_design', { consoleKit: false }) === 'shipyard'
+    && CLL.routeOverlayId?.('unit_design') === 'shipyard', 'U1b: trwałe — U → Stocznia bez flag, z consoleKit OFF i bez argumentu flag');
+  assert(['fleet', 'shipyard', 'tech', 'colony', 'diplomacy'].every((id) => CLL.routeOverlayId?.(id, {}) === id),
+    'U1g (kontrola): inne klawisze bez zmian (fleet, shipyard, tech, colony, diplomacy)');
+  kitOn();
   const om = new OverlayManager();
   const mkOv = () => ({ visible: false, show() { this.visible = true; }, hide() { this.visible = false; } });
   om.register('shipyard', mkOv()); om.register('unit_design', mkOv());
@@ -453,9 +469,11 @@ await sec(async () => {
   assert(om.active === 'shipyard' && om.overlays.shipyard.visible && !om.overlays.unit_design.visible, 'U1c: OverlayManager — U otwiera Stocznię');
   om.handleKey('u');
   assert(om.active === null, 'U1d (kontrola): drugie U zamyka (jak S)');
-  setFlags(false);
+  F.consoleKit = false;
   om.handleKey('u');
-  assert(om.active === 'unit_design', 'U1e (kontrola): flaga OFF — U otwiera dzisiejszy ekran U');
+  F.consoleKit = true;
+  assert(om.active === 'shipyard' && om.overlays.shipyard.visible && !om.overlays.unit_design.visible,
+    'U1e: trwałe — przy consoleKit OFF U nadal otwiera Stocznię (ekran U nie wraca)');
   const fm = strip(src('../../ui/FleetManagerOverlay.js')), co = strip(src('../../ui/ColonyOverlay.js')), um = strip(src('../../scenes/UIManager.js'));
   assert(/_drawGroundTab\([\s\S]{0,300}_groundPanel\.draw\(/.test(fm) && /GroundUnitPanel/.test(co) && /register\('unit_design', new UnitDesignOverlay\(\)\)/.test(um),
     'U1f (kontrola): projektant naziemny — Dowództwo → Naziemne i szkic Kolonii bez zmian; overlay U nadal zarejestrowany');
@@ -464,7 +482,7 @@ await sec(async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('F726 — projektant U: kategorie tarcz i desantu');
 await sec(async () => {
-  setFlags(false); stubWorld();
+  stubWorld();
   const ed = new UnitDesignOverlay(); ed.visible = true;
   ed._onHit({ type: 'select_hull', data: { hullId: 'hull_frigate' } });
   ed._onHit({ type: 'select_slot', data: { index: 1 } });

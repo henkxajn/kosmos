@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// ship_hologram_smoke — KEEPER ARC KONSOLE, krok K1a (`ShipHologramRenderer`; flaga `shipHologram`)
+// ship_hologram_smoke — KEEPER ARC KONSOLE, krok K1a (`ShipHologramRenderer`; flaga `shipHologram` zdjęta w KZ-Shipyard)
 // Plan: `docs/design/CONSOLES_PLAN.md` §2 B1–B4, D-K-4 / D-K-7 / D-K-10 / D-K-11.
 // ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 // CO PINUJE (logika i kontrakt — bez pinów na stałych wyglądu):
@@ -13,7 +13,9 @@
 //   H4 bezczynność: bez zmian i bez obrotu `draw` nie renderuje (tylko komponuje); obrót → render co klatkę; ukryty = 0
 //   H5 `release()` zwalnia kontekst (dispose + forceContextLoss, słuchacze zdjęci); następny rysunek tworzy nowy
 //   H6 GLSL: stałe łańcuchy bez grawisów i bez interpolacji (próba kompilacji w Chrome z błędną kontrolą — sonda K1a)
-//   H7 pokrętła w klamrze, flaga w FEATURES, haki UIManagera (predykat sceny konsoli, rysunek, animacja)
+//   H7 pokrętła w klamrze, trwałość (bez klucza flagi; podgląd debug otwiera się bez warunku), haki UIManagera (predykat sceny
+//      konsoli, rysunek, animacja). KZ-Shipyard: piny «FEATURES.shipHologram ON» i «flaga OFF → podgląd odmawia» (ścieżka OFF)
+//      zamienione na pin trwałości (brak klucza) i pin otwarcia (open() tworzy podgląd, rejestruje go w UIManager, close() zwalnia).
 // ⚠ Fail-first: moduły powstają w K1a — importy dynamiczne, piny DEGRADUJĄ (czerwone), suita się nie przerywa.
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -277,17 +279,24 @@ console.log('\n── H7 pokrętła, flaga, haki UIManagera ──');
   assert(t.edgeAngle === 89 && t.edgeAlpha === 0 && t.rim === L?.HOLO_TUNING_DEFAULTS?.rim && !('bogus' in t) && t.spin === 1.5, 'H7 pokrętła w klamrze, nie-liczby i obce klucze pominięte');
   assert(L?.HOLO_TUNING_DEFAULTS?.edgeAngle === 30 && L?.HOLO_TUNING_DEFAULTS?.budgetMs === 4 && L?.HOLO_TUNING_DEFAULTS?.xray === 0,
     'H7 domyślne po oglądaniu właściciela: próg 30°, budżet 4 ms, xray 0');
-  assert(GAME_CONFIG.FEATURES.shipHologram === true, 'H7 FEATURES.shipHologram (ON w K1a)');
+  assert(!('shipHologram' in GAME_CONFIG.FEATURES) && 'consoleKit' in GAME_CONFIG.FEATURES, 'H7 trwałość: klucza shipHologram nie ma w FEATURES (świadek: consoleKit jest)');
   const ui = stripComments(src('../../scenes/UIManager.js'));
   const pred = ui.slice(ui.indexOf('isConsoleSceneActive() {'), ui.indexOf('consoleSceneActive({', ui.indexOf('isConsoleSceneActive() {')));
   assert(/consoleKit !== true\) return false;\s*if \(this\._holoDebug\?\.isOpen === true\) return true;/.test(pred), 'H7 podgląd = scena konsoli (po fladze consoleKit)');
   assert(ui.includes('if (this._holoDebug?.isOpen) this._holoDebug.draw(ctx, W, H);') && ui.includes('|| (this._holoDebug?.isAnimating?.() ?? false)'), 'H7 rysunek i animacja podglądu w UIManager');
   const D = await tryImport('../../debug/ShipHologramDebug.js');
-  const h = D ? D.shipHologramDebugHelpers({ getUIManager: () => null }).holo : null;
-  GAME_CONFIG.FEATURES.shipHologram = false;
-  const refused = h ? h.open() : null;
-  GAME_CONFIG.FEATURES.shipHologram = true;
-  assert(typeof refused === 'string' && refused.includes('shipHologram') && h?.info() === 'closed', 'H7 flaga OFF → podgląd odmawia, nic nie tworzy');
+  const uiStub = { _dirty: false, _holoDebug: null };
+  const h = D ? D.shipHologramDebugHelpers({ getUIManager: () => uiStub }).holo : null;
+  const closed0 = h ? h.info() : null;
+  const opened = safe(() => h.open(), null);
+  const info1 = h ? h.info() : null;
+  assert(closed0 === 'closed' && !!opened && typeof opened === 'object' && opened.mode === '3q' && info1?.open === true
+    && uiStub._holoDebug?.isOpen === true && uiStub._dirty === true,
+  'H7 trwałość: open() bez warunku flagi — tworzy podgląd, rejestruje go w UIManager (`_holoDebug`), prosi o klatkę');
+  const closedMsg = h ? safe(() => h.close(), null) : null;
+  assert(closedMsg === 'closed' && uiStub._holoDebug === null && h?.info()?.open === false, 'H7 close() zamyka podgląd i zdejmuje go z UIManagera');
+  const dsrc = stripComments(src('../../debug/ShipHologramDebug.js'));
+  assert(!/GAME_CONFIG|FEATURES/.test(dsrc) && /open: \(\) => \{/.test(dsrc), 'H7 ShipHologramDebug nie czyta FEATURES (świadek: open() w źródle)');
   const rect = safe(() => L.debugViewerRect(1280, 833), {});
   assert(rect.w === 900 && rect.h === 640 && rect.x === 190 && rect.y === 97, 'H7 prostokąt podglądu 900×640 wyśrodkowany');
 }

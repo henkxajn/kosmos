@@ -1,5 +1,5 @@
 // ShipHologramRenderer — hologram statku do bohatera Stoczni (ARC KONSOLE, krok K1a; CONSOLES_PLAN.md §2 B2/B4,
-// D-K-7 (a), D-K-10 (a), D-K-11 (a); flaga `FEATURES.shipHologram` sprawdzana przez GOSPODARZA, nie tutaj).
+// D-K-7 (a), D-K-10 (a), D-K-11 (a); flaga `shipHologram` zdjęta w KZ-Shipyard — hologram jest częścią konsoli Stoczni).
 //
 // • Własny WebGLRenderer na płótnie poza DOM — tworzony leniwie przy pierwszym rysunku, zwalniany w `release()` (dispose +
 //   forceContextLoss). Obraz trafia do płótna UI przez `ctx.drawImage` w prostokąt podany przez gospodarza.
