@@ -1687,6 +1687,218 @@ worker OK, avg worker ms body 46 / planetoid 11. (3) `csSurface()` hero New Eart
 - **CS-7:** the hero map takes ≈ 0.6–1.1 s — show the upscaled LOD map immediately and swap in the hero map when ready;
   prefetch the player's capital hero map in idle time after game start.
 
+### 3.6 CS-6a — shared surface shader on the system map + per-body colours (2026-11-18; not committed, owner look pending)
+
+> Tuning pass after the first owner look: §3.6.1 (supersedes the ocean / glint / star-tint numbers below).
+
+**Scope (owner split of CS-6, 2026-11-18).** 6a = surface shader + per-body colours + lighting + system-map integration +
+old texture pipeline off. 6b = atmospheres, clouds, Venus / Titan decks (realistic on the system map: hothouse = opaque
+cloud deck with subtle banding, cryo_haze = orange haze; thinned later in the colony view), tidally-locked orientation,
+carried SurfaceField fixes. **Hard requirement:** colours must not repeat — no two bodies of one archetype look alike.
+
+**Files.** New: `src/renderer/SurfaceShader.js` (GLSL + uniform builder + material / texture factories, zero three
+imports — THREE is injected), `src/data/BodyPalettes.js` (palette variants, star tint, jitter amplitudes),
+`src/utils/SurfacePaletteLogic.js` (pure: `resolveSurfaceLook`, `surfaceSeaLevelOf`, `paletteDistance`),
+`src/testing/smoke/colony_sphere_shader_smoke.mjs`, `src/testing/headless/probe-cs6a-shader.mjs` +
+`cs6a-sheet-page.js`. Changed: `ThreeRenderer.js` (+168 lines, one block of methods + 4 call sites + tick + event),
+`GameConfig.js` (**critical file** — flag `sharedSurface: false` only), `ColonySphereDebug.js` + `GameScene.js`
+(`csShared` alias + one flag-gated `rebuildBodySurfaces()` call), three keepers (below). Not touched: `SurfaceField.js`, `SurfaceCache.js`, the worker, gas giants,
+`AtmosphereShader`, clouds, the colony screen, saves.
+
+**Shader** (one program for every body; per-body values only through uniforms):
+- Equirect lookup computed per fragment from the object-space direction (no mesh UVs) with an explicit LOD
+  (`textureLod`, LOD from the screen-space derivative of the direction) → no seam at ±180°, no pole pinch, smooth
+  shading on the low-poly moon / planetoid spheres. Map = RGBA8 (e, m, t, a) from SurfaceCache, mipmapped, repeat in u.
+- 10 look functions selected by `uLook` (terran / ocean / jungle, desert, ice, volcanic, hothouse, cryo, cratered ×6
+  archetypes, tidal, Io, Europa). **Their thresholds mirror the SurfaceField classifiers** (`cTerran` …), softened with
+  `smoothstep`, so the system map agrees with the tile terrain of CS-5.
+- Object-space value noise (3 octaves at ×38 + one at ×150) perturbs e / m / t before the look function (fractal biome
+  borders below map resolution) and mottles the albedo; it fades out when a noise feature drops under ≈ 2 px.
+- Normals: central differences of the elevation channel (sea level clamps water flat) + the noise gradient, soft-
+  saturated; strength per archetype (`relief`).
+- Oceans: depth colour, coast shallows, thin beach, sharp glint + broad sheen; pack ice. Ice: matte sheen. Lava
+  (volcanic, volcanic_moon): HDR emissive from the lava mask, constant day and night (bloom picks it up).
+- Light: gate on the geometric normal (relief never lights the night side), wrap = atmosphere softness, warm tint at
+  the terminator on worlds with air, ambient from the scene's AmbientLight, `uCityLights` + `uCityGain` wired, black.
+- Placeholder: `uMapMix` 0 → 1 over 0.35 s blends a palette mean colour into the real surface (no mesh rebuild).
+- Log depth via `LogDepthChunks` (derived variant, round-trip pinned); output through three's tone-mapping and
+  colour-space chunks. Shared uniforms `SURFACE_SHARED_UNIFORMS` (sun position / colour, ambient, `uTune` = live knobs
+  relief × / specular × / emissive × / detail ×).
+
+**Colour variety** (deterministic from `surfaceSeed`, archetype, planetoid type, star class):
+1. variant A of the archetype's palette table (weighted; some weights depend on the star class, e.g. red foliage ×3
+   at M, blue-green ×2.5 at F);
+2. a blend of a second variant B ≠ A with weight 0 … 0.42 — a continuous space, not a finite list;
+3. palette-wide jitter: hue ±9°, saturation ±16%, value ±11%, warm↔cool ±3.5% (grey bodies: hue ±5°, sat ±22%,
+   value ±14%, warm↔cool ±7%);
+4. per-slot jitter (hue ±3°, value ±4.5%);
+5. star-class albedo tint (M ×[1.05, 0.97, 0.90]·0.94, K, G neutral, F ×[0.97, 1.00, 1.05]·1.04). Emissive slots skip 3–5.
+
+| Archetype | Look | Variants |
+|---|---|---|
+| terran | TERRAN | earth, teal, olive, crimson, viridian, amber, jade_sea (7) |
+| ocean | TERRAN (ocean mode) | navy, teal, jade, steel, cobalt (5) |
+| jungle | TERRAN (jungle mode) | emerald, olive, teal, maroon, dark, lime (6) |
+| desert | DESERT | rust, ochre, greybrown, crimson, pale_sand, umber (6) |
+| ice | ICE | white, pale_blue, beige, mint, rosy, slate (6) |
+| volcanic | VOLCANIC | basalt, rusty, sulphur, obsidian, cinder (5) |
+| hothouse | HOTHOUSE | venus, ochre_red, pale, acid, brown (5) |
+| cryo_haze / hazy_moon | CRYO | titan, amber, tan, tholin, olive / titan, honey, grey, red, khaki (5 + 5) |
+| scorched | CRATERED | mercury, charcoal, baked, tan, bronze (5) |
+| barren | CRATERED | grey, warm, cool, brown, basalt, pale (6) |
+| tidally_locked | TIDAL | ember, ochre, ashen, violet, pale (5) |
+| rocky_cratered | CRATERED | luna, warm, cool, rusty, carbon, ochre (6) |
+| volcanic_moon | IO | io, orange, lemon, green, ochre (5) |
+| icy_cracked | EUROPA | europa, blue, rust, tan, teal, enceladus (6) |
+| icy_cratered | CRATERED | callisto, bright, tan, blue, dark (5) |
+| planetoid | CRATERED | metallic / carbonaceous / silicate × 4 each |
+| planetoid_icy | CRATERED | frost, cream, blue, rose (4) |
+
+**Star light on surfaces (decision by CC, owner may tune).** The star PointLight colour of an M star is `0xff6b47`; used
+directly it turns every surface monochrome red and every ocean black. `surfaceSunColor` keeps the game's intensity
+(2.8 · L^0.22, so M is dim and F bright) but mixes only `SURFACE_SUN_TINT = 0.3` of the star hue into white. Gas giants
+and ships still take the PointLight as is — a small mismatch inside one frame (issue 3 below).
+
+**System-map integration** (`FEATURES.sharedSurface`, default false):
+- `_sharedSurfaceMaterial(body)` returns null as its first statement when the flag is OFF; the three build paths
+  (`addPlanetMesh`, `_addMoonMesh`, `_initPlanetoids`) and `_updatePlanetMesh` fall through to today's code. A body
+  without seed / archetype also falls through.
+- ON: material with the placeholder colour at build time. `_tickSharedSurfaces` (real time, per frame): star light →
+  shared uniforms; first tick with a cache calls `prefetchSystem(activeSystemId)` (lazy, because at game start the
+  cache is created after `initSystem`), then per body `get` (hit → map at once) or `request`; `surface:ready` /
+  the request promise swap the texture into the existing material; fade.
+- No `_bakePlanetTexture`, no `loadPlanetTextures` for these bodies; `_rebakePlanetTextures` finds no `.map` and
+  ends without the "Rebake: N tekstur" log (measured: log absent).
+- The map texture belongs to the material and is released by the material's `dispose` event, so every existing
+  clean-up path (system switch, body removal, `_updatePlanetMesh`) frees it without edits; the registry entry leaves
+  on the same event.
+- **Start order.** The first `initSystem` of a scene runs before surface seeds / archetypes are assigned (the seed needs
+  the galaxy), so with the flag ON the start system was first built on the old path. `GameScene.start()` now calls
+  `rebuildBodySurfaces()` right after the SurfaceCache is created (flag ON only; synchronous, before the terrain
+  textures load and the rebake could start). Found by running the owner script 1:1 (`--owner`): before the fix 0 of 56
+  bodies used the shared shader at game start. The old synchronous bake of the start system still runs once (issue 9).
+- `csShared()` flips the flag and swaps materials in place (`rebuildBodySurfaces` — camera, meshes, atmosphere, clouds
+  untouched). The OFF direction uses `_legacyBodyMaterial`, a copy of today's recipe used **only** by this debug tool.
+
+**Measurements** (real game, headless Chrome over CDP, **real GPU**: ANGLE D3D11, RTX 3070; 1600×1041; seeded new
+game; `node src/testing/headless/probe-cs6a-shader.mjs --game`; three runs, last one shown, the others within ±15%):
+
+| Measure | sharedSurface OFF | sharedSurface ON |
+|---|---|---|
+| frame time, full system view (43 bodies) | 16.7 ms median, p95 16.8 (60 fps, vsync cap) | 16.7 ms median, p95 16.7 |
+| frame time, close-up on the home planet | 16.7 ms median, p95 16.7 | 16.7 ms median, p95 16.8 |
+| system switch, main-thread stall (`csNextSystem()` call) | **2 912 ms** (47 bodies) | **15 ms** (39 bodies) |
+| fully textured after a system switch | **6 739 ms** (until "Rebake: 45 tekstur") | **1 415 ms** (39 maps, worker), bodies visible from frame 1 in the placeholder colour |
+| `csShared()` on a cold cache (39 bodies) | 2 273 ms (legacy bake, main thread) | 3 ms swap + 2 008 ms until all maps |
+| "Rebake" log on switch | present | absent |
+
+Both paths sit on the 60 fps vsync cap, so the frame-time rows only show "no regression at the cap"; uncapped GPU cost
+was not measured. Other runs: ON fully textured in 1 426 ms (40 bodies), 1 949 ms (53), 2 256 ms (65). SurfaceCache
+after 2 ON systems: 76 maps, 6.03 MiB, 0 errors, 0 worker failures.
+
+**Proof.**
+- GLSL compile probe (`--compile`): game program with and without log-depth chunks compiles and draws a lit pixel;
+  the control (same fragment + an undeclared identifier) fails with `ERROR: 0:311` / `0:322`.
+- Contact sheets (`--sheets`, `--game`; real GPU): `docs/design/prototypes/cs6a-archetypes.png` (20 rows: every surface
+  archetype incl. 3 planetoid types × M / G / F), `cs6a-variety.png` (ice, desert, rocky_cratered, terran × 6 seeds),
+  `cs6a-systemmap-before-after.png` (2 systems, OFF | ON, same camera).
+- Keeper `colony_sphere_shader_smoke`: 52 PASS — palette table complete (every archetype, ≥ 4 variants, slot counts),
+  determinism, 40 seeds × every archetype: no near-identical pair, median palette distance > 0.03, ≥ 3 base variants hit;
+  star-class ordering; null cases with a witness; GLSL text pins (no interpolation, every look has a branch, explicit
+  LOD only, log-depth round-trip); uniform sharing; texture life cycle on a fake THREE (re-apply and `dispose` free the
+  map); flag wiring by source pins.
+- Signed pin changes: `colony_sphere_cache_smoke` C6 (ThreeRenderer is now the one caller outside debug, with a
+  witness; 56 PASS), `colony_sphere_surface_smoke` B7 (SurfacePaletteLogic may import `seaLevelOf`; 33 PASS),
+  `hud_orbits_smoke` (fake renderer gets `_sharedSurfaceMaterial: () => null`; 46 PASS).
+- Sweep 432 / 432, 0 FAIL; `check-i18n` PASS.
+- **Flag OFF:** proven by construction and source pins (null in the first statement, old build code not edited), by the
+  sweep, and by the OFF legs of the game probe. **No pixel-level before / after comparison of the OFF path was run** and
+  no fail-first worktree run (VIS step, light loop).
+
+**Known visual issues (for the tuning loop and CS-6b).**
+1. tidally_locked reads as an almost uniform day-side ball: the field's substellar point (+x) is not turned toward
+   the star yet (6b orientation).
+2. hothouse is a flat yellow-brown surface until the 6b cloud deck; cryo_haze and hazy_moon show their surface under
+   today's generic white clouds (visible in the before / after sheet).
+3. Surfaces use the softened star colour, gas giants and ships the raw PointLight colour — in an M system rocky bodies
+   look warm-white lit next to red-lit giants.
+4. Today's atmosphere shell and white cloud layer sit on top unchanged (same blue rim on every planet, V-275); the
+   ocean glint shows through cloud gaps.
+5. Terran land on high-water worlds can read grey (rock / tundra slots dominate small continents); oceans are darker
+   than the old baked look; desert dark-rock regions can read as near-black patches under dim stars.
+6. Maps are 256×128 (planetoids 128×64); close zoom is carried by the detail noise. Requesting the hero map
+   (1024×512) for the focused body is not wired.
+7. Night side is close to black (scene ambient only); there are no city lights until CS-9.
+8. Carried, untouched: ice seeds can still be similar in structure (colour now differs), barren crater modulation weak.
+
+9. With the flag ON, a new game / load still pays today's synchronous bake of the start system once (seeds are assigned
+   after the first `initSystem`); removing it means moving seed / archetype assignment before the renderer init
+   (start-order change, not done in a VIS step).
+
+**Owner script validated on the live engine** (`probe-cs6a-shader.mjs --owner`, real GPU): both flags set on the title
+screen → new game: 56 / 56 bodies on the shared shader, 0 legacy diffuse maps, 0 "Rebake" logs; `csShared()` → OFF
+(56 swapped, 4 502 ms legacy bake on the main thread) → `csShared()` → ON (1 ms, all maps from cache at once);
+`csNextSystem()` → 54 / 54 textured in 1 391 ms, 0 "Rebake" logs.
+
+**Owner check (light loop; Polish script in chat).** F5 → on the title screen set `sharedSurface` and `seededSystems`
+to true → new game → look around, zoom on bodies → `csShared()` A/B → `csNextSystem()`.
+
+#### 3.6.1 CS-6a tuning pass (2026-11-18; owner check PASS 2026-11-19)
+
+Owner review of the first sheets and the in-game look: moons, variety, Io / Europa glow and the system-switch time
+accepted; six items to tune before commit. All changes stay behind `FEATURES.sharedSurface`; `SurfaceField.js`, the
+worker, `SurfaceCache.js`, `GasGiantShader.js`, the colony screen and saves are not touched.
+
+| # | Item | Cause found | Change |
+|---|---|---|---|
+| 1 | terran / ocean looked cartoonish | the sea colour was the *shallow* slot over most of the depth range (× 1.2), a 40-power sheen lobe drew a large white blob, land was flat mixes of saturated slots | oceans = deep slot with a mild depth gradient, shallows only on a narrow shelf (depth < 0.07); terran / ocean / jungle palettes re-drawn (desaturated navy seas, olive / green / ochre / brown land; `crimson` foliage is now russet and rare outside M); glint = 900-power lobe + a faint 150-power halo, Fresnel-weighted; land gets dry-vegetation patches, stronger moisture / albedo noise, a fourth noise octave (× 460) and micro-normal roughness at close zoom |
+| 2 | terran land grey at high water coverage | **Finding 771**: the field's elevation channel saturates at 1.0, so `h = (e − sea) / (1 − sea)` is ≈ 1 on most land; measured share of land classified `mountains` + `peaks`: 30% at water 0.2, 44–50% at 0.7, 58–74% at 0.9 (3 seeds × 6 000 points). The shader mirrored the classifier → rock slot everywhere | shader only: mountains are vegetated (darker montane tone), bare rock appears only where dry or on noise ridges (≤ 72%); peak snow also needs cold (`t`), not height alone. **Deliberate divergence from `cTerran`** until the field is fixed (CS-6b: stop the clamp / renormalise `e`, then re-align) |
+| 3 | black ragged patches (hazy_moon pole, cryo_haze lake edges) | lake slot was near black (`#1e1a22`) and the shoreline used the detail-noise-perturbed elevation against a ± 0.004 threshold → ragged teeth; the polar patch is a polar lake (the field lowers `e` toward the poles), not a pole-mapping fault | shoreline from the raw map elevation, ± 0.012 soft threshold, lighter shallows, lake slots re-drawn dark but not black (10 variants) |
+| 4 | dark regions crush to black under weak stars | albedo × dim star (M: 0.49 × G) fell under the display floor | soft luminance floor in linear albedo (`ALB_FLOOR` 0.03, hue-preserving, × up to 2.5 under a weak star, 60% on open water) + albedo gain up to × 1.4 under a weak star |
+| 5 | soft at close zoom | only the 256×128 LOD map was wired | `_tickSurfaceHero`: every 6th frame the body with the largest on-screen disc gets the 1024×512 hero map from SurfaceCache (worker, priority `focus`) once its disc is ≥ 260 device px; back to the LOD map under 180 px; another body takes over only when 1.4 × larger. One hero at a time. Pure rule: `surfaceHeroDecision` |
+| 6 | M-dwarf light differed between rocks and gas giants | surfaces used a softened star colour, everything else the raw PointLight | `SURFACE_SUN_TINT` 0.3 → **0.4**, and one fill PointLight at the star (flag ON only) adds exactly `soft − raw`, so raw + fill = `surfaceSunColor` for the **whole scene**. GasGiantShader untouched (D-CS-5). **Side effect to confirm with the owner:** rings, clouds, atmosphere shells, ships and stations get the same softened light (a per-body light is not possible in three without editing the gas shader) |
+
+**Measurements** (real game, headless Chrome over CDP, real GPU, 1600×1041, `probe-cs6a-shader.mjs`, two full runs):
+frame time OFF / ON, wide and close-up: 16.7 ms median, p95 16.7–16.8, max 16.8–17.0 (60 fps vsync cap, as before);
+hero swap window (focus → hero map applied): max frame 16.8 ms, map width 256 → 1024, back to 256 after zoom-out;
+system switch ON: 18–22 ms stall, fully textured after 1 682–1 733 ms (39–46 bodies), no "Rebake" log;
+OFF: 3 091–3 264 ms stall, rebake after 7 189–7 651 ms. `csShared()` → ON with the camera already close: all maps
+after 3 763 ms (includes the hero bake). Two visible PointLights with the flag ON, one with it OFF.
+
+**Proof.** `cs6a-archetypes.png`, `cs6a-variety.png`, `cs6a-systemmap-before-after.png` regenerated;
+new `cs6a-terran-closeup.png` (6 terran seeds, two per water band, hero map, stars G and K, terminator in frame).
+The homeworld frame OFF | ON is the top row of the before / after sheet. GLSL compile probe: game program OK with and
+without log depth, control fails (`ERROR: 0:337` / `0:348`). Keeper `colony_sphere_shader_smoke` 62 PASS (new S9:
+hero hysteresis rule, raw + fill = surface sun colour for M / K / white / Dyson purple, white star → zero fill, fill
+light created only behind the registry gate, switched off by `csShared` → OFF, hero map requested from SurfaceCache).
+Sweep 432 / 432, 0 FAIL; `check-i18n` PASS. Flag OFF: no edit on the OFF path (the fill light and the hero tick sit
+behind the empty-registry return); no pixel-level OFF comparison was run.
+
+**Not verified / open after this pass.**
+- The fill light was verified by count and by the keeper identity, and is visible on the gas giant in the before /
+  after sheet; an M-system frame with a rock and a gas giant side by side was not captured.
+- Adding / hiding the fill light changes the light count, so three recompiles lit programs once per toggle; the
+  cost of that one-off recompile was not measured separately.
+- Sheets after the last weak-star gain change were regenerated but not re-inspected frame by frame.
+- Known issues 1, 2, 4, 7, 8, 9 of §3.6 are unchanged (CS-6b / later); 3, 5, 6 are addressed here.
+
+**Finding 771** 🟠 — SurfaceField terran recipe: elevation saturates at the 1.0 clamp, so the height-normalised
+classes `mountains` / `peaks` take 30–74% of land (rising with water coverage) and the plateau has no relief gradient.
+Gameplay terrain (CS-5) will inherit it. Fix belongs to CS-6b (carried SurfaceField fixes, version bump); the shader
+divergence in item 2 is then removed. **The classifier must agree with the shader before CS-5.**
+
+**Owner check 2026-11-19: PASS** ("everything looks good"): terran realistic (dark muted navy oceans, green / olive
+land, small glint), homeworld land green, hero map sharpens on close zoom, no hitches, `csShared()` A/B and
+`csNextSystem()` fine.
+
+**Decision D-CS-21 (signed 2026-11-19):** item 6 option (a) — keep the whole-scene softened fill light; ships,
+stations, rings, clouds and atmosphere shells share the same light as planets. GasGiantShader stays untouched.
+
+**Carry list for CS-6b:** atmospheres per archetype; per-body clouds; Venus cloud deck; Titan haze with an opacity
+parameter for the colony view; tidally-locked orientation; ice seed similarity; barren crater modulation; cryo_haze vs
+hazy_moon differentiation; moon crater A/B sheet (current vs ≈ +40% density — owner picks, default stays current);
+Finding 771 field fix + re-align the shader; verify an M / K frame with rock + gas giant + ship under one light.
+
 ---
 
 ## 4. Decisions for Filip (recommendation first)
