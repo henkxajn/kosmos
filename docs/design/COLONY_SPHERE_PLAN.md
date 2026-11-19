@@ -2893,6 +2893,59 @@ csCollisionTest reason ranking; watch entry missing); survived: `SWEEP_SPEED_MAR
 known producer exceeds speed × tech × dt (not pinned). Earlier part-B mutations re-run on the new code: 7/7 killed. Sweep
 437/437 OK (31 advisory), `check-i18n` PASS.
 
+### 3.10 CS-1a — TileGraph interface + FlatHexTileGraph, systems sites (2026-11-19; owner smoke PASS)
+
+Pure refactor, no flag, no save change, no critical file touched (`HexGrid.js` is wrapped, not edited).
+
+**Interface as built** (`src/map/TileGraph.js`):
+- Entry: `tileGraphOf(grid)` (one graph per grid instance, WeakMap; falsy grid → `null`, like `grid?.`).
+- Tile ref = id string (flat: today's `"q,r"`) or any object with `q,r` (tile, unit, `{q,r}`).
+- Methods: `tiles()`, `forEachTile(cb)`, `anyTile()`, `tile(ref)`, `idOf(ref)`, `parseKey` / `formatKey`,
+  `neighbors(ref, {crossSeam})`, `distance(a,b)`, `within(ref,k)` (= spiral), `ring(ref,k)`,
+  `path(from, to, {passable, maxIterations})` (A* moved 1:1 from `GroundUnitManager._aStar`).
+- Module helpers: `parseTileKey`, `formatTileKey`, `isCapitalKey`, `samePos`, `CAPITAL_PREFIX`, `BUILDING_PREFIX`,
+  `DETACHED_FLAT_GRAPH` (coordinate math only, for positions without a grid).
+- `FlatHexTileGraph` only delegates to `HexGrid` methods → same neighbour order, tie-breaks, iteration order.
+- Not yet: `latitude` / `latitudeBand` / `isLandingEdge` / `stepDirection` (CS-2), `serialize` / `restore` (CS-5).
+
+**Sites moved:**
+
+| File | Moved |
+|---|---|
+| BuildingSystem | 11× key split + `grid.get`, adjacency + neighbour re-rate, `_isOwnTile`, iterations, all `capital_` / `building_` keys |
+| GroundUnitManager | A* (`_aStar` = wrapper on `graph.path`), 4 distances, 8 tile lookups, survey spiral, position equality, occupation keys |
+| CombatSystem | `_getTile`, support distance, retreat via `neighbors(…, {crossSeam:false})` |
+| ArmySystem | position equality → `samePos` |
+| InvasionSystem, GarrisonPlanner, SupplyCoverageSystem | iterations, spiral/ring, keys, distance |
+| ColonyAutoExpander, EmpireColonyBootstrap | iterations, `_tileByKey`, `_active` sync, neighbours, keys |
+| Withdrawal, TileOwnership, Anomaly, Resource, Impact, RandomEvent, ColonyGrid, VesselManager, ColonyManager | lookups, iterations, producer keys |
+
+**Left for CS-1b:** all UI / renderer / test-helper sites, #764, #765.
+
+**Left for CS-2 (grid-geometry rules, `// CS-2` notes in source):** Invasion `_isEdgeHex`; Combat retreat does not cross
+the seam (`crossSeam:false`); GroundUnitManager seam teleport / sprite facing and the `reveal_fog` cube loop;
+RandomEvent equator fallback; Bootstrap `_inferRows`; the three polar penalties; latitude modifier + persisted `tileR`;
+`_gridHeight`; StrikeSquadron origin fallback.
+
+**Left for CS-5 (key format / tile-id migration, not geometry; `// CS-5` notes in source):** minefield key
+`${q}_${r}` (GroundUnitManager, groundAbilities); battle keys `pid|q|r` (CombatSystem); `q,r` fields on units and armies
+(incl. writes in `Vessel.unloadGroundUnit` / `dropTroop`, VesselManager `unit.q ?? 0`); event payloads `{q, r}`;
+`getUnitAt(pid,q,r)`-style signatures; Supply coverage map keys (read by the UI overlay); `HexGrid.restore` in
+ColonyManager.
+
+**Proof:**
+- `probe-cs1a-trace.mjs` (30 y AI + scripted ground phase: 6 units, 12 A* moves, survey, army, war, garrison mobilisation,
+  4-troop invasion, combat): seed A trace `d3bc84c5…` / state `14ee8ac7…` (1,992 events), seed B 60 y trace `52afc4cd…` /
+  state `3597f337…` (2,910 events) — identical to HEAD `a36ad12`. HexGrid call counts identical except `distance`
+  +101 (the three distance copies now call it).
+- Keeper `colony_sphere_tilegraph_smoke.mjs` 37 PASS: every tile of 10 flat grids (all size classes + `largestHexMaps`,
+  4,031 tiles, 427,908 distance pairs vs the three old formula copies), 10,092 A* searches (2,743 blocked) vs a frozen
+  HEAD copy, source pins for 18 files with witnesses. Fail-first in a detached worktree at HEAD: 4 PASS / 20 FAIL
+  (control T2a green on both sides).
+- 11 mutations, all red. **Probe weakness:** M1 (neighbour order), M2 (distance), M6 (seam), M7 (ring), M8 (`building_`
+  prefix) leave the trace unchanged — they are covered by the keeper only.
+- Sweep 438/438, 0 FAIL, 31 advisories (same as HEAD); `check-i18n` PASS. Owner smoke 2026-11-19 PASS.
+
 ## 4. Decisions for Filip (recommendation first)
 
 > ✅ All signed 2026-11-18. The binding text, with conditions (D-CS-5, D-CS-8) and the new D-CS-17 / D-CS-18, is **§0b**. This
