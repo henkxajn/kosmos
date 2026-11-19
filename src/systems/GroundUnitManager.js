@@ -10,7 +10,7 @@
 //   Słucha:  time:tick (civDeltaYears)
 
 import EventBus from '../core/EventBus.js';
-import { HexGrid } from '../map/HexGrid.js';
+import { tileGraphOf, samePos, DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getUnitStats, GROUND_MOVE_COST, isStandableTile } from '../data/GroundUnitData.js';
 import { UNIT_ARCHETYPES, getTransportSize, DEFAULT_MORALE } from '../data/unitArchetypes.js';
@@ -64,7 +64,7 @@ export class GroundUnitManager {
     const toKill = [];
     for (const u of this._units.values()) {
       if (u.planetId !== planetId) continue;
-      if (u.q !== q || u.r !== r) continue;
+      if (!samePos(u, { q, r })) continue;
       const hp = (u.currentHP ?? u.hp ?? 0) - dmg;
       u.currentHP = hp;
       u.hp = hp;
@@ -274,10 +274,11 @@ export class GroundUnitManager {
    */
   getUnitsInRange(planetId, q, r, range, factionFilter = null) {
     const result = [];
+    const graph = this._graphFor(planetId);
     for (const u of this._units.values()) {
       if (u.planetId !== planetId) continue;
       if (factionFilter && u.owner !== factionFilter) continue;
-      if (this._hexDistance(q, r, u.q, u.r) <= range) result.push(u);
+      if (graph.distance({ q, r }, u) <= range) result.push(u);
     }
     return result;
   }
@@ -298,7 +299,7 @@ export class GroundUnitManager {
 
   getUnitAt(planetId, q, r) {
     for (const u of this._units.values()) {
-      if (u.planetId === planetId && u.q === q && u.r === r &&
+      if (u.planetId === planetId && samePos(u, { q, r }) &&
           u.status !== 'moving' && u.status !== 'in_cargo') {
         return u;
       }
@@ -314,7 +315,7 @@ export class GroundUnitManager {
   getUnitsAtHex(planetId, q, r) {
     const out = [];
     for (const u of this._units.values()) {
-      if (u.planetId === planetId && u.q === q && u.r === r &&
+      if (u.planetId === planetId && samePos(u, { q, r }) &&
           u.status !== 'in_cargo') {
         out.push(u);
       }
@@ -369,14 +370,15 @@ export class GroundUnitManager {
     const grid = this._getGrid(unit.planetId);
     if (!grid) return false;
 
-    const targetTile = grid.get(targetQ, targetR);
+    const target = { q: targetQ, r: targetR };
+    const targetTile = tileGraphOf(grid).tile(target);
     if (!targetTile) return false;
 
     // Ocean = nieprzejezdny
     if (MOVE_COST[targetTile.type] === Infinity) return false;
 
     // Już na miejscu
-    if (unit.q === targetQ && unit.r === targetR) return false;
+    if (samePos(unit, target)) return false;
 
     // Oblicz ścieżkę A*
     const path = this._aStar(grid, unit.q, unit.r, targetQ, targetR);
@@ -442,7 +444,7 @@ export class GroundUnitManager {
 
     // Sprawdź czy hex ma wykrytą, nieujawnioną anomalię
     const grid = this._getGrid(unit.planetId);
-    const tile = grid?.get(unit.q, unit.r);
+    const tile = tileGraphOf(grid)?.tile(unit);
     if (!tile || !tile.anomaly || !tile.anomalyDetected || tile.anomalyRevealed) return false;
 
     unit.mission = {
@@ -667,7 +669,7 @@ export class GroundUnitManager {
       const owner = unit.owner ?? 'player';
       const grid = this._getGrid(unit.planetId);
       if (!grid) continue;
-      const tile = grid.get(unit.q, unit.r);
+      const tile = tileGraphOf(grid).tile(unit);
       if (!tile) continue;
 
       const tileOwner = tile.owner; // null/player/empireId
@@ -677,7 +679,7 @@ export class GroundUnitManager {
       if (tileOwner != null && !groundOwnersHostile(owner, tileOwner)) continue;
 
       // Zanotuj że foreigner jest na tym hexie (żeby potem nie resetować jego timera)
-      const key = `${unit.q},${unit.r}`;
+      const key = tileGraphOf(grid).idOf(unit);
       if (!occupiedByForeigner.has(unit.planetId)) occupiedByForeigner.set(unit.planetId, new Map());
       occupiedByForeigner.get(unit.planetId).set(key, owner);
 
@@ -732,7 +734,7 @@ export class GroundUnitManager {
     const owner = unit.owner ?? 'player';
     const grid = this._getGrid(unit.planetId);
     if (!grid) return;
-    const tile = grid.get(unit.q, unit.r);
+    const tile = tileGraphOf(grid).tile(unit);
     if (!tile) return;
     if (tile.owner === owner) return;
     if (tile.owner != null && !groundOwnersHostile(owner, tile.owner)) return;   // R1 (G2-4) — bez wojny nie zajmuje
@@ -746,9 +748,10 @@ export class GroundUnitManager {
     // Dla każdego grida — sprawdź hexy z occupyEmpireId które nie mają już okupanta
     for (const [planetId, tiles] of this._stalePlanetCache()) {
       const foreignHere = occupiedByForeigner.get(planetId);
+      const graph = this._graphFor(planetId);
       for (const tile of tiles) {
         if (!tile.occupyEmpireId) continue;
-        const key = `${tile.q},${tile.r}`;
+        const key = graph.idOf(tile);
         const foreigner = foreignHere?.get(key);
         if (foreigner !== tile.occupyEmpireId) {
           // Już nikt nie okupuje z tej frakcji → reset
@@ -767,7 +770,7 @@ export class GroundUnitManager {
       const grid = col.grid;
       if (!grid) continue;
       // Tylko hexy z aktywnym occupy (perf)
-      const tiles = grid.toArray().filter(t => t && t.occupyEmpireId);
+      const tiles = tileGraphOf(grid).tiles().filter(t => t && t.occupyEmpireId);
       if (tiles.length > 0) yield [col.planetId, tiles];
     }
   }
@@ -790,7 +793,7 @@ export class GroundUnitManager {
     // Opcja C v3: offline jednostki nie atakują (brak utrzymania)
     if (atk.status === 'offline') return { hit: false, reason: 'offline' };
 
-    const dist = this._hexDistance(atk.q, atk.r, tgt.q, tgt.r);
+    const dist = this._graphFor(atk.planetId).distance(atk, tgt);
     if (dist > (atk.range ?? 1)) return { hit: false, reason: 'out_of_range' };
 
     // Ground Unit System: counter bonus wlicza się do dmg PRZED odjęciem AC.
@@ -866,7 +869,7 @@ export class GroundUnitManager {
 
     const grid = this._getGrid(unit.planetId);
     if (!grid) return { success: false, reason: 'no_grid' };
-    const tile = grid.get(unit.q, unit.r);
+    const tile = tileGraphOf(grid).tile(unit);
     if (!tile) return { success: false, reason: 'no_tile' };
 
     const hasBuilding = tile.buildingId || tile.capitalBase;
@@ -898,7 +901,7 @@ export class GroundUnitManager {
         continue;
       }
       // Jednostka opuściła hex → reset
-      if (unit.q !== cap.q || unit.r !== cap.r) {
+      if (!samePos(unit, cap)) {
         this._captureProgress.delete(unitId);
         EventBus.emit('groundUnit:captureInterrupted', {
           unitId, planetId: cap.planetId, q: cap.q, r: cap.r,
@@ -913,7 +916,7 @@ export class GroundUnitManager {
 
       if (cap.progress >= 1) {
         const grid = this._getGrid(cap.planetId);
-        const tile = grid?.get(cap.q, cap.r);
+        const tile = tileGraphOf(grid)?.tile(cap);
         if (tile) this._changeTileOwner(tile, cap.planetId, unit.owner);
         EventBus.emit('groundUnit:buildingCaptured', {
           unitId, planetId: cap.planetId, q: cap.q, r: cap.r,
@@ -984,7 +987,7 @@ export class GroundUnitManager {
       const ability = GroundUnitFactory.getAbility(scout);
       if (!ability) continue;
       const rng = ability.revealRange ?? 3;
-      const hexes = [];
+      const hexes = [];   // CS-2: pętla sześcienna = geometria płaskiej siatki (zdarzenie bez słuchacza)
       for (let dq = -rng; dq <= rng; dq++) {
         for (let dr = Math.max(-rng, -dq - rng); dr <= Math.min(rng, -dq + rng); dr++) {
           hexes.push({ q: scout.q + dq, r: scout.r + dr });
@@ -1043,7 +1046,7 @@ export class GroundUnitManager {
   _checkMineTrigger(unit) {
     const gs = window.KOSMOS?.gameState;
     if (!gs) return false;
-    const key  = `${unit.q}_${unit.r}`;
+    const key  = `${unit.q}_${unit.r}`;   // CS-5: format klucza (id pola) — migracja kluczy, nie geometria
     const path = `minefields.${unit.planetId}.${key}`;
     const mine = gs.get(path);
     if (!mine) return false;
@@ -1080,10 +1083,14 @@ export class GroundUnitManager {
   _year() { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
 
   /** Dystans heksowy (cube coords). */
+  // CS-1a — odległość przez graf pól (dawny wzór sześcienny; dla całkowitych q,r identyczny).
   _hexDistance(q1, r1, q2, r2) {
-    const s1 = -q1 - r1;
-    const s2 = -q2 - r2;
-    return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
+    return DETACHED_FLAT_GRAPH.distance({ q: q1, r: r1 }, { q: q2, r: r2 });
+  }
+
+  // Graf pól ciała; bez siatki → graf odłączony (sama arytmetyka współrzędnych, jak dotąd).
+  _graphFor(planetId) {
+    return tileGraphOf(this._getGrid(planetId)) ?? DETACHED_FLAT_GRAPH;
   }
 
   /**
@@ -1114,7 +1121,7 @@ export class GroundUnitManager {
         if (!groundOwnersHostile(u.owner, atk.owner)) continue;   // R1 (G2-4) — pościg tylko za wrogiem (wojna)
         if (u.hp <= 0) continue;
         if (u._stealthState === 'hidden') continue;
-        const d = this._hexDistance(atk.q, atk.r, u.q, u.r);
+        const d = this._graphFor(atk.planetId).distance(atk, u);
         if (d < bestDist) { bestDist = d; best = u; }
       }
 
@@ -1148,7 +1155,7 @@ export class GroundUnitManager {
 
         const goal = this._findTerritorialGoal(atk, colony);
         if (!goal) { this._noteTerritorialBlock(atk, 'no_goal'); continue; }
-        if (atk.q === goal.q && atk.r === goal.r) {
+        if (samePos(atk, goal)) {
           this._noteTerritorialBlock(atk, 'holding');          // dotarł — stanie JEST celem
           continue;
         }
@@ -1208,7 +1215,8 @@ export class GroundUnitManager {
    * @returns {{q:number, r:number, kind:'capital'|'building'}|null}
    */
   _findTerritorialGoal(unit, colony) {
-    const tiles = colony?.grid?.toArray?.() ?? [];
+    const graph = tileGraphOf(colony?.grid) ?? DETACHED_FLAT_GRAPH;
+    const tiles = graph.tiles();
 
     const capital = tiles.find(t => t?.capitalBase);
     if (capital && isStandableTile(capital)) return { q: capital.q, r: capital.r, kind: 'capital' };
@@ -1218,7 +1226,7 @@ export class GroundUnitManager {
     let bestTile = null, bestDist = Infinity;
     for (const t of tiles) {
       if (!t || !t.buildingId) continue;
-      const d = this._hexDistance(unit.q, unit.r, t.q, t.r);
+      const d = graph.distance(unit, t);
       if (d < bestDist) { bestDist = d; bestTile = t; }
     }
     return bestTile ? { q: bestTile.q, r: bestTile.r, kind: 'building' } : null;
@@ -1317,7 +1325,7 @@ export class GroundUnitManager {
 
     if (grid) {
       const SURVEY_RADIUS = 15;
-      const tiles = grid.spiral(unit.q, unit.r, SURVEY_RADIUS);
+      const tiles = tileGraphOf(grid).within(unit, SURVEY_RADIUS);
       for (const tile of tiles) {
         if (tile.anomaly && !tile.anomalyDetected) {
           tile.anomalyDetected = true;
@@ -1339,14 +1347,14 @@ export class GroundUnitManager {
   // Analyze zakończony — ujawnij anomalię i aplikuj efekty
   _completeAnalysis(unit) {
     const grid = this._getGrid(unit.planetId);
-    const tile = grid?.get(unit.q, unit.r);
+    const tile = tileGraphOf(grid)?.tile(unit);
 
     if (tile && tile.anomaly && tile.anomalyDetected) {
       tile.anomalyRevealed = true;
 
       EventBus.emit('groundUnit:anomalyFound', {
         unitId:   unit.id,
-        tileKey:  `${unit.q},${unit.r}`,
+        tileKey:  tileGraphOf(grid).idOf(unit),
         anomaly:  tile.anomaly,
         planetId: unit.planetId,
       });
@@ -1358,76 +1366,14 @@ export class GroundUnitManager {
 
   // ── A* pathfinding na siatce hex ─────────────────────────────────────────
 
+  // CS-1a — A* żyje w TileGraph.path (przeniesiony 1:1: koszt jednolity 1, heurystyka = odległość
+  // bez zawijania, limit 2000 iteracji). Teren wpływa na PRĘDKOŚĆ (_tickMovement via unit._stepCost),
+  // NIE na wybór trasy — tylko Infinity (ocean) blokuje przejście.
   _aStar(grid, startQ, startR, goalQ, goalR) {
-    const startKey = `${startQ},${startR}`;
-    const goalKey  = `${goalQ},${goalR}`;
-
-    // Open set: priority queue (prosty heap na tablicy)
-    const open    = [{ q: startQ, r: startR, f: 0 }];
-    const gScore  = new Map(); // klucz → koszt dotarcia
-    const cameFrom = new Map(); // klucz → poprzedni klucz
-
-    gScore.set(startKey, 0);
-
-    const heuristic = (q, r) => HexGrid.distance(q, r, goalQ, goalR);
-
-    let iterations = 0;
-    const MAX_ITERATIONS = 2000; // zabezpieczenie
-
-    while (open.length > 0 && iterations++ < MAX_ITERATIONS) {
-      // Znajdź węzeł z najniższym f
-      let bestIdx = 0;
-      for (let i = 1; i < open.length; i++) {
-        if (open[i].f < open[bestIdx].f) bestIdx = i;
-      }
-      const current = open.splice(bestIdx, 1)[0];
-      const curKey = `${current.q},${current.r}`;
-
-      if (curKey === goalKey) {
-        // Odtwórz ścieżkę (bez startu, z celem)
-        return this._reconstructPath(cameFrom, goalKey);
-      }
-
-      const neighbors = grid.getNeighbors(current.q, current.r);
-      for (const neighbor of neighbors) {
-        // Pathfinding używa UNIFORM COST 1 — gracz chce najkrótszej ścieżki.
-        // Terrain cost wpływa na PRĘDKOŚĆ (spowolnienie w _tickMovement via unit._stepCost),
-        // NIE na wybór trasy. Tylko Infinity (ocean) blokuje przejście.
-        const terrainCost = MOVE_COST[neighbor.type] ?? 1;
-        if (terrainCost === Infinity) continue;  // nieprzejezdny
-        const cost = 1;
-
-        const nKey = `${neighbor.q},${neighbor.r}`;
-        const tentativeG = (gScore.get(curKey) ?? Infinity) + cost;
-
-        if (tentativeG < (gScore.get(nKey) ?? Infinity)) {
-          cameFrom.set(nKey, curKey);
-          gScore.set(nKey, tentativeG);
-          const f = tentativeG + heuristic(neighbor.q, neighbor.r);
-
-          // Dodaj do open set (lub zaktualizuj)
-          const existing = open.find(n => `${n.q},${n.r}` === nKey);
-          if (existing) {
-            existing.f = f;
-          } else {
-            open.push({ q: neighbor.q, r: neighbor.r, f });
-          }
-        }
-      }
-    }
-
-    return null; // brak ścieżki
-  }
-
-  _reconstructPath(cameFrom, goalKey) {
-    const path = [];
-    let current = goalKey;
-    while (cameFrom.has(current)) {
-      const [q, r] = current.split(',').map(Number);
-      path.unshift({ q, r });
-      current = cameFrom.get(current);
-    }
-    return path;
+    return tileGraphOf(grid).path({ q: startQ, r: startR }, { q: goalQ, r: goalR }, {
+      passable: (tile) => (MOVE_COST[tile.type] ?? 1) !== Infinity,
+      maxIterations: 2000,
+    });
   }
 
   // ── Pomocnicze ───────────────────────────────────────────────────────────
@@ -1450,6 +1396,7 @@ export class GroundUnitManager {
     const fromLocal = grid.tilePixelPos(unit.q, unit.r, 1);  // znormalizowane (hexSize=1)
     const toLocal   = grid.tilePixelPos(nextHex.q, nextHex.r, 1);
 
+    // CS-2: szew/kierunek → TileGraph.stepDirection (tu bez zmian).
     // Wykryj zawinięcie mapy — jeśli dystans X > połowa szerokości gridu,
     // to krok przechodzi przez krawędź → teleportuj natychmiast (bez animacji)
     const gridW = grid.gridPixelSize(1).w;
@@ -1472,7 +1419,7 @@ export class GroundUnitManager {
     }
 
     // Koszt terenu docelowego hexa → wpływa na prędkość ruchu
-    const nextTile = grid.get(nextHex.q, nextHex.r);
+    const nextTile = tileGraphOf(grid).tile(nextHex);
     unit._stepCost = nextTile ? (MOVE_COST[nextTile.type] ?? 1) : 1;
   }
 

@@ -11,6 +11,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { RANDOM_EVENTS, DRAWABLE_EVENTS, TOTAL_WEIGHT } from '../data/RandomEventsData.js';
+import { tileGraphOf, formatTileKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 // Minimalna przerwa między zdarzeniami (lata gry)
 const MIN_COOLDOWN = 8;
@@ -463,19 +464,19 @@ export class RandomEventSystem {
         // Downgrade o 1 level (bez zwrotu surowców — katastrofa)
         entry.level = level - 1;
         // Pobierz prawdziwy tile z gridu (poprawne LatMod i anomalyEffect), fallback na neutralny
-        const parts = activeKey.split(',');
-        const realTile = colony.grid?.get(parseInt(parts[0], 10), parseInt(parts[1], 10));
+        const realTile = tileGraphOf(colony.grid)?.tile(activeKey);
+        // CS-2: fallback „równik” (r = height/2) → TileGraph
         const tileLike = realTile ?? { r: Math.floor((colony.grid?.height ?? 10) / 2), type: 'plains', key: activeKey, anomalyEffect: null };
         entry.baseRates = bSys._calcBaseRates(entry.building, tileLike, entry.level);
         entry.effectiveRates = bSys._applyTechMultipliers(entry.baseRates, entry.building, activeKey);
-        const pid = entry.producerId ?? `building_${activeKey}`;
+        const pid = entry.producerId ?? formatTileKey(activeKey, 'building_');
         if (bSys.resourceSystem) {
           bSys.resourceSystem.registerProducer(pid, entry.effectiveRates);
         }
       } else {
         // Pełne zniszczenie Lv1 budynku (bezpośrednio — unika cross-colony bleed)
         if (bSys.resourceSystem) {
-          bSys.resourceSystem.removeProducer(entry.producerId ?? `building_${activeKey}`);
+          bSys.resourceSystem.removeProducer(entry.producerId ?? formatTileKey(activeKey, 'building_'));
         }
         if (entry.housing > 0 && bSys.civSystem) {
           bSys.civSystem.removeHousing(entry.housing, !!entry.building?.isHabitat);

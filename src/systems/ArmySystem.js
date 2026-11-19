@@ -27,6 +27,7 @@
 //     groundUnit:moved     → jeśli unit wyjdzie z hexu armii → usuń z niej
 
 import EventBus from '../core/EventBus.js';
+import { samePos } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 let _nextArmyId = 1;
 
@@ -69,7 +70,7 @@ export class ArmySystem {
     const first = units[0];
     const owner = first.owner ?? 'player';
     for (const u of units) {
-      if (u.planetId !== first.planetId || u.q !== first.q || u.r !== first.r) {
+      if (u.planetId !== first.planetId || !samePos(u, first)) {
         return { success: false, reason: 'different_hex' };
       }
       if ((u.owner ?? 'player') !== owner) {
@@ -188,7 +189,7 @@ export class ArmySystem {
   }
 
   getArmyOnHex(planetId, q, r) {
-    return this.getAllArmies().find(a => a.planetId === planetId && a.q === q && a.r === r) ?? null;
+    return this.getAllArmies().find(a => a.planetId === planetId && samePos(a, { q, r })) ?? null;
   }
 
   /**
@@ -219,7 +220,7 @@ export class ArmySystem {
     const army = this.getArmyForUnit(unitId);
     if (!army) return;
     // Jeśli jednostka wyszła z hexa armii → wyrzuć ją
-    if (q !== army.q || r !== army.r) {
+    if (!samePos({ q, r }, army)) {
       army.members.delete(unitId);
       this._unitToArmy.delete(unitId);
       if (army.members.size < 2) {
@@ -246,9 +247,9 @@ export class ArmySystem {
       if (members.length === 0) continue;
       const first = members[0];
       const allSame = members.every(m =>
-        m.planetId === first.planetId && m.q === first.q && m.r === first.r
+        m.planetId === first.planetId && samePos(m, first)
       );
-      if (allSame && (army.q !== first.q || army.r !== first.r || army.planetId !== first.planetId)) {
+      if (allSame && (!samePos(army, first) || army.planetId !== first.planetId)) {
         army.planetId = first.planetId;
         army.q = first.q;
         army.r = first.r;

@@ -41,6 +41,7 @@ import { stationGroupOf, resolveStationGroupState } from '../utils/StationGroup.
 import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkArchetypeUnlocked } from '../data/unitArchetypes.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
+import { tileGraphOf, isCapitalKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { EmpireColonyBootstrap } from './EmpireColonyBootstrap.js';   // W3-1 — reuse resolvera tech imperium
@@ -929,7 +930,7 @@ export class ColonyManager {
 
     // Hexy → nowy właściciel (dokładne lustro :752-757)
     if (colony.grid?.toArray) {
-      for (const tile of colony.grid.toArray()) {
+      for (const tile of tileGraphOf(colony.grid).tiles()) {
         if (tile) tile.owner = newOwnerEmpireId;
       }
     }
@@ -1023,7 +1024,7 @@ export class ColonyManager {
 
     // Przełącz wszystkie hexy na gracza
     if (colony.grid?.toArray) {
-      for (const tile of colony.grid.toArray()) {
+      for (const tile of tileGraphOf(colony.grid).tiles()) {
         if (tile) tile.owner = 'player';
       }
     }
@@ -1969,14 +1970,15 @@ export class ColonyManager {
     if (!grid) return null;
 
     // Znajdź Capital hex
+    const graph = tileGraphOf(grid);
     let capQ = 0, capR = 0;
     let found = false;
-    for (const tile of grid.toArray()) {
+    for (const tile of graph.tiles()) {
       if (tile?.capitalBase) { capQ = tile.q; capR = tile.r; found = true; break; }
     }
     if (!found) {
       // Fallback: pierwszy niepoza-oceanowy hex
-      for (const tile of grid.toArray()) {
+      for (const tile of graph.tiles()) {
         if (tile && tile.type !== 'ocean') {
           capQ = tile.q; capR = tile.r; found = true; break;
         }
@@ -1988,7 +1990,7 @@ export class ColonyManager {
 
     // Spiral 0→5 — wolny hex bez jednostki + nie-ocean
     for (let radius = 0; radius <= 5; radius++) {
-      const tiles = grid.spiral(capQ, capR, radius);
+      const tiles = graph.within({ q: capQ, r: capR }, radius);
       for (const tile of tiles) {
         if (!tile || tile.type === 'ocean') continue;
         if (mgr?.getUnitAt?.(colony.planetId, tile.q, tile.r)) continue;
@@ -2864,7 +2866,7 @@ export class ColonyManager {
         // Sprawdź czy stolica istnieje (w _active lub na grid)
         let hasCapital = false;
         for (const k of bSys._active.keys()) {
-          if (k.startsWith('capital_')) { hasCapital = true; break; }
+          if (isCapitalKey(k)) { hasCapital = true; break; }
         }
         if (!hasCapital && savedGrid?.forEach) {
           savedGrid.forEach(tile => { if (tile.capitalBase) hasCapital = true; });
@@ -2920,7 +2922,7 @@ export class ColonyManager {
       colony.grid = grid;
 
       // Faza 6.5: inicjalizacja własności hexów na nowej kolonii
-      for (const tile of grid.toArray()) {
+      for (const tile of tileGraphOf(grid).tiles()) {
         if (tile && tile.owner == null) tile.owner = 'player';
       }
 

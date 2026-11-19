@@ -10,7 +10,9 @@
 // (pierwszy tick — stare zapisy). Jedno źródło reguły „co stemplujemy”.
 // G2-4 F1 (Finding 363): `revertPeaceOccupation` — jedno źródło reguły „co pokój cofa” (woła `WithdrawalSystem`).
 //
-// ⚠ ZERO importów — moduł node-testowalny.
+// ⚠ Jedyny import: TileGraph (czysty, bez zależności od sceny) — moduł node-testowalny.
+
+import { tileGraphOf } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 /**
  * Stempluje `tile.owner = ownerId` na kaflach BEZ właściciela (`owner == null`). Kafli już ostemplowanych
@@ -22,7 +24,7 @@
 export function stampUnownedTiles(grid, ownerId) {
   if (!grid || !ownerId) return 0;
   let stamped = 0;
-  for (const tile of grid.toArray?.() ?? []) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile && tile.owner == null) { tile.owner = ownerId; stamped++; }
   }
   return stamped;
@@ -43,7 +45,7 @@ export function stampUnownedTiles(grid, ownerId) {
 export function revertPeaceOccupation(grid, colonyOwner, occupier) {
   const out = { reverted: [], reset: 0 };
   if (!grid || !colonyOwner || !occupier || colonyOwner === occupier) return out;
-  for (const tile of grid.toArray?.() ?? []) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (!tile) continue;
     const taken = tile.owner === occupier;
     if (taken) {

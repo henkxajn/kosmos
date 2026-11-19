@@ -23,6 +23,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES, ALL_RESOURCES 
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { t } from '../i18n/i18n.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { parseTileKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 // ── Jak często emitujemy resource:changed (co ile lat gry) ─────────────────
 const EMIT_THROTTLE_YEARS = 1 / 365.25; // co dzień gry
@@ -298,11 +299,11 @@ export class ResourceSystem {
 
       // Rozwiąż typ budynku z id producenta
       let type = id;
-      if (id.startsWith('building_')) {
-        const tileKey = id.slice('building_'.length);
-        const entry = active?.get(tileKey);
+      const pk = parseTileKey(id);
+      if (pk.prefix === 'building_') {
+        const entry = active?.get(pk.id);
         type = entry?.building?.id ?? 'unknown';
-      } else if (id.startsWith('capital_')) {
+      } else if (pk.prefix === 'capital_') {
         type = 'colony_base';
       } else if (id === 'civilization_consumption') {
         type = 'pop_consumption';

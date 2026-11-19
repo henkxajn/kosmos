@@ -23,6 +23,7 @@
 import EventBus from '../core/EventBus.js';
 import { DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
+import { tileGraphOf, DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 /** Towar zaopatrzenia w magazynie kolonii (`resourceSystem`). */
 const SUPPLY_COMMODITY = 'military_supplies';
@@ -264,7 +265,8 @@ export class SupplyCoverageSystem {
     return [...pids];
   }
 
-  _key(q, r) { return `${q},${r}`; }
+  // Klucz mapy zasięgu = id pola (format płaskiej siatki „q,r”; czyta go też nakładka UI). CS-5: id grafu ciała.
+  _key(q, r) { return DETACHED_FLAT_GRAPH.idOf({ q, r }); }
 
   /**
    * SB78 (S4/3, Finding 442) — czy jednostka stoi na kolonii WŁASNEGO imperium (gracz: kolonia gracza — kanon
@@ -292,7 +294,7 @@ export class SupplyCoverageSystem {
     //   nie maluje go jako strefy zaopatrzenia. Zasięg jednostek zaopatrzenia (3.) — bez zmian.
     if (grid && isPlayerColony(colony)) {
       // Znajdź hex Capital
-      for (const tile of grid.toArray()) {
+      for (const tile of tileGraphOf(grid).tiles()) {
         if (tile?.capitalBase) {
           this._addHexAndNeighbors(map, grid, tile.q, tile.r, { type: 'capital' });
           break;
@@ -325,15 +327,16 @@ export class SupplyCoverageSystem {
   }
 
   _addHexAndNeighbors(map, grid, q, r, info, overwriteCapital = true) {
-    const k0 = this._key(q, r);
+    const graph = tileGraphOf(grid) ?? DETACHED_FLAT_GRAPH;
+    const k0 = graph.idOf({ q, r });
     if (overwriteCapital || !map.has(k0) || map.get(k0).type === 'supplier') {
       map.set(k0, info);
     }
     if (!grid) return;
-    const ring = grid.ring(q, r, 1);
+    const ring = graph.ring({ q, r }, 1);
     for (const tile of ring) {
       if (!tile) continue;
-      const k = this._key(tile.q, tile.r);
+      const k = graph.idOf(tile);
       const prev = map.get(k);
       if (!prev) { map.set(k, info); continue; }
       // Priorytet: capital > barracks > supplier — nie nadpisuj silniejszego źródła słabszym
@@ -348,16 +351,15 @@ export class SupplyCoverageSystem {
     const result = [];
     for (const u of units) {
       if (u.owner !== src.owner) continue;
-      const dist = this._hexDistance(src.q, src.r, u.q, u.r);
+      const dist = this._graphFor(src.planetId).distance(src, u);
       if (dist <= rng) result.push(u);
     }
     return result;
   }
 
-  _hexDistance(q1, r1, q2, r2) {
-    const dq = q1 - q2;
-    const dr = r1 - r2;
-    return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+  // Graf pól ciała; bez siatki → graf odłączony (sama arytmetyka współrzędnych, jak dotąd).
+  _graphFor(planetId) {
+    return tileGraphOf(this.colonyManager?.getColony?.(planetId)?.grid) ?? DETACHED_FLAT_GRAPH;
   }
 
   // ── Serializacja (lekka — coverage przeliczany z live state) ──────────────

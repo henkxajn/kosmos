@@ -18,6 +18,7 @@
 //               game:over (gdy homePlanet traci wszystkich POPów)
 
 import EventBus from '../core/EventBus.js';
+import { parseTileKey, formatTileKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 // Progi mass ratio
 const THRESHOLD_LIGHT      = 0.0001;
@@ -241,7 +242,7 @@ export class ImpactDamageSystem {
       const { key, entry } = destroyable[i];
 
       // Usuń producenta zasobów
-      const producerId = key.startsWith('capital_') ? key : `building_${key}`;
+      const producerId = parseTileKey(key).prefix === 'capital_' ? key : formatTileKey(key, 'building_');
       resourceSystem.removeProducer(producerId);
 
       // Zwolnij housing

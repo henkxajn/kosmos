@@ -34,6 +34,7 @@ import {
   GARRISON_OUTPOST_DEPOSITS, GARRISON_SPREAD_MAX_RADIUS, INVASION_BASE_ARCHETYPE, AI_FIELDED_ARCHETYPES,
 } from '../data/GarrisonData.js';
 import { isStandableTile } from '../data/GroundUnitData.js';
+import { tileGraphOf, DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { colonyDevScore } from './ColonyDevScore.js';
 
 /** Liczba skończona i dodatnia, inaczej 0 (POP / suma fabryk / liczba jednostek z niepewnego źródła). */
@@ -203,7 +204,7 @@ export function garrisonAllocation(empire) {
  * @returns {HexTile|null}
  */
 export function garrisonAnchor(grid, isOutpost = false) {
-  const tiles = grid?.toArray?.() ?? [];
+  const tiles = tileGraphOf(grid)?.tiles() ?? [];
   if (!isOutpost) {
     const capital = tiles.find(t => t?.capitalBase);
     if (capital && isStandableTile(capital)) return capital;
@@ -230,10 +231,11 @@ export function garrisonHexes(body, count) {
   const occupied = body?.occupied ?? null;
   const taken = new Set();
   const hexes = [];
-  for (const tile of grid.spiral(anchorTile.q, anchorTile.r, GARRISON_SPREAD_MAX_RADIUS)) {
+  const graph = tileGraphOf(grid);
+  for (const tile of graph.within(anchorTile, GARRISON_SPREAD_MAX_RADIUS)) {
     if (hexes.length >= n) break;
     if (!isStandableTile(tile)) continue;
-    const key = `${tile.q},${tile.r}`;
+    const key = graph.idOf(tile);
     if (taken.has(key) || occupied?.has?.(key)) continue;
     taken.add(key);
     hexes.push({ q: tile.q, r: tile.r });
@@ -375,7 +377,7 @@ export function readGarrisonBodyContext(K, planetId) {
   return {
     grid: colony?.grid ?? null,
     isOutpost: !!colony?.isOutpost,
-    occupied: new Set(units.filter(u => nonNegative(u?.hp) > 0).map(u => `${u.q},${u.r}`)),
+    occupied: new Set(units.filter(u => nonNegative(u?.hp) > 0).map(u => (tileGraphOf(colony?.grid) ?? DETACHED_FLAT_GRAPH).idOf(u))),
   };
 }
 

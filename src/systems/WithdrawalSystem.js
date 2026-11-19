@@ -36,6 +36,7 @@
 import EventBus from '../core/EventBus.js';
 import { bodyOwnerOf, areAtWar, groundOwnersHostile } from '../utils/WarGate.js';
 import { revertPeaceOccupation } from '../utils/TileOwnership.js';
+import { tileGraphOf } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 /** Termin wycofania w latach WYŚWIETLANYCH (6 miesięcy = 6 civY przy CIV_TIME_SCALE 12). */
 export const WITHDRAWAL_YEARS = 0.5;
@@ -238,7 +239,7 @@ export class WithdrawalSystem {
     let total = 0;
     for (const col of cm.getAllColonies()) {
       const owner = bodyOwnerOf(col?.planetId);
-      const tiles = col?.grid?.toArray?.() ?? [];
+      const tiles = tileGraphOf(col?.grid)?.tiles() ?? [];
       if (!owner || tiles.length === 0) continue;
       const others = new Set();
       for (const tile of tiles) {

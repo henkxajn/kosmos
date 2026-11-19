@@ -23,6 +23,7 @@ import { ARCHETYPES } from '../data/EmpireData.js';
 import { POP_CONSUMPTION } from '../data/ResourcesData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
+import { tileGraphOf, parseTileKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import {
   INDUSTRIALIST_TARGETS,
@@ -623,7 +624,7 @@ export class ColonyAutoExpander {
     // enforceHard=true → filtruj do hardTerrains; false → bez filtra (fallback).
     const pick = (enforceHard) => {
       let best = null, bestScore = -Infinity;
-      grid.forEach(tile => {
+      tileGraphOf(grid).forEachTile(tile => {
         if (tile.buildingId || tile.capitalBase || tile.underConstruction || tile.pendingBuild) return;
         if (this._isTileBlacklisted(colony, tile.key, civYear)) return;  // Y3: tile [fail]
         const terrain = TERRAIN_TYPES[tile.type];
@@ -745,7 +746,7 @@ export class ColonyAutoExpander {
     if (!grid || typeof grid.forEach !== 'function') return 'no_candidate';
 
     let candidate = null;
-    grid.forEach(tile => {
+    tileGraphOf(grid).forEachTile(tile => {
       if (candidate) return;
       if (tile.buildingId !== buildingId) return;
       if (tile.underConstruction || tile.pendingBuild) return;
@@ -890,8 +891,9 @@ export class ColonyAutoExpander {
   _tileByKey(colony, tileKey) {
     const grid = colony.buildingSystem?._grid;
     if (!grid || typeof grid.forEach !== 'function') return null;
+    const graph = tileGraphOf(grid);
     let found = null;
-    grid.forEach(t => { if (!found && t.key === tileKey) found = t; });
+    graph.forEachTile(t => { if (!found && graph.idOf(t) === tileKey) found = t; });
     return found;
   }
 
@@ -912,8 +914,9 @@ export class ColonyAutoExpander {
     const grid = bSys?._grid;
     if (!grid || typeof grid.forEach !== 'function') return;
 
+    const graph = tileGraphOf(grid);
     // 1) Reset stanu budynków. NIE ruszamy tile.type/anomalyEffect (generacja mapy).
-    grid.forEach(tile => {
+    graph.forEachTile(tile => {
       tile.buildingId = null; tile.buildingLevel = 1;
       tile.capitalBase = false; tile.underConstruction = null; tile.pendingBuild = null;
     });
@@ -923,14 +926,13 @@ export class ColonyAutoExpander {
     //    ustaw TYLKO capitalBase i continue (NIE stempluj buildingId), inaczej po
     //    resecie _findFreeTile zabudowałby hex stolicy. Wzorzec: _syncTileBuildings:462-466.
     for (const [key, entry] of bSys._active) {
-      if (key.startsWith('capital_')) {
-        const [cq, cr] = key.slice(8).split(',').map(Number);
-        const ct = grid.get(cq, cr);
+      const parsed = parseTileKey(key);
+      if (parsed.prefix === 'capital_') {
+        const ct = graph.tile(parsed.id);
         if (ct) ct.capitalBase = true;
         continue;
       }
-      const [q, r] = key.split(',').map(Number);
-      const t = grid.get(q, r);
+      const t = graph.tile(key);
       if (t) {
         t.buildingId    = entry.building?.id ?? entry.buildingId;
         t.buildingLevel = entry.level ?? 1;
@@ -940,8 +942,7 @@ export class ColonyAutoExpander {
     // 3) Budowa w toku → underConstruction (tylko żywe wpisy construction queue).
     if (bSys._constructionQueue) {
       for (const [key, constr] of bSys._constructionQueue) {
-        const [q, r] = key.split(',').map(Number);
-        const t = grid.get(q, r);
+        const t = graph.tile(key);
         if (t) t.underConstruction = constr;
       }
     }
@@ -949,8 +950,7 @@ export class ColonyAutoExpander {
     // 4) Oczekujące (brak surowców/POP) → pendingBuild.
     if (bSys._pendingQueue) {
       for (const [key, order] of bSys._pendingQueue) {
-        const [q, r] = key.split(',').map(Number);
-        const t = grid.get(q, r);
+        const t = graph.tile(key);
         if (t) t.pendingBuild = order.buildingId ?? order.building?.id;
       }
     }

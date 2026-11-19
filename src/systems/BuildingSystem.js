@@ -25,6 +25,7 @@ import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES, evaluatePlacement }  from '../map/HexTile.js';
 import { TECHS }          from '../data/TechData.js';
 import { HexGrid }        from '../map/HexGrid.js';
+import { tileGraphOf, parseTileKey, formatTileKey, isCapitalKey, CAPITAL_PREFIX, BUILDING_PREFIX } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
 import { DepositSystem }    from '../systems/DepositSystem.js';
 import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
@@ -274,7 +275,7 @@ export class BuildingSystem {
   _countOutpostBuildings() {
     let count = 0;
     for (const [key, entry] of this._active) {
-      if (key.startsWith('capital_')) continue;
+      if (isCapitalKey(key)) continue;
       if (entry.building.isSpaceport) continue;
       count++;
     }
@@ -355,8 +356,7 @@ export class BuildingSystem {
    *  broni przed nadmiarem (downgrade trimuje droidy, ale odczyt zabezpiecza się dodatkowo). */
   _tileDroidCount(entry, tileKey) {
     if (!entry || !this._grid) return 0;
-    const [q, r] = tileKey.split(',').map(Number);
-    const slot = this._grid.get(q, r)?.syntheticSlot;
+    const slot = tileGraphOf(this._grid).tile(tileKey)?.syntheticSlot;
     if (!slot) return 0;
     return Math.min(slot.count ?? 0, (entry.jobs ?? 0) * (entry.level ?? 1));
   }
@@ -366,7 +366,7 @@ export class BuildingSystem {
   countInstalledSynthetics(commodityId = null) {
     if (!this._grid) return 0;
     let n = 0;
-    this._grid.forEach(tile => {
+    tileGraphOf(this._grid).forEachTile(tile => {
       const slot = tile?.syntheticSlot;
       if (slot && (commodityId == null || slot.commodityId === commodityId)) n += (slot.count ?? 0);
     });
@@ -474,8 +474,7 @@ export class BuildingSystem {
     if (!entry) return { ok: false, reason: 'no_building', count: 0, jobs: 0 };
     if (entry.building?.isAutonomous || (entry.jobs ?? 0) === 0) return { ok: false, reason: 'autonomous_building', count: 0, jobs: 0 };
     const jobs = (entry.jobs ?? 0) * (entry.level ?? 1);
-    const [q, r] = tileKey.split(',').map(Number);
-    const slot = this._grid?.get(q, r)?.syntheticSlot;
+    const slot = tileGraphOf(this._grid)?.tile(tileKey)?.syntheticSlot;
     const count = Math.min(slot?.count ?? 0, jobs);
     const popType = entry.building.popType ?? 'laborer';
     if (count >= jobs) return { ok: false, reason: 'building_full', count, jobs };
@@ -521,8 +520,7 @@ export class BuildingSystem {
     }
 
     // Sprawdź tile
-    const [q, r] = tileKey.split(',').map(Number);
-    const tile = this._grid?.get(q, r);
+    const tile = tileGraphOf(this._grid)?.tile(tileKey);
     if (!tile) return { success: false, reason: 'no_tile' };
 
     // Droid-per-job: 1 droid = 1 etat. Budynek pomieści do jobs×level droidów.
@@ -578,8 +576,7 @@ export class BuildingSystem {
    * downgrade-trim (`_upgrade` Lv−) DALEJ NISZCZĄ (destrukcja budynku). Flag OFF = niszczenie (Faza 4).
    */
   removeSynthetic(tileKey) {
-    const [q, r] = tileKey.split(',').map(Number);
-    const tile = this._grid?.get(q, r);
+    const tile = tileGraphOf(this._grid)?.tile(tileKey);
     if (!tile?.syntheticSlot) return { success: false, reason: 'no_synthetic' };
 
     const slot = tile.syntheticSlot;
@@ -660,8 +657,7 @@ export class BuildingSystem {
       return { success: false, installed: 0, shortfall: 0, reason: 'nothing_to_autonomize' };
     }
     const jobs = (entry.jobs ?? 0) * (entry.level ?? 1);
-    const [q, r] = tileKey.split(',').map(Number);
-    const installed0 = this._grid?.get(q, r)?.syntheticSlot?.count ?? 0;
+    const installed0 = tileGraphOf(this._grid)?.tile(tileKey)?.syntheticSlot?.count ?? 0;
     const openSlots = jobs - installed0;
     if (openSlots <= 0) return { success: false, installed: 0, shortfall: 0, reason: 'already_autonomous' };
 
@@ -736,8 +732,7 @@ export class BuildingSystem {
   getDemolishDroidLoss(tileKey) {
     const entry = this._active.get(tileKey);
     if (!entry) return 0;
-    const [q, r] = tileKey.split(',').map(Number);
-    const slot = this._grid?.get(q, r)?.syntheticSlot;
+    const slot = tileGraphOf(this._grid)?.tile(tileKey)?.syntheticSlot;
     if (!slot) return 0;
     const level = entry.level ?? 1;
     const jobs  = entry.building?.jobs ?? 0;
@@ -755,12 +750,12 @@ export class BuildingSystem {
     const level = 1;
     // Zbuduj minimalny tile-like obiekt do obliczenia stawek
     // Pobierz prawdziwy tile z gridu (dla anomalyEffect) lub fallback
-    const realTile = this._grid?.get(...tileKey.split(',').map(Number));
+    const realTile = tileGraphOf(this._grid)?.tile(tileKey);
     const tileLike = realTile ?? { r: tileR, type: tileType, key: tileKey, anomalyEffect: null };
 
     const baseRates  = this._calcBaseRates(building, tileLike, level);
-    const activeKey  = isCapital ? `capital_${tileKey}` : tileKey;
-    const producerId = isCapital ? `capital_${tileKey}` : `building_${tileKey}`;
+    const activeKey  = isCapital ? formatTileKey(tileKey, CAPITAL_PREFIX) : tileKey;
+    const producerId = isCapital ? formatTileKey(tileKey, CAPITAL_PREFIX) : formatTileKey(tileKey, BUILDING_PREFIX);
     const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);  // oryginał (serialize compat)
     const jobs    = this._isOutpost ? 0 : (building.jobs ?? 0);                     // Population 2.0: etaty (×4)
 
@@ -1196,7 +1191,7 @@ export class BuildingSystem {
     entry.baseRates = this._calcBaseRates(building, tile, nextLevel);
     entry.effectiveRates = this._applyTechMultipliers(entry.baseRates, building, tile.key);
 
-    const producerId = `building_${tile.key}`;
+    const producerId = formatTileKey(tile.key, BUILDING_PREFIX);
     if (hasKeys(entry.effectiveRates) && this.resourceSystem) {
       this.resourceSystem.registerProducer(producerId, entry.effectiveRates);
     } else if (this.resourceSystem) {
@@ -1365,7 +1360,7 @@ export class BuildingSystem {
       entry.baseRates = this._calcBaseRates(building, tile, newLevel);
       entry.effectiveRates = this._applyTechMultipliers(entry.baseRates, building, tile.key);
 
-      const producerId = `building_${tile.key}`;
+      const producerId = formatTileKey(tile.key, BUILDING_PREFIX);
       if (hasKeys(entry.effectiveRates) && this.resourceSystem) {
         this.resourceSystem.registerProducer(producerId, entry.effectiveRates);
       }
@@ -1401,7 +1396,7 @@ export class BuildingSystem {
 
     // Usuń producenta (bezpośrednio)
     if (this.resourceSystem) {
-      this.resourceSystem.removeProducer(`building_${tile.key}`);
+      this.resourceSystem.removeProducer(formatTileKey(tile.key, BUILDING_PREFIX));
     }
 
     // Housing (bezpośrednio)
@@ -1581,8 +1576,7 @@ export class BuildingSystem {
     const entry = this._constructionQueue.get(tileKey);
     if (!entry) return;
     // Znajdź tile w gridzie
-    const [q, r] = tileKey.split(',').map(Number);
-    const tile = this._grid?.get(q, r);
+    const tile = tileGraphOf(this._grid)?.tile(tileKey);
     if (tile) {
       // Deleguj do _demolish — obsłuży zwrot kosztów i czyszczenie
       this._demolish(tile);
@@ -1621,7 +1615,7 @@ export class BuildingSystem {
     // fallback w ColonyOverlay._getGrid) — bez tego guardu powstałyby dwie.
     if (building.isCapital) {
       for (const key of this._active.keys()) {
-        if (key.startsWith('capital_')) return false;
+        if (isCapitalKey(key)) return false;
       }
     }
 
@@ -1664,13 +1658,13 @@ export class BuildingSystem {
     let placedTile = null;
     if (preferred) {
       let bestScore = -Infinity;
-      grid.forEach(tile => {
+      tileGraphOf(grid).forEachTile(tile => {
         if (!isFreeHex(tile)) return;
         if (!preferred.includes(tile.type)) return;
         const score = polarPenalty(tile.r);
         if (score > bestScore) {
           bestScore  = score;
-          placedKey  = tile.key ?? `${tile.q},${tile.r}`;
+          placedKey  = tileGraphOf(grid).idOf(tile);
           placedTile = tile;
         }
       });
@@ -1683,7 +1677,7 @@ export class BuildingSystem {
     if (!placedTile) {
       const pick = (enforceHard) => {
         let best = null, bestKey = null, bestScore = -Infinity;
-        grid.forEach(tile => {
+        tileGraphOf(grid).forEachTile(tile => {
           if (!isFreeHex(tile)) return;
           if (enforceHard && hardTerrains && !hardTerrains.includes(tile.type)) return;
           let score = 0;
@@ -1692,7 +1686,7 @@ export class BuildingSystem {
           if (score > bestScore) {
             bestScore = score;
             best      = tile;
-            bestKey   = tile.key ?? `${tile.q},${tile.r}`;
+            bestKey   = tileGraphOf(grid).idOf(tile);
           }
         });
         return { best, bestKey };
@@ -1751,8 +1745,9 @@ export class BuildingSystem {
       const baseRates      = b.baseRates || b.effectiveRates || {};
       const effectiveRates = this._applyTechMultipliers(baseRates, building);
 
-      const activeKey  = isCapital ? (b.tileKey.startsWith('capital_') ? b.tileKey : `capital_${b.tileKey}`) : b.tileKey;
-      const producerId = isCapital ? `capital_${b.tileKey.replace('capital_', '')}` : `building_${b.tileKey}`;
+      const bk = parseTileKey(b.tileKey);
+      const activeKey  = isCapital ? (bk.prefix === CAPITAL_PREFIX ? b.tileKey : formatTileKey(b.tileKey, CAPITAL_PREFIX)) : b.tileKey;
+      const producerId = isCapital ? formatTileKey((bk.prefix === CAPITAL_PREFIX ? bk.id : b.tileKey), CAPITAL_PREFIX) : formatTileKey(b.tileKey, BUILDING_PREFIX);
       const popCost    = this._isOutpost ? 0 : (b.popCost ?? building.popCost ?? POP_PER_BUILDING);  // oryginał (compat)
       const jobs       = this._isOutpost ? 0 : (building.jobs ?? 0);  // Population 2.0: z żywej definicji (stare+nowe save → ×4)
       const housing    = b.housing || 0;
@@ -1800,7 +1795,7 @@ export class BuildingSystem {
   }
 
   restoreFromGrid(grid) {
-    grid.forEach(tile => {
+    tileGraphOf(grid).forEachTile(tile => {
       if (!tile.buildingId) return;  // pomiń puste i underConstruction-only
       const building = BUILDINGS[tile.buildingId];
       if (!building) return;
@@ -1808,7 +1803,7 @@ export class BuildingSystem {
       const level = tile.buildingLevel ?? 1;
       const baseRates      = this._calcBaseRates(building, tile, level);
       const effectiveRates = this._applyTechMultipliers(baseRates, building);
-      const producerId     = `building_${tile.key}`;
+      const producerId     = formatTileKey(tile.key, BUILDING_PREFIX);
 
       if (hasKeys(effectiveRates) && this.resourceSystem) {
         this.resourceSystem.registerProducer(producerId, effectiveRates);
@@ -1959,7 +1954,7 @@ export class BuildingSystem {
   _isOwnTile(tile) {
     const grid = this._grid;
     if (!grid || typeof grid.get !== 'function') return true;   // fail-open — patrz komentarz wyżej
-    return grid.get(tile?.q, tile?.r) === tile;
+    return tileGraphOf(grid).tile(tile) === tile;
   }
 
   /**
@@ -2135,15 +2130,12 @@ export class BuildingSystem {
     const adjMult = this.techSystem?.getAdjacencyMultiplier() ?? 0;
     if (adjMult === 0 || !this._grid) return 1.0;
 
-    const parts = tileKey.split(',');
-    const q = parseInt(parts[0], 10);
-    const r = parseInt(parts[1], 10);
-    if (isNaN(q) || isNaN(r)) return 1.0;
-
-    const neighbors = this._grid.getNeighbors(q, r);
+    // Klucz z prefiksem ('capital_…') / niepoprawny → brak pola → brak sąsiadów (dawny strażnik isNaN).
+    const graph = tileGraphOf(this._grid);
+    const neighbors = graph.neighbors(tileKey);
     let count = 0;
     for (const nb of neighbors) {
-      const nbKey = `${nb.q},${nb.r}`;
+      const nbKey = graph.idOf(nb);
       const nbEntry = this._active.get(nbKey);
       if (nbEntry && nbEntry.building.category === building.category) {
         count++;
@@ -2157,20 +2149,17 @@ export class BuildingSystem {
    */
   _reapplyNeighborRates(tileKey) {
     if (!this._grid) return;
-    const parts = tileKey.split(',');
-    const q = parseInt(parts[0], 10);
-    const r = parseInt(parts[1], 10);
-    if (isNaN(q) || isNaN(r)) return;
-
-    const neighbors = this._grid.getNeighbors(q, r);
+    // Klucz z prefiksem / niepoprawny → brak sąsiadów (dawny strażnik isNaN).
+    const graph = tileGraphOf(this._grid);
+    const neighbors = graph.neighbors(tileKey);
     for (const nb of neighbors) {
-      const nbKey = `${nb.q},${nb.r}`;
+      const nbKey = graph.idOf(nb);
       const entry = this._active.get(nbKey);
       if (!entry) continue;
       const newEffective = this._applyTechMultipliers(entry.baseRates, entry.building, nbKey);
       entry.effectiveRates = newEffective;
       if (hasKeys(newEffective) && this.resourceSystem) {
-        const pid = entry.producerId ?? `building_${nbKey}`;
+        const pid = entry.producerId ?? formatTileKey(nbKey, BUILDING_PREFIX);
         this.resourceSystem.registerProducer(pid, newEffective);
       }
     }
@@ -2180,7 +2169,7 @@ export class BuildingSystem {
   /** Rozwiąż przekazany tileKey na klucz w _active (obsługuje prefiks capital_). null gdy brak budynku. */
   _resolveActiveKey(tileKey) {
     if (this._active.has(tileKey)) return tileKey;
-    const cap = `capital_${tileKey}`;
+    const cap = formatTileKey(tileKey, CAPITAL_PREFIX);
     if (this._active.has(cap)) return cap;
     return null;
   }
@@ -2211,7 +2200,7 @@ export class BuildingSystem {
       for (const activeKey of keys) {
         const entry = this._active.get(activeKey);
         const J = (entry.jobs ?? 0) * (entry.level ?? 1);
-        const plain = activeKey.startsWith('capital_') ? activeKey.slice(8) : activeKey;
+        const plain = isCapitalKey(activeKey) ? parseTileKey(activeKey).id : activeKey;
         const D = this._tileDroidCount(entry, plain);
         const humanCap = Math.max(0, J - D);
         const assigned = Math.min(humanCap, remaining);
@@ -2232,7 +2221,7 @@ export class BuildingSystem {
       const b = entry.building;
       if (!b || (b.popType ?? 'laborer') !== strataType || b.isAutonomous || (entry.jobs ?? 0) === 0) continue;
       const J = (entry.jobs ?? 0) * (entry.level ?? 1);
-      const plain = activeKey.startsWith('capital_') ? activeKey.slice(8) : activeKey;
+      const plain = isCapitalKey(activeKey) ? parseTileKey(activeKey).id : activeKey;
       sum += Math.max(0, J - this._tileDroidCount(entry, plain));
     }
     return sum;
@@ -2351,8 +2340,7 @@ export class BuildingSystem {
     // = ×tier, pół-droid = pół bonusu (zgodne z 1+(eff−1)×D/J przy pełnej obsadzie ludzi), a
     // niedobsadzona ludzka reszta poprawnie ciągnie wynik w dół (D2 „understaffed-safe").
     if (tileKey && this._grid) {
-      const [q, r] = tileKey.split(',').map(Number);
-      const slot  = this._grid.get(q, r)?.syntheticSlot;
+      const slot  = tileGraphOf(this._grid).tile(tileKey)?.syntheticSlot;
       const entry = this._active.get(tileKey);
       const J = (building.jobs ?? 0) * (entry?.level ?? 1);
       const D = Math.min(slot?.count ?? 0, J);
@@ -2375,8 +2363,7 @@ export class BuildingSystem {
     // baseRates (budynek bez własnych stawek też obciąża energię przez droidy). Doliczany niżej.
     let synthUpkeep = 0;
     if (tileKey && this._grid) {
-      const [sq, sr] = tileKey.split(',').map(Number);
-      const slot = this._grid.get(sq, sr)?.syntheticSlot;
+      const slot = tileGraphOf(this._grid).tile(tileKey)?.syntheticSlot;
       if (slot) {
         const entry = this._active.get(tileKey);
         const J = (building?.jobs ?? 0) * (entry?.level ?? 1);
@@ -2453,9 +2440,9 @@ export class BuildingSystem {
     this._greedyStaffCache = null;   // Slice 5C.2: unieważnij memo greedy-fill (obsada mogła się zmienić)
     for (const [activeKey, entry] of this._active) {
       // Przelicz baseRates z tile (uwzględnia anomalyEffect)
-      const tileKey = activeKey.startsWith('capital_') ? activeKey.replace('capital_', '') : activeKey;
-      const parts = tileKey.split(',');
-      const tile = this._grid?.get(parseInt(parts[0], 10), parseInt(parts[1], 10));
+      const { prefix, id } = parseTileKey(activeKey);
+      const tileKey = prefix === 'capital_' ? id : activeKey;
+      const tile = tileGraphOf(this._grid)?.tile(tileKey);
       if (tile && entry.building) {
         const level = entry.level ?? 1;
         entry.baseRates = this._calcBaseRates(entry.building, tile, level);
@@ -2465,7 +2452,7 @@ export class BuildingSystem {
       entry.effectiveRates = newEffective;
 
       if (this.resourceSystem) {
-        const pid = entry.producerId ?? (activeKey.startsWith('capital_') ? activeKey : `building_${activeKey}`);
+        const pid = entry.producerId ?? (isCapitalKey(activeKey) ? activeKey : formatTileKey(activeKey, BUILDING_PREFIX));
         // Puste stawki (np. fabryka OFFLINE = zero energii/utrzymania) → wyrejestruj,
         // inaczej zostałby STARY producent z poprzednimi (pobierającymi) stawkami.
         if (hasKeys(newEffective)) this.resourceSystem.registerProducer(pid, newEffective);

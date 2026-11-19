@@ -20,6 +20,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
+import { tileGraphOf, samePos, DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { UNIT_ARCHETYPES, isDefensiveUnit, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
 import { groundOwnersHostile } from '../utils/WarGate.js';   // R1 (G2-4) — bez wojny nie ma bitwy
@@ -122,7 +123,7 @@ export class CombatSystem {
 
     for (const { planetId, q, r } of contested) {
       // Separator `|` (nie `_`) — planetId może zawierać `_` (np. "p_3"), co psuło split
-      const key = `${planetId}|${q}|${r}`;
+      const key = `${planetId}|${q}|${r}`;   // CS-5: format klucza (id pola) — migracja kluczy, nie geometria
       seenKeys.add(key);
       this._runBattleRound(planetId, q, r, key);
     }
@@ -173,7 +174,7 @@ export class CombatSystem {
     for (const u of gum._units.values()) {
       if (u.hp <= 0) continue;
       if (u.status === 'offline' || u.status === 'in_cargo') continue;
-      const key = `${u.planetId}|${u.q}|${u.r}`;
+      const key = `${u.planetId}|${u.q}|${u.r}`;   // CS-5: format klucza (id pola) — migracja kluczy, nie geometria
       if (!groups.has(key)) groups.set(key, new Set());
       groups.get(key).add(u.owner ?? 'player');
     }
@@ -418,8 +419,8 @@ export class CombatSystem {
       if (u.hp <= 0) continue;
       if (u.status === 'offline' || u.status === 'moving' || u.status === 'in_cargo') continue;
       if (!u.supportTarget) continue;
-      if (u.supportTarget.q !== q || u.supportTarget.r !== r) continue;
-      const dist = this._hexDist(u.q, u.r, q, r);
+      if (!samePos(u.supportTarget, { q, r })) continue;
+      const dist = (tileGraphOf(gum._getGrid?.(planetId)) ?? DETACHED_FLAT_GRAPH).distance(u, { q, r });
       const range = u.range ?? 1;
       if (dist > range) { u.supportTarget = null; continue; }  // wyszło z zasięgu
       // Nie support jeśli sam na contested hex
@@ -444,17 +445,13 @@ export class CombatSystem {
   _tryRetreat(gum, unit) {
     const grid = gum._getGrid?.(unit.planetId);
     if (!grid) return;
-    // Znajdź sąsiedni hex bez wrogów
-    const HEX_DIRS = [
-      { q: +1, r:  0 }, { q: +1, r: -1 }, { q:  0, r: -1 },
-      { q: -1, r:  0 }, { q: -1, r: +1 }, { q:  0, r: +1 },
-    ];
+    // Znajdź sąsiedni hex bez wrogów. CS-2: odwrót nie przechodzi przez szew mapy (crossSeam: false) —
+    //   reguła geometrii do decyzji przy kuli; tu bez zmian (kolejność kierunków jak dotąd).
     let best = null;
-    for (const d of HEX_DIRS) {
-      const nq = unit.q + d.q;
-      const nr = unit.r + d.r;
-      const tile = grid.get(nq, nr);
-      if (!tile || tile.type === 'ocean') continue;
+    for (const tile of tileGraphOf(grid).neighbors(unit, { crossSeam: false })) {
+      const nq = tile.q;
+      const nr = tile.r;
+      if (tile.type === 'ocean') continue;
       const occupants = gum.getUnitsAtHex(unit.planetId, nq, nr);
       const hasEnemy = occupants.some(u => groundOwnersHostile(u.owner, unit.owner));   // R1 (G2-4)
       if (hasEnemy) continue;
@@ -488,12 +485,6 @@ export class CombatSystem {
   _getTile(planetId, q, r) {
     const gum = window.KOSMOS?.groundUnitManager;
     const grid = gum?._getGrid?.(planetId);
-    return grid?.get?.(q, r) ?? null;
-  }
-
-  _hexDist(q1, r1, q2, r2) {
-    const s1 = -q1 - r1;
-    const s2 = -q2 - r2;
-    return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
+    return tileGraphOf(grid)?.tile({ q, r }) ?? null;
   }
 }

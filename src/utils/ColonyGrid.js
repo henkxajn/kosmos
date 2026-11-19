@@ -23,6 +23,7 @@
 // ⚠ Zero importów systemów (wzór `GarrisonPlanner`): `homePlanetId` z opcji, domyślnie z `window.KOSMOS` (gdy jest).
 
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { tileGraphOf, parseTileKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 /**
  * Stan budynków na kaflach siatki z rejestru budynków kolonii: kafle czyszczone, potem stolica (`capitalBase`), aktywne
@@ -33,36 +34,34 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
  */
 export function syncTileBuildings(grid, bSys) {
   if (!grid || !bSys) return;
+  const graph = tileGraphOf(grid);
   // Wyczyść stany budynków
-  grid.forEach(tile => {
+  graph.forEachTile(tile => {
     tile.buildingId = null; tile.buildingLevel = 1;
     tile.capitalBase = false; tile.underConstruction = null; tile.pendingBuild = null;
   });
   // Aktywne budynki
   for (const [tileKey, entry] of bSys._active) {
-    if (tileKey.startsWith('capital_')) {
-      const coords = tileKey.slice(8).split(',').map(Number);
-      const t = grid.get(coords[0], coords[1]);
+    const parsed = parseTileKey(tileKey);
+    if (parsed.prefix === 'capital_') {
+      const t = graph.tile(parsed.id);
       if (t) t.capitalBase = true;
       continue;
     }
-    const [q, r] = tileKey.split(',').map(Number);
-    const t = grid.get(q, r);
+    const t = graph.tile(tileKey);
     if (t) { t.buildingId = entry.building.id; t.buildingLevel = entry.level ?? 1; }
   }
   // Budowa w toku
   if (bSys._constructionQueue) {
     for (const [tileKey, constr] of bSys._constructionQueue) {
-      const [q, r] = tileKey.split(',').map(Number);
-      const t = grid.get(q, r);
+      const t = graph.tile(tileKey);
       if (t) t.underConstruction = constr;
     }
   }
   // Oczekujące zamówienia (pending queue)
   if (bSys._pendingQueue) {
     for (const [tileKey, order] of bSys._pendingQueue) {
-      const [q, r] = tileKey.split(',').map(Number);
-      const t = grid.get(q, r);
+      const t = graph.tile(tileKey);
       if (t) t.pendingBuild = order.buildingId ?? order.building?.id;
     }
   }
@@ -94,7 +93,7 @@ export function ensureColonyGrid(colony, opts = {}) {
   // Domyślny owner: dla obcej kolonii → empireId/isTestEnemy, inaczej → 'player'.
   // Nie nadpisuje hexów które już mają ownera (np. po invasion).
   const defaultOwner = colony.ownerEmpireId ?? (colony.isTestEnemy ? 'enemy' : 'player');
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile && tile.owner == null) tile.owner = defaultOwner;
   }
 

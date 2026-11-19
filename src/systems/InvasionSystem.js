@@ -32,6 +32,7 @@ import { garrisonTier, readEmpireGarrisonSnapshot, invasionTroops } from '../uti
 import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 import { dropTroop } from '../entities/Vessel.js';      // AI STRIKES BACK S3 (SB52) — desant z ładunku, droga gracza
+import { tileGraphOf } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { ensureColonyGrid } from '../utils/ColonyGrid.js';   // AI STRIKES BACK S4/2 (SB87, Finding 55) — siatka leniwie
 
 const CAPTURE_GRACE_YEARS = 3.0;
@@ -473,7 +474,7 @@ export class InvasionSystem {
     if (InvasionSystem.hasLivingDefender(gum.getUnitsOnPlanet(planetId), 'player')) return false;
 
     // Warunek terenowy — JEDEN predykat dla obu kierunków (D2=W2, AC-6).
-    if (!InvasionSystem.holdsDecisiveGround(colony.grid?.toArray?.(), 'player')) return false;
+    if (!InvasionSystem.holdsDecisiveGround(tileGraphOf(colony.grid)?.tiles(), 'player')) return false;
 
     return colMgr.captureColonyForPlayer?.(planetId, 'ground_invasion') === true;
   }
@@ -584,7 +585,7 @@ export class InvasionSystem {
       //   Kampania nie gaśnie: bez wojny tylko nie przejmuje (wycofanie po pokoju to D14, G2-4).
       if (warGateRefusal(inv.aggressor, inv.planetId)) continue;
 
-      if (InvasionSystem.holdsDecisiveGround(grid.toArray(), inv.aggressor)
+      if (InvasionSystem.holdsDecisiveGround(tileGraphOf(grid).tiles(), inv.aggressor)
           && !InvasionSystem.hasLivingDefender(units, inv.aggressor)) {
         this._captureColony(inv);
       }
@@ -616,7 +617,7 @@ export class InvasionSystem {
     const edgeHexes = [];
     const fallback = [];
     const gum = window.KOSMOS?.groundUnitManager;
-    const allTiles = grid.toArray();  // HexGrid.toArray() — pełna lista
+    const allTiles = tileGraphOf(grid).tiles();  // pełna lista, kolejność iteracji grafu
 
     for (const tile of allTiles) {
       if (!tile) continue;
@@ -638,6 +639,7 @@ export class InvasionSystem {
     return pool;
   }
 
+  // CS-2: „mniej niż 6 sąsiadów” = brzeg płaskiej mapy → TileGraph.isLandingEdge (D-CS-9); tu bez zmian.
   _isEdgeHex(grid, tile) {
     // Brzegowe hexy mają mniej niż 6 sąsiadów (pierwsza/ostatnia row, brzeg mapy).
     const neighbors = grid.getNeighbors ? grid.getNeighbors(tile.q, tile.r) : [];

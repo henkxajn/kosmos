@@ -26,6 +26,7 @@ import { TechSystem } from './TechSystem.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import { isStandableTile } from '../data/GroundUnitData.js';
 import { stampUnownedTiles } from '../utils/TileOwnership.js';
+import { tileGraphOf } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { DepositSystem } from './DepositSystem.js';
@@ -754,7 +755,8 @@ export class EmpireColonyBootstrap {
     // Scan hexów; enforceAiHard=true → wymuś aiHard; false → fallback (bez filtra).
     const scan = (enforceAiHard) => {
       let best = null, bestK = null, bestS = -Infinity;
-      grid.forEach(tile => {
+      const graph = tileGraphOf(grid);
+      graph.forEachTile(tile => {
         // Hard constraints — skip niedostępne / niezgodne
         if (tile.buildingId) return;
         if (tile.capitalBase) return;
@@ -780,7 +782,7 @@ export class EmpireColonyBootstrap {
 
         // Adjacency bonus z budynkami tej samej kategorii (HexGrid.getNeighbors(q, r))
         if (category && typeof grid.getNeighbors === 'function') {
-          const neighbors = grid.getNeighbors(tile.q, tile.r);
+          const neighbors = graph.neighbors(tile);
           const sameCount = neighbors.reduce((acc, n) => {
             if (!n?.buildingId) return acc;
             const nBuilding = BUILDINGS[n.buildingId];
@@ -796,7 +798,7 @@ export class EmpireColonyBootstrap {
         if (score > bestS) {
           bestS = score;
           best  = tile;
-          bestK = tile.key ?? `${tile.q},${tile.r}`;
+          bestK = graph.idOf(tile);
         }
       });
       return { best, bestK };
@@ -833,7 +835,7 @@ export class EmpireColonyBootstrap {
   /** Fallback gdy grid nie eksponuje wymiarów — wnioskuj z max tile.r */
   static _inferRows(grid) {
     let maxR = 0;
-    grid.forEach(t => { if (t.r > maxR) maxR = t.r; });
+    tileGraphOf(grid).forEachTile(t => { if (t.r > maxR) maxR = t.r; });   // CS-2: _inferRows znika (latitudeBand)
     return maxR + 1;
   }
 }

@@ -86,6 +86,7 @@ const REFUEL_RATES = {
   fuel:       3,    // jednostek/rok (zastępuje power_cells + plasma_cores — spłaszczenie 3→2)
   warp_cores: 2.0,  // jednostek/rok (4× vs bazowe 0.5 — szybkie tankowanie baku warp)
 };
+import { tileGraphOf } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { systemScaleOf, systemScaleOfEntity, systemScaleOfStar, activeSystemScale } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 export class VesselManager {
@@ -1554,7 +1555,7 @@ export class VesselManager {
     if (!grid) { this._refuseFullScan(vessel); return; }
 
     let detectedCount = 0;
-    grid.forEach(tile => {
+    tileGraphOf(grid).forEachTile(tile => {
       if (!tile.anomaly) return;
       if (!tile.anomalyDetected) {
         tile.anomalyDetected = true;

@@ -11,6 +11,7 @@
 
 import { ANOMALIES } from '../data/AnomalyData.js';
 import EventBus from '../core/EventBus.js';
+import { tileGraphOf } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 
 // Typy efektów zapisywane na tile (NIE stosowane natychmiast)
 const TILE_EFFECT_TYPES = new Set([
@@ -121,8 +122,7 @@ export class AnomalyEffectSystem {
     const grid   = colony?.grid;
     if (!grid) return;
 
-    const [q, r] = tileKey.split(',').map(Number);
-    const tile = grid.get(q, r);
+    const tile = tileGraphOf(grid).tile(tileKey);
     if (!tile) return;
 
     tile.anomalyEffect = { ...effect };
