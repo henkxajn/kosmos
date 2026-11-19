@@ -669,8 +669,8 @@ parameters remain the truth; the seed only drives the surface.**
 | **761** | ⚪ | Dead biome-PNG terrain overwrite: `_loadBiomeMap` requests `_biome.png` files that do not exist (`ColonyOverlay.js:5685-5767` ✔; 0 of 216 files ✔). A 404 on every colony open. Removed in CS-Z. |
 | **762** | ⚪ | The `force_fields` ocean unlock is unreachable (`TechData.js:1037` ✔): `evaluatePlacement` rejects `buildable:false` before it reads unlocks (`HexTile.js:179` ✔). |
 | **763** | ⚪ | Moon/planetoid anomaly caps are dead: `getEffectivePlanetType` never returns `moon`/`planetoid` (`EntityUtils.js:7-13` vs `PlanetMapGenerator.js:433-435`). Polar and anomaly eligibility read raw `planetType`, undefined for moons and planetoids (`PlanetMapGenerator.js:358`, `AnomalyData.js:463`). |
-| **764** | ⚪ | `ActionCatalog` reads tiles via the non-existent `grid.getByKey` / `grid._map` (`src/testing/actions/ActionCatalog.js:112,131` ✔), so the tile is always `undefined` (test tooling). |
-| **765** | ⚪ | `ColonyOverlay._hexDist` is defined twice (`:738`, `:2921` ✔); the later one silently wins. |
+| **764** | ✅ CS-1b | `ActionCatalog` reads tiles via the non-existent `grid.getByKey` / `grid._map` (`src/testing/actions/ActionCatalog.js:112,131` ✔), so the tile is always `undefined` (test tooling). |
+| **765** | ✅ CS-1b | `ColonyOverlay._hexDist` is defined twice (`:738`, `:2921` ✔); the later one silently wins. |
 | **766** | ⚪ | `AI_TERRAIN_RULES` lists the non-existent terrain `industrial_zones` (`src/data/ai/AiTerrainRules.js:25-26` ✔). An audit pass also reports AI non-capital placement allowed on ocean (`EmpireColonyBootstrap.js:743-747`, not re-read). |
 | **767** | ⚪ | Cross-system colonize excludes moons, in-system allows them (`VesselManager.js:3698-3700` vs `MissionSystem.js:209-212`). |
 | **V-279** | ⚪ | Globe bump thresholds off by one biome id (`PlanetShader.js:254-255` ✔ vs `BiomeMapGenerator.js:16-27` ✔). Superseded by the new surface shader. |
@@ -2945,6 +2945,59 @@ ColonyManager.
 - 11 mutations, all red. **Probe weakness:** M1 (neighbour order), M2 (distance), M6 (seam), M7 (ring), M8 (`building_`
   prefix) leave the trace unchanged — they are covered by the keeper only.
 - Sweep 438/438, 0 FAIL, 31 advisories (same as HEAD); `check-i18n` PASS. Owner smoke 2026-11-19 PASS.
+
+### 3.11 CS-1b — remaining TileGraph sites (UI, renderer, test tooling) + Findings 764, 765 (2026-11-19; owner smoke PASS)
+
+Pure refactor except the #764 test-tooling fix; no flag, no save change, no critical file touched (`HexGrid.js`,
+`TileGraph.js`, `GameConfig.js`, `SaveMigration.js` unchanged).
+
+**Sites moved:**
+
+| File | Moved |
+|---|---|
+| ColonyOverlay | capital checks ×3 → `isCapitalKey`; 4 distances → `graph.distance` via new `_graphFor(planetId)`; `grid.get` ×6 → `graph.tile`; tile keys ×8 → `graph.idOf`; supply-overlay key parse → `graph.tile(key)`; position equality ×3 → `samePos`; 6 "(q,r)" texts → `idOf` (identical text) |
+| GameScene | debug `energyChain` producer key + key parse; starter / power-test placement `toArray` ×3 → `tiles()` |
+| PlanetGlobeRenderer | keys ×4 → `idOf`; build-mode highlight iteration → `forEachTile` |
+| BattleGroupPanel, EconomyOverlay | unit position → `idOf`; producer key → `parseTileKey` + prefix constants |
+| PlanetMapGenerator | iterations ×5, `filter` ×3, Voronoi distance, smoothing + desert neighbours |
+| SpawnTestEnemy, CombatSandbox | iterations, `building_` keys, BFS over `HEX_DIRECTIONS` → `neighbors({crossSeam:false})`, unused import removed |
+| Test tooling | ActionCatalog, ScriptedBot (#764), RuleBot, GameCore, Pop/Resource/Price/RoiTelemetry |
+
+**Remaining raw-hex hits (reason):** ColonyOverlay 2D-map geometry (4 iterations in `_findBestTileForCapital`,
+`_centerOnCapital`, `_drawMap`, `_applyBiomeMap` #761; 2 `grid.get` by edge direction + `HEX_DIRECTIONS`; latitude label
+= CS-2; `_screenToTile`) → replaced in CS-7/CS-8. PlanetGlobeRenderer RegionSystem legacy ×3 + UV picking ×2 → CS-7.
+Texture bake pipeline (PlanetGlobeTexture, PlanetTerrainTexture, BiomeMapGenerator, BuildingMapGenerator,
+SurfaceMarkers, ColonyBuildingMarkers) → C2, removed in CS-Z. PlanetMapGenerator polar caps by row → CS-5. CS-5
+(unit q,r fields / signatures, `// CS-5` notes): UnitCardPanel ×2 and the ColonyOverlay unit panel ×1 (spaced
+"(q, r)" ≠ id, kept for no visual change), CargoLoadModal `unit.q ?? 0`, GameScene `gum.moveUnit(q,r)`. Not tile keys:
+AI log texts (ColonyAutoExpander, EmpireColonyBootstrap), `HexTile.key` (the id definition), RegionSystem / PlanetScene
+(dead).
+
+**Finding 765 ✅** — the two `_hexDist` copies computed the same cube formula (no wrap); the later silently won. Both
+removed → `graph.distance` (= `HexGrid.distance`, keeper T1g over 427,908 pairs). No behaviour change.
+
+**Finding 764 ✅** — ActionCatalog (and the twin in ScriptedBot's `tileKey` path) read tiles via the non-existent
+`grid.getByKey` / `grid._map`; now `graph.tile(key)`. **Behaviour change (test tooling only):** fresh boot catalog
+upgrade/demolish 0/0 → 3/3; RuleBot boosted 60 cy: upgrade requests 0 → 7, Lv≥2 buildings 1 → 3, buildings 20 → 18.
+**BALANS / RuleBot harness numbers before CS-1b are not directly comparable — the next BALANS run is a new baseline.**
+
+**Finding 778 🟡 (record only, no fix):** in headless runs `tile.underConstruction` progress stays at 0 for builds and
+upgrades while `_active` flips immediately (measured: farm build and farm upgrade, 6 civ-years). Pre-existing,
+unrelated to #764. If construction time is effectively skipped headless, BALANS economy results are optimistic.
+Free finding number: 779.
+
+**Proof:**
+- `probe-cs1a-trace`: seed A 30 y trace `d3bc84c5…` / state `14ee8ac7…` (1,992 events); seed B (`KOSMOS_SEED=cs1b-seedB`,
+  60 y) trace `25ae0a1f…` / state `ea79a395…` (2,893 events) — identical to HEAD `003cb3f`; HexGrid call counts identical.
+- Keeper `colony_sphere_tilegraph_smoke` 37 → 63 PASS: T4 source pins on 18 files (exact allowed counts with reasons;
+  comment-aware scanner), T5 no duplicate methods in any `src/ui` class (#765), T6 SpawnTestEnemy BFS = frozen old BFS
+  (6,728 cases), T7 control: generator fingerprint `6ffc0c8f…` = HEAD. Fail-first at HEAD: 43 PASS / 19 FAIL.
+- New keeper `action_catalog_tile_lookup_smoke` 6/6 (fail-first 1/5; K1 control green both sides): catalog = expected
+  entries, ScriptedBot by key and q/r, effect upgrade Lv 1 → 2.
+- 10 mutations, 9 red. M7 (GameCore tile order) caught by the trace probe only. **M8 survives:** inverting the
+  capital filter in ColonyOverlay `_buildingSummary` — ColonyOverlay cannot be imported under node, so its logic is
+  covered only by source pins, helper equivalence (T1) and the owner smoke.
+- Sweep 439/439, 0 FAIL, 31 advisories (same as HEAD); `check-i18n` PASS. Owner smoke 2026-11-19 PASS.
 
 ## 4. Decisions for Filip (recommendation first)
 
