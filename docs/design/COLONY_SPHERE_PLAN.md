@@ -2999,6 +2999,126 @@ Free finding number: 779.
   covered only by source pins, helper equivalence (T1) and the owner smoke.
 - Sweep 439/439, 0 FAIL, 31 advisories (same as HEAD); `check-i18n` PASS. Owner smoke 2026-11-19 PASS.
 
+### 3.12 CS-2 — grid-geometry rules behind TileGraph + Finding 779 (2026-11-19; owner gate PASS)
+
+Refactor, bit-identical on flat **except Finding 779** (owner decision, option 1). No flag, no save-version change, no
+critical file touched (`HexGrid.js`, `GameConfig.js`, `SaveMigration.js`, `EventBus.js` unchanged; `HexGrid.getLatitudeModifier`
+stays as the oracle for keepers and the dead `PlanetScene`).
+
+**Interface as built** (`src/map/TileGraph.js`, methods of `FlatHexTileGraph` — not generic formulas, see the CS-5 note):
+- `latitudeBand(ref)` → `LATITUDE_BAND.EQUATORIAL / SUBPOLAR / POLAR` from the tile's row and the height of **its own grid**
+  (same condition order as the old `getLatitudeModifier`); ref = tile, `{q,r}` or id (band from the id, never from a stored `tileR`).
+- `equatorTile()` → first tile of row `floor(height/2)` (the old RandomEvent fallback row), `null` if none.
+- `isLandingEdge(ref)` → `neighbors(ref).length < 6` (with seam wrap = first/last row and the short polar rows).
+- `stepDirection(from, to)` → `{crossesSeam, facingLeft}`: the old GroundUnitManager pixel rule (|dx| > 0.4 × grid width at
+  hexSize 1 → teleport; facing inverted on the seam step).
+- Data: `src/data/LatitudeBands.js` (`latitudeModifierOf(band)`: production ×0.5 / ×0.7, build cost ×1.5 / ×1.25, label);
+  `AiTerrainRules.AI_POLAR_PENALTY` + `aiPolarPenalty(graph, tile)` (−5 / −2) — the one canon for the three former copies.
+
+**Sites moved:**
+
+| File | Moved |
+|---|---|
+| BuildingSystem | latitude modifier → `_latitudeModifier(tile, graph)` / `_latitudeGraph(graph)` (explicit graph → `_grid` → the colony's grid); `_gridHeight` removed; queues no longer write `tileR`, restore ignores it; polar penalty → `aiPolarPenalty` (×2); `HexGrid` import gone |
+| ColonyAutoExpander, EmpireColonyBootstrap | polar penalty → `aiPolarPenalty`; Bootstrap `_inferRows` removed; `_activateBuilding(…, null, …)` |
+| InvasionSystem | `_isEdgeHex` removed → `graph.isLandingEdge(tile)` |
+| GroundUnitManager | seam teleport + sprite facing → `graph.stepDirection(unit, nextHex)` (pixels stay for 2D interpolation only, CS-7/CS-8); `reveal_fog` cube loop left as is (event has no listener; CS-5 at its first listener) |
+| RandomEventSystem | equator fallback → `graph.equatorTile()` |
+| StrikeSquadronSystem | anchor fallback `{q:0,r:0}` → `graph.anyTile()` (= tile (0,0) on every flat grid, keeper G6a); `{q:0,r:0}` only for a body without a grid |
+| ColonyOverlay | latitude label → `latitudeModifierOf(graph.latitudeBand(tile))`; `_gridHeight` mirror gone |
+| GameScene | `gridSizes` height table (active colony after load) and 3 `_gridHeight` writes removed; new-game starter / boosted / power-test placement passes the grid's graph to `_calcBaseRates` (the grid is not yet on the colony or the BuildingSystem there) |
+| ColonyManager, ColonyGrid, MissionSystem, SpawnTestEnemy, CombatSandbox, GameCore | `_gridHeight` writes removed |
+| CombatSystem | retreat comment only (`crossSeam:false` is a graph option; no seam on a sphere) |
+
+**Finding 779 ✅ closed (fixed in CS-2; the only behaviour change of the step — the latitude band always comes from the colony's own grid; AI colonies after load now pay / produce on polar bands as in a new game).** After loading a save the latitude modifier of a
+colony came from the mirror `BuildingSystem._gridHeight`, not from its grid: the **active** colony got 10 from a planet-type
+table in `GameScene` (`rocky: 10` — the real grids are 6…20 rows), every **other** colony got 0 = modifier OFF. The mirror was
+set again only when the player opened that colony's map (`ColonyOverlay`); `ensureColonyGrid` returns early for a colony that
+already has a grid and `syncTileBuildings` sets `_grid` only — so **AI colonies (whose map the player never opens) ran without
+the modifier for the whole session after every load**, and the player's non-active colonies until their map was opened. Wrong
+rates computed in the window were stored in `baseRates` and persisted by the next save. Fix: the band always comes from the
+colony's own grid; the stale `tileR` of old saves is ignored (not recomputed — the band is derived from the tile key).
+Measured on the real engine (`probe-cs2-postload.mjs`, fixture `GATE-S4-fresh-gy60`, clock frozen before «Continue», no tick;
+one free tile per row, research_station production per year and build cost through the real `_build`):
+
+| Colony (rows) | State before CS-2 (4829bec) | Rows that differ | Before → after (production · cost) |
+|---|---|---|---|
+| Pik1, player, **active** (16) | `_gridHeight` = 10 (table) until the map is opened | r8, r9, r14, r15 of 16 | r8 equatorial: 5.6 · Si 29 Cu 12 → **8 · Si 23 Cu 9**; r9: 4 · Si 34 Cu 14 → **8 · Si 23 Cu 9**; r14 subpolar: 8 · Si 23 Cu 9 → **5.6 · Si 29 Cu 12**; r15 polar: 8 → **4** |
+| Propus b, AI (12) | `_gridHeight` = 0, `_grid` null — still after opening the player's map and after 1 game year | r0, r1, r10, r11 | polar 8 · Si 20 Cu 8 → **4 · Si 30 Cu 12**; subpolar 8 · Si 20 Cu 8 → **5.6 · Si 25 Cu 10** |
+| Regulus c, AI (16) | same | r0, r1, r14, r15 | polar 8 · Si 23 Cu 9 → **4 · Si 34 Cu 14**; subpolar → **5.6 · Si 29 Cu 12** |
+| Propus d, AI (14) | same | r0, r1, r12, r13 | as Propus b |
+| Plt-15, AI outpost (6) | same | r0, r1, r4, r5 | production 8 → **4** / **5.6** (outposts: no research_station cost) |
+
+After CS-2 every row of every measured colony equals the old rule with the **true** grid height (= a fresh game) in all three
+phases (window, after opening the map, after 1 game year); before CS-2 only the active colony after opening its map did.
+Equatorial rows are identical before and after. **No other state differs:** the save written right after load (tileR stripped)
+has 108,155 leaves identical except 2 wall-clock `eventLog.createdAt` stamps — the same 2 as a base-vs-base control run;
+2,125,661 bytes on both trees. (Without the frozen clock the rAF loop advances game time by ~3·10⁻⁵ y before the pause and
+~840 numbers drift — not comparable.) The fixture's 36 pending orders carry `tileR` but sit on rows 2–5 (equatorial) → no
+change there. AI tile choice is unaffected (it never read `_gridHeight`; the penalty canon is bit-identical, G2d/G2e).
+
+**Trace normalisation (session 1).** `probe-cs1a-trace` raw hashes differ from 4829bec only by removed fields: `_gridHeight`
+in the `colony:founded` payload, `game:saved.sizeBytes`, `tileR` in `underConstruction`. With those stripped the traces are
+identical: seed A `21d6fdf57aca`, seed B `0335241b8e9f`.
+
+**Note for CS-5 (D-CS-9).** On the geodesic grid "fewer than 6 neighbours" is exactly the 12 pentagons, so the flat landing
+rule must not travel: `isLandingEdge`, `latitudeBand`, `equatorTile` and `stepDirection` are methods of `FlatHexTileGraph`
+only; the interface header names `isLandingEdge` by D-CS-9 without a neighbour count. Keeper G7 pins it (methods own to the
+flat class, nothing above it in the prototype chain, no module-level export, no `< 6` / row / pixel rule outside the class
+body). `GeodesicGrid` must bring its own landing rule (D-CS-9), latitude thresholds per `n` (D-CS-7), an equator tile, and a
+`stepDirection` without a seam (facing from the tangent-plane direction).
+
+**Finding 780 ⚪ (recorded — pre-existing, not CS-2; fix in CS-8 with the new build panel).** The colony-map build preview and the affordability check
+(`ColonyOverlay._canAfford`, `_getMissing`, the cost text in the build panel) call `computeBuildResourceCost(building, planet)`
+without the latitude multiplier, while `_build` charges `× latMod.buildCost`. Measured: research_station on Pik1 subpolar
+(2,14) charged Si 29 / Cu 12, the panel shows the equatorial Si 23 / Cu 9; a build the panel calls affordable can land in the
+pending queue.
+
+**Finding 781 ⚪ (recorded at the owner gate — pre-existing, not CS-2).** Ground units walk zig-zag paths: A* tie-breaking
+among equal-cost neighbours (first in queue wins). Revisit in CS-5 with the geodesic A* (straight-looking tie-break).
+Free finding number: 782.
+
+**CS-Z cleanup list (added by CS-2):**
+- the dead `_tileR` argument slot of `BuildingSystem._activateBuilding` (all callers pass `null`; kept so positional callers in
+  tests do not shift);
+- `PlanetScene`'s dead `_gridHeight` write and its `getLatitudeModifier` read (scene never opened); then
+  `HexGrid.getLatitudeModifier` (critical file — only keepers' oracle and `RegionSystem` compat remain);
+- 20 test files still write the dead `_gridHeight` (harmless; `farm_climate_gate`, `stage2_water_envcost`, `stage3_well_gate`
+  comment "latMod = 1.0" — now true because those BuildingSystems have no grid, not because of the field).
+
+**Gate helpers** (`src/debug/Cs2GeometryDebug.js`, aliases `cs2Latitude()`, `cs2Seam()`, `cs2Invasion()`, `cs2Strike()`,
+`cs2EquatorEvent()`; quote-free, no args): latitude readout per band (production + cost through the build path, plus already
+built research stations vs the band); seam walk of a test unit (removed after 5 s, time speed restored); war + invasion of the
+active colony (test-only, reload after); strike squadron on the active colony (test-only, reload after); equator-fallback damage
+event on a throw-away BuildingSystem (colony untouched). Checklist: `COLONY_SPHERE_CS2_GATE_CHECKLIST.md`.
+
+**Proof:**
+- Keeper `colony_sphere_geometry_smoke` 49 PASS — 32 grids (10 size classes incl. `largestHexMaps` + the 22 fixture grids,
+  5,426 tiles): G1 band = old rule on every tile and ref form; G2 penalty = the three old copies (incl. `_inferRows`), 128
+  autoPlace / `_findFreeTile` pick sequences = frozen old pickers; G3 landing edge + `_findLandingHexes` pool (seeded shuffle);
+  G4 `stepDirection` + `_setupNextStep` on 31,648 neighbour pairs (1,731 across the seam); G5 equator tile + `_damageBuildings`;
+  G6 `anyTile` = (0,0); G7 interface (CS-5 note); G8 source pins (`_gridHeight` only in `PlanetScene` ×1, no `tileR`,
+  `_activateBuilding` null slot ×5 calls, no row/edge/pixel math at the 11 former sites, witnesses on a legacy sample); G9
+  Finding 779 on colonies restored by the **real** `ColonyManager.restore` from the fixture (window = after opening the map =
+  old rule with the true height = fresh-game colony; `_build` cost; queue completion with stale `tileR` 0); G10 `tileR` neither
+  written nor read.
+- Fail-first in a detached worktree at 4829bec: **15 PASS / 34 FAIL**; green on both sides = controls (G0, G1e bound-grid
+  production, G2d–f picks, G3c pool, G4b–c, G5b, G6a, G8e–f, G9a, G9e, G9f).
+- 20 mutations, **20 red** (each new method, data and penalty values, the 779 graph fallback and stale-`tileR` path, the
+  interface, each former site's source pin, `serializeQueue` / `restorePendingQueue` keeping `tileR`). M11 / M12 (`_gridHeight`
+  mirror / `gridSizes` table back), M13 (Invasion edge inlined again, same behaviour), M16 (Strike `{q:0,r:0}` back) and M18
+  (Bootstrap penalty sign) are caught by source pins only (no headless effect path: ColonyOverlay / GameScene do not import,
+  Bootstrap placement is not executed by the keeper).
+- `probe-cs2-gate.mjs` 15/15 on the live engine (every checklist command and scenario); its new-game part (starter rates =
+  recomputed on the tile, 8/8) is green on 4829bec too (no-change control).
+- Sweep 440/440, 0 FAIL, 31 advisories (same as before the step); `check-i18n` PASS.
+
+**Owner gate — PASS (2026-11-19).** Post-load window: all 21 `cs2Latitude` rows identical before / after opening the map;
+band labels; a post-load build on a polar tile produces 4 = expected before and after opening the map; ground-unit move with
+ocean blocking; save / load mid-gate; equator event; seam crossing; invasion landing 3/3 on edge rows; strike squadron
+launched at the capital anchor; flat new game unchanged. Note: step 5 (cost deduction) could not be judged in game (large
+stockpile) — covered by keeper G9d and gate probe L4.
+
 ## 4. Decisions for Filip (recommendation first)
 
 > ✅ All signed 2026-11-18. The binding text, with conditions (D-CS-5, D-CS-8) and the new D-CS-17 / D-CS-18, is **§0b**. This

@@ -2,6 +2,18 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
+## CS-2 — grid-geometry rules behind TileGraph + Finding 779 (2026-11-19)
+
+- `FlatHexTileGraph` gains `latitudeBand`, `equatorTile`, `isLandingEdge`, `stepDirection` (flat-only methods; CS-5 brings
+  its own, D-CS-9); data `LatitudeBands.js`; one polar-penalty canon `AiTerrainRules.aiPolarPenalty`; `_gridHeight`,
+  `gridSizes`, `_inferRows`, `_isEdgeHex` removed; queues no longer write `tileR` (old values ignored).
+- Finding 779 ✅: after a load the band came from a mirror (active colony: table height 10; others: 0 = no modifier — AI
+  colonies for the whole session). Now always from the colony's own grid.
+- Findings 780 (build panel shows equatorial cost on polar tiles → CS-8) and 781 (zig-zag A* paths → CS-5) recorded; free 782.
+- Proof: keeper `colony_sphere_geometry_smoke` 49 PASS (fail-first 15/34), 20/20 mutations red; `probe-cs2-postload`
+  (base vs CS-2, post-load save identical otherwise); `probe-cs2-gate` 15/15; sweep 440/440, i18n PASS; owner gate PASS.
+- Next: CS-5 (GeodesicGrid).
+
 ## CS-1b — remaining TileGraph sites + Findings 764, 765 (2026-11-19)
 
 - UI (ColonyOverlay, BattleGroupPanel, EconomyOverlay), GameScene, PlanetGlobeRenderer keys, PlanetMapGenerator,
