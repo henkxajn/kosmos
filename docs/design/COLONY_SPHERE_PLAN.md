@@ -2418,6 +2418,357 @@ thin Mars-like worlds becoming "cold" → harder colonisation) is to be judged i
 
 ---
 
+### 3.9 CS-PHYS-b — orbits scaled by stellar luminosity + homeworlds in the HZ (D-CS-19 part 2 of 2; 2026-11-19; PARTIAL, not committed)
+
+Owner decisions (2026-11-19): (1) fix Finding 773 in this step; (2) in new worlds every empire's homeworld lies on an
+orbit inside its star's HZ; the 5–35 °C band stays only as a safety net. Session stopped at the context budget —
+status and the remaining list are at the end of this section.
+
+**World property (as D-CS-18 / climateModel).** `FEATURES.scaledOrbits` (default false) is read once at world creation
+(`GameScene.start()` new-game branch, `GameCore.boot()`), passed to the home generator (`seedCtx.orbitModel`) and
+stamped as `galaxyData.orbitModel = 2` (only when ON). `SystemGenerator.worldOrbitModel(galaxyData)` is the only reader
+for foreign systems (generation, `peekCountsForStar`, observatory scan, `csPeek` / `csWorlds`). Every star of an
+orbit-model-2 world carries its own stamp `star.orbitModel = 2` (saved only when present; restored in
+`GameScene._restoreSystem` ×2), from which `Star` derives the HZ — no dependency on galaxy load order. Unstamped / old
+saves: legacy forever. Independent of `realisticClimate` (the intended configuration is both ON).
+
+**Orbit model (pure, `src/utils/OrbitModel.js`).** ℓ = √L [AU] (distance of 1 S⊕).
+
+| Quantity | Legacy | Orbit model 2 |
+|---|---|---|
+| HZ | class table (M 0.10–0.35, K 0.40–1.05, G 0.85–1.70, F 1.45–2.95 AU) | 0.85·ℓ – 1.70·ℓ = S 1.384 – 0.346 S⊕ (G table = Sun calibration; F table agrees within 1.5%; the K/M tables were stretched inward to S 2.5 / 4.0 to survive the fixed minimum orbit) |
+| Frost line | 2.2 · hz.max | same ratio → 3.74·ℓ |
+| Minimum planet orbit | max(0.35, 0.15 + 0.4·M★) AU | max(0.03, 0.40·ℓ) AU (S 6.25 S⊕, Mercury 6.7) |
+| Titius-Bode scale | class hzMid / 1.075 | the star's own hzMid / 1.075 (same perturbation draw per slot) |
+| Separation | `MIN_ORBIT_HALF_SEP` (AU) | × κ, κ = clamp(ℓ, 0.2, 1), **and** a collision floor: a·(1−e_out) ≥ a_in·(1+e_in) + 0.65·Σ visual radii [px]/110 + 0.01 AU (`collisionMinOrbitAU` — mirror of `PhysicsSystem.checkCollisions`, which merges planets on a px threshold in the active system) |
+| Planetoids / belt / comets / disk | fixed AU ranges | ranges × κ; planetoid margins = max(κ·legacy, 1.3·(r_planet + 5 px)/110 + a·e) (mirror of `checkSmallBodyCollisions`) |
+| HZ guarantee | rocky in HZ before separation | same, plus after separation `_ensureRockyInHZ`: home band first (S 1.10–1.384, `homeworldBandAU`), then the whole HZ; insert at the widest clear point, else move the nearest rocky there |
+| Homeworld | player: score (+50 HZ, temp, atmosphere); AI: first rocky | both: `pickHabitableHomeworld` — rocky inside the HZ, flux nearest the home-band centre 1.234 S⊕ (ln), tie → smaller a; none → legacy rule. Same pure rule in `EmpireColonyBootstrap._pickHomePlanet(planets, star)` and the `LifeSystem` mirror `pickHomeworldBody(planets, star)` |
+
+Home band: a breathable rocky world reaches 5 °C at S ≈ 1.09 (ClimateModel, albedo 0.3; 0.15 is warmer) and ≈ 1.06 in
+the legacy +20 °C model, so S 1.10–1.384 is inside the 5–35 °C band in both climate models.
+
+**RNG stream.** The TB loop keeps one perturbation draw per slot, so the slot draws are a deterministic transform. The
+stream length still changes, and cannot stay identical: (1) a lower minimum orbit turns previously skipped slots into
+planets (`_makePlanet` draws: e, type, mass, atmosphere, composition, M, inclination); (2) orbit → type/mass → moon
+count (`_moonCount`, `_makeMoon` draws) and atmosphere branches; (3) the HZ / giant guarantees fire in different systems;
+(4) the planetoid rejection loop's attempt count depends on the (scaled) forbidden zones. Kept: same seed → same world,
+and `peekCountsForStar` takes the same `orbitModel` → **peek == generated (0 mismatches in 5 × 72 × 2)**.
+
+**Consumers of orbit radius / in-system distance** (survey 2026-11-19; [P] scales with distance, [F] fixed threshold; the
+"NOT handled" rows are handled by CS-PHYS-b2 — per-consumer status with file:line in §3.9.1).
+Effect of compact M systems (planets 0.12–5.4 AU, rocky gaps ≈ 0.12–0.18 AU because of the collision floor):
+
+| Area | file:line | Effect |
+|---|---|---|
+| Collisions | `PhysicsSystem.js:113-129` px threshold 0.65·Σr (≈0.07–0.12 AU), active system | **[F] critical** — would merge neighbouring planets; **handled in the generator** (collision floor; 0 violations measured) |
+| Star mesh | `ThreeRenderer.js:136,2307-2309,2356` core r×3 ≈ 2.37 WU = 0.215 AU for M; corona half-size 0.47 AU | **[F] critical visual** — planets at 0.12–0.2 AU sit inside the opaque core; **NOT handled** |
+| Star picking | `ThreeRenderer.js:2393` click sphere r×2.5 ≈ 0.18 AU, first hit wins (`:4601,:4616`) | **[F]** planets inside 0.18 AU unclickable; NOT handled |
+| Camera | `ThreeCameraController.js:28-29,306-311` star zone 1.3R, zoom floor 2.2R; `:252-254` fit ≥ 70 WU; `ThreeRenderer.js:5533` extent incl. planetoids | **[F]** cannot zoom onto inner M planets; framing floor; NOT handled |
+| Sun exclusion | `MovementOrderSystem.js:32,992` 0.3 AU → `unreachable_target`; `RetreatTarget.js:51,90,217`; `VesselManager.js:65-67,3192-3215` (0.3 + 0.1 AU, SHORT_HOP 0.5 AU straight line) | **[F] critical gameplay** — planets < 0.3 AU (M homeworlds 0.14–0.25 AU) cannot be targeted; NOT handled |
+| Arrival / snap | `RendezvousData.js:18` CAPTURE_AU 0.5; `VesselManager.js:100` SNAP_TO_BODY_AU 0.5; `MovementOrderSystem.js:45` THREAT_RADIUS 0.15 | **[F]** "fly to" arrives instantly across most of an M inner system; free-space clicks snap |
+| Combat / detection | `ProximitySystem.js:48-55` (0.5 / 0.15 AU); weapons 0.05–0.30 AU (`GameConfig.js:605-610`); `SENSOR_LOCK_AU` 0.3; `SystemPoolService.js:31` blockade 0.5 AU; `BattleStageLogic.js:46` cluster 0.30 | **[F]** ships at neighbouring planets engage / blockade / merge battles |
+| Sensors | `sensorRangeAU` 1.0–2.5, `DetectionRange.js` 0.5, observatory levels 1/3/6/15 AU | **[F]** whole M system always visible (observatory levels pointless there) |
+| Travel / fuel | `HullsData` speedAU 0.7–1.4, fuelPerAU; `VesselManager.js:3349`, `MovementOrderSystem.js:1652` | [P] in-system trips ~4–10× shorter, fuel irrelevant in-system; `MissionSystem.js:39-40` / `ExpeditionSystem.js:247,255` floors (0.008–0.1 yr) start to bite |
+| Warp / AI | `VesselManager.js:3137-3145` warp arrival 30 AU out; `DirectorDoctrine.js:41-48` patrol ring ≥ 6 AU; `DirectorFirstContact.js:37` flyby 23.6 AU | **[F]** long empty legs in compact systems, AI patrols far outside every planet |
+| Time | `TimeSystem.js:103-110` no substeps; M periods 12–30 days; `CollisionForecast.js:22` step 0.1 yr | [P] analytic Kepler is stable, but strobing at high warp; collision forecast aliasing |
+| Moons | `SystemGenerator._makeMoon` visual 3D floors | 0 moons beyond half the neighbour gap (measured); physically all game moons are outside Hill spheres already (legacy too: planets are drawn ×200) |
+| Tidal lock | `BodyArchetypes.js:81` 0.85·∛M AU | M 19.4% → 34.7% locked (expected); D-CS-23 kept |
+| Labels / readouts | `HudLabelLayer.js:699-718` star obstacle; several `toFixed(1)` AU readouts | inner labels pushed; "0.1 AU" readouts |
+
+**Measurements** (`probe-cs-phys-orbits.mjs`, 5 seeds × 72 systems + home, realisticClimate ON in both):
+
+| Class | planets legacy → scaled | in HZ | systems with a rocky HZ planet | locked | orbit range AU | median extent AU (incl. planetoids) |
+|---|---|---|---|---|---|---|
+| F (43) | 396 → 395 | 116 → 115 | 43 → 43 | 0 → 0% | 1.27–34.9 → 1.14–31.5 | 24.8 → 24.9 |
+| G (85) | 795 → 795 | 122 → 138 | 85 → 85 | 6.2 → 5.9% | 0.71–23.9 → 0.58–26.1 | 24.6 → 23.4 |
+| K (99) | 792 → 927 | 99 → 131 | 99 → 99 | 11.0 → 12.7% | 0.55–14.0 → 0.36–16.5 | 24.6 → 15.6 |
+| M (133) | 684 → 1235 | **0 → 176** | **0 → 131** | 19.4 → 34.7% | 0.55–12.5 → 0.12–5.4 | 24.6 → 5.1 |
+
+M archetypes legacy → scaled: terran 2 → 37, jungle 0 → 29, desert 0 → 66, barren 0 → 48, volcanic 0 → 12,
+tidally_locked 92 → 302, gas_cold 244 → 106, gas_temperate 17 → 173, ice 202 → 287, cryo_haze 127 → 175. G/F nearly
+unchanged (G terran 32 → 22, jungle 6 → 11). Collision-floor violations 0, moons beyond half gap 0, peek mismatches 0.
+
+**Homeworlds** (GameCore.boot, 20 worlds × 3 empires, both flags ON vs climate only): inside the HZ **60/60** (legacy
+33/60; legacy M homes 0/20 → 20/20); home flux 0.359–1.380, median 1.122 S⊕ (legacy 0.045–2.81). **Safety band still
+acts 22/60 (cold), 0 hot** (legacy 26 cold + 11 hot) — target ≈ 0 NOT met: `_ensureRockyInBand` often cannot fit a
+planet into the narrow home band (G/K: κ half-separations 0.5 AU vs a band 0.1·ℓ wide), so the pick falls back to an
+outer-HZ rocky world (−1 … −40 °C before the clamp).
+
+**Finding 773 — fixed (code, keeper pending).** `SaveSystem._serializePreCivWorld()` writes `preCivWorld = { seed,
+seededSystems?, climateModel?, orbitModel? }` only when `civ4x` is not saved (pre-4X) and a galaxy exists; optional key,
+no version bump (old saves lack it → old behaviour). `GameScene.start()` on that load path regenerates the galaxy from
+`GalaxyGenerator.preCivWorldOf(savedData)` — same seed, `applyWorldStamps` re-stamps `seededSystems` / `orbitModel`
+(also derived from the restored home star's `orbitModel`). Side effect (positive): a pre-4X save now gets the same
+galaxy on every load (closes the "fresh galaxy per load" limitation noted in GameScene for new saves).
+
+**Files.** New: `src/utils/OrbitModel.js`, `src/testing/headless/probe-cs-phys-orbits.mjs`. Changed: **`GameConfig.js`**
+(critical — flag), **`SystemGenerator.js`** (critical — `worldOrbitModel`, min orbit, κ separation + collision floor,
+`_ensureRockyInHZ` / `_ensureRockyInBand`, small-body ranges, homeworld pick, band counter `homeworldBandStats`,
+`generateForStar` / `peekCountsForStar` orbitModel argument), `GalaxyGenerator.js` (stamp, `applyWorldStamps`,
+`preCivWorldOf`), `Star.js` (stamp → HZ), `SaveSystem.js` (star stamp, `preCivWorld`), `GameScene.js` (decision,
+stamp, 773 path, restore ×2, log, `csOrbits` alias), `GameCore.js`, `StarSystemManager.js`, `ObservatorySystem.js`,
+`EmpireColonyBootstrap.js`, `HomeworldClimate.js`, `LifeSystem.js`, `ColonySphereDebug.js` (`csOrbits`, peek with
+the world orbit model). No `PhysicsSystem` / renderer change.
+
+**Status / left (next session).**
+1. Homeworld safety band ≈ 0: make the home-band guarantee succeed (e.g. move the HZ rocky planet into the band with a
+   local re-separation, or place the home slot before separation), then re-measure.
+2. Owner decision needed before the gate — **critical consumers not handled**: star core / corona / click sphere
+   swallowing planets < 0.2 AU, camera star zone, sun exclusion 0.3 AU (M homeworlds unreachable), CAPTURE / SNAP 0.5 AU,
+   ProximitySystem / blockade / battle-cluster ranges. Recommendation: a per-star distance scale (ℓ-based, legacy = 1)
+   for the star mesh/picking/camera zone and for the sun exclusion; the fleet ranges as a separate decision (they are
+   gameplay balance).
+3. Keeper `colony_sphere_orbits_smoke` (fail-first on a detached worktree at b0f3106, mutations): OFF trace bit-identical
+   (reuse `CSPHYS-world-off-baseline.json` + climate-v2 baseline), world stamp (flag after start, old save, pre-4X save),
+   determinism + peek == generated, homes inside HZ, M HZ share, min-orbit floor / collision floor / moons, save round
+   trip, Finding 773. Already done: 7 call-shape pins widened to accept the optional orbit argument (core assertions
+   unchanged) — `colony_sphere_seeds_smoke` ×4, `colony_sphere_climate_smoke` ×3. Sweep with flag OFF: **434/434 OK,
+   0 FAIL** (31 advisory), incl. the CS-PHYS-a OFF trace K1; `check-i18n` PASS.
+4. BALANS a/b/c (both OFF / climate only / both ON), consumer effects in-game (travel time per class, radar coverage).
+5. Gate checklist + live-engine probe.
+
+#### 3.9.1 CS-PHYS-b2 — homeworld orbit +15 °C, per-system distance scale, keepers (2026-11-19; not committed, owner gate pending)
+
+**D-CS-24 (owner, 2026-11-19) — option (b): ONE distance scale per system for ALL in-system spatial thresholds.**
+k = κ = clamp(√L, 0.2, 1) — the same factor the generator uses for orbit separations (`OrbitModel.compactionOf`);
+k = 1 **exactly** for every star without the `orbitModel: 2` stamp (legacy worlds, old saves → bit-identical: `x · 1`
+is exact in IEEE). Ship speeds, fuel use and galaxy-level (warp) distances are NOT scaled — compact systems are faster
+to cross, an intended strategic trait of M dwarfs.
+
+**1. Homeworld orbit (+15 °C).** `OrbitModel.homeworldFinalTempC({L, a, e, albedo, climateModel})` mirrors
+`makeHomeworldBreathable` before its clamp (climate v2: `bodyClimate` with a breathable atmosphere; legacy: T_eq + 20 °C);
+`homeworldOrbitAU` bisects a for +15 °C (60 iterations, clamped to the HZ). Results: legacy climate a = 0.899·ℓ
+(S 1.24), climate v2 a = 0.858·ℓ (S 1.36) for albedo 0.3; the rocky albedo 0.15 used in game gives S ≈ 1.00 — all inside
+the HZ (0.85–1.70·ℓ). `SystemGenerator._placeHomeworldSlot` (replaces `_ensureRockyInHZ` / `_ensureRockyInBand` and
+`homeworldBandAU`) runs in EVERY system of an orbit-model-2 world (any system can become an AI home; peek must match):
+candidate = the rocky planet inside the HZ nearest the target (ln a), else a new rocky (`_makePlanet` — the only RNG
+draws of the step); it is moved to the exact orbit with its own e / albedo; inner neighbours are pulled inwards to keep
+κ separation + collision floor (`collisionMaxInnerOrbitAU`, the inverse of `collisionMinOrbitAU`), removed below the
+minimum orbit; outer neighbours pushed out by `_enforceMinSeparation`. `pickHabitableHomeworld` now picks the rocky
+HZ planet whose final temperature is nearest +15 °C (same pure rule for the player, the AI bootstrap and the LifeSystem
+guard). `peekCountsForStar` takes the world climate model (4th argument; ObservatorySystem, `csPeek`, `csWorlds`, probe
+pass `worldClimateModel`) — the home-slot orbit depends on it.
+**Result:** 5–35 °C safety band acts **0 times** — probe 20 worlds × 3 empires (60/60 in HZ, 0 cold, 0 hot; was 22/60
+cold) and keeper O4 5 seeds × all empires × both climate models (15 + 15 empires, all in HZ, all at +15 ± 1 °C, band
+checked 15× per model, active 0×). M systems: 133/133 with a rocky HZ planet (was 131/133), terran 37 → 51, jungle 29 → 6.
+
+**2. Distance-scale helper — `src/utils/SystemScale.js`.** `systemScaleOfStar(star)`, `systemScaleOf(systemId)` (star via
+`StarSystemManager`, else `EntityManager.getStarOfSystem`; unknown system → 1), `activeSystemScale()`,
+`systemScaleOfEntity(e)`; `Star.systemScale` getter; `window.KOSMOS.systemScale` (scene code that keepers compile
+with a fixed scope reads it through `K`, renderer through `this._star.systemScale`). Consumers scaled:
+
+| Area | file:line (after CS-PHYS-b2) | Threshold × k |
+|---|---|---|
+| Star mesh / core / corona / click sphere / silhouette mask / camera star zone + zoom floor / HUD label obstacle | `ThreeRenderer.js:2312` (`r` × `star.systemScale`; everything derived from `r`, incl. `setStarCoreRadius`) | yes |
+| Camera system-framing floor 70 WU | `ThreeRenderer.js:5554` → `ThreeCameraController.frameSystem(maxAU, scale)` | yes |
+| Battle-cluster radius (scene, banners, strip) | `ThreeRenderer.js:9126`, `GameScene.js:4609,4715`, `CombatStrip.js` (`clusterRadiusPx(auToPx, scale)`) | yes |
+| Sun exclusion for orders 0.3 AU | `MovementOrderSystem.js:996`; route avoidance + 0.1 AU margin + SHORT_HOP 0.5 AU `VesselManager.js:3194-3211`; shelters / escape `RetreatTarget.js:91,218` | yes |
+| Arrival / pursuit / patrol radius 0.15 AU, escort 0.1 AU | `MovementOrderSystem.js:50` (`threatRadiusPx`) used at `:1157,1645,1682,1761,1943`; escort `:862` | yes |
+| Snap-to-body 0.5 AU, rendezvous capture 0.5 AU | `VesselManager.js:4111`, `:4014` | yes |
+| Weapon ranges (engage, proximity, DSCS rounds, deadlock) | `MovementOrderSystem.js:2421`, `ProximitySystem.js:459`, `DeepSpaceCombatSystem.js:1561` (+ encounter system id at the call sites) | yes |
+| Combat enter base 0.15 AU, team-up buffer, disengage 0.5 AU | `ProximitySystem.js:260`, `DeepSpaceCombatSystem.js:262,983,1304`, `VesselCombatSystem.js:238`, retreat bubble `RetreatTarget.js:127,202` | yes |
+| Detection 0.5 AU / sensorRangeAU (= HUD radar rings), sensor-lock 0.3 AU | `DetectionRange.js:23` (one function for ProximitySystem and `HudRadarLogic`), `ProximitySystem.js:350` | yes |
+| Blockade 0.5 AU | `SystemPoolService.js:365` | yes |
+| Observatory detection levels 1/3/6/15 AU | `ObservatorySystem.js:180` | yes |
+| Intel contact 0.3 AU | `IntelSystem.js:413` | yes |
+| AI patrol ring clamps 6–30 AU (ring itself already ∝ max orbit) | `DirectorDoctrine.js:379` | yes |
+| AI first-contact flyby radius 2600 px | `DirectorFirstContact.js:107` | yes |
+| Warp arrival point 30 AU out (in-system position, not a galaxy distance) | `VesselManager.js:3142` | yes |
+| PhysicsSystem planet merge (px on visual radii) | unchanged — handled in the generator (collision floor, 0 violations) | n/a |
+| Ship speeds, fuel/AU, warp (ly) | unchanged (D-CS-24) | no |
+| AccretionSystem accretion zone 0.12 AU, cluster bin 0.15 AU (Generator scenario only) | `AccretionSystem.js:58,97` (CS-PHYS-b3, §3.9.2) | yes |
+| HUD sensor-lock fallback (no ProximitySystem) | `HudLabelLayer.js:649` (CS-PHYS-b3) | yes |
+| Star mesh drawn radius | CS-PHYS-b3 / Finding 774: drawn scale ℓ without the 0.2 floor, clipped to 1.5× clearance (§3.9.2) — visual only | drawn scale |
+| Route body-avoidance margin 0.15 AU (+0.05 AU waypoint offset) | `VesselManager.js:3221` — tied to the drawn planet radius (px, not scaled); measured detour M p90 1.021 → 1.061 (§3.9.2) | no (decision) |
+
+**Keeper `colony_sphere_orbits_smoke.mjs` (61 pins).** O1 OFF trace bit-identical to the 66f924f baseline
+(`CSPHYS-world-off-baseline.json`, 5 digests) with the flag OFF and with the flag flipped ON after world creation,
+k = 1 for all 13 stars of a legacy world, unknown system → 1; O2 world stamp (old star / old galaxy → 1, stamped star
+k = √L, Finding 773: `preCivWorld` carries seed + 3 stamps and regenerates an identical galaxy, absent with civ4x,
+GameScene pins); O3 determinism + peek == generated in 213 systems × 2 climate models; O4 homes (above); O5 geometry over
+5 seeds × 2 climate models (> 5000 planets): minimum orbit, collision floor (independent mirror of PhysicsSystem), κ
+separation, moons inside half the neighbour gap (the game's operational Hill sphere — planets are drawn ×200, so the
+physical Hill sphere does not contain game moons even in legacy worlds); O6 consumers in a compact M system (k = 0.2)
+vs a legacy control (k = 1): M planets outside the star core / click sphere (1195 planets, 0 inside, worst periapsis
+1.05× the core radius), order to a body at 0.17 AU passes the sun gate (witness getter right after the gate; control
+rejected), snap 0.3 AU → free space (control snaps), 0.05 AU → the intended body, missile range 0.06 AU, detection
+0.1 AU, sensor-lock × k, blockade at 0.3 AU off / 0.05 AU on (control on at 0.3), source pins for the live paths.
+**Fail-first** (detached worktree at b0f3106, final keeper): 26 PASS / 35 FAIL (green = OFF-trace, determinism, legacy
+geometry and legacy controls). **Mutations** (12, each red): SystemScale always 1 (9 red), sun gate unscaled, home slot
+off, target 30 °C, snap unscaled, peek without climate model, no inward pull, renderStar unscaled, blockade unscaled,
+weapon range unscaled, detection unscaled, 773 without orbitModel. Widened call-shape pins (core assertions unchanged):
+`click_focus_rule` T6e (second `frameSystem` argument), `zoom_floor` F8e (`× (star.systemScale ?? 1)`),
+`colony_sphere_seeds` (ObservatorySystem peek with the climate model). **Sweep 435/435 OK, 0 FAIL (31 advisory);
+`check-i18n` PASS.**
+
+**Live engine** (`probe-cs-phys-b2-live.mjs`, headless Chrome, real title → new game with both flags, Enter through the
+civ intro, retries until the home star is M): M star L 0.040, k 0.2, home a 0.199 AU at +15 °C, core 0.72 WU; 5 innermost
+planets (0.086–0.734 AU) clicked at the system framing AND zoomed — 10/10 hit the intended planet; orders of a player
+ship to bodies at 0.086 and 0.199 AU (inside the legacy 0.3 AU exclusion) accepted; colony overlay opens and closes;
+0 exceptions except 2× `AudioContext is closed` after same-tab re-navigation — identical on b0f3106 (control run: same 2
+errors; different result otherwise: no stamp, home 0.55 AU, core 3.6 WU), tagged as harness noise (Finding 775).
+
+**Findings.** **774 ⚪** — thin star-core margin in the dimmest M systems: orbits scale with ℓ but k is floored at 0.2,
+so for ℓ < 0.2 the innermost periapsis approaches the scaled core (worst 1.05× in 5 seeds; L ≥ 0.026 generated). Options
+for CS-PHYS-b3: floor the minimum orbit at ≥ 1.3× the scaled core, or scale the star mesh by ℓ below the floor.
+**775 ⚪** — 2× `InvalidStateError: AudioContext is closed` on same-tab re-navigation (pre-existing, base too; harness
+artefact, no owner impact expected).
+
+**Files.** New: `src/utils/SystemScale.js`, `src/testing/smoke/colony_sphere_orbits_smoke.mjs`,
+`src/testing/headless/probe-cs-phys-b2-live.mjs`, `src/testing/headless/probe-cs-phys-b2-star.mjs`. Changed
+(on top of §3.9): `OrbitModel.js`, **`SystemGenerator.js`** (critical — home slot, peek climate argument), `Star.js`,
+`ThreeRenderer.js`, `ThreeCameraController.js`, `GameScene.js`, `MovementOrderSystem.js`, `VesselManager.js`,
+`RetreatTarget.js`, `ProximitySystem.js`, `DeepSpaceCombatSystem.js`, `VesselCombatSystem.js`, `SystemPoolService.js`,
+`DetectionRange.js`, `ObservatorySystem.js`, `IntelSystem.js`, `DirectorDoctrine.js`, `DirectorFirstContact.js`,
+`BattleClusterLogic.js`, `CombatStrip.js`, `ColonySphereDebug.js`, `probe-cs-phys-orbits.mjs`, 3 widened keepers.
+Critical files touched in this arc step: `GameConfig.js` (flag, from §3.9) and `SystemGenerator.js`; `PhysicsSystem.js`,
+`EventBus.js`, `EntityManager.js`, `HexGrid.js`, `SaveMigration.js` untouched (no save-version bump).
+
+**Left for CS-PHYS-b3.** (1) BALANS a/b/c (both OFF / realisticClimate only / both ON) on the CS-PHYS-a seeds — not
+started in this session (context budget). (2) In-game consumer effects: travel time per class, radar coverage, AI
+behaviour in compact systems (patrol, strikes), fleet-order feel. (3) Finding 774 decision. (4) Remaining fixed
+in-system numbers not on the table: AccretionSystem (disk phase), `toFixed(1)` AU readouts ("0.1 AU"), label LOD
+distances — survey + owner look. (5) Gate checklist (1600×1041) + owner gate; then the `feat` / `docs` commit pair.
+
+#### 3.9.2 CS-PHYS-b3 — BALANS a/b/c, compact-system effects, Finding 774, constant sweep (2026-11-19; not committed, owner gate pending)
+
+**1. BALANS a/b/c** (`probe-cs-phys-balans.mjs`, now `--orbits=on|off` + `--tag=X`; the tag redirects the runner's
+`<prefix>-telemetry-REAL.json` / `-report-REAL.html` to `…REAL.<tag>.json/html`, so the REAL files are no longer
+overwritten — md5 of the REAL files unchanged before/after, backup in the session scratchpad). Same panel as CS-PHYS-a:
+AI runner 8 seeds × 45 gy and × 120 gy, POP runner 8 × 45 gy, galaxy `HEADLESS_GALAXY_SEED`. (a) both OFF, (b)
+realisticClimate, (c) realisticClimate + scaledOrbits. 0 crashes in all 9 runs.
+
+| AI runner, Σ over 8 seeds × 2 AI empires | a 45 gy | b 45 gy | c 45 gy | a 120 | b 120 | c 120 |
+|---|---|---|---|---|---|---|
+| AI colonies / outposts / systems at end | 56 / 56 / 32 | = a | **93 / 80 / 48** | 56 / 56 / 32 | = a | **93 / 80 / 48** |
+| … colonies outside the home system | 0 | 0 | 13 | 0 | 0 | 13 |
+| Σ first outpost gy · Σ first-3-colonies gy (expansionist never reaches 3 in a/b) | 97 · 103 | = a | 95 · 42 | = 45 gy | = a | = 45 gy |
+| AI pop end | 2175 | 2175 | 2097 (−3.6%) | 4519 | 4519 | 4491 (−0.6%) |
+| AI buildings / jobs / unfilled | 690 / 1975 / 7 | = a | 695 / 1965 / 9 | 884 / 1988 / 8 | = a | 879 / 2032 / 1 |
+| pop-decline years | 14 | 14 | 26 | 19 | 19 | 32 |
+| zero-stock years food / water / energy | 18 / 128 / 356 | = a | 0 / 156 / 428 | 156 / 326 / 430 | = a | 22 / 258 / 428 |
+| player colonies / pop / buildings / credits | 8 / 500 / 303 / 101.8k | = a | 8 / 536 / 324 / 108.3k | 8 / 500 / 314 / 282.8k | = a | 8 / 536 / 342 / 313.6k |
+| decisions effective · AI build fails (capped log) | 2437 · 1492 | 2459 · 1397 | 2128 · 1142 | same as 45 gy (log cap) | | |
+| strategy colony / outpost actions (all succeeded) | 38 / 56 | = a | 62 / 80 | = | = | = |
+
+POP runner: a ≡ b byte-identical JSON; c: player pop Σ 500 → 536 (+7.2%), unemployed 176 → 190, surplus years WASTED
+44 → 17 (seed 7 had a 31-pop home in b → 67 in c). Per-seed player pop takes only the values 31/43/67/91 — each value is
+one home world; scaledOrbits changes which home a seed gets (home system regenerated), not the economy.
+
+**Reading.** (1) realisticClimate alone stays economically inert (= CS-PHYS-a). (2) The whole c-delta comes from ONE
+outlier: the expansionist AI's home `sys_040` is a dim star with **4 planets in the legacy model → 9 in the scaled
+model**; in a/b that empire sits on 1 colony + 2 outposts in 1 system for the entire 120 gy (targets saturated — the
+harness hid a stuck AI empire), in c it reaches 4–7 colonies / 5 outposts / 3 systems, and 3 of its colonies are in
+other systems. The industrialist (`sys_061`) is unchanged (6/5/3 in every seed). (3) More colonies spread the same
+population: AI pop −3.6% at 45 gy, −0.6% at 120 gy; more pop-decline years (new small colonies) and more zero-water
+years at 45 gy, but far fewer food shortages (18 → 0, 156 → 22). (4) The player bot stays on its home world; its +7%
+pop / +7–11% credits is the home world itself (now on the +15 °C orbit instead of a band-clamped one). (5) Fewer AI
+build failures (1397 → 1142) and fewer effective decisions (2459 → 2128 — the capped log fills with upgrades of more
+colonies). Nothing points at a broken mechanic; no retune (as instructed). Outlier to keep in mind for BALANS 2: a
+legacy dim-star AI home starves the expansionist archetype.
+
+**2. In-game effects of compact systems** (`probe-cs-phys-b3-compact.mjs`, 5 seeds × 73 systems, climate v2 in both,
+medians; trip = home world → every other planet, RMS distance over random phases √(a₁² + a₂²); hull_medium 1.0 AU/yr,
+0.5 fuel/AU — the probe also prints hull_small / hull_large):
+
+| Class | k | extent AU | innermost a AU | trip AU | trip days (hull_medium) | fuel | radar cover: player medium / AI vessel / colony L0 / L2 | patrol ring / extent | warp arrival / extent | route / straight p90 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| F | 1 → 1 | 19.5 → 20.3 | 1.46 → 1.40 | 5.41 → 5.28 | 1974 → 1929 | 2.70 → 2.64 | 0.6 / 0.1 / 0.3 / 9.5 → 0.5 / 0.1 / 0.2 / 8.7 % | 0.86 → 0.86 | 1.54 → 1.48 | 1.005 → 1.005 |
+| G | 1 → 0.98 | 12.9 → 12.0 | 0.83 → 0.65 | 3.57 → 3.49 | 1306 → 1276 | 1.79 → 1.75 | 1.4 / 0.2 / 0.6 / 21.8 → 1.3 / 0.1 / 0.6 / 20.7 % | 0.85 → 0.85 | 2.33 → 2.28 | 1.006 → 1.008 |
+| K | 1 → 0.64 | 9.4 → 9.0 | 0.63 → 0.35 | 3.37 → 2.38 | 1231 → 870 | 1.69 → 1.19 | 2.6 / 0.3 / 1.1 / 41.0 → 1.2 / 0.1 / 0.5 / 19.0 % | 0.86 → 0.86 | 3.20 → 2.18 | 1.019 → 1.020 |
+| M | 1 → 0.21 | 7.1 → 2.7 | 0.55 → 0.18 | 3.94 → 1.05 | 1439 → 384 | 1.97 → 0.53 | 4.5 / 0.5 / 2.0 / 71.5 → 1.4 / 0.2 / 0.6 / 22.8 % | 0.88 → 0.85 | 4.23 → 2.39 | 1.021 → 1.061 |
+
+Reading: M in-system trips are ~3.7× shorter and cheaper (intended, D-CS-24); K ~1.4×; F/G unchanged. **Radar coverage
+falls** in compact systems because thresholds scale with k (0.21) while the M extent shrinks only to 0.38× (the legacy
+M class table was already compact) — observatory levels become meaningful in M systems again (L2 72% → 23% of the disk;
+L3 still 100%). No trip falls under the MissionSystem floor (0.008 yr). AI patrol ring stays at 0.85–0.88 of the extent
+and now sits at the outer planets in 133/133 M systems (legacy 112/133 — the 6 AU floor pushed it beyond them).
+First-contact flyby and warp arrival stay outside the outermost planet (1.9× / 2.4× extent in M). Route detours from
+the unscaled body margin stay small (waypoints per trip 0.45 → 0.64 in M).
+**Not measured:** AI patrol / strike EXECUTION in compact systems — headless `GameCore` mounts no MovementOrderSystem /
+ProximitySystem / DSCS / FleetSystem (CLAUDE.md trap), so "stuck / oscillating / never engaging" is not observable
+here; the geometry above shows no ring or radius outside its system. One analytic risk found → **Finding 776 ⚪**:
+the combat-entry threshold is sampled per frame with no substeps; at 1 r/s a head-on pass of two hull_small ships
+closes 0.047 AU per frame at 60 fps and 0.093 AU at 30 fps, while the entry diameter in a k = 0.2 system is
+2 × 0.15 × 0.2 = 0.06 AU — at ≤ 30 fps two fast ships can pass through each other without an engage sample (legacy
+0.30 AU: no risk; cruisers 0.047 AU at 30 fps: OK). Not observed in play; candidate fix (later, mechanics arc):
+segment-distance test over the frame step in ProximitySystem, or substeps at 1 r/s.
+
+**3. Finding 774 — fixed (visual only, no generation change).** Measured before the change (5 seeds, scaled worlds):
+innermost periapsis / drawn core — M worst 1.05×, and **pure ℓ scaling would not reach 1.5×**: below 1.5× in 37/133 M,
+63/99 K, 23/85 G systems (minimum orbit 0.40·ℓ AU vs core radius 0.21–0.38·ℓ AU, minus eccentricity). Implementation:
+`SystemScale.starDrawScale(star, { baseCoreAU, innermostPeriapsisAU })` = 1 exactly without the `orbitModel: 2` stamp;
+stamped: min(1, ℓ) (no 0.2 floor, ceiling 1) clipped to periapsis / (1.5 × core radius at scale 1)
+(`STAR_CORE_CLEARANCE = 1.5`). `ThreeRenderer.renderStar(star, planets)` (`initSystem` passes the system's planets):
+`r = baseR × _starDrawScale` — core, corona, click sphere, silhouette mask and the camera star zone / zoom floor
+(`setStarCoreRadius(_sunCoreRadius)`) follow `r`. Screen floor `_applyStarScreenFloor` (render loop, only when
+`_starDrawScale < 1`): core + click sphere get a multiplier ≥ 1 so the core radius stays ≥ `STAR_MIN_CORE_PX = 4` CSS px
+(far zoom; near zoom multiplier 1, so the camera zone matches the drawing); the corona is not scaled (its shader works in
+world units and already reaches ~10 px). Gameplay k (floor 0.2) unchanged. Result: 3312 planets in 360 stamped systems,
+0 below 1.5× (worst exactly 1.500×); clipping active in 121 systems, drawn scale < k in 172.
+
+**4. Constant sweep.** Scaled (D-CS-24 spatial thresholds): AccretionSystem accretion zone 0.12 AU and cluster bin
+0.15 AU × `systemScaleOfStar(this.star)` (Generator scenario only; unstamped stars → 1); HUD label sensor-lock fallback
+× k (`HudLabelLayer.js:649`, used only without ProximitySystem). "0.1 AU" readouts: `SystemScale.auReadoutDecimals`
+(< 0.25 AU → 2 decimals, else 1) in the HUD label detect/lock readouts, the radar ring readout
+(`HudRadarLogic.rangeReadoutText`) and the body-list orbit in `FleetTabPanel` — legacy values are all ≥ 0.3 AU (minimum
+orbit 0.35, lock ≥ 0.3, detection ≥ 0.5), so legacy text is unchanged. Left unscaled on purpose: the route
+body-avoidance margin 0.15 AU (+0.05 AU) — it protects the DRAWN planet disc (visual radius in px, not scaled; scaling
+it would route ships through planet discs), measured detours small (above); ship speeds, fuel, warp (D-CS-24); other
+`toFixed(1)` AU readouts are distances (ship ↔ body, travel) that are small in legacy too — not a scale issue. Label
+LOD distances: none in AU found by the grep (`HudLabelLayer` works in screen px). Consumer table §3.9.1 updated.
+`csOrbits()` reports `systemScale` (k) and `starDrawScale` (Finding 774) for the gate.
+
+**Keepers.** `colony_sphere_orbits_smoke` 61 → **84 pins**: O6 updated to the drawn scale (M planets outside core /
+click sphere, worst 1.500×); **O7** Finding 774 (legacy 1 exactly, ℓ below the floor, k still 0.2, ceiling, clipping
+formula, periapsis helper, 3312 planets ≥ 1.5×, clipping witness, legacy world 13 stars = 1, screen floor 4 px / near
+1 / degenerate 1, live-path pins: loop gate, floor scales core + click sphere not corona, camera zone from
+`_sunCoreRadius`); **O8** sweep (accretion executed: 0.06 AU absorbed in legacy, not at k = 0.2; source pins
+Accretion / HudLabelLayer / FleetTabPanel; readout decimals; radar readout 0.06 → "0.06 AU", legacy 1.5 / 0.5 unchanged;
+witness: body margin intentionally unscaled). Widened call-shape pin: `zoom_floor` F8c/F8e (new `renderStar(star,
+planets = [])` signature and `baseR × _starDrawScale`; core assertions unchanged). **Fail-first** (`git worktree --detach
+b0f3106`, three stub copied, no junction, final keeper): **29 PASS / 55 FAIL**, no abort; green = OFF trace,
+determinism, legacy controls incl. O8a (legacy accretion) and O8e (legacy radar text), witnesses. **Mutations (12, all
+killed):** 0.2 floor back (774b), no clearance clip (774e/g/h), legacy = ℓ (774a/i), ceiling removed (774d),
+renderStar on k (pin), screen floor always on (pin), 2 px floor (774j), floor scales corona (pin), accretion unscaled
+(O8b + pin), readout threshold ≤ 0.3 (O8c), radar 1 decimal (O8d), HUD lock fallback without k (pin).
+**Sweep 435/435 OK, 0 FAIL (31 advisory); `check-i18n` PASS** (keepers reading `ColonySphereDebug` re-run after the
+`csOrbits` field change: archetypes 161, cache 56, climate 51, seeds 123, surface 45, life_temperature 24 — all green).
+
+**Live engine** (variant of `probe-cs-phys-b2-live.mjs` with `csOrbits()` / `csClimate()` / far-zoom checks, headless
+Chrome, real title → new game with both flags): PASS — home star M, L 0.035, `systemScale` 0.2, `starDrawScale` 0.188
+(= ℓ, not clipped), home 0.188 AU at +15 °C (`csClimate` climateModel 2, contradictions 0); innermost planets clicked
+at the system framing and zoomed **10/10**; orders to bodies at 0.295 / 0.452 AU and to the home world at 0.188 AU
+(inside the legacy 0.3 AU exclusion) accepted; colony overlay opens / closes; 0 page exceptions; screen floor ×2.66 at
+camera distance 450, ×1 at distance 3. Gate steps 3–5 (old save, flag after start, pre-4X seeded save) use commands
+already validated by the CS-PHYS-a live probe and keeper O1/O2 (not re-driven live in this session).
+
+**Findings.** **774 ✅** fixed (above). **776 ⚪** (new, no step) — combat-entry sampling at 1 r/s in k = 0.2 systems
+(analytic, above). Free number: 777.
+
+**Owner live gate — PASS (functional), 2026-11-19.** (1) Old save unavailable (single slot overwritten by earlier gate
+games) — checked on a new no-flag world instead: csOrbits orbitModel 1, worldStamp null, systemScale 1, starDrawScale 1.
+(2) New world with realisticClimate + scaledOrbits on the title: climateModel 2, homeworld New Earth 15 °C (flux 0.999,
+zone hz), no planet inside the star disc. **Visual issue (owner screenshot):** in compact systems planets look far too
+big relative to their orbits — drawn body radii, moon orbit radii and the star glow/corona do not follow the system
+scale (the moon orbit ring around the homeworld is larger than the planet spacing) → CS-PHYS-c. (3) csNextSystem → M
+dwarf sys_063 (k 0.2, starDrawScale 0.195): inner planets easy to click, star small. (4) Flag set after start:
+orbitModel 1, systemScale 1. (5) Finding 773: seeded + climate + orbits world saved before 4X, F5 → Continue: same
+galaxy seed 107300328, orbitModel 2. Findings: 774 ✅, 776 ⚪ open.
+
+**Next step CS-PHYS-c (before the flags become permanent).** (a) Compact-system visual scale: drawn planet / moon radii,
+moon orbit radii, star glow / corona and default camera framing follow the system scale, with minimum pixel sizes
+(ships / icons unscaled); revisit the 0.15 AU route-avoidance margin once drawn radii scale. (b) Finding 776: combat
+entry must not be skipped between frames at high game speed in small-k systems.
+
+**Files (CS-PHYS-b3).** New: `src/testing/headless/probe-cs-phys-b3-compact.mjs`,
+`docs/design/COLONY_SPHERE_CSPHYS_B_GATE_CHECKLIST.md`. Changed: `SystemScale.js` (`starDrawScale`,
+`innermostPeriapsisAU`, `starScreenFloorScale`, `auReadoutDecimals`), `ThreeRenderer.js` (renderStar draw scale, screen
+floor), `AccretionSystem.js`, `HudLabelLayer.js`, `HudRadarLogic.js`, `FleetTabPanel.js`, `ColonySphereDebug.js`
+(`csOrbits` fields), `probe-cs-phys-balans.mjs` (orbits flag, tag), keepers `colony_sphere_orbits_smoke`,
+`zoom_floor_smoke`. No critical file touched in this step (GameConfig / SystemGenerator changes are from §3.9 / §3.9.1).
+
 ## 4. Decisions for Filip (recommendation first)
 
 > ✅ All signed 2026-11-18. The binding text, with conditions (D-CS-5, D-CS-8) and the new D-CS-17 / D-CS-18, is **§0b**. This

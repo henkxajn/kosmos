@@ -284,5 +284,8 @@ i test przejdzie jałowo.
 
 ## COLONY SPHERE — po CS-PHYS-a (2026-11-19)
 
-- **Finding 773 ⚪** — stempel `seededSystems` ginie dla świata zapisanego przed wejściem w tryb 4X (galaktyka regenerowana bez stempla). Ta sama luka dla klimatu naprawiona w CS-PHYS-a (`galaxyClimateModel`). Plan: COLONY_SPHERE_PLAN §3.8.1.
+- **Finding 773 ✅ (CS-PHYS-b)** — stempel `seededSystems` ginie dla świata zapisanego przed wejściem w tryb 4X (galaktyka regenerowana bez stempla). Ta sama luka dla klimatu naprawiona w CS-PHYS-a (`galaxyClimateModel`). Plan: COLONY_SPHERE_PLAN §3.8.1.
 - **Klimat v2 a kolonizacja** — ~110 ciał zmienia pasmo temperatury (głównie cienkie światy typu Mars → „zimne”); BALANS tego nie widzi (bot nie kolonizuje thin/dense). Ocenić w grze po CS-5.
+
+## COLONY SPHERE — po CS-PHYS-b (2026-11-19)
+- **CS-PHYS-c** (przed utrwaleniem flag): (a) skala wizualna kompaktowych układów — promienie planet/księżyców, orbity księżyców, poświata/korona gwiazdy i domyślny kadr kamery za skalą układu (minimalne rozmiary w px; statki/ikony bez skali; potem przegląd marginesu omijania 0.15 AU); (b) **Finding 776 ⚪** — wejście w walkę nie może przeskoczyć między klatkami przy dużej prędkości gry w układach o małym k. Plan: COLONY_SPHERE_PLAN §3.9.2.
