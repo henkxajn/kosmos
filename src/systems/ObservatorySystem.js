@@ -23,6 +23,7 @@ import { isEnemyVessel } from '../entities/Vessel.js';
 import { systemIdOf } from '../utils/SystemScope.js';   // AI STRIKES BACK S3/2 (SB59, Finding 427)
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
+import { systemScaleOf } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 // Zasięg detekcji wrogich statków per poziom obserwatorium (AU).
 // Index 0 = brak obserwatorium — każda kolonia dostaje 1 AU pasywnego wzroku
@@ -175,7 +176,8 @@ export class ObservatorySystem {
       }
     });
     const idx = Math.min(lvl, VESSEL_DETECTION_RANGE.length - 1);
-    return VESSEL_DETECTION_RANGE[idx];
+    // CS-PHYS-b2 (D-CS-24): × skala układu kolonii (świat dotychczasowy k = 1)
+    return VESSEL_DETECTION_RANGE[idx] * systemScaleOf(colony.planet?.systemId ?? colony.systemId ?? 'sys_home');
   }
 
   // Czy konkretny statek jest aktualnie wykryty?
@@ -544,7 +546,9 @@ export class ObservatorySystem {
     const gs = this._getGalaxyStar(systemId);
     if (!gs) return null;
     // CS-3a(-fix): ten sam kontekst świata (seed + tryb z galaxyData), którego użyje StarSystemManager.generateAndRegister.
-    return new SystemGenerator().peekCountsForStar(gs, SystemGenerator.worldSeedContext(window.KOSMOS?.galaxyData));
+    // CS-PHYS-b — model orbit świata zmienia liczby ciał (min. orbita, separacje) → ten sam rekord co generacja
+    return new SystemGenerator().peekCountsForStar(gs, SystemGenerator.worldSeedContext(window.KOSMOS?.galaxyData),
+      SystemGenerator.worldOrbitModel(window.KOSMOS?.galaxyData), SystemGenerator.worldClimateModel(window.KOSMOS?.galaxyData));
   }
 
   // ── Tick skanowania ───────────────────────────────────────────────────

@@ -41,6 +41,7 @@ import { DistanceUtils }  from './DistanceUtils.js';
 import { systemIdOf }     from './SystemScope.js';
 import { hasSpaceportAt } from './SpaceportCheck.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
+import { systemScaleOf, systemScaleOfEntity } from './SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
@@ -87,7 +88,7 @@ export function bodiesInSystemOf(vessel) {
     if (sys == null) return [];
     if (systemIdOf(e) !== sys) continue;
     // Strefa wykluczenia Słońca — kandydat, którego rozkaz i tak by nie przyjął.
-    if (Math.hypot(e.x, e.y) / AU_TO_PX < SUN_EXCLUSION_AU) continue;
+    if (Math.hypot(e.x, e.y) / AU_TO_PX < SUN_EXCLUSION_AU * systemScaleOf(sys)) continue;   // CS-PHYS-b2 — skala układu
     out.push(e);
   }
   return out;
@@ -123,7 +124,7 @@ export function nearestShelter(vessel, opts = {}) {
   if (!vessel?.position) return null;
   const colonyManager = opts.colonyManager ?? window.KOSMOS?.colonyManager ?? null;
   const clearanceAU = typeof opts.clearanceAU === 'number'
-    ? opts.clearanceAU : GAME_CONFIG.COMBAT_DISENGAGE_AU;
+    ? opts.clearanceAU : GAME_CONFIG.COMBAT_DISENGAGE_AU * systemScaleOfEntity(vessel);   // CS-PHYS-b2
   const avoid = opts.avoidPoint ?? null;
   const ownerId = ownerOf(vessel);
 
@@ -198,7 +199,7 @@ export function nearestOwnColonyBodyInSystem(vessel, colonyManager) {
  */
 export function escapeVector(vessel, avoidPoint, minAU) {
   if (!vessel?.position || !avoidPoint) return null;
-  const radiusPx = (typeof minAU === 'number' ? minAU : GAME_CONFIG.COMBAT_DISENGAGE_AU) * AU_TO_PX;
+  const radiusPx = (typeof minAU === 'number' ? minAU : GAME_CONFIG.COMBAT_DISENGAGE_AU * systemScaleOfEntity(vessel)) * AU_TO_PX;   // CS-PHYS-b2
   // Margines 20 % — bąbel liczy się od punktu starcia, a statek ma tam DOLECIEĆ, nie musnąć granicę.
   const r = radiusPx * 1.2;
 
@@ -214,7 +215,7 @@ export function escapeVector(vessel, avoidPoint, minAU) {
   let py = avoidPoint.y + (dy / len) * r;
 
   // Wyprowadzenie poza strefę Słońca — inaczej `MovementOrderSystem` odrzuci `unreachable_target`.
-  const sunPx = SUN_EXCLUSION_AU * AU_TO_PX;
+  const sunPx = SUN_EXCLUSION_AU * AU_TO_PX * systemScaleOfEntity(vessel);   // CS-PHYS-b2 — skala układu
   const dSun = Math.hypot(px, py);
   if (dSun < sunPx * 1.1) {
     const ux = dSun < 1e-6 ? 1 : px / dSun;

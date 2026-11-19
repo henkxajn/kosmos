@@ -190,6 +190,7 @@ import { SurfaceCache } from '../systems/SurfaceCache.js'; // ARC COLONY SPHERE 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
 const INTRO_SETTLE_MS = 2500;
+import { SystemScale } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24) — K.systemScale
 
 // ARC GALAXY G3-B — n-ta najbliższa gwiazda od aktywnego układu (przyrządy bramki; 1 = najbliższa).
 function galaxyNearestStar(K, n) {
@@ -238,10 +239,13 @@ export class GameScene {
     // (dom z zapisu; galaktyka z zapisu niesie własny stempel). Nowa gra przy ON → 2: dom generowany z modelem v2,
     // galaktyka dostaje stempel `climateModel` (niżej) i od niego zależą wszystkie obce układy.
     const worldClimateModel = (!savedData && GAME_CONFIG.FEATURES.realisticClimate === true) ? 2 : 1;
+    // CS-PHYS-b (D-CS-19, §3.9) — model orbit świata: ta sama jednorazowa decyzja nowej gry. Wczytanie → 1 (dom z zapisu,
+    // gwiazdy niosą własny stempel orbitModel). Nowa gra przy ON → 2: dom z orbitami skalowanymi + stempel galaktyki niżej.
+    const worldOrbitModel = (!savedData && GAME_CONFIG.FEATURES.scaledOrbits === true) ? 2 : 1;
     const { star, planets, moons = [], planetesimals, asteroids = [], comets = [], planetoids = [] } =
       savedData
         ? this._restoreSystem(savedData, cx, cy)
-        : this._generateFreshSystem(cx, cy, preMintedGalaxySeed, worldClimateModel);
+        : this._generateFreshSystem(cx, cy, preMintedGalaxySeed, worldClimateModel, worldOrbitModel);
 
     this.star = star;
 
@@ -250,6 +254,7 @@ export class GameScene {
     this.starSystemManager = new StarSystemManager();
     this.starSystemManager.registerHomeSystem(star, planets, moons, planetoids);
     window.KOSMOS.starSystemManager = this.starSystemManager;
+    window.KOSMOS.systemScale = SystemScale;   // CS-PHYS-b2 (D-CS-24) — skala odległości układu (kod sceny czyta przez K)
     window.KOSMOS.activeSystemId    = 'sys_home';
 
     // ── Three.js renderer ──────────────────────────────────────
@@ -2428,12 +2433,23 @@ export class GameScene {
     const galaxyClimateModel = savedData
       ? (planets.some(p => p.climate?.model === 2) ? 2 : 1)
       : worldClimateModel;
+    // Finding 773 (CS-PHYS-b) — zapis sprzed 4X niesie `preCivWorld` (seed + stemple świata, SaveSystem): galaktyka
+    // odtwarzana z TYM SAMYM seedem i stemplami (seedowany świat zostaje seedowany). Stary zapis bez rekordu → null.
+    const preCivWorld = isNewGame ? GalaxyGenerator.preCivWorldOf(savedData) : null;
+    // CS-PHYS-b — model orbit galaktyki: nowa gra → decyzja z początku start(); wczytanie bez galaktyki → stempel
+    // odtworzonej gwiazdy domu (albo rekordu sprzed 4X).
+    const galaxyOrbitModel = savedData
+      ? ((star.orbitModel === 2 || preCivWorld?.orbitModel === 2) ? 2 : 1)
+      : worldOrbitModel;
     if (isNewGame) {
       window.KOSMOS.galaxyData = GalaxyGenerator.generate(
-        preMintedGalaxySeed ?? GalaxyGenerator.mintSeed(), star.name, star.spectralType,
+        preCivWorld?.seed ?? preMintedGalaxySeed ?? GalaxyGenerator.mintSeed(), star.name, star.spectralType,
         { seededSystems: preMintedGalaxySeed !== null,    // CS-3a-fix — stempel świata (ta sama decyzja co dom)
           climateModel: galaxyClimateModel }                // CS-PHYS-a — stempel klimatu (ta sama decyzja co dom)
       );
+      // CS-PHYS-b — stempel orbit (ta sama decyzja co dom) + Finding 773 (stempel seedowania z zapisu sprzed 4X)
+      GalaxyGenerator.applyWorldStamps(window.KOSMOS.galaxyData,
+        { seededSystems: preCivWorld?.seededSystems === true, orbitModel: galaxyOrbitModel });
       console.log(`[GALAXY_SEED] Nowa galaktyka — seed ${window.KOSMOS.galaxyData.seed}`);
     } else {
       // Zapis: seed i cała galaktyka przychodzą z pliku — ZERO re-derywacji.
@@ -2450,7 +2466,8 @@ export class GameScene {
     const surfaceSeedsAssigned = this.starSystemManager.assignMissingSurfaceSeeds(window.KOSMOS.galaxyData?.seed);
     console.log(`[CS-3a] surfaceSeed nadane: ${surfaceSeedsAssigned} · seededSystems=${GAME_CONFIG.FEATURES.seededSystems}`
       + ` · świat=${window.KOSMOS.galaxyData?.seededSystems === true ? 'seedowany' : 'dotychczasowy'}`
-      + ` · klimat=${window.KOSMOS.galaxyData?.climateModel === 2 ? 'v2' : 'dotychczasowy'}`);
+      + ` · klimat=${window.KOSMOS.galaxyData?.climateModel === 2 ? 'v2' : 'dotychczasowy'}`
+      + ` · orbity=${window.KOSMOS.galaxyData?.orbitModel === 2 ? 'skalowane' : 'dotychczasowe'}`);
     // CS-3b — archetyp ciała + tidallyLocked (`??=`) ZARAZ PO ziarnach (remis rozstrzyga surfaceSeed). Nowa gra: dom
     // gracza już po makeHomeworldBreathable (generateCivScenario), więc archetyp z parametrów po mutacji.
     const archetypesAssigned = this.starSystemManager.assignMissingArchetypes();
@@ -2462,6 +2479,7 @@ export class GameScene {
     window.csTemp       = window.KOSMOS.debug?.csTemp;         // Finding 770 — temperatury aktywnego układu
     window.csLifeTick   = window.KOSMOS.debug?.csLifeTick;     // Finding 770 — jedno sprawdzenie LifeSystem teraz
     window.csClimate    = window.KOSMOS.debug?.csClimate;      // CS-PHYS-a — klimat aktywnego układu + model świata
+    window.csOrbits     = window.KOSMOS.debug?.csOrbits;       // CS-PHYS-b — orbity / HZ / strefy aktywnego układu
     window.csSurface    = window.KOSMOS.debug?.csSurface;      // CS-4a — podgląd powierzchni zaznaczonego ciała
     window.csSurfaceAll = window.KOSMOS.debug?.csSurfaceAll;   // CS-4a — miniatury wszystkich ciał układu
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
@@ -4588,7 +4606,7 @@ export class GameScene {
     const encId = String(battleData.battleId ?? '').replace(/^battle_ds_/, 'encounter_');
     const vm = K?.vesselManager;
     const getPos = (id) => vm?.getVessel?.(id)?.position ?? null;
-    const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX) });
+    const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX, K?.systemScale?.of?.(dscs?._activeEncounters?.get?.(encId)?.location?.systemId ?? K?.activeSystemId) ?? 1) });
     const isActive = (id) => id !== encId && !!dscs?._activeEncounters?.get?.(id)?.isActive;
     this._battleClusterHold ??= [];
     // #675 — gotowy klaster czeka jeszcze okno łaski (baner wychodzi z `_releaseBattleGrace`; dobicie w oknie dołącza).
@@ -4694,7 +4712,7 @@ export class GameScene {
     const vm = K?.vesselManager;
     const encId = encounterIdOfBattle(battleId);
     const getPos = (id) => vm?.getVessel?.(id)?.position ?? null;
-    const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX) });
+    const peerIds = clusterPeerIds(encId, dscs?.listActive?.() ?? [], { getPos, radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX, K?.systemScale?.of?.(dscs?._activeEncounters?.get?.(encId)?.location?.systemId ?? K?.activeSystemId) ?? 1) });
     const isActive = (id) => id !== encId && !!dscs?._activeEncounters?.get?.(id)?.isActive;
     // #675 — jak baner: gotowa grupa czeka okno łaski (linie wychodzą z `_releaseBattleGrace`).
     this._writeNarration(this._clusterNarratorOf().onBattleResolved({ battleId, result, peerIds, isActive,
@@ -5026,7 +5044,7 @@ export class GameScene {
   // CS-3a: `galaxySeed` = seed zmintowany przed układem domowym (tylko seededSystems ON; inaczej null
   // i generateCivScenario idzie dotychczasową, nieseedowaną ścieżką). POWER TEST zostaje nieseedowany.
   // CS-3a-fix: `seeded` = (galaxySeed !== null) — ta sama decyzja świata co stempel galaktyki w start().
-  _generateFreshSystem(cx, cy, galaxySeed = null, climateModel = 1) {
+  _generateFreshSystem(cx, cy, galaxySeed = null, climateModel = 1, orbitModel = 1) {
     const generator = new SystemGenerator();
 
     // POWER TEST — scenariusz testowy z dużym układem
@@ -5034,7 +5052,7 @@ export class GameScene {
     const isBoosted   = window.KOSMOS?.scenario === 'civilization_boosted';
     const result = isPowerTest
       ? generator.generatePowerTestScenario()
-      : generator.generateCivScenario({ galaxySeed: galaxySeed ?? undefined, seeded: galaxySeed !== null, climateModel });
+      : generator.generateCivScenario({ galaxySeed: galaxySeed ?? undefined, seeded: galaxySeed !== null, climateModel, orbitModel });
 
     // Zachowaj id planety z cywilizacją do auto-kolonizacji
     this._civPlanetId = result.civPlanetId;
@@ -5182,6 +5200,7 @@ export class GameScene {
       spectralType: data.star.spectralType,
       mass:         data.star.mass,
       luminosity:   data.star.luminosity,
+      orbitModel:   data.star.orbitModel,   // CS-PHYS-b — stempel orbit gwiazdy (HZ z jasności); brak → tabela klasy
     });
     // Gwiazda zawsze w centrum Three.js (0, 0)
     star.x = 0;
@@ -5195,6 +5214,7 @@ export class GameScene {
         const otherStar = new Star({
           id: sd.id, name: sd.name, spectralType: sd.spectralType,
           mass: sd.mass, luminosity: sd.luminosity,
+          orbitModel: sd.orbitModel,   // CS-PHYS-b
         });
         otherStar.x = 0;
         otherStar.y = 0;

@@ -7,6 +7,8 @@
 // Czysty: bez `window` i bez EventBusa — systemy podaje wołający (wyciągnięte z `ProximitySystem` bez zmiany rachunku:
 // te same działania w tej samej kolejności, wynik co do bitu).
 
+import { systemScaleOfEntity } from './SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
+
 /** Bazowy zasięg wykrycia (AU): statek imperium i zapas, gdy brak odczytu kadłuba. */
 export const DETECTION_BASE_AU = 0.5;
 
@@ -18,8 +20,9 @@ export const DETECTION_BASE_AU = 0.5;
  */
 export function vesselDetectionRangeAU(vessel, { vesselManager = null, techSystem = null } = {}) {
   const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
-  if (!isPlayer) return DETECTION_BASE_AU;
+  const k = systemScaleOfEntity(vessel);   // CS-PHYS-b2 (D-CS-24) — skala układu (świat dotychczasowy 1)
+  if (!isPlayer) return DETECTION_BASE_AU * k;
   const base = vesselManager?.getVesselSensorRangeAU ? vesselManager.getVesselSensorRangeAU(vessel) : DETECTION_BASE_AU;
   const mult = techSystem?.getMultiplier ? techSystem.getMultiplier('sensor_range') : 1.0;
-  return base * mult;
+  return base * mult * k;
 }

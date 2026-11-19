@@ -5,6 +5,7 @@ import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { KeplerMath } from '../utils/KeplerMath.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { systemScaleOfStar } from '../utils/SystemScale.js';   // CS-PHYS-b3 (D-CS-24)
 
 export class AccretionSystem {
   constructor({ planetesimals, star }) {
@@ -53,7 +54,8 @@ export class AccretionSystem {
   _checkPlanetAccretion() {
     const planets           = EntityManager.getByType('planet');
     const ACCRETION_DIST_AU = 0.12;  // strefa akrecji (AU)
-    const accretionPx       = ACCRETION_DIST_AU * GAME_CONFIG.AU_TO_PX;
+    // CS-PHYS-b3 (D-CS-24): próg przestrzenny × skala układu gwiazdy (bez stempla orbit 2 → 1, bit w bit)
+    const accretionPx       = ACCRETION_DIST_AU * GAME_CONFIG.AU_TO_PX * systemScaleOfStar(this.star);
 
     const toRemove = new Set();
 
@@ -92,7 +94,7 @@ export class AccretionSystem {
   // Sprawdź czy skupiska planetezymali osiągnęły masę progową → nowa planeta
   _checkClusterPromotion() {
     const PROMOTION_MASS_EARTH = 0.3;  // masy Ziemi
-    const BIN_SIZE_AU          = 0.15; // rozmiar binu (AU)
+    const BIN_SIZE_AU          = 0.15 * systemScaleOfStar(this.star); // rozmiar binu (AU) × skala układu (CS-PHYS-b3)
 
     const bins = new Map();
     this.planetesimals.forEach(p => {

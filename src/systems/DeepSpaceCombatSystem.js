@@ -49,6 +49,7 @@ import { isSameSystemStrict, systemIdOf } from '../utils/SystemScope.js';
 // POLISH P1 (CP1) — reguła rund i zegar starcia (siatka `TimeSystem`).
 import { COMBAT_ROUND_RULE_MS, COMBAT_SAFETY_ROUND_CAP } from '../data/CombatPaceData.js';
 import { combatClockMs, orbitClockSec } from '../utils/SimClock.js';
+import { systemScaleOf, systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
@@ -258,7 +259,7 @@ export class DeepSpaceCombatSystem {
     } else {
       // Team-up gather: vessele w buforze COMBAT_ENGAGEMENT_AU × 1.5 od mid.
       nearby = [];
-      const bufferPx = COMBAT_ENGAGEMENT_AU * TEAMUP_BUFFER_FACTOR * AU_TO_PX;
+      const bufferPx = COMBAT_ENGAGEMENT_AU * TEAMUP_BUFFER_FACTOR * AU_TO_PX * systemScaleOfEntity(v1);   // CS-PHYS-b2
       for (const v of vm._vessels.values()) {
         if (v.isWreck) continue;
         if (!_inCombatState(v)) continue;
@@ -354,7 +355,7 @@ export class DeepSpaceCombatSystem {
       const pin = this._findDominantDockedAt(playerGroup);
       const frozenA = !!GAME_CONFIG.FEATURES?.m4PlayerCombatMissionPause;
       if (this._deadlocked(this._prospectiveCombatants(playerGroup, pin, frozenA),
-        this._prospectiveCombatants(bestGroup, pin, true), 'player', bestEmpireId)) {
+        this._prospectiveCombatants(bestGroup, pin, true), 'player', bestEmpireId, v1.systemId)) {
         if (trace) console.log('[DSCS] reject startEng: no damage possible after freeze', {
           playerGroup: playerGroup.map(v => v.id), bestGroup: bestGroup.map(v => v.id), pin,
         });
@@ -602,7 +603,7 @@ export class DeepSpaceCombatSystem {
         const v = this._vm?._vessels?.get(id);
         if (!v?.position || v.isWreck || _isRetreatingFromCombat(v)) continue;
         if (v.position.state !== 'orbiting' || v.position.dockedAt != null) continue;
-        const range = Math.max(...st.weapons.map(w => this._resolveWeaponRange(w, owner)));
+        const range = Math.max(...st.weapons.map(w => this._resolveWeaponRange(w, owner, encounter.location?.systemId)));
         const engageId = v.movementOrder?.type === 'engage' ? v.movementOrder.targetEntityId : null;
         let nearest = null, nearestAU = Infinity, engaged = null, engagedAU = Infinity;
         for (const fid of foes) {
@@ -689,7 +690,7 @@ export class DeepSpaceCombatSystem {
             continue;
           }
 
-          const effectiveRangeAU = this._resolveWeaponRange(weapon, attackerOwner);
+          const effectiveRangeAU = this._resolveWeaponRange(weapon, attackerOwner, encounter.location?.systemId);
 
           // Find target — Opcja D engage priority dla player, closest fallback.
           const target = this._pickTarget(aVessel, aState, defenderVids, encounter, effectiveRangeAU);
@@ -881,7 +882,7 @@ export class DeepSpaceCombatSystem {
     // M1 (decyzja 5) — strażnik „nikt nie może zadać obrażeń”: remis BEZ wraków żywych.
     const combA = this._combatantsOf(encounter, sideAVids);
     const combB = this._combatantsOf(encounter, sideBVids);
-    if (this._deadlocked(combA, combB, encounter.sideA.ownerEmpireId, encounter.sideB.ownerEmpireId)) {
+    if (this._deadlocked(combA, combB, encounter.sideA.ownerEmpireId, encounter.sideB.ownerEmpireId, encounter.location?.systemId)) {
       EventBus.emit('combat:noDamagePossible', {
         encounterId: encounter.id, round: encounter.currentRound, systemId: encounter.location.systemId,
         aliveA: combA.length, aliveB: combB.length,
@@ -979,7 +980,7 @@ export class DeepSpaceCombatSystem {
     const vm = this._vm;
     const gy = this._year();
     const mid = encounter.location.point;
-    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
+    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX * systemScaleOf(encounter.location?.systemId);   // CS-PHYS-b2
     let n = 0;
     for (const [id, st] of encounter.vesselStates) {
       if (!st || st.hp <= 0) continue;
@@ -1091,13 +1092,13 @@ export class DeepSpaceCombatSystem {
    * @param {object[]} A, B — uczestnicy (`_combatantsOf` / `_prospectiveCombatants`)
    * @private
    */
-  _deadlocked(A, B, ownerA, ownerB) {
+  _deadlocked(A, B, ownerA, ownerB, systemId = null) {
     if (A.some((c) => c.moving) || B.some((c) => c.moving)) return false;
-    return !this._sideCanDamage(A, B, ownerA) && !this._sideCanDamage(B, A, ownerB);
+    return !this._sideCanDamage(A, B, ownerA, systemId) && !this._sideCanDamage(B, A, ownerB, systemId);
   }
 
   /** @private */
-  _sideCanDamage(mine, foes, owner) {
+  _sideCanDamage(mine, foes, owner, systemId = null) {
     const armed = mine.filter((c) => c.st?.weapons?.length > 0);
     if (!armed.length || !foes.length) return false;
     let maxDmg = 0;   // największe obrażenia strony na rundę (każda broń trafia)
@@ -1107,7 +1108,7 @@ export class DeepSpaceCombatSystem {
       if ((f.st?.shieldHP ?? 0) >= maxDmg && regen >= maxDmg) continue;   // tarcza nie do przebicia
       for (const c of armed) {
         if (c.approach) return true;
-        const range = Math.max(...c.st.weapons.map((w) => this._resolveWeaponRange(w, owner)));
+        const range = Math.max(...c.st.weapons.map((w) => this._resolveWeaponRange(w, owner, systemId)));
         if (Math.hypot(f.x - c.x, f.y - c.y) / AU_TO_PX <= range) return true;
       }
     }
@@ -1300,7 +1301,7 @@ export class DeepSpaceCombatSystem {
     //   sprawdzeniami. Sam bufor odległości w selektorze tego NIE zamyka — dlatego marker.
     const isRetreating = _isRetreatingFromCombat;
 
-    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
+    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX * systemScaleOf(encounter.location?.systemId);   // CS-PHYS-b2
     let aliveCount = 0;
     let outsideCount = 0;
     for (const vid of vids) {
@@ -1545,7 +1546,8 @@ export class DeepSpaceCombatSystem {
    * @param {string} ownerEmpireId — 'player' używa TechSystem; empire bez tech w P3.
    * @returns {number}
    */
-  _resolveWeaponRange(weapon, ownerEmpireId) {
+  // CS-PHYS-b2 (D-CS-24): zasięg × skala układu starcia (`systemId`; brak / świat dotychczasowy → k = 1)
+  _resolveWeaponRange(weapon, ownerEmpireId, systemId = null) {
     const baseAU = weapon.rangeAU ?? this._fallbackRangeAU(weapon.category);
     let mult = 1.0;
     if (ownerEmpireId === 'player') {
@@ -1556,7 +1558,7 @@ export class DeepSpaceCombatSystem {
       }
     }
     // Empire tech state — P5 doda. W P3 zostaje mult=1.0 dla wrogów.
-    return baseAU * mult;
+    return baseAU * mult * systemScaleOf(systemId);
   }
 
   /**

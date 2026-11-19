@@ -16,6 +16,7 @@ import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition, 
 import { DepositSystem } from '../systems/DepositSystem.js';
 import { combineSeeds, hashStringToInt } from '../utils/SeedMath.js';
 import { CLIMATE_LEGACY, CLIMATE_V2, KELVIN, bodyClimate, tidalFluxWm2, applyTidalHeating } from '../utils/ClimateModel.js';
+import { ORBIT_LEGACY, ORBIT_SCALED, scaledMinOrbitAU, compactionOf, pickHabitableHomeworld, homeworldOrbitAU } from '../utils/OrbitModel.js';
 
 // Bonus cieplarniany wg typu atmosfery (°C)
 // thick zachowany dla backward compat (stare save'y)
@@ -33,6 +34,33 @@ const MIN_ORBIT_HALF_SEP = {
   rocky:     0.25,  // AU — Ziemia/Wenus: małe masy (Wenus–Ziemia ≈ 0.28 AU)
   hot_rocky: 0.20,  // AU — bliskie gwiazdy, bardzo małe masy
 };
+
+// CS-PHYS-b — progi kolizji PhysicsSystem (lustro: checkCollisions 0.65·Σr, checkSmallBodyCollisions 1.3·Σr, px)
+const PLANET_COLLISION_FACTOR     = 0.65;
+const SMALL_BODY_COLLISION_FACTOR = 1.3;
+const PLANETOID_VISUAL_RADIUS_MAX = 5;      // px — największy promień wizualny planetoidy (_generatePlanetoids)
+const COLLISION_MARGIN_AU         = 0.01;   // AU — zapas ponad próg
+
+/** Minimalny odstęp półosi [AU], przy którym dwie planety nigdy nie wejdą w próg kolizji PhysicsSystem. */
+export function collisionClearanceAU(p1, p2) {
+  const r = PLANET_COLLISION_FACTOR * ((p1.visual?.radius ?? 10) + (p2.visual?.radius ?? 10)) / GAME_CONFIG.AU_TO_PX;
+  return r + p1.orbital.a * (p1.orbital.e ?? 0) + p2.orbital.a * (p2.orbital.e ?? 0) + COLLISION_MARGIN_AU;
+}
+
+/**
+ * Najmniejsza półoś planety `outer` za planetą `inner` spełniająca collisionClearanceAU po przesunięciu (a·e rośnie
+ * razem z półosią): a·(1−e_out) ≥ a_in·(1+e_in) + próg + zapas.
+ */
+export function collisionMinOrbitAU(inner, outer) {
+  const r = PLANET_COLLISION_FACTOR * ((inner.visual?.radius ?? 10) + (outer.visual?.radius ?? 10)) / GAME_CONFIG.AU_TO_PX;
+  return (inner.orbital.a * (1 + (inner.orbital.e ?? 0)) + r + COLLISION_MARGIN_AU) / (1 - (outer.orbital.e ?? 0));
+}
+
+/** Największa półoś planety `inner` pod planetą `outer` spełniająca próg kolizji (odwrotność collisionMinOrbitAU). */
+export function collisionMaxInnerOrbitAU(inner, outer) {
+  const r = PLANET_COLLISION_FACTOR * ((inner.visual?.radius ?? 10) + (outer.visual?.radius ?? 10)) / GAME_CONFIG.AU_TO_PX;
+  return (outer.orbital.a * (1 - (outer.orbital.e ?? 0)) - r - COLLISION_MARGIN_AU) / (1 + (inner.orbital.e ?? 0));
+}
 
 // Mulberry32 PRNG — deterministyczny generator liczb pseudolosowych
 function mulberry32(seed) {
@@ -71,6 +99,8 @@ const HOME_SYSTEM_RNG_ID = 'sys_home';
  */
 export const EMERGENCY_GALAXY_SEED = 0;
 const _emergency = { uses: 0, logged: new Set() };
+// CS-PHYS-b — licznik aktywacji pasma 5–35 °C w makeHomeworldBreathable (bez wpływu na rozgrywkę)
+const _homeBand = { total: 0, cold: 0, hot: 0 };
 
 export class SystemGenerator {
 
@@ -109,6 +139,21 @@ export class SystemGenerator {
     if (galaxyData) return CLIMATE_LEGACY;
     return GAME_CONFIG.FEATURES.realisticClimate === true ? CLIMATE_V2 : CLIMATE_LEGACY;
   }
+
+  /**
+   * CS-PHYS-b (D-CS-19, §3.9) — model orbit ŚWIATA: stempel `galaxyData.orbitModel === 2` → 2; rekord świata bez
+   * stempla → 1 (każdy stary zapis, nowa gra przy OFF); brak rekordu → flaga (tylko dawne API / harness). Jak
+   * worldClimateModel: decyzja zapada przy tworzeniu świata, przełączenie flagi po starcie nic nie zmienia.
+   */
+  static worldOrbitModel(galaxyData) {
+    if (galaxyData?.orbitModel === ORBIT_SCALED) return ORBIT_SCALED;
+    if (galaxyData) return ORBIT_LEGACY;
+    return GAME_CONFIG.FEATURES.scaledOrbits === true ? ORBIT_SCALED : ORBIT_LEGACY;
+  }
+
+  /** CS-PHYS-b — ile razy pasmo 5–35 °C świata macierzystego musiało zadziałać (sonda / keeper). */
+  static homeworldBandStats() { return { ..._homeBand }; }
+  static resetHomeworldBandStats() { _homeBand.total = 0; _homeBand.cold = 0; _homeBand.hot = 0; }
 
   /** CS-3a-fix — ile razy użyto ścieżki awaryjnej (świat seedowany bez galaxySeed). Keeper / sonda: 0. */
   static emergencySeedUses() { return _emergency.uses; }
@@ -159,6 +204,8 @@ export class SystemGenerator {
   generate(seedCtx = {}) {
     // CS-PHYS-a — model klimatu świata podany przez wołającego (decyzja z chwili tworzenia świata); brak → dotychczasowy
     this._climate = seedCtx?.climateModel === CLIMATE_V2 ? CLIMATE_V2 : CLIMATE_LEGACY;
+    // CS-PHYS-b — model orbit świata podany przez wołającego (decyzja z chwili tworzenia świata); brak → dotychczasowy
+    this._orbit = seedCtx?.orbitModel === ORBIT_SCALED ? ORBIT_SCALED : ORBIT_LEGACY;
     const rngSeed = this._homeRngSeed(seedCtx);
     if (rngSeed === null) return this._generateHomeBodies();
     const origRandom = Math.random;
@@ -232,6 +279,7 @@ export class SystemGenerator {
       spectralType,
       mass,
       luminosity,
+      orbitModel:   this._orbit,      // CS-PHYS-b — Star stempluje tylko 2 (HZ z jasności)
       x: 0,
       y: 0,
     });
@@ -281,7 +329,11 @@ export class SystemGenerator {
     // Min orbit skalowane masą gwiazdy — cięższe gwiazdy mają większy promień wizualny
     // Poza zasięgiem wewnętrznego glow gwiazdy (r * 9 / 2 w Three.js → ~r * 4.5 / 11 AU)
     // M(0.3)→0.35, K(0.7)→0.43, G(1.0)→0.55, F(1.4)→0.71 AU
-    const minOrbitAU = Math.max(0.35, 0.15 + (star.mass ?? 1.0) * 0.4);
+    // CS-PHYS-b (§3.9): świat orbit skalowanych — max(0.03, 0.40·√L) AU (strumień 6.25 S⊕); HZ gwiazdy już z jasności,
+    // więc wzorzec Titiusa-Bode'a (hzScale) skaluje się z √L. Te same rzuty perturbacji na slot co dotychczas.
+    const minOrbitAU = this._orbit === ORBIT_SCALED
+      ? scaledMinOrbitAU(star.luminosity)
+      : Math.max(0.35, 0.15 + (star.mass ?? 1.0) * 0.4);
 
     for (let i = 0; i < count; i++) {
       // Titius-Bode z perturbacją ±15%
@@ -334,8 +386,49 @@ export class SystemGenerator {
 
     // ── Wymuszenie minimalnej separacji orbit (kryterium stabilności Hilla) ──
     this._enforceMinSeparation(planets, star);
+    // CS-PHYS-b2 — świat orbit skalowanych: slot domu na orbicie +15 °C (decyzja 2: dom w HZ, pasmo 5–35 °C tylko siatka)
+    if (this._orbit === ORBIT_SCALED) this._placeHomeworldSlot(planets, star, breathableCount);
 
     return planets;
+  }
+
+  // CS-PHYS-b2 (§3.9.1) — slot świata macierzystego w KAŻDYM układzie świata orbit skalowanych (każdy może zostać domem
+  // imperium AI, a peek musi zgadzać się z generacją): skalista na orbicie, na której jej temperatura KOŃCOWA (po
+  // makeHomeworldBreathable, model klimatu świata) = +15 °C (OrbitModel.homeworldOrbitAU). Kandydat: skalista w HZ
+  // najbliższa celu (ln a); brak → nowa skalista (_makePlanet — jedyne rzuty RNG kroku). Potem sąsiedzi: wewnętrzni
+  // dosuwani do środka (separacja κ + podłoga kolizyjna), poniżej minimalnej orbity — usuwani; zewnętrzni wypychani
+  // przez _enforceMinSeparation (dom nie rusza się, bo jego wewnętrzny sąsiad już spełnia odstęp).
+  _placeHomeworldSlot(planets, star, breathableCount) {
+    const hz = star.habitableZone;
+    const L  = star.luminosity;
+    const solve = (p) => homeworldOrbitAU({ L, e: p.orbital.e ?? 0, hz, climateModel: this._climate,
+                                             albedo: p.albedo ?? PLANET_TYPE_CONFIG.rocky.albedo });
+    const probe = { orbital: { a: 1, e: 0 }, albedo: PLANET_TYPE_CONFIG.rocky.albedo };
+    const aGuess = solve(probe);
+    let home = planets
+      .filter(p => p.planetType === 'rocky' && p.orbital.a >= hz.min && p.orbital.a <= hz.max)
+      .sort((x, y) => (Math.abs(Math.log(x.orbital.a / aGuess)) - Math.abs(Math.log(y.orbital.a / aGuess)))
+                      || (x.orbital.a - y.orbital.a))[0];
+    if (!home) {
+      home = this._makePlanet(star, aGuess, planets.length, 'rocky', breathableCount);
+      planets.push(home);
+    }
+    const aHome = solve(home);
+    if (home.orbital.a !== aHome) this._adjustOrbit(home, aHome, star);
+    planets.sort((x, y) => x.orbital.a - y.orbital.a);
+
+    const k = compactionOf(L);
+    const minOrbitAU = scaledMinOrbitAU(L);
+    for (let j = planets.indexOf(home) - 1; j >= 0; j--) {
+      const inner = planets[j], outer = planets[j + 1];
+      const sep = ((MIN_ORBIT_HALF_SEP[inner.planetType] || 0.25) + (MIN_ORBIT_HALF_SEP[outer.planetType] || 0.25)) * k;
+      const maxA = Math.min(outer.orbital.a - sep, collisionMaxInnerOrbitAU(inner, outer));
+      if (inner.orbital.a <= maxA) break;          // dalsi wewnętrzni nieruszeni — odstępy z separacji zostają
+      if (maxA < minOrbitAU) { planets.splice(j, 1); continue; }
+      this._adjustOrbit(inner, maxA, star);
+    }
+    this._enforceMinSeparation(planets, star);
+    return home;
   }
 
   // Pomocnik: stwórz planetę na podanej orbicie (unika duplikacji kodu)
@@ -414,12 +507,17 @@ export class SystemGenerator {
 
     // Upewnij się, że posortowane po półosi
     planets.sort((a, b) => a.orbital.a - b.orbital.a);
+    // CS-PHYS-b — świat orbit skalowanych: separacje × κ = clamp(√L, 0.2, 1); dotychczasowy: ×1 (bit w bit)
+    const k = this._orbit === ORBIT_SCALED ? compactionOf(star.luminosity) : 1;
 
     for (let i = 1; i < planets.length; i++) {
       const prev = planets[i - 1];
       const curr = planets[i];
-      const minSep = (MIN_ORBIT_HALF_SEP[prev.planetType] || 0.25)
-                   + (MIN_ORBIT_HALF_SEP[curr.planetType] || 0.25);
+      let minSep = ((MIN_ORBIT_HALF_SEP[prev.planetType] || 0.25)
+                   + (MIN_ORBIT_HALF_SEP[curr.planetType] || 0.25)) * k;
+      // CS-PHYS-b — podłoga kolizyjna: PhysicsSystem.checkCollisions łączy planety bliżej niż 0.65·Σ promieni [px];
+      // odstęp musi to pokryć także w peryhelium/aphelium (a·e obu planet). Dotychczasowy świat: bez podłogi.
+      if (this._orbit === ORBIT_SCALED) minSep = Math.max(minSep, collisionMinOrbitAU(prev, curr) - prev.orbital.a);
 
       const actualSep = curr.orbital.a - prev.orbital.a;
       if (actualSep < minSep) {
@@ -602,7 +700,7 @@ export class SystemGenerator {
     for (let i = 0; i < count; i++) {
       // Rozkład logarytmiczny: więcej ciał w pasie wewnętrznym, mniej na zewnątrz
       const t  = Math.pow(Math.random(), 0.65);
-      const a  = GAME_CONFIG.DISK_MIN_AU + t * (GAME_CONFIG.DISK_MAX_AU - GAME_CONFIG.DISK_MIN_AU);
+      const a  = (GAME_CONFIG.DISK_MIN_AU + t * (GAME_CONFIG.DISK_MAX_AU - GAME_CONFIG.DISK_MIN_AU)) * this._smallBodyScale(star);
       const e  = 0.05 + Math.random() * 0.32;   // bardziej eliptyczne niż planety
       const T  = KeplerMath.orbitalPeriod(a, star.physics.mass);
       const M  = Math.random() * Math.PI * 2;
@@ -621,9 +719,15 @@ export class SystemGenerator {
 
   // ── Pas asteroid (2.0–3.5 AU, stabilne orbity) ────────────────
   // Nie generowany gdy jest duża planeta (gas) w zakresie 1.5–4.0 AU
+  // CS-PHYS-b — mnożnik zakresów małych ciał (dysk, pas, komety, planetoidy): κ w świecie orbit skalowanych, inaczej 1
+  _smallBodyScale(star) {
+    return this._orbit === ORBIT_SCALED ? compactionOf(star.luminosity) : 1;
+  }
+
   _generateAsteroidBelt(star, planets) {
+    const k = this._smallBodyScale(star);
     const hasGasInBelt = planets.some(p =>
-      p.orbital.a >= 1.5 && p.orbital.a <= 4.0 &&
+      p.orbital.a >= 1.5 * k && p.orbital.a <= 4.0 * k &&
       (p.planetType === 'gas' || p.physics.mass > 50)
     );
 
@@ -633,7 +737,7 @@ export class SystemGenerator {
 
     const asteroids = [];
     for (let i = 0; i < count; i++) {
-      const a           = 2.8 + Math.random() * 1.7;   // 2.8–4.5 AU (dalej od strefy rocky)
+      const a           = (2.8 + Math.random() * 1.7) * k;   // 2.8–4.5 AU (dalej od strefy rocky); ×κ (CS-PHYS-b)
       const e           = 0.03 + Math.random() * 0.12; // stabilne 0.03–0.15
       const T           = KeplerMath.orbitalPeriod(a, star.physics.mass);
       const mass        = 0.0001 + Math.random() * 0.005;
@@ -658,7 +762,7 @@ export class SystemGenerator {
     const comets = [];
 
     for (let i = 0; i < count; i++) {
-      const a    = 8 + Math.random() * 22;            // 8–30 AU
+      const a    = (8 + Math.random() * 22) * this._smallBodyScale(star);   // 8–30 AU; ×κ (CS-PHYS-b)
       const e    = 0.75 + Math.random() * 0.22;       // 0.75–0.97
       const T    = KeplerMath.orbitalPeriod(a, star.physics.mass);
       const mass = 0.00001 + Math.random() * 0.001;
@@ -701,9 +805,16 @@ export class SystemGenerator {
     const PLANETOID_MAX_AU = Math.min(GAME_CONFIG.MAX_ORBIT_AU, 25); // max 25 AU
 
     // Zbuduj listę zabronionych stref (planeta ± margines)
+    // CS-PHYS-b — świat orbit skalowanych: zakres i marginesy × κ (dotychczasowy: ×1, bit w bit)
+    // Świat orbit skalowanych: margines = max(κ·dotychczasowy, próg kolizji małych ciał 1.3·Σ promieni [px] + a·e planety)
+    const kp = this._smallBodyScale(star);
     const forbidden = planets.map(p => ({
       center: p.orbital.a,
-      margin: PLANET_MARGIN[p.planetType] || 0.3,
+      margin: this._orbit === ORBIT_SCALED
+        ? Math.max((PLANET_MARGIN[p.planetType] || 0.3) * kp,
+                   SMALL_BODY_COLLISION_FACTOR * ((p.visual?.radius ?? 10) + PLANETOID_VISUAL_RADIUS_MAX) / GAME_CONFIG.AU_TO_PX
+                   + p.orbital.a * (p.orbital.e ?? 0))
+        : (PLANET_MARGIN[p.planetType] || 0.3),
     }));
 
     // Palety kolorów per typ planetoidy
@@ -716,7 +827,7 @@ export class SystemGenerator {
     for (let i = 0; i < count; i++) {
       let a, attempts = 0;
       do {
-        a = PLANETOID_MIN_AU + Math.random() * (PLANETOID_MAX_AU - PLANETOID_MIN_AU);
+        a = (PLANETOID_MIN_AU + Math.random() * (PLANETOID_MAX_AU - PLANETOID_MIN_AU)) * kp;
         attempts++;
       } while (
         attempts < 30 &&
@@ -805,8 +916,9 @@ export class SystemGenerator {
         planet.climate = re.climate;
       }
       // Clamp do zakresu Earth-like — planeta macierzysta musi być hospitalna
-      if (finalC < 5)  finalC = 5 + Math.random() * 10;   // 5–15°C
-      if (finalC > 35) finalC = 20 + Math.random() * 10;  // 20–30°C
+      _homeBand.total++;                                   // CS-PHYS-b — licznik aktywacji pasma (sonda)
+      if (finalC < 5)  { _homeBand.cold++; finalC = 5 + Math.random() * 10; }   // 5–15°C
+      if (finalC > 35) { _homeBand.hot++;  finalC = 20 + Math.random() * 10; }  // 20–30°C
       planet.temperatureC = Math.round(finalC);
       planet.temperatureK = planet.temperatureC + 273.15;
       planet.surface.temperature = planet.temperatureC;
@@ -853,9 +965,10 @@ export class SystemGenerator {
     const hz = star.habitableZone;
 
     // Znajdź najlepszą planetę rocky w HZ (scoring: temp 0–50°C, atmosfera, stabilność)
-    let bestPlanet = null;
+    // CS-PHYS-b (decyzja 2) — świat orbit skalowanych: skalista WEWNĄTRZ HZ (ta sama reguła co dom AI); brak → scoring
+    let bestPlanet = this._orbit === ORBIT_SCALED ? pickHabitableHomeworld(planets, star) : null;
     let bestScore  = -Infinity;
-    for (const p of planets) {
+    for (const p of (bestPlanet ? [] : planets)) {
       if (p.planetType !== 'rocky') continue;
       let score = 0;
       // Bonus: w strefie HZ
@@ -978,8 +1091,10 @@ export class SystemGenerator {
   // CS-3a (D-CS-17): `seedCtx` = kontekst ziarna świata `{ galaxySeed, seeded }`
   // (SystemGenerator.worldSeedContext(galaxyData)); brak → ziarno dotychczasowe (dawne API).
   // CS-PHYS-a: `climateModel` = model klimatu świata (SystemGenerator.worldClimateModel(galaxyData)); brak → dotychczasowy.
-  generateForStar(galaxyStar, seedCtx, climateModel = CLIMATE_LEGACY) {
+  // CS-PHYS-b: `orbitModel` = model orbit świata (SystemGenerator.worldOrbitModel(galaxyData)); brak → dotychczasowy.
+  generateForStar(galaxyStar, seedCtx, climateModel = CLIMATE_LEGACY, orbitModel = ORBIT_LEGACY) {
     this._climate = climateModel === CLIMATE_V2 ? CLIMATE_V2 : CLIMATE_LEGACY;
+    this._orbit   = orbitModel === ORBIT_SCALED ? ORBIT_SCALED : ORBIT_LEGACY;
     // Seeded PRNG → deterministyczna generacja (ziarno: _foreignRngSeed — wspólne z peekCountsForStar)
     const seed = this._foreignRngSeed(galaxyStar.id, seedCtx);
     const rng  = mulberry32(seed);
@@ -996,6 +1111,7 @@ export class SystemGenerator {
         spectralType: galaxyStar.spectralType,
         mass:         galaxyStar.mass,
         luminosity:   galaxyStar.luminosity,
+        orbitModel:   this._orbit,      // CS-PHYS-b
         x: 0,
         y: 0,
       });
@@ -1045,7 +1161,13 @@ export class SystemGenerator {
   //   nie wpływają na długości tablic). generateId() jedynie inkrementuje licznik (bez RNG).
   //   CS-3a: ziarno WYŁĄCZNIE przez _foreignRngSeed (to samo co generateForStar) — wołający podaje
   //   ten sam kontekst świata, którego użyłby generateAndRegister (worldSeedContext(galaxyData)).
-  peekCountsForStar(galaxyStar, seedCtx) {
+  //   CS-PHYS-b: `orbitModel` = ten sam model orbit świata co generateAndRegister (worldOrbitModel(galaxyData)).
+  //   Klimat nie zmienia liczb ani rzutów (CS-PHYS-a), więc peek go nie potrzebuje.
+  // CS-PHYS-b2: `climateModel` = model klimatu świata — w świecie orbit skalowanych orbita slotu domu (+15 °C) od niego
+  // zależy (separacje → liczby ciał), więc peek bierze ten sam model co generateForStar.
+  peekCountsForStar(galaxyStar, seedCtx, orbitModel = ORBIT_LEGACY, climateModel = CLIMATE_LEGACY) {
+    this._orbit = orbitModel === ORBIT_SCALED ? ORBIT_SCALED : ORBIT_LEGACY;
+    this._climate = climateModel === CLIMATE_V2 ? CLIMATE_V2 : CLIMATE_LEGACY;
     const seed = this._foreignRngSeed(galaxyStar.id, seedCtx);
     const rng  = mulberry32(seed);
     const origRandom = Math.random;
@@ -1058,6 +1180,7 @@ export class SystemGenerator {
         spectralType: galaxyStar.spectralType,
         mass:         galaxyStar.mass,
         luminosity:   galaxyStar.luminosity,
+        orbitModel:   this._orbit,      // CS-PHYS-b
         x: 0,
         y: 0,
       });

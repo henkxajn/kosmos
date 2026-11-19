@@ -30,6 +30,7 @@ import { resolveTemplate } from '../../utils/ShipTemplateResolver.js';
 import { DirectorProbes, DirectorGuards, DirectorActions } from './DirectorRegistry.js';
 import { queueMissionEvent } from '../../ui/MissionEventModal.js';
 import { t } from '../../i18n/i18n.js';
+import { systemScaleOf } from '../../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 /** Ile lat WYŚWIETLANYCH trwa przelot od wejścia do wyjścia z układu. */
 const FLYBY_DURATION_YEARS = 6.0;
@@ -101,7 +102,9 @@ export class DirectorFirstContact {
     // graczowi czas na przechwycenie, mniejszy promień stawia sondę bliżej domu. Bez tego
     // zestrzelenie jest praktycznie nietestowalne — statki gracza są wolniejsze od sondy.
     const durationYears = Number(params.durationYears) > 0 ? Number(params.durationYears) : FLYBY_DURATION_YEARS;
-    const radiusPx      = Number(params.radiusPx)      > 0 ? Number(params.radiusPx)      : FLYBY_RADIUS_PX;
+    // CS-PHYS-b2 (D-CS-24): domyślny promień przelotu × skala układu domowego gracza (dotychczasowy k = 1)
+    const radiusPx      = Number(params.radiusPx)      > 0 ? Number(params.radiusPx)
+      : FLYBY_RADIUS_PX * systemScaleOf(window.KOSMOS?.homeSystemId ?? 'sys_home');
 
     const reg = this._require('empireRegistry');
     const vm  = this._require('vesselManager');

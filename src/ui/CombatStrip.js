@@ -25,6 +25,7 @@ import {
   COMBAT_STRIP, stripBattles, stripLayout, stripDetailHeight, stripLog, stripWatchPayload, stripHitAt,
   tuneCombatStrip, resetCombatStrip,
 } from './CombatStripLogic.js';
+import { activeSystemScale } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 const MEASURE_CACHE_MAX = 800;
 
@@ -189,7 +190,7 @@ export class CombatStrip {
     const vessel = (id) => vm?.getVessel?.(id) ?? vm?._vessels?.get?.(id) ?? null;
     return {
       getPos: (id) => vessel(id)?.position ?? null,
-      radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX),
+      radius: clusterRadiusPx(GAME_CONFIG.AU_TO_PX, activeSystemScale()),   // CS-PHYS-b2 — skala układu
       activeSystemId: K.activeSystemId ?? null,
       quality: (id) => K.intelSystem?.getVesselContact?.(id)?.quality ?? 'unknown',
       labelFor: (owner) => (owner === 'player' ? t('battle.player')

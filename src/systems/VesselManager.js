@@ -86,6 +86,7 @@ const REFUEL_RATES = {
   fuel:       3,    // jednostek/rok (zastępuje power_cells + plasma_cores — spłaszczenie 3→2)
   warp_cores: 2.0,  // jednostek/rok (4× vs bazowe 0.5 — szybkie tankowanie baku warp)
 };
+import { systemScaleOf, systemScaleOfEntity, systemScaleOfStar, activeSystemScale } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 export class VesselManager {
   // S3.5a-1 — utrzymanie floty (core mechanic, bez FEATURES flagi — stałe lokalne klasy).
@@ -3138,7 +3139,7 @@ export class VesselManager {
       const edgeAU = 30; // AU — obrzeża układu
       // SB54 — kąt wspólny dla grupy (`mission.arrivalAngle`, ustawiany w `dispatchInterstellar`); bez niego — losowany.
       const angle = Number.isFinite(m.arrivalAngle) ? m.arrivalAngle : Math.random() * Math.PI * 2;
-      const edgePx = edgeAU * AU_TO_PX;
+      const edgePx = edgeAU * AU_TO_PX * systemScaleOfStar(star);   // CS-PHYS-b2 — obrzeża × skala układu celu
       vessel.systemId = m.toSystemId;
       vessel.position.state = 'orbiting';
       vessel.position.x = Math.cos(angle) * edgePx;  // gwiazda zawsze w (0,0)
@@ -3189,7 +3190,9 @@ export class VesselManager {
 
     // Krótkie dystanse (< 0.5 AU) → linia prosta, bez unikania
     // (np. lot planeta→księżyc — oba blisko gwiazdy, nie trzeba omijać)
-    const SHORT_HOP = 0.5 * AU_TO_PX;
+    // CS-PHYS-b2 (D-CS-24): progi trasy (krótki skok, strefa Słońca, margines) × skala układu; dotychczasowy k = 1
+    const kSys = systemScaleOf(systemId ?? 'sys_home');
+    const SHORT_HOP = 0.5 * AU_TO_PX * kSys;
     if (directDist < SHORT_HOP) {
       return { waypoints: [], totalDist: directDist };
     }
@@ -3204,8 +3207,8 @@ export class VesselManager {
     const dotSun = (-sx) * dx + (-sy) * dy;
     const tSun = dotSun / lenSq;
 
-    if (minDistSun <= SUN_EXCLUSION && tSun >= 0 && tSun <= 1) {
-      const r = SUN_EXCLUSION + SUN_MARGIN;
+    if (minDistSun <= SUN_EXCLUSION * kSys && tSun >= 0 && tSun <= 1) {
+      const r = (SUN_EXCLUSION + SUN_MARGIN) * kSys;
       const baseAngle = Math.atan2(dy, dx);
       const wp1 = { x: r * Math.cos(baseAngle + Math.PI / 2), y: r * Math.sin(baseAngle + Math.PI / 2) };
       const wp2 = { x: r * Math.cos(baseAngle - Math.PI / 2), y: r * Math.sin(baseAngle - Math.PI / 2) };
@@ -4008,7 +4011,7 @@ export class VesselManager {
     let dockEnt = this._findEntity(p.dockedAt);
     if (dockEnt?.type === 'station') dockEnt = this._findEntity(dockEnt.bodyId) ?? null;
     if (dockEnt && (p.state === 'docked' || p.state === 'orbiting') && (dockEnt.id === ent.id || dockEnt.id === parent?.id)) return true;
-    const capPx = RENDEZVOUS_TUNING.CAPTURE_AU * AU_TO_PX;
+    const capPx = RENDEZVOUS_TUNING.CAPTURE_AU * AU_TO_PX * systemScaleOfEntity(ent);   // CS-PHYS-b2 — skala układu ciała
     const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const near = (b) => {
       if (!b) return false;
@@ -4104,7 +4107,8 @@ export class VesselManager {
     // układami nie ma „tutaj", więc nie ma czego snapować (wzór `RetreatTarget.bodiesInSystemOf`).
     const scopeSys = vessel ? systemIdOf(vessel) : undefined;
     if (vessel && scopeSys == null) return null;
-    const maxPx = maxAU * AU_TO_PX;
+    // CS-PHYS-b2 (D-CS-24): promień przyciągania × skala układu (statku, bez statku — aktywnego); dotychczasowy k = 1
+    const maxPx = maxAU * AU_TO_PX * (scopeSys != null ? systemScaleOf(scopeSys) : activeSystemScale());
     let best = null;
     let bestDist = Infinity;
     for (const type of ['planet', 'moon', 'planetoid']) {

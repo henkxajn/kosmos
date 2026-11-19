@@ -31,6 +31,7 @@ import { getPrimaryRole, isEnemyVessel } from '../entities/Vessel.js';
 import { stationGroupAnchorId } from '../utils/StationGroup.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 import { vesselDetectionRangeAU } from '../utils/DetectionRange.js';
+import { systemScaleOfEntity, auReadoutDecimals } from '../utils/SystemScale.js';   // CS-PHYS-b3 (D-CS-24)
 import { fmtDec, fmtInt } from './NumberFormatLogic.js';
 import { gatherVesselLabels, stationStatusBadges, BADGE_ICON, edgeIndicators } from './MapLabelLogic.js';
 import { clusterScreenPoints } from './FleetPictureLogic.js';
@@ -628,7 +629,7 @@ export class HudLabelLayer {
     }
     const r = colonyRadarRangeAU(b.colony, F.K.observatorySystem);
     if (r === Infinity) parts.push(t('hudLabel.detect', '∞'));
-    else if (r > 0) parts.push(t('hudLabel.detect', `${fmtDec(r, 1, loc)} AU`));
+    else if (r > 0) parts.push(t('hudLabel.detect', `${fmtDec(r, auReadoutDecimals(r), loc)} AU`));
     return parts.length ? parts.join(' · ') : null;
   }
 
@@ -645,8 +646,8 @@ export class HudLabelLayer {
     const det = vesselDetectionRangeAU(v, { vesselManager: K.vesselManager, techSystem: K.techSystem });
     // Sensor-lock: ta sama funkcja co detekcja par (`ProximitySystem._getSensorLockAU`); bez systemu — wzór stały × tech.
     const lock = K.proximitySystem?._getSensorLockAU?.(v)
-      ?? (GAME_CONFIG.SENSOR_LOCK_AU ?? 0.3) * (K.techSystem?.getMultiplier?.('sensor_range') ?? 1);
-    const au = (x) => `${fmtDec(x, 1, loc)} AU`;
+      ?? (GAME_CONFIG.SENSOR_LOCK_AU ?? 0.3) * (K.techSystem?.getMultiplier?.('sensor_range') ?? 1) * systemScaleOfEntity(v);
+    const au = (x) => `${fmtDec(x, auReadoutDecimals(x), loc)} AU`;   // CS-PHYS-b3 — < 0.25 AU dwa miejsca
     const parts = [role];
     if (det > 0 && Number.isFinite(det)) parts.push(t('hudLabel.detect', au(det)));
     if (lock > 0 && Number.isFinite(lock)) parts.push(t('hudLabel.lock', au(lock)));

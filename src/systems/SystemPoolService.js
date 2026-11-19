@@ -26,6 +26,7 @@ import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { PooledStore } from '../utils/PooledStore.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';
+import { systemScaleOf } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 const HUB_MODULE        = 'logistics_hub';
 const BLOCKADE_RANGE_AU = 0.5;              // ≈ SNAP_TO_BODY_AU (VesselManager) — „na orbicie / oblega"
@@ -361,7 +362,7 @@ export class SystemPoolService {
       // free-float (dockedAt=null): oblega ciało TYLKO gdy w zasięgu I to jest NAJBLIŻSZE ciało układu.
       // Bez „najbliższe" statek przy księżycu (orbituje planetę < 0.5 AU) blokowałby też planetę.
       const dB = DistanceUtils.euclideanAU(pos, body);   // body.x/body.y (ciała mają x/y na TOP-LEVEL, nie .position)
-      if (dB >= BLOCKADE_RANGE_AU) continue;
+      if (dB >= BLOCKADE_RANGE_AU * systemScaleOf(bodySys)) continue;   // CS-PHYS-b2 (D-CS-24) — skala układu
       if (!candidates) candidates = this._systemBodies(bodySys);
       let nearest = true;
       for (const other of candidates) {

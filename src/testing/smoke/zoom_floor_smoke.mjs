@@ -386,14 +386,15 @@ header('F8  renderer podaje promień tarczy (`_sunCoreRadius`)');
   const c2 = mkCam({ starR: null }); const r2 = mkRenderer(null); r2._star = null;
   call(setCC, r2, c2);
   ok(c2._starCoreRadius === 0, `F8b SEDNO: bez gwiazdy (\`_star\` null) — promień 0 (jest: ${c2._starCoreRadius})`);
-  const rs = methodBody(TR_SRC, '  renderStar(star) {');
+  const rs = methodBody(TR_SRC, TR_SRC.includes('  renderStar(star, planets = []) {') ? '  renderStar(star, planets = []) {' : '  renderStar(star) {');
   const iSet = rs.indexOf('this._sunCoreRadius = r * STAR_CORE_SCALE;'), iPass = rs.indexOf('this._cameraController?.setStarCoreRadius?.(this._sunCoreRadius);');
   ok(iSet > 0 && iPass > iSet && /new THREE\.SphereGeometry\(r \* STAR_CORE_SCALE, 64, 64\)/.test(rs),
     'F8c SEDNO: `renderStar` podaje kamerze `_sunCoreRadius` (= r × STAR_CORE_SCALE — promień kuli rdzenia) PO jego wyliczeniu');
   const gs = src('../../scenes/GameScene.js');
   const iInit = gs.indexOf('this.threeRenderer.initSystem(star, planets, planetesimals, moons);'), iCam = gs.indexOf('this.threeRenderer.setCameraController(this.cameraController);');
   ok(iInit > 0 && iCam > iInit, 'F8d KONTROLA: rozruch — `initSystem` (renderStar) PRZED `setCameraController` (dlatego promień podaje także on)');
-  ok(/const STAR_CORE_SCALE = 3\.0;/.test(TR_SRC) && /const r = Math\.max\(0\.6, Math\.min\(1\.6, 0\.6 \+ starMass \* 0\.6\)\);/.test(rs),
+  ok(/const STAR_CORE_SCALE = 3\.0;/.test(TR_SRC) && (/const r = Math\.max\(0\.6, Math\.min\(1\.6, 0\.6 \+ starMass \* 0\.6\)\)( \* \(star\.systemScale \?\? 1\))?;/.test(rs)
+      || (/const baseR = Math\.max\(0\.6, Math\.min\(1\.6, 0\.6 \+ starMass \* 0\.6\)\);/.test(rs) && /const r = baseR \* this\._starDrawScale;/.test(rs))),
     'F8e KONTROLA: wzór promienia tarczy w `renderStar` = wzór keepera (F1, F2)');
 }
 

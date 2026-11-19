@@ -3,6 +3,8 @@
 
 import { CelestialBody } from './CelestialBody.js';
 import { STAR_TYPES } from '../config/GameConfig.js';
+import { ORBIT_SCALED, scaledHabitableZone } from '../utils/OrbitModel.js';
+import { systemScaleOfStar } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 export class Star extends CelestialBody {
   constructor(config) {
@@ -28,6 +30,12 @@ export class Star extends CelestialBody {
       min: typeData.habitableZone.min,
       max: typeData.habitableZone.max,
     };
+    // CS-PHYS-b (D-CS-19, §3.9): gwiazda świata z orbitami skalowanymi (stempel `orbitModel: 2`, zapisywany) → HZ
+    // z JASNOŚCI tej gwiazdy (0.85…1.70 AU·√L). Bez stempla pole nie powstaje, HZ z tabeli klasy (każdy stary zapis).
+    if (config.orbitModel === ORBIT_SCALED) {
+      this.orbitModel    = ORBIT_SCALED;
+      this.habitableZone = scaledHabitableZone(this.luminosity);
+    }
 
     // Aktywność gwiazdy (do dalszego etapu)
     this.activity = {
@@ -45,4 +53,7 @@ export class Star extends CelestialBody {
       'Strefa życia':   `${this.habitableZone.min.toFixed(2)} – ${this.habitableZone.max.toFixed(2)} AU`,
     };
   }
+
+  /** CS-PHYS-b2 (D-CS-24): skala odległości układu tej gwiazdy (SystemScale; bez stempla orbit 2 → 1). */
+  get systemScale() { return systemScaleOfStar(this); }
 }

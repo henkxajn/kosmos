@@ -153,7 +153,9 @@ export class GameCore {
     const worldSeededSystems = GAME_CONFIG.FEATURES.seededSystems === true;
     // CS-PHYS-a (D-CS-19): model klimatu świata — flaga czytana RAZ, ta sama wartość stempluje galaktykę niżej.
     const worldClimateModel = GAME_CONFIG.FEATURES.realisticClimate === true ? 2 : 1;
-    const result = gen.generateCivScenario({ galaxySeed, seeded: worldSeededSystems, climateModel: worldClimateModel });
+    // CS-PHYS-b (D-CS-19 §3.9): model orbit świata — flaga czytana RAZ, ta sama wartość stempluje galaktykę niżej.
+    const worldOrbitModel = GAME_CONFIG.FEATURES.scaledOrbits === true ? 2 : 1;
+    const result = gen.generateCivScenario({ galaxySeed, seeded: worldSeededSystems, climateModel: worldClimateModel, orbitModel: worldOrbitModel });
     const { star, planets, moons = [], planetesimals = [], asteroids = [], comets = [], planetoids = [] } = result;
     this._civPlanetId = result.civPlanetId;
     star.x = 0;
@@ -319,7 +321,7 @@ export class GameCore {
     // GALAXY_SEED: seed wchodzi JAWNYM parametrem `boot({ galaxySeed })`, domyślnie
     // stałym (HEADLESS_GALAXY_SEED). W harnessie NIE MA ścieżki mintowania losowego —
     // to jest cała mitygacja R1 (reprodukowalność BALANS / turniejów botów).
-    K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType, { seededSystems: worldSeededSystems, climateModel: worldClimateModel });
+    K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType, { seededSystems: worldSeededSystems, climateModel: worldClimateModel, orbitModel: worldOrbitModel });
     // CS-3a — ziarna powierzchni układu domowego (ten sam pass co GameScene.start()).
     this.starSystemManager.assignMissingSurfaceSeeds(K.galaxyData.seed);
     // CS-3b — archetyp ciała + tidallyLocked (ten sam pass co GameScene.start(), zaraz po ziarnach).

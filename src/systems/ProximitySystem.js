@@ -43,6 +43,7 @@ import { DETECTION_BASE_AU, vesselDetectionRangeAU } from '../utils/DetectionRan
 //
 // M4 P3-7: PROXIMITY_DETECTION_AU staje się base value. Per-vessel próg
 // dynamic via _getDetectionRangeAU (player z TechSystem.getMultiplier('sensor_range');
+import { systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 // empire bez tech → base). Hysteresis ratio (×1.2) zachowany. Combat range
 // pozostaje hardcoded — to fizyczne ograniczenie engagement, nie sensora.
 export const PROXIMITY_DETECTION_AU = DETECTION_BASE_AU;   // 0,5 AU — ARKUSZ HUD H1: jedno źródło (`DetectionRange.js`)
@@ -256,7 +257,7 @@ export class ProximitySystem {
     // Hysteresis: exit = enter × 1.33 (zachowane ratio z hardcoded 0.15/0.20).
     const isCombat = this._activeCombatPairs.has(key);
     const combatEnterAU = Math.max(
-      COMBAT_ENGAGEMENT_AU,
+      COMBAT_ENGAGEMENT_AU * systemScaleOfEntity(v1),   // CS-PHYS-b2 (D-CS-24) — skala układu pary
       _maxWeaponRangeAU(v1) * 1.05,
       _maxWeaponRangeAU(v2) * 1.05,
     );
@@ -346,7 +347,7 @@ export class ProximitySystem {
     if (!isPlayer) return 0;
     const techSys = window.KOSMOS?.techSystem;
     const mult    = techSys?.getMultiplier ? techSys.getMultiplier('sensor_range') : 1.0;
-    return GAME_CONFIG.SENSOR_LOCK_AU * mult;
+    return GAME_CONFIG.SENSOR_LOCK_AU * mult * systemScaleOfEntity(vessel);   // CS-PHYS-b2
   }
 
   /**
@@ -455,5 +456,5 @@ function _maxWeaponRangeAU(vessel) {
     const effective = mod.stats.rangeAU * mult;
     if (effective > maxAU) maxAU = effective;
   }
-  return maxAU;
+  return maxAU * systemScaleOfEntity(vessel);   // CS-PHYS-b2 (D-CS-24) — skala układu statku
 }

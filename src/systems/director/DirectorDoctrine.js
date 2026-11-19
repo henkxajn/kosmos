@@ -37,6 +37,7 @@ import gameState from '../../core/GameState.js';
 import EntityManager from '../../core/EntityManager.js';
 import { DirectorProbes, DirectorGuards, DirectorActions } from './DirectorRegistry.js';
 import { isEnemyVessel, hasWeapons, isInService } from '../../entities/Vessel.js';
+import { systemScaleOf } from '../../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 /** Ile promienia orbity zewnętrznej bierzemy na pierścień patrolu (1.0 = po orbicie skrajnej). */
 const PATROL_RING_FACTOR = 0.9;
@@ -375,7 +376,8 @@ export class DirectorDoctrine {
       if (a > maxA) maxA = a;
     }
     const r = maxA * PATROL_RING_FACTOR;
-    return Math.min(PATROL_MAX_RADIUS_AU, Math.max(PATROL_MIN_RADIUS_AU, r));
+    const k = systemScaleOf(systemId);   // CS-PHYS-b2 (D-CS-24) — klamry pierścienia × skala układu (dotychczasowy 1)
+    return Math.min(PATROL_MAX_RADIUS_AU * k, Math.max(PATROL_MIN_RADIUS_AU * k, r));
   }
 
   _hash(s) {

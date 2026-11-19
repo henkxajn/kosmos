@@ -75,6 +75,14 @@ export const GAME_CONFIG = {
     // OFF (default): generacja bit w bit jak dotąd. Własność ŚWIATA (jak D-CS-18): czytana RAZ przy tworzeniu świata
     //     (GameScene.start / GameCore.boot); przełączenie po starcie nic nie zmienia, stary zapis bez stempla = dotychczasowy.
     realisticClimate:     false,
+    // ── ARC COLONY SPHERE CS-PHYS-b (D-CS-19 część 2, plan COLONY_SPHERE §3.9) — orbity skalowane jasnością gwiazdy.
+    // ON: NOWY świat dostaje stempel `galaxyData.orbitModel = 2` (gwiazdy: `star.orbitModel = 2`, zapisywany): HZ =
+    //     0.85…1.70 AU·√L, minimalna orbita max(0.03, 0.40·√L) AU, separacje orbit i zakresy małych ciał × clamp(√L,
+    //     0.2, 1); świat macierzysty KAŻDEGO imperium na skalistej planecie wewnątrz HZ (src/utils/OrbitModel.js).
+    //     Układy karłów M stają się zwarte i mają planety w HZ. Niezależna od realisticClimate (docelowo obie ON).
+    // OFF (default): generacja bit w bit jak dotąd. Własność ŚWIATA (jak D-CS-18): czytana RAZ przy tworzeniu świata
+    //     (GameScene.start / GameCore.boot); przełączenie po starcie nic nie zmienia, stary zapis bez stempla = dotychczasowy.
+    scaledOrbits:         false,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
     // ⚠ W3-8 — `fleetMaterialization` i `unifiedAggregator` USUNIĘTE razem z warstwą

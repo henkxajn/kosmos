@@ -30,6 +30,7 @@ import { isEnemyVessel, isInService } from '../entities/Vessel.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 import { vesselDetectionRangeAU } from '../utils/DetectionRange.js';
+import { auReadoutDecimals } from '../utils/SystemScale.js';   // CS-PHYS-b3 — odczyt < 0.25 AU z dwoma miejscami
 import { fmtDec } from './NumberFormatLogic.js';   // korekta 1b — odczyt zasięgu (separator dziesiętny wg języka)
 
 // Ta sama funkcja zasięgu co `ProximitySystem._getDetectionRangeAU` (keeper `hud_radar_smoke` pinuje tożsamość).
@@ -229,7 +230,7 @@ export function glowLayerAlpha(n, peak) {
  *  języka (`fmtDec`, `locale` = 'pl' | 'en'); jednostka „AU” jak w obu słownikach; ∞ albo brak zasięgu — `null` (bez okręgu). */
 export function rangeReadoutText(rangeAU, locale = 'pl') {
   if (!(rangeAU > 0) || !Number.isFinite(rangeAU)) return null;
-  return `${fmtDec(rangeAU, 1, locale)} AU`;
+  return `${fmtDec(rangeAU, auReadoutDecimals(rangeAU), locale)} AU`;
 }
 
 /**

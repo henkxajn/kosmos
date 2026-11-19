@@ -17,9 +17,10 @@
 
 import { STAGE, encounterClusters } from '../renderer/combat/BattleStageLogic.js';
 
-/** Promień klastra starć w px rozgrywki (ta sama stała co scena bitwy: `STAGE.CLUSTER_AU`). */
-export function clusterRadiusPx(auToPx) {
-  return STAGE.CLUSTER_AU * auToPx;
+/** Promień klastra starć w px rozgrywki (ta sama stała co scena bitwy: `STAGE.CLUSTER_AU`); `scale` = skala układu
+ *  (CS-PHYS-b2, SystemScale — świat dotychczasowy 1). */
+export function clusterRadiusPx(auToPx, scale = 1) {
+  return STAGE.CLUSTER_AU * auToPx * scale;
 }
 
 const byIdAsc = (a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);

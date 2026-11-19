@@ -104,7 +104,8 @@ export class GalaxyGenerator {
    * @returns {{seed: number, systems: Array, seededSystems?: true}} GalaxyData — `seed` DO UTRWALENIA
    */
   // CS-PHYS-a: `climateModel: 2` stempluje świat (`galaxyData.climateModel = 2`, D-CS-19 §3.8); inne → pole NIE powstaje.
-  static generate(seed, starName = 'Sol', spectralType = 'G', { seededSystems = false, climateModel = 1 } = {}) {
+  // CS-PHYS-b: `orbitModel: 2` stempluje świat (`galaxyData.orbitModel = 2`, D-CS-19 §3.9); inne → pole NIE powstaje.
+  static generate(seed, starName = 'Sol', spectralType = 'G', { seededSystems = false, climateModel = 1, orbitModel = 1 } = {}) {
     // Loud-fail zamiast cichego fallbacku: seed nie-liczbowy dałby albo stałą
     // galaktykę (dokładnie ten defekt, który GALAXY_SEED naprawia), albo galaktykę
     // bez utrwalonego seeda (R2). Wołających jest dokładnie trzech i wszyscy podają
@@ -211,6 +212,32 @@ export class GalaxyGenerator {
     const galaxy = { seed: seedI32, systems };
     if (seededSystems === true) galaxy.seededSystems = true;   // CS-3a-fix — stempel świata (tylko ON)
     if (climateModel === 2) galaxy.climateModel = 2;           // CS-PHYS-a — stempel klimatu świata (tylko ON)
+    GalaxyGenerator.applyWorldStamps(galaxy, { orbitModel });  // CS-PHYS-b — stempel orbit świata (tylko ON)
     return galaxy;
+  }
+
+  /**
+   * CS-PHYS-b — dopisuje stemple świata do ŚWIEŻO wygenerowanego rekordu (gałąź tworzenia świata). Pola powstają tylko
+   * przy ON (`seededSystems: true`, `orbitModel: 2`); stemple nie zmieniają zawartości galaktyki (same pola rekordu).
+   */
+  static applyWorldStamps(galaxy, { seededSystems = false, orbitModel = 1 } = {}) {
+    if (!galaxy) return galaxy;
+    if (seededSystems === true) galaxy.seededSystems = true;
+    if (orbitModel === 2) galaxy.orbitModel = 2;
+    return galaxy;
+  }
+
+  /**
+   * Finding 773 (CS-PHYS-b) — rekord świata zapisu sprzed 4X (`savedData.preCivWorld`, SaveSystem._serializePreCivWorld)
+   * albo null (brak / uszkodzony / stary zapis). Tylko liczbowy seed int32 i znane stemple.
+   */
+  static preCivWorldOf(savedData) {
+    const r = savedData?.preCivWorld;
+    if (!r || typeof r.seed !== 'number' || !Number.isInteger(r.seed)) return null;
+    const out = { seed: r.seed };
+    if (r.seededSystems === true) out.seededSystems = true;
+    if (r.climateModel === 2) out.climateModel = 2;
+    if (r.orbitModel === 2) out.orbitModel = 2;
+    return out;
   }
 }

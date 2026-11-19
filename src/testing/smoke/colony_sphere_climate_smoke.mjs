@@ -178,11 +178,11 @@ console.log('\n── K4 stempel świata ──');
   const gs = src('../../scenes/GameScene.js');
   const reads = gs.match(/FEATURES\.realisticClimate/g) ?? [];
   assert(reads.length === 1 && /const worldClimateModel = \(!savedData && GAME_CONFIG\.FEATURES\.realisticClimate === true\) \? 2 : 1;/.test(gs)
-    && /_generateFreshSystem\(cx, cy, preMintedGalaxySeed, worldClimateModel\)/.test(gs) && /climateModel: galaxyClimateModel \}/.test(gs)
+    && /_generateFreshSystem\(cx, cy, preMintedGalaxySeed, worldClimateModel(, worldOrbitModel)?\)/.test(gs) && /climateModel: galaxyClimateModel \}/.test(gs)
     && /const galaxyClimateModel = savedData\s*\?\s*\(planets\.some\(p => p\.climate\?\.model === 2\) \? 2 : 1\)\s*:\s*worldClimateModel;/.test(gs)
-    && /generateCivScenario\(\{[^}]*climateModel \}\)/.test(gs), `GameScene: flaga czytana RAZ (nowa gra), ta sama decyzja → dom + stempel galaktyki; zapis sprzed 4X → model z ciał domu (${reads.length} odczyt)`);
+    && /generateCivScenario\(\{[^}]*climateModel(, orbitModel)? \}\)/.test(gs), `GameScene: flaga czytana RAZ (nowa gra), ta sama decyzja → dom + stempel galaktyki; zapis sprzed 4X → model z ciał domu (${reads.length} odczyt)`);
   const ssm = src('../../systems/StarSystemManager.js');
-  assert(/generateForStar\(galaxyStar, seedCtx, SystemGenerator\.worldClimateModel\(galaxyData\)\)/.test(ssm) && !/realisticClimate/.test(ssm),
+  assert(/generateForStar\(galaxyStar, seedCtx, SystemGenerator\.worldClimateModel\(galaxyData\)(,\s*SystemGenerator\.worldOrbitModel\(galaxyData\))?\)/.test(ssm) && !/realisticClimate/.test(ssm),
     'StarSystemManager: model z rekordu świata (worldClimateModel), nie z flagi');
   const sg = src('../../generators/SystemGenerator.js');
   const flagReads = sg.match(/FEATURES\.realisticClimate/g) ?? [];

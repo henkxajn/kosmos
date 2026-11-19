@@ -311,7 +311,8 @@ header('T6  źródło ThreeRenderer.resetToSystemView (Findingi 472, 473)');
   const r3 = reset ? reset.call(f3) : undefined;
   ok(r3 === false && f3.calls.length === 0, 'T6i WYKONANIE: lot intro — reset ustępuje');
   const fa = methodBody(tr, '  _frameActiveSystem() {');
-  ok(/frameSystem\(this\._computeSystemExtentAU\(\)\)/.test(fa), 'T6e KONTROLA (bez zmian w U1): `_frameActiveSystem` = `frameSystem(zasięg układu)`');
+  // CS-PHYS-b2: drugi argument (skala układu, D-CS-24) dozwolony — rdzeń pinu (zasięg układu jako 1. argument) bez zmian
+  ok(/frameSystem\(this\._computeSystemExtentAU\(\)(?:\s*,[^)]*\)?)?\)/.test(fa), 'T6e KONTROLA (bez zmian w U1): `_frameActiveSystem` = `frameSystem(zasięg układu)`');
 }
 
 // ═══ T7 ═════════════════════════════════════════════════════════════════════

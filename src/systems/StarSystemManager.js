@@ -110,7 +110,9 @@ export class StarSystemManager {
     const galaxySeed = seedCtx.galaxySeed;
     const generator = new SystemGenerator();
     // CS-PHYS-a — model klimatu z REKORDU ŚWIATA (stempel climateModel), nie z bieżącej flagi (D-CS-19 §3.8)
-    const result = generator.generateForStar(galaxyStar, seedCtx, SystemGenerator.worldClimateModel(galaxyData));
+    // CS-PHYS-b — model orbit z REKORDU ŚWIATA (stempel orbitModel), ta sama droga co peekCountsForStar (§3.9)
+    const result = generator.generateForStar(galaxyStar, seedCtx, SystemGenerator.worldClimateModel(galaxyData),
+      SystemGenerator.worldOrbitModel(galaxyData));
 
     // Oznacz encje systemId
     result.star.systemId = systemId;

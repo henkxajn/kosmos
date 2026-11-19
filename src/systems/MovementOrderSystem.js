@@ -23,12 +23,14 @@ import { SHIP_MODULES }      from '../data/ShipModulesData.js';
 import { canLaunchFromCurrent, launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { isSameSystem } from '../utils/SystemScope.js';
 import { nearestShelter, escapeVector, nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
+import { systemScaleOf, systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
 
 // Strefa wykluczenia wokół Słońca (punkty wewnątrz = unreachable).
 // Spójne z VesselManager._calcRoute — zob. §8.5.
+// CS-PHYS-b2 (D-CS-24): promień × skala układu (SystemScale; świat dotychczasowy k = 1).
 const SUN_EXCLUSION_PX = 0.3 * AU_TO_PX;
 
 // M4 P1 — drift auto-return timer. Po complete pursue/intercept na vessel target
@@ -44,6 +46,8 @@ const DRIFT_AUTO_RETURN_GAME_YEARS = 5;
 // próg "dotarcia" i zostawia miejsce na widoczny ruch przy krótkich pursuach.
 const THREAT_RADIUS_AU = 0.15;
 const THREAT_RADIUS_PX = THREAT_RADIUS_AU * AU_TO_PX;
+// CS-PHYS-b2 (D-CS-24) — próg dotarcia w układzie statku (× skala układu; świat dotychczasowy k = 1)
+const threatRadiusPx = (vessel) => THREAT_RADIUS_PX * systemScaleOfEntity(vessel);
 
 // Epsilon dla intercept math — detekcja degenerate cases.
 const INTERCEPT_EPS = 1e-6;
@@ -855,7 +859,7 @@ export class MovementOrderSystem {
     // Filip's decision: 0.1 AU (~11 px) — czytelna formacja bez "siedzenia
     // na targecie". Spec §10.3 sugerował 0.15 AU (THREAT_RADIUS_PX), ale playtest
     // M3 może fine-tune'ować jeśli pojawi się feedback "za blisko/daleko".
-    const ESCORT_DISTANCE_PX = 0.1 * AU_TO_PX;
+    const ESCORT_DISTANCE_PX = 0.1 * AU_TO_PX * systemScaleOfEntity(vessel);   // CS-PHYS-b2 — skala układu
 
     const dx = tx - vessel.position.x;
     const dy = ty - vessel.position.y;
@@ -989,7 +993,7 @@ export class MovementOrderSystem {
     }
 
     // §8.5 — reject gdy punkt wewnątrz strefy wykluczenia Słońca (nie do obejścia).
-    if (Math.hypot(p.x, p.y) < SUN_EXCLUSION_PX) {
+    if (Math.hypot(p.x, p.y) < SUN_EXCLUSION_PX * systemScaleOf(vessel.systemId ?? 'sys_home')) {
       return { ok: false, reason: 'unreachable_target' };
     }
 
@@ -1150,7 +1154,7 @@ export class MovementOrderSystem {
     //   distance < THREAT_RADIUS_PX (wykryte w playtescie z 2 vesselami orbitującymi
     //   bliskie ciała). Semantyczny komunikat dla UX: "target już w zasięgu".
     const initDist = Math.hypot(initTx - vessel.position.x, initTy - vessel.position.y);
-    if (initDist < THREAT_RADIUS_PX) {
+    if (initDist < threatRadiusPx(vessel)) {
       return { ok: false, reason: 'target_already_in_range' };
     }
     const order = {
@@ -1638,7 +1642,7 @@ export class MovementOrderSystem {
     const ptx = proximityTarget.x ?? proximityTarget.position?.x ?? tx;
     const pty = proximityTarget.y ?? proximityTarget.position?.y ?? ty;
     const distBefore = Math.hypot(ptx - vessel.position.x, pty - vessel.position.y);
-    if (distBefore <= THREAT_RADIUS_PX) {
+    if (distBefore <= threatRadiusPx(vessel)) {
       this._completeOrder(vessel, order, gameYear, proximityTarget);
       return;
     }
@@ -1675,7 +1679,7 @@ export class MovementOrderSystem {
     // Proximity check PO ruchu — gdy step zamknął lukę do progu.
     // (Krytyczne dla tail-chase gdy catch-rate pokrywa target-step dokładnie).
     const distAfter = Math.hypot(ptx - vessel.position.x, pty - vessel.position.y);
-    if (distAfter <= THREAT_RADIUS_PX) {
+    if (distAfter <= threatRadiusPx(vessel)) {
       this._completeOrder(vessel, order, gameYear, proximityTarget);
     }
   }
@@ -1754,7 +1758,7 @@ export class MovementOrderSystem {
           EventBus.emit('vessel:combatRangeEnter', {
             vesselAId:  vessel.id,
             vesselBId:  target.id,
-            distanceAU: THREAT_RADIUS_AU,
+            distanceAU: THREAT_RADIUS_AU * systemScaleOfEntity(vessel),
             sameFaction: false,
           });
           if (ps?._activeCombatPairs) ps._activeCombatPairs.add(k);
@@ -1936,7 +1940,7 @@ export class MovementOrderSystem {
     const dy = wp.y - vessel.position.y;
     const distPx = Math.hypot(dx, dy);
 
-    if (distPx <= THREAT_RADIUS_PX) {
+    if (distPx <= threatRadiusPx(vessel)) {
       // KOLEJNOŚĆ: emit PRZED advance — handler dostaje index "właśnie osiągnięty".
       EventBus.emit('vessel:patrolWaypointReached', {
         vesselId:      vessel.id,
@@ -2414,5 +2418,5 @@ function _computeMaxWeaponRangeAU(vessel) {
     const effective = mod.stats.rangeAU * mult;
     if (effective > maxAU) maxAU = effective;
   }
-  return maxAU;
+  return maxAU * systemScaleOfEntity(vessel);   // CS-PHYS-b2 (D-CS-24) — lustro ProximitySystem._maxWeaponRangeAU
 }

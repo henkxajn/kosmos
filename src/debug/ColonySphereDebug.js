@@ -35,6 +35,7 @@ import { BODY_ARCHETYPES, ARCHETYPE_FAMILIES } from '../data/BodyArchetypes.js';
 import { familyOf, planetoidPaletteOf } from '../utils/BodyArchetypeLogic.js';
 import { HOMEWORLD_TEMP_MIN_C, HOMEWORLD_TEMP_MAX_C } from '../utils/HomeworldClimate.js';
 import { climateModelOfWorld, equilibriumK, lookContradicts, KELVIN } from '../utils/ClimateModel.js';
+import { orbitModelOfWorld, orbitZoneOf, frostLineAU, scaledMinOrbitAU, compactionOf } from '../utils/OrbitModel.js';
 import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';   // CS-4a / CS-4b — podgląd powierzchni + stan cache
 
 function bodyTypeOf(body, kind) {
@@ -105,7 +106,8 @@ export function colonySphereGeneratedPeekRows() {
     const count = (kind) => EntityManager.getByType(kind).filter(b => b.systemId === sys.systemId).length;
     const gen  = { planets: count('planet'), moons: count('moon'), planetoids: count('planetoid') };
     // peek inkrementuje licznik id EntityManager (generateId bez RNG) — jak skan obserwatorium; nieszkodliwe.
-    const peek = new SystemGenerator().peekCountsForStar(gs, seedCtx);
+    const peek = new SystemGenerator().peekCountsForStar(gs, seedCtx, SystemGenerator.worldOrbitModel(K.galaxyData),
+      SystemGenerator.worldClimateModel(K.galaxyData));
     rows.push({
       systemId: sys.systemId,
       genP: gen.planets, peekP: peek.planets,
@@ -129,8 +131,10 @@ export function colonySphereLegacyDiff() {
   const stars = (K.galaxyData?.systems ?? []).filter(s => s.id !== 'sys_home');
   let differ = 0;
   for (const gs of stars) {
-    const cur    = new SystemGenerator().peekCountsForStar(gs, seedCtx);
-    const legacy = new SystemGenerator().peekCountsForStar(gs, { galaxySeed: seedCtx.galaxySeed, seeded: false });
+    const om     = SystemGenerator.worldOrbitModel(K.galaxyData);   // CS-PHYS-b — ten sam model orbit po obu stronach
+    const cm     = SystemGenerator.worldClimateModel(K.galaxyData);  // CS-PHYS-b2 — orbita slotu domu zależy od klimatu
+    const cur    = new SystemGenerator().peekCountsForStar(gs, seedCtx, om, cm);
+    const legacy = new SystemGenerator().peekCountsForStar(gs, { galaxySeed: seedCtx.galaxySeed, seeded: false }, om, cm);
     if (cur.planets !== legacy.planets || cur.moons !== legacy.moons || cur.planetoids !== legacy.planetoids) differ++;
   }
   return { differ, stars: stars.length };
@@ -281,6 +285,37 @@ export function colonySphereDebugHelpers() {
     return summary;
   };
 
+  // CS-PHYS-b — csOrbits(): gwiazda (klasa, L, HZ, linia mrozu, model orbit świata i gwiazdy) + orbity ciał aktywnego układu.
+  const csOrbits = () => {
+    const K = window.KOSMOS ?? {};
+    const systemId = K.activeSystemId ?? 'sys_home';
+    const st = EntityManager.getStarOfSystem(systemId);
+    const hz = st?.habitableZone;
+    const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
+    const rows = EntityManager.getByTypeInSystem('planet', systemId).sort((a, b) => a.orbital.a - b.orbital.a).map(p => ({
+      name: p.name, type: p.planetType, orbitAU: r3(p.orbital.a), flux: r3(st?.luminosity / (p.orbital.a ** 2)),
+      zone: orbitZoneOf(p.orbital.a, hz), archetype: p.bodyArchetype ?? null, tidallyLocked: p.tidallyLocked === true,
+      finalC: round1(p.temperatureC), home: p.id === K.homePlanet?.id || p.lifeScore === 100,
+    }));
+    const summary = {
+      systemId, starClass: st?.spectralType ?? null, luminosity: r3(st?.luminosity),
+      hzInnerAU: r3(hz?.min), hzOuterAU: r3(hz?.max), frostLineAU: r3(frostLineAU(hz)),
+      orbitModel: orbitModelOfWorld(K.galaxyData), worldStamp: K.galaxyData?.orbitModel ?? null,
+      starStamp: st?.orbitModel ?? null, scaledOrbitsFlag: GAME_CONFIG.FEATURES.scaledOrbits === true,
+      minOrbitAU: r3(st?.orbitModel === 2 ? scaledMinOrbitAU(st.luminosity) : null),
+      compaction: r3(st?.orbitModel === 2 ? compactionOf(st.luminosity) : null),
+      // CS-PHYS-b3: k progów rozgrywki (SystemScale; świat dotychczasowy 1) i skala RYSUNKU tarczy (Finding 774)
+      systemScale: r3(st?.systemScale ?? null),
+      starDrawScale: r3(K.threeRenderer?._starDrawScale ?? null),
+      planets: rows.length, inHZ: rows.filter(r => r.zone === 'hz').length,
+      tidallyLocked: rows.filter(r => r.tidallyLocked).length,
+    };
+    console.table(rows);
+    console.log('[csOrbits]', JSON.stringify(summary));
+    summary.rows = rows;
+    return summary;
+  };
+
   // Finding 770 — csTemp(): temperatury aktywnego układu; homeworldsOutOfBand ma być 0.
   const csTemp = () => {
     const K = window.KOSMOS ?? {};
@@ -393,5 +428,5 @@ export function colonySphereDebugHelpers() {
     console.log('[csHaze]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze };
 }

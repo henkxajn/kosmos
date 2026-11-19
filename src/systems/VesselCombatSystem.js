@@ -41,6 +41,7 @@ import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { COMBAT_ENGAGEMENT_AU, pairKey } from './ProximitySystem.js';
 // ⚠ Wariant FAIL-CLOSED, wyłącznie dla warstwy walki (lustro DSCS).
 import { isSameSystemStrict, systemIdOf } from '../utils/SystemScope.js';
+import { systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
@@ -234,7 +235,7 @@ export class VesselCombatSystem {
 
     // Zbierz vessele w buforze COMBAT_ENGAGEMENT_AU * 1.5 od mid — team-up logic.
     const nearby = [];
-    const bufferPx = COMBAT_ENGAGEMENT_AU * 1.5 * AU_TO_PX;
+    const bufferPx = COMBAT_ENGAGEMENT_AU * 1.5 * AU_TO_PX * systemScaleOfEntity(v1);   // CS-PHYS-b2 — skala układu
     for (const v of vm._vessels.values()) {
       if (v.isWreck) continue;
       if (!_inCombatState(v)) continue;

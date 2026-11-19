@@ -93,6 +93,8 @@ export class SaveSystem {
         moons:      moons.map(m => this._serializeMoon(m)),
         planetoids: planetoids.map(p => this._serializePlanetoid(p)),
         civ4x:      this._serializeCiv4x(),
+        // Finding 773 (CS-PHYS-b) — stemple świata zapisu sprzed 4X (galaxyData mieszka w civ4x, które wtedy jest null)
+        ...this._serializePreCivWorld(),
         // M4 P2 — uiPrefs persistowane w save (np. radar overlay, minimap)
         uiPrefs:    window.KOSMOS?.uiPrefs ? { ...window.KOSMOS.uiPrefs } : {},
       };
@@ -249,8 +251,24 @@ export class SaveSystem {
     return out;
   }
 
+  /**
+   * Finding 773 (CS-PHYS-b, §3.9) — zapis sprzed wejścia w 4X nie niesie `galaxyData` (`_serializeCiv4x` → null), więc
+   * po wczytaniu galaktyka powstawała od nowa z NOWYM seedem i bez stempli świata (seedowany świat wracał jako
+   * nieseedowany). Tu: `preCivWorld` = seed + stemple (tylko obecne), wyłącznie gdy civ4x NIE jest zapisywane.
+   * Zapis z civ4x albo bez galaktyki → klucz pominięty (stary kształt bajt w bajt). Bez bumpu wersji: pole opcjonalne.
+   */
+  _serializePreCivWorld() {
+    const gd = window.KOSMOS?.galaxyData;
+    if (window.KOSMOS?.civMode || !gd || typeof gd.seed !== 'number') return {};
+    const rec = { seed: gd.seed };
+    if (gd.seededSystems === true) rec.seededSystems = true;
+    if (gd.climateModel === 2)     rec.climateModel  = 2;
+    if (gd.orbitModel === 2)       rec.orbitModel    = 2;
+    return { preCivWorld: rec };
+  }
+
   _serializeStar(star) {
-    return {
+    const row = {
       id:           star.id,
       name:         star.name,
       spectralType: star.spectralType,
@@ -260,6 +278,9 @@ export class SaveSystem {
       y:            star.y,
       systemId:     star.systemId ?? 'sys_home',
     };
+    // CS-PHYS-b — stempel orbit gwiazdy (HZ z jasności) tylko w świecie orbitModel 2; brak → klucz pominięty
+    if (star.orbitModel === 2) row.orbitModel = 2;
+    return row;
   }
 
   _serializePlanet(p) {

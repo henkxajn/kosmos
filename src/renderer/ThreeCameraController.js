@@ -27,6 +27,7 @@ const MAX_DIST = 450;
 // środka gwiazdy przy R 3,6) leżą między 1,3 R a 2,2 R — przy celu na nich obowiązuje podłoga z fokusu.
 export const STAR_ZONE_MULT = 1.3;
 export const STAR_FLOOR_MULT = 2.2;
+const SYSTEM_FIT_MIN_DIST = 70;   // j. świata — podłoga ramki startowej układu (× skala układu, CS-PHYS-b2)
 
 export class ThreeCameraController {
   constructor(camera) {
@@ -249,9 +250,10 @@ export class ThreeCameraController {
   // Skala 3D ↔ tactical — ramka startowa: dopasuj dystans kamery tak, by cały układ
   // (promień maxOrbitAU w AU) zmieścił się w kadrze, jak fit-to-bounds mapy taktycznej.
   // Ustawia też _defaultDist → reset (H) wraca do tej ramki, nie do sztywnego 85.
-  frameSystem(maxOrbitAU) {
+  // CS-PHYS-b2 (D-CS-24): `scale` = skala układu (SystemScale) — podłoga ramki 70 j. × k (świat dotychczasowy 1).
+  frameSystem(maxOrbitAU, scale = 1) {
     if (!Number.isFinite(maxOrbitAU) || maxOrbitAU <= 0) return;
-    const fit = Math.max(70, Math.min(MAX_DIST, maxOrbitAU * SYSTEM_FIT_DIST_PER_AU));
+    const fit = Math.max(SYSTEM_FIT_MIN_DIST * scale, Math.min(MAX_DIST, maxOrbitAU * SYSTEM_FIT_DIST_PER_AU));
     this._defaultDist = fit;
     this._dist = this._targetDist = fit;  // snap bez lerpa — start / zmiana układu
     this._theta = 0.3;

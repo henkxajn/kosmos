@@ -182,7 +182,8 @@ export class LifeSystem {
     for (const emp of K.empireRegistry?.listAll?.() ?? []) {
       const sys = emp?.homeSystemId ? K.starSystemManager?.getSystem?.(emp.homeSystemId) : null;
       if (!sys) continue;
-      const body = pickHomeworldBody((sys.planetIds ?? []).map(id => EntityManager.get(id)).filter(Boolean));
+      const body = pickHomeworldBody((sys.planetIds ?? []).map(id => EntityManager.get(id)).filter(Boolean),
+        EntityManager.get(sys.starEntityId));   // CS-PHYS-b — reguła wg modelu orbit gwiazdy
       if (body) ids.add(body.id);
     }
     return ids;

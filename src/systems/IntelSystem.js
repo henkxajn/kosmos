@@ -27,6 +27,7 @@ import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
 
 const LEVELS = ['unknown', 'rumor', 'contact', 'detailed'];
 const LEVEL_RANK = { unknown: 0, rumor: 1, contact: 2, detailed: 3 };
@@ -409,7 +410,7 @@ export class IntelSystem {
   }
 
   _observeVessel(vesselId, vessel, distanceAU) {
-    const newQuality = (distanceAU < VESSEL_CONTACT_DISTANCE_AU) ? 'contact' : 'rumor';
+    const newQuality = (distanceAU < VESSEL_CONTACT_DISTANCE_AU * systemScaleOfEntity(vessel)) ? 'contact' : 'rumor';   // CS-PHYS-b2
     const rec = this._getOrInitVesselRecord(vesselId);
     const oldQuality = rec.quality;
     const oldRank = VESSEL_LEVEL_RANK[oldQuality] ?? 0;

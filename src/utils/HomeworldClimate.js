@@ -6,6 +6,8 @@
 // i strażnik pasma — przeliczenie nie może wypchnąć świata macierzystego poza pasmo z generacji.
 // Wzoru temperatury NIE zmieniamy (to krok CS-PHYS / D-CS-19).
 
+import { ORBIT_SCALED, pickHabitableHomeworld } from './OrbitModel.js';
+
 // Pasmo clampu z generacji — lustro literałów w SystemGenerator.makeHomeworldBreathable (keeper pilnuje zgodności).
 export const HOMEWORLD_TEMP_MIN_C = 5;    // °C — poniżej generator losuje 5–15 °C
 export const HOMEWORLD_TEMP_MAX_C = 35;   // °C — powyżej generator losuje 20–30 °C
@@ -22,8 +24,13 @@ const inBand = (c) => Number.isFinite(c) && c >= HOMEWORLD_TEMP_MIN_C && c <= HO
  * pierwsza skalista, potem pierwsza nie-gazowa, na końcu pierwsza. Niezależna od własności kolonii
  * (zdobyty dom to dalej to samo ciało z tym samym clampem).
  */
-export function pickHomeworldBody(planets) {
+export function pickHomeworldBody(planets, star = null) {
   if (!Array.isArray(planets) || planets.length === 0) return null;
+  // CS-PHYS-b — gwiazda świata orbit skalowanych: skalista w HZ (lustro EmpireColonyBootstrap._pickHomePlanet)
+  if (star?.orbitModel === ORBIT_SCALED) {
+    const hz = pickHabitableHomeworld(planets, star);
+    if (hz) return hz;
+  }
   const rocky = planets.find(p => p?.planetType === 'rocky');
   if (rocky) return rocky;
   const nonGas = planets.find(p => p?.planetType !== 'gas');

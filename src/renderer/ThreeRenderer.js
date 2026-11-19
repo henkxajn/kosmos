@@ -39,6 +39,7 @@ import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
+import { starDrawScale, innermostPeriapsisAU, starScreenFloorScale } from '../utils/SystemScale.js';   // Finding 774
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { loadBuildingTextures } from './BuildingTextures.js';
@@ -2048,7 +2049,7 @@ export class ThreeRenderer {
     loadBuildingTextures();
 
     this._sharedPrefetchDone = false;   // CS-6a — nowy układ: prefetch map powierzchni przy pierwszym ticku
-    this.renderStar(star);
+    this.renderStar(star, planets);
     planets.forEach(p => this.addPlanetMesh(p));
     moons.forEach(m => this._addMoonMesh(m));
     this._initPlanetoids();
@@ -2301,12 +2302,36 @@ export class ThreeRenderer {
     if (cool) this._ambient.color.lerp(AMBIENT_COOL_COLOR, AMBIENT_COOL_MIX);
   }
 
+  // Finding 774 (CS-PHYS-b3) — rdzeń gwiazdy ściśniętego układu nie maleje na ekranie poniżej STAR_MIN_CORE_PX (CSS px):
+  // przy dalekim kadrze rdzeń i sfera kliku dostają mnożnik ≥ 1; z bliska mnożnik = 1, więc strefa kamery
+  // (`_sunCoreRadius`) zgadza się z rysunkiem. Korona bez zmian (jej shader liczy w jednostkach świata).
+  _applyStarScreenFloor() {
+    if (!this._starCore || !this._starGroup || !this.camera) return;
+    const f = starScreenFloorScale({
+      coreRadiusWorld:  this._sunCoreRadius,
+      distance:         this.camera.position.distanceTo(this._starGroup.position),
+      viewportHeightPx: window.innerHeight || 720,
+      fovDeg:           this.camera.fov ?? 55,
+    });
+    if (this._starCore.scale.x !== f) {
+      this._starCore.scale.setScalar(f);
+      this._starClickMesh?.scale.setScalar(f);
+    }
+  }
+
   // ── Gwiazda (kolorowy rdzeń + białe centrum + kolorowe promieniowanie) ──
-  renderStar(star) {
+  renderStar(star, planets = []) {
     this._star = star;
     // Promień gwiazdy skalowany masą: M(0.3)→0.8, K(0.7)→1.0, G(1.0)→1.2, F(1.4)→1.4
     const starMass = star.mass ?? 1.0;
-    const r = Math.max(0.6, Math.min(1.6, 0.6 + starMass * 0.6));
+    const baseR = Math.max(0.6, Math.min(1.6, 0.6 + starMass * 0.6));
+    // Finding 774 (CS-PHYS-b3; wcześniej CS-PHYS-b2 × systemScale): × skala RYSUNKU gwiazdy (SystemScale.starDrawScale)
+    // — ℓ bez podłogi 0.2, przycięta tak, by najbliższe peryhelium planety leżało ≥ 1.5 × promień rdzenia. Rdzeń,
+    // korona, sfera kliku, maska i strefa kamery (setStarCoreRadius) idą za `r`; tylko rysunek — progi rozgrywki
+    // zostają na k. Świat dotychczasowy (bez stempla orbit 2): skala 1 (bit w bit).
+    const baseCoreAU = baseR * STAR_CORE_SCALE * WORLD_SCALE / GAME_CONFIG.AU_TO_PX;   // j. świata → px → AU
+    this._starDrawScale = starDrawScale(star, { baseCoreAU, innermostPeriapsisAU: innermostPeriapsisAU(planets) });
+    const r = baseR * this._starDrawScale;
     const color = new THREE.Color(star.visual.color);
 
     // Typ spektralny → konfiguracja per-typ
@@ -4890,6 +4915,8 @@ export class ThreeRenderer {
         if (this._starCorona) {
           // Billboard — plane zawsze frontem do kamery (group ma tylko pozycję, bez rotacji)
           this._starCorona.quaternion.copy(this.camera.quaternion);
+          // Finding 774 — podłoga ekranowa rdzenia (+ sfera kliku) tylko przy skali rysunku < 1 (świat dotychczasowy nietknięty)
+          if (this._starDrawScale < 1) this._applyStarScreenFloor();
           // Delikatne „oddychanie" jasności korony (±3%).
           // ⚠ Faza jest AKUMULOWANA w _tickClouds, a NIE brana z this._clock (U6).
           //   THREE.Clock zwraca POZYCJĘ na osi czasu ściennego i liczy dalej, gdy pętla
@@ -5548,7 +5575,7 @@ export class ThreeRenderer {
   // (odpowiednik fit-to-bounds mapy taktycznej). No-op gdy kontroler niewpięty.
   _frameActiveSystem() {
     if (!this._cameraController?.frameSystem) return;
-    this._cameraController.frameSystem(this._computeSystemExtentAU());
+    this._cameraController.frameSystem(this._computeSystemExtentAU(), this._star?.systemScale ?? 1);   // CS-PHYS-b2 — podłoga ramki × k
   }
 
   // ── ARKUSZ UI U1-1 (D-UI-5 §7.9; Findingi 471, 472, 473) — domyślny widok układu ─────────────────────────────────
@@ -9120,7 +9147,7 @@ export class ThreeRenderer {
     const vm = K?.vesselManager;
     const byId = new Map(inView.map((e) => [e.id, e]));
     const logical = (id) => { const q = vm?.getVessel?.(id)?.position; return q ? { x: S(q.x), y: S(q.y) } : null; };
-    return encounterClusters(inView, logical, STAGE.CLUSTER_AU * GAME_CONFIG.AU_TO_PX / WORLD_SCALE).map((cl) => {
+    return encounterClusters(inView, logical, STAGE.CLUSTER_AU * GAME_CONFIG.AU_TO_PX * (this._star?.systemScale ?? 1) / WORLD_SCALE).map((cl) => {
       const ids = [...new Set(cl.encounterIds.flatMap((eid) => encounterParticipants(byId.get(eid))))].sort();
       // ARC CV-3a3 (D-CV-4) — uczestnicy przy ciele (`dockedAt`): ciało skorupy = ciało większości z nich (remis — mniejsze id);
       // unieruchomieni przy INNYM ciele rysują się jak wolni.

@@ -366,18 +366,18 @@ header('S7: zapis i ścieżka wczytania');
   const iAssign = gsrc.indexOf('assignMissingSurfaceSeeds(window.KOSMOS.galaxyData');
   assert(iGal > 0 && iAssign > iGal, 'pin: start() nadaje ziarna (??=) PO ustaleniu galaxyData (obie gałęzie)');
   assert(/preMintedGalaxySeed\s*=\s*\(\s*!savedData\s*&&\s*GAME_CONFIG\.FEATURES\.seededSystems\s*\)/.test(gsrc), 'pin: mint przed układem domowym tylko przy !savedData && seededSystems');
-  assert(/_generateFreshSystem\(cx,\s*cy,\s*preMintedGalaxySeed(,\s*worldClimateModel)?\)/.test(gsrc) && /preMintedGalaxySeed\s*\?\?\s*GalaxyGenerator\.mintSeed\(\)/.test(gsrc), 'pin: ten sam seed trafia do układu domowego i do GalaxyGenerator.generate');
-  assert(/generateCivScenario\(\{\s*galaxySeed:[^}]*seeded:\s*galaxySeed\s*!==\s*null(,\s*climateModel)?\s*\}\)/.test(gsrc), 'pin: _generateFreshSystem podaje galaxySeed + seeded (= jest pre-mint) do generateCivScenario');
+  assert(/_generateFreshSystem\(cx,\s*cy,\s*preMintedGalaxySeed(,\s*worldClimateModel(,\s*worldOrbitModel)?)?\)/.test(gsrc) && /preMintedGalaxySeed\s*\?\?\s*GalaxyGenerator\.mintSeed\(\)/.test(gsrc), 'pin: ten sam seed trafia do układu domowego i do GalaxyGenerator.generate');
+  assert(/generateCivScenario\(\{\s*galaxySeed:[^}]*seeded:\s*galaxySeed\s*!==\s*null(,\s*climateModel(,\s*orbitModel)?)?\s*\}\)/.test(gsrc), 'pin: _generateFreshSystem podaje galaxySeed + seeded (= jest pre-mint) do generateCivScenario');
   assert(/preMintedGalaxySeed\s*\?\?\s*GalaxyGenerator\.mintSeed\(\),\s*star\.name,\s*star\.spectralType,\s*\{\s*seededSystems:\s*preMintedGalaxySeed\s*!==\s*null\s*(,\s*climateModel:\s*galaxyClimateModel\s*)?\}/.test(gsrc),
     'pin: gałąź isNewGame stempluje świat tą samą decyzją co dom (seededSystems: preMintedGalaxySeed !== null)');
   const iNewGal = gsrc.indexOf('window.KOSMOS.galaxyData = GalaxyGenerator.generate(');
   const iEmp = gsrc.indexOf('EmpireGenerator.generate(window.KOSMOS.galaxyData');
   assert(iNewGal > 0 && iEmp > iNewGal, 'pin: rekord świata (seed + stempel) ustalony PRZED EmpireGenerator (pierwsza generacja układów obcych)');
   const csrc = readSrc('../../testing/headless/GameCore.js');
-  assert(/generateCivScenario\(\{\s*galaxySeed,\s*seeded:\s*worldSeededSystems(,\s*climateModel:\s*worldClimateModel)?\s*\}\)/.test(csrc) && /GalaxyGenerator\.generate\(galaxySeed,[^)]*\{\s*seededSystems:\s*worldSeededSystems(,\s*climateModel:\s*worldClimateModel)?\s*\}\)/.test(csrc),
+  assert(/generateCivScenario\(\{\s*galaxySeed,\s*seeded:\s*worldSeededSystems(,\s*climateModel:\s*worldClimateModel(,\s*orbitModel:\s*worldOrbitModel)?)?\s*\}\)/.test(csrc) && /GalaxyGenerator\.generate\(galaxySeed,[^)]*\{\s*seededSystems:\s*worldSeededSystems(,\s*climateModel:\s*worldClimateModel(,\s*orbitModel:\s*worldOrbitModel)?)?\s*\}\)/.test(csrc),
     'pin: GameCore — jedna decyzja świata (worldSeededSystems) dla domu i stempla galaktyki');
   const osrc = readSrc('../../systems/ObservatorySystem.js');
-  assert(/peekCountsForStar\(gs,\s*SystemGenerator\.worldSeedContext\(window\.KOSMOS\?\.galaxyData\)\)/.test(osrc), 'pin: ObservatorySystem podaje kontekst świata (worldSeedContext(galaxyData)) do peekCountsForStar');
+  assert(/peekCountsForStar\(gs,\s*SystemGenerator\.worldSeedContext\(window\.KOSMOS\?\.galaxyData\)(,\s*SystemGenerator\.worldOrbitModel\(window\.KOSMOS\?\.galaxyData\)(,\s*SystemGenerator\.worldClimateModel\(window\.KOSMOS\?\.galaxyData\))?)?\)/.test(osrc), 'pin: ObservatorySystem podaje kontekst świata (worldSeedContext(galaxyData)) do peekCountsForStar');
   const ecb = readSrc('../../systems/EmpireColonyBootstrap.js');
   const vm  = readSrc('../../systems/VesselManager.js');
   assert(/generateAndRegister\(galaxyStar,\s*galaxy\)/.test(ecb) && /generateAndRegister\(targetStar,\s*gd\)/.test(vm), 'pin: bootstrap AI i przylot statku podają rekord świata JAWNIE do generateAndRegister');

@@ -21,6 +21,7 @@ import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { drawMiniBar }     from '../ui/CivPanelDrawer.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
+import { auReadoutDecimals } from '../utils/SystemScale.js';   // CS-PHYS-b3 — orbita < 0.25 AU z dwoma miejscami
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
 const _BODY_TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
@@ -1025,7 +1026,7 @@ export class FleetTabPanel {
 
         ctx.fillStyle = C.dim;
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillText(`${orbA.toFixed(1)}AU`, x + PAD + indent, ry + 22);
+        ctx.fillText(`${orbA.toFixed(auReadoutDecimals(orbA))}AU`, x + PAD + indent, ry + 22);
 
         ctx.textAlign = 'right';
         ctx.fillStyle = C.label;
@@ -1051,7 +1052,7 @@ export class FleetTabPanel {
 
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.label;
-        ctx.fillText(`${orbA.toFixed(1)}AU`, x + PAD + indent, ry + 22);
+        ctx.fillText(`${orbA.toFixed(auReadoutDecimals(orbA))}AU`, x + PAD + indent, ry + 22);
 
         ctx.textAlign = 'right';
         ctx.fillStyle = C.dim;

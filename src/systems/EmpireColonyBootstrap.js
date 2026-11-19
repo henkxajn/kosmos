@@ -18,6 +18,7 @@
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
+import { ORBIT_SCALED, pickHabitableHomeworld } from '../utils/OrbitModel.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
@@ -95,7 +96,8 @@ export class EmpireColonyBootstrap {
     const planetEntities = (sysData.planetIds ?? [])
       .map(id => EntityManager.get(id))
       .filter(Boolean);
-    const homePlanet = this._pickHomePlanet(planetEntities);
+    // CS-PHYS-b — gwiazda układu decyduje o regule (świat orbit skalowanych: skalista w HZ, D-CS-19 decyzja 2)
+    const homePlanet = this._pickHomePlanet(planetEntities, EntityManager.get(sysData.starEntityId));
     if (!homePlanet) {
       console.error(`[EmpireColonyBootstrap] Brak planety nadającej się na home w ${homeSystemId}`);
       return null;
@@ -657,8 +659,14 @@ export class EmpireColonyBootstrap {
    * Wybiera home planet z listy planet wygenerowanego systemu.
    * Preferencja: rocky → non-gas → first.
    */
-  static _pickHomePlanet(planets) {
+  static _pickHomePlanet(planets, star = null) {
     if (!Array.isArray(planets) || planets.length === 0) return null;
+    // CS-PHYS-b (§3.9): gwiazda świata orbit skalowanych → skalista WEWNĄTRZ HZ (ta sama reguła co dom gracza i
+    // strażnik LifeSystem — OrbitModel.pickHabitableHomeworld); brak takiej → reguła dotychczasowa niżej.
+    if (star?.orbitModel === ORBIT_SCALED) {
+      const hz = pickHabitableHomeworld(planets, star);
+      if (hz) return hz;
+    }
     const rocky = planets.find(p => p?.planetType === 'rocky');
     if (rocky) return rocky;
     const nonGas = planets.find(p => p?.planetType !== 'gas');
