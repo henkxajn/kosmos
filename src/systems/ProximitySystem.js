@@ -30,6 +30,7 @@
 
 import { isInService } from '../entities/Vessel.js';
 import EventBus from '../core/EventBus.js';
+import EntityManager from '../core/EntityManager.js';   // CS-PHYS-c (776) — pozycja ciała statku przy doku/orbicie
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isSameSystemStrict } from '../utils/SystemScope.js';   // AI STRIKES BACK S3/2 (SB59, Finding 151)
@@ -44,6 +45,7 @@ import { DETECTION_BASE_AU, vesselDetectionRangeAU } from '../utils/DetectionRan
 // M4 P3-7: PROXIMITY_DETECTION_AU staje się base value. Per-vessel próg
 // dynamic via _getDetectionRangeAU (player z TechSystem.getMultiplier('sensor_range');
 import { systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
+import { closestApproach, maxFlightStepAU } from '../utils/SweptProximity.js';      // CS-PHYS-c (Finding 776)
 // empire bez tech → base). Hysteresis ratio (×1.2) zachowany. Combat range
 // pozostaje hardcoded — to fizyczne ograniczenie engagement, nie sensora.
 export const PROXIMITY_DETECTION_AU = DETECTION_BASE_AU;   // 0,5 AU — ARKUSZ HUD H1: jedno źródło (`DetectionRange.js`)
@@ -51,11 +53,24 @@ export const PROXIMITY_EXIT_AU      = 0.6;
 export const COMBAT_ENGAGEMENT_AU   = 0.15;
 export const COMBAT_EXIT_AU         = 0.20;
 export const MAX_PAIRS_PER_TICK     = 500;
+// CS-PHYS-c (Finding 776) — granica skoku statku między próbkami: dłuższy skok = TELEPORT (ustawienie pozycji debugiem,
+// przywrócenie, dociągnięcie) → tylko test punktowy. Zmianę układu i lot warp łapie osobno warunek systemId.
+// Poprawka po kontroli właściciela: stały limit 1 AU odrzucał zwykły lot przy długim tiku (hull_small 2.5 AU/rok przy
+// 1 r/s: tik > 0.40 s = krok > 1 AU; przycięcie ~0.72 s dało 1.8 AU na statek i walki nie było) — czyli sam przypadek 776.
+// Granica = NAJWIĘKSZY możliwy przelot statku w tym tiku:
+//   speedAU × mnożnik prędkości z tech (misje go stosują; iloczyn do ×7) × SWEEP_SPEED_MARGIN × dt tiku
+//   + ruch ciała, przy którym statek stoi (dok / orbita: przesunięcie ciała + przeskok po orbicie wokół niego)
+//   + SWEEP_STEP_FLOOR_AU.
+// Jawne oznaczanie teleportów w miejscach zapisu pozycji odpadło: ~50 miejsc zapisu (misje, dok, cofanie w walce,
+// stagery debug) — nowe łatwo przeoczyć; granica z prędkości × dt obejmuje je wszystkie bez dotykania producentów.
+// Stałe SWEEP_SPEED_MARGIN / SWEEP_STEP_FLOOR_AU i wzór przelotu: `utils/SweptProximity.js` (wspólne z MOS).
+export { SWEEP_SPEED_MARGIN, SWEEP_STEP_FLOOR_AU } from '../utils/SweptProximity.js';
 
 // M4 P3-7: hysteresis ratio enter→exit dla dynamic detection.
 const DETECTION_HYSTERESIS = 1.2;
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
+const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE;   // civYears / rok fizyki (ProximitySystem dostaje civDy)
 
 /**
  * Zwraca stabilny klucz pary vesseli — niezależny od kolejności (v1,v2) vs (v2,v1).
@@ -85,6 +100,18 @@ function _isValidForProximity(v) {
   return true;
 }
 
+/**
+ * Próg wejścia w walkę pary [AU]: max(BAZA 0.15 AU × k układu, zasięg broni obu × 1.05) — M4 P3 hotfix3 + CS-PHYS-b2.
+ * CS-PHYS-c — wyjęte z `_checkPair` bez zmiany wzoru (jedno źródło dla debug `csCollisionTest` i keeperów).
+ */
+export function combatEnterAUOf(v1, v2) {
+  return Math.max(
+    COMBAT_ENGAGEMENT_AU * systemScaleOfEntity(v1),   // CS-PHYS-b2 (D-CS-24) — skala układu pary
+    _maxWeaponRangeAU(v1) * 1.05,
+    _maxWeaponRangeAU(v2) * 1.05,
+  );
+}
+
 export class ProximitySystem {
   /**
    * @param {import('./VesselManager.js').VesselManager} vesselManager
@@ -99,6 +126,8 @@ export class ProximitySystem {
     this._activeSensorLockPairs = new Set();
     /** @type {number} offset do rotacji iteracji w _tick (budget handling) */
     this._iterationOffset = 0;
+    /** CS-PHYS-c (Finding 776) — pozycje statków z końca poprzedniego tiku: id → { x, y, systemId } (początek odcinka) */
+    this._prevSamples = new Map();
 
     // Cleanup aktywnych par gdy którykolwiek vessel ginie — zapobiega
     // false-positive przy reuse vessel ID w przyszłości.
@@ -138,6 +167,11 @@ export class ProximitySystem {
   _tick(civDy) {
     if (!GAME_CONFIG.FEATURES?.proximitySystem) return;
     if (!civDy || civDy <= 0) return;
+    // CS-PHYS-c (776) — dt wywołania [lata fizyki] dla granicy skoku: większy z bieżącego i poprzedniego (przejście PRZED
+    // ruchem widzi ruch słuchaczy tiku z poprzedniej klatki, policzony jej dt)
+    this._sweepDtYears = Math.max(civDy, this._lastCivDy ?? 0) / CIV_TIME_SCALE;
+    this._lastCivDy = civDy;
+    this._sweepSpeedMult = Math.max(1, globalThis.window?.KOSMOS?.techSystem?.getShipSpeedMultiplier?.() ?? 1);
     if (!this._vm?._vessels?.size) return;
 
     const vessels = [];
@@ -145,7 +179,7 @@ export class ProximitySystem {
       if (_isValidForProximity(v)) vessels.push(v);
     }
     const n = vessels.length;
-    if (n < 2) return;
+    if (n < 2) { this._samplePositions(vessels); return; }
 
     const maxPairs = MAX_PAIRS_PER_TICK;
     let checked = 0;
@@ -169,6 +203,79 @@ export class ProximitySystem {
     // Rotacja offsetu — gwarantuje progres nawet gdy budget < total pairs.
     //   Cap przez n*n (odpowiednik "całego cyklu par") dla stabilności.
     this._iterationOffset = (this._iterationOffset + checked) % Math.max(1, n * n);
+    this._samplePositions(vessels);
+  }
+
+  /**
+   * CS-PHYS-c (Finding 776) — zapamiętaj pozycje końca tiku (początek odcinka w następnym). Statek nieważny w tym tiku
+   * (w doku, w rezerwie, wrak) wypada z mapy → po powrocie pierwszy tik ma tylko test punktowy.
+   * @private
+   */
+  _samplePositions(vessels) {
+    const next = new Map();
+    for (const v of vessels) {
+      const p = v.position;
+      const s = { x: p.x, y: p.y, systemId: v.systemId ?? null };
+      // statek w doku / na orbicie jedzie z ciałem — pozycja ciała do granicy skoku (_maxSweepStepPx)
+      if ((p.state === 'docked' || p.state === 'orbiting') && p.dockedAt) {
+        const b = EntityManager.get(p.dockedAt);
+        if (b && Number.isFinite(b.x) && Number.isFinite(b.y)) { s.bodyId = p.dockedAt; s.bx = b.x; s.by = b.y; }
+      }
+      next.set(v.id, s);
+    }
+    this._prevSamples = next;
+  }
+
+  /**
+   * CS-PHYS-c (776) — największy możliwy skok statku od próbki w tym tiku [px] (opis przy SWEEP_SPEED_MARGIN wyżej).
+   * Ruch z ciałem: |Δ ciała| + odległość od ciała w próbce + odległość od ciała teraz (nierówność trójkąta — obejmuje
+   * każdy przeskok po orbicie wokół ciała).
+   * @private
+   */
+  _maxSweepStepPx(v, p) {
+    const flyAU = maxFlightStepAU(v.speedAU, this._sweepSpeedMult, this._sweepDtYears);
+    let carryPx = 0;
+    if (p.bodyId) {
+      const b = EntityManager.get(p.bodyId);
+      if (b && Number.isFinite(b.x) && Number.isFinite(b.y)) {
+        carryPx = Math.hypot(b.x - p.bx, b.y - p.by) + Math.hypot(p.x - p.bx, p.y - p.by)
+          + Math.hypot(v.position.x - b.x, v.position.y - b.y);
+      }
+    }
+    return flyAU * AU_TO_PX + carryPx;
+  }
+
+  /**
+   * CS-PHYS-c (Finding 776) — najmniejsze zbliżenie pary w ostatnim tiku (ruch obu statków z poprzedniego tiku do
+   * bieżącego). null, gdy przemiatanie pominięte (powód: `_sweptProbe`). Para obserwowana debugiem (`_sweepWatch`,
+   * csCollisionTest) dostaje wpis na każde wywołanie: powód pominięcia albo zbliżenie, plus skok statku.
+   * @private
+   * @returns {{ distAU: number, t: number, a: {x:number,y:number}, b: {x:number,y:number}, stepAU: number }|null}
+   */
+  _sweptApproach(v1, v2) {
+    const r = this._sweptProbe(v1, v2);
+    const w = this._sweepWatch?.get?.(pairKey(v1.id, v2.id));
+    if (w) w.push(r.skip ? { skip: r.skip, stepAU: r.stepAU ?? null, maxStepAU: r.maxStepAU ?? null } : { distAU: r.distAU, stepAU: r.stepAU });
+    return r.skip ? null : r;
+  }
+
+  /**
+   * CS-PHYS-c (776) — przemiatanie albo powód pominięcia: flagOff · noPrevSample (pierwszy tik / statek wrócił do gry) ·
+   * systemChanged (skok warp, zmiana układu) · teleportGuard (skok > _maxSweepStepPx).
+   * @private
+   */
+  _sweptProbe(v1, v2) {
+    if (!GAME_CONFIG.FEATURES?.sweptProximity) return { skip: 'flagOff' };
+    const p1 = this._prevSamples.get(v1.id), p2 = this._prevSamples.get(v2.id);
+    if (!p1 || !p2) return { skip: 'noPrevSample' };
+    if (p1.systemId !== (v1.systemId ?? null) || p2.systemId !== (v2.systemId ?? null)) return { skip: 'systemChanged' };
+    const s1 = Math.hypot(v1.position.x - p1.x, v1.position.y - p1.y);
+    const s2 = Math.hypot(v2.position.x - p2.x, v2.position.y - p2.y);
+    const m1 = this._maxSweepStepPx(v1, p1), m2 = this._maxSweepStepPx(v2, p2);
+    if (s1 > m1) return { skip: 'teleportGuard', stepAU: s1 / AU_TO_PX, maxStepAU: m1 / AU_TO_PX };
+    if (s2 > m2) return { skip: 'teleportGuard', stepAU: s2 / AU_TO_PX, maxStepAU: m2 / AU_TO_PX };
+    const ca = closestApproach(p1, v1.position, p2, v2.position);
+    return { distAU: ca.dist / AU_TO_PX, t: ca.t, a: ca.a, b: ca.b, stepAU: Math.max(s1, s2) / AU_TO_PX };
   }
 
   /**
@@ -197,6 +304,9 @@ export class ProximitySystem {
     const distPx = Math.hypot(dx, dy);
     const distAU = sameSystem ? (distPx / AU_TO_PX) : Infinity;
     const isPaired = this._activePairs.has(key);
+    // CS-PHYS-c (Finding 776) — najmniejsze zbliżenie w tym tiku (≤ distAU); poza układem / bez próbki — jak punkt.
+    const swept = sameSystem ? this._sweptApproach(v1, v2) : null;
+    const nearAU = swept ? Math.min(distAU, swept.distAU) : distAU;
 
     // M4 P3-7 — dynamic detection threshold per vessel pair. Wygrywa większy
     // sensor (np. player ze zbadanym advanced_sensors_2 wykrywa z 0.75 AU;
@@ -204,14 +314,15 @@ export class ProximitySystem {
     const enterAU = Math.max(this._getDetectionRangeAU(v1), this._getDetectionRangeAU(v2));
     const exitAU  = enterAU * DETECTION_HYSTERESIS;
 
-    if (!isPaired && distAU < enterAU) {
+    if (!isPaired && nearAU < enterAU) {
       this._activePairs.add(key);
       const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
       EventBus.emit('vessel:proximityEnter', {
         vesselAId:  v1.id,
         vesselBId:  v2.id,
-        distanceAU: distAU,
+        distanceAU: nearAU,
         sameFaction,
+        ...(distAU < enterAU ? {} : { swept: true }),   // CS-PHYS-c — wyłącznie z przemiatania
       });
     } else if (isPaired && distAU >= exitAU) {
       this._activePairs.delete(key);
@@ -232,14 +343,15 @@ export class ProximitySystem {
       const lockEnterAU = Math.max(this._getSensorLockAU(v1), this._getSensorLockAU(v2));
       if (lockEnterAU > 0) {
         const lockExitAU = lockEnterAU * DETECTION_HYSTERESIS;
-        if (!isLocked && distAU < lockEnterAU) {
+        if (!isLocked && nearAU < lockEnterAU) {
           this._activeSensorLockPairs.add(key);
           const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
           EventBus.emit('vessel:sensorLockEnter', {
             vesselAId:  v1.id,
             vesselBId:  v2.id,
-            distanceAU: distAU,
+            distanceAU: nearAU,
             sameFaction,
+            ...(distAU < lockEnterAU ? {} : { swept: true }),   // CS-PHYS-c
           });
         } else if (isLocked && distAU >= lockExitAU) {
           this._activeSensorLockPairs.delete(key);
@@ -256,11 +368,7 @@ export class ProximitySystem {
     // player vessel; player kontynuuje zbliżanie do swojej weapon range.
     // Hysteresis: exit = enter × 1.33 (zachowane ratio z hardcoded 0.15/0.20).
     const isCombat = this._activeCombatPairs.has(key);
-    const combatEnterAU = Math.max(
-      COMBAT_ENGAGEMENT_AU * systemScaleOfEntity(v1),   // CS-PHYS-b2 (D-CS-24) — skala układu pary
-      _maxWeaponRangeAU(v1) * 1.05,
-      _maxWeaponRangeAU(v2) * 1.05,
-    );
+    const combatEnterAU = combatEnterAUOf(v1, v2);   // CS-PHYS-c — wspólna reguła (też dla csCollisionTest)
     const combatExitAU = combatEnterAU * (COMBAT_EXIT_AU / COMBAT_ENGAGEMENT_AU);  // ratio 1.333
 
     // P3 polish #2 (2026-05-20) — defensywne re-emit gdy pair "zaschła" w
@@ -283,7 +391,7 @@ export class ProximitySystem {
     }
     const isCombatRefreshed = this._activeCombatPairs.has(key);
 
-    if (!isCombatRefreshed && distAU < combatEnterAU) {
+    if (!isCombatRefreshed && nearAU < combatEnterAU) {
       // Bugfix 2026-05-21 (task #13): nie emituj combatRangeEnter gdy
       // któryś vessel jest docked. DSCS i tak zrejekutje (NOT in combat
       // state) → bez tej skrótki ProximitySystem emituje co tick, VCS
@@ -291,13 +399,22 @@ export class ProximitySystem {
       if (v1.position?.state === 'docked' || v2.position?.state === 'docked') {
         return;
       }
-      this._activeCombatPairs.add(key);
       const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
+      // CS-PHYS-c (Finding 776) — wejście WYŁĄCZNIE z przemiatania (statki minęły się między tikami): strony różnych
+      // frakcji wracają do punktu największego zbliżenia, zanim DSCS je zamrozi — inaczej starcie zaczynałoby się
+      // z pozycji po minięciu, poza zasięgiem broni (strażnik „nikt nie może zadać obrażeń” odmówiłby startu).
+      const sweptOnly = !(distAU < combatEnterAU);
+      if (sweptOnly && !sameFaction) {
+        v1.position.x = swept.a.x; v1.position.y = swept.a.y;
+        v2.position.x = swept.b.x; v2.position.y = swept.b.y;
+      }
+      this._activeCombatPairs.add(key);
       EventBus.emit('vessel:combatRangeEnter', {
         vesselAId:  v1.id,
         vesselBId:  v2.id,
-        distanceAU: distAU,
+        distanceAU: nearAU,
         sameFaction,
+        ...(sweptOnly ? { swept: true } : {}),   // CS-PHYS-c
       });
     } else if (isCombatRefreshed && distAU >= combatExitAU) {
       this._activeCombatPairs.delete(key);

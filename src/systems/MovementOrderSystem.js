@@ -24,6 +24,7 @@ import { canLaunchFromCurrent, launchFuelMultiplierForVessel } from '../utils/Sp
 import { isSameSystem } from '../utils/SystemScope.js';
 import { nearestShelter, escapeVector, nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
 import { systemScaleOf, systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24)
+import { segmentPointDistance, closestApproach, maxFlightStepAU } from '../utils/SweptProximity.js';   // CS-PHYS-c (Finding 776)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -95,6 +96,8 @@ export class MovementOrderSystem {
     // w skali physics (spójnie z vessel.speedAU = AU/gameYear). Diff gameYear
     // pomiędzy tickami daje nam physicsDy bez znajomości dwóch timescales.
     this._lastTickYear = null;
+    /** CS-PHYS-c (776) — ostatni krok pościgu/przechwytu i pozycja celu w tamtym tiku: order → zapis (_sweptPrevStepHit) */
+    this._sweepPrev = new WeakMap();
 
     // Subskrypcje — pętla tick przychodzi synchronicznie z VesselManager._tick.
     this._onArrived     = ({ vessel, mission }) => this._onVesselArrived(vessel, mission);
@@ -1646,12 +1649,27 @@ export class MovementOrderSystem {
       this._completeOrder(vessel, order, gameYear, proximityTarget);
       return;
     }
+    // CS-PHYS-c (776) — przemiatanie POPRZEDNIEGO kroku względem RZECZYWISTEGO ruchu celu w tamtym tiku. Cel z misji
+    // rusza się w _updatePositions, już po MOS, więc jego odcinek tiku znamy dopiero teraz. Długi tik (przycięcie przy
+    // 1 r/s): krok kończy się w punkcie przechwytu, a cel przelatuje przez ten punkt później w tym samym tiku i odlatuje
+    // — bez tego pościg z równą prędkością nie kończy się nigdy.
+    //   Pozycja celu = z początku tiku MOS (_tickStartTargetPos), więc oba odcinki obejmują ten sam przedział czasu.
+    const tg0 = this._tickStartTargetPos?.get?.(proximityTarget) ?? { x: ptx, y: pty };
+    if (GAME_CONFIG.FEATURES?.sweptProximity && this._sweptPrevStepHit(vessel, order, proximityTarget, tg0.x, tg0.y, dPhysicsYear)) {
+      this._completeOrder(vessel, order, gameYear, proximityTarget);
+      return;
+    }
+    // CS-PHYS-c (776) — zapamiętaj krok tego tiku i pozycję celu sprzed jego ruchu (sprawdzane w następnym tiku)
+    const rememberStep = (fx, fy) => this._sweepPrev?.set?.(order, {
+      fromX: fx, fromY: fy, toX: vessel.position.x, toY: vessel.position.y, tgX: tg0.x, tgY: tg0.y,
+      target: proximityTarget, tgSys: proximityTarget.systemId ?? null, dt: dPhysicsYear,
+    });
 
     // Wektor do waypointu (tx,ty) — dla pursue == target; dla intercept == IP.
     const dx = tx - vessel.position.x;
     const dy = ty - vessel.position.y;
     const distWpPx = Math.hypot(dx, dy);
-    if (distWpPx < INTERCEPT_EPS) return;  // już w punkcie
+    if (distWpPx < INTERCEPT_EPS) { rememberStep(vessel.position.x, vessel.position.y); return; }  // już w punkcie (krok zerowy)
 
     // Krok w jednostkach px. speedAU (AU/gameYear) × AU_TO_PX = px/gameYear.
     // Player Fleet Groups (P2): _speedCapAU clamp dla pursue/intercept gdy member floty.
@@ -1664,6 +1682,7 @@ export class MovementOrderSystem {
 
     const ux = dx / distWpPx;
     const uy = dy / distWpPx;
+    const fromX = vessel.position.x, fromY = vessel.position.y;   // CS-PHYS-c — początek kroku (test przemiatany)
     vessel.position.x += ux * stepPx;
     vessel.position.y += uy * stepPx;
 
@@ -1678,10 +1697,39 @@ export class MovementOrderSystem {
 
     // Proximity check PO ruchu — gdy step zamknął lukę do progu.
     // (Krytyczne dla tail-chase gdy catch-rate pokrywa target-step dokładnie).
-    const distAfter = Math.hypot(ptx - vessel.position.x, pty - vessel.position.y);
+    // CS-PHYS-c (Finding 776) — przy flagze sweptProximity: najmniejsza odległość CELU od odcinka kroku (krok przechwytu
+    // celuje w punkt przechwytu, nie w cel — przy 1 r/s potrafi przejść przez próg celu i skończyć się za nim).
+    const distAfter = GAME_CONFIG.FEATURES?.sweptProximity
+      ? segmentPointDistance({ x: fromX, y: fromY }, vessel.position, { x: ptx, y: pty })
+      : Math.hypot(ptx - vessel.position.x, pty - vessel.position.y);
     if (distAfter <= threatRadiusPx(vessel)) {
       this._completeOrder(vessel, order, gameYear, proximityTarget);
+    } else {
+      rememberStep(fromX, fromY);
     }
+  }
+
+  /**
+   * CS-PHYS-c (776) — czy poprzedni krok statku zbliżył się do celu na promień zagrożenia, licząc ruch celu w TYM SAMYM
+   * tiku (od pozycji zapisanej przy kroku do bieżącej). Pominięte, gdy: brak zapisu, inny cel, statek przesunięty poza
+   * MOS od tamtej pory, cel w innym układzie, albo skok celu-statku (lot własny, nie przy ciele) dłuższy niż jego
+   * największy możliwy przelot — teleport, ta sama granica co w ProximitySystem (`maxFlightStepAU`).
+   * @private
+   */
+  _sweptPrevStepHit(vessel, order, target, ptx, pty, dPhysicsYear) {
+    const s = this._sweepPrev?.get?.(order);
+    if (!s || s.target !== target) return false;
+    if (s.toX !== vessel.position.x || s.toY !== vessel.position.y) return false;
+    if ((target.systemId ?? null) !== s.tgSys) return false;
+    const tp = target.position;
+    const carried = !!(tp && (tp.state === 'docked' || tp.state === 'orbiting') && tp.dockedAt);   // jedzie z ciałem
+    if (typeof target.speedAU === 'number' && !carried) {
+      const mult = globalThis.window?.KOSMOS?.techSystem?.getShipSpeedMultiplier?.() ?? 1;
+      const stepAU = Math.hypot(ptx - s.tgX, pty - s.tgY) / AU_TO_PX;
+      if (stepAU > maxFlightStepAU(target.speedAU, mult, Math.max(s.dt, dPhysicsYear))) return false;
+    }
+    const ca = closestApproach({ x: s.fromX, y: s.fromY }, { x: s.toX, y: s.toY }, { x: s.tgX, y: s.tgY }, { x: ptx, y: pty });
+    return ca.dist <= threatRadiusPx(vessel);
   }
 
   _completeOrder(vessel, order, gameYear, target) {
@@ -2112,6 +2160,16 @@ export class MovementOrderSystem {
       ? Math.max(0, gameYear - this._lastTickYear)
       : 0;
     this._lastTickYear = gameYear;
+
+    // CS-PHYS-c (776) — pozycje celów pościgu/przechwytu z POCZĄTKU tiku (przed ruchem MOS): odcinek celu w
+    //   _sweptPrevStepHit nie zależy od kolejności rozkazów w pętli (cel z rozkazem MOS mógł już ruszyć w tym tiku)
+    this._tickStartTargetPos = new Map();
+    for (const order of this._byVessel.values()) {
+      if (order.status !== 'active' || (order.type !== ORDER_TYPES.pursue && order.type !== ORDER_TYPES.intercept)) continue;
+      const t = this._resolveTarget(order.targetEntityId);
+      const x = t?.x ?? t?.position?.x, y = t?.y ?? t?.position?.y;
+      if (t && Number.isFinite(x) && Number.isFinite(y)) this._tickStartTargetPos.set(t, { x, y });
+    }
 
     // Iteruj aktywne ordery (po kopii — _byVessel może być zmutowane przez _completeOrder wewnątrz).
     if (this._byVessel.size > 0) {

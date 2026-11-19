@@ -3218,13 +3218,15 @@ export class VesselManager {
     }
 
     // ── Krok 2: unikanie planet i księżyców (tylko z aktywnego układu) ──
-    const BODY_MARGIN = 0.15 * AU_TO_PX; // 0.15 AU margines
+    // CS-PHYS-c — margines chroni RYSOWANĄ tarczę ciała, a ta maleje × skala rysunku ciał (= k) → margines × k;
+    // stosunek margines / promień tarczy jak w świecie dotychczasowym (k = 1 → bit w bit).
+    const BODY_MARGIN = 0.15 * AU_TO_PX * kSys; // 0.15 AU margines × k
     const routeSysId = systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home';
     const allBodies = [
       ...EntityManager.getByTypeInSystem('planet', routeSysId),
       ...EntityManager.getByTypeInSystem('moon', routeSysId),
     ];
-    const waypoints = this._avoidBodies(sx, sy, tx, ty, sunWaypoints, allBodies, BODY_MARGIN);
+    const waypoints = this._avoidBodies(sx, sy, tx, ty, sunWaypoints, allBodies, BODY_MARGIN, kSys);
 
     // Przelicz łączny dystans z finalnymi waypointami
     const totalDist = this._routeLength(sx, sy, tx, ty, waypoints);
@@ -3241,7 +3243,7 @@ export class VesselManager {
   /**
    * Sprawdź kolizje trasy z ciałami niebieskimi i dodaj waypoints ominięcia.
    */
-  _avoidBodies(sx, sy, tx, ty, existingWps, bodies, margin) {
+  _avoidBodies(sx, sy, tx, ty, existingWps, bodies, margin, scale = 1) {
     const newWps = [...existingWps];
 
     for (const body of bodies) {
@@ -3259,7 +3261,7 @@ export class VesselManager {
       for (let i = 0; i < pts.length - 1; i++) {
         const minDist = this._pointToSegmentDist(bx, by, pts[i], pts[i + 1]);
         if (minDist < margin) {
-          const wp = this._avoidanceWaypoint(pts[i], pts[i + 1], bx, by, margin + 0.05 * AU_TO_PX);
+          const wp = this._avoidanceWaypoint(pts[i], pts[i + 1], bx, by, margin + 0.05 * AU_TO_PX * scale);   // CS-PHYS-c — offset × k
           if (wp) newWps.push(wp);
           break; // jedno ciało = jeden waypoint
         }

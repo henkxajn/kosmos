@@ -83,6 +83,12 @@ export const GAME_CONFIG = {
     // OFF (default): generacja bit w bit jak dotąd. Własność ŚWIATA (jak D-CS-18): czytana RAZ przy tworzeniu świata
     //     (GameScene.start / GameCore.boot); przełączenie po starcie nic nie zmienia, stary zapis bez stempla = dotychczasowy.
     scaledOrbits:         false,
+    // ── ARC COLONY SPHERE CS-PHYS-c (Finding 776) — PRZEMIATANE progi zbliżenia. ON (default): ProximitySystem (wykrycie,
+    //     sensor-lock, wejście w walkę) bada najmniejsze zbliżenie DWÓCH ruchów z poprzedniego tiku do bieżącego, nie tylko
+    //     pozycje końcowe — szybkie statki w ściśniętym układzie przy 1 r/s nie mijają się bez walki (przy samym przemiataniu
+    //     walka startuje w punkcie największego zbliżenia); MovementOrderSystem — przechwyt kończy się, gdy KROK przechodzi
+    //     przez próg celu. OFF: tylko pozycje końcowe (bit w bit jak dotąd). Zmiana w konsoli działa od następnego tiku.
+    sweptProximity:       true,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
     // ⚠ W3-8 — `fleetMaterialization` i `unifiedAggregator` USUNIĘTE razem z warstwą

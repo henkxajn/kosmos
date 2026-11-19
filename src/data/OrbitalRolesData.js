@@ -106,10 +106,12 @@ export function computeBodyRadius(entity) {
 /**
  * Oblicz konkretny zakres orbit (rMin, rMax) dla danej roli na danym ciele.
  */
-export function getOrbitRange(roleKey, bodyRadius) {
+// CS-PHYS-c — `scale` = skala rysunku ciał układu (SystemScale.bodyDrawScale; świat dotychczasowy 1 → bit w bit):
+// `bodyRadius` podajemy już RYSOWANY (× scale), a minima bezwzględne (rMinAbs, odstęp 0.02) też × scale.
+export function getOrbitRange(roleKey, bodyRadius, scale = 1) {
   const def = ORBITAL_ROLES[roleKey] ?? ORBITAL_ROLES.default;
-  const rMin = Math.max(def.rMinAbs ?? 0, bodyRadius * def.rMinMult);
-  const rMax = Math.max(rMin + 0.02, bodyRadius * def.rMaxMult);
+  const rMin = Math.max((def.rMinAbs ?? 0) * scale, bodyRadius * def.rMinMult);
+  const rMax = Math.max(rMin + 0.02 * scale, bodyRadius * def.rMaxMult);
   return { rMin, rMax };
 }
 

@@ -36,6 +36,7 @@ import { familyOf, planetoidPaletteOf } from '../utils/BodyArchetypeLogic.js';
 import { HOMEWORLD_TEMP_MIN_C, HOMEWORLD_TEMP_MAX_C } from '../utils/HomeworldClimate.js';
 import { climateModelOfWorld, equilibriumK, lookContradicts, KELVIN } from '../utils/ClimateModel.js';
 import { orbitModelOfWorld, orbitZoneOf, frostLineAU, scaledMinOrbitAU, compactionOf } from '../utils/OrbitModel.js';
+import { csCollisionTest, csCollisionTestLowFps } from './CollisionTestDebug.js';   // CS-PHYS-c (Finding 776) — przemiatane wejście w walkę
 import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';   // CS-4a / CS-4b — podgląd powierzchni + stan cache
 
 function bodyTypeOf(body, kind) {
@@ -307,6 +308,7 @@ export function colonySphereDebugHelpers() {
       // CS-PHYS-b3: k progów rozgrywki (SystemScale; świat dotychczasowy 1) i skala RYSUNKU tarczy (Finding 774)
       systemScale: r3(st?.systemScale ?? null),
       starDrawScale: r3(K.threeRenderer?._starDrawScale ?? null),
+      bodyDrawScale: r3(K.threeRenderer?._bodyDrawScale ?? null),   // CS-PHYS-c — skala rysunku ciał (= k)
       planets: rows.length, inHZ: rows.filter(r => r.zone === 'hz').length,
       tidallyLocked: rows.filter(r => r.tidallyLocked).length,
     };
@@ -428,5 +430,5 @@ export function colonySphereDebugHelpers() {
     console.log('[csHaze]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps };
 }

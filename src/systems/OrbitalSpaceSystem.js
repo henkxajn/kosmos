@@ -21,7 +21,8 @@
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
-import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
+import { orbitClockSec } from '../utils/SimClock.js';
+import { systemScaleOfEntity } from '../utils/SystemScale.js';   // CS-PHYS-c — skala rysunku ciał (= k)   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
 import {
   ORBITAL_ROLES,
   MIN_ANGULAR_SPACING_RAD,
@@ -129,8 +130,10 @@ export class OrbitalSpaceSystem {
     // Promień planety + zakres orbit dla tej roli — skalowane wg planety
     // (mała planeta → blisko, gas giant → daleko)
     const planetEntity = EntityManager.get(planetId);
-    const bodyRadius = computeBodyRadius(planetEntity);
-    const range = getOrbitRange(role, bodyRadius);
+    // CS-PHYS-c — promień ciała i zakres orbit × skala rysunku ciał układu (świat dotychczasowy 1)
+    const drawScale = systemScaleOfEntity(planetEntity);
+    const bodyRadius = computeBodyRadius(planetEntity) * drawScale;
+    const range = getOrbitRange(role, bodyRadius, drawScale);
 
     // Spróbuj znaleźć niekolidującą pozycję
     let orbit = this._findFreeSlot(roleDef, range, occupants, MIN_ANGULAR_SPACING_RAD, opts);

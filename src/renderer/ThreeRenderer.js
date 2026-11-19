@@ -39,7 +39,7 @@ import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
-import { starDrawScale, innermostPeriapsisAU, starScreenFloorScale } from '../utils/SystemScale.js';   // Finding 774
+import { starDrawScale, innermostPeriapsisAU, starScreenFloorScale, bodyDrawScale, bodyScreenFloorScale } from '../utils/SystemScale.js';   // Finding 774, CS-PHYS-c
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { loadBuildingTextures } from './BuildingTextures.js';
@@ -1699,13 +1699,13 @@ export class ThreeRenderer {
           const ent = this._entityByUUID.get(pEntry.mesh.uuid);
           bodyR = ent ? this._getEntityRadius(ent) : 0.1;
         } else if (this._moons.has(dockedAt)) {
-          bodyR = 0.03;
+          bodyR = 0.03 * (this._bodyDrawScale ?? 1);
         } else if (this._planetoids.has(dockedAt)) {
-          bodyR = 0.02;
+          bodyR = 0.02 * (this._bodyDrawScale ?? 1);
         }
         entry._orbiting = {
           bodyId: dockedAt,
-          orbitR: Math.max(0.5, bodyR * 6.0),
+          orbitR: Math.max(0.5 * (this._bodyDrawScale ?? 1), bodyR * 6.0),   // CS-PHYS-c — minimum × skala ciał
           isWreck: true,
           initAngle: rendererRandom() * Math.PI * 2,
         };
@@ -1783,13 +1783,13 @@ export class ThreeRenderer {
         this._focusStationId = null;
         // Księżyce — pozwól na głębszy zoom (r=0.015–0.04, potrzeba bliskiej kamery)
         if (this._cameraController) {
-          this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 0.3);
+          this._cameraController.setMinDist((entity.type === 'moon' ? 0.15 : 0.3) * (this._bodyDrawScale ?? 1));   // CS-PHYS-c — × skala ciał
         }
         this._updateCameraFocus();
         // Auto-zoom na każde kliknięte ciało (oprócz gwiazdy)
         if (this._cameraController && entity.type !== 'star') {
           const r = this._getEntityRadius(entity);
-          const idealDist = Math.max(r * 6, 0.8);
+          const idealDist = Math.max(r * 6, 0.8 * (this._bodyDrawScale ?? 1));   // CS-PHYS-c
           // Zbliżaj gdy kamera daleko — nie cofaj jeśli gracz już blisko
           if (this._cameraController._targetDist > idealDist * 1.5) {
             this._cameraController.setTargetDist(idealDist);
@@ -1835,7 +1835,7 @@ export class ThreeRenderer {
       this._colonyMarkers.hide();
       this._hideColonyTooltip();
       // Przywróć domyślny min zoom (sam próg — kamera się nie rusza)
-      if (this._cameraController && !swap) this._cameraController.setMinDist(0.3);
+      if (this._cameraController && !swap) this._cameraController.setMinDist(0.3 * (this._bodyDrawScale ?? 1));   // CS-PHYS-c
       // ARKUSZ HUD H0 — orbity w stylu ze stanu (bez zaznaczenia)
       this._hudRestylePlanetoidOrbits();
       this._hudRestyleMoonRings();
@@ -2332,6 +2332,8 @@ export class ThreeRenderer {
     const baseCoreAU = baseR * STAR_CORE_SCALE * WORLD_SCALE / GAME_CONFIG.AU_TO_PX;   // j. świata → px → AU
     this._starDrawScale = starDrawScale(star, { baseCoreAU, innermostPeriapsisAU: innermostPeriapsisAU(planets) });
     const r = baseR * this._starDrawScale;
+    // CS-PHYS-c — skala rysunku CIAŁ układu (= k; świat bez stempla orbit 2 → 1 dokładnie). Ustawiana PRZED addPlanetMesh.
+    this._bodyDrawScale = bodyDrawScale(star);
     const color = new THREE.Color(star.visual.color);
 
     // Typ spektralny → konfiguracja per-typ
@@ -2469,13 +2471,45 @@ export class ThreeRenderer {
     return Math.max(0.06, Math.min(0.14, 0.05 + mass * 0.012));
   }
 
-  // Promień encji w jednostkach Three.js (planeta/księżyc/planetoid/gwiazda)
+  // Promień encji w jednostkach Three.js (planeta/księżyc/planetoid/gwiazda) — CS-PHYS-c: RYSOWANY (× skala ciał)
   _getEntityRadius(entity) {
-    if (entity.type === 'planet') return ThreeRenderer._planetRadius(entity);
-    if (entity.type === 'moon') return Math.max(0.015, Math.min(0.04, 0.015 + (entity.physics?.mass ?? 0.001) * 1.5));
-    if (entity.type === 'planetoid') return 0.02;
+    const s = (this._bodyDrawScale ?? 1);
+    if (entity.type === 'planet') return ThreeRenderer._planetRadius(entity) * s;
+    if (entity.type === 'moon') return Math.max(0.015, Math.min(0.04, 0.015 + (entity.physics?.mass ?? 0.001) * 1.5)) * s;
+    if (entity.type === 'planetoid') return 0.02 * s;
     if (entity.type === 'star') return 1.6;
     return 0.1;
+  }
+
+  /**
+   * CS-PHYS-c — podłoga ekranowa tarcz ciał układu ściśniętego (tylko skala rysunku < 1; pętla renderu). Tarcza planety,
+   * księżyca i planetoidy nie maleje na ekranie poniżej BODY_MIN_PX, ale nigdy nie rośnie ponad rozmiar ze świata
+   * dotychczasowego (mnożnik ≤ 1 / skala). Pierścienie orbit księżyców (dzieci grupy planety) dostają odwrotny mnożnik —
+   * zostają na pozycjach fizyki (księżyce leżą na x/y z PhysicsSystem).
+   */
+  _applyBodyScreenFloor() {
+    const s = (this._bodyDrawScale ?? 1);
+    if (!(s < 1) || !this.camera) return;
+    const H = window.innerHeight || 720, fov = this.camera.fov ?? 55, cam = this.camera.position, maxScale = 1 / s;
+    const floorOf = (obj, r) => bodyScreenFloorScale({ radiusWorld: r, distance: cam.distanceTo(obj.position), viewportHeightPx: H, fovDeg: fov, maxScale });
+    for (const entry of this._planets.values()) {
+      const r = entry.mesh?.geometry?.parameters?.radius;
+      if (!(r > 0)) continue;
+      const f = floorOf(entry.group, r);
+      if (entry.group.scale.x !== f) entry.group.scale.setScalar(f);
+    }
+    for (const m of this._moons.values()) {
+      const r = m.mesh?.geometry?.parameters?.radius;
+      if (r > 0) { const f = floorOf(m.mesh, r); if (m.mesh.scale.x !== f) m.mesh.scale.setScalar(f); }
+      const gf = m.parentEntry?.group?.scale?.x ?? 1;
+      if (m.ring && m.ring.scale.x !== 1 / gf) m.ring.scale.setScalar(1 / gf);
+    }
+    for (const pd of this._planetoids.values()) {
+      const r = pd.mesh?.geometry?.parameters?.radius;
+      if (!(r > 0)) continue;
+      const f = floorOf(pd.mesh, r);
+      if (pd.mesh.scale.x !== f) pd.mesh.scale.setScalar(f);
+    }
   }
 
   // ── Pierścienie planet (gas 60%, ice 40%) ──────────────────────────────
@@ -3126,7 +3160,7 @@ export class ThreeRenderer {
     if (this._planets.has(planet.id)) return;
 
     const seed = hashCode(String(planet.id));
-    const r    = ThreeRenderer._planetRadius(planet);
+    const r    = ThreeRenderer._planetRadius(planet) * (this._bodyDrawScale ?? 1);   // CS-PHYS-c — rysowany promień (× skala ciał)
 
     // Cache typ tekstury i wariant — inne systemy (ColonyOverlay) użyją tego samego
     if (!planet._cachedTexType) {
@@ -3276,7 +3310,7 @@ export class ThreeRenderer {
 
     const { mesh } = entry;
     const seed = hashCode(String(planet.id));
-    const r    = ThreeRenderer._planetRadius(planet);
+    const r    = ThreeRenderer._planetRadius(planet) * (this._bodyDrawScale ?? 1);   // CS-PHYS-c — rysowany promień (× skala ciał)
     mesh.geometry.dispose();
     mesh.geometry = new THREE.SphereGeometry(r, 48, 48);
 
@@ -3651,7 +3685,7 @@ export class ThreeRenderer {
 
     // Sfera księżyca — w scenie, pozycja synchronizowana z moon.x/y
     // Promień oparty o masę: 0.0001–0.015 M⊕ → r = 0.015–0.04 (zawsze mniejsze od planet)
-    const r   = Math.max(0.015, Math.min(0.04, 0.015 + (moon.physics?.mass ?? 0.001) * 1.5));
+    const r   = Math.max(0.015, Math.min(0.04, 0.015 + (moon.physics?.mass ?? 0.001) * 1.5)) * (this._bodyDrawScale ?? 1);   // CS-PHYS-c
     const geo = new THREE.SphereGeometry(r, 24, 16);
 
     // Tekstura: terrain-based diffuse (hex grid → generateColorMap) lub PBR fallback
@@ -3716,7 +3750,7 @@ export class ThreeRenderer {
     if (!isPlayer && planet.lifeScore <= 0) return;
     if (!entry) return;
 
-    const r       = ThreeRenderer._planetRadius(planet);
+    const r       = ThreeRenderer._planetRadius(planet) * (this._bodyDrawScale ?? 1);   // CS-PHYS-c
     // Kropka gracza nieco większa
     const dotSize = isPlayer ? Math.max(0.05, r * 0.45) : Math.max(0.04, r * 0.35);
 
@@ -3859,7 +3893,7 @@ export class ThreeRenderer {
     planetoids.forEach(p => {
       // Mesh sfery (r = 0.08–0.12 na podstawie masy — widoczne w zewnętrznym układzie)
       const mass = p.physics?.mass ?? 0.01;
-      const r = Math.max(0.08, Math.min(0.12, 0.06 + mass * 0.8));
+      const r = Math.max(0.08, Math.min(0.12, 0.06 + mass * 0.8)) * (this._bodyDrawScale ?? 1);   // CS-PHYS-c
       const geo = new THREE.SphereGeometry(r, 16, 12);
 
       // Tekstura: terrain-based diffuse (hex grid) lub PBR fallback
@@ -4917,6 +4951,8 @@ export class ThreeRenderer {
           this._starCorona.quaternion.copy(this.camera.quaternion);
           // Finding 774 — podłoga ekranowa rdzenia (+ sfera kliku) tylko przy skali rysunku < 1 (świat dotychczasowy nietknięty)
           if (this._starDrawScale < 1) this._applyStarScreenFloor();
+          // CS-PHYS-c — podłoga ekranowa tarcz ciał (tylko skala rysunku ciał < 1)
+          if ((this._bodyDrawScale ?? 1) < 1) this._applyBodyScreenFloor();
           // Delikatne „oddychanie" jasności korony (±3%).
           // ⚠ Faza jest AKUMULOWANA w _tickClouds, a NIE brana z this._clock (U6).
           //   THREE.Clock zwraca POZYCJĘ na osi czasu ściennego i liczy dalej, gdy pętla
@@ -5559,7 +5595,7 @@ export class ThreeRenderer {
   // więc tu zwracamy surowy maksymalny zasięg (bez paddingu ×1.15 mapy taktycznej).
   _computeSystemExtentAU() {
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    let maxOrbitAU = 1;  // AU
+    let maxOrbitAU = 1 * (this._star?.systemScale ?? 1);  // AU — CS-PHYS-c: podłoga 1 AU × k (świat dotychczasowy 1)
     for (const p of (EntityManager.getByTypeInSystem('planet', sysId) || [])) {
       const a = p.orbital?.a ?? 0;  // AU
       if (a > maxOrbitAU) maxOrbitAU = a;
@@ -5595,7 +5631,7 @@ export class ThreeRenderer {
     this._focusEntityId    = null;
     this._focusVesselId    = null;
     this._focusStationId   = null;
-    this._cameraController.setMinDist(0.3);   // domyślny min zoom (fokus statku / stacji go obniża)
+    this._cameraController.setMinDist(0.3 * (this._bodyDrawScale ?? 1));   // domyślny min zoom (fokus statku / stacji go obniża); CS-PHYS-c × skala ciał
     this._frameActiveSystem();
     return true;
   }
@@ -5744,9 +5780,9 @@ export class ThreeRenderer {
         if (pE) {
           const ent = this._entityByUUID.get(pE.mesh.uuid);
           bodyR = ent ? this._getEntityRadius(ent) : 0.1;
-        } else if (this._moons.has(bodyId)) bodyR = 0.03;
-        else if (this._planetoids.has(bodyId)) bodyR = 0.02;
-        entry._orbiting = { bodyId, orbitR: Math.max(0.5, bodyR * 6.0), isWreck: true, initAngle: rendererRandom() * Math.PI * 2 };
+        } else if (this._moons.has(bodyId)) bodyR = 0.03 * (this._bodyDrawScale ?? 1);
+        else if (this._planetoids.has(bodyId)) bodyR = 0.02 * (this._bodyDrawScale ?? 1);
+        entry._orbiting = { bodyId, orbitR: Math.max(0.5 * (this._bodyDrawScale ?? 1), bodyR * 6.0), isWreck: true, initAngle: rendererRandom() * Math.PI * 2 };   // CS-PHYS-c — minimum × skala ciał
       } else if (isWreck && vessel.wreckLocation && vessel.position.dockedAt == null) {
         const wx = isNaN(vessel.wreckLocation.x) ? 0 : vessel.wreckLocation.x;
         const wy = isNaN(vessel.wreckLocation.y) ? 0 : vessel.wreckLocation.y;
@@ -6384,7 +6420,7 @@ export class ThreeRenderer {
     if (bodyX == null) return null;
 
     // Promień orbity — 2× promień ciała (minimum 0.06 żeby nie wchodzić w mesh)
-    const orbitR = Math.max(0.06, bodyR * 2.0);
+    const orbitR = Math.max(0.06 * (this._bodyDrawScale ?? 1), bodyR * 2.0);   // CS-PHYS-c — minimum × skala ciał
 
     // Kąt orbity — czas + offset per statek (deterministyczny z ID)
     const idHash = hashCode(vessel.id);
@@ -7191,7 +7227,7 @@ export class ThreeRenderer {
     const pEntry = this._planets.get(bodyId);
     if (pEntry) {
       const entity = EntityManager.get(bodyId);
-      const radius = entity ? ThreeRenderer._planetRadius(entity) : 1;
+      const radius = entity ? ThreeRenderer._planetRadius(entity) * (this._bodyDrawScale ?? 1) : 1;   // CS-PHYS-c
       // Zbierz child meshe (chmury, atmosfera) z grupy
       const children = [];
       for (const child of pEntry.group.children) {

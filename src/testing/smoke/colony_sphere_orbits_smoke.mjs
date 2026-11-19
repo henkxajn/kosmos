@@ -486,9 +486,10 @@ console.log('\n── O8 przegląd stałych (CS-PHYS-b3): akrecja, HUD sensor-lo
   const ftp = src('../../ui/FleetTabPanel.js');
   assert((ftp.match(/orbA\.toFixed\(auReadoutDecimals\(orbA\)\)/g) ?? []).length === 2 && !/orbA\.toFixed\(1\)/.test(ftp),
     'pin O8: FleetTabPanel — orbita na liście ciał z auReadoutDecimals (×2)');
-  // Celowo NIE skalowane: margines omijania ciał (0.15 AU — związany z rysowanym promieniem planet w px, nieskalowanym)
+  // CS-PHYS-c (§3.9.3) — decyzja z §3.9.2 odwrócona: rysowane tarcze ciał skalują się × k, więc margines omijania też
+  // (pełny pin wykonawczy: colony_sphere_compact_smoke C5).
   const vmS = src('../../systems/VesselManager.js');
-  assert(/const BODY_MARGIN = 0\.15 \* AU_TO_PX;/.test(vmS), 'świadek O8: margines omijania ciał 0.15 AU bez skali (§3.9.2 — rysowane planety w px)');
+  assert(/const BODY_MARGIN = 0\.15 \* AU_TO_PX \* kSys;/.test(vmS), 'pin O8 (CS-PHYS-c): margines omijania ciał 0.15 AU × k (rysowane tarcze × k)');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

@@ -88,6 +88,26 @@ export function starScreenFloorScale({ coreRadiusWorld, distance, viewportHeight
   return (px > 0 && Number.isFinite(px) && px < minPx) ? minPx / px : 1;
 }
 
+// ── CS-PHYS-c — rysunek CIAŁ układu ściśniętego (planety, księżyce, planetoidy, pierścienie, orbity stacji) ──────────
+// Orbity zmalały × k, a rysowane promienie nie (planeta ×200 przy orbicie 0.19 AU, pierścień księżyca szerszy niż odstęp
+// planet). Skala rysunku ciał = k (ten sam współczynnik co separacje orbit) — świat bez stempla: 1 DOKŁADNIE. Statki,
+// modele stacji, ikony i etykiety NIE skalują się (stały rozmiar na ekranie).
+export const BODY_MIN_PX = 2;   // CSS px — najmniejszy promień tarczy ciała na ekranie (tylko skala rysunku < 1)
+
+/** Skala rysunku ciał układu gwiazdy (bezwymiarowa). Bez stempla `orbitModel: 2` → 1 DOKŁADNIE. */
+export function bodyDrawScale(star) {
+  return systemScaleOfStar(star);
+}
+
+/**
+ * Podłoga ekranowa tarczy ciała: mnożnik w [1, maxScale], przy którym promień tarczy na ekranie ≥ minPx (CSS px).
+ * `maxScale` = 1 / skala rysunku → tarcza nigdy nie jest większa niż w świecie dotychczasowym. Dane zerowe → 1.
+ */
+export function bodyScreenFloorScale({ radiusWorld, distance, viewportHeightPx, fovDeg, minPx = BODY_MIN_PX, maxScale = Infinity }) {
+  const f = starScreenFloorScale({ coreRadiusWorld: radiusWorld, distance, viewportHeightPx, fovDeg, minPx });
+  return Math.max(1, Math.min(f, maxScale));
+}
+
 // ── CS-PHYS-b3 — odczyty odległości w układzie (AU) ─────────────────────────────────────────────────────────────────
 // W kompaktowym układzie zasięgi × k i orbity schodzą poniżej 0.25 AU („0.1 AU” dla 0.06 i 0.14). Świat dotychczasowy
 // nie ma takich wartości (minimalna orbita 0.35 AU, sensor-lock ≥ 0.3 AU, wykrycie ≥ 0.5 AU) → jego odczyty bez zmian.
@@ -101,4 +121,5 @@ export const SystemScale = Object.freeze({
   ofStar: systemScaleOfStar,
   ofEntity: systemScaleOfEntity,
   active: activeSystemScale,
+  bodyDraw: bodyDrawScale,
 });

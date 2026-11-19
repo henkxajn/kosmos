@@ -1275,15 +1275,19 @@ export class SystemGenerator {
   _makeMoon(planet, moonIndex, star, maxOrbitAU = 0.15, moonCount = 1) {
     // Przybliżony promień planety w Three.js units (spójny z ThreeRenderer._planetRadius)
     const planetR3D = { gas: 0.48, ice: 0.20, rocky: 0.10, hot_rocky: 0.07 }[planet.planetType] ?? 0.10;
-    const minOrbit3D = planetR3D * 2.5;                              // min: 2.5× promień planety
+    // CS-PHYS-c — orbity księżyców są zdefiniowane w promieniach RYSOWANEJ planety (j. Three.js), a rysunek ciał
+    // w układzie ściśniętym maleje × k (SystemScale.bodyDrawScale) → wszystkie długości 3D poniżej × k. Świat bez
+    // stempla orbit 2: k = 1 DOKŁADNIE (x · 1 w IEEE) → orbity bit w bit; zero nowych rzutów RNG.
+    const kDraw      = this._orbit === ORBIT_SCALED ? compactionOf(star?.luminosity) : 1;
+    const minOrbit3D = planetR3D * 2.5 * kDraw;                      // min: 2.5× promień planety
     // Cap dynamiczny: max 3 j. dla gas gigantów, mniejszy dla mniejszych planet
     const typeCap    = { gas: 3.0, ice: 1.5, rocky: 0.8, hot_rocky: 0.5 }[planet.planetType] ?? 1.0;
-    const maxOrbit3D = Math.min(maxOrbitAU * 11, typeCap);           // max: z sąsiadów, cap per typ
-    const safeMax    = Math.max(minOrbit3D + 0.15, maxOrbit3D);      // zawsze min 0.15 j. przestrzeni
+    const maxOrbit3D = Math.min(maxOrbitAU * 11, typeCap * kDraw);   // max: z sąsiadów, cap per typ
+    const safeMax    = Math.max(minOrbit3D + 0.15 * kDraw, maxOrbit3D);   // zawsze min 0.15 j. przestrzeni
 
     // Rozłóż księżyce równomiernie w zakresie [minOrbit3D, safeMax]
     const frac    = moonCount <= 1 ? 0.35 : (moonIndex + 0.5) / moonCount;
-    const orbit3D = minOrbit3D + frac * (safeMax - minOrbit3D) + Math.random() * 0.1;
+    const orbit3D = minOrbit3D + frac * (safeMax - minOrbit3D) + Math.random() * 0.1 * kDraw;
     const a       = orbit3D / 11;                                    // AU od planety
 
     // Okres orbitalny skalibrowany wizualnie — NIE fizykalnie poprawny Kepler.

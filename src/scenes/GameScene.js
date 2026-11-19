@@ -2480,6 +2480,8 @@ export class GameScene {
     window.csLifeTick   = window.KOSMOS.debug?.csLifeTick;     // Finding 770 — jedno sprawdzenie LifeSystem teraz
     window.csClimate    = window.KOSMOS.debug?.csClimate;      // CS-PHYS-a — klimat aktywnego układu + model świata
     window.csOrbits     = window.KOSMOS.debug?.csOrbits;       // CS-PHYS-b — orbity / HZ / strefy aktywnego układu
+    window.csCollisionTest = window.KOSMOS.debug?.csCollisionTest;   // CS-PHYS-c (Finding 776) — mijanka dwóch szybkich statków przy 1 r/s
+    window.csCollisionTestLowFps = window.KOSMOS.debug?.csCollisionTestLowFps;   // CS-PHYS-c (776) — ta sama mijanka z wymuszonymi długimi tikami
     window.csSurface    = window.KOSMOS.debug?.csSurface;      // CS-4a — podgląd powierzchni zaznaczonego ciała
     window.csSurfaceAll = window.KOSMOS.debug?.csSurfaceAll;   // CS-4a — miniatury wszystkich ciał układu
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
