@@ -310,6 +310,8 @@ export class SaveSystem {
       // CS-3b-v2 — pasmo wody terran (zamrożone; null = nie-terran albo nienadane)
       waterBand:     p.waterBand ?? null,
       waterCoverage: p.waterCoverage ?? null,
+      // CS-PHYS-a — rekord klimatu v2 (tylko świat climateModel 2; brak → klucz pominięty, stary zapis bajt w bajt)
+      ...(p.climate ? { climate: { ...p.climate } } : {}),
       // Złoża (Etap 26 — gospodarka)
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
@@ -345,6 +347,7 @@ export class SaveSystem {
       surfaceSeed:       m.surfaceSeed ?? null,   // CS-3a
       tidallyLocked:     m.tidallyLocked ?? null, // CS-3b
       bodyArchetype:     m.bodyArchetype ?? null, // CS-3b
+      ...(m.climate ? { climate: { ...m.climate } } : {}),   // CS-PHYS-a
       deposits: m.deposits ? m.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,
@@ -376,6 +379,7 @@ export class SaveSystem {
       surfaceSeed:       p.surfaceSeed ?? null,   // CS-3a
       tidallyLocked:     p.tidallyLocked ?? null, // CS-3b
       bodyArchetype:     p.bodyArchetype ?? null, // CS-3b
+      ...(p.climate ? { climate: { ...p.climate } } : {}),   // CS-PHYS-a
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,

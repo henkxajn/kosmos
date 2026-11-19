@@ -67,6 +67,14 @@ export const GAME_CONFIG = {
     // OFF: stara ścieżka bit w bit (gwiazda domowa dla każdego układu, bez strażnika — dom przy gwieździe M: 10 → −131 °C).
     // Czytana przy każdym sprawdzeniu LifeSystem (co 1000 lat gry) — przełączenie w konsoli działa od razu.
     lifeTempOwnStar:      true,
+    // ── ARC COLONY SPHERE CS-PHYS-a (D-CS-19, plan COLONY_SPHERE §3.8) — realistyczny klimat przy generacji.
+    // ON: NOWY świat dostaje stempel `galaxyData.climateModel = 2`: cieplarnia f(atmosfera, strumień gwiazdy) z ucieczką
+    //     (Wenus) i zapadaniem CO₂ (Tytan), zakres dzień/noc ciał bez atmosfery (tylko wyświetlanie), grzanie pływowe
+    //     wewnętrznych księżyców gazowych olbrzymów; temperatury zamrożone (LifeSystem ich nie przelicza). Zero rzutów
+    //     RNG — te same ciała, orbity i atmosfery co świat dotychczasowy z tym samym seedem (src/utils/ClimateModel.js).
+    // OFF (default): generacja bit w bit jak dotąd. Własność ŚWIATA (jak D-CS-18): czytana RAZ przy tworzeniu świata
+    //     (GameScene.start / GameCore.boot); przełączenie po starcie nic nie zmienia, stary zapis bez stempla = dotychczasowy.
+    realisticClimate:     false,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
     // ⚠ W3-8 — `fleetMaterialization` i `unifiedAggregator` USUNIĘTE razem z warstwą

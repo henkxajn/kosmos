@@ -7,6 +7,7 @@ import EntityManager from '../core/EntityManager.js';
 import { lifeBonus } from '../data/ElementsData.js';
 import { t }         from '../i18n/i18n.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { isFrozenClimateWorld } from '../utils/ClimateModel.js';
 import { pickHomeworldBody, guardHomeworldTempC } from '../utils/HomeworldClimate.js';
 
 // Etapy ewolucji życia (lifeScore 0-100)
@@ -77,8 +78,11 @@ export class LifeSystem {
 
   _tick(planet, homes = null) {
     // 1. Przelicz temperaturę wg bieżącej orbity (może się zmieniła przez akcje gracza)
-    if (homes) this._recalcTempOwnStar(planet, homes);
-    else       this._recalcTemp(planet);
+    //    CS-PHYS-a (D-CS-19): świat z klimatem v2 (stempel galaxyData.climateModel = 2) — temperatury z generacji,
+    //    zamrożone: bez przeliczenia. Świat dotychczasowy — bez zmian.
+    if (this.climateFrozen()) { /* temperatura z generacji */ }
+    else if (homes) this._recalcTempOwnStar(planet, homes);
+    else            this._recalcTemp(planet);
 
     const prevScore = planet.lifeScore;
     const prevStage = LifeSystem.getStageFor(prevScore);
@@ -112,6 +116,11 @@ export class LifeSystem {
     if (planet.lifeScore !== prevScore) {
       EventBus.emit('life:updated', { planet });
     }
+  }
+
+  // CS-PHYS-a — czy świat ma klimat zamrożony przy generacji (stempel świata, nie bieżąca flaga)
+  climateFrozen() {
+    return isFrozenClimateWorld(window.KOSMOS?.galaxyData);
   }
 
   // ── Temperatura równowagowa wg bieżącej orbity ────────────────

@@ -1,0 +1,11 @@
+{
+ "base": "66f924f",
+ "note": "CS-PHYS-a K1 — wiersze zapisu bez id/parentPlanetId",
+ "digests": {
+  "seeded:612055237": "1389a4346cac13341dab8c1e",
+  "seeded:-2102099243": "829a6f1d4a347a906e15d168",
+  "legacyApi:sys_k1": "73d4c6ef25adef55deb5364d",
+  "legacyApi:sys_k2": "87c2f9ea764a23c1b0530108",
+  "legacyApi:sys_k3": "122ce14c31a71974e723bf51"
+ }
+}

@@ -151,7 +151,9 @@ export class GameCore {
     // układ domowy jest z niego losowany; OFF → ignorowany (dotychczasowy Math.random harnessu).
     // CS-3a-fix: flaga czytana RAZ (decyzja świata); ta sama wartość stempluje galaktykę niżej.
     const worldSeededSystems = GAME_CONFIG.FEATURES.seededSystems === true;
-    const result = gen.generateCivScenario({ galaxySeed, seeded: worldSeededSystems });
+    // CS-PHYS-a (D-CS-19): model klimatu świata — flaga czytana RAZ, ta sama wartość stempluje galaktykę niżej.
+    const worldClimateModel = GAME_CONFIG.FEATURES.realisticClimate === true ? 2 : 1;
+    const result = gen.generateCivScenario({ galaxySeed, seeded: worldSeededSystems, climateModel: worldClimateModel });
     const { star, planets, moons = [], planetesimals = [], asteroids = [], comets = [], planetoids = [] } = result;
     this._civPlanetId = result.civPlanetId;
     star.x = 0;
@@ -317,7 +319,7 @@ export class GameCore {
     // GALAXY_SEED: seed wchodzi JAWNYM parametrem `boot({ galaxySeed })`, domyślnie
     // stałym (HEADLESS_GALAXY_SEED). W harnessie NIE MA ścieżki mintowania losowego —
     // to jest cała mitygacja R1 (reprodukowalność BALANS / turniejów botów).
-    K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType, { seededSystems: worldSeededSystems });
+    K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType, { seededSystems: worldSeededSystems, climateModel: worldClimateModel });
     // CS-3a — ziarna powierzchni układu domowego (ten sam pass co GameScene.start()).
     this.starSystemManager.assignMissingSurfaceSeeds(K.galaxyData.seed);
     // CS-3b — archetyp ciała + tidallyLocked (ten sam pass co GameScene.start(), zaraz po ziarnach).

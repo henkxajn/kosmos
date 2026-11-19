@@ -15,6 +15,7 @@ import EntityManager     from '../core/EntityManager.js';
 import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition, getMoonComposition, WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 import { combineSeeds, hashStringToInt } from '../utils/SeedMath.js';
+import { CLIMATE_LEGACY, CLIMATE_V2, KELVIN, bodyClimate, tidalFluxWm2, applyTidalHeating } from '../utils/ClimateModel.js';
 
 // Bonus cieplarniany wg typu atmosfery (°C)
 // thick zachowany dla backward compat (stare save'y)
@@ -98,6 +99,17 @@ export class SystemGenerator {
     return { galaxySeed: null, seeded: GAME_CONFIG.FEATURES.seededSystems === true };
   }
 
+  /**
+   * CS-PHYS-a (D-CS-19, §3.8) — model klimatu ŚWIATA: stempel `galaxyData.climateModel === 2` → 2; rekord świata bez
+   * stempla → 1 (każdy stary zapis, nowa gra przy OFF); brak rekordu → flaga (tylko dawne API / harness). Jak D-CS-18:
+   * decyzja zapada przy tworzeniu świata, przełączenie flagi po starcie nic nie zmienia.
+   */
+  static worldClimateModel(galaxyData) {
+    if (galaxyData?.climateModel === CLIMATE_V2) return CLIMATE_V2;
+    if (galaxyData) return CLIMATE_LEGACY;
+    return GAME_CONFIG.FEATURES.realisticClimate === true ? CLIMATE_V2 : CLIMATE_LEGACY;
+  }
+
   /** CS-3a-fix — ile razy użyto ścieżki awaryjnej (świat seedowany bez galaxySeed). Keeper / sonda: 0. */
   static emergencySeedUses() { return _emergency.uses; }
 
@@ -145,6 +157,8 @@ export class SystemGenerator {
   // ciał (z depozytami) na mulberry32(seededRngSeed(galaxySeed, 'sys_home')), jak generateForStar.
   // `seeded` różne od true → dokładnie dotychczasowa ścieżka (Math.random bez podmiany).
   generate(seedCtx = {}) {
+    // CS-PHYS-a — model klimatu świata podany przez wołającego (decyzja z chwili tworzenia świata); brak → dotychczasowy
+    this._climate = seedCtx?.climateModel === CLIMATE_V2 ? CLIMATE_V2 : CLIMATE_LEGACY;
     const rngSeed = this._homeRngSeed(seedCtx);
     if (rngSeed === null) return this._generateHomeBodies();
     const origRandom = Math.random;
@@ -345,11 +359,17 @@ export class SystemGenerator {
     const T_rad_K        = this.calcEquilibriumTemp(star.luminosity, a, albedo);
     const T_base_C       = T_rad_K - 273.15;
     const atmosphere     = this.getAtmosphere(planetType, surfaceGravity, T_base_C, mass, breathableCount);
-    const temperatureC   = T_base_C + (GREENHOUSE[atmosphere] ?? 0);
+    const legacyTempC    = T_base_C + (GREENHOUSE[atmosphere] ?? 0);
+    // CS-PHYS-a — klimat v2 (zero rzutów RNG): cieplarnia f(atmosfera, strumień), zakres dzień/noc bez atmosfery
+    const clim           = this._climate === CLIMATE_V2
+      ? bodyClimate({ L: star.luminosity, a, e, albedo, atmosphere, range: planetType !== 'gas' })
+      : null;
+    const temperatureC   = clim ? clim.temperatureC : legacyTempC;
     const temperatureK   = temperatureC + 273.15;
     const breathableAtmosphere = atmosphere === 'breathable';
 
-    const color = this.getPlanetColor(planetType, temperatureK, nameIndex);
+    // Kolor z temperatury DOTYCHCZASOWEJ (bez zmiany wyglądu, ta sama liczba rzutów — CS-PHYS-a)
+    const color = this.getPlanetColor(planetType, legacyTempC + 273.15, nameIndex);
 
     // Skład chemiczny — inicjalizowany wg typu planety i odległości od HZ
     // Lekkie losowe wahania (±20% wartości bazowej) dla różnorodności układów
@@ -361,7 +381,7 @@ export class SystemGenerator {
     }
     const normComp = normalizeComposition(composition);
 
-    return new Planet({
+    const planet = new Planet({
       id:                EntityManager.generateId(),
       name:              this.generatePlanetName(star.name, nameIndex),
       a, e, T,
@@ -381,6 +401,8 @@ export class SystemGenerator {
       visualRadius:      this.getVisualRadius(mass, planetType),
       composition:       normComp,
     });
+    if (clim) planet.climate = clim.climate;   // CS-PHYS-a — tylko świat v2 (inaczej brak pola)
+    return planet;
   }
 
   // ── Wymuszenie minimalnej separacji orbit ────────────────────────────
@@ -425,6 +447,13 @@ export class SystemGenerator {
     const greenhouse = GREENHOUSE[planet.atmosphere] ?? 0;
     const T_base_C   = T_rad_K - 273.15;
     planet.temperatureC = T_base_C + greenhouse;
+    // CS-PHYS-a — planeta z rekordem v2: ten sam model klimatu na nowej orbicie
+    if (planet.climate?.model === CLIMATE_V2) {
+      const clim = bodyClimate({ L: star.luminosity, a: newA, e: planet.orbital.e ?? 0, albedo,
+                                 atmosphere: planet.atmosphere, range: planet.planetType !== 'gas' });
+      planet.temperatureC = clim.temperatureC;
+      planet.climate = clim.climate;
+    }
     planet.temperatureK = planet.temperatureC + 273.15;
     if (planet.surface) {
       planet.surface.temperature = planet.temperatureC;
@@ -710,6 +739,10 @@ export class SystemGenerator {
       const surfaceGravity = this.calcSurfaceGravity(mass, surfaceRadius);
       const temperatureK   = T_rad_K;          // brak atmosfery
       const temperatureC   = T_rad_K - 273.15;
+      // CS-PHYS-a — planetoida: tylko równowaga (temperatura bez zmian) + zakres dzień/noc do wyświetlania
+      const pClim = this._climate === CLIMATE_V2
+        ? bodyClimate({ L: star.luminosity, a, e, albedo: pAlbedo, atmosphere: 'none', greenhouse: false }).climate
+        : null;
 
       // Skład chemiczny wg typu + jitter ±20%
       const baseComp = getPlanetoidComposition(planetoidType);
@@ -724,7 +757,7 @@ export class SystemGenerator {
       const colors = TYPE_COLORS[planetoidType];
       const color  = colors[Math.floor(Math.random() * colors.length)];
 
-      planetoids.push(new Planetoid({
+      const planetoid = new Planetoid({
         id:                EntityManager.generateId(),
         name:              `Plt-${i}`,
         a, e, T,
@@ -739,7 +772,9 @@ export class SystemGenerator {
         temperatureK,
         temperatureC,
         composition:       normComp,
-      }));
+      });
+      if (pClim) planetoid.climate = pClim;
+      planetoids.push(planetoid);
     }
     return planetoids;
   }
@@ -760,6 +795,15 @@ export class SystemGenerator {
       planet.breathableAtmosphere = true;
       const T_base_C = planet.temperatureK - 273.15 - oldGreenhouse;
       let finalC = T_base_C + GREENHOUSE.breathable;
+      // CS-PHYS-a — świat v2: równowaga z rekordu + cieplarnia oddychalna przy tym samym strumieniu (bez rzutów)
+      const c = planet.climate?.model === CLIMATE_V2 ? planet.climate : null;
+      if (c) {
+        const a = planet.orbital?.a ?? 1;
+        const albedo = planet.albedo ?? (PLANET_TYPE_CONFIG[planet.planetType]?.albedo ?? 0.3);
+        const re = bodyClimate({ L: c.flux * a * a, a, e: planet.orbital?.e ?? 0, albedo, atmosphere: 'breathable' });
+        finalC = re.temperatureC;
+        planet.climate = re.climate;
+      }
       // Clamp do zakresu Earth-like — planeta macierzysta musi być hospitalna
       if (finalC < 5)  finalC = 5 + Math.random() * 10;   // 5–15°C
       if (finalC > 35) finalC = 20 + Math.random() * 10;  // 20–30°C
@@ -933,7 +977,9 @@ export class SystemGenerator {
   // Encje dodawane do EntityManager (jak generate()).
   // CS-3a (D-CS-17): `seedCtx` = kontekst ziarna świata `{ galaxySeed, seeded }`
   // (SystemGenerator.worldSeedContext(galaxyData)); brak → ziarno dotychczasowe (dawne API).
-  generateForStar(galaxyStar, seedCtx) {
+  // CS-PHYS-a: `climateModel` = model klimatu świata (SystemGenerator.worldClimateModel(galaxyData)); brak → dotychczasowy.
+  generateForStar(galaxyStar, seedCtx, climateModel = CLIMATE_LEGACY) {
+    this._climate = climateModel === CLIMATE_V2 ? CLIMATE_V2 : CLIMATE_LEGACY;
     // Seeded PRNG → deterministyczna generacja (ziarno: _foreignRngSeed — wspólne z peekCountsForStar)
     const seed = this._foreignRngSeed(galaxyStar.id, seedCtx);
     const rng  = mulberry32(seed);
@@ -1057,9 +1103,12 @@ export class SystemGenerator {
       const outerGap = nextA - planet.orbital.a;
       const maxOrbitAU = Math.min(innerGap, outerGap) * 0.25; // max 25% dystansu do sąsiada
 
+      const own = [];
       for (let mi = 0; mi < count; mi++) {
-        allMoons.push(this._makeMoon(planet, mi, star, maxOrbitAU, count));
+        own.push(this._makeMoon(planet, mi, star, maxOrbitAU, count));
       }
+      if (this._climate === CLIMATE_V2) this._applyMoonTidalHeating(planet, own);
+      allMoons.push(...own);
     }
     return allMoons;
   }
@@ -1092,6 +1141,14 @@ export class SystemGenerator {
   // Stwórz jeden księżyc dla planety
   // Orbity skalowane do sąsiadów — nie nachodzą na orbity sąsiednich planet
   // maxOrbitAU: max orbita w AU (25% dystansu do najbliższego sąsiada)
+  // CS-PHYS-a — grzanie pływowe + IR rodzica dla księżyców gazowego olbrzyma, strefa wg rangi po półosi (ten sam
+  // porządek co archetypeContext: a, remis id). Zero rzutów RNG — po wygenerowaniu wszystkich księżyców rodzica.
+  _applyMoonTidalHeating(planet, moons) {
+    const sorted = [...moons].sort((x, y) => ((x.orbital?.a ?? x.a ?? 0) - (y.orbital?.a ?? y.a ?? 0))
+      || String(x.id).localeCompare(String(y.id)));
+    sorted.forEach((m, rank) => applyTidalHeating(m, tidalFluxWm2(planet.planetType, rank, sorted.length)));
+  }
+
   _makeMoon(planet, moonIndex, star, maxOrbitAU = 0.15, moonCount = 1) {
     // Przybliżony promień planety w Three.js units (spójny z ThreeRenderer._planetRadius)
     const planetR3D = { gas: 0.48, ice: 0.20, rocky: 0.10, hot_rocky: 0.07 }[planet.planetType] ?? 0.10;
@@ -1145,13 +1202,17 @@ export class SystemGenerator {
     const surfaceGravity = this.calcSurfaceGravity(mass, surfaceRadius);
     const T_base_C       = T_rad_K - 273.15;
     const atmosphere     = this.getAtmosphereMoon(surfaceGravity, T_base_C, mass);
-    const temperatureC   = T_base_C + (GREENHOUSE[atmosphere] ?? 0);
+    // CS-PHYS-a — klimat v2: cieplarnia przy strumieniu orbity rodzica, zakres dzień/noc (pływy: _applyMoonTidalHeating)
+    const clim           = this._climate === CLIMATE_V2
+      ? bodyClimate({ L: star.luminosity, a: parentA, fluxA: parentA, e: planet.orbital?.e ?? 0, albedo, atmosphere })
+      : null;
+    const temperatureC   = clim ? clim.temperatureC : T_base_C + (GREENHOUSE[atmosphere] ?? 0);
     const temperatureK   = temperatureC + 273.15;
     // Księżyce: praktycznie zawsze false (g za małe dla breathable)
     const breathableAtmosphere = atmosphere === 'breathable';
 
     const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
-    return new Moon({
+    const moon = new Moon({
       id:                EntityManager.generateId(),
       name:              `${planet.name}-${romanNumerals[moonIndex] || moonIndex + 1}`,
       a, e, T, M,
@@ -1169,6 +1230,8 @@ export class SystemGenerator {
       atmosphere,
       breathableAtmosphere,
     });
+    if (clim) moon.climate = clim.climate;   // CS-PHYS-a — tylko świat v2
+    return moon;
   }
 
   // Kolory księżyców

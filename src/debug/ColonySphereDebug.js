@@ -34,6 +34,7 @@ import { SURFACE_SEED_KINDS } from '../utils/SurfaceSeed.js';
 import { BODY_ARCHETYPES, ARCHETYPE_FAMILIES } from '../data/BodyArchetypes.js';
 import { familyOf, planetoidPaletteOf } from '../utils/BodyArchetypeLogic.js';
 import { HOMEWORLD_TEMP_MIN_C, HOMEWORLD_TEMP_MAX_C } from '../utils/HomeworldClimate.js';
+import { climateModelOfWorld, equilibriumK, lookContradicts, KELVIN } from '../utils/ClimateModel.js';
 import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';   // CS-4a / CS-4b — podgląd powierzchni + stan cache
 
 function bodyTypeOf(body, kind) {
@@ -168,6 +169,38 @@ export function colonySphereTempRows(systemId) {
   return rows;
 }
 
+/**
+ * CS-PHYS-a — klimat ciał aktywnego układu: strumień, równowaga, cieplarnia, pływy, temperatura końcowa, zakres
+ * dzień/noc (rekord v2), archetyp i niespójność wygląd ↔ temperatura. Ciało bez rekordu (świat dotychczasowy):
+ * strumień i równowaga liczone z orbity, cieplarnia = temperatura − równowaga (stała tablica dotychczasowa).
+ */
+export function colonySphereClimateRows(systemId) {
+  const rows = [];
+  for (const kind of ['planet', 'moon', 'planetoid']) {
+    for (const b of EntityManager.getByTypeInSystem(kind, systemId)) {
+      const st = EntityManager.getStarOfSystem(b.systemId ?? 'sys_home');
+      const c = b.climate ?? null;
+      const parent = kind === 'moon' ? EntityManager.get(b.parentPlanetId) : null;
+      const a = kind === 'moon' ? parent?.orbital?.a : b.orbital?.a;
+      const L = st?.luminosity;
+      const albedo = b.albedo ?? (kind === 'moon' ? (b.moonType === 'icy' ? 0.6 : 0.12) : null);
+      const flux = c ? c.flux : (L > 0 && a > 0 ? L / (a * a) : null);
+      const eqC = c ? c.eqC : (L > 0 && a > 0 && albedo != null ? equilibriumK(L, a, albedo) - KELVIN : null);
+      const T = b.temperatureC;
+      rows.push({
+        name: b.name, kind, type: b.planetType ?? b.moonType ?? b.planetoidType ?? null, atmosphere: b.atmosphere ?? 'none',
+        flux: Number.isFinite(flux) ? Math.round(flux * 1000) / 1000 : null,
+        eqC: round1(eqC), greenhouseC: c ? round1(c.greenhouseC) : (eqC != null ? round1(T - eqC) : null),
+        tidalC: c ? round1(c.tidalC) : 0, finalC: round1(T),
+        dayMaxC: c ? round1(c.dayMaxC) : null, nightMinC: c ? round1(c.nightMinC) : null,
+        archetype: b.bodyArchetype ?? null, contradiction: lookContradicts(b.bodyArchetype, T) ? 'yes' : 'no',
+        record: c ? 'v2' : 'legacy',
+      });
+    }
+  }
+  return rows;
+}
+
 const outOfBand = (r) => r.homeworld && !(r.temperatureC >= HOMEWORLD_TEMP_MIN_C && r.temperatureC <= HOMEWORLD_TEMP_MAX_C);
 
 export function colonySphereDebugHelpers() {
@@ -226,6 +259,28 @@ export function colonySphereDebugHelpers() {
     summary.rows = rows;
     return summary;
   };
+  // CS-PHYS-a — csClimate(): klimat ciał aktywnego układu + model klimatu świata (stempel) i stan flagi.
+  const csClimate = () => {
+    const K = window.KOSMOS ?? {};
+    const systemId = K.activeSystemId ?? 'sys_home';
+    const rows = colonySphereClimateRows(systemId);
+    const summary = {
+      systemId,
+      climateModel: climateModelOfWorld(K.galaxyData),           // 2 = realistyczny (stempel świata), 1 = dotychczasowy
+      worldStamp: K.galaxyData?.climateModel ?? null,
+      realisticClimateFlag: GAME_CONFIG.FEATURES.realisticClimate === true,
+      bodies: rows.length,
+      withV2Record: rows.filter(r => r.record === 'v2').length,
+      withDayNight: rows.filter(r => r.dayMaxC != null).length,
+      contradictions: rows.filter(r => r.contradiction === 'yes').length,
+      playerHome: K.homePlanet ? { name: K.homePlanet.name, finalC: round1(K.homePlanet.temperatureC),
+                                   record: K.homePlanet.climate ? 'v2' : 'legacy' } : null,
+    };
+    console.table(rows);
+    console.log('[csClimate]', JSON.stringify(summary));
+    return summary;
+  };
+
   // Finding 770 — csTemp(): temperatury aktywnego układu; homeworldsOutOfBand ma być 0.
   const csTemp = () => {
     const K = window.KOSMOS ?? {};
@@ -338,5 +393,5 @@ export function colonySphereDebugHelpers() {
     console.log('[csHaze]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze };
 }

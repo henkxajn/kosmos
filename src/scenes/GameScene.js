@@ -234,10 +234,14 @@ export class GameScene {
     const preMintedGalaxySeed = (!savedData && GAME_CONFIG.FEATURES.seededSystems)
       ? GalaxyGenerator.mintSeed()
       : null;
+    // CS-PHYS-a (D-CS-19, §3.8) — model klimatu świata: ta sama jednorazowa decyzja nowej gry co wyżej. Wczytanie → 1
+    // (dom z zapisu; galaktyka z zapisu niesie własny stempel). Nowa gra przy ON → 2: dom generowany z modelem v2,
+    // galaktyka dostaje stempel `climateModel` (niżej) i od niego zależą wszystkie obce układy.
+    const worldClimateModel = (!savedData && GAME_CONFIG.FEATURES.realisticClimate === true) ? 2 : 1;
     const { star, planets, moons = [], planetesimals, asteroids = [], comets = [], planetoids = [] } =
       savedData
         ? this._restoreSystem(savedData, cx, cy)
-        : this._generateFreshSystem(cx, cy, preMintedGalaxySeed);
+        : this._generateFreshSystem(cx, cy, preMintedGalaxySeed, worldClimateModel);
 
     this.star = star;
 
@@ -2418,10 +2422,17 @@ export class GameScene {
     // Domknięcie tego (przeniesienie `galaxyData` poza bramkę `civMode`) zmienia format
     // zapisu, czyli dotyka Decyzji 2 (bez bumpu wersji) — świadomie POZA zakresem G1.
     const isNewGame = !savedData?.civ4x?.galaxyData;
+    // CS-PHYS-a — model klimatu galaktyki tworzonej TUTAJ: nowa gra → decyzja z początku start(); zapis bez utrwalonej
+    // galaktyki (sprzed wejścia w 4X, patrz wyżej) → model ŚWIATA z odtworzonych ciał domu (rekord climate v2 = świat
+    // v2), inaczej stempel by przepadł, a LifeSystem przeliczałby zamrożone temperatury v2 starym wzorem.
+    const galaxyClimateModel = savedData
+      ? (planets.some(p => p.climate?.model === 2) ? 2 : 1)
+      : worldClimateModel;
     if (isNewGame) {
       window.KOSMOS.galaxyData = GalaxyGenerator.generate(
         preMintedGalaxySeed ?? GalaxyGenerator.mintSeed(), star.name, star.spectralType,
-        { seededSystems: preMintedGalaxySeed !== null }   // CS-3a-fix — stempel świata (ta sama decyzja co dom)
+        { seededSystems: preMintedGalaxySeed !== null,    // CS-3a-fix — stempel świata (ta sama decyzja co dom)
+          climateModel: galaxyClimateModel }                // CS-PHYS-a — stempel klimatu (ta sama decyzja co dom)
       );
       console.log(`[GALAXY_SEED] Nowa galaktyka — seed ${window.KOSMOS.galaxyData.seed}`);
     } else {
@@ -2438,7 +2449,8 @@ export class GameScene {
     // dostają ziarna w StarSystemManager.generateAndRegister.
     const surfaceSeedsAssigned = this.starSystemManager.assignMissingSurfaceSeeds(window.KOSMOS.galaxyData?.seed);
     console.log(`[CS-3a] surfaceSeed nadane: ${surfaceSeedsAssigned} · seededSystems=${GAME_CONFIG.FEATURES.seededSystems}`
-      + ` · świat=${window.KOSMOS.galaxyData?.seededSystems === true ? 'seedowany' : 'dotychczasowy'}`);
+      + ` · świat=${window.KOSMOS.galaxyData?.seededSystems === true ? 'seedowany' : 'dotychczasowy'}`
+      + ` · klimat=${window.KOSMOS.galaxyData?.climateModel === 2 ? 'v2' : 'dotychczasowy'}`);
     // CS-3b — archetyp ciała + tidallyLocked (`??=`) ZARAZ PO ziarnach (remis rozstrzyga surfaceSeed). Nowa gra: dom
     // gracza już po makeHomeworldBreathable (generateCivScenario), więc archetyp z parametrów po mutacji.
     const archetypesAssigned = this.starSystemManager.assignMissingArchetypes();
@@ -2449,6 +2461,7 @@ export class GameScene {
     window.csArchetypes = window.KOSMOS.debug?.csArchetypes;   // CS-3b
     window.csTemp       = window.KOSMOS.debug?.csTemp;         // Finding 770 — temperatury aktywnego układu
     window.csLifeTick   = window.KOSMOS.debug?.csLifeTick;     // Finding 770 — jedno sprawdzenie LifeSystem teraz
+    window.csClimate    = window.KOSMOS.debug?.csClimate;      // CS-PHYS-a — klimat aktywnego układu + model świata
     window.csSurface    = window.KOSMOS.debug?.csSurface;      // CS-4a — podgląd powierzchni zaznaczonego ciała
     window.csSurfaceAll = window.KOSMOS.debug?.csSurfaceAll;   // CS-4a — miniatury wszystkich ciał układu
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
@@ -5013,7 +5026,7 @@ export class GameScene {
   // CS-3a: `galaxySeed` = seed zmintowany przed układem domowym (tylko seededSystems ON; inaczej null
   // i generateCivScenario idzie dotychczasową, nieseedowaną ścieżką). POWER TEST zostaje nieseedowany.
   // CS-3a-fix: `seeded` = (galaxySeed !== null) — ta sama decyzja świata co stempel galaktyki w start().
-  _generateFreshSystem(cx, cy, galaxySeed = null) {
+  _generateFreshSystem(cx, cy, galaxySeed = null, climateModel = 1) {
     const generator = new SystemGenerator();
 
     // POWER TEST — scenariusz testowy z dużym układem
@@ -5021,7 +5034,7 @@ export class GameScene {
     const isBoosted   = window.KOSMOS?.scenario === 'civilization_boosted';
     const result = isPowerTest
       ? generator.generatePowerTestScenario()
-      : generator.generateCivScenario({ galaxySeed: galaxySeed ?? undefined, seeded: galaxySeed !== null });
+      : generator.generateCivScenario({ galaxySeed: galaxySeed ?? undefined, seeded: galaxySeed !== null, climateModel });
 
     // Zachowaj id planety z cywilizacją do auto-kolonizacji
     this._civPlanetId = result.civPlanetId;
@@ -5227,6 +5240,7 @@ export class GameScene {
       p.bodyArchetype    = pd.bodyArchetype    ?? null;
       p.waterBand        = pd.waterBand        ?? null;   // CS-3b-v2
       p.waterCoverage    = pd.waterCoverage    ?? null;   // CS-3b-v2
+      if (pd.climate) p.climate = { ...pd.climate };          // CS-PHYS-a — rekord klimatu v2 (wyświetlanie)
       // Przywróć złoża z save (v6)
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));
@@ -5265,6 +5279,7 @@ export class GameScene {
       m.surfaceSeed = md.surfaceSeed ?? null;   // CS-3a
       m.tidallyLocked = md.tidallyLocked ?? null;   // CS-3b
       m.bodyArchetype = md.bodyArchetype ?? null;   // CS-3b
+      if (md.climate) m.climate = { ...md.climate };   // CS-PHYS-a
       // Przywróć złoża z save (v6)
       if (md.deposits?.length > 0) {
         m.deposits = md.deposits.map(d => ({ ...d }));
@@ -5299,6 +5314,7 @@ export class GameScene {
       p.surfaceSeed = pd.surfaceSeed ?? null;   // CS-3a
       p.tidallyLocked = pd.tidallyLocked ?? null;   // CS-3b
       p.bodyArchetype = pd.bodyArchetype ?? null;   // CS-3b
+      if (pd.climate) p.climate = { ...pd.climate };   // CS-PHYS-a
       // Przywróć złoża z save
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));

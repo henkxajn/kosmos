@@ -103,7 +103,8 @@ export class GalaxyGenerator {
    *   generacja i skan czytają stempel, nie bieżącą flagę. Brak / false → pole NIE powstaje (kształt jak dotąd).
    * @returns {{seed: number, systems: Array, seededSystems?: true}} GalaxyData — `seed` DO UTRWALENIA
    */
-  static generate(seed, starName = 'Sol', spectralType = 'G', { seededSystems = false } = {}) {
+  // CS-PHYS-a: `climateModel: 2` stempluje świat (`galaxyData.climateModel = 2`, D-CS-19 §3.8); inne → pole NIE powstaje.
+  static generate(seed, starName = 'Sol', spectralType = 'G', { seededSystems = false, climateModel = 1 } = {}) {
     // Loud-fail zamiast cichego fallbacku: seed nie-liczbowy dałby albo stałą
     // galaktykę (dokładnie ten defekt, który GALAXY_SEED naprawia), albo galaktykę
     // bez utrwalonego seeda (R2). Wołających jest dokładnie trzech i wszyscy podają
@@ -209,6 +210,7 @@ export class GalaxyGenerator {
     // To ona jedzie do zapisu i to z niej odtwarzamy galaktykę przy wczytaniu.
     const galaxy = { seed: seedI32, systems };
     if (seededSystems === true) galaxy.seededSystems = true;   // CS-3a-fix — stempel świata (tylko ON)
+    if (climateModel === 2) galaxy.climateModel = 2;           // CS-PHYS-a — stempel klimatu świata (tylko ON)
     return galaxy;
   }
 }
