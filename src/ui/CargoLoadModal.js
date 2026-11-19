@@ -403,6 +403,7 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
                 refreshTroopSection();          // odmowa D13a — sekcja pokaże powód
                 return;
               }
+              // CS-5 — pola q,r jednostki + sygnatura (…, q, r) jak Vessel.unloadGroundUnit
               if (!unloadGroundUnit(vessel, unit, planetId, unit.q ?? 0, unit.r ?? 0)) {
                 refreshTroopSection();          // odmowa metody (bramka wojny, brak argumentów) — odśwież sekcję
                 return;

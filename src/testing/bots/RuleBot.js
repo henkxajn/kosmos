@@ -18,6 +18,7 @@ import { TECHS } from '../../data/TechData.js';
 import { COMMODITIES } from '../../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../../map/HexTile.js';
 import { canColonize, canDoRecon, canHaulCargo } from '../../entities/Vessel.js';
+import { tileGraphOf } from '../../map/TileGraph.js';   // CS-1b — przez TileGraph
 
 // Droidy tier-1 obsadzają TYLKO prostą pracę (laborer/miner/worker) — Pop 2.0 Faza 4.
 const DROID_TIER1_STRATA = ['laborer', 'miner', 'worker'];
@@ -1153,7 +1154,7 @@ export class RuleBot extends BaseBot {
       }
     }
     // ⚠ Lv2 upgrade ODRZUCONE — headless upgrade NIE DZIAŁA (catalog.listUpgradeActions=0 przez zły
-    // akcesor grid.getByKey/_map; a bezpośredni planet:upgradeRequest też nie podnosi poziomu kopalni
+    // akcesor grid.getByKey/_map — Finding 764, naprawione w CS-1b; a bezpośredni planet:upgradeRequest też nie podnosi poziomu kopalni
     // — osobny gap ścieżki upgrade BuildingSystem headless, spamował 927× i głodził pętlę). Skalujemy
     // Fe LICZBĄ kopalń (equivalent output, więcej Lv1 zamiast mniej Lv2). Filipowy kształt „~4×Lv2"
     // = te same Fe co ~8×Lv1; kształt Lv2 wymaga naprawy ścieżki upgrade (osobny harness issue). LOG.
@@ -1244,7 +1245,7 @@ export class RuleBot extends BaseBot {
 
   /** Liczba WOLNYCH (buildable, nie zajęte, nie damaged) kafli danego terenu. */
   _countFreeTiles(ctx, terrainType) {
-    const tiles = ctx.active?.grid?.toArray?.() ?? [];
+    const tiles = tileGraphOf(ctx.active?.grid)?.tiles() ?? [];
     let n = 0;
     for (const t of tiles) {
       if (t.type !== terrainType) continue;

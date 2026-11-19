@@ -8,6 +8,7 @@
 import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { showUnitCard } from './UnitCardPanel.js';
+import { DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1b — id pola jednostki przez TileGraph
 
 /**
  * @param {Array<object>} units — zaznaczone jednostki (z getUnit)
@@ -150,7 +151,7 @@ export function showBattleGroup(units, selectedSet) {
         // Hex
         const hexEl = document.createElement('span');
         hexEl.style.cssText = `font-size: 10px; color: ${THEME.textSecondary}; text-align: center;`;
-        hexEl.textContent = `${unit.q},${unit.r}`;
+        hexEl.textContent = (window.KOSMOS?.groundUnitManager?._graphFor?.(unit.planetId) ?? DETACHED_FLAT_GRAPH).idOf(unit);
         row.appendChild(hexEl);
 
         // Deselect button

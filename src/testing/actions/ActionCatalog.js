@@ -11,6 +11,7 @@ import { TECHS } from '../../data/TechData.js';
 import { SHIPS } from '../../data/ShipsData.js';
 import { COMMODITIES } from '../../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../../map/HexTile.js';
+import { tileGraphOf, isCapitalKey } from '../../map/TileGraph.js';   // CS-1b — Finding 764: kafel po kluczu przez TileGraph
 import EntityManager from '../../core/EntityManager.js';
 import { ACTION_TYPES } from './ActionAdapter.js';
 
@@ -58,7 +59,7 @@ export class ActionCatalog {
     if (!bSys || !techSys || !resSys) return [];
 
     const actions = [];
-    const tiles = active.grid.toArray();
+    const tiles = tileGraphOf(active.grid).tiles();
     // Priorytetyzuj wolne hexy. Używamy AUTORYTATYWNEGO gettera `isOccupied`
     // (buildingId || underConstruction || pendingBuild) — dokładnie tego, co sprawdza
     // BuildingSystem._build. Ręczne `!buildingId && !underConstruction` POMIJAŁO
@@ -103,13 +104,13 @@ export class ActionCatalog {
     if (!bSys?._active) return [];
     const actions = [];
     for (const [tileKey, entry] of bSys._active.entries()) {
-      // Stolica i wirtualne — skip (klucz zaczyna się od 'capital_')
-      if (tileKey.startsWith('capital_')) continue;
+      // Stolica i wirtualne — skip (klucz z prefiksem stolicy)
+      if (isCapitalKey(tileKey)) continue;
       const building = BUILDINGS[entry.building?.id ?? entry.buildingId];
       if (!building || building.isCapital) continue;
       const maxLv = building.maxLevel ?? 10;
       if ((entry.level ?? 1) >= maxLv) continue;
-      const tile = active.grid.getByKey?.(tileKey) ?? active.grid._map?.get?.(tileKey);
+      const tile = tileGraphOf(active.grid).tile(tileKey);   // Finding 764 (było: nieistniejące getByKey/_map → zawsze undefined)
       if (!tile) continue;
       actions.push({ type: ACTION_TYPES.UPGRADE, tile });
       if (actions.length >= limit) break;
@@ -125,10 +126,10 @@ export class ActionCatalog {
     if (!bSys?._active) return [];
     const actions = [];
     for (const [tileKey, entry] of bSys._active.entries()) {
-      if (tileKey.startsWith('capital_')) continue;
+      if (isCapitalKey(tileKey)) continue;
       const building = BUILDINGS[entry.building?.id ?? entry.buildingId];
       if (!building || building.isCapital) continue;
-      const tile = active.grid.getByKey?.(tileKey) ?? active.grid._map?.get?.(tileKey);
+      const tile = tileGraphOf(active.grid).tile(tileKey);   // Finding 764 (było: nieistniejące getByKey/_map → zawsze undefined)
       if (!tile) continue;
       actions.push({ type: ACTION_TYPES.DEMOLISH, tile });
       if (actions.length >= limit) break;

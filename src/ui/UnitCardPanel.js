@@ -185,6 +185,8 @@ export function showUnitCard(unit) {
     }
 
     // ── Pozycja ──────────────────────────────────────────────────
+    // CS-5 — pola q,r jednostki; format „(q, r)” ze spacją ≠ id pola „q,r” (TileGraph.idOf), więc
+    //   zostaje dosłownie (bez zmiany wyglądu) do migracji pozycji jednostek w CS-5.
     _addSection(body, '📍 POZYCJA', () => [
       { label: 'Hex', value: `(${unit.q}, ${unit.r})` },
       { label: 'Status', value: unit.status ?? 'idle' },

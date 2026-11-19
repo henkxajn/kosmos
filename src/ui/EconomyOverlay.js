@@ -20,6 +20,7 @@ import { applyConsoleHalo, withAdaptiveHalo } from './ConsoleKit.js';
 import { drawEconomyConsole } from './EconomyConsoleView.js';
 import { drawProductionConsole } from './ProductionConsoleView.js';
 import { applyEconChip, taxEffect } from './EconomyConsoleLogic.js';
+import { parseTileKey, BUILDING_PREFIX, CAPITAL_PREFIX } from '../map/TileGraph.js';   // CS-1b — klucze producentów przez TileGraph
 
 // Strona grupy dla aktywnego id (ta sama instancja pod trzema id); overlay rysuje się tylko jako aktywny, więc innego id nie ma —
 // fallback = Produkcja (`economy`), jak dawny domyślny `_centerTab`
@@ -630,10 +631,11 @@ export class EconomyOverlay extends BaseOverlay {
         const val = rates[resId] ?? 0;
         if (val === 0) continue;
         let type = pid;
-        if (pid.startsWith('building_')) {
-          const tileKey = pid.slice('building_'.length);
+        const pk = parseTileKey(pid);
+        if (pk.prefix === BUILDING_PREFIX) {
+          const tileKey = pk.id;
           type = bSys?._active?.get(tileKey)?.building?.id ?? 'unknown';
-        } else if (pid.startsWith('capital_')) type = 'colony_base';
+        } else if (pk.prefix === CAPITAL_PREFIX) type = 'colony_base';
         else if (pid === 'civilization_consumption') type = 'pop_consumption';
         add(val > 0 ? producers : consumers, type, Math.abs(val));
       }

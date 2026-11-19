@@ -60,6 +60,7 @@ import { BASE_PRICE } from '../../data/TradeValuesData.js';
 import { ALL_RESOURCES } from '../../data/ResourcesData.js';
 import { computeBuildResourceCost, computeBuildCommodityCost } from '../../data/EnvironmentCost.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
+import { isCapitalKey } from '../../map/TileGraph.js';   // CS-1b — przez TileGraph
 
 // 1 game-year = CIV_TIME_SCALE civ-years. Stawki gry są PER CIV-YEAR (HARD #3).
 export const CIV_PER_GY = GAME_CONFIG.CIV_TIME_SCALE;
@@ -400,7 +401,7 @@ export class RoiTelemetry {
       for (const [r, v] of Object.entries(e.effectiveRates ?? {})) t.rates[r] = (t.rates[r] ?? 0) + v;
       // Kopalnie mają `rates: {}` — urobek liczy się z depozytów. Bierzemy REALNY
       // szacunek gry (obsada × dostępność energii × wyczerpanie), nie „nameplate".
-      if (b.isMine && !key.startsWith('capital_')) {
+      if (b.isMine && !isCapitalKey(key)) {
         const est = bSys?.getMineOutputEstimate?.(key);
         if (est) {
           t.mineStaffSum += est.staff ?? 0;

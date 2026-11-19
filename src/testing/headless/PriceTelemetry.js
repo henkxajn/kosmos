@@ -39,6 +39,7 @@ import {
   PRICE_DEFAULTS, CIV_PER_GY, priceOf, isResource, buildPurchaseCatalog, round, median,
 } from './PriceAudit.js';
 import { fullyLoadedCost, RoiTelemetry } from './RoiTelemetry.js';
+import { isCapitalKey } from '../../map/TileGraph.js';   // CS-1b — przez TileGraph
 
 export { PRICE_DEFAULTS, CIV_PER_GY };
 
@@ -210,7 +211,7 @@ export class PriceTelemetry {
       const t = perType[b.id] ?? (perType[b.id] = { levels: 0, rates: {}, mineGains: {} });
       t.levels += (e.level ?? 1);
       for (const [r, v] of Object.entries(e.effectiveRates ?? {})) t.rates[r] = (t.rates[r] ?? 0) + v;
-      if (b.isMine && !key.startsWith('capital_')) {
+      if (b.isMine && !isCapitalKey(key)) {
         const est = bSys.getMineOutputEstimate?.(key);
         for (const [r, v] of Object.entries(est?.gains ?? {})) t.mineGains[r] = (t.mineGains[r] ?? 0) + v;
       }

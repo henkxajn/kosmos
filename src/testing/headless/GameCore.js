@@ -84,6 +84,7 @@ import { EmpireGenerator }   from '../../generators/EmpireGenerator.js';
 import { BUILDINGS }         from '../../data/BuildingsData.js';
 import { TERRAIN_TYPES }     from '../../map/HexTile.js';
 import { PlanetMapGenerator } from '../../map/PlanetMapGenerator.js';
+import { tileGraphOf } from '../../map/TileGraph.js';   // CS-1b — przez TileGraph
 import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_BUILD_PLAN, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
 
 /**
@@ -464,7 +465,7 @@ export class GameCore {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
-    const allTiles = grid.toArray();
+    const allTiles = tileGraphOf(grid).tiles();
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -535,7 +536,7 @@ export class GameCore {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
-    const allTiles = grid.toArray();
+    const allTiles = tileGraphOf(grid).tiles();
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -601,7 +602,7 @@ export class GameCore {
   // ── Auto-place capital (colony_base) — replika ColonyOverlay logic ──
   _placeCapital(grid) {
     if (!grid) return;
-    const tiles = grid.toArray();
+    const tiles = tileGraphOf(grid).tiles();
     // Preferuj plains (najwyższe food bonus), potem any buildable blisko środka
     let best = tiles.find(t => t.type === 'plains' && !t.buildingId && !t.damaged);
     if (!best) {

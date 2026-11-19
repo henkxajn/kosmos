@@ -16,6 +16,7 @@
 //   seed = hash z planet.id → ta sama planeta → ta sama mapa zawsze
 
 import { HexGrid }  from './HexGrid.js';
+import { tileGraphOf } from './TileGraph.js';   // CS-1b — iteracja / sąsiedzi / odległość przez TileGraph
 import { HexTile, BIOTIC_TERRAIN_TYPES }  from './HexTile.js';
 import { getEffectivePlanetType } from '../utils/EntityUtils.js';
 import { getEligibleAnomalies, ANOMALIES } from '../data/AnomalyData.js';
@@ -138,7 +139,7 @@ export class PlanetMapGenerator {
 
     // 8. Fog of war (odkryte tylko na planecie domowej)
     if (!homeWorld) {
-      grid.forEach(tile => { tile.explored = false; });
+      tileGraphOf(grid).forEachTile(tile => { tile.explored = false; });
     }
 
     return grid;
@@ -291,7 +292,8 @@ export class PlanetMapGenerator {
   // ── Krok 3: Wypełnienie Voronoi ────────────────────────────────────────────
 
   static _voronoiFill(grid, weights, rand) {
-    const allTiles = grid.toArray();
+    const graph    = tileGraphOf(grid);
+    const allTiles = graph.tiles();
     const total    = allTiles.length;
 
     // Liczba ziaren: ~1 na 4 pola (dobre klasterowanie)
@@ -310,7 +312,7 @@ export class PlanetMapGenerator {
       let minDist = Infinity;
       let chosen  = seeds[0].type;
       for (const seed of seeds) {
-        const d = HexGrid.distance(tile.q, tile.r, seed.q, seed.r);
+        const d = graph.distance(tile, seed);
         if (d < minDist) {
           minDist = d;
           chosen  = seed.type;
@@ -327,8 +329,9 @@ export class PlanetMapGenerator {
     for (let pass = 0; pass < passes; pass++) {
       // Zbierz zmiany osobno (nie mutuj podczas iteracji)
       const changes = [];
-      grid.forEach(tile => {
-        const neighbors = grid.getNeighbors(tile.q, tile.r);
+      const graph = tileGraphOf(grid);
+      graph.forEachTile(tile => {
+        const neighbors = graph.neighbors(tile);
         if (neighbors.length < 2) return;
 
         // Zlicz częstość każdego typu wśród sąsiadów
@@ -405,9 +408,9 @@ export class PlanetMapGenerator {
 
     // Aktywność wulkaniczna: hot_rocky → gwarantuj przynajmniej 2 wulkany
     if (type === 'hot_rocky') {
-      let volcanoCount = grid.filter(t => t.type === 'volcano').length;
+      let volcanoCount = tileGraphOf(grid).tiles().filter(t => t.type === 'volcano').length;
       if (volcanoCount < 2) {
-        const candidates = grid.filter(t => t.type === 'desert' || t.type === 'wasteland');
+        const candidates = tileGraphOf(grid).tiles().filter(t => t.type === 'desert' || t.type === 'wasteland');
         for (let i = 0; i < Math.min(2 - volcanoCount, candidates.length); i++) {
           const idx = Math.floor(rand() * (candidates.length - i));
           candidates[idx].type = 'volcano';
@@ -417,9 +420,10 @@ export class PlanetMapGenerator {
     }
 
     // Las przylegający do pustyni → zastąp pustkowiem (naturalna granica)
-    grid.forEach(tile => {
+    const graph = tileGraphOf(grid);
+    graph.forEachTile(tile => {
       if (tile.type !== 'forest') return;
-      const hasDesertNeighbor = grid.getNeighbors(tile.q, tile.r)
+      const hasDesertNeighbor = graph.neighbors(tile)
         .some(n => n.type === 'desert' || n.type === 'volcano');
       if (hasDesertNeighbor && rand() < 0.6) tile.type = 'plains';
     });
@@ -435,7 +439,7 @@ export class PlanetMapGenerator {
                        : 5;
 
     // Kandydujące hexy (bez budynku, bez zasobu strategicznego, bez anomalii)
-    const allTiles = grid.toArray().filter(t =>
+    const allTiles = tileGraphOf(grid).tiles().filter(t =>
       t.strategicResource === null && t.anomaly === null && !t.buildingId
     );
 
@@ -480,7 +484,7 @@ export class PlanetMapGenerator {
       if ((comp[p.element] ?? 0) < p.threshold) continue;
 
       // Zbierz kandydujące pola odpowiedniego terenu bez istniejącego zasobu
-      const candidates = grid.filter(t =>
+      const candidates = tileGraphOf(grid).tiles().filter(t =>
         p.terrains.includes(t.type) && t.strategicResource === null
       );
       if (candidates.length === 0) continue;

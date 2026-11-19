@@ -22,7 +22,7 @@ import EventBus from '../core/EventBus.js';
 import gameState from '../core/GameState.js';
 import { createVessel } from '../entities/Vessel.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
-import { HEX_DIRECTIONS } from '../map/HexGrid.js';
+import { tileGraphOf, formatTileKey, BUILDING_PREFIX } from '../map/TileGraph.js';   // CS-1b — iteracja/klucze przez TileGraph
 import { TECHS } from '../data/TechData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
@@ -266,13 +266,13 @@ function _placeLayout(bSys, grid, layout) {
 // (skopiowane z SpawnTestEnemy._placeBuilding — cheat-style bez kosztów).
 function _placeBuilding(bSys, grid, buildingId, targetLevel) {
   const before = new Set();
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile?.buildingId === buildingId) before.add(tile.key);
   }
   if (!bSys.autoPlaceBuilding(buildingId)) return null;
 
   let placed = null;
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile?.buildingId === buildingId && !before.has(tile.key)) {
       placed = tile;
       break;
@@ -294,7 +294,7 @@ function _forceUpgradeToLevel(bSys, tile, targetLevel) {
     entry.baseRates     = bSys._calcBaseRates(building, tile, nextLevel);
     entry.effectiveRates = bSys._applyTechMultipliers(entry.baseRates, building);
 
-    const producerId = `building_${tile.key}`;
+    const producerId = formatTileKey(tile.key, BUILDING_PREFIX);
     const hasRates = Object.keys(entry.effectiveRates || {}).length > 0;
     if (hasRates && bSys.resourceSystem) {
       bSys.resourceSystem.registerProducer(producerId, entry.effectiveRates);
@@ -397,7 +397,7 @@ function _setupEnemyCivilization(scene, enemyPlanet) {
   colony.buildingSystem._grid       = grid;
   colony.buildingSystem._gridHeight = grid.height ?? 10;
   colony.grid = grid;
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile) tile.owner = SANDBOX_ENEMY_ID;
   }
 

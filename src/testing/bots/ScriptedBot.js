@@ -20,6 +20,7 @@ import { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { RandomBot } from './RandomBot.js';
 import { RuleBot } from './RuleBot.js';
 import EntityManager from '../../core/EntityManager.js';
+import { tileGraphOf } from '../../map/TileGraph.js';   // CS-1b — Finding 764 (bliźniak): kafel przez TileGraph
 
 export class ScriptedBot extends BaseBot {
   constructor({ script, fallback = 'idle' } = {}) {
@@ -65,9 +66,9 @@ export class ScriptedBot extends BaseBot {
         if (!active?.grid) return null;
         if (action.tileQ != null && action.tileR != null) {
           // Wyraźne koordy
-          out.tile = active.grid.get?.(action.tileQ, action.tileR) ?? active.grid._map?.get?.(`${action.tileQ},${action.tileR}`);
+          out.tile = tileGraphOf(active.grid).tile({ q: action.tileQ, r: action.tileR });
         } else if (action.tileKey) {
-          out.tile = active.grid.getByKey?.(action.tileKey) ?? active.grid._map?.get?.(action.tileKey);
+          out.tile = tileGraphOf(active.grid).tile(action.tileKey);   // Finding 764 (było: getByKey/_map → zawsze undefined)
         } else {
           // Auto-resolve: pierwszy legalny tile dla tego budynku
           const listCat = action.type === ACTION_TYPES.BUILD

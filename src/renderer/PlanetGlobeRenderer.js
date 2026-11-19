@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import EventBus   from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
+import { tileGraphOf, DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1b — id pola / iteracja przez TileGraph
 import { PlanetGlobeTexture }         from './PlanetGlobeTexture.js';
 import { PlanetGlobeCameraController } from './PlanetGlobeCameraController.js';
 import { PlanetTerrainTexture }        from './PlanetTerrainTexture.js';
@@ -441,7 +442,7 @@ export class PlanetGlobeRenderer {
     this._selectedTileCoords = tile ? { q: tile.q, r: tile.r } : null;
     this._updateOverlay();
     // Podświetl marker wybranego tile'a
-    const key = tile ? (tile.key ?? `${tile.q},${tile.r}`) : null;
+    const key = tile ? this._tileGraph().idOf(tile) : null;
     this._surfaceMarkers?.setSelected(key);
   }
 
@@ -464,17 +465,18 @@ export class PlanetGlobeRenderer {
 
     const bSys = window.KOSMOS?.buildingSystem;
     const allowed = new Set();
-    this._grid.forEach(tile => {
+    const graph = this._tileGraph();
+    graph.forEachTile(tile => {
       if (tile.buildingId || tile.underConstruction || tile.pendingBuild) return;
       if (tile.damaged) return;
       // Użyj BuildingSystem._canBuildOnTile jeśli dostępne, inaczej prosta logika
       if (bSys && typeof bSys._canBuildOnTile === 'function') {
-        if (bSys._canBuildOnTile(tile, building)) allowed.add(tile.key ?? `${tile.q},${tile.r}`);
+        if (bSys._canBuildOnTile(tile, building)) allowed.add(graph.idOf(tile));
       } else {
         const terrain = tile.terrainDef;
         if (!terrain?.buildable) return;
         if (building.terrainAny || terrain.allowedCategories.includes(building.category)) {
-          allowed.add(tile.key ?? `${tile.q},${tile.r}`);
+          allowed.add(graph.idOf(tile));
         }
       }
     });
@@ -498,12 +500,17 @@ export class PlanetGlobeRenderer {
     // Aktualizuj markery 3D (nowe budynki, rozbiórki)
     this._surfaceMarkers?.update(this._grid);
     if (this._selectedTileCoords) {
-      const key = `${this._selectedTileCoords.q},${this._selectedTileCoords.r}`;
+      const key = this._tileGraph().idOf(this._selectedTileCoords);
       this._surfaceMarkers?.setSelected(key);
     }
   }
 
   // ── Prywatne ────────────────────────────────────────────────
+
+  // CS-1b — graf pól bieżącej siatki (id pola, iteracja); bez siatki graf odłączony (samo id).
+  _tileGraph() {
+    return tileGraphOf(this._grid) ?? DETACHED_FLAT_GRAPH;
+  }
 
   // Pełna aktualizacja overlay — markery + highlight + opcjonalna siatka
   _updateOverlay() {

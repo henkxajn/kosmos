@@ -168,6 +168,7 @@ import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
 import { ELEMENTS }          from '../data/ElementsData.js';      // POWER TEST
 import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
+import { tileGraphOf, formatTileKey, BUILDING_PREFIX } from '../map/TileGraph.js';   // CS-1b — pola/klucze przez TileGraph
 import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId, isSystemExplored } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
@@ -1243,11 +1244,10 @@ export class GameScene {
           if (baseE === 0 && effE === 0 && !(b.energyCost > 0)) continue;   // tylko energochłonne
           const popType = b.popType ?? 'laborer';
           const emp = bs._getBuildingLaborEfficiency?.(b, key);
-          const pid = entry.producerId ?? `building_${key}`;
+          const pid = entry.producerId ?? formatTileKey(key, BUILDING_PREFIX);
           const reg = res._producers?.get(pid)?.energy;
           // Droid-per-job: liczba droidów + sumaryczny upkeep energii (perUnit × droidy).
-          const [eq, er] = key.split(',').map(Number);
-          const slot   = bs._grid?.get?.(eq, er)?.syntheticSlot;
+          const slot   = tileGraphOf(bs._grid)?.tile(key)?.syntheticSlot;
           const J      = (b.jobs ?? 0) * (entry.level ?? 1);
           const droids = Math.min(slot?.count ?? 0, J);
           const synthUp = slot ? droids * (bs.constructor.SYNTH_ENERGY_UPKEEP?.[slot.tier] ?? 2) : 0;
@@ -4810,7 +4810,7 @@ export class GameScene {
     if (!grid || !bSys) return;
 
     // Zbierz wolne, budowlane tile'y (nie ocean, nie damaged, nie zajęte)
-    const allTiles = grid.toArray();
+    const allTiles = tileGraphOf(grid).tiles();
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -4904,7 +4904,7 @@ export class GameScene {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
-    const allTiles = grid.toArray();
+    const allTiles = tileGraphOf(grid).tiles();
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -4974,7 +4974,7 @@ export class GameScene {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
-    const allTiles = grid.toArray();
+    const allTiles = tileGraphOf(grid).tiles();
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -6353,7 +6353,7 @@ export class GameScene {
         for (const uid of selectedIds) {
           const u = gum?.getUnit?.(uid);
           if (u && (!u.owner || u.owner === 'player')) {
-            gum.moveUnit(uid, tile.q, tile.r);
+            gum.moveUnit(uid, tile.q, tile.r);   // CS-5 — sygnatura (pid, q, r) jednostki
           }
         }
       }

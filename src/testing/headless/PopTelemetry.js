@@ -26,6 +26,7 @@
 
 import { TERRAIN_TYPES } from '../../map/HexTile.js';
 import { canColonize } from '../../entities/Vessel.js';
+import { tileGraphOf } from '../../map/TileGraph.js';   // CS-1b — przez TileGraph
 
 // Wynik klasyfikacji roku (headline stan nadwyżki POP).
 export const POP_CLASS = {
@@ -126,7 +127,7 @@ export class PopTelemetry {
    *  builds rejestrują się w `_active` + ustawiają `isOccupied`, więc buildingId
    *  drastycznie zaniża (7 vs realne 35 → potwierdzone probe). */
   static buildOut(home) {
-    const tiles = home?.grid?.toArray?.() ?? [];
+    const tiles = tileGraphOf(home?.grid)?.tiles() ?? [];
     let buildable = 0, occupied = 0;
     for (const t of tiles) {
       const terr = TERRAIN_TYPES[t.type];

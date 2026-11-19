@@ -16,7 +16,7 @@
 
 import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
-import { HEX_DIRECTIONS } from '../map/HexGrid.js';
+import { tileGraphOf, formatTileKey, BUILDING_PREFIX } from '../map/TileGraph.js';   // CS-1b — pola/sąsiedzi/klucze przez TileGraph
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import gameState from '../core/GameState.js';
 import EventBus from '../core/EventBus.js';
@@ -120,7 +120,7 @@ export function spawnTestEnemy() {
   colony.grid = grid;
 
   // Oznacz wszystkie hexy jako własność wrogiego imperium
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile) tile.owner = TEST_ENEMY_ID;
   }
 
@@ -210,14 +210,14 @@ function _findNearestUninhabitedBody(homePlanet) {
 function _placeBuilding(bSys, grid, buildingId, targetLevel) {
   // Zapamiętaj jakie tile'e mają już ten buildingId — by znaleźć świeżo postawiony
   const before = new Set();
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile?.buildingId === buildingId) before.add(tile.key);
   }
 
   if (!bSys.autoPlaceBuilding(buildingId)) return null;
 
   let placed = null;
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile?.buildingId === buildingId && !before.has(tile.key)) {
       placed = tile;
       break;
@@ -243,7 +243,7 @@ function _forceUpgradeToLevel(bSys, tile, targetLevel) {
     entry.baseRates     = bSys._calcBaseRates(building, tile, nextLevel);
     entry.effectiveRates = bSys._applyTechMultipliers(entry.baseRates, building);
 
-    const producerId = `building_${tile.key}`;
+    const producerId = formatTileKey(tile.key, BUILDING_PREFIX);
     const hasRates = Object.keys(entry.effectiveRates || {}).length > 0;
     if (hasRates && bSys.resourceSystem) {
       bSys.resourceSystem.registerProducer(producerId, entry.effectiveRates);
@@ -259,34 +259,32 @@ function _forceUpgradeToLevel(bSys, tile, targetLevel) {
 }
 
 function _findCapitalTile(grid) {
-  for (const tile of grid.toArray()) {
+  for (const tile of tileGraphOf(grid).tiles()) {
     if (tile?.capitalBase) return tile;
   }
   return null;
 }
 
 // Sąsiedzi stolicy — preferuj puste (bez budynku, bez jednostki, nie ocean)
-function _findAdjacentFreeHexes(grid, tile, n) {
+// CS-1b: eksport tylko dla keepera równoważności (colony_sphere_tilegraph_smoke).
+export function _findAdjacentFreeHexes(grid, tile, n) {
   const gum = window.KOSMOS.groundUnitManager;
   const planetId = gum?.getAllUnits().find(u => u.planetId)?.planetId; // nieistotne, użyjemy tile.planetId
 
   // Ring 1 (direct neighbors), potem ring 2 jeśli brakuje
   const out = [];
+  const graph = tileGraphOf(grid);
   const visited = new Set([tile.key]);
   const queue = [{ q: tile.q, r: tile.r, depth: 0 }];
 
   while (queue.length > 0 && out.length < n) {
     const { q, r, depth } = queue.shift();
     if (depth >= 3) break;  // ring 3 max — wystarczy
-    for (const d of HEX_DIRECTIONS) {
-      const nq = q + d.q;
-      const nr = r + d.r;
-      const key = `${nq},${nr}`;
+    for (const nt of graph.neighbors({ q, r }, { crossSeam: false })) {
+      const key = graph.idOf(nt);
       if (visited.has(key)) continue;
       visited.add(key);
-      const nt = grid.get(nq, nr);
-      if (!nt) continue;
-      queue.push({ q: nq, r: nr, depth: depth + 1 });
+      queue.push({ q: nt.q, r: nt.r, depth: depth + 1 });
       if (nt.buildingId)       continue;
       if (nt.capitalBase)      continue;
       if (nt.type === 'ocean') continue;

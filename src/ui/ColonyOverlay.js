@@ -19,6 +19,7 @@ import EntityManager from '../core/EntityManager.js';
 import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
 import { computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
 import { HexGrid }      from '../map/HexGrid.js';
+import { tileGraphOf, isCapitalKey, samePos, DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1b — pola/klucze/odległości przez TileGraph
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
 import { ensureColonyGrid, syncTileBuildings } from '../utils/ColonyGrid.js';   // S4/2 (SB87, Finding 55) — jedna droga tworzenia siatki
@@ -618,7 +619,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (bSys && window.KOSMOS?.civMode && !isOutpost && !isHostileColony) {
       let hasCapital = false;
       for (const key of bSys._active.keys()) {
-        if (key.startsWith('capital_')) { hasCapital = true; break; }
+        if (isCapitalKey(key)) { hasCapital = true; break; }
       }
       if (!hasCapital) {
         const baseTile = this._findBestTileForCapital(grid);
@@ -636,7 +637,7 @@ export class ColonyOverlay extends BaseOverlay {
           // skasowany, więc po autoPlaceBuilding następne wejście pokaże stolicę.
           let placed = false;
           for (const key of bSys._active.keys()) {
-            if (key.startsWith('capital_')) { placed = true; break; }
+            if (isCapitalKey(key)) { placed = true; break; }
           }
           if (placed) return this._getGrid(colony);
         }
@@ -726,18 +727,21 @@ export class ColonyOverlay extends BaseOverlay {
     const gum = window.KOSMOS?.groundUnitManager;
     if (!gum) return false;
     const range = unit.range ?? 1;
+    const graph = this._graphFor(unit.planetId);
     for (const u of gum._units.values()) {
       if (u.planetId !== unit.planetId) continue;
-      const d = this._hexDist(unit.q, unit.r, u.q, u.r);
+      const d = graph.distance(unit, u);
       if (d === 0 || d > range) continue;
       if (combatSystem.isHexContested(unit.planetId, u.q, u.r)) return true;
     }
     return false;
   }
 
-  _hexDist(q1, r1, q2, r2) {
-    const s1 = -q1 - r1, s2 = -q2 - r2;
-    return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
+  // CS-1b (Finding 765) — jedna droga do grafu pól ciała: siatka z cache overlayu, a bez niej graf
+  // odłączony (sama arytmetyka współrzędnych). Zastępuje dwie kopie `_hexDist` (późniejsza po cichu
+  // nadpisywała wcześniejszą; obie liczyły ten sam wzór sześcienny bez zawijania = HexGrid.distance).
+  _graphFor(planetId) {
+    return tileGraphOf(this._gridCache?.[planetId]) ?? DETACHED_FLAT_GRAPH;
   }
 
   // ── Multi-select helpers ──────────────────────────────────────────────
@@ -934,7 +938,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Floating panel obok zaznaczonego hexa (nie pokazuj gdy jednostka zaznaczona).
     // Clampowany do obszaru MAPY (ox..ox+mapW), żeby nie wchodził pod kolumnę info.
     if (this._selectedHex && !this._selectedUnit && grid && colony && !colony.isPreview) {
-      const tile = grid.get(this._selectedHex.q, this._selectedHex.r);
+      const tile = tileGraphOf(grid).tile(this._selectedHex);
       if (tile) {
         // Jeśli na hexie jest stack (≥2 player units) → pokaż stack panel
         const gum = window.KOSMOS?.groundUnitManager;
@@ -2280,7 +2284,7 @@ export class ColonyOverlay extends BaseOverlay {
     const out = {};
     if (colony?.buildingSystem?._active) {
       for (const [key, entry] of colony.buildingSystem._active) {
-        if (key.startsWith('capital_')) continue;
+        if (isCapitalKey(key)) continue;
         const bid = entry.building?.id;
         if (!bid) continue;
         out[bid] = (out[bid] ?? 0) + 1;
@@ -2431,8 +2435,8 @@ export class ColonyOverlay extends BaseOverlay {
       if (sy < oy - hs * 2 || sy > oy + oh + hs * 2) return;
 
       const terrain = TERRAIN_TYPES[tile.type] ?? TERRAIN_TYPES.plains;
-      const hov = this._hoveredHex?.q === tile.q && this._hoveredHex?.r === tile.r;
-      const sel = this._selectedHex?.q === tile.q && this._selectedHex?.r === tile.r;
+      const hov = !!this._hoveredHex && samePos(this._hoveredHex, tile);
+      const sel = !!this._selectedHex && samePos(this._selectedHex, tile);
       this._drawHex(ctx, sx, sy, hs, terrain, tile, hov, sel, planet, grid);
     });
 
@@ -2458,12 +2462,11 @@ export class ColonyOverlay extends BaseOverlay {
     const cy = oy + oh / 2 - this._camY;
 
     ctx.save();
+    const graph = tileGraphOf(grid);
     for (const [key, info] of coverage) {
-      const [qS, rS] = key.split(',');
-      const q = Number(qS), r = Number(rS);
-      const tile = grid?.get(q, r);
+      const tile = graph?.tile(key);
       if (!tile) continue;
-      const pos = grid.tilePixelPos(q, r, hs);
+      const pos = grid.tilePixelPos(tile.q, tile.r, hs);
       const sx = cx + pos.x;
       const sy = cy + pos.y;
 
@@ -2493,7 +2496,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Sprawdź czy hex pod roverem ma anomalię do analizy
     const colony = this._getColony();
     const grid = colony ? this._getGrid(colony) : null;
-    const tile = grid?.get(unit.q, unit.r);
+    const tile = tileGraphOf(grid)?.tile(unit);
     const canAnalyze = tile?.anomaly && tile.anomalyDetected && !tile.anomalyRevealed;
 
     // Faza 6: owner info i cele ataku
@@ -2845,7 +2848,7 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillRect(bx, by, bw, bh);
         ctx.fillStyle = '#FFF';
         ctx.font = `bold 10px ${THEME.fontFamily}`;
-        ctx.fillText(`✕ Cofnij wsparcie (${unit.supportTarget.q},${unit.supportTarget.r})`, bx + 6, by + 12);
+        ctx.fillText(`✕ Cofnij wsparcie (${this._graphFor(unit.planetId).idOf(unit.supportTarget)})`, bx + 6, by + 12);
         this._addHit(bx, by, bw, bh, 'unitClearSupport');
         ly += 26;
       } else if (cs) {
@@ -2901,27 +2904,24 @@ export class ColonyOverlay extends BaseOverlay {
   _findAdjacentEnemyUnit(unit, gum) {
     const all = gum.getUnitsOnPlanet(unit.planetId);
     const range = unit.range ?? 1;
+    const graph = this._graphFor(unit.planetId);
     for (const u of all) {
       if (u.id === unit.id) continue;
       if (u.owner === unit.owner || (!u.owner && !unit.owner)) continue;
-      const dist = this._hexDist(unit.q, unit.r, u.q, u.r);
+      const dist = graph.distance(unit, u);
       if (dist <= range) return u;
     }
     return null;
   }
   _findAdjacentPlayerUnit(enemyUnit, gum) {
     const all = gum.getUnitsOnPlanet(enemyUnit.planetId);
+    const graph = this._graphFor(enemyUnit.planetId);
     for (const u of all) {
       if (u.owner && u.owner !== 'player') continue;
-      const dist = this._hexDist(enemyUnit.q, enemyUnit.r, u.q, u.r);
+      const dist = graph.distance(enemyUnit, u);
       if (dist <= 1) return u;
     }
     return null;
-  }
-  _hexDist(q1, r1, q2, r2) {
-    const s1 = -q1 - r1;
-    const s2 = -q2 - r2;
-    return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
   }
 
   _loadUnitSprites() {
@@ -3200,11 +3200,12 @@ export class ColonyOverlay extends BaseOverlay {
 
     // ── Victoria 2 stack combat: badges i battle markers ─────────────────────
     // Grupuj po (q,r) i rysuj: licznik stacka + ⚔ gdy contested
-    const stacks = new Map();  // "q,r" → { player: [], enemy: [], tile }
+    const stacks = new Map();  // id pola → { player: [], enemy: [], tile }
+    const stackGraph = tileGraphOf(grid) ?? DETACHED_FLAT_GRAPH;
     for (const u of units) {
       if (u.status === 'moving') continue;
       if (u._stealthState === 'hidden' && u.owner && u.owner !== 'player') continue;
-      const key = `${u.q},${u.r}`;
+      const key = stackGraph.idOf(u);
       if (!stacks.has(key)) {
         stacks.set(key, { player: [], enemy: [], q: u.q, r: u.r });
       }
@@ -3320,9 +3321,10 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.font = `bold 11px ${THEME.fontFamily}`;
     ctx.fillStyle = existingArmy ? '#E0C060' : '#80B8FF';
     ctx.textAlign = 'left';
+    const tileId = this._graphFor(firstUnit.planetId).idOf(tile);
     const header = existingArmy
-      ? `🎖 ${existingArmy.name} (${tile.q},${tile.r})`
-      : `👥 STACK (${tile.q},${tile.r}) — ${units.length} jedn.`;
+      ? `🎖 ${existingArmy.name} (${tileId})`
+      : `👥 STACK (${tileId}) — ${units.length} jedn.`;
     ctx.fillText(header, x + H_PAD, y + 16);
 
     // Lista jednostek
@@ -3448,7 +3450,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillStyle = ACCENT;
     ctx.textAlign = 'left';
     const headerText = allSameArmy
-      ? `🎖 ${firstArmy.name.toUpperCase()}  ·  ${sel.length} JEDN.  ·  (${firstArmy.q},${firstArmy.r})`
+      ? `🎖 ${firstArmy.name.toUpperCase()}  ·  ${sel.length} JEDN.  ·  (${this._graphFor(firstArmy.planetId).idOf(firstArmy)})`
       : `👥 ZAZNACZONO ${sel.length} JEDNOSTEK`;
     ctx.fillText(headerText, dx + 12, dy + 18);
 
@@ -3505,7 +3507,7 @@ export class ColonyOverlay extends BaseOverlay {
       btns.push({ label: '✏ NAZWA',    type: 'armyRename',          data: { armyId: firstArmy.id } });
       btns.push({ label: '💔 ROZWIĄŻ', type: 'armyDisband',         data: { armyId: firstArmy.id }, danger: true });
     } else if (sel.length >= 2) {
-      const sameHex = sel.every(u => u.q === sel[0].q && u.r === sel[0].r && u.planetId === sel[0].planetId);
+      const sameHex = sel.every(u => samePos(u, sel[0]) && u.planetId === sel[0].planetId);
       if (sameHex) {
         btns.push({ label: '🎖 POŁĄCZ', type: 'armyCreateFromSelection', data: {} });
       }
@@ -3793,6 +3795,7 @@ export class ColonyOverlay extends BaseOverlay {
 
   // ── Floating panel ───────────────────────────────────────────────────────
   _drawFloatingPanel(ctx, x, y, tile, colony, grid) {
+    const graph = tileGraphOf(grid) ?? DETACHED_FLAT_GRAPH;   // CS-1b — id pola / pole przez TileGraph
     // D4=W3 (OG-4) — „widoczny, ale zablokowany". Panel ZOSTAJE (jest też wywiadem o kaflu),
     // ale rozkazy rysują się wygaszone i z 🔒. Hit-zony ZOSTAJĄ — klik ma powiedzieć DLACZEGO
     // (inwariant `_onHit` → flash). Dokładnie idiom `locked` używany tu dla bramki klimatu.
@@ -3816,7 +3819,7 @@ export class ColonyOverlay extends BaseOverlay {
       h += 20 + 16; // nazwa + level
       // Produkcja / wydobycie (header + linie) — MUSI odzwierciedlać blok rysujący 1:1, inaczej
       // panel jest za krótki i dolne elementy (Rozbiórka/droidy) wypadają pod clip (były ucinane).
-      const tileKey = `${tile.q},${tile.r}`;
+      const tileKey = graph.idOf(tile);
       const aEntry = colony?.buildingSystem?._active?.get(tileKey);
       const rates = aEntry?.effectiveRates ?? aEntry?.baseRates ?? b.rates;
       const baseRates = b.rates ?? {};
@@ -3921,7 +3924,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.font = `10px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
     const latMod = HexGrid.getLatitudeModifier(tile.r, grid.height);
-    ctx.fillText(`(${tile.q},${tile.r})${latMod.label ? '  ' + latMod.label : ''}`, x + 8, cy);
+    ctx.fillText(`(${graph.idOf(tile)})${latMod.label ? '  ' + latMod.label : ''}`, x + 8, cy);
     cy += 16;
 
 
@@ -3979,7 +3982,7 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillText(`Poziom ${tile.buildingLevel ?? 1}${b.maxLevel ? '/' + b.maxLevel : ''}`, x + 8, cy); cy += 16;
 
       // Efektywna produkcja z BuildingSystem._active
-      const tileKey = `${tile.q},${tile.r}`;
+      const tileKey = graph.idOf(tile);
       const activeEntry = colony.buildingSystem?._active?.get(tileKey);
       const rates = activeEntry?.effectiveRates ?? activeEntry?.baseRates ?? b.rates;
 
@@ -4053,7 +4056,7 @@ export class ColonyOverlay extends BaseOverlay {
       // (koherentne zaokrąglenie: plant = round(total)+round(droidDraw), droidLine = −round(droidDraw)).
       if (b.energyCost) {
         const _eE = rates?.energy ?? -b.energyCost;
-        const _eTier = grid.get(tile.q, tile.r)?.syntheticSlot?.tier ?? 1;
+        const _eTier = graph.tile(tile)?.syntheticSlot?.tier ?? 1;
         const _eD = colony.buildingSystem?._tileDroidCount?.(activeEntry, tileKey) ?? 0;
         const _eDraw = (colony.buildingSystem?.constructor?.SYNTH_ENERGY_UPKEEP?.[_eTier] ?? 2) * _eD;
         const _ePlant = Math.round(_eE) + Math.round(_eDraw);
@@ -4068,7 +4071,7 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillStyle = THEME.textPrimary;
         if (_D > 0) {
           ctx.fillText(t('colonyPanel.staffing', _J - _D, _D, _J), x + 8, cy); cy += 14;
-          const _tier = grid.get(tile.q, tile.r)?.syntheticSlot?.tier ?? 1;
+          const _tier = graph.tile(tile)?.syntheticSlot?.tier ?? 1;
           const _per = colony.buildingSystem?.constructor?.SYNTH_ENERGY_UPKEEP?.[_tier] ?? 2;
           ctx.fillStyle = '#ffdd44';
           ctx.fillText(t('colonyPanel.droidUpkeep', _per, _D, _per * _D), x + 8, cy); cy += 14;
@@ -4095,9 +4098,9 @@ export class ColonyOverlay extends BaseOverlay {
       cy += 28;
 
       // ── Slice 5C.2: tri-state desygnacja {Aktywny | Pauza | Priorytet} (segmentowy przełącznik) ──
-      const _dsEntry = colony.buildingSystem?._active?.get(`${tile.q},${tile.r}`);
+      const _dsEntry = colony.buildingSystem?._active?.get(graph.idOf(tile));
       if (GAME_CONFIG.FEATURES?.popAllocation2Priority === true && _dsEntry) {
-        const dsKey = `${tile.q},${tile.r}`;
+        const dsKey = graph.idOf(tile);
         const cur = _dsEntry.designation ?? 'active';
         const segs = [
           { id: 'active',   label: t('designation.active'),   col: '#2f6b3a' },
@@ -4124,7 +4127,7 @@ export class ColonyOverlay extends BaseOverlay {
       // Droid-per-job: „n🤖 / J" + Install (dopóki count<J) I Remove (gdy count>0) współistnieją.
       const bsSyn = colony?.buildingSystem;
       if (bsSyn && (b.jobs ?? 0) > 0 && !b.isAutonomous) {
-        const tileKey = `${tile.q},${tile.r}`;
+        const tileKey = graph.idOf(tile);
         const prev = bsSyn.previewSyntheticInstall?.(tileKey) ?? { ok: false, reason: 'no_building', count: 0, jobs: 0 };
         const dCount = prev.count ?? 0, dJobs = prev.jobs ?? 0;
         // Nagłówek stanu automatyzacji „n🤖 / J". Slice 5D FIX C: baseline 'top' + odstęp, by
@@ -4649,7 +4652,7 @@ export class ColonyOverlay extends BaseOverlay {
             damage: res.damage,
             ownerId: 'player',
           });
-          this._showFlash(`💥 Ostrzał (${tile.q},${tile.r}) — ${res.damage} dmg`);
+          this._showFlash(`💥 Ostrzał (${this._graphFor(this._strikePlanetId).idOf(tile)}) — ${res.damage} dmg`);
         } else if (res?.reason === NOT_AT_WAR) {
           this._showFlash(t('fleet.reason.strikeNotAtWar'));
         } else {
@@ -4739,7 +4742,7 @@ export class ColonyOverlay extends BaseOverlay {
           return true;
         }
         const range = unit.range ?? 1;
-        const dist = this._hexDist(unit.q, unit.r, tile.q, tile.r);
+        const dist = this._graphFor(unit.planetId).distance(unit, tile);
         if (dist === 0 || dist > range) {
           this._showFlash(`Poza zasięgiem (${dist}/${range})`);
           return true;
@@ -4749,7 +4752,7 @@ export class ColonyOverlay extends BaseOverlay {
           return true;
         }
         unit.supportTarget = { q: tile.q, r: tile.r };
-        this._showFlash(`🎯 Wsparcie bitwy (${tile.q},${tile.r})`);
+        this._showFlash(`🎯 Wsparcie bitwy (${this._graphFor(unit.planetId).idOf(tile)})`);
         this._supportMode = false;
         this._supportSourceUnitId = null;
         return true;
@@ -4842,7 +4845,8 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     const grid = colony ? this._getGrid(colony) : null;
-    const tile = this._selectedHex && grid ? grid.get(this._selectedHex.q, this._selectedHex.r) : null;
+    const graph = tileGraphOf(grid);
+    const tile = this._selectedHex && grid ? graph.tile(this._selectedHex) : null;
 
     switch (zone.type) {
       case 'close':
@@ -5017,7 +5021,7 @@ export class ColonyOverlay extends BaseOverlay {
       case 'demolish': {
         if (!tile) break;
         // Droid-per-job (D5): ostrzeż gdy rozbiórka/downgrade ZNISZCZY droidy (wzór dialogu wyparcia).
-        const dLoss = colony?.buildingSystem?.getDemolishDroidLoss?.(`${tile.q},${tile.r}`) ?? 0;
+        const dLoss = colony?.buildingSystem?.getDemolishDroidLoss?.(graph.idOf(tile)) ?? 0;
         const doDemolish = () => EventBus.emit('planet:demolishRequest', { tile });
         if (dLoss > 0) {
           showConfirmModal({
@@ -5097,7 +5101,7 @@ export class ColonyOverlay extends BaseOverlay {
       case 'cancelPending':
         if (tile) {
           // Anuluj oczekujące zamówienie
-          const tileKey = `${tile.q},${tile.r}`;
+          const tileKey = graph.idOf(tile);
           const bSys = colony?.buildingSystem;
           if (bSys?._pendingQueue?.has(tileKey)) {
             bSys._pendingQueue.delete(tileKey);
@@ -5659,7 +5663,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (key === 'Delete' && this._selectedHex) {
       const colony = this._getColony();
       const grid = colony ? this._getGrid(colony) : null;
-      const tile = grid?.get(this._selectedHex.q, this._selectedHex.r);
+      const tile = tileGraphOf(grid)?.tile(this._selectedHex);
       if (tile?.buildingId) { EventBus.emit('planet:demolishRequest', { tile }); return true; }
     }
 

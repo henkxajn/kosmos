@@ -44,6 +44,7 @@ import { BUILDINGS } from '../../data/BuildingsData.js';
 import { TERRAIN_TYPES } from '../../map/HexTile.js';
 import { computeBuildResourceCost, computeBuildCommodityCost } from '../../data/EnvironmentCost.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
+import { tileGraphOf } from '../../map/TileGraph.js';   // CS-1b — przez TileGraph
 
 // 1 game-year = CIV_TIME_SCALE civ-years. Stawki gry są PER CIV-YEAR — mnożymy (HARD #3).
 export const CIV_PER_GY = GAME_CONFIG.CIV_TIME_SCALE;
@@ -214,7 +215,7 @@ export class ResourceTelemetry {
     const tech = bSys?.techSystem;
     if (!bSys || !resSys) return out;
 
-    const tiles = home?.grid?.toArray?.() ?? [];
+    const tiles = tileGraphOf(home?.grid)?.tiles() ?? [];
     const free = tiles.filter(t => TERRAIN_TYPES[t.type]?.buildable && !t.isOccupied && !t.damaged);
 
     for (const b of Object.values(BUILDINGS)) {
