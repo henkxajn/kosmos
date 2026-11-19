@@ -48,6 +48,7 @@ for the record.
 | **D-CS-9 … D-CS-16** | Signed as recommended (§4). |
 | **D-CS-17 (new)** | Physical bodies must differ per new game, not only their surfaces. Foreign system RNG stream = f(galaxySeed, starId) instead of `hashString(starId)` alone; home system generation seeded from galaxySeed instead of unseeded `Math.random`. Old saves are unaffected (bodies are stored in full). This supersedes the §1.D remark that galaxy-seeded physical bodies are outside this arc. Implemented in CS-3a behind `FEATURES.seededSystems` (§3.1). |
 | **D-CS-18 (new, signed 2026-11-18)** | The system-seed mode is a property of the **world**, decided once at world creation (`GameScene.start()` / `GameCore.boot()`) and stamped in `galaxyData.seededSystems = true` (only when ON; saved whole, no version bump; unstamped = unseeded). `SystemGenerator.worldSeedContext(galaxyData)` is the only reader; generation and scan derive their seed from it, so flipping the flag after start changes nothing. Fail-closed: a seeded world without a galaxySeed logs `[CS-3a]` `console.error`, counts `emergencySeedUses()` and uses `EMERGENCY_GALAXY_SEED = 0`, never the old seed. Homeworld mutation seeded from galaxySeed in a seeded world. CS-3a-fix (§3.2, Finding 769). |
+| **D-CS-25 (signed 2026-11-19)** | Moon-orbit generation change in scaled-orbit worlds accepted: moon orbit radii × k at generation for `orbitModel: 2` worlds, no new RNG draws, legacy worlds unchanged, scaled test saves made before the change keep their old moon orbits (§3.9.3). |
 
 **Step order (signed): surface track first.**
 CS-3a → CS-3b → CS-4 → CS-6 → CS-1a → CS-1b → CS-2 → CS-5 → CS-7 → CS-8 → CS-9 → CS-10 → CS-11 → CS-12 → CS-Z.
@@ -2768,6 +2769,129 @@ entry must not be skipped between frames at high game speed in small-k systems.
 floor), `AccretionSystem.js`, `HudLabelLayer.js`, `HudRadarLogic.js`, `FleetTabPanel.js`, `ColonySphereDebug.js`
 (`csOrbits` fields), `probe-cs-phys-balans.mjs` (orbits flag, tag), keepers `colony_sphere_orbits_smoke`,
 `zoom_floor_smoke`. No critical file touched in this step (GameConfig / SystemGenerator changes are from §3.9 / §3.9.1).
+
+#### 3.9.3 CS-PHYS-c — compact-system visual scale + Finding 776 (2026-11-19; owner gate PASS)
+
+**Owner gate PASS 2026-11-19** (including the long-tick fix, §3.9.3.1). **Finding 776 ✅ closed** (`sweptProximity`, speed-derived teleport guard). Star corona left as is. **D-CS-25 signed:** moon orbit radii × k at generation in `orbitModel: 2` worlds accepted (no new RNG draws, legacy worlds unchanged, earlier scaled test saves keep old moon orbits).
+**Finding 777 🟡 (record only, no fix):** the game loop does not clamp frame dt (`GameScene` `gameLoop` → `TimeSystem.update(deltaMs)`), so at 1 r/s a single hitch (~0.7 s) moves every vessel several AU in one tick. Combat entry is covered by the swept check; other per-tick effects of such jumps (MOS completion beyond intercept, missions, detection exits, economy steps) are unaudited. Next free finding number: 778.
+
+**A. Visual scale (stamped worlds only; legacy k = 1 bit-identical: every factor is `x · 1`).** Body drawing scale =
+k (`SystemScale.bodyDrawScale(star)` ≡ `systemScaleOfStar`, the D-CS-24 factor the orbits shrank by). Scaled:
+planet / moon / planetoid mesh radii (`ThreeRenderer` — `_getEntityRadius`, `addPlanetMesh`, material rebuild, life
+glow, `_addMoonMesh`, planetoids; clouds, atmosphere, gas-giant rings, colony building markers follow `r`); visual
+ship / wreck orbits around bodies (minima 0.06 / 0.5 WU × k); station and ship orbital lanes
+(`OrbitalRolesData.getOrbitRange(role, r, scale)` + `OrbitalSpaceSystem.assignOrbit` × `systemScaleOfEntity`); camera
+min zoom on a body (0.3 / moon 0.15 × k), default min zoom, auto-zoom floor 0.8 × k (disc pixel sizes at min zoom =
+legacy → the 260 px hero trigger stays reachable), system-frame floor 1 AU × k. **Moon orbits**: they are defined in
+units of the drawn planet radius (`_makeMoon`: 2.5 radii, type caps, +0.15, jitter 0.1 WU), so in an orbit-model-2 world
+all those lengths × k at generation (no new RNG draws; legacy worlds unchanged — keeper orbits O1 trace green). This is
+the one generation change of the step (moon positions move by ≤ 0.04 AU; saves made before keep their moon orbits).
+Measured (5 seeds): widest moon ring / neighbour gap in M systems 0.921 → 0.365. **Screen floor**
+(`_applyBodyScreenFloor`, render loop only when scale < 1): disc radius ≥ `BODY_MIN_PX` = 2 CSS px, multiplier capped at
+1/k (never larger than legacy); moon orbit rings get the inverse multiplier (moons stay on physics positions). **Star**:
+already drawn with `starDrawScale` (Finding 774, ℓ, corona follows `r`); measured core / home orbit 0.23 in the seed-11 M
+home vs 0.33 legacy G → no change in this step (owner judges by eye). Ships, station models, icons, labels unscaled.
+**Route margin (decision §3.9.2 reversed):** body-avoidance margin 0.15 AU and waypoint offset 0.05 AU × k
+(`VesselManager._calcRoute`) — margin / drawn radius identical to legacy. Proof: `docs/design/prototypes/
+csphys-c-compact-before-after.png` (`probe-cs-phys-c-shots.mjs`, forced galaxy seed 11 → M home L 0.028, k 0.2; frames:
+system frame, inner system 9 WU, homeworld auto-zoom (camera still lerping at 8 s in both), homeworld 1.5 WU, K system
+k 0.62, G system k 1 = control identical). Numbers: homeworld drawn radius 0.107 → 0.0214 WU, home moon rings
+0.366 / 0.422 → 0.093 / 0.144 WU, min zoom 0.3 → 0.06.
+
+**B. Finding 776 ✅ (behind `FEATURES.sweptProximity`, default ON; OFF = old behaviour).** Root cause: ProximitySystem
+sampled end positions once per tick; at 1 r/s and low fps the relative step of two hull_small ships (0.047 AU at 60 fps,
+0.09 at 30) exceeds the k = 0.2 entry diameter 0.063 AU. Fix: per-vessel end-of-tick samples; `_sweptApproach` = closest
+approach of the two uniform motions (`utils/SweptProximity.closestApproach`, relative motion, t ∈ [0, 1]) used for the
+ENTER branches of detection, sensor-lock and combat (exits / hysteresis stay on end positions). Excluded: no sample,
+system change, jump longer than the vessel's largest possible travel in that tick (teleport — §3.9.3.1; the first
+version used a fixed 1 AU cap, which the owner check broke). Combat entered only by the sweep: cross-faction pair rewound
+to the closest-approach positions before DSCS freezes it (otherwise the "no damage possible" guard refuses the start);
+payload `swept: true`, `distanceAU` = closest approach. Same-faction: event, no rewind. `combatEnterAUOf` extracted
+unchanged. Audit: MovementOrderSystem intercept/pursue completion — step-segment vs target point (`segmentPointDistance`)
+— changed; patrol / pursue steps are clamped to the waypoint (land exactly) — unchanged; mission arrival is
+time-parametric — n/a; snap-to-body (click), blockade (presence state), escort (clamped) — not crossing tests; accretion
+(co-orbiting planetesimals, Generator scenario) — unchanged. Earlier-than-before triggers (legacy worlds too): only when
+two ships' motions cross the threshold between samples while both end samples are outside (the pass-through case);
+head-on approach at 60 fps triggers in the same tick (keeper control). Budget rotation (500 pairs/tick) unchanged.
+Debug `csCollisionTest()` (`src/debug/CollisionTestDebug.js`): live engine (headless Chrome, M home k 0.2) ON 3/3 combat
+started (`trigger: swept`), OFF 0/3; battles resolve, test hulls removed, 0 exceptions.
+
+**Keepers.** New `colony_sphere_compact_smoke` (48 pins: C1 scale + floor rules, C2 moon orbits, C3 orbital lanes,
+C4 renderer methods extracted from source and executed + live-path pins, C5 route margin executed) and
+`swept_proximity_smoke` (27 pins: S1 math, S2 pass-through in k 0.2 executed, S3 controls/exclusions, S4 same faction,
+S5 MOS intercept step). `colony_sphere_orbits` O8 witness → pin of the new margin. Fail-first (`git worktree --detach
+98f7316`, three stub copied, no junction): compact 17 PASS / 31 FAIL, swept 12 PASS / 15 FAIL, no abort. Mutations 21/21
+killed (bodyDrawScale 1, moon kDraw 1, rMinAbs unscaled, lanes unscaled, moon radius unscaled, floor cap removed, ring
+compensation removed, margin unscaled, offset unscaled, auto-zoom unscaled, renderStar scale 1, swept off, no rewind,
+rewind same faction, teleport cap A, teleport cap B, system check removed, samples not stored, MOS segment removed, t not
+clamped, combat enter on end distance). Sweep 437/437 OK (31 advisory), `check-i18n` PASS.
+
+**Files.** New: `src/utils/SweptProximity.js`, `src/debug/CollisionTestDebug.js`, keepers above,
+`src/testing/headless/probe-cs-phys-c-shots.mjs`, the PNG. Changed: `SystemScale.js`, `ThreeRenderer.js`,
+`SystemGenerator.js` (moon orbits), `OrbitalRolesData.js`, `OrbitalSpaceSystem.js`, `VesselManager.js`,
+`ProximitySystem.js`, `MovementOrderSystem.js`, `ColonySphereDebug.js` (`csOrbits.bodyDrawScale`, `csCollisionTest`),
+`GameScene.js` (alias), **critical file** `GameConfig.js` (flag `sweptProximity` only). Free finding number: 778 (777 recorded above).
+
+#### 3.9.3.1 CS-PHYS-c owner check — long-tick fix of the sweep guard (2026-11-19; owner gate PASS)
+
+**Owner check:** everything PASS except `csCollisionTest()` with `sweptProximity` ON in a G home (k = 1): `combatStarted:
+false`, 6 frames at 6 fps during an AI `bootstrapColony` hitch, `minFrameSampleAU` 1.79 with `lateralAU` 0.1418 <
+`enterAU` 0.1575; the re-run at normal fps started combat (`trigger: point`, 0.1478 AU).
+
+**Root cause (reproduced, numbers).** `hull_small` + `engine_ion` flies 2.4955 AU/yr (not 1.4). The game loop does not
+clamp `deltaMs`, so at 1 r/s one tick of t seconds moves each ship 2.5·t AU. The fixed `SWEEP_MAX_STEP_AU` = 1 AU rejected
+every tick longer than 0.40 s as a teleport → point test only. Node reproduction on the owner geometry (gap 2.205 AU,
+lateral 0.1418): tick 1/60 s → point entry 0.1479 AU (= owner's 0.1478); 1/6 s (step 0.42 AU) → swept; 0.5 / 0.7 / 1.0 /
+1.3 s (step 1.25–3.24 AU) → **no combat** on the 1 AU tree, swept 0.1418 AU after the fix. The owner's sample (≥ 1.79 AU
+apart before and after the pass) means ≥ 1.79 AU per ship in one tick, i.e. a hitch ≥ 0.72 s — exactly the Finding 776
+case, and it also happens at k = 1.
+
+**Fix (behind `sweptProximity`).** The guard is the vessel's largest possible travel in that tick: `maxFlightStepAU` =
+speedAU × tech ship-speed multiplier (missions apply it; product up to ×7) × `SWEEP_SPEED_MARGIN` 1.5 × dt +
+`SWEEP_STEP_FLOOR_AU` 0.05, with dt = max(this call, previous call) / `CIV_TIME_SCALE` (the pre-move pass sees motion of
+listeners from the previous frame). A vessel docked / orbiting a body also gets the body's motion: |Δbody| + distance to the
+body in the sample + distance now (triangle bound, covers any jump around the orbit). Constants and the formula live in
+`utils/SweptProximity.js` (shared with MOS; systems do not import each other). Explicit teleport tagging was rejected:
+~50 position-write sites (missions, docking, combat rewind, debug stagers) — a new one is easy to miss; the speed × dt bound
+covers them all without touching producers. Warp arrival / system change stay caught by the systemId check. Debug
+position sets happen while paused, so the next tick's dt is short and they remain teleports (the old fixed 1 AU cap
+would have swept any placement under 1 AU). Combat-grid ticks (DSCS close steps on the round clock) can exceed the bound —
+they fall back to the point test (legacy).
+
+**MovementOrderSystem re-check.** The CS-PHYS-c change (step segment vs the target's point) misses long ticks: a mission
+target moves in `_updatePositions` after MOS, so in a hitch the pursuer's step ends at the intercept point and the target
+passes it later in the same tick — an equal-speed chase then never completes. Fix: `_sweptPrevStepHit` — at the next tick,
+closest approach of the previous step vs the target's real motion over the same interval (target position from the
+**start** of the MOS tick, `_tickStartTargetPos`, so the result does not depend on order iteration); skipped when the
+pursuer was moved outside MOS, the target changed system, or the target's free-flight jump exceeds `maxFlightStepAU`.
+Hostile pairs are already entered into combat by ProximitySystem pass 2 in the same tick; this closes order completion.
+**Snap-back** for long ticks: the cross-faction rewind puts both ships at the closest-approach points of their (up to
+~4 AU) tick segments — keeper S6 (x = 0, 0.9 AU back along the track) and live runs (`at.distanceAU` = lateral).
+
+**Debug.** `csCollisionTest()` now reports `sweptSkip` (flagOff / noPrevSample / systemChanged / teleportGuard /
+noProximitySystem; most frequent excluding noPrevSample), `sweepSkips`, `minSweptAU`, `maxShipStepAU`, `stepLimitAU`,
+`ticks`, `routeStraight` / `placeSeed` (first of 12 placement seeds whose two routes need no body-avoidance waypoints — a bent
+route changes the approach), and refuses with `combat_in_progress` while the system ticks on the combat grid (one live run
+had the ships standing still for that reason). New `csCollisionTestLowFps()`: the same scenario with forced long ticks —
+frame time is fed to the game in chunks of `tickMs` (721 ms) so each ship moves `LOW_FPS_STEP_AU` 1.8 AU per tick (the
+owner's measured hitch). A uniform 6 fps (0.42 AU steps) would not reproduce the case — the 1 AU cap passed such steps.
+
+**Live (headless Chrome, seed 11; M home k 0.2 and `sys_003` G k 1, 3 runs each):** ON — `csCollisionTest` 6/6 and
+`csCollisionTestLowFps` 6/6 combat, all `trigger: swept`, ship steps 0.33–3.95 AU per tick; OFF — 0/12 (`sweptSkip:
+flagOff`); battles resolve, test hulls removed, 0 exceptions.
+
+**Keepers.** `swept_proximity_smoke` 27 → 54 pins: existing cases now use a dt consistent with the motion (`civFor(step)`;
+the old `_tick(0.01)` with 0.16 AU steps was physically impossible and is now correctly a teleport); S5 long-tick MOS
+(completion, OFF control, target teleport, pursuer moved, start-of-tick target position, `_tick` snapshot executed); S6 long
+tick (k 1 and k 0.2 swept + rewind; controls green on both sides: same 1.8 AU jump in a short tick, 6 AU jump in a long
+tick, warp arrival, system change; tech multiplier; previous-call dt; orbit carry with a free-flight witness; `_sweepWatch`
+reasons; `summarizeSweep`). Fail-first on the pre-fix working tree (1 AU cap, detached worktree at 98f7316 + the tree's
+files): 37 PASS / 16 FAIL, no abort. Mutations 17/18 killed (fixed 1 AU cap, bound without dt, dt of the current call only,
+no tech multiplier, no body carry ×2, no guard A / B, no system check, MOS: no previous-step sweep, no pursuer-moved check,
+no target jump guard, current instead of start-of-tick target, no start-of-tick snapshot, step not remembered;
+csCollisionTest reason ranking; watch entry missing); survived: `SWEEP_SPEED_MARGIN` 1.5 → 1.0 — a tolerance constant, no
+known producer exceeds speed × tech × dt (not pinned). Earlier part-B mutations re-run on the new code: 7/7 killed. Sweep
+437/437 OK (31 advisory), `check-i18n` PASS.
 
 ## 4. Decisions for Filip (recommendation first)
 
