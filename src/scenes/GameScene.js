@@ -2457,6 +2457,11 @@ export class GameScene {
     window.KOSMOS.surfaceCache = new SurfaceCache();
     window.csCache      = window.KOSMOS.debug?.csCache;        // CS-4b — stan SurfaceCache
     window.csNextSystem = window.KOSMOS.debug?.csNextSystem;   // CS-4b — widok na następny wygenerowany układ (kontrola)
+    window.csShared     = window.KOSMOS.debug?.csShared;       // CS-6a — A/B wspólnego shadera powierzchni na mapie układu
+    // CS-6a — pierwszy initSystem biegnie PRZED nadaniem ziaren / archetypów (wyżej: ziarno zależy od galaktyki), więc przy
+    // fladze ON ciała układu startowego dostały materiały starej ścieżki. Tu, synchronicznie (zanim tekstury terenu się
+    // załadują i ruszy rebake), podmiana na wspólny shader. Flaga OFF: brak wywołania.
+    if (GAME_CONFIG.FEATURES.sharedSurface) this.threeRenderer?.rebuildBodySurfaces?.();
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,

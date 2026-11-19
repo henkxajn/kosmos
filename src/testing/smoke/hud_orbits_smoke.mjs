@@ -134,7 +134,7 @@ const mkR = ({ filter = 'all', build = true } = {}) => {
     scene, _star: { x: 0, y: 0 }, _orbits: new Map(), _planetoidOrbits: new Map(), _moons: new Map(),
     _planets: new Map(PLANETS.map((p) => [p.id, { group: { kids: [], add(o) { this.kids.push(o); } } }])),
     _orbitFilter: filter, _selectedEntityId: null, _hudOrbitKey: null, _hudHoverOrbitId: null, _cleanView: undefined,
-    _clickable: [], _entityByUUID: new Map(), _bakePlanetTexture: () => null,
+    _clickable: [], _entityByUUID: new Map(), _bakePlanetTexture: () => null, _sharedSurfaceMaterial: () => null /* CS-6a: flaga OFF → dzisiejsza ścieżka */,
     _tacticalOrbitMarkers: new Map(), _tradeLines: [], _tradeFireflies: [], _vessels: new Map(), _sensorRingMeshes: new Map(),
     _predictionConeMeshes: new Map(), _enemyAlertMarkers: new Map(), _tacticalGlyphs: new Map(), _hpBars: new Map(),
     _colonyMarkers: { show() {}, hide() {} }, _hideColonyTooltip() {}, _getEntityRadius: () => 0.2, _cameraController: null,

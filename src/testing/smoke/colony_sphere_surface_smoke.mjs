@@ -240,7 +240,9 @@ const files = walk(path.join(REPO, 'src')).map(p => path.relative(REPO, p).repla
 const importers = files.filter(f => /(SurfaceField|SurfacePreviewLogic)\.js['"]/.test(strip(read(f))));
 // CS-4b: SurfaceCache (jedyne wejście do map) i jego worker importują SurfaceField z założenia; ich własny brak
 // podpięcia pilnuje colony_sphere_cache_smoke (C6).
-const CS4B_OWNERS = ['src/systems/SurfaceCache.js', 'src/workers/surface.worker.js'];
+// CS-6a (zmiana podpisana, plan §3.6): logika palet wspólnego shadera bierze z SurfaceField WYŁĄCZNIE seaLevelOf (poziom
+// morza = ten sam kanon co klasyfikacja terenu); pilnuje tego colony_sphere_shader_smoke (S8).
+const CS4B_OWNERS = ['src/systems/SurfaceCache.js', 'src/workers/surface.worker.js', 'src/utils/SurfacePaletteLogic.js'];
 const wired = importers.filter(f => !f.startsWith('src/debug/') && !f.startsWith('src/testing/') && f !== 'src/utils/SurfacePreviewLogic.js'
   && !CS4B_OWNERS.includes(f));
 assert(importers.includes('src/debug/SurfacePreviewDebug.js'), 'świadek: SurfacePreviewDebug importuje SurfaceField');

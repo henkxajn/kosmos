@@ -54,6 +54,14 @@ export const GAME_CONFIG = {
     //     ślad traces/CS3a-sysgen-off-baseline.json). Stare zapisy nietknięte w obu stanach —
     //     ciała są zapisywane w całości. Zmiana w konsoli działa dla NOWEJ gry / nowo generowanego układu.
     seededSystems:        false,
+    // ── ARC COLONY SPHERE CS-6a — wspólny shader powierzchni na mapie układu (plan COLONY_SPHERE §3.6).
+    // ON: planety skaliste / lodowe, księżyce i planetoidy rysuje JEDEN materiał (src/renderer/SurfaceShader.js) karmiony
+    //     mapą LOD z SurfaceCache (worker) i paletą archetypu z rozrzutem z surfaceSeed (src/data/BodyPalettes.js). Bez
+    //     bake'u diffuse, bez PNG normal / roughness, bez „Rebake: N tekstur" przy zmianie układu. Gazowce, powłoka
+    //     atmosfery i chmury bez zmian (CS-6b). Ciało bez ziarna / archetypu idzie starą ścieżką.
+    // OFF (default): dzisiejsza ścieżka nietknięta (ThreeRenderer._sharedSurfaceMaterial zwraca null w pierwszej linii).
+    // Zmiana w konsoli działa po wejściu do innego układu; natychmiast przełącza `csShared()` (podmiana materiałów).
+    sharedSurface:        false,
     // ── Finding 770 — LifeSystem przelicza temperaturę planet z gwiazdą WŁASNEGO układu ciała, a światy macierzyste
     //    (gracza i AI) zostają w paśmie clampu z generacji 5–35 °C (src/utils/HomeworldClimate.js).
     // OFF: stara ścieżka bit w bit (gwiazda domowa dla każdego układu, bez strażnika — dom przy gwieździe M: 10 → −131 °C).

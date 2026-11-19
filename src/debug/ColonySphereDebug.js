@@ -275,5 +275,17 @@ export function colonySphereDebugHelpers() {
     console.log('[csNextSystem]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll, csCache, csNextSystem };
+  // CS-6a — csShared(): przełącza FEATURES.sharedSurface i OD RAZU podmienia materiały ciał aktywnego układu
+  // (ThreeRenderer.rebuildBodySurfaces — bez ruszania kamery i siatek), żeby właściciel mógł porównać A/B w miejscu.
+  const csShared = () => {
+    const F = GAME_CONFIG.FEATURES;
+    F.sharedSurface = !F.sharedSurface;
+    const tr = window.KOSMOS?.threeRenderer;
+    const t0 = performance.now();
+    const bodies = tr?.rebuildBodySurfaces?.() ?? 0;
+    const summary = { sharedSurface: F.sharedSurface, swapped: bodies, rebuildMs: Math.round(performance.now() - t0), ...(tr?.sharedSurfaceStats?.() ?? {}) };
+    console.log('[csShared]', JSON.stringify(summary));
+    return summary;
+  };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll, csCache, csNextSystem, csShared };
 }

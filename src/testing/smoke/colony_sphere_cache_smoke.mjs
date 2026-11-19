@@ -367,9 +367,11 @@ const importers = files.filter(f => /SurfaceCache\.js['"]/.test(strip(read(f))))
 const wired = importers.filter(f => !f.startsWith('src/debug/') && !f.startsWith('src/testing/') && f !== 'src/scenes/GameScene.js');
 assert(importers.includes('src/debug/SurfacePreviewDebug.js') && importers.includes('src/scenes/GameScene.js'), 'świadek: SurfacePreviewDebug i GameScene importują SurfaceCache');
 assert(wired.length === 0, `poza GameScene / debug nikt nie importuje SurfaceCache${wired.length ? ' — ' + wired.join(', ') : ''}`);
-const callers = files.filter(f => !f.startsWith('src/debug/') && !f.startsWith('src/testing/') && f !== 'src/systems/SurfaceCache.js'
+// CS-6a (zmiana podpisana, plan §3.6): mapa układu (ThreeRenderer, za FEATURES.sharedSurface) jest JEDYNYM konsumentem poza debug.
+const callers = files.filter(f => !f.startsWith('src/debug/') && !f.startsWith('src/testing/') && f !== 'src/systems/SurfaceCache.js' && f !== 'src/renderer/ThreeRenderer.js'
   && /surfaceCache\??\.(request|get|prefetchSystem|snapshot)\b|\.prefetchSystem\(/.test(strip(read(f))));
-assert(callers.length === 0, `nikt poza debug nie woła surfaceCache.request / get / prefetchSystem${callers.length ? ' — ' + callers.join(', ') : ''}`);
+assert(callers.length === 0, `nikt poza debug i ThreeRenderer (CS-6a) nie woła surfaceCache.request / get / prefetchSystem${callers.length ? ' — ' + callers.join(', ') : ''}`);
+assert(/cache\.prefetchSystem\(/.test(strip(read('src/renderer/ThreeRenderer.js'))), 'świadek CS-6a: ThreeRenderer woła prefetchSystem');
 const gs = strip(read('src/scenes/GameScene.js'));
 const gsLines = gs.split('\n').filter(l => /SurfaceCache|surfaceCache|csCache/.test(l)).map(l => l.trim());
 assert(gsLines.length === 4 && gsLines.some(l => /^window\.KOSMOS\.surfaceCache = new SurfaceCache\(\);$/.test(l))

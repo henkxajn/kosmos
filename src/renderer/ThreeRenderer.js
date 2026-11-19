@@ -26,6 +26,8 @@ import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
 import { AtmosphereShader }  from './AtmosphereShader.js';
 import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
+import { SurfaceShader }      from './SurfaceShader.js';                       // CS-6a — wspólny shader powierzchni
+import { resolveSurfaceLook, surfaceSeaLevelOf } from '../utils/SurfacePaletteLogic.js';
 import { rendererRandom } from './RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
 import { PresentationClock } from './combat/PresentationClock.js';   // ARC CV-2a (D-CV-10) — zegar prezentacji: pauza = pauza
 import { FxEngine, LIVE_CV_FX } from './combat/FxEngine.js';         // ARC CV-2a — silnik FX walki na pulach (flaga cvFxEngine)
@@ -503,6 +505,14 @@ export class ThreeRenderer {
     this._lifeGlows    = new Map();   // planetId → Sprite (dziecko group planety)
     this._moons        = new Map();   // moonId → { mesh, ring, parentEntry }
     this._planetoids       = new Map();   // planetoidId → { mesh }
+    // CS-6a — ciała na wspólnym shaderze powierzchni (FEATURES.sharedSurface): bodyId → { body, material, … }.
+    // Pusty przy fladze OFF (wtedy _tickSharedSurfaces wychodzi w pierwszej linii).
+    this._sharedSurfaces       = new Map();
+    this._sharedPrefetchDone   = false;
+    this._sharedSurfaceLastTick = 0;
+    this._sharedHeroId         = null;   // ciało z mapą bohatera 1024×512 (zbliżenie; jedno na raz)
+    this._sharedHeroTick       = 0;
+    this._sharedFillLight      = null;   // dopełnienie światła gwiazdy (zmiękczony odcień dla całej sceny), tylko flaga ON
     this._planetoidOrbits  = new Map();   // planetoidId → Line (ukryte domyślnie)
     this._entityByUUID = new Map();   // mesh.uuid → entity
     this._clickable    = [];
@@ -2017,6 +2027,9 @@ export class ThreeRenderer {
       this._hudHoverOrbitId = entityId ?? null;
       this._hudRestyleOrbits();
     }));
+
+    // CS-6a — mapa powierzchni gotowa w SurfaceCache → podmiana tekstury w istniejącym materiale (bez przebudowy siatki).
+    EventBus.on('surface:ready', safe(({ bodyId }) => this._onSurfaceReady(bodyId)));
   }
 
   // ── Inicjalizacja układu ─────────────────────────────────────
@@ -2026,6 +2039,7 @@ export class ThreeRenderer {
     // Ładuj tekstury PNG budynków dla mapy 2D kolonii (async, cichy fallback do emoji)
     loadBuildingTextures();
 
+    this._sharedPrefetchDone = false;   // CS-6a — nowy układ: prefetch map powierzchni przy pierwszym ticku
     this.renderStar(star);
     planets.forEach(p => this.addPlanetMesh(p));
     moons.forEach(m => this._addMoonMesh(m));
@@ -2521,6 +2535,249 @@ export class ThreeRenderer {
 
   // ── Bake diffuse texture planety ────────────────────────────────────────────
   // Priorytet: tekstury terenu z mapy 2D → fallback na shader proceduralny
+  // ── CS-6a — wspólny shader powierzchni (FEATURES.sharedSurface; plan COLONY_SPHERE §3.6) ──────────────
+  // Planety skaliste / lodowe, księżyce i planetoidy dostają JEDEN materiał (SurfaceShader) karmiony mapą LOD z
+  // SurfaceCache (worker). Do czasu nadejścia mapy materiał pokazuje barwę zastępczą z palety archetypu; mapa wchodzi
+  // w ISTNIEJĄCY materiał (uniform), bez przebudowy siatki. Gazowce, powłoka atmosfery i chmury zostają jak są (CS-6b).
+  // ⚠ Flaga OFF: `_sharedSurfaceMaterial` zwraca null w pierwszej linii — żadna z trzech ścieżek budowy nie zmienia się.
+
+  /** Materiał wspólnego shadera dla ciała albo null (flaga OFF, gaz, brak ziarna / archetypu → dzisiejsza ścieżka). */
+  _sharedSurfaceMaterial(body) {
+    if (!GAME_CONFIG.FEATURES?.sharedSurface) return null;
+    let look = null;
+    try { look = resolveSurfaceLook(body, this._star?.spectralType); }
+    catch (err) { console.warn('[ThreeRenderer] shared surface look error:', body?.id, err); }
+    if (!look) return null;
+    const material = SurfaceShader.createSurfaceMaterial(THREE, look, { logDepth: logDepthOn(), surfaceSeed: body.surfaceSeed });
+    const rec = { body, material, requested: false, textured: false, fade: false, t0: performance.now(), readyMs: null,
+      sea: undefined, hero: false };
+    this._sharedSurfaces.set(body.id, rec);
+    // Tekstura mapy jest własnością materiału (zwalnia ją SurfaceShader na `dispose`); tu tylko wypis z rejestru —
+    // każda ścieżka sprzątania (zmiana układu, usunięcie ciała, _updatePlanetMesh) woła material.dispose().
+    material.addEventListener('dispose', () => {
+      if (this._sharedSurfaces.get(body.id) === rec) this._sharedSurfaces.delete(body.id);
+    });
+    return material;
+  }
+
+  /** Mapa z SurfaceCache → tekstura w materiale ciała. `instant` = trafienie w cache przy budowie (bez przejścia). */
+  _applySharedSurfaceMap(bodyId, map, instant = false) {
+    const rec = this._sharedSurfaces.get(bodyId);
+    if (!rec || rec.textured || !map) return;
+    if (!SurfaceShader.applySurfaceMap(THREE, rec.material, map, this._sharedSeaLevel(rec), instant)) return;
+    rec.textured = true;
+    rec.fade = !instant;
+    rec.readyMs = performance.now() - rec.t0;
+  }
+
+  /** Poziom morza ciała (liczony raz na rekord — kalibracja SurfaceField to kilka ms). */
+  _sharedSeaLevel(rec) {
+    if (rec.sea === undefined) {
+      rec.sea = -1;
+      try { rec.sea = surfaceSeaLevelOf(rec.body); } catch (err) { /* bez morza */ }
+    }
+    return rec.sea;
+  }
+
+  /** Siatka ciała ze wspólnym shaderem (planeta / księżyc / planetoida) albo null. */
+  _sharedSurfaceMesh(bodyId) {
+    return this._planets.get(bodyId)?.mesh ?? this._moons.get(bodyId)?.mesh ?? this._planetoids.get(bodyId)?.mesh ?? null;
+  }
+
+  /** Średnica tarczy ciała na ekranie [px urządzenia] — miara „czy mapa LOD jest już za mała". */
+  _sharedSurfacePx(bodyId, pxPerUnit) {
+    const mesh = this._sharedSurfaceMesh(bodyId);
+    if (!mesh?.geometry) return 0;
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const r = mesh.geometry.boundingSphere.radius * mesh.matrixWorld.getMaxScaleOnAxis();
+    const e = mesh.matrixWorld.elements, c = this.camera.position;
+    const dx = e[12] - c.x, dy = e[13] - c.y, dz = e[14] - c.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    return dist > r ? (2 * r * pxPerUnit) / dist : 1e9;
+  }
+
+  /**
+   * Strojenie CS-6a (§3.6.1, pkt 5) — ostrość na zbliżeniu: ciało o największej tarczy na ekranie dostaje mapę
+   * bohatera 1024×512 z SurfaceCache (worker — bez przycięcia klatki), po oddaleniu wraca do mapy LOD.
+   * Jedno ciało na raz; próg i histereza: SurfaceShader.SURFACE_HERO_PX / surfaceHeroDecision.
+   */
+  _tickSurfaceHero(cache) {
+    if ((this._sharedHeroTick = (this._sharedHeroTick + 1) % 6) !== 0) return;
+    const pxPerUnit = this.renderer.domElement.height / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+    let bestId = null, bestPx = 0;
+    for (const [id, rec] of this._sharedSurfaces) {
+      if (!rec.textured) continue;
+      const px = this._sharedSurfacePx(id, pxPerUnit);
+      if (px > bestPx) { bestPx = px; bestId = id; }
+    }
+    const curId = this._sharedSurfaces.has(this._sharedHeroId) ? this._sharedHeroId : null;
+    const curPx = curId ? this._sharedSurfacePx(curId, pxPerUnit) : 0;
+    const verdict = SurfaceShader.surfaceHeroDecision(curPx, bestPx, bestId !== null && bestId === curId);
+    if (verdict === 'keep') return;
+    // Stary bohater wraca do mapy LOD (z cache; wyparta z cache → zamówienie, do tego czasu zostaje mapa bohatera).
+    if (curId) {
+      const old = this._sharedSurfaces.get(curId);
+      if (old.hero) {
+        const back = (map) => {
+          if (!map || this._sharedSurfaces.get(curId) !== old || this._sharedHeroId === curId) return;
+          if (SurfaceShader.applySurfaceMap(THREE, old.material, map, this._sharedSeaLevel(old), true)) old.hero = false;
+        };
+        const lod = cache.get(old.body);
+        this._sharedHeroId = null;
+        if (lod) back(lod); else cache.request(old.body).then(back);
+      }
+    }
+    this._sharedHeroId = verdict === 'best' ? bestId : null;
+    if (!this._sharedHeroId) return;
+    const id = this._sharedHeroId, rec = this._sharedSurfaces.get(id);
+    const apply = (map) => {
+      if (!map || this._sharedHeroId !== id || this._sharedSurfaces.get(id) !== rec || rec.hero) return;
+      if (SurfaceShader.applySurfaceMap(THREE, rec.material, map, this._sharedSeaLevel(rec), true)) rec.hero = true;
+    };
+    const hit = cache.get(rec.body, 'hero');
+    if (hit) apply(hit); else cache.request(rec.body, 'hero', 'focus').then(apply);
+  }
+
+  /**
+   * Strojenie CS-6a (§3.6.1, pkt 6) — jeden wspólny, zmiękczony odcień gwiazdy dla CAŁEJ sceny: drugi PointLight w
+   * miejscu gwiazdy dopełnia surową barwę do `surfaceSunColor` (SURFACE_SUN_TINT). Gazowce (GasGiantShader nietknięty)
+   * i skały dostają tę samą barwę światła. Powstaje dopiero przy fladze ON; `on = false` go gasi (csShared → OFF).
+   */
+  _syncSharedFillLight(on) {
+    const light = this._starLight;
+    if (!on || !light) { if (this._sharedFillLight) this._sharedFillLight.visible = false; return; }
+    if (!this._sharedFillLight) {
+      this._sharedFillLight = new THREE.PointLight(0x000000, 0, 0, 0);
+      this.scene.add(this._sharedFillLight);
+    }
+    const fill = this._sharedFillLight;
+    const c = SurfaceShader.surfaceFillLightColor(light.color.r, light.color.g, light.color.b);
+    fill.visible = true;
+    fill.color.setRGB(c[0], c[1], c[2]);
+    fill.intensity = light.intensity;
+    fill.position.copy(light.position);
+  }
+
+  /** `surface:ready` — mapa ciała trafiła do cache. */
+  _onSurfaceReady(bodyId) {
+    const rec = this._sharedSurfaces.get(bodyId);
+    if (!rec || rec.textured) return;
+    const map = window.KOSMOS?.surfaceCache?.get?.(rec.body);
+    if (map) this._applySharedSurfaceMap(bodyId, map);
+  }
+
+  /**
+   * Co klatkę (czas realny): światło gwiazdy → uniformy wspólne, zamówienia map (leniwie — przy starcie gry
+   * SurfaceCache powstaje PO initSystem), przejście barwa zastępcza → mapa.
+   */
+  _tickSharedSurfaces() {
+    if (this._sharedSurfaces.size === 0) return;
+    const now = performance.now();
+    const dt = Math.min(0.1, Math.max(0, (now - (this._sharedSurfaceLastTick || now)) / 1000));
+    this._sharedSurfaceLastTick = now;
+
+    const U = SurfaceShader.SURFACE_SHARED_UNIFORMS;
+    const light = this._starLight;
+    if (light) {
+      U.uSunPos.value[0] = light.position.x; U.uSunPos.value[1] = light.position.y; U.uSunPos.value[2] = light.position.z;
+      SurfaceShader.surfaceSunColor(light.color.r, light.color.g, light.color.b, light.intensity, U.uSunColor.value);
+    }
+    this._syncSharedFillLight(true);
+    const amb = this._ambient;
+    if (amb) {
+      const k = amb.intensity / Math.PI;
+      U.uAmbient.value[0] = amb.color.r * k; U.uAmbient.value[1] = amb.color.g * k; U.uAmbient.value[2] = amb.color.b * k;
+    }
+
+    const cache = window.KOSMOS?.surfaceCache;
+    for (const [id, rec] of this._sharedSurfaces) {
+      if (!rec.requested && cache) {
+        if (!this._sharedPrefetchDone) {
+          this._sharedPrefetchDone = true;
+          cache.prefetchSystem(window.KOSMOS?.activeSystemId ?? 'sys_home');   // priorytety: planety > księżyce > planetoidy
+        }
+        rec.requested = true;
+        const hit = cache.get(rec.body);
+        if (hit) this._applySharedSurfaceMap(id, hit, true);
+        else cache.request(rec.body).then(map => this._applySharedSurfaceMap(id, map));
+      }
+      if (rec.fade) {
+        const u = rec.material.uniforms.uMapMix;
+        u.value = Math.min(1, u.value + dt / SurfaceShader.SURFACE_FADE_SECONDS);
+        if (u.value >= 1) rec.fade = false;
+      }
+    }
+    if (cache) this._tickSurfaceHero(cache);
+  }
+
+  /** Stan wspólnego shadera (debug `csShared`, sondy): ile ciał, ile z mapą, najdłuższy czas do mapy. */
+  sharedSurfaceStats() {
+    let textured = 0, maxReadyMs = 0;
+    for (const rec of this._sharedSurfaces.values()) {
+      if (rec.textured) { textured++; if (rec.readyMs > maxReadyMs) maxReadyMs = rec.readyMs; }
+    }
+    const bodies = this._sharedSurfaces.size;
+    const hero = this._sharedSurfaces.get(this._sharedHeroId);
+    return { enabled: !!GAME_CONFIG.FEATURES?.sharedSurface, bodies, textured, pending: bodies - textured, maxReadyMs: Math.round(maxReadyMs),
+      hero: hero ? this._sharedHeroId : null, heroReady: !!hero?.hero, fillLight: !!this._sharedFillLight?.visible };
+  }
+
+  /**
+   * INSTRUMENT A/B (debug `csShared()`): materiał DZISIEJSZEJ ścieżki dla ciała — kopia przepisu z addPlanetMesh /
+   * _addMoonMesh / _initPlanetoids (bake diffuse + PNG normal / roughness, potem PNG, potem płaski kolor).
+   * ⚠ Używa go WYŁĄCZNIE rebuildBodySurfaces; ścieżki gry budują materiał po staremu, u siebie. Znika razem ze starym
+   *   potokiem tekstur (CS-Z).
+   */
+  _legacyBodyMaterial(body, kind) {
+    const metalness = kind === 'planet' ? 0.05 : (kind === 'moon' ? 0.02 : (body.planetoidType === 'metallic' ? 0.25 : 0.05));
+    const seed = hashCode(kind === 'moon' ? (body.id || 'moon') : String(body.id));
+    const texType = resolveTextureType(body);
+    const maps = texType ? loadPlanetTextures(texType, (seed % TEXTURE_VARIANTS) + 1) : null;
+    let baked = null;
+    try { baked = this._bakePlanetTexture(body); } catch (err) { /* fallback niżej */ }
+    if (baked) {
+      const m = new THREE.MeshStandardMaterial({ map: baked, normalMap: maps?.normal ?? null, roughnessMap: maps?.roughness ?? null, metalness });
+      m.userData.bakedDiffuse = true;   // diffuse jest własnością TEGO materiału → zwalniany przy kolejnej podmianie
+      return m;
+    }
+    if (maps) return new THREE.MeshStandardMaterial({ map: maps.diffuse, normalMap: maps.normal, roughnessMap: maps.roughness, metalness });
+    return new THREE.MeshStandardMaterial({
+      color: body.visual?.color ?? (kind === 'planetoid' ? 0x998877 : 0x888888),
+      metalness: kind === 'moon' ? 0.02 : 0.05, roughness: kind === 'moon' ? 0.85 : 0.7,
+    });
+  }
+
+  /**
+   * Przebuduj MATERIAŁY ciał aktywnego układu wg bieżącej flagi FEATURES.sharedSurface — bez ruszania siatek, kamery,
+   * orbit, atmosfer i chmur (natychmiastowe A/B dla właściciela). Zwraca liczbę podmienionych ciał.
+   */
+  rebuildBodySurfaces() {
+    let n = 0;
+    // ⚠ Kolejność: NAJPIERW nowy materiał (rejestr dostaje nowy wpis pod tym samym id), POTEM dispose starego —
+    //   słuchacz dispose usuwa wpis tylko wtedy, gdy nadal wskazuje na swój rekord.
+    const swap = (mesh, body, kind) => {
+      if (!mesh || !body || body.planetType === 'gas' || mesh.material?.userData?.gasUniforms) return;
+      const shared = this._sharedSurfaceMaterial(body);
+      if (!shared && !mesh.material?.userData?.surfaceShader) return;   // już materiał starej ścieżki — nic do podmiany
+      const next = shared ?? this._legacyBodyMaterial(body, kind);
+      const old = mesh.material;
+      mesh.material = next;
+      if (old) {
+        // Diffuse starej ścieżki: zwolnienie pamięci GPU (tekstura z cache PNG wgra się ponownie przy następnym użyciu).
+        if (!old.userData?.surfaceShader && old.map) old.map.dispose();
+        old.dispose();   // materiał wspólnego shadera: zwalnia mapę i wypisuje się z rejestru (zdarzenie dispose)
+      }
+      n++;
+    };
+    for (const e of this._planets.values()) swap(e.mesh, e.planet, 'planet');
+    for (const e of this._moons.values()) swap(e.mesh, e.moon, 'moon');
+    for (const e of this._planetoids.values()) swap(e.mesh, e.planetoid, 'planetoid');
+    this._sharedPrefetchDone = false;
+    this._sharedHeroId = null;
+    if (!GAME_CONFIG.FEATURES?.sharedSurface) this._syncSharedFillLight(false);   // OFF: scena wraca do surowego światła gwiazdy
+    return n;
+  }
+
   _bakePlanetTexture(planet) {
     // ── Tryb 1: mapa kolorów z tekstur terenu (1:1 z mapą 2D) ──────────────
     if (texturesLoaded()) {
@@ -2738,6 +2995,9 @@ export class ThreeRenderer {
           });
         }
       }
+    } else if ((material = this._sharedSurfaceMaterial(planet))) {
+      // CS-6a (FEATURES.sharedSurface) — wspólny shader powierzchni: bez bake'u diffuse i bez PNG normal / roughness.
+      // Flaga OFF albo ciało bez wyglądu → null → dzisiejsza ścieżka niżej, nietknięta.
     } else {
       // RTT bake — proceduralny diffuse z BiomeMap + PlanetShader
       let bakedDiffuse = null;
@@ -2866,6 +3126,8 @@ export class ThreeRenderer {
           });
         }
       }
+    } else if ((mesh.material = this._sharedSurfaceMaterial(planet))) {
+      // CS-6a — wspólny shader powierzchni (stary materiał zwolniony wyżej razem ze swoją mapą).
     } else {
       const texType = resolveTextureType(planet);
       if (texType) {
@@ -3211,8 +3473,8 @@ export class ThreeRenderer {
     const geo = new THREE.SphereGeometry(r, 24, 16);
 
     // Tekstura: terrain-based diffuse (hex grid → generateColorMap) lub PBR fallback
-    let mat;
-    try {
+    let mat = this._sharedSurfaceMaterial(moon);   // CS-6a — null przy fladze OFF → dzisiejsza ścieżka
+    if (!mat) try {
       const bakedDiffuse = this._bakePlanetTexture(moon);
       if (bakedDiffuse) {
         const texType = resolveTextureType(moon);
@@ -3418,8 +3680,8 @@ export class ThreeRenderer {
 
       // Tekstura: terrain-based diffuse (hex grid) lub PBR fallback
       const isMetallic = p.planetoidType === 'metallic';
-      let mat;
-      try {
+      let mat = this._sharedSurfaceMaterial(p);   // CS-6a — null przy fladze OFF → dzisiejsza ścieżka
+      if (!mat) try {
         const bakedDiffuse = this._bakePlanetTexture(p);
         if (bakedDiffuse) {
           const texType = resolveTextureType(p);
@@ -4534,6 +4796,7 @@ export class ThreeRenderer {
         this._tickGasMaterials();        // C1a — uDetail + kierunek światła żywych gazowców
         this._tickSunMaterials();        // S1 — drabina gwiazdy (bramkowane liveSunShader)
         this._tickAtmoMaterials();       // V3/A0 — siła powłoki atmosfery (bramkowane dayNightAtmosphere)
+        this._tickSharedSurfaces();      // CS-6a — światło, zamówienia map i przejścia wspólnego shadera (pusty rejestr = no-op)
         this._syncHudOrbits();           // ARKUSZ HUD H0 — orbity w kolorach motywu: epoka motywu, dom (510), chip [O]
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
