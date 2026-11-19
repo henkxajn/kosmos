@@ -2458,6 +2458,9 @@ export class GameScene {
     window.csCache      = window.KOSMOS.debug?.csCache;        // CS-4b — stan SurfaceCache
     window.csNextSystem = window.KOSMOS.debug?.csNextSystem;   // CS-4b — widok na następny wygenerowany układ (kontrola)
     window.csShared     = window.KOSMOS.debug?.csShared;       // CS-6a — A/B wspólnego shadera powierzchni na mapie układu
+    window.csDeck       = window.KOSMOS.debug?.csDeck;         // CS-6b — kamera na ciało z pokładem / mgłą
+    window.csLocked     = window.KOSMOS.debug?.csLocked;       // CS-6b — kamera na planetę związaną pływowo
+    window.csHaze       = window.KOSMOS.debug?.csHaze;         // CS-6b — nieprzezroczystość pokładu ciała pod kamerą
     // CS-6a — pierwszy initSystem biegnie PRZED nadaniem ziaren / archetypów (wyżej: ziarno zależy od galaktyki), więc przy
     // fladze ON ciała układu startowego dostały materiały starej ścieżki. Tu, synchronicznie (zanim tekstury terenu się
     // załadują i ruszy rebake), podmiana na wspólny shader. Flaga OFF: brak wywołania.

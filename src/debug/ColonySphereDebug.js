@@ -19,6 +19,11 @@
 //                    samą drogą co mapa galaktyki (`switchActiveSystem`). Niczego nie generuje; tylko kontrola właściciela
 //                    (pokazuje układ AI, którego gracz jeszcze nie odkrył — używać na grze testowej).
 //
+//   csShared() — CS-6a: A/B wspólnego shadera powierzchni (przełącza FEATURES.sharedSurface i podmienia materiały).
+//   csDeck() / csLocked() — CS-6b: kamera na kolejne ciało z pokładem / mgłą (hothouse, cryo_haze, hazy_moon) albo na
+//                    planetę związaną pływowo; gdy w układzie nie ma (więcej) — przechodzi do następnego układu.
+//   csHaze(v) — CS-6b: nieprzezroczystość pokładu / mgły ciała pod kamerą (0…1); bez argumentu = wartość z archetypu.
+//
 // Wywołanie: `csWorlds()` / `csPeek()` / `csArchetypes()` (window) albo `KOSMOS.debug.csWorlds()` itd.
 // Importowalne pod node (bez THREE) — keeper colony_sphere_seeds_smoke wykonuje oba pomocniki.
 
@@ -287,5 +292,51 @@ export function colonySphereDebugHelpers() {
     console.log('[csShared]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll, csCache, csNextSystem, csShared };
+  // CS-6b — csDeck() / csLocked(): pokaż kolejne ciało z pokładem lub mgłą (hothouse / cryo_haze / hazy_moon) albo
+  // planetę związaną pływowo. Najpierw aktywny układ (kolejne wywołania przechodzą po jego ciałach), potem następne
+  // wygenerowane układy (csNextSystem), aż coś znajdzie. Kamera renderera zbliża się do ciała od strony dnia.
+  const DECK_ARCHETYPES = new Set(['hothouse', 'cryo_haze', 'hazy_moon']);
+  const seen = { deck: new Set(), locked: new Set() };
+  const csFind = (kind, test) => {
+    const K = window.KOSMOS ?? {}, tr = K.threeRenderer, em = K.entityManager;
+    const systems = (K.starSystemManager?.getAllSystems?.() ?? []).length || 1;
+    for (let hop = 0; hop <= systems; hop++) {
+      const sys = K.activeSystemId ?? 'sys_home';
+      const bodies = [...(em?.getByTypeInSystem?.('planet', sys) ?? []), ...(em?.getByTypeInSystem?.('moon', sys) ?? [])].filter(test);
+      const body = bodies.find(b => !seen[kind].has(b.id));
+      if (body) {
+        seen[kind].add(body.id);
+        const mesh = tr?._planets?.get(body.id)?.group ?? tr?._moons?.get(body.id)?.mesh;
+        const cc = tr?._cameraController;
+        if (mesh && cc) {
+          tr._focusVesselId = null; tr._focusStationId = null; tr._focusEntityId = body.id;
+          const r = tr._getEntityRadius(body);
+          cc.setMinDist?.(0.05);
+          cc.applyView({ target: { x: mesh.position.x, y: 0, z: mesh.position.z }, theta: Math.atan2(-mesh.position.z, -mesh.position.x) + 0.96, phi: 1.22, dist: Math.max(r * 4.2, 0.12) });
+        }
+        const summary = { system: sys, body: body.name, id: body.id, archetype: body.bodyArchetype, atmosphere: body.atmosphere ?? null,
+          tidallyLocked: body.tidallyLocked === true, hazeOpacity: tr?.bodyHazeOpacity?.(body.id) ?? null, moreHere: bodies.filter(b => !seen[kind].has(b.id)).length };
+        console.log(`[cs${kind === 'deck' ? 'Deck' : 'Locked'}]`, JSON.stringify(summary));
+        return summary;
+      }
+      if (!csNextSystem().to) break;
+    }
+    seen[kind].clear();
+    console.warn(`[cs${kind === 'deck' ? 'Deck' : 'Locked'}] nic więcej w wygenerowanych układach — kolejne wywołanie zaczyna od początku`);
+    return null;
+  };
+  const csDeck = () => csFind('deck', b => DECK_ARCHETYPES.has(b.bodyArchetype));
+  const csLocked = () => csFind('locked', b => b.type === 'planet' && b.bodyArchetype === 'tidally_locked');   // D-CS-23: tylko archetyp (sama flaga nie zatrzymuje obrotu)
+  // CS-6b — csHaze(v): nieprzezroczystość pokładu / mgły ciała pod kamerą (0…1) — JEDEN parametr, który CS-7 rozrzedzi
+  // w widoku kolonii. csHaze() bez argumentu przywraca wartość z archetypu. Tylko podgląd (nic nie zapisuje).
+  const csHaze = (value) => {
+    const tr = window.KOSMOS?.threeRenderer;
+    const id = tr?._focusEntityId, rec = id != null ? tr?._sharedSurfaces?.get(id) : null;
+    if (!rec?.air) { console.warn('[csHaze] ciało pod kamerą nie ma powłoki powietrza (najpierw csDeck())'); return null; }
+    const set = tr.bodyHazeOpacity(id, value === undefined ? rec.air.look.hazeOpacity : value);
+    const summary = { id, archetype: rec.body.bodyArchetype, hazeOpacity: set, archetypeDefault: rec.air.look.hazeOpacity };
+    console.log('[csHaze]', JSON.stringify(summary));
+    return summary;
+  };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze };
 }

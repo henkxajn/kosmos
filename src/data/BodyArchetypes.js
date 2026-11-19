@@ -19,6 +19,8 @@
 //     palety klasy gwiazdy), żeby dwa światy tego samego archetypu nigdy nie wyglądały identycznie,
 //   • CS-11 (gazowe olbrzymy) — `gasPreset` (D-CS-5: domyślnie i awaryjnie DZISIEJSZY wygląd).
 // ⚠ Wartości `field`, `atmosphere`, `clouds` to PLACEHOLDERY — strojone w CS-4 / CS-6 (nie są pinowane keeperami).
+// ⚠ CS-6b: `atmosphere` / `clouds` w wierszach NIE są już czytane — żywe dane powietrza to src/data/BodyAtmospheres.js
+//   (Finding 772: usunąć placeholdery w CS-Z).
 // CS-4a (SurfaceField, plan §3.4) — `field` strojony na arkuszu kontaktowym; przepis = id archetypu. Pokrętła:
 //   octaves, freq (bazowa częstotliwość), warp (zniekształcenie domeny), ridge (grzbiety), relief (amplituda ciał bez
 //   atmosfery), continent (udział niskiej częstotliwości — kontynenty), craterDensity / craterScale / craterDepth,
@@ -26,7 +28,9 @@
 //   seaFromWaterCoverage (terran: morze = zapisane waterCoverage) albo seaShare (stały udział cieczy), tropic / wetBias,
 //   islands (ocean), lava / calderas (volcanic), volcanoes (hothouse), polarLow (jeziora Tytana przy biegunach),
 //   maria (Księżyc), scarps (Merkury), veins (żyły planetoid), patches (ciemne plamy), cracks (lineae), paterae (Io),
-//   regional (gęstość kraterów: stare wyżyny vs równiny), lavaPlains (scorched: ciemne gładkie równiny lawowe),
+//   regional (gęstość kraterów: stare wyżyny vs równiny), regionalDepth (głębokość spadku gęstości na równinach,
+//   domyślnie 0.8) i highlandBoost (dodatkowa gęstość na wyżynach, domyślnie 0) — CS-6b, dziś tylko barren,
+//   lavaPlains (scorched: ciemne gładkie równiny lawowe),
 //   rifts / oldIce (ice: ryfty, regiony starego lodu i gładkich równin).
 //
 // ── Reguły dopasowania (`match`) ──────────────────────────────────────────────────────────────────────────────
@@ -313,7 +317,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { atmosphere: ['none'], priority: 30 },   // bezatmosferyczny, słabe światło (Księżyc / Kallisto)
       { priority: 0 },                          // fallback rodziny planet
     ],
-    field: { octaves: 5, warp: 0.1, ridge: 0.4, craterDensity: 0.6, seaFromWaterCoverage: false, polarCapBias: 0.2, basinChance: 0.3, regional: 0.8, relief: 0.25, freq: 1.3 },
+    field: { octaves: 5, warp: 0.1, ridge: 0.4, craterDensity: 0.6, seaFromWaterCoverage: false, polarCapBias: 0.2, basinChance: 0.3, regional: 0.95, regionalDepth: 1.0, highlandBoost: 0.35, lavaPlains: 0.7, relief: 0.25, freq: 1.3 },
     biomes: [
       { class: 'regolith_plain', terrain: 'wasteland', colorRole: 'regolith' },
       { class: 'crater_floor', terrain: 'crater', colorRole: 'darkRock' },
@@ -371,7 +375,7 @@ export const BODY_ARCHETYPES = Object.freeze([
       { moonType: ['rocky'], priority: 10 },   // Księżyc-like
       { priority: 0 },                         // fallback rodziny moon
     ],
-    field: { octaves: 5, warp: 0.1, ridge: 0.35, craterDensity: 0.7, seaFromWaterCoverage: false, polarCapBias: 0.2, maria: 1.0, basinChance: 0.25, regional: 0.5, relief: 0.25, freq: 1.3 },
+    field: { octaves: 5, warp: 0.1, ridge: 0.35, craterDensity: 0.98, seaFromWaterCoverage: false, polarCapBias: 0.2, maria: 1.0, basinChance: 0.25, regional: 0.5, relief: 0.25, freq: 1.3 },
     biomes: [
       { class: 'highlands', terrain: 'wasteland', colorRole: 'highland' },
       { class: 'maria', terrain: 'wasteland', colorRole: 'mare' },
@@ -419,7 +423,7 @@ export const BODY_ARCHETYPES = Object.freeze([
   {
     id: 'icy_cratered', family: 'moon', nameKey: 'archetype.icy_cratered.name',
     match: [{ moonType: ['icy'], priority: 10 }],   // Kallisto-like (zewnętrzny, stara skorupa)
-    field: { octaves: 5, warp: 0.15, ridge: 0.45, craterDensity: 0.85, seaFromWaterCoverage: false, polarCapBias: 1.0, patches: 1.0, regional: 0.7, relief: 0.2, freq: 1.3 },
+    field: { octaves: 5, warp: 0.15, ridge: 0.45, craterDensity: 1.19, seaFromWaterCoverage: false, polarCapBias: 1.0, patches: 1.0, regional: 0.7, relief: 0.2, freq: 1.3 },
     biomes: [
       { class: 'ice_plain', terrain: 'ice_sheet', colorRole: 'dirtyIce' },
       { class: 'crater_floor', terrain: 'crater', colorRole: 'dirtyIce' },

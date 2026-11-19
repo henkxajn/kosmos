@@ -174,11 +174,8 @@ vec2 dirToUv(vec3 d) {
 // Cieniowanie krateru z kanału a (0.5 = brak, < 0.5 dno, > 0.5 wał).
 vec3 craterShade(vec3 c, float a, float k) { return c * (1.0 + (a - 0.5) * k); }
 
-// terran / ocean / jungle — progi jak cTerran / cOcean / cJungle.
-// ⚠ Dwa świadome odstępstwa od klasyfikatora (strojenie CS-6a, plan §3.6.1): kanał e pola nasyca się na 1.0, więc
-//   przy dużym pokryciu wodą większość lądu ma h ≈ 1 (klasy mountains / peaks). Na mapie układu góry są więc
-//   porośnięte (ciemniejsza roślinność), a goła skała wychodzi tylko tam, gdzie sucho albo na grzbietach szumu;
-//   śnieg szczytów wymaga dodatkowo chłodu (t), nie samej wysokości.
+// terran / ocean / jungle — progi jak cTerran / cOcean / cJungle (CS-6b: pole v3 nie nasyca już kanału e — Finding
+// 771 — więc góry to skała, a śnieg szczytów leży dokładnie tam, gdzie klasyfikator daje klasę peaks: h > 0.45 + 0.7·t).
 vec3 lookTerran(float e, float m, float t, float a) {
   float sea = uA.x, capT = uA.y, mode = uA.z;
   float h = clamp((e - sea) / max(1.0 - sea, 0.001), 0.0, 1.0);
@@ -189,23 +186,23 @@ vec3 lookTerran(float e, float m, float t, float a) {
   if (mode > 1.5) {
     c = mix(P3, P4, ss(0.30, 0.42, m));
     c = mix(c, P7, ss(0.62, 0.72, m) * (1.0 - ss(0.10, 0.18, h)));
-    mt = ss(0.52, 0.66, h);
+    mt = ss(0.54, 0.66, h);
     patchK = 0.12;
   } else if (mode > 0.5) {
     c = mix(P3, P4, ss(0.42, 0.58, m));
-    mt = ss(0.36, 0.52, h);
+    mt = ss(0.49, 0.61, h);
   } else {
     c = mix(P2, P3, ss(0.27, 0.39, m));
     c = mix(c, P4, ss(0.52, 0.66, m));
     c = mix(c, P7, 1.0 - ss(capT + 0.08, capT + 0.20, t));
-    mt = ss(0.48, 0.62, h);
-    iceLand = ss(0.0, 0.06, h - (0.45 + 0.7 * t)) * (1.0 - ss(0.34, 0.52, t)) * ss(0.30, 0.55, gNa);
+    mt = ss(0.48, 0.60, h);
+    iceLand = ss(-0.02, 0.04, h - (0.45 + 0.7 * t));
   }
   // Płaty suchszej roślinności (szum) — ląd nie jest jedną plamą farby.
   c = mix(c, mix(c, P2, 0.55), ss(0.56, 0.82, gNb) * patchK);
-  // Góry: ciemniejsza roślinność regla; goła skała tylko gdzie sucho / na grzbietach.
-  float bare = mt * clamp(0.08 + 0.62 * (1.0 - ss(0.28, 0.60, m)) + (gNa - 0.5) * 0.8, 0.0, 0.72);
-  c *= 1.0 - 0.18 * mt;
+  // Góry = skała (klasa mountains); w wilgotnym klimacie częściowo porośnięte, szum łamie krawędź pasma.
+  float bare = mt * clamp(0.82 - 0.28 * ss(0.50, 0.80, m) + (gNa - 0.5) * 0.5, 0.0, 1.0);
+  c *= 1.0 - 0.12 * mt;
   c = mix(c, P5, bare);
   // Plaża: wąski, niejaskrawy pas tuż nad wodą.
   c = mix(c, mix(P2, vec3(0.8), 0.12), (1.0 - ss(0.0, 0.012, h)) * 0.22);

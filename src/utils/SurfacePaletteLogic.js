@@ -26,12 +26,12 @@ const SALT_PALETTE = 0x43533661;   // 'CS6a'
 /** Liczba z [0, 1) z ziarna i numeru strumienia (splitmix — jak reszta arca). */
 function unit(seed, n) { return mixSeed(combineSeeds(seed >>> 0, SALT_PALETTE, n)) / 4294967296; }
 
-function hexToRgb(hex) {
+export function hexToRgb(hex) {
   const n = parseInt(String(hex).replace('#', ''), 16);
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-function rgbToHsv([r, g, b]) {
+export function rgbToHsv([r, g, b]) {
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
   let h = 0;
   if (d > 0) {
@@ -41,7 +41,7 @@ function rgbToHsv([r, g, b]) {
   return [h, mx > 0 ? d / mx : 0, mx];
 }
 
-function hsvToRgb([h, s, val]) {
+export function hsvToRgb([h, s, val]) {
   const c = val * s, hp = (((h % 360) + 360) % 360) / 60, x = c * (1 - Math.abs((hp % 2) - 1)), m = val - c;
   let r = 0, g = 0, b = 0;
   if (hp < 1) { r = c; g = x; } else if (hp < 2) { r = x; g = c; } else if (hp < 3) { g = c; b = x; }

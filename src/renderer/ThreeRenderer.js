@@ -28,6 +28,9 @@ import { AtmosphereShader }  from './AtmosphereShader.js';
 import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
 import { SurfaceShader }      from './SurfaceShader.js';                       // CS-6a — wspólny shader powierzchni
 import { resolveSurfaceLook, surfaceSeaLevelOf } from '../utils/SurfacePaletteLogic.js';
+import { SurfaceAirShader }   from './SurfaceAirShader.js';                    // CS-6b — atmosfera / chmury / pokłady
+import { resolveAirLook, isStarLocked, substellarDirOf, starLockQuat, weatherRate } from '../utils/SurfaceAirLogic.js';
+import { patchDiffuseOnlyPointLights, DIFFUSE_ONLY_DISTANCE } from './DiffuseOnlyLight.js';   // strojenie CS-6b — dopełnienie bez odblasku
 import { rendererRandom } from './RendererRng.js';   // ARC CV-0b (Finding 612) — losowanie wizualne poza strumieniem gry
 import { PresentationClock } from './combat/PresentationClock.js';   // ARC CV-2a (D-CV-10) — zegar prezentacji: pauza = pauza
 import { FxEngine, LIVE_CV_FX } from './combat/FxEngine.js';         // ARC CV-2a — silnik FX walki na pulach (flaga cvFxEngine)
@@ -189,6 +192,11 @@ const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 const LIFE_GLOW_COL = 0x44ff88;
 
 // ── Prediction cone (M2b C4) ────────────────────────────────────────────
+// Strojenie CS-6b (§3.7.1 pkt 3): PointLight z distance < 0 tylko barwi (bez odblasku) — patrz DiffuseOnlyLight.js.
+// Bez takiego światła (flaga sharedSurface OFF) wynik shaderów jest identyczny.
+const DIFFUSE_ONLY_OK = patchDiffuseOnlyPointLights(THREE.ShaderChunk);
+if (!DIFFUSE_ONLY_OK) console.warn('[ThreeRenderer] lights_fragment_begin: brak kotwic — dopełnienie światła zachowa odblask');
+
 // Wizualizacja niepewności intercept point: trójkąt (fill + outline) per-vessel. Geom/mat tworzone raz, runtime tylko
 // transform (scale.x = szerokość kąta, scale.z = długość zasięgu w world units). ARKUSZ HUD paczka B (D-HUD-16) — kolor
 // w roli `primary` motywu (dawniej cyjan 0x00ffff), po zmianie motywu przemalowany (`_syncHud3dColors`).
@@ -2550,14 +2558,103 @@ export class ThreeRenderer {
     if (!look) return null;
     const material = SurfaceShader.createSurfaceMaterial(THREE, look, { logDepth: logDepthOn(), surfaceSeed: body.surfaceSeed });
     const rec = { body, material, requested: false, textured: false, fade: false, t0: performance.now(), readyMs: null,
-      sea: undefined, hero: false };
+      sea: undefined, hero: false, air: null };
     this._sharedSurfaces.set(body.id, rec);
     // Tekstura mapy jest własnością materiału (zwalnia ją SurfaceShader na `dispose`); tu tylko wypis z rejestru —
     // każda ścieżka sprzątania (zmiana układu, usunięcie ciała, _updatePlanetMesh) woła material.dispose().
     material.addEventListener('dispose', () => {
       if (this._sharedSurfaces.get(body.id) === rec) this._sharedSurfaces.delete(body.id);
+      // CS-6b — powietrze żyje razem z materiałem powierzchni. ⚠ Tu TYLKO zwolnienie zasobów GPU, bez parent.remove():
+      //   ten słuchacz odpala się także w środku group.traverse (sprzątanie układu), a usunięcie dziecka w trakcie
+      //   przechodzenia psuje pętlę three. Z drzewa sceny powłoki znikają razem z grupą / siatką albo w _removeAirChildren.
+      if (rec.air) {
+        for (const m of [rec.air.shell, rec.air.halo]) { m.visible = false; m.geometry.dispose(); m.material.dispose(); }
+        rec.air = null;
+      }
     });
     return material;
+  }
+
+  // ── CS-6b — powietrze ciała na wspólnym shaderze (atmosfera, chmury, pokłady; plan COLONY_SPHERE §3.7) ──────────
+  // Zastępuje dzisiejszą parę „białe chmury + niebieska poświata" WYŁĄCZNIE dla ciał z materiałem wspólnego shadera
+  // (flaga ON). Flaga OFF: `_syncSharedAir` nie jest wołane (materiał bez `surfaceShader`), ścieżka gry bez zmian.
+
+  /** Usuń z rodzica powłoki powietrza (`onlyShared` = tylko CS-6b; false = także dzisiejsze chmury i poświatę). */
+  _removeAirChildren(parent, onlyShared = false) {
+    if (!parent) return;
+    for (const ch of [...parent.children]) {
+      const u = ch.userData;
+      if (!(u?.isSharedAir || (!onlyShared && (u?.isCloud || u?.isAtmosphere)))) continue;
+      parent.remove(ch);
+      ch.geometry?.dispose();
+      ch.material?.dispose();
+    }
+  }
+
+  /**
+   * Zbuduj powłoki powietrza ciała (chmury / zasłona + poświata limbu) jako dzieci `parent` (grupa planety albo siatka
+   * księżyca). Zwraca true, gdy ciało ma atmosferę wg archetypu (`resolveAirLook`); ciała bez atmosfery — nic.
+   */
+  _syncSharedAir(bodyId, parent, body, r, tiltZ = 0) {
+    const rec = this._sharedSurfaces.get(bodyId);
+    if (!rec || !parent) return false;
+    this._removeAirChildren(parent, true);
+    rec.air = null;
+    let look = null;
+    try { look = resolveAirLook(body); }
+    catch (err) { console.warn('[ThreeRenderer] shared air look error:', body?.id, err); }
+    if (!look) return false;
+    const mats = SurfaceAirShader.createAirMaterials(THREE, look, { logDepth: logDepthOn() });
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(r * look.shellScale, 48, 32), mats.shell);
+    const halo  = new THREE.Mesh(new THREE.SphereGeometry(r * look.haloScale, 32, 24), mats.halo);
+    shell.rotation.z = tiltZ;
+    for (const m of [shell, halo]) { m.userData.isSharedAir = true; m.raycast = () => {}; }
+    parent.add(shell);
+    parent.add(halo);
+    rec.air = { look, shell, halo, angle: 0, phase: look.weatherPhase };
+    return true;
+  }
+
+  /**
+   * INSTRUMENT A/B (debug `csShared()` → OFF): dzisiejsze chmury i poświata planety — kopia przepisu z addPlanetMesh.
+   * ⚠ Używa go WYŁĄCZNIE rebuildBodySurfaces. Znika razem ze starą ścieżką (CS-Z).
+   */
+  _legacyAirLayers(group, planet, r) {
+    const has = planet.planetType !== 'gas' && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
+    if (!has) return;
+    const cloudMesh = this._createSystemCloudMesh(r);
+    if (cloudMesh) { cloudMesh.userData.isCloud = true; group.add(cloudMesh); }
+    const atmoMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(r * AtmosphereShader.ATMO_SCALE, 32, 32),
+      GAME_CONFIG.FEATURES.dayNightAtmosphere
+        ? AtmosphereShader.createLiveAtmosphereMaterial(planet, logDepthOn())
+        : AtmosphereShader.createAtmosphereMaterial(planet, logDepthOn())
+    );
+    atmoMesh.userData.isAtmosphere = true;
+    group.add(atmoMesh);
+  }
+
+  /** Punkt podgwiezdny (przestrzeń obiektu) planety związanej pływowo albo null — tylko dla ciał wspólnego shadera. */
+  _starLockOf(planet) {
+    if (!GAME_CONFIG.FEATURES?.sharedSurface || !isStarLocked(planet)) return null;
+    try { return substellarDirOf(planet); } catch (err) { return [1, 0, 0]; }
+  }
+
+  /** Związana pływowo: bez obrotu wokół osi — punkt podgwiezdny patrzy na gwiazdę i śledzi ją po orbicie. */
+  _orientStarLocked(entry, starPos) {
+    const g = entry.group.position;
+    const q = starLockQuat(entry.starLock, (starPos?.x ?? 0) - g.x, (starPos?.z ?? 0) - g.z, (this._starLockQ ??= [0, 0, 0, 1]));
+    entry.mesh.quaternion.set(q[0], q[1], q[2], q[3]);
+  }
+
+  /**
+   * JEDEN parametr na ciało: nieprzezroczystość zasłony / pokładu chmur (Wenus, Tytan). Mapa układu trzyma wartość z
+   * archetypu; CS-7 rozrzedzi ją w widoku kolonii. `value` pominięte = odczyt. Zwraca wartość albo null (brak powłoki).
+   */
+  bodyHazeOpacity(bodyId, value) {
+    const air = this._sharedSurfaces.get(bodyId)?.air;
+    if (!air) return null;
+    return value === undefined ? SurfaceAirShader.hazeOpacityOf(air.shell.material) : SurfaceAirShader.setHazeOpacity(air.shell.material, value);
   }
 
   /** Mapa z SurfaceCache → tekstura w materiale ciała. `instant` = trafienie w cache przy budowie (bez przejścia). */
@@ -2647,7 +2744,8 @@ export class ThreeRenderer {
     const light = this._starLight;
     if (!on || !light) { if (this._sharedFillLight) this._sharedFillLight.visible = false; return; }
     if (!this._sharedFillLight) {
-      this._sharedFillLight = new THREE.PointLight(0x000000, 0, 0, 0);
+      // Tylko barwi (rozproszenie): znacznik distance < 0 + łatka chunka świateł — bez własnego odblasku (§3.7.1 pkt 3).
+      this._sharedFillLight = new THREE.PointLight(0x000000, 0, DIFFUSE_ONLY_OK ? DIFFUSE_ONLY_DISTANCE : 0, 0);
       this.scene.add(this._sharedFillLight);
     }
     const fill = this._sharedFillLight;
@@ -2689,6 +2787,10 @@ export class ThreeRenderer {
       U.uAmbient.value[0] = amb.color.r * k; U.uAmbient.value[1] = amb.color.g * k; U.uAmbient.value[2] = amb.color.b * k;
     }
 
+    // Zegar pogody = zegar gry: pauza zamraża chmury, szybsza gra przyspiesza je do limitu (weatherRate).
+    const ts = window.KOSMOS?.timeSystem;
+    const wdt = dt * (ts ? weatherRate(ts.multiplier, ts.isPaused) : 1);
+
     const cache = window.KOSMOS?.surfaceCache;
     for (const [id, rec] of this._sharedSurfaces) {
       if (!rec.requested && cache) {
@@ -2700,6 +2802,18 @@ export class ThreeRenderer {
         const hit = cache.get(rec.body);
         if (hit) this._applySharedSurfaceMap(id, hit, true);
         else cache.request(rec.body).then(map => this._applySharedSurfaceMap(id, map));
+      }
+      if (rec.air) {
+        // Chmury współobracają się z ciałem: powłoka planety (dziecko grupy) przejmuje orientację obracającej się siatki.
+        // Powłoka księżyca jest dzieckiem siatki — obraca się z nią sama.
+        const pe = this._planets.get(id);
+        if (pe && rec.air.shell.parent === pe.group) rec.air.shell.quaternion.copy(pe.mesh.quaternion);
+        rec.air.locked = !!pe?.starLock;
+      }
+      if (rec.air && wdt > 0) {
+        if (!rec.air.locked) rec.air.angle += wdt * rec.air.look.drift;   // związane pływowo: tylko wiatry pasmowe
+        rec.air.phase += wdt * rec.air.look.evolve;
+        SurfaceAirShader.setAirClock(rec.air.shell.material, rec.air.angle, rec.air.phase);
       }
       if (rec.fade) {
         const u = rec.material.uniforms.uMapMix;
@@ -2718,7 +2832,11 @@ export class ThreeRenderer {
     }
     const bodies = this._sharedSurfaces.size;
     const hero = this._sharedSurfaces.get(this._sharedHeroId);
+    let air = 0, locked = 0;
+    for (const rec of this._sharedSurfaces.values()) if (rec.air) air++;
+    for (const e of this._planets.values()) if (e.starLock) locked++;
     return { enabled: !!GAME_CONFIG.FEATURES?.sharedSurface, bodies, textured, pending: bodies - textured, maxReadyMs: Math.round(maxReadyMs),
+      air, locked,
       hero: hero ? this._sharedHeroId : null, heroReady: !!hero?.hero, fillLight: !!this._sharedFillLight?.visible };
   }
 
@@ -2755,7 +2873,7 @@ export class ThreeRenderer {
     let n = 0;
     // ⚠ Kolejność: NAJPIERW nowy materiał (rejestr dostaje nowy wpis pod tym samym id), POTEM dispose starego —
     //   słuchacz dispose usuwa wpis tylko wtedy, gdy nadal wskazuje na swój rekord.
-    const swap = (mesh, body, kind) => {
+    const swap = (mesh, body, kind, entry = null) => {
       if (!mesh || !body || body.planetType === 'gas' || mesh.material?.userData?.gasUniforms) return;
       const shared = this._sharedSurfaceMaterial(body);
       if (!shared && !mesh.material?.userData?.surfaceShader) return;   // już materiał starej ścieżki — nic do podmiany
@@ -2767,9 +2885,29 @@ export class ThreeRenderer {
         if (!old.userData?.surfaceShader && old.map) old.map.dispose();
         old.dispose();   // materiał wspólnego shadera: zwalnia mapę i wypisuje się z rejestru (zdarzenie dispose)
       }
+      // CS-6b — powietrze i orientacja idą za materiałem: wspólny shader → atmosfera / chmury z archetypu i ciało
+      // związane pływowo zwrócone ku gwieździe; stara ścieżka → dzisiejsze chmury + poświata, obrót wokół osi.
+      const r = mesh.geometry?.parameters?.radius ?? 1;
+      if (kind === 'planet' && entry) {
+        this._removeAirChildren(entry.group);
+        const lock = shared ? this._starLockOf(body) : null;
+        if (lock) {
+          entry.starLock = lock;
+          mesh.rotation.set(0, 0, 0);
+          this._orientStarLocked(entry, this._starGroup?.position);
+        } else if (entry.starLock) {
+          delete entry.starLock;
+          mesh.rotation.set(0, 0, 0.1 + (hashCode(String(body.id)) % 10) * 0.04);
+        }
+        if (shared) this._syncSharedAir(body.id, entry.group, body, r, mesh.rotation.z);
+        else this._legacyAirLayers(entry.group, body, r);
+      } else if (kind === 'moon') {
+        this._removeAirChildren(mesh, true);
+        if (shared) this._syncSharedAir(body.id, mesh, body, r, 0);
+      }
       n++;
     };
-    for (const e of this._planets.values()) swap(e.mesh, e.planet, 'planet');
+    for (const e of this._planets.values()) swap(e.mesh, e.planet, 'planet', e);
     for (const e of this._moons.values()) swap(e.mesh, e.moon, 'moon');
     for (const e of this._planetoids.values()) swap(e.mesh, e.planetoid, 'planetoid');
     this._sharedPrefetchDone = false;
@@ -3054,8 +3192,12 @@ export class ThreeRenderer {
     mesh.userData = { kosmosType: 'planet', planetId: planet.id };
     group.add(mesh);
 
+    // CS-6b (FEATURES.sharedSurface) — ciało na wspólnym shaderze dostaje powietrze z archetypu (_syncSharedAir niżej)
+    // ZAMIAST dzisiejszych chmur i poświaty. Flaga OFF: materiał nie ma `surfaceShader` → sharedBody false → bez zmian.
+    const sharedBody = material?.userData?.surfaceShader === true;
+
     // Warstwa chmur — tylko rocky z atmosferą (nie gas)
-    const hasValidAtmo = !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
+    const hasValidAtmo = !sharedBody && !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
     if (hasValidAtmo) {
       const cloudMesh = this._createSystemCloudMesh(r);
       if (cloudMesh) {
@@ -3065,7 +3207,7 @@ export class ThreeRenderer {
     }
 
     // Atmosfera Rayleigh — tylko planety skaliste z atmosferą (NIE gas giganty)
-    const hasAtmo = !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
+    const hasAtmo = !sharedBody && !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
     if (hasAtmo) {
       // V3 — GLSL i uniformy mieszkają w AtmosphereShader.js. Literał ścieżki OFF jest
       // przeniesiony CO DO ZNAKU i przypięty sumą SHA-256 w keeperze; wariant żywy stoi
@@ -3087,8 +3229,20 @@ export class ThreeRenderer {
 
     this._clickable.push(mesh);
     this._entityByUUID.set(mesh.uuid, planet);
-    this._planets.set(planet.id, { group, mesh, planet });
+    const entry = { group, mesh, planet };
+    this._planets.set(planet.id, entry);
     this.scene.add(group);
+
+    if (sharedBody) {
+      // CS-6b — związana pływowo: bez nachylenia i bez obrotu wokół osi (orientację odświeża _syncPlanetMeshes).
+      const lock = this._starLockOf(planet);
+      if (lock) {
+        entry.starLock = lock;
+        mesh.rotation.set(0, 0, 0);
+        this._orientStarLocked(entry, this._starGroup?.position);
+      }
+      this._syncSharedAir(planet.id, group, planet, r, mesh.rotation.z);
+    }
   }
 
   _updatePlanetMesh(planet) {
@@ -3128,6 +3282,8 @@ export class ThreeRenderer {
       }
     } else if ((mesh.material = this._sharedSurfaceMaterial(planet))) {
       // CS-6a — wspólny shader powierzchni (stary materiał zwolniony wyżej razem ze swoją mapą).
+      // CS-6b — powietrze odbudowane na nowy promień (stare powłoki zwolnił słuchacz dispose starego materiału).
+      this._syncSharedAir(planet.id, entry.group, planet, r, entry.starLock ? 0 : mesh.rotation.z);
     } else {
       const texType = resolveTextureType(planet);
       if (texType) {
@@ -3372,7 +3528,8 @@ export class ThreeRenderer {
       // ⚠ Bramka stoi na MATERIALE, nie na planetType: ścieżka bake (liveGasShaders
       // OFF) i wszystkie planety skaliste zachowują spin BEZ ZMIAN — tam jest on
       // jedynym ruchem, jaki mają.
-      if (!entry.mesh.material?.userData?.gasUniforms) entry.mesh.rotation.y += 0.003;
+      if (entry.starLock) this._orientStarLocked(entry, starWPos);   // CS-6b — tylko flaga ON (wpis bez starLock = dziś)
+      else if (!entry.mesh.material?.userData?.gasUniforms) entry.mesh.rotation.y += 0.003;
 
 
       // Aktualizuj kierunek światła w atmosferze i chmurach
@@ -3514,6 +3671,8 @@ export class ThreeRenderer {
     this._clickable.push(mesh);
     this._entityByUUID.set(mesh.uuid, moon);
     this._moons.set(moon.id, { mesh, ring, parentEntry, moon });
+    // CS-6b — księżyc z atmosferą (hazy_moon) na wspólnym shaderze: mgła i poświata jako dzieci siatki (flaga ON).
+    if (mat.userData?.surfaceShader) this._syncSharedAir(moon.id, mesh, moon, r, 0);
   }
 
   // ── Znacznik na planecie: żółty (gracz) lub zielony (życie) ───

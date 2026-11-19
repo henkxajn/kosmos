@@ -29,7 +29,7 @@
 //  Związana pływowo: punkt podgwiazdowy = +x (lon 0, środek mapy).
 
 /** Wersja pola — zmiana wyglądu / terenu podbija ją (CS-4b: klucz cache). */
-export const SURFACE_FIELD_VERSION = 2;
+export const SURFACE_FIELD_VERSION = 4;
 
 /** 10 terenów rozgrywki (HexTile.js; D-CS-3) — classify zwraca zawsze jeden z nich. */
 export const GAMEPLAY_TERRAINS = Object.freeze(['plains', 'mountains', 'ocean', 'forest', 'desert', 'tundra',
@@ -44,6 +44,13 @@ export const LOD_SIZES = Object.freeze({
 
 /** Liczba punktów Fibonacciego kalibracji poziomu morza (stała — zmiana = inny teren). */
 export const SEA_CALIBRATION_POINTS = 4096;
+
+/**
+ * Normalizacja wysokości rodziny terran (Finding 771, v3): surowe e przepisu jest odwzorowane afinicznie tak, że
+ * kwantyl `qLo` próby kalibracyjnej trafia w `lo`, a kwantyl `qHi` w `hi`. Kanał e nie nasyca się już na 1.0, więc
+ * wysokość nad morzem h = (e − sea) / (1 − sea) ma gradient na całym lądzie przy każdym pokryciu wodą.
+ */
+export const ELEVATION_NORM = Object.freeze({ qLo: 0.01, qHi: 0.995, lo: 0.05, hi: 0.95, hiSpread: 0.12 });
 
 // Złoty kąt π(3 − √5) [rad] — cos i sin jako LITERAŁY (keeper sprawdza je względem Math.cos/sin po stronie testu).
 const GOLDEN_COS = -0.7373688780783197;
@@ -238,6 +245,7 @@ function rTerran(c, x, y, z, out) {
   const r = 1 - Math.abs(simplex3(c.n2, qx * 2.6 + o[1], qy * 2.6, qz * 2.6));
   e += Math.max(0, e - 0.55) * r * r * r * 0.6 * f.ridge;
   if (f.islands > 0) e += (ridged(c.n2, qx * 3.1 + o[2], qy * 3.1, qz * 3.1, 3) - 0.35) * f.islands;
+  e = c.eA + c.eB * e;   // v3 (771): normalizacja z kalibracji; w trakcie kalibracji eA = 0, eB = 1 (surowe e)
   out[0] = e;
   out[1] = 0.5 + f.wetBias + fbm(c.n2, x * 2.1 + o[4], y * 2.1 + o[5], z * 2.1 + o[6], 4) * 1.15;
   out[2] = 1 - (1 - f.tropic) * y * y + fbm(c.n1, x * 2.5 + o[7], y * 2.5, z * 2.5, 3) * 0.22 - Math.max(0, e - c.sea) * 0.12;
@@ -265,10 +273,11 @@ function rIce(c, x, y, z, out) {
   warp(c, x, y, z, 1.3, 1.2 * f.warp * c.v.warp);
   const cr = craters(c, x, y, z, f.craterDensity * c.v.craterMul);
   const rf = c.v.regionFreq;
-  const region = fbm(c.n2, x * rf + o[4], y * rf + o[5], z * rf + o[6], 4);
+  const region = fbm(c.n2, x * rf + o[4], y * rf + o[5], z * rf + o[6], 4) + c.v.iceBias;
   const smoothPlain = smooth(-0.05, -0.2, region);   // gładkie zamarznięte równiny: niżej, bez grzbietów
   let e = 0.42 + fbm(c.n0, W[0] * fr, W[1] * fr, W[2] * fr, f.octaves) * 0.5 - smoothPlain * 0.08;
-  e += (ridged(c.n2, x * 3 + o[2], y * 3, z * 3, 4) - 0.3) * 0.5 * f.ridge * (1 - 0.8 * smoothPlain) + cr * 0.05;
+  const iq = c.v.iceRidgeFreq;
+  e += (ridged(c.n2, x * iq + o[2], y * iq, z * iq, 4) - 0.3) * 0.5 * f.ridge * c.v.iceRidge * (1 - 0.8 * smoothPlain) + cr * 0.05;
   const rift = f.rifts * c.v.riftMul * Math.max(lineMask(c.n1, W[0] * 1.1 * rf + o[7], W[1] * 1.1 * rf, W[2] * 1.1 * rf),
     0.6 * lineMask(c.n1, W[0] * 2.3 + o[8], W[1] * 2.3, W[2] * 2.3));
   out[0] = e;
@@ -343,7 +352,7 @@ function rCratered(c, x, y, z, out) {
   const flooded = f.maria > 0 ? m : 0;
   // Region: 1 = stare, gęsto pokraterowane wyżyny, 0 = młodsze równiny (mniej kraterów; scorched: lawa).
   const reg = f.regional > 0 ? smooth(-0.18, 0.18, fbm(c.n1, x * 0.9 + o[6], y * 0.9 + o[7], z * 0.9 + o[8], 3) + c.v.regBias) : 1;
-  const dens = f.craterDensity * c.v.craterMul * (1 - f.regional * 0.8 * (1 - reg));
+  const dens = f.craterDensity * c.v.craterMul * (1 - f.regional * f.regionalDepth * (1 - reg)) * (1 + f.highlandBoost * reg);
   const plains = f.lavaPlains * (1 - reg);
   const cr = craters(c, x, y, z, dens) * (1 - 0.65 * flooded) + giantCrater(c, x, y, z);
   out[0] = 0.55 + base * f.relief * (1 - 0.7 * plains) - flooded * 0.08 - plains * 0.26 + cr * f.craterDepth + (f.scarps > 0 ? m * 0.08 : 0);
@@ -428,7 +437,7 @@ function cTerran(s, sea, f) {
   const h = (s.e - sea) / (1 - sea);
   // Linia śniegu rośnie ku równikowi (t ≈ 1 → ponad 1 = brak śnieżnych szczytów w tropikach).
   if (h > 0.45 + 0.7 * s.t) return 'peaks';
-  if (h > 0.58) return 'mountains';
+  if (h > 0.54) return 'mountains';
   if (s.t < capT + 0.16) return 'tundra';
   if (s.m < 0.33) return 'steppe';
   if (s.m < 0.6) return 'plains';
@@ -441,7 +450,7 @@ function cOcean(s, sea, f) {
     return s.e < sea - 0.04 ? 'deep_sea' : 'shallow_sea';
   }
   const h = (s.e - sea) / (1 - sea);
-  if (h > 0.45) return 'island_peaks';
+  if (h > 0.55) return 'island_peaks';
   return s.m > 0.5 ? 'island_forest' : 'island_plains';
 }
 function cJungle(s, sea) {
@@ -565,7 +574,7 @@ const FIELD_DEFAULTS = Object.freeze({
   recipe: null, octaves: 5, warp: 0.2, ridge: 0.4, craterDensity: 0, seaFromWaterCoverage: false, polarCapBias: 0,
   seaShare: 0, freq: 1.4, relief: 0.25, continent: 0, craterScale: 1, craterDepth: 0.1, tropic: 0, wetBias: 0, islands: 0,
   lava: 0, calderas: 0, volcanoes: 0, polarLow: 0, maria: 0, scarps: 0, veins: 0, patches: 0, cracks: 0, paterae: 0,
-  basinChance: 0, regional: 0, lavaPlains: 0, rifts: 0, oldIce: 0,
+  basinChance: 0, regional: 0, lavaPlains: 0, rifts: 0, oldIce: 0, regionalDepth: 0.8, highlandBoost: 0,
 });
 const TERRAN_DEFAULT_WATER = 0.7;   // terran bez zapisanego waterCoverage (nie powinno się zdarzyć po CS-3b `??=`)
 const SALTS = Object.freeze([0x1f123bb5, 0x5f356495, 0x2c1b3c6d, 0x297a2d39, 0x6c8e9cf5]);
@@ -607,6 +616,10 @@ export function prepareSurface(seed, arch, params = null) {
     regBias: (unitOf(s, 0x4b7a3c19) - 0.5) * 0.3,          // udział starych wyżyn ±
     regionFreq: 0.6 + 0.7 * unitOf(s, 0x1d8e4e27),         // lód: skala regionów
     riftMul: 0.5 + 1.0 * unitOf(s, 0x6c62272e),            // lód: siła ryftów
+    relief: unitOf(s, 0x5851f42d),                         // rodzina terran (v3): 0 = płaski, 1 = górzysty (ELEVATION_NORM.hiSpread)
+    iceBias: (unitOf(s, 0x4f1bbcdc) - 0.5) * 0.3,          // lód (v3): udział starego lodu vs gładkich równin
+    iceRidge: 0.45 + 1.1 * unitOf(s, 0x27d4eb2f),          // lód (v3): siła grzbietów
+    iceRidgeFreq: 2.0 + 2.4 * unitOf(s, 0x165667b1),       // lód (v3): skala grzbietów
     lavaFreq: 0.7 + 0.7 * unitOf(s, 0x3b9aca07),           // volcanic: gęstość sieci lawy
     lavaMul: 0.75 + 0.55 * unitOf(s, 0x5bd1e995),
     lavaBasin: 0.3 + 0.2 * unitOf(s, 0x2f6b4c33),          // volcanic: zalane niziny
@@ -643,11 +656,12 @@ export function prepareSurface(seed, arch, params = null) {
     n0: makePerm(s ^ 0x9e3779b9), n1: makePerm(s ^ 0x85ebca6b), n2: makePerm(s ^ 0xc2b2ae35),
     salt: SALTS.map(x => (mix32(s ^ x) | 0)),
     sea: 0.5, seaShare: 0, hasSea: false,
+    eA: 0, eB: 1,   // normalizacja e (rodzina terran, v3); tożsamość dla pozostałych przepisów
   };
   let share = 0;
   if (f.seaFromWaterCoverage) share = Number.isFinite(params?.waterCoverage) ? params.waterCoverage : TERRAN_DEFAULT_WATER;
   else if (f.seaShare > 0) share = f.seaShare;
-  if (share > 0) { c.sea = calibrateSea(c, share); c.seaShare = share; c.hasSea = true; }
+  if (share > 0) { c.sea = calibrateSea(c, share, RECIPES[recipe] === rTerran); c.seaShare = share; c.hasSea = true; }
   else c.sea = -1;   // brak morza: e < sea nigdy
   CTX_CACHE.set(key, c);
   if (CTX_CACHE.size > CTX_CACHE_MAX) CTX_CACHE.delete(CTX_CACHE.keys().next().value);
@@ -676,13 +690,25 @@ let FIB_CAL = null;
 const S = new Float64Array(4);
 
 // Poziom morza = kwantyl e na stałym zbiorze punktów (udział morza = share). e nie zależy od c.sea.
-function calibrateSea(c, share) {
+// normalise (rodzina terran, v3 / Finding 771): ta sama próba SUROWEGO e (bez obcięcia) wyznacza najpierw
+// odwzorowanie afiniczne c.eA / c.eB (ELEVATION_NORM), a poziom morza jest kwantylem już znormalizowanego e.
+function calibrateSea(c, share, normalise) {
   if (!FIB_CAL) FIB_CAL = fibonacciSphere(SEA_CALIBRATION_POINTS);
   const n = SEA_CALIBRATION_POINTS;
   const es = new Float64Array(n);
+  const k = Math.min(n - 1, Math.max(1, Math.floor(share * n + 0.5)));
+  if (normalise) {
+    const fn = RECIPES[c.recipe];
+    for (let i = 0; i < n; i++) { fn(c, FIB_CAL[i * 3], FIB_CAL[i * 3 + 1], FIB_CAL[i * 3 + 2], S); es[i] = S[0]; }
+    es.sort();
+    const N = ELEVATION_NORM;
+    const lo = es[Math.floor(N.qLo * (n - 1))], hi = es[Math.floor(N.qHi * (n - 1))];
+    const top = N.hi + (c.v.relief - 0.5) * N.hiSpread;   // rzeźba z ziarna: świat płaski … górzysty
+    if (hi - lo > 1e-9) { c.eB = (top - N.lo) / (hi - lo); c.eA = N.lo - lo * c.eB; }
+    return clamp01(c.eA + c.eB * (es[k - 1] + es[k]) * 0.5);
+  }
   for (let i = 0; i < n; i++) { sampleInto(c, FIB_CAL[i * 3], FIB_CAL[i * 3 + 1], FIB_CAL[i * 3 + 2], S); es[i] = S[0]; }
   es.sort();
-  const k = Math.min(n - 1, Math.max(1, Math.floor(share * n + 0.5)));
   return (es[k - 1] + es[k]) * 0.5;
 }
 
@@ -715,7 +741,10 @@ export function surfaceInfo(seed, arch, params) {
   return {
     version: SURFACE_FIELD_VERSION, recipe: c.recipe, seaLevel: c.sea, seaShare: c.seaShare, hasSea: c.hasSea,
     palette: c.palette,
-    variation: { freq: v.freq, warp: v.warp, craterMul: v.craterMul, albedo: v.albedo, giantCrater: v.giant, giantRadius: v.giant ? v.gr : 0 },
+    variation: { freq: v.freq, warp: v.warp, craterMul: v.craterMul, albedo: v.albedo, giantCrater: v.giant, giantRadius: v.giant ? v.gr : 0,
+      relief: v.relief,
+      // Punkt podgwiezdny przepisu tidally_locked (środek „oka") w przestrzeni pola — CS-6b obraca nim ciało ku gwieździe.
+      substellar: [1 / v.tTiltLen, v.tLat / v.tTiltLen, v.tTilt / v.tTiltLen] },
   };
 }
 

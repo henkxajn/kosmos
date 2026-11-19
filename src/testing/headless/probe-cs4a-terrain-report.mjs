@@ -3,7 +3,7 @@
 // plus rozrzut po ziarnach (min / mediana / max udziału zabudowywalnego). Flaga: mediana zabudowywalnego udziału
 // odchodzi o > ±20% (względnie) od dzisiejszej — informacja dla D-CS-8 / CS-5, nie zmiana teraz.
 //
-//   node src/testing/headless/probe-cs4a-terrain-report.mjs [--seeds a,b] [--per 30] [--json plik]
+//   node src/testing/headless/probe-cs4a-terrain-report.mjs [--seeds a,b] [--per 30] [--cut 0.05] [--json plik]
 
 import './env.js';
 import { writeFileSync } from 'node:fs';
@@ -22,6 +22,7 @@ const SF = await import('../../utils/SurfaceField.js');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i >= 0 ? process.argv[i + 1] : d; };
 const SEEDS = arg('--seeds', '-2102099243,612055237').split(',').map(Number);
 const PER = +arg('--per', 30);
+const CUT = +arg('--cut', 0.05);   // próg udziału terenu w kolumnach „top" (CS-6b: --cut 0.01 pokazuje pełny podział lądu)
 const TERR = ['plains', 'forest', 'desert', 'tundra', 'ice_sheet', 'wasteland', 'crater', 'mountains', 'volcano', 'ocean'];
 const buildable = (t) => TERRAIN_TYPES[t]?.buildable === true;
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
@@ -71,8 +72,8 @@ for (const [id, rec] of Object.entries(per)) {
     id, n: rec.today.length,
     todayBuildMed: +mT.toFixed(3), newBuildMin: +Math.min(...bN).toFixed(3), newBuildMed: +mN.toFixed(3), newBuildMax: +Math.max(...bN).toFixed(3),
     relChange: +rel.toFixed(3), flag: Math.abs(rel) > 0.2,
-    todayTop: TERR.filter(t => shareT[t] >= 0.05).sort((a, b) => shareT[b] - shareT[a]).map(t => `${t} ${pc(shareT[t])}`).join(', '),
-    newTop: TERR.filter(t => shareN[t] >= 0.05).sort((a, b) => shareN[b] - shareN[a]).map(t => `${t} ${pc(shareN[t])}`).join(', '),
+    todayTop: TERR.filter(t => shareT[t] >= CUT).sort((a, b) => shareT[b] - shareT[a]).map(t => `${t} ${pc(shareT[t])}`).join(', '),
+    newTop: TERR.filter(t => shareN[t] >= CUT).sort((a, b) => shareN[b] - shareN[a]).map(t => `${t} ${pc(shareN[t])}`).join(', '),
   });
 }
 const order = Object.keys(ARCHETYPE_BY_ID);

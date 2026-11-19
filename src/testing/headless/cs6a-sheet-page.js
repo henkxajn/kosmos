@@ -18,7 +18,7 @@ import { mixSeed } from '../../utils/SeedMath.js';
 const LIGHT_BASE = 2.8, LUM_EXP = 0.22, AMBIENT_HEX = 0x101a26, AMBIENT_COOL_HEX = 0x0a1c4d, AMBIENT_COOL_MIX = 0.6, AMBIENT_INT = 0.4;
 const SUN_DIR = new THREE.Vector3(-0.78, 0.32, 0.54).normalize();
 
-function lightFor(cls) {
+export function lightFor(cls) {
   const st = STAR_TYPES[cls] ?? STAR_TYPES.G;
   const c = new THREE.Color(st.color);
   const sun = SurfaceShader.surfaceSunColor(c.r, c.g, c.b, LIGHT_BASE * Math.pow(Math.max(st.luminosity ?? 1, 1e-6), LUM_EXP));
@@ -37,7 +37,7 @@ export function fakeBody(archId, seed, extra = {}) {
   };
 }
 
-function makeStage(W, H) {
+export function makeStage(W, H) {
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -80,7 +80,7 @@ function drawCell(st, x, y, size, body, cls, rotY = 0.6, opts = {}) {
   return look;
 }
 
-function finish(st, labels, title) {
+export function finish(st, labels, title) {
   const out = document.createElement('canvas');
   out.width = st.W; out.height = st.H;
   const g = out.getContext('2d');
