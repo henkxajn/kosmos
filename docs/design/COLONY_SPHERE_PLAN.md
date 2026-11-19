@@ -1882,7 +1882,7 @@ behind the empty-registry return); no pixel-level OFF comparison was run.
 - Sheets after the last weak-star gain change were regenerated but not re-inspected frame by frame.
 - Known issues 1, 2, 4, 7, 8, 9 of §3.6 are unchanged (CS-6b / later); 3, 5, 6 are addressed here.
 
-**Finding 771** 🟠 — SurfaceField terran recipe: elevation saturates at the 1.0 clamp, so the height-normalised
+**Finding 771** ✅ (fixed in CS-6b, §3.7 — SurfaceField v3, shader re-aligned) — SurfaceField terran recipe: elevation saturates at the 1.0 clamp, so the height-normalised
 classes `mountains` / `peaks` take 30–74% of land (rising with water coverage) and the plateau has no relief gradient.
 Gameplay terrain (CS-5) will inherit it. Fix belongs to CS-6b (carried SurfaceField fixes, version bump); the shader
 divergence in item 2 is then removed. **The classifier must agree with the shader before CS-5.**
@@ -1898,6 +1898,339 @@ stations, rings, clouds and atmosphere shells share the same light as planets. G
 parameter for the colony view; tidally-locked orientation; ice seed similarity; barren crater modulation; cryo_haze vs
 hazy_moon differentiation; moon crater A/B sheet (current vs ≈ +40% density — owner picks, default stays current);
 Finding 771 field fix + re-align the shader; verify an M / K frame with rock + gas giant + ship under one light.
+
+### 3.7 CS-6b — atmospheres, clouds, decks, tidal lock, SurfaceField v3 (2026-11-19; not committed, owner look pending)
+
+Everything new sits behind `FEATURES.sharedSurface` (default `false`). The colony screen, saves, gameplay systems,
+`GasGiantShader.js` (D-CS-5) and the critical files are not touched. `SurfaceField.js` changes value (version 2 → **3**),
+but nothing gameplay-side reads it yet (CS-5).
+
+**Files.** New: `src/data/BodyAtmospheres.js` (per-archetype air data), `src/utils/SurfaceAirLogic.js` (pure:
+`resolveAirLook`, `isStarLocked`, `substellarDirOf`, `starLockQuat`), `src/renderer/SurfaceAirShader.js` (two GLSL
+programs, THREE injected), keeper `colony_sphere_air_smoke.mjs`, probe `probe-cs6b-air.mjs` + `cs6b-sheet-page.js`.
+Changed: `SurfaceField.js` (v3), `BodyArchetypes.js` (barren field knobs, comments), `SurfaceShader.js` (terran look
+re-aligned), `ThreeRenderer.js` (air shells, tidal lock, `bodyHazeOpacity`), `SurfacePaletteLogic.js` (three colour
+helpers exported), `ColonySphereDebug.js` + `GameScene.js` (`csDeck` / `csLocked` / `csHaze`),
+`colony_sphere_surface_smoke.mjs` (golden v3 + B9), `probe-cs4a-terrain-report.mjs` (`--cut`), `cs6a-sheet-page.js`
+(three helpers exported).
+
+#### Finding 771 — fixed (SurfaceField v3)
+
+Cause confirmed by measurement: the terran recipe's raw elevation runs well past 1.0 and was clamped to [0, 1] (up to 54% of the land of a
+water-0.9 world sat exactly at e = 1); the
+classifier's height `h = (e − sea) / (1 − sea)` divides by what is left under the clamp, so the higher the sea level,
+the more land sits at h ≈ 1.
+
+Fix: for the terran family (`terran` / `ocean` / `jungle`) the same 4 096-point calibration that finds the sea level now
+first normalises the raw elevation affinely — the 1% quantile maps to 0.05 and the 99.5% quantile to 0.95 ± 0.06
+(`ELEVATION_NORM`; the ± is a new per-seed `relief` value, flat world … rugged world), and the sea level is the quantile of
+the normalised channel. No extra samples, no trig (D-CS-16 keeper green). Classifier thresholds re-tuned on the new
+distribution: terran `mountains` h > 0.54 (was 0.58), `island_peaks` h > 0.55 (was 0.45); snowline rule unchanged.
+Other recipes are not normalised and compute bit for bit as in v2 (keeper witness: 72 of 72 old golden rows).
+
+Share of **land** per class, 12 seeds × 1 500 points per water coverage (min / median / max; keeper B9 prints this table):
+
+| water coverage | v2 mountains + peaks | v2 peaks (median) | v2 land saturated at e = 1 (max) | v3 mountains + peaks | v3 peaks (median) | v3 saturated (max) |
+|---|---|---|---|---|---|---|
+| 0.2 | 20 / 27 / 35% | 8% | 7% | 9 / 15 / 25% | 2% | 1% |
+| 0.5 | 21 / 27 / 35% | 9% | 11% | 8 / 13 / 22% | 1% | 1% |
+| 0.7 | 24 / 33 / 39% | 11% | 18% | 10 / 15 / 21% | 2% | 2% |
+| 0.9 | 32 / 54 / 72% | 23% | 54% | 13 / 20 / 30% | 3% | 6% |
+
+`ocean` archetype: island peaks 9 / 20 / 30% of land (60 seeds; v2 24–43%). `jungle`: mountains 6 / 12 / 21% (v2 11–21%).
+
+Terrain-share report re-run (`probe-cs4a-terrain-report.mjs --cut 0.01`, same galaxies and bodies as §3.4.1; share of
+**all tiles**, today's generator column unchanged). Only these rows moved; the other 13 rows and every buildable share
+(min / median / max) are identical to the CS-4a table:
+
+| Archetype | n | buildable min / median / max | v2 terrains % | v3 terrains % |
+|---|---|---|---|---|
+| terran | 28 | 14 / 30 / 79% (unchanged) | ocean 71, mountains 10, ice_sheet 7, forest 5, plains 4, desert 3, tundra 1 | ocean 71, ice_sheet 7, forest 6, plains 5, desert 5, mountains 3, tundra 2 |
+| jungle | 7 | 80 / 83 / 85% (unchanged) | forest 55, mountains 17, ocean 17, plains 12 | forest 61, ocean 17, plains 12, mountains 12 |
+| ice | 60 | 100% (unchanged) | ice_sheet 80, wasteland 19 | ice_sheet 81, wasteland 19 |
+| barren | 56 | 100% (unchanged) | wasteland 90, crater 6, mountains 4 | wasteland 90, crater 6, mountains 4 |
+
+Terran mountains: 10 of 29 land-and-ice tiles (≈ 34%) → 3 of 29 (≈ 10%). D-CS-20 is not affected (mountains are buildable).
+
+**Shader re-aligned (D-CS-16).** The CS-6a workaround is removed: `lookTerran` draws rock where the classifier says
+`mountains` (smoothstep centred on the same threshold, partly vegetated only where wet) and snow exactly where it says
+`peaks` (h > 0.45 + 0.7·t); the extra "needs cold and noise" conditions are gone. Sheet `cs6b-field-v3.png`.
+
+**Carried field fixes (same version bump).**
+- *Ice seeds too similar:* three new per-seed values — share of old ice vs smooth plains (region bias ± 0.15), ridge
+  strength × 0.45–1.55, ridge scale 2.0–4.4. Measured spread of the old-ice share across 12 seeds: 19 pp → 29 pp.
+- *Barren crater modulation too weak:* measured first — the regional density factor already existed, the regions just did
+  not read. Barren now uses `regional` 0.95, new knobs `regionalDepth` 1.0 (plains nearly craterless) and `highlandBoost`
+  0.35, plus `lavaPlains` 0.7 (plains smoother and slightly lower). Regional contrast of crater activity (90th / 10th
+  percentile cell, median of 12 seeds): 4.9 × → 8.4 ×. The two new knobs default to the old arithmetic, so the moon
+  archetypes are bit-identical (control: rocky_cratered 4.7 × before and after).
+
+#### Atmosphere, clouds, decks (flag ON)
+
+A body on the shared shader gets **two shells** in place of today's white cloud sphere + blue rim (same number of draw
+calls): a cloud / veil shell at 1.016 r (front side, premultiplied alpha) and a limb halo at 1.035–1.115 r (back side,
+additive). Both read the same shared light uniforms as the surface (softened star colour, D-CS-21). Airless bodies get
+neither; today's pair is no longer created for shared-shader bodies.
+
+| Archetype | Halo / veil | Clouds | Notes |
+|---|---|---|---|
+| terran / ocean | blue; veil 0.34 / 0.38, rising toward the limb, day side only | coverage 0.26–0.60 / 0.42–0.72 | the veil lifts the dark oceans; clouds range from scattered cumulus to storm bands and swirls |
+| jungle | humid green-cyan, veil 0.46 | 0.46–0.76 | milkier than terran |
+| desert | thin pinkish (Mars), veil 0.20 | 0.03–0.14 | bluish twilight |
+| ice / volcanic / tidally_locked (with an atmosphere) | pale blue / smoky orange-brown / pale lilac, veil 0.20–0.30 | sparse (ash-grey on volcanic) | only when the stored atmosphere class is thin / breathable / dense |
+| hothouse | thick cream halo; **opaque deck** (hazeOpacity 1.0) | — | banding + swirls; variants cream / sulphur / tan; surface hidden on the system map |
+| cryo_haze | orange; **opaque haze** (0.97) | — | variants orange / amber / rust |
+| hazy_moon | paler peach / ochre / salmon; **thinner** (0.86) | — | surface shows faintly; tone differs from cryo_haze |
+| scorched, barren, the four airless moons, planetoids | none | none | |
+
+- **Never the same twice:** variant A + up to 40% of variant B + hue / saturation / value jitter from `surfaceSeed`; cloud
+  coverage, cell scale, banding and swirl drawn from the seed inside the archetype's range; the pattern itself is offset by
+  a three-number phase from the seed. Stored atmosphere class scales density (thin 0.55, breathable 1.0, dense 1.3).
+- **Light:** day-side scattering with a soft gate that wraps further behind the terminator for denser air, a warm (or, on
+  Mars / Titan types, bluish) twilight band, cloud self-shading toward the star, forward-scatter boost when backlit.
+- **Drift:** slow rigid rotation of the pattern (≈ 0.008–0.02 rad/s real time, about 1 body in 7 retrograde) plus a very
+  slow evolution of the swirls.
+- **`hazeOpacity` — one parameter per body** (uniform `uVeil.x`): `ThreeRenderer.bodyHazeOpacity(bodyId[, value])`,
+  `SurfaceAirShader.setHazeOpacity`. The system map keeps the archetype value; CS-7 thins it in the colony view. Preview:
+  `csHaze(0.3)` / `csHaze()`; last column of `cs6b-venus-titan.png`.
+
+**Tidally locked.** Planets with the stored `tidallyLocked` flag (moons never — they are locked to their planet) get no
+axial spin and no axial tilt with the flag ON; the mesh is oriented every physics tick so the sub-stellar point faces the
+star. For the `tidally_locked` archetype that point is the centre of the field's "eye" (`surfaceInfo().variation.
+substellar`, the seed-tilted direction the recipe already used); other locked archetypes show the field's +x. The
+rotation is "fixed turn of the sub-stellar point onto +x, then a turn about the vertical axis" — poles stay upright
+and the motion is uniform (the naive shortest-arc rotation flips the poles once per orbit; keeper control).
+**Scope note for the owner:** the flag is set on every close-in planet, so with the flag ON a locked *terran* around an
+M dwarf also stops spinning and keeps one face to its star. Easy to narrow to the `tidally_locked` archetype if unwanted.
+
+**Moon craters A/B (owner decides — default NOT changed).** `cs6b-moon-craters-ab.png`: rocky_cratered (density 0.70 vs
+0.98) and icy_cratered (0.85 vs 1.19), 3 seeds each, same light. **D-CS-22:** signed 2026-11-19 — B (§3.7.1).
+
+**Light check (D-CS-21).** `cs6b-mk-light.png`: one in-game camera frame in a K system — rocky moon, its gas giant and
+an orbital station (spawned by the probe with `debug.spawnStation`), two visible PointLights (star + fill). Moon and
+giant are lit from the same side with the same warm-white tone. The station model reads very dark and small in that
+frame; its lighting cannot be judged from it.
+
+**Measurements** (real game, headless Chrome over CDP, real GPU RTX 3070, 1600×1041, `probe-cs6b-air.mjs --game`, three
+runs, each a different random galaxy):
+- frame time, home system, wide and close-up, OFF and ON: median 16.7 ms, p95 16.7–16.8, max 16.8–16.9 in all twelve
+  measurements (60 fps vsync cap — the cap hides any difference below it, as in CS-6a);
+- system switch with the flag ON: 17–23 ms synchronous stall; all maps in after 1 153 ms (30 bodies), 1 373 ms (43),
+  1 398 ms (39), 2 816 ms (48), 3 014 ms (50). CS-6a measured 1 682–1 733 ms for 39–46 bodies; the two slow samples are
+  the two largest systems. Field bake cost itself is unchanged: 18 surface archetypes at 256×128 take 839 ms in v3 vs
+  851 ms in v2 (node, same seeds);
+- owner path (`--owner`, both flags on the title screen): air present right after start (4 bodies with air in the home
+  system), no legacy cloud / halo left on any shared-shader planet in 9 system visits, `csShared()` → OFF restores
+  today's layers (3 planets) and removes every shell and lock, sub-stellar alignment dot product 1.00000 wherever a
+  locked planet exists, `bodyHazeOpacity` set / read / restore exact.
+
+**Proof** (`docs/design/prototypes/`): `cs6b-atmospheres.png` (every archetype, star G, terminator in frame),
+`cs6b-clouds.png` (terran / ocean / jungle / desert × 6 seeds), `cs6b-venus-titan.png` (hothouse, cryo_haze, hazy_moon × 3
+seeds + hazeOpacity 0.35 column), `cs6b-tidally-locked.png` (top view at 4 orbit positions + the body seen from the star
+at each — the surface is identical, the clouds are not, they drift), `cs6b-moon-craters-ab.png`, `cs6b-mk-light.png`,
+`cs6b-systemmap-before-after.png` (homeworld + a cryo_haze planet, OFF | ON), `cs6b-field-v3.png`.
+
+**Keepers.** GLSL compile probe (`probe-cs6b-air.mjs --compile`): shell and halo programs compile with and without log
+depth and draw lit pixels; the four controls fail (`'cs6b_broken_control' : undeclared identifier`).
+`colony_sphere_air_smoke` 44 PASS (new). `colony_sphere_surface_smoke` 44 PASS — golden values **re-recorded
+deliberately** (132 rows, 11 archetypes; of the previous 84 rows only the 12 terran rows changed). Fail-first in a
+detached worktree of 9d3ff56 with the final file: 9 red (golden, version, four Finding-771 pins, relief, ice, barren),
+controls green on both sides (72 untouched v2 rows, seed variation, rocky_cratered contrast).
+`colony_sphere_shader_smoke` 62, `colony_sphere_cache_smoke` 56 (cache key now `v3`), archetypes 161, seeds 123. Sweep
+433 / 433, 0 FAIL; `check-i18n` PASS. One signed-style pin change: `SurfaceAirLogic.js` joins the list of modules allowed
+to import `SurfaceField` (it reads `surfaceInfo` only; pinned in the air keeper).
+
+**Flag OFF.** Edits on the OFF path of `ThreeRenderer`: a `sharedBody` constant that is `false` without a shared-shader
+material (gates the two legacy blocks), the planet entry object built before `_planets.set`, and an `if (entry.starLock)`
+test in front of the unchanged spin line. Verified by source pins and by the in-game state readout (OFF: 0 shells, 0
+locks, legacy layers present). **No pixel-level OFF comparison was run.**
+
+**Not verified / open.**
+- Frame cost above the 60 fps cap is not measured (no uncapped run); the shell shader does 13 value-noise lookups per
+  cloud fragment vs 15 simplex lookups in today's cloud shader.
+- Cloud coverage numbers are archetype knobs, not measured area shares (the threshold mapping is tuned by eye).
+- The station in the light frame is too dark to judge; a ship was not captured.
+- The second system of the before / after sheet is whichever generated system has a deck planet; a hothouse deck was
+  seen in game only in the home system of one run, not on a sheet (sheets cover it).
+- `csDeck` / `csLocked` move the renderer camera directly (no selection event).
+
+**Finding 772** ⚪ — `BodyArchetypes` rows still carry the placeholder fields `atmosphere { tint, density }` and
+`clouds { coverage }`; nothing reads them (the live source is `BodyAtmospheres.js`), but `colony_sphere_archetypes_smoke`
+pins their shape. Two sources for one thing — remove the placeholders (and the shape pin) in CS-Z or fold the table in.
+
+**Owner check (console lines without quotes).** Title screen: `KOSMOS.gameConfig.FEATURES.sharedSurface=true`, then
+`KOSMOS.gameConfig.FEATURES.seededSystems=true` → new game → (1) homeworld close-up: blue haze on the limb, clouds with
+structure, drifting slowly; (2) a desert, an ice and an airless body from the outliner: thin pinkish / pale / no air;
+(3) `csDeck()` — camera jumps to the next hothouse / cryo_haze / hazy_moon body (switches system when needed), then
+`csHaze(0.3)` and `csHaze()` to see the one opacity parameter; (4) `csNextSystem()` until an M or K star, look at a rock
+next to a gas giant; `csLocked()` — a locked planet, day side toward the star; (5) `csShared()` twice for A/B in place.
+Decisions given back 2026-11-19: D-CS-22 = B, tidal-lock scope = archetype only (D-CS-23) — see §3.7.1.
+
+**Carry to CS-7 / later:** thin `hazeOpacity` in the colony view; cloud shadows on the surface; night-side city lights
+under clouds (CS-9); Finding 772.
+
+#### 3.7.1 CS-6b tuning pass (2026-11-19; owner approved the CS-6b look, seven tuning items; not committed, owner look pending)
+
+Owner check of §3.7: atmospheres, Venus decks, Titan haze, tidal lock and the Finding 771 fix approved. Everything below
+still sits behind `FEATURES.sharedSurface`; no gameplay, colony-screen or `GasGiantShader.js` change.
+
+**Decisions signed 2026-11-19.**
+- **D-CS-22 — moon craters: option B.** `rocky_cratered` crater density 0.70 → 0.98, `icy_cratered` 0.85 → 1.19 (≈ +40%).
+  `SURFACE_FIELD_VERSION` 3 → **4** (cache key `v4`).
+- **D-CS-23 — tidal-lock scope: the archetype only.** Only planets of the `tidally_locked` archetype stop spinning and
+  face the star (`isStarLocked`). A terran (or any other) world that merely carries the stored `tidallyLocked` flag
+  keeps its normal rotation — its surface is generated with a rotation-based climate. The flag stays as data.
+  This supersedes the "Tidally locked" scope paragraph of §3.7. `csLocked()` now looks for the archetype; it returns
+  `null` in a galaxy without such a planet (seen in 2 of 3 probe galaxies — the archetype is rare).
+
+**1. Clouds evolve (was: rigid drift only).** `SurfaceAirShader` cloud block rewritten, new uniform `uFlow`
+(weather phase, band wind, wind-band count, puffiness):
+- *Weather systems* (where the clouds are): low-frequency field sampled in **two phases half a cycle apart**, cross-faded
+  with triangle weights; each phase lives one cycle and returns with a new pattern, so systems form, grow and dissipate
+  without a pop (contrast is variance-compensated at mid-fade). Cycle ≈ 117–175 s of weather time per body
+  (`AIR_WEATHER.cycleSeconds` 140 ± 20% from the seed), start phase from the seed (bodies do not pulse together).
+- *Latitude-band wind:* inside a phase the pattern is shifted along the parallels by `wind · sin(π · bands · sin lat)`
+  (0.6–1.2 rad per cycle, 1.6–3.4 bands, sign from the seed) — neighbouring bands move in opposite directions. The shift
+  is bounded to half a cycle and is zero where the phase weight peaks, so the pattern never winds up into streaks.
+- *Cumulus cells:* cellular noise whose feature points orbit inside their cells with the weather phase — cells grow,
+  shrink and merge. The rigid whole-pattern drift (`uShape.w`) stays.
+- **Clock = game clock** (`weatherRate` in `SurfaceAirLogic`, `ThreeRenderer._tickSharedSurfaces`): paused → 0 (frozen);
+  1 day/s → 1 ×; faster game → √(days/s), capped at 3 × (`AIR_WEATHER.speedCap`). Measured in game over 3 s of real time
+  (`--owner`): paused 0 cycles and 0 rad; 1 d/s 0.0214 cycles; 3 d/s 0.0369 (1.72 ×); 1 y/s 0.0643 (3.0 ×).
+  Decks (hothouse / cryo_haze / hazy_moon) keep their approved look; their slow swirl evolution now runs on the same clock.
+
+**2. Smear removed.** Measured cause: the domain warp displaced the detail lookup by up to ≈ ± 3.8 noise cells, and the
+storm-belt term carried 55% of the system mask. Now: warp ≤ ± 0.5 cell, belt share 28%, archetype `warp` / `band` ranges
+lowered (terran / ocean / jungle), cell detail from cellular noise, narrower threshold (crisp-but-soft edge), cloud alpha
+eased by 30% at the very limb. Same lookup budget order as before (11 noise lookups, two of them cellular, vs 13).
+
+**3. Gas giant highlight — measured before fixing.** Same paused frame, M star, camera on the star side
+(`probe-cs6b-air.mjs --gasspec`, sheet `cs6b-gas-highlight.png`): the soft highlight in the middle of the disc **exists
+with the flag OFF** — it is the giant's own specular reflection of the star (`MeshStandardMaterial`, roughness 0.45,
+VISUALS arc). The D-CS-21 fill `PointLight` added a second, cool specular on top of it, which turned it into the white
+blob (peak pixel 108 / 85 / 112 with the fill specular vs 102 / 35 / 73 without). Fix: the fill light now only tints.
+three has no diffuse-only light and `GasGiantShader.js` must not change, so the marker lives in the light: new
+`src/renderer/DiffuseOnlyLight.js` patches the text of three's `lights_fragment_begin` chunk once at `ThreeRenderer`
+import — after a point light with `distance < 0` the accumulated `directSpecular` is restored; the fill light is created
+with `distance = -1` (attenuation is unchanged: decay 0, no cutoff). The star light is untouched, so what remains on the
+giant is exactly today's star highlight, now on a correctly tinted disc. **Flag OFF:** the chunk text is patched for
+every lit material, but no light carries the marker, so the branch is never taken (no pixel-level OFF comparison run).
+If a three update removes the anchors, the patch is skipped with a console warning and the fill keeps its specular.
+
+**4. Jungle alien foliage.** `maroon` variant weights `{ M: 3, K: 1.5, G: 0.5, F: 0.4 }` → `{ M: 3, K: 1.2, G: 0.1,
+F: 0.08 }`. Share as the main variant over 600 seeds: M 40.8%, K 23.0%, G 3.3%, F 2.0%.
+
+**5. D-CS-22 applied.** Golden values re-recorded deliberately: of the 132 previous rows only `rocky_cratered` rows
+changed (2 of 12 sample points sit on a crater); 12 `icy_cratered` rows added so that archetype is pinned too (144 rows).
+`rocky_cratered` regional contrast 4.7 × → 3.6 × (denser craters fill the quiet regions). `cs6b-moon-craters-ab.png`
+now reads "B = new default"; column A reproduces the previous density.
+
+**6. D-CS-23 applied** (see above). Witness in game: a terran planet with the flag in an M system has no star lock.
+
+**7. Titan haze.** `cryo_haze` `hazeOpacity` 0.97 → **0.90** (owner's value); `hazy_moon` unchanged (0.86), tones unchanged.
+
+**Performance** (real game, headless Chrome over CDP, RTX 3070, 1600×1041, `--perf`). New instrument: `--uncapped`
+removes vsync and a 1×1 `readPixels` per frame synchronises with the GPU, so the number includes GPU work. Mean frame
+time, two runs each (different random galaxies), previous CS-6b build → this build: full system view 1.41 / 1.38 →
+1.47 / 1.40 ms; homeworld close-up 1.50 / 1.43 → 1.56 / 1.47 ms; disc filling the frame 1.69 / 1.44 → 1.50 / 1.60 ms.
+Inside run-to-run noise — no regression. Capped run: 16.67 ms mean, p95 16.7–16.8 in all views.
+
+**Proof** (`docs/design/prototypes/`): `cs6b-clouds-evolution.png` (terran and ocean at t = 0 / 20 / 40 / 60 s, same
+camera, surface fixed; third row with the rigid drift frozen — band wind + evolution), `cs6b-gas-highlight.png` (new),
+and regenerated `cs6b-clouds.png`, `cs6b-mk-light.png`, `cs6b-moon-craters-ab.png`, `cs6b-venus-titan.png`,
+`cs6b-atmospheres.png`, `cs6b-tidally-locked.png`, `cs6b-field-v3.png`, `cs6b-systemmap-before-after.png`.
+
+**Keepers.** GLSL compile probe: both programs compile with and without log depth, four failing controls fail.
+`colony_sphere_air_smoke` 53 PASS (new block A8: `weatherRate`, weather look from the seed, `setAirClock`, two-phase
+shader pins, `DiffuseOnlyLight` against the real three chunk with an anchor-less control, fill-light marker only on the
+fill light, jungle `maroon` shares; `isStarLocked` and `cryo_haze` pins re-signed). `colony_sphere_surface_smoke` 45 PASS
+(golden v4, D-CS-22 pin; the "moon rows equal v2" witness now covers the 60 non-moon rows and requires the moon rows to
+differ). Shader 62, cache 56, archetypes 161. Sweep 433 / 433, 0 FAIL; `check-i18n` PASS. Owner path (`--owner`): OK.
+
+**Not verified / open.**
+- The band-wind row of the evolution sheet cannot isolate the wind from the evolution (both run on the weather phase).
+- Cloud coverage of the visible hemisphere swings as systems form and dissipate; it is not normalised per frame.
+- The fill light is diffuse-only for **every** lit material (rings, ships, stations too) — not looked at separately.
+- No pixel-level flag-OFF comparison (as in §3.7).
+- `cs6b-mk-light.png` label still reads "lights: star + fill"; the fill there is the tint-only light.
+
+**Owner check (console lines without quotes).** Title screen: `KOSMOS.gameConfig.FEATURES.sharedSurface=true`, then
+`KOSMOS.gameConfig.FEATURES.seededSystems=true` → new game → homeworld close-up: watch the clouds ≈ 1 minute at 1 d/s
+(shapes form and dissipate, bands drift apart), then at a faster speed (faster, no flicker), then paused (frozen);
+`csDeck()` (cryo_haze at 0.90); `csLocked()` (archetype only; `null` = this galaxy has none); `csNextSystem()` to an
+M / K system with a gas giant — the highlight on the giant is the star's own, no white blob.
+
+##### Cloud tuning pass #2 (2026-11-19; owner check of the pass above; not committed, owner look pending)
+
+Owner check: Titan haze 0.90, `csLocked`, the gas giant highlight and D-CS-22 / D-CS-23 accepted. Clouds only in this
+pass; it **supersedes items 1–2 above where they differ** (cellular noise, cycle length, speed cap).
+
+**1. Clouds co-rotate with the planet.** Measured cause: a planet's air shell is a child of the planet *group*, while
+only the body *mesh* spins — the cloud layer stood still over a turning surface. `_tickSharedSurfaces` now copies the
+mesh orientation to the shell every frame (moon shells are children of the mesh and already turned with it). The band
+winds and the slow whole-pattern drift are therefore motion **relative to the surface**. A star-locked body
+(D-CS-23) gets no drift at all — band winds and evolution only. In game (`--owner`, 3 s): body turned 0.54 rad, shell
+within 0.003 rad of it (one frame); paused: body 0, clouds 0.
+
+**2. Evolution about twice as fast.** `AIR_WEATHER.cycleSeconds` 140 → **70** (per body 58–88 s from the seed);
+`speedCap` 3 → **2.5** (shortest full renewal ≈ 28 s — no flicker). Weather phase advance per 3 s of real time:
+
+| game speed | `weatherRate` | cycles / 3 s (75 s-cycle body) | previous pass |
+|---|---|---|---|
+| paused | 0 | 0 (measured) | 0 |
+| 1 day/s | 1.00 | 0.0402 (measured) | 0.0214 |
+| 3 days/s | 1.73 | 0.0696 (measured) | 0.0369 |
+| 1 week/s | 2.50 (cap) | 0.100 (computed) | 0.0567 (computed) |
+| 1 month/s, 1 year/s | 2.50 (cap) | 0.100 (computed) | 0.0643 (measured) |
+
+The in-game sample at 1 year/s was cut short by the game's own auto-pause (0.0692 in the part that ran); the cap is
+pinned by the keeper (`weatherRate`).
+
+**3. Look — soft again, without the smears.** The cellular noise is gone (functions removed from the shader). Density
+now comes from three soft octaves that slide against each other with the weather phase, read through **two ramps**: a
+wide one for thin semi-transparent veils and feathered edges (42% of the alpha) and a higher one for thick cores (58%).
+Thick parts are gently shaded toward their shadowed side (detail sampled toward the star; × 0.72–1.12) and are slightly
+brighter on top. Fronts and spirals come from a mild warp of the *systems* layer only (the detail warp stays ≤ ± 0.5
+cell — that was the smear). Whole-world white-outs: system contrast 2.5 → 1.7 and threshold `0.69 − 0.25 · coverage`
+(tuned on the sheet — the first version of this pass still whited out ocean / jungle worlds). 13 noise lookups per cloud
+fragment (the pre-tuning shader had 13).
+
+**Performance** (same instrument as above, mean frame ms, two runs each; previous pass → this pass): full system view
+1.44 / 1.55 → 1.40 / 1.41; close-up 1.45 / 1.51 → 1.45 / 1.40; disc filling the frame 1.55 / 1.77 → 1.58 / 1.40. No
+regression.
+
+**Proof:** `cs6b-clouds.png`, `cs6b-clouds-evolution.png` (rows 1–2: surface held, t = 0 / 20 / 40 / 60 s; row 3: the
+planet turns 0.22 rad per step and the cloud layer turns with the continents), all other CS-6b sheets regenerated.
+
+**Keepers.** Compile probe OK with four failing controls. `colony_sphere_air_smoke` 54 PASS (co-rotation and
+locked-body pins added; cycle range, cap and shader-shape pins re-signed), surface 45, shader 62, cache 56. Sweep
+433 / 433, 0 FAIL; `check-i18n` PASS; owner path OK.
+
+**Not verified / open.** Coverage of the visible hemisphere still swings while systems form and dissipate (not
+normalised). The shell follows the mesh one frame late (0.003 rad at the measured spin). On the turning row of the sheet
+the clouds also evolve, so the match with the continents is approximate by design.
+
+**Owner check.** Both flags on the title screen as above → new game → homeworld close-up ≈ 1 minute at 1 d/s (clearly
+different layout after a minute; the clouds turn with the continents), faster speed, paused (planet and clouds stop).
+
+##### Owner check — PASS (2026-11-19)
+
+Owner in-game check of CS-6b with both tuning passes: **PASS**. Approved: atmospheres per archetype, Venus decks, Titan
+haze, tidal lock, gas giant highlight fix (fill light diffuse-only), Finding 771 fix (SurfaceField v3 → v4), clouds
+(evolving, co-rotating with band winds relative to the surface, soft look without smears or cellular texture).
+
+- **D-CS-22 — SIGNED:** moon craters option B (rocky_cratered 0.98, icy_cratered 1.19; SurfaceField v4).
+- **D-CS-23 — SIGNED:** tidal lock (no spin, sub-stellar point toward the star) only for the `tidally_locked` archetype;
+  the stored `tidallyLocked` flag stays as data.
+- **cryo_haze `hazeOpacity` 0.90** — owner's choice (hazy_moon 0.86 unchanged).
+- **Finding 772** ⚪ open — `BodyArchetypes` rows carry unused `atmosphere` / `clouds` placeholder fields; the live data is
+  `BodyAtmospheres.js`. Remove (with the archetypes keeper shape pin) in CS-Z or fold in.
+
+**Carry to CS-7:** thin `hazeOpacity` in the colony view (`ThreeRenderer.bodyHazeOpacity`); show the upscaled LOD map
+first and swap in the hero map; prefetch the capital's hero map after game start; clouds on the colony sphere must use
+the same co-rotating, evolving field (`SurfaceAirShader`, weather clock `weatherRate`).
+
+**Next step in the plan: CS-PHYS (Opus).**
 
 ---
 
