@@ -280,3 +280,9 @@ oraz `TradeOverlay.js:1085/1095/1105` emitują **bez** ręcznego minusa, czyli p
 keeper wykonaniowy: saldo przed/po jednym rozliczeniu == dokładnie tabela `GROUND_UNIT_UPKEEP`.
 ⚠ Keeper musi mieć **bogatą** kolonię w fixture, inaczej bramka salda ukryje drugie pobranie
 i test przejdzie jałowo.
+
+
+## COLONY SPHERE — po CS-PHYS-a (2026-11-19)
+
+- **Finding 773 ⚪** — stempel `seededSystems` ginie dla świata zapisanego przed wejściem w tryb 4X (galaktyka regenerowana bez stempla). Ta sama luka dla klimatu naprawiona w CS-PHYS-a (`galaxyClimateModel`). Plan: COLONY_SPHERE_PLAN §3.8.1.
+- **Klimat v2 a kolonizacja** — ~110 ciał zmienia pasmo temperatury (głównie cienkie światy typu Mars → „zimne”); BALANS tego nie widzi (bot nie kolonizuje thin/dense). Ocenić w grze po CS-5.

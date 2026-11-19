@@ -2232,6 +2232,190 @@ the same co-rotating, evolving field (`SurfaceAirShader`, weather clock `weather
 
 **Next step in the plan: CS-PHYS (Opus).**
 
+### 3.8 CS-PHYS-a — realistic climate at generation (D-CS-19 part 1 of 2; design 2026-11-19)
+
+CS-PHYS is cut in two: **CS-PHYS-a** climate only (this section, `FEATURES.realisticClimate`), **CS-PHYS-b** orbits
+scaled by stellar luminosity (separate step, separate flag). No orbit, RNG-stream or visual code changes here.
+
+**World property (as D-CS-18).** The model is decided once at world creation — `GameScene.start()` (new game only,
+the same branch as the pre-minted galaxy seed) and `GameCore.boot()` — read from the flag exactly once, passed to the
+home-system generator and stamped as `galaxyData.climateModel = 2` (only when ON; saved whole inside `galaxyData`, no
+version bump). `SystemGenerator.worldClimateModel(galaxyData)` is the only reader for foreign systems: stamp 2 → 2;
+a world record without the stamp → 1 (legacy, every old save); no record → the flag (headless API only).
+`worldSeedContext` is unchanged (its JSON shape is pinned). Flipping the flag later changes nothing.
+
+**Zero RNG draws.** The climate is a pure function of values the generator already drew, computed after the draws
+that use temperature. The atmosphere is still rolled from the pre-greenhouse equilibrium temperature `T_base_C`;
+`getPlanetColor` keeps receiving the legacy temperature (no visual change, the same draw count). So a climate-v2 world
+has exactly the same bodies, orbits, atmospheres, compositions and deposits as a legacy world with the same seed —
+only `temperatureC/K` differ and a `climate` record is added. `peekCountsForStar == generated` holds trivially.
+
+**Formulas** (new pure module `src/utils/ClimateModel.js`; flux `S = L/a²` in S⊕, moon: the parent's `a`):
+- Equilibrium (unchanged): `T_eq = 278 K · (1−A)^¼ · L^¼ / √a`, albedo per type (rocky 0.15, hot_rocky 0.05, ice 0.50,
+  gas 0.35; moons icy 0.6 / rocky 0.12; planetoids 0.05–0.15).
+- Greenhouse, grey-atmosphere approximation: `T_s = T_eq · (1 + ¾·τ)^¼`, `ΔT = T_s − T_eq`, optical depth τ(atmosphere, S):
+
+| Atmosphere | τ for S ≥ S_col (0.35) | runaway (S 1.1 → 1.5, smoothstep) | collapse floor (S → 0) |
+|---|---|---|---|
+| none | 0 | — | 0 |
+| thin | 0.1 | none | 0.05 |
+| breathable | 0.478 · S^−1.70 (carbonate–silicate thermostat: Earth at S 1, ≈ 0 °C at the HZ outer edge) | none | 0.3 |
+| dense | 7 | → 33 (Venus ≈ 434 °C) | 1.7 (Titan ≈ −180 °C) |
+| thick | 14 | → 40 (Venus ≈ 467 °C) | 2.5 |
+
+  Below `S_col = FLUX_HZ_OUTER = 0.35` (the CO₂ maximum-greenhouse limit, the same constant that splits hothouse /
+  cryo_haze) the CO₂ part condenses: `τ = floor + (τ(S_col) − floor) · (S/S_col)^8` (sharp collapse). Every τ of thick
+  ≥ dense at every flux, so the `thick < dense` inversion is gone. Calibration note: the game's rocky albedo 0.15 puts
+  Earth's `T_eq` at −6 °C, so the breathable greenhouse at Earth flux is **+21 K** (Earth = +15 °C); measured against
+  real Earth's Bond-albedo `T_eq` 255 K it is the textbook +33 K — the lighter game albedo carries 12 K of it.
+- Airless bodies (`none`; gas giants excluded) — **display only**, stored, the gameplay value stays the mean:
+  day max = subsolar `√2 · T_eq` at perihelion flux `L/(a(1−e))²`; night min = `min(95 K, 0.75 · T_eq)` (slow-rotator
+  regolith night). Mercury (A 0.05, a 0.387, e 0.206) → +427 / −178 °C. Thin atmospheres: the same range halved toward
+  the final temperature (Mars ≈ −4 / −116 °C).
+- Moons: greenhouse from the parent's flux; tidal + parent-IR heating for moons of **gas** giants by rank zone
+  (`moonZoneOfRank`, same as the archetypes): inner 2.5 W/m² (Io), mid 0.05 W/m² (Europa), outer 0:
+  `T = (T_s⁴ + F/σ)^¼`; night min raised to `(F/σ)^¼`. Effect at Jupiter: Io-like +6 K; negligible near the star.
+- Planetoids: equilibrium only (temperature unchanged), plus the airless display range.
+- Homeworlds (player + every AI): `makeHomeworldBreathable` recomputes with the stored `climate` record
+  (`T_eq + ΔT(breathable, S)`), then the same 5–35 °C clamp with the same draws; HomeworldClimate band unchanged.
+- `LifeSystem._recalcTemp` / `_recalcTempOwnStar` do nothing in a climate-v2 world (temperatures are generation-time
+  and frozen, D-CS-19); `_calcPotential` still runs; LifeSystem otherwise untouched.
+
+Stored per body (planet / moon / planetoid, only in v2 worlds, key omitted otherwise so legacy saves stay byte-equal):
+`climate = { model: 2, flux, eqC, greenhouseC, tidalC, dayMaxC, nightMinC }` (°C rounded to 0.01; range `null` when
+not airless/thin); restored `?? null`, no version bump.
+
+**Order of operations** (per body, generator): orbit + type + mass → radius, gravity → `T_eq` → atmosphere rolled from
+`T_base_C` (unchanged) → `T = T_eq + ΔT(atm, S)` (v2) → colour from the legacy temperature → … → `_enforceMinSeparation`
+recomputes moved planets with the same model → moons (parent's final `a`), tidal pass per parent after all its moons →
+planetoids → (home) `makeHomeworldBreathable` → archetypes assigned from the stored values (frozen, D-CS-2; secondary
+temperature clauses see v2 values in new worlds; not re-selected anywhere).
+
+**Expected analogues:** Earth (rocky, breathable, S 1) +15 °C · Venus (rocky, S 1.91) dense 434 / thick 467 °C ·
+Mars (rocky, thin, S 0.43) −53 °C · Titan (ice planet, dense, S 0.011) −180 °C (thick −175) · Mercury day/night
++427 / −178 °C · Io-like inner moon of a Jovian giant +6 K tidal.
+
+**Every gameplay consumer of temperature** (expected effect in v2 worlds; measured in §3.8 results):
+- `EnvironmentBands.temperatureBand` (`src/data/EnvironmentBands.js:20`, cold < −53 / hot > 77 °C) feeds
+  `PopulationData.planetGrowthMod` (`:32`, pop growth ×0.85 outside moderate), `EnvironmentCost.envMultiplier`
+  (`:44`, build/upkeep surcharge cold +25% / hot +15%), `ProsperitySystem` (`:207`), `ConsumerGoodsData` (`:14`) and the
+  colony info panel (`EnvironmentEffectLogic.js:40`). Expect: thin/none bodies a few K warmer (≈ same band), dense/thick
+  HZ bodies move moderate → hot, breathable HZ worlds stay moderate.
+- `HexTile.js:191` open-air climate gate (`requiresOpenAirClimate` buildings need T ≥ 0 °C): breathable worlds near the
+  HZ outer edge sit at ≈ 0 °C (gate flips either way), dense worlds open up, cold thin worlds stay closed.
+- Colony map terrain: `PlanetMapGenerator._calcWeights` / `_applyPolarEffects` (`src/map/PlanetMapGenerator.js:150,357`),
+  `RegionSystem` (`src/map/RegionSystem.js:404,470`), `BodyTerrainUtils.getBodyTerrains` (`:32`, outpost picker) read
+  `surface.temperature`: hot greenhouse worlds lose ice caps / gain hot biomes.
+- `LifeSystem._calcPotential` (`src/systems/LifeSystem.js:187-199`, life only in −35…85 °C): frozen v2 temperatures;
+  hothouse worlds drop out, HZ breathable worlds stay in.
+- `BuildingSystem._isPlanetExtreme` (`src/systems/BuildingSystem.js:1926`, home planet only): homeworld in band → none.
+- `SystemGenerator._applyCivHomeworld` home pick (`:820`, +30 for 0–50 °C, +15 for −23…77): v2 temperatures can pick a
+  different rocky planet as the player's home (then clamped to 5–35 °C).
+- Archetype secondary clauses (`BodyArchetypes.js:196,213,250,302,440` — jungle/desert > 35, volcanic > 150,
+  scorched > 100, hazy_moon < 0) at world creation only.
+- Display only: tooltips (`TooltipContent.js:191`), `Planet/Moon.getInfo`, `LabelHoverLogic.js:208`, colony info
+  (`ColonyOverlay.js:1458`), observatory / body modal. Legacy texture choice `PlanetTextureUtils.resolveTextureType`
+  (`:75,85,99`) and `TerrainTextures` (`:111`) read temperature — a v2 world can show a different legacy texture on the
+  system map with `sharedSurface` OFF (counted, not changed). AI empires have no direct temperature term (Director /
+  `AcceptanceEngine` grep = 0); they feel it through the colony-map terrain, growth and cost multipliers above.
+
+Critical files touched (covered by this plan's sign-off): `src/config/GameConfig.js` (flag), `src/generators/SystemGenerator.js`.
+
+#### 3.8.1 CS-PHYS-a — implementation and measurements (2026-11-19; not committed, owner gate pending)
+
+**Files.** New: `src/utils/ClimateModel.js` (pure model + `LOOK_TEMP_CONTRADICTION`), keeper
+`src/testing/smoke/colony_sphere_climate_smoke.mjs`, trace `src/testing/fixtures/traces/CSPHYS-world-off-baseline.json`
+(recorded on a detached worktree at `66f924f`), probes `src/testing/headless/probe-cs-phys-climate.mjs` (5 seeds × 72
+systems, legacy vs v2), `probe-cs-phys-balans.mjs` (BALANS wrapper), `probe-cs-phys-gate.mjs` (live engine, headless
+Chrome). Changed: **`GameConfig.js`** (critical, flag), **`SystemGenerator.js`** (critical: `worldClimateModel`, climate in
+`_makePlanet` / `_adjustOrbit` / `_makeMoon` + `_applyMoonTidalHeating` / planetoids / `makeHomeworldBreathable`),
+`GalaxyGenerator.js` (stamp), `GameScene.js` (one decision + stamp + restore ×3 + `csClimate` alias), `GameCore.js`,
+`StarSystemManager.js`, `LifeSystem.js` (no-op in v2 worlds), `SaveSystem.js` (key only when present),
+`ColonySphereDebug.js` (`csClimate`, `colonySphereClimateRows`), `colony_sphere_seeds_smoke.mjs` (4 call-shape pins
+widened to accept the sibling `climateModel` argument; core assertion unchanged).
+
+**Live-probe finding fixed in this step.** A world saved before 4X starts has no persisted `galaxyData` (§G1 comment in
+`GameScene.start`): on load a new galaxy is minted, and the climate stamp would be lost while the home bodies keep their
+v2 records — LifeSystem then rewrote the frozen temperatures with the legacy formula (probe `save2`: 7 planets changed).
+Fix: on that load path the regenerated galaxy's model comes from the restored home bodies (`galaxyClimateModel`).
+**Finding 773 ⚪** (pre-existing since CS-3a-fix, no step): the same path re-stamps `seededSystems` as `false`
+(`preMintedGalaxySeed` is null for any save), so a seeded world saved before 4X loads as unseeded.
+
+**Analogues (code values):** Earth +15.0 °C (ΔT +21.3 K; legacy 13.8) · Venus dense 433.9 / thick 467.4 °C (legacy
+100.7 / 75.7 — inversion gone) · Mars −53.0 °C, day/night −2 / −116 (legacy −41.9) · Titan ice dense −180.2 / thick
+−174.6 °C (legacy −137.5 / −162.5); Titan-like icy moon with game `thin` −200.9 °C (real Titan is 1.5 bar ≈ `dense`) ·
+Mercury mean 168 °C (unchanged), day +426.9 / night −178.2 °C · Moon −3.9 °C, +107.6 / −178.2 · Io +6.2 K tidal, Europa
++0.24 K.
+
+**Rules and contradictions** (`probe-cs-phys-climate`, 5 seeds × 72 systems, same bodies in both models — verified):
+
+| | legacy | climate v2 |
+|---|---|---|
+| R1 airless beyond hz.min, T > 0 | 101 / 15193 | 101 / 15193 (means unchanged by design) |
+| R1b airless < 0.5·hz.min, T < 100 | 0 / 0 | 0 / 0 (no such orbit — CS-PHYS-b) |
+| R2 thin/breathable in HZ ∉ (−20, 50) | 83 / 247 (33.6%) | 82 / 247 (33.2%) — breathable 16/75 → **0/75**, thin 67/172 → 82/172 |
+| R3 dense/thick at a ≤ hz.max, T < 100 | 18 / 23 (78.3%) | 14 / 23 (60.9%) — the rest sit beyond S_col (class HZ ≠ flux HZ) |
+| R4 distant moon with atmosphere ≥ 0 | 0 / 205 | 0 / 205 |
+| look ↔ temperature contradictions | **71** / 3751 | **14** / 3751 (6 cryo_haze at S 0.3–0.35 boundary + 8 scorched judged on the mean); scorched judged on the day side → **6** |
+
+R2 for `thin` gets worse on purpose: a Mars-class thin atmosphere gives +4 K (Mars anchor), so thin HZ worlds near the
+outer edge are cold. Archetypes: **identical** in both models (0 / 6868 changed; secondary temperature clauses never flip).
+
+**Temperature distribution** (°C min / median / max, n; full table in the probe JSON): rocky breathable HZ −37/1/54 →
+**−1/8/44** (75); rocky dense/thick inner 114/117/125 → **465/471/489** (5); dense/thick HZ −25/11/84 → −36/81/396 (18);
+dense/thick outer −86/−42/2 → −116/−63/68 (155); rocky thin HZ −62/−6/53 → −74/−16/44 (170); ice dense/thick frost
+−181/−143/−84 → −234/−187/−114 (176); airless bodies, planetoids and gas giants unchanged; icy/rocky moons of gas giants
++1…+9 K median (tidal floor ≈ −192 °C far out; max +52 K at the coldest inner moons).
+
+**Gameplay consumers — observed** (6868 non-gas planets + moons, 5 galaxies): temperature band changed on 110 bodies
+(moderate → cold 98 — mostly thin worlds losing the flat +15; moderate → hot 9; cold/hot → moderate 3); open-air
+climate gate (atmosphere and T ≥ 0) open on 175 → 193 bodies; LifeSystem window (−35…85 °C) 698 → 676; colony-terrain
+set (`getBodyTerrains`) changed on 77 bodies; legacy texture (`resolveTextureType` thresholds, `sharedSurface` OFF)
+changed on 116 (iron↔rocky 57, ocean↔rocky 35, → toxic/lava 8, desert/ocean 16); player home pick changed 0/5;
+homeworlds (player + AI, 15) all 5–35 °C in both (e.g. 22/29/7 → 22/25/14).
+
+**BALANS** (`probe-cs-phys-balans.mjs`, the AI-empire runner = player bot + 2 AI empires, real economy, galaxy
+`HEADLESS_GALAXY_SEED`; 8 seeds × 45 gy and 8 seeds × 120 gy; POP runner 8 × 45 gy): **every summary metric identical
+OFF vs ON** — AI colonies 56 / outposts 56 / systems 32, first outpost Σ97 gy, pop end 2175 (45 gy) / 4519 (120 gy),
+jobs, buildings, pop-decline years, zero-stock years for food/water/energy, the player's colonies/pop/buildings/first
+expansion; POP JSON byte-identical. Only the capped decision log moves: AI `expander:build:fail` 314 → 217, successful
+decisions 2437 → 2459 (+0.9%). Reading: within this harness the climate change is economically inert — homes are
+clamped into the same moderate band, outpost targets are mostly airless (means unchanged), the AI has no temperature term,
+and the player bot stays on its home world. The fewer failed AI builds are consistent with the open-air gate opening on
+warmer greenhouse worlds. Not covered by the harness: a player who settles thin / dense worlds (band and gate changes
+above). No retune.
+
+**Keeper** `colony_sphere_climate_smoke` K1–K10: **51 pins**. Fail-first on `git worktree --detach 66f924f` (three stub
+copied, no junction): **14 green / 37 red**, no abort; the 14 green are the OFF trace (5 + flip), legacy behaviour
+controls (LifeSystem recalculates, legacy save omits the key, flag ON in a legacy world adds nothing), determinism / same
+bodies / peek (controls) and the outer-zone exclusion. **19 mutations, all killed**: thick < dense, no runaway, no CO₂
+collapse, LifeSystem not frozen, worldClimateModel reads the flag, GalaxyGenerator always writes the key, SaveSystem
+always writes `climate`, colour from the v2 temperature, homeworld ignores the record, tidal on ice giants, moon flux from
+its own orbit, StarSystemManager without the world model, GameScene without the `savedData` gate, atmosphere rolled from
+the v2 temperature, `_adjustOrbit` without v2, thermostat off, planetoid temperature changed, moon restore dropped,
+pre-4X load without `galaxyClimateModel`. Sweep `run-all.mjs --quiet`: **434/434 OK, 0 FAIL** (31 advisory). `check-i18n`: PASS (no new UI strings; debug
+output only).
+
+**Live engine** (`probe-cs-phys-gate.mjs`, headless Chrome, the real title → new game flow): `title` climateModel 2,
+stamp 2, v2 records on every body, csLifeTick changed 0 · `flip` climateModel 1, 0 records · `save` (legacy save,
+flag ON on the title, Continue) climateModel 1, 0 records · `save2` (v2 world saved before 4X, flag OFF, Continue)
+climateModel 2, records kept, csLifeTick changed 0. Only page exceptions: headless `AudioContext is closed` (known).
+
+**Owner live gate — PASS (2026-11-19).** (1) Old save: csClimate climateModel 1, worldStamp null, withV2Record 0; after
+`realisticClimate=true` still climateModel 1, same numbers. (2) New world with the flag set on the title screen: log
+`klimat=v2`; climateModel 2, worldStamp 2, withV2Record 48/48, withDayNight 44, contradictions 0; csLifeTick changed 0
+(home New Earth 12 °C stays); tidal heating visible on gas-giant moons (+20…+38 °C). (3) Same world after save → F5 →
+Continue (flag false): climateModel 2, identical numbers. (4) OFF game, flag set after start: climateModel 1, withV2Record 0.
+
+**Observation for CS-PHYS-b:** in the v2 world the homeworld sits at flux 0.192 (equilibrium −96.5 °C) and is playable
+only through the 5–35 °C homeworld band — the orbit problem CS-PHYS-b fixes.
+
+**Finding 773 ⚪ open** (no step): the `seededSystems` world stamp is lost for worlds saved before 4X mode (regenerated
+galaxy re-stamped unseeded) — the same gap fixed here for climate via `galaxyClimateModel`.
+
+**BALANS caveat:** the harness does not colonise thin / dense worlds. The temperature-band shift on ≈ 110 bodies (mostly
+thin Mars-like worlds becoming "cold" → harder colonisation) is to be judged in play after CS-5.
+
 ---
 
 ## 4. Decisions for Filip (recommendation first)
