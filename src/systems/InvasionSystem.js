@@ -625,7 +625,7 @@ export class InvasionSystem {
       if (tile.capitalBase) continue;
       if (gum?.getUnitAt(colony.planetId, tile.q, tile.r)) continue;
 
-      const isEdge = this._isEdgeHex(grid, tile);
+      const isEdge = tileGraphOf(grid).isLandingEdge(tile);   // CS-2: strefa lądowania (D-CS-9)
       if (isEdge) edgeHexes.push({ q: tile.q, r: tile.r });
       else fallback.push({ q: tile.q, r: tile.r });
     }
@@ -639,12 +639,6 @@ export class InvasionSystem {
     return pool;
   }
 
-  // CS-2: „mniej niż 6 sąsiadów” = brzeg płaskiej mapy → TileGraph.isLandingEdge (D-CS-9); tu bez zmian.
-  _isEdgeHex(grid, tile) {
-    // Brzegowe hexy mają mniej niż 6 sąsiadów (pierwsza/ostatnia row, brzeg mapy).
-    const neighbors = grid.getNeighbors ? grid.getNeighbors(tile.q, tile.r) : [];
-    return neighbors.length < 6;
-  }
 
   _year() { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
 }

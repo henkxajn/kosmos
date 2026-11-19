@@ -36,6 +36,7 @@ import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { isInService, hasWeapons, isEnemyVessel, loadGroundUnit } from '../entities/Vessel.js';
 import { garrisonAnchor, garrisonTier, readEmpireGarrisonSnapshot } from '../utils/GarrisonPlanner.js';
+import { tileGraphOf } from '../map/TileGraph.js';   // CS-2 — kotwica zapasowa = pierwsze pole grafu
 import { readEmpireWavePlan, planWave, STRIKE_TRANSPORT_TEMPLATE, squadronHoldMaxYears } from '../utils/StrikeWavePlanner.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 
@@ -187,7 +188,8 @@ export class StrikeSquadronSystem {
     // ── fala: obcięcie do ŻYWEJ ładowni kadłuba, jednostki NOWE przy stolicy, załadunek ──
     const tier = garrisonTier(readEmpireGarrisonSnapshot(K, empireId));
     const plan = planWave({ limit: plan0.limit, share: plan0.share, tier, capacity: transport.troopCapacity ?? 0 });
-    const anchor = garrisonAnchor(capital.grid, !!capital.isOutpost) ?? { q: 0, r: 0 };
+    // CS-2: bez kotwicy → pierwsze pole grafu (płasko = dawne {0,0}); { q: 0, r: 0 } tylko dla ciała bez siatki
+    const anchor = garrisonAnchor(capital.grid, !!capital.isOutpost) ?? tileGraphOf(capital.grid)?.anyTile() ?? { q: 0, r: 0 };
     const unitIds = [];
     const rollback = (reason, extra = {}) => {
       for (const uid of unitIds) gum.removeUnit?.(uid);

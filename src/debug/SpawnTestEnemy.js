@@ -116,7 +116,6 @@ export function spawnTestEnemy() {
   // 4. Wygeneruj grid (replikacja logiki ColonyManager._onColonyFounded)
   const grid = PlanetMapGenerator.generate(colony.planet, false);
   colony.buildingSystem._grid       = grid;
-  colony.buildingSystem._gridHeight = grid.height ?? 10;
   colony.grid = grid;
 
   // Oznacz wszystkie hexy jako własność wrogiego imperium

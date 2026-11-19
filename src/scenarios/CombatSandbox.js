@@ -160,7 +160,6 @@ export function loadCombatSandbox(scene, civPlanet) {
   scene.civSystem.setPopulation(PLAYER_POPULATION);
   const playerGrid = PlanetMapGenerator.generate(civPlanet, true);
   scene.buildingSystem._grid       = playerGrid;
-  scene.buildingSystem._gridHeight = playerGrid.height;
   if (playerColony) playerColony.grid = playerGrid;
   _placeLayout(scene.buildingSystem, playerGrid, PLAYER_BUILDINGS);
 
@@ -395,7 +394,6 @@ function _setupEnemyCivilization(scene, enemyPlanet) {
 
   const grid = PlanetMapGenerator.generate(enemyPlanet, false);
   colony.buildingSystem._grid       = grid;
-  colony.buildingSystem._gridHeight = grid.height ?? 10;
   colony.grid = grid;
   for (const tile of tileGraphOf(grid).tiles()) {
     if (tile) tile.owner = SANDBOX_ENEMY_ID;

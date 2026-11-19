@@ -97,10 +97,9 @@ export function ensureColonyGrid(colony, opts = {}) {
     if (tile && tile.owner == null) tile.owner = defaultOwner;
   }
 
-  // Ustaw gridHeight, deposits i tryb w BuildingSystem (krytyczne!)
+  // Ustaw siatkę, deposits i tryb w BuildingSystem (krytyczne!)
   const bSys = colony.buildingSystem;
   if (bSys) {
-    bSys._gridHeight = grid.height ?? 10;
     bSys._grid = grid;
     if (typeof bSys.setDeposits === 'function') {
       bSys.setDeposits(colony.planet?.deposits ?? []);

@@ -24,13 +24,13 @@ import { BUILDINGS }      from '../data/BuildingsData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES, evaluatePlacement }  from '../map/HexTile.js';
 import { TECHS }          from '../data/TechData.js';
-import { HexGrid }        from '../map/HexGrid.js';
 import { tileGraphOf, parseTileKey, formatTileKey, isCapitalKey, CAPITAL_PREFIX, BUILDING_PREFIX } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
 import { DepositSystem }    from '../systems/DepositSystem.js';
 import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
 import { systemBelongsToPlayer } from '../utils/ColonyOwnership.js';
-import { getTerrainRule }  from '../data/ai/AiTerrainRules.js';
+import { getTerrainRule, aiPolarPenalty }  from '../data/ai/AiTerrainRules.js';
+import { latitudeModifierOf, neutralLatitudeModifier } from '../data/LatitudeBands.js';   // CS-2 — pas szerokości
 import { t, getName }      from '../i18n/i18n.js';
 import { envMultiplier, computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
@@ -70,15 +70,13 @@ export class BuildingSystem {
     this._factoryPauseSuppressed = false;  // gracz przejął przełącznik w bieżącym epizodzie budowy priorytetowej
 
     // Kolejka budowy:
-    //   tileKey → { buildingId, progress, buildTime, tileR, tileType, isUpgrade?, targetLevel? }
+    //   tileKey → { buildingId, progress, buildTime, tileType, isUpgrade?, targetLevel? }
+    //   (CS-2: bez `tileR` — pas szerokości liczony z klucza pola; `tileR` ze starych zapisów jest ignorowane)
     this._constructionQueue = new Map();
 
     // Oczekujące zamówienia (brak surowców → czeka aż będą dostępne):
-    //   tileKey → { tileKey, buildingId, cost, isUpgrade, targetLevel, tileR, tileType, queuedAt }
+    //   tileKey → { tileKey, buildingId, cost, isUpgrade, targetLevel, tileType, queuedAt }
     this._pendingQueue = new Map();
-
-    // Wysokość siatki (do obliczania modyfikatora polarnego)
-    this._gridHeight = 0;
 
     // Referencja na deposits ciała niebieskiego (ustawiana przez GameScene)
     this._deposits = null;
@@ -743,7 +741,9 @@ export class BuildingSystem {
 
   // ── Aktywacja budynku (wspólna logika dla nowej budowy i zakończenia construction) ──
 
-  _activateBuilding(tileKey, buildingId, tileR, tileType, isCapital = false) {
+  // `_tileR` — dawny rząd pola, IGNOROWANY (CS-2, Finding 779): pas szerokości liczony z klucza pola przez graf.
+  //   Slot zostaje, żeby pozycyjne wywołania (testy, stare ścieżki) się nie przesunęły.
+  _activateBuilding(tileKey, buildingId, _tileR, tileType, isCapital = false) {
     const building = BUILDINGS[buildingId];
     if (!building) return;
 
@@ -751,7 +751,7 @@ export class BuildingSystem {
     // Zbuduj minimalny tile-like obiekt do obliczenia stawek
     // Pobierz prawdziwy tile z gridu (dla anomalyEffect) lub fallback
     const realTile = tileGraphOf(this._grid)?.tile(tileKey);
-    const tileLike = realTile ?? { r: tileR, type: tileType, key: tileKey, anomalyEffect: null };
+    const tileLike = realTile ?? { type: tileType, key: tileKey, anomalyEffect: null };   // CS-2: pas z klucza (bez tileR)
 
     const baseRates  = this._calcBaseRates(building, tileLike, level);
     const activeKey  = isCapital ? formatTileKey(tileKey, CAPITAL_PREFIX) : tileKey;
@@ -937,9 +937,7 @@ export class BuildingSystem {
     }
 
     // Modyfikator polarny (wyłączony dla RegionSystem — polarność wbudowana w biom)
-    const latMod = (!this._isRegionMode && this._gridHeight > 0)
-      ? HexGrid.getLatitudeModifier(tile.r, this._gridHeight)
-      : { production: 1.0, buildCost: 1.0, label: null };
+    const latMod = this._latitudeModifier(tile);
 
     // Oblicz koszt surowców: modyfikator polarny (latMod) × dopłata środowiskowa (Stage 2).
     // Wspólny helper z UI (computeBuildResourceCost) → podgląd == rzeczywisty koszt dla części środowiskowej.
@@ -1005,7 +1003,6 @@ export class BuildingSystem {
         jobs,
         isUpgrade: false,
         targetLevel: null,
-        tileR: tile.r,
         tileType: tile.type,
         queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
       });
@@ -1034,7 +1031,6 @@ export class BuildingSystem {
         buildingId,
         progress: 0,
         buildTime,
-        tileR: tile.r,
         tileType: tile.type,
       });
       tile.underConstruction = { buildingId, progress: 0, buildTime };
@@ -1050,7 +1046,7 @@ export class BuildingSystem {
       tile.buildingLevel = 1;
     }
 
-    this._activateBuilding(tile.key, buildingId, tile.r, tile.type, isCapital);
+    this._activateBuilding(tile.key, buildingId, null, tile.type, isCapital);
     EventBus.emit('planet:buildResult', { success: true, tile, buildingId });
   }
 
@@ -1131,7 +1127,6 @@ export class BuildingSystem {
         jobs,
         isUpgrade: true,
         targetLevel: nextLevel,
-        tileR: tile.r,
         tileType: tile.type,
         queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
       });
@@ -1156,7 +1151,6 @@ export class BuildingSystem {
         buildingId: building.id,
         progress: 0,
         buildTime: upgradeTime,
-        tileR: tile.r,
         tileType: tile.type,
         isUpgrade: true,
         targetLevel: nextLevel,
@@ -1478,12 +1472,12 @@ export class BuildingSystem {
           const jobs = activeEntry.jobs ?? building?.jobs ?? 0;
 
           // Użyj tile-like do _applyUpgrade
-          const tileLike = { key: tileKey, r: entry.tileR, type: entry.tileType, buildingLevel: activeEntry.level, buildingId: building.id };
+          const tileLike = { key: tileKey, type: entry.tileType, buildingLevel: activeEntry.level, buildingId: building.id };
           this._applyUpgrade(tileLike, activeEntry, building, nextLevel, jobs);
         }
       } else {
         // Nowa budowa zakończona — aktywuj budynek
-        this._activateBuilding(tileKey, entry.buildingId, entry.tileR, entry.tileType, false);
+        this._activateBuilding(tileKey, entry.buildingId, null, entry.tileType, false);
       }
 
       EventBus.emit('planet:constructionComplete', {
@@ -1532,13 +1526,12 @@ export class BuildingSystem {
               buildingId: building.id,
               progress: 0,
               buildTime: upgradeTime,
-              tileR: order.tileR,
               tileType: order.tileType,
               isUpgrade: true,
               targetLevel: order.targetLevel,
             });
           } else {
-            const tileLike = { key: tileKey, r: order.tileR, type: order.tileType, buildingLevel: entry.level, buildingId: building.id };
+            const tileLike = { key: tileKey, type: order.tileType, buildingLevel: entry.level, buildingId: building.id };
             this._applyUpgrade(tileLike, entry, building, order.targetLevel, neededPop);
           }
         }
@@ -1553,11 +1546,10 @@ export class BuildingSystem {
             buildingId: order.buildingId,
             progress: 0,
             buildTime,
-            tileR: order.tileR,
             tileType: order.tileType,
           });
         } else {
-          this._activateBuilding(tileKey, order.buildingId, order.tileR, order.tileType, false);
+          this._activateBuilding(tileKey, order.buildingId, null, order.tileType, false);
         }
       }
 
@@ -1622,7 +1614,7 @@ export class BuildingSystem {
     const grid = this._grid;
     if (!grid || typeof grid.forEach !== 'function') return false;
 
-    const rows = grid.height ?? 10;
+    const graph = tileGraphOf(grid);
     const preferred = Array.isArray(opts.preferredTerrain) && opts.preferredTerrain.length > 0
       ? opts.preferredTerrain
       : null;
@@ -1642,14 +1634,7 @@ export class BuildingSystem {
       return TERRAIN_TYPES[tile.type]?.buildable === true;
     };
 
-    // POLAR_PENALTY: zsynchronizowane z ColonyAutoExpander._findFreeTile (-5/-2).
-    //   Jeśli zmieniasz tu wartości, zmień też tam i w
-    //   EmpireColonyBootstrap._placeBuildingSmart — trzy kopie tej samej skali.
-    const polarPenalty = (r) => {
-      if (r === 0 || r === rows - 1) return -5;
-      if (r === 1 || r === rows - 2) return -2;
-      return 0;
-    };
+    // Kara polarna: jeden kanon (CS-2) — AiTerrainRules.aiPolarPenalty(graph, tile), pas z TileGraph.
 
     // Faza 1 — jawny preferredTerrain od callera (hard hint). Fix: czytamy
     //   tile.type, nie nieistniejące tile.terrain (przez co Faza 1 była martwa).
@@ -1661,7 +1646,7 @@ export class BuildingSystem {
       tileGraphOf(grid).forEachTile(tile => {
         if (!isFreeHex(tile)) return;
         if (!preferred.includes(tile.type)) return;
-        const score = polarPenalty(tile.r);
+        const score = aiPolarPenalty(graph, tile);
         if (score > bestScore) {
           bestScore  = score;
           placedKey  = tileGraphOf(grid).idOf(tile);
@@ -1682,7 +1667,7 @@ export class BuildingSystem {
           if (enforceHard && hardTerrains && !hardTerrains.includes(tile.type)) return;
           let score = 0;
           if (softTerrains && softTerrains.includes(tile.type)) score += 10;
-          score += polarPenalty(tile.r);
+          score += aiPolarPenalty(graph, tile);
           if (score > bestScore) {
             bestScore = score;
             best      = tile;
@@ -1713,7 +1698,7 @@ export class BuildingSystem {
 
     // Deleguj do wspólnej aktywacji — rejestracja produkcji, zatrudnienia, housing,
     // konwersji strata, faction shift, factory points itd.
-    this._activateBuilding(key, buildingId, tile.r, tile.type, isCapital);
+    this._activateBuilding(key, buildingId, null, tile.type, isCapital);
 
     return true;
   }
@@ -1858,7 +1843,6 @@ export class BuildingSystem {
         buildingId: entry.buildingId,
         progress:   entry.progress,
         buildTime:  entry.buildTime,
-        tileR:      entry.tileR,
         tileType:   entry.tileType,
       };
       if (entry.isUpgrade) {
@@ -1878,7 +1862,6 @@ export class BuildingSystem {
         buildingId: item.buildingId,
         progress:   item.progress ?? 0,
         buildTime:  item.buildTime ?? 1,
-        tileR:      item.tileR ?? 0,
         tileType:   item.tileType ?? 'plains',
         isUpgrade:  item.isUpgrade ?? false,
         targetLevel: item.targetLevel,
@@ -1905,7 +1888,6 @@ export class BuildingSystem {
         cost:        item.cost ?? {},
         isUpgrade:   item.isUpgrade ?? false,
         targetLevel: item.targetLevel ?? null,
-        tileR:       item.tileR ?? 0,
         tileType:    item.tileType ?? 'plains',
         queuedAt:    item.queuedAt ?? 0,
       });
@@ -2013,7 +1995,26 @@ export class BuildingSystem {
 
   // Oblicz stawki bazowe z uwzględnieniem poziomu budynku
   // Efekt poziomu: rate × level (liniowy — upgrade podwaja produkcję)
-  _calcBaseRates(building, tile, level = 1) {
+  // ── Pas szerokości pola (CS-2, D-CS-7) ────────────────────────────────────
+  // Graf kolonii: jawny (`graph` — nowa gra liczy stawki na siatce, której jeszcze nie ma ani w BuildingSystem, ani
+  // w kolonii) → siatka BuildingSystem → siatka kolonii (po wczytaniu `_grid` bywa null, dopóki mapa nie jest
+  // otwarta — Finding 779: wcześniej modyfikator szedł wtedy z `_gridHeight` = 0 lub z tabeli GameScene).
+  _latitudeGraph(graph = null) {
+    return graph ?? tileGraphOf(this._grid)
+      ?? tileGraphOf(window.KOSMOS?.colonyManager?.getColony?.(this._planetId)?.grid);
+  }
+
+  // Modyfikator {production, buildCost, label} pola. Pole bez współrzędnych (tile-like z kolejki) → pas z klucza
+  // pola, nigdy z zapisanego `tileR`. Tryb RegionSystem albo brak siatki → bez kary.
+  _latitudeModifier(tile, graph = null) {
+    if (this._isRegionMode) return neutralLatitudeModifier();
+    const g = this._latitudeGraph(graph);
+    if (!g) return neutralLatitudeModifier();
+    const ref = (tile.q != null && tile.r != null) ? tile : parseTileKey(tile.key).id;
+    return latitudeModifierOf(g.latitudeBand(ref));
+  }
+
+  _calcBaseRates(building, tile, level = 1, graph = null) {
     const hasRates = building.rates && hasKeys(building.rates);
     const hasEnergyCost = building.energyCost && building.energyCost > 0;
     const hasMaintenance = building.maintenance && hasKeys(building.maintenance);
@@ -2035,9 +2036,7 @@ export class BuildingSystem {
     const climatePlanet = this._resolveOwnPlanet();
     const climateFoodMult = (building.requiresOpenAirClimate && climatePlanet?.atmosphere === 'thin') ? 0.5 : 1.0;
 
-    const latMod = (!this._isRegionMode && this._gridHeight > 0)
-      ? HexGrid.getLatitudeModifier(tile.r, this._gridHeight)
-      : { production: 1.0, buildCost: 1.0, label: null };
+    const latMod = this._latitudeModifier(tile, graph);
 
     // Mnożnik poziomu: liniowy — Lv2 = 2x, Lv3 = 3x produkcji
     const levelMult = level;

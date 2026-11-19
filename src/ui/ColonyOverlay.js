@@ -18,7 +18,7 @@ import { stationGroupOf, resolveStationGroupState } from '../utils/StationGroup.
 import EntityManager from '../core/EntityManager.js';
 import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
 import { computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
-import { HexGrid }      from '../map/HexGrid.js';
+import { latitudeModifierOf } from '../data/LatitudeBands.js';   // CS-2 — etykieta pasa szerokości
 import { tileGraphOf, isCapitalKey, samePos, DETACHED_FLAT_GRAPH } from '../map/TileGraph.js';   // CS-1b — pola/klucze/odległości przez TileGraph
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
@@ -579,7 +579,6 @@ export class ColonyOverlay extends BaseOverlay {
         // Zsynchronizuj BuildingSystem z tą SAMĄ instancją grida (install/energyChain/render
         // muszą czytać/pisać jeden grid). Dla kolonii gracza z save inaczej bSys._grid = null.
         bSys._grid = colony.grid;
-        bSys._gridHeight = colony.grid.height ?? 10;
         if (typeof bSys.setDeposits === 'function') bSys.setDeposits(colony.planet?.deposits ?? []);
       }
       this._loadBiomeMap(colony.planet, colony.grid, pid);   // biomy nie są serializowane (async)
@@ -3923,7 +3922,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Koordynaty + modyfikator polarny
     ctx.font = `10px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    const latMod = HexGrid.getLatitudeModifier(tile.r, grid.height);
+    const latMod = latitudeModifierOf(graph.latitudeBand(tile));   // CS-2: pas z grafu (D-CS-7)
     ctx.fillText(`(${graph.idOf(tile)})${latMod.label ? '  ' + latMod.label : ''}`, x + 8, cy);
     cy += 16;
 

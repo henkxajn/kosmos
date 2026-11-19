@@ -649,7 +649,6 @@ export class ColonyManager {
     // Generuj HexGrid — potrzebny do autoPlaceBuilding
     const grid = PlanetMapGenerator.generate(entity, false);
     bSys._grid = grid;
-    bSys._gridHeight = grid.height ?? 10;
 
     // FactorySystem per-outpost. Outpost GRACZA → tryb reaktywny (reforma).
     const factSys = new FactorySystem(resSys);
@@ -2874,7 +2873,6 @@ export class ColonyManager {
         // Brak stolicy → postaw
         if (!hasCapital && savedGrid) {
           bSys._grid = savedGrid;
-          bSys._gridHeight = savedGrid.height ?? 10;
           bSys.autoPlaceBuilding?.('colony_base');
         }
         // Pop = 0 na pełnej kolonii → minimum 2 POP startowe
@@ -2918,7 +2916,6 @@ export class ColonyManager {
     if (colony?.buildingSystem && colony.planet) {
       const grid = PlanetMapGenerator.generate(colony.planet, false);
       colony.buildingSystem._grid = grid;
-      colony.buildingSystem._gridHeight = grid.height ?? 10;
       colony.grid = grid;
 
       // Faza 6.5: inicjalizacja własności hexów na nowej kolonii

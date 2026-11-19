@@ -23,6 +23,8 @@
 //   csDeck() / csLocked() — CS-6b: kamera na kolejne ciało z pokładem / mgłą (hothouse, cryo_haze, hazy_moon) albo na
 //                    planetę związaną pływowo; gdy w układzie nie ma (więcej) — przechodzi do następnego układu.
 //   csHaze(v) — CS-6b: nieprzezroczystość pokładu / mgły ciała pod kamerą (0…1); bez argumentu = wartość z archetypu.
+//   cs2Latitude() / cs2Seam() / cs2Invasion() / cs2Strike() / cs2EquatorEvent() — CS-2: scenariusze bramki geometrii siatki
+//                    (Cs2GeometryDebug.js).
 //
 // Wywołanie: `csWorlds()` / `csPeek()` / `csArchetypes()` (window) albo `KOSMOS.debug.csWorlds()` itd.
 // Importowalne pod node (bez THREE) — keeper colony_sphere_seeds_smoke wykonuje oba pomocniki.
@@ -38,6 +40,7 @@ import { climateModelOfWorld, equilibriumK, lookContradicts, KELVIN } from '../u
 import { orbitModelOfWorld, orbitZoneOf, frostLineAU, scaledMinOrbitAU, compactionOf } from '../utils/OrbitModel.js';
 import { csCollisionTest, csCollisionTestLowFps } from './CollisionTestDebug.js';   // CS-PHYS-c (Finding 776) — przemiatane wejście w walkę
 import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';   // CS-4a / CS-4b — podgląd powierzchni + stan cache
+import { cs2GeometryDebugHelpers } from './Cs2GeometryDebug.js';   // CS-2 (Finding 779) — scenariusze bramki geometrii siatki
 
 function bodyTypeOf(body, kind) {
   if (kind === 'planet')    return body.planetType ?? '?';
@@ -430,5 +433,6 @@ export function colonySphereDebugHelpers() {
     console.log('[csHaze]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps };
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps,
+    ...cs2GeometryDebugHelpers() };
 }

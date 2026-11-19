@@ -2591,7 +2591,6 @@ export class MissionSystem {
       outpost.grid = grid;
       if (outpost.buildingSystem) {
         outpost.buildingSystem._grid = grid;
-        outpost.buildingSystem._gridHeight = grid.height ?? 10;
       }
     }
 

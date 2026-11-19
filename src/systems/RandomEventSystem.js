@@ -465,8 +465,9 @@ export class RandomEventSystem {
         entry.level = level - 1;
         // Pobierz prawdziwy tile z gridu (poprawne LatMod i anomalyEffect), fallback na neutralny
         const realTile = tileGraphOf(colony.grid)?.tile(activeKey);
-        // CS-2: fallback „równik” (r = height/2) → TileGraph
-        const tileLike = realTile ?? { r: Math.floor((colony.grid?.height ?? 10) / 2), type: 'plains', key: activeKey, anomalyEffect: null };
+        // Fallback: neutralne pole na równiku (CS-2: TileGraph.equatorTile — pas szerokości z grafu, nie z rzędu)
+        const eq = tileGraphOf(colony.grid)?.equatorTile();
+        const tileLike = realTile ?? { q: eq?.q, r: eq?.r, type: 'plains', key: activeKey, anomalyEffect: null };
         entry.baseRates = bSys._calcBaseRates(entry.building, tileLike, entry.level);
         entry.effectiveRates = bSys._applyTechMultipliers(entry.baseRates, entry.building, activeKey);
         const pid = entry.producerId ?? formatTileKey(activeKey, 'building_');

@@ -18,6 +18,8 @@
 //   liście soft jako forward-compat (po prostu nigdy nie dopasuje hexa).
 // ═══════════════════════════════════════════════════════════════
 
+import { LATITUDE_BAND } from '../../map/TileGraph.js';
+
 export const AI_TERRAIN_RULES = {
   mine:    { mode: 'hard', terrains: ['mountains'] },
   farm:    { mode: 'hard', terrains: ['plains'] },
@@ -45,6 +47,20 @@ export const AI_TERRAIN_RULES = {
 /** Zwraca regułę terenu dla budynku ({ mode, terrains }) lub null. */
 export function getTerrainRule(buildingId) {
   return AI_TERRAIN_RULES[buildingId] ?? null;
+}
+
+// ── Kara polarna w scoringu wyboru pola (CS-2: jeden kanon zamiast trzech kopii) ──
+// Czytelnicy: BuildingSystem.autoPlaceBuilding, ColonyAutoExpander._findFreeTile,
+// EmpireColonyBootstrap._placeBuildingSmart. Odpowiada modyfikatorowi pasa (×0.5 → −5, ×0.7 → −2).
+export const AI_POLAR_PENALTY = Object.freeze({
+  [LATITUDE_BAND.POLAR]:      -5,
+  [LATITUDE_BAND.SUBPOLAR]:   -2,
+  [LATITUDE_BAND.EQUATORIAL]:  0,
+});
+
+/** Kara polarna pola (punkty scoringu ≤ 0) z pasa szerokości jego grafu. */
+export function aiPolarPenalty(graph, tile) {
+  return AI_POLAR_PENALTY[graph.latitudeBand(tile)];
 }
 
 export default AI_TERRAIN_RULES;

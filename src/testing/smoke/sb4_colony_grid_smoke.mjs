@@ -128,7 +128,8 @@ header('T1  ensureColonyGrid — kolonia bez siatki');
   assert(!!g && col.grid === g && col._gridEnsured === true, 'T1a siatka na kolonii, znacznik `_gridEnsured`');
   assert(sameTiles(g, ref), 'T1b te same kafle co generator mapy planety (deterministycznie)');
   assert(owners.size === 1 && owners.has('player'), 'T1c właściciel kafli bez właściciela — gracz');
-  assert(col.buildingSystem?._grid === g && col.buildingSystem?._gridHeight === (g?.height ?? -1), 'T1d `BuildingSystem` — ta sama instancja siatki i wysokość');
+  // CS-2: lustro `_gridHeight` usunięte — pas szerokości liczy BuildingSystem z grafu tej siatki.
+  assert(col.buildingSystem?._grid === g && !('_gridHeight' in (col.buildingSystem ?? {})) && col.buildingSystem?._latitudeGraph?.()?.grid === g, 'T1d `BuildingSystem` — ta sama instancja siatki, pas szerokości z jej grafu');
 }
 {
   const w = boot();

@@ -2484,6 +2484,8 @@ export class GameScene {
     window.csCollisionTestLowFps = window.KOSMOS.debug?.csCollisionTestLowFps;   // CS-PHYS-c (776) — ta sama mijanka z wymuszonymi długimi tikami
     window.csSurface    = window.KOSMOS.debug?.csSurface;      // CS-4a — podgląd powierzchni zaznaczonego ciała
     window.csSurfaceAll = window.KOSMOS.debug?.csSurfaceAll;   // CS-4a — miniatury wszystkich ciał układu
+    // CS-2 (Finding 779) — scenariusze bramki geometrii siatki (Cs2GeometryDebug.js): odczyt pasa, szew, desant, eskadra, zdarzenie.
+    for (const k of ['cs2Latitude', 'cs2Seam', 'cs2Invasion', 'cs2Strike', 'cs2EquatorEvent']) window[k] = window.KOSMOS.debug?.[k];
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
     // Dziś czyta go tylko podgląd debug (csSurface / csSurfaceAll / csCache); renderer podepnie CS-6 / CS-7.
     window.KOSMOS.surfaceCache?.dispose?.();
@@ -2639,8 +2641,7 @@ export class GameScene {
           this.buildingSystem  = activeCol.buildingSystem;
           if (activeCol.factorySystem) this.factorySystem = activeCol.factorySystem;
           const activePlanet = activeCol.planet ?? this.colonyManager._findEntity(activeId);
-          const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
-          this.buildingSystem._gridHeight = gridSizes[activePlanet?.planetType] ?? 10;
+          // CS-2 (Finding 779): bez tabeli wysokości siatki — pas szerokości liczy BuildingSystem z siatki kolonii.
           if (activePlanet?.deposits) this.buildingSystem.setDeposits(activePlanet.deposits);
         }
 
@@ -3928,8 +3929,6 @@ export class GameScene {
           this._spawnPowerTestFleet(civPlanet.id);
           // Generuj grid i auto-buduj
           const grid = PlanetMapGenerator.generate(civPlanet, true);
-          // Ustaw gridHeight w BuildingSystem (potrzebne do modyfikatora polarnego)
-          if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
           this._autoBuildPowerTest(grid);
           // Otwórz ColonyOverlay (stolica auto-place w _openGlobe)
           this.colonyManager.switchActiveColony(civPlanet.id);
@@ -3962,7 +3961,6 @@ export class GameScene {
           this.civSystem.setPopulation(BOOSTED_STARTER_POP);
           // Generuj grid i postaw budynki (standardowe + boosted)
           const grid = PlanetMapGenerator.generate(civPlanet, true);
-          if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
           this._autoPlaceBoostedBuildings(grid);
           this.colonyManager.switchActiveColony(civPlanet.id);
           this.uiManager?.overlayManager?.openPanel('colony');
@@ -3986,7 +3984,6 @@ export class GameScene {
 
         // Generuj grid i postaw budynki startowe
         const grid = PlanetMapGenerator.generate(civPlanet, true);
-        if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
         this._autoPlaceStarterBuildings(grid);
         // Otwórz ColonyOverlay (stolica auto-place w _openGlobe)
         this.colonyManager.switchActiveColony(civPlanet.id);
@@ -4855,7 +4852,7 @@ export class GameScene {
         tile.buildingLevel = plan.level;
 
         // Oblicz baseRates z uwzględnieniem terenu i poziomu
-        const baseRates = bSys._calcBaseRates(building, tile, plan.level);
+        const baseRates = bSys._calcBaseRates(building, tile, plan.level, tileGraphOf(grid));   // CS-2: pas szerokości z tej siatki
 
         // Skumulowane housing (per level)
         const housing = (building.housing || 0) * plan.level;
@@ -4948,7 +4945,7 @@ export class GameScene {
       tile.buildingId    = plan.id;
       tile.buildingLevel = plan.level;
 
-      const baseRates = bSys._calcBaseRates(building, tile, plan.level);
+      const baseRates = bSys._calcBaseRates(building, tile, plan.level, tileGraphOf(grid));   // CS-2: pas szerokości z tej siatki
       const housing   = (building.housing || 0) * plan.level;
 
       entries.push({
@@ -5015,7 +5012,7 @@ export class GameScene {
         tile.buildingId    = plan.id;
         tile.buildingLevel = plan.level;
 
-        const baseRates = bSys._calcBaseRates(building, tile, plan.level);
+        const baseRates = bSys._calcBaseRates(building, tile, plan.level, tileGraphOf(grid));   // CS-2: pas szerokości z tej siatki
         const housing   = (building.housing || 0) * plan.level;
 
         entries.push({

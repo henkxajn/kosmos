@@ -23,8 +23,11 @@
 //   within(ref, k)                    — pola w promieniu k (środek pierwszy, potem pierścienie)
 //   ring(ref, k)                      — pola dokładnie w odległości k
 //   path(from, to, {passable, maxIterations}) — A*: kroki bez startu, z celem; null = brak
-// Reguły geometrii siatki (pasy szerokości, kara polarna, krawędź lądowania, krok przez szew,
-// _gridHeight) przechodzą za ten interfejs w CS-2 — tu ich jeszcze nie ma.
+// Reguły geometrii siatki (CS-2) — wywołujący NIE liczą rzędów, krawędzi ani pikseli sami:
+//   latitudeBand(ref)                 — pas szerokości: LATITUDE_BAND.EQUATORIAL / SUBPOLAR / POLAR (D-CS-7)
+//   equatorTile()                     — jakieś pole w pasie równikowym (fallback „neutralnej szerokości”)
+//   isLandingEdge(ref)                — czy pole należy do strefy lądowania desantu (D-CS-9)
+//   stepDirection(from, to)           — {crossesSeam, facingLeft}: krok przez szew mapy + zwrot sprite'a
 
 import { HexGrid, HEX_DIRECTIONS } from './HexGrid.js';
 
@@ -34,6 +37,11 @@ import { HexGrid, HEX_DIRECTIONS } from './HexGrid.js';
 export const CAPITAL_PREFIX  = 'capital_';
 export const BUILDING_PREFIX = 'building_';
 export const TILE_KEY_PREFIXES = Object.freeze([CAPITAL_PREFIX, BUILDING_PREFIX]);
+
+// ── Pasy szerokości (CS-2, D-CS-7) ───────────────────────────────────────────
+// Pas pola = jedyne wejście reguł szerokości (modyfikator ekonomiczny `src/data/LatitudeBands.js`, kara polarna AI
+// `AiTerrainRules.aiPolarPenalty`). Liczby (×0.5 / ×0.7, −5 / −2) żyją w danych, nie tutaj.
+export const LATITUDE_BAND = Object.freeze({ EQUATORIAL: 0, SUBPOLAR: 1, POLAR: 2 });
 
 /** Czy klucz to wirtualna stolica ('capital_<id pola>'). */
 export function isCapitalKey(key) {
@@ -138,6 +146,45 @@ export class FlatHexTileGraph {
   ring(ref, k) {
     const p = this._qr(ref);
     return this.grid.ring(p.q, p.r, k);
+  }
+
+  // ── Reguły geometrii siatki (CS-2) ──────────────────────────────────────
+  // Pas szerokości z rzędu pola i wysokości TEJ siatki (dawne HexGrid.getLatitudeModifier(r, height), ta sama
+  // kolejność warunków): rząd 0 / ostatni = biegun, 1 / przedostatni = przedbiegun, reszta = równik.
+  // Ref = pole, {q,r} albo id "q,r" (pas liczony z id, nie z zapisanego `tileR`).
+  latitudeBand(ref) {
+    const h = this.grid?.height;
+    const r = this._qr(ref).r;
+    if (r === 0 || r === h - 1) return LATITUDE_BAND.POLAR;
+    if (r === 1 || r === h - 2) return LATITUDE_BAND.SUBPOLAR;
+    return LATITUDE_BAND.EQUATORIAL;
+  }
+
+  // Pole w pasie równikowym: pierwsze (w kolejności iteracji) pole środkowego rzędu floor(height/2) — dawny
+  // fallback RandomEventSystem `r = height/2`. Brak takiego pola → null.
+  equatorTile() {
+    const mid = Math.floor((this.grid?.height ?? 0) / 2);
+    return this.tiles().find(t => t.r === mid) ?? null;
+  }
+
+  // Strefa lądowania desantu na płaskiej mapie = brzeg: mniej niż 6 sąsiadów (z zawijaniem przez szew, więc
+  // brzeg to pierwszy / ostatni rząd i krótsze rzędy). Na kuli (CS-5) brzegu nie ma — reguła D-CS-9.
+  isLandingEdge(ref) {
+    return this.neighbors(ref).length < 6;
+  }
+
+  // Krok jednostki z pola `from` na sąsiednie `to`: czy przechodzi przez szew mapy (|dx| > 0.4 szerokości siatki
+  // w pikselach przy hexSize = 1 → teleport bez animacji) i czy sprite patrzy w lewo (przy szwie odwrotnie, bo
+  // wizualnie jednostka „wychodzi” z drugiej strony). Na kuli (CS-5): szwu nie ma, zwrot z kierunku w płaszczyźnie
+  // stycznej.
+  stepDirection(from, to) {
+    const a = this._qr(from);
+    const b = this._qr(to);
+    const fromLocal = this.grid.tilePixelPos(a.q, a.r, 1);
+    const toLocal   = this.grid.tilePixelPos(b.q, b.r, 1);
+    const dx = toLocal.x - fromLocal.x;
+    const crossesSeam = Math.abs(dx) > this.grid.gridPixelSize(1).w * 0.4;
+    return { crossesSeam, facingLeft: crossesSeam ? dx > 0 : dx < 0 };
   }
 
   // ── Ścieżka ─────────────────────────────────────────────────────────────

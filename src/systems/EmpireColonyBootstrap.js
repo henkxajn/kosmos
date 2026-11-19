@@ -23,7 +23,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { TechSystem } from './TechSystem.js';
-import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
+import { getTerrainRule, aiPolarPenalty } from '../data/ai/AiTerrainRules.js';
 import { isStandableTile } from '../data/GroundUnitData.js';
 import { stampUnownedTiles } from '../utils/TileOwnership.js';
 import { tileGraphOf } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
@@ -190,7 +190,6 @@ export class EmpireColonyBootstrap {
     //    autoPlaceBuilding miało siatkę do iteracji).
     const grid = PlanetMapGenerator.generate(homePlanet, false);
     colony.buildingSystem._grid       = grid;
-    colony.buildingSystem._gridHeight = grid.height ?? 10;
     colony.grid                       = grid;
     // G2-3b C-S3 (Finding 318) — kafle kolonii AI niosą właściciela od urodzenia; bez tego `owner == null`
     //   był dla okupacji „obcym” kaflem także dla WŁASNYCH jednostek imperium (`TileOwnership.js`).
@@ -400,7 +399,6 @@ export class EmpireColonyBootstrap {
     // 6. HexGrid (createColony NIE generuje grida — potrzebny do _placeBuildingSmart)
     const grid = PlanetMapGenerator.generate(planetEntity, false);
     colony.buildingSystem._grid       = grid;
-    colony.buildingSystem._gridHeight = grid.height ?? 10;
     colony.grid                       = grid;
     // G2-3b C-S3 (Finding 318) — kafle kolonii AI niosą właściciela od urodzenia; bez tego `owner == null`
     //   był dla okupacji „obcym” kaflem także dla WŁASNYCH jednostek imperium (`TileOwnership.js`).
@@ -712,8 +710,7 @@ export class EmpireColonyBootstrap {
    *
    * Scoring:
    *   - preferredTerrain match: +10  (soft hint, nie wymóg)
-   *   - polar (r=0 lub r=last): -5   (latitude penalty production ×0.5)
-   *   - sub-polar (r=1 lub r=last-1): -2  (latitude penalty ×0.7)
+   *   - kara polarna (AiTerrainRules.aiPolarPenalty): biegun -5, przedbiegun -2 (pas TileGraph.latitudeBand)
    *   - adjacency bonus +2 per sąsiad tej samej kategorii (Etap 38 adjacency)
    *   - negatywne anomalie: -3
    *
@@ -738,7 +735,6 @@ export class EmpireColonyBootstrap {
     //   a hex trzyma typ w `tile.type` (nie `tile.terrain`) — wcześniej ten twardy
     //   filtr i miękki preferredTerrain były martwe (zawsze undefined/undefined).
     const allowed = building.terrainOnly;
-    const totalRows = grid.height ?? this._inferRows(grid);
     const category = building.category;
     // D17 / Finding 336 (G2-K1): stolica staje WYŁĄCZNIE na kaflu, na którym da się stanąć —
     //   okupacja wymaga stania na kaflu stolicy, więc stolica na oceanie robiła kolonię
@@ -776,9 +772,8 @@ export class EmpireColonyBootstrap {
         if (preferred.length > 0 && preferred.includes(tile.type)) score += 10;
         if (aiSoft && aiSoft.includes(tile.type)) score += 10;
 
-        // Polar penalty (latMod ×0.5 dla rzędu 0/last, ×0.7 dla 1/last-1)
-        if (tile.r === 0 || tile.r === totalRows - 1) score -= 5;
-        else if (tile.r === 1 || tile.r === totalRows - 2) score -= 2;
+        // Kara polarna — kanon (CS-2): AiTerrainRules.aiPolarPenalty, pas z TileGraph
+        score += aiPolarPenalty(graph, tile);
 
         // Adjacency bonus z budynkami tej samej kategorii (HexGrid.getNeighbors(q, r))
         if (category && typeof grid.getNeighbors === 'function') {
@@ -828,14 +823,8 @@ export class EmpireColonyBootstrap {
       bestTile.buildingId    = buildingId;
       bestTile.buildingLevel = 1;
     }
-    bSys._activateBuilding(bestKey, buildingId, bestTile.r, bestTile.type, isCapital);
+    bSys._activateBuilding(bestKey, buildingId, null, bestTile.type, isCapital);
     return true;
   }
 
-  /** Fallback gdy grid nie eksponuje wymiarów — wnioskuj z max tile.r */
-  static _inferRows(grid) {
-    let maxR = 0;
-    tileGraphOf(grid).forEachTile(t => { if (t.r > maxR) maxR = t.r; });   // CS-2: _inferRows znika (latitudeBand)
-    return maxR + 1;
-  }
 }

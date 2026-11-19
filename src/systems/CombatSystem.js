@@ -445,8 +445,8 @@ export class CombatSystem {
   _tryRetreat(gum, unit) {
     const grid = gum._getGrid?.(unit.planetId);
     if (!grid) return;
-    // Znajdź sąsiedni hex bez wrogów. CS-2: odwrót nie przechodzi przez szew mapy (crossSeam: false) —
-    //   reguła geometrii do decyzji przy kuli; tu bez zmian (kolejność kierunków jak dotąd).
+    // Znajdź sąsiedni hex bez wrogów. Odwrót nie przechodzi przez szew mapy (crossSeam: false — reguła grafu;
+    //   na kuli szwu nie ma, opcja nic nie zmienia). Kolejność kierunków jak dotąd.
     let best = null;
     for (const tile of tileGraphOf(grid).neighbors(unit, { crossSeam: false })) {
       const nq = tile.q;

@@ -24,7 +24,7 @@ import { POP_CONSUMPTION } from '../data/ResourcesData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { tileGraphOf, parseTileKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
-import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
+import { getTerrainRule, aiPolarPenalty } from '../data/ai/AiTerrainRules.js';
 import {
   INDUSTRIALIST_TARGETS,
   INDUSTRIALIST_SURVIVAL_THRESHOLDS,
@@ -618,13 +618,13 @@ export class ColonyAutoExpander {
     const rule = getTerrainRule(buildingId);
     const hardTerrains = rule?.mode === 'hard' ? rule.terrains : null;
     const softTerrains = rule?.mode === 'soft' ? rule.terrains : null;
-    const rows = grid.height ?? 10;
+    const graph = tileGraphOf(grid);
     const civYear = this._civYear();
 
     // enforceHard=true → filtruj do hardTerrains; false → bez filtra (fallback).
     const pick = (enforceHard) => {
       let best = null, bestScore = -Infinity;
-      tileGraphOf(grid).forEachTile(tile => {
+      graph.forEachTile(tile => {
         if (tile.buildingId || tile.capitalBase || tile.underConstruction || tile.pendingBuild) return;
         if (this._isTileBlacklisted(colony, tile.key, civYear)) return;  // Y3: tile [fail]
         const terrain = TERRAIN_TYPES[tile.type];
@@ -634,8 +634,7 @@ export class ColonyAutoExpander {
         // Lekki scoring: preferowany teren (soft) > unikanie biegunów.
         let score = 0;
         if (softTerrains && softTerrains.includes(tile.type)) score += 10;
-        if (tile.r === 0 || tile.r === rows - 1) score -= 5;
-        else if (tile.r === 1 || tile.r === rows - 2) score -= 2;
+        score += aiPolarPenalty(graph, tile);   // CS-2: kanon kary polarnej (pas z TileGraph)
         if (score > bestScore) { bestScore = score; best = tile; }
       });
       return best;

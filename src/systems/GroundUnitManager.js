@@ -987,7 +987,7 @@ export class GroundUnitManager {
       const ability = GroundUnitFactory.getAbility(scout);
       if (!ability) continue;
       const rng = ability.revealRange ?? 3;
-      const hexes = [];   // CS-2: pętla sześcienna = geometria płaskiej siatki (zdarzenie bez słuchacza)
+      const hexes = [];   // pętla sześcienna płaskiej siatki — celowo bez zmian: zdarzenie nie ma słuchacza (CS-5 przy pierwszym słuchaczu)
       for (let dq = -rng; dq <= rng; dq++) {
         for (let dr = Math.max(-rng, -dq - rng); dr <= Math.min(rng, -dq + rng); dr++) {
           hexes.push({ q: scout.q + dq, r: scout.r + dr });
@@ -1392,31 +1392,18 @@ export class GroundUnitManager {
     const nextHex = unit._path[0];
     if (!nextHex) return;
 
-    // Piksele startowe (aktualny hex)
+    // Piksele startowe (aktualny hex) — tylko interpolacja rysunku 2D (CS-7/CS-8)
     const fromLocal = grid.tilePixelPos(unit.q, unit.r, 1);  // znormalizowane (hexSize=1)
     const toLocal   = grid.tilePixelPos(nextHex.q, nextHex.r, 1);
 
-    // CS-2: szew/kierunek → TileGraph.stepDirection (tu bez zmian).
-    // Wykryj zawinięcie mapy — jeśli dystans X > połowa szerokości gridu,
-    // to krok przechodzi przez krawędź → teleportuj natychmiast (bez animacji)
-    const gridW = grid.gridPixelSize(1).w;
-    const dx = toLocal.x - fromLocal.x;
-    if (Math.abs(dx) > gridW * 0.4) {
-      unit._wrapStep = true;  // flaga: pomiń interpolację
-    } else {
-      unit._wrapStep = false;
-    }
+    // Krok przez szew mapy (→ teleport bez interpolacji) i zwrot sprite'a — reguła grafu (CS-2: TileGraph.stepDirection)
+    const step = tileGraphOf(grid).stepDirection(unit, nextHex);
+    unit._wrapStep = step.crossesSeam;  // flaga: pomiń interpolację
 
     unit._fromPixel = fromLocal;
     unit._toPixel   = toLocal;
 
-    // Oblicz kierunek sprite'a na podstawie rzeczywistego kierunku ruchu
-    // Przy zawinięciu: odwróć logikę (leci "przez krawędź" w drugą stronę)
-    if (unit._wrapStep) {
-      unit._facingLeft = dx > 0;  // odwrócone — wizualnie idzie w drugą stronę
-    } else {
-      unit._facingLeft = dx < 0;
-    }
+    unit._facingLeft = step.facingLeft;
 
     // Koszt terenu docelowego hexa → wpływa na prędkość ruchu
     const nextTile = tileGraphOf(grid).tile(nextHex);
