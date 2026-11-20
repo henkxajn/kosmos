@@ -91,8 +91,9 @@ export const GAME_CONFIG = {
     sweptProximity:       true,
     // ── ARC COLONY SPHERE CS-5 — geodezyjna siatka kolonii (GeodesicTileGraph, 10n²+2 pól, D-CS-8). OFF (default): każda
     //     siatka kolonii płaska, bit w bit jak dotąd. ON: NOWE kolonie na planetach / księżycach / planetoidach z archetypem
-    //     dostają siatkę geo — ale do CS-7 (hero kuli) TYLKO poza żywą grą (headless GameCore / debug), bo 2D ColonyOverlay
-    //     nie umie narysować siatki geo; w żywej grze nowe kolonie zostają płaskie (ColonyGridFactory.geoGridsAllowed).
+    //     dostają siatkę geo, a okno kolonii pokazuje dla nich kulę zamiast mapy 2D (CS-7: ColonySphereRenderer; nowa gra —
+    //     także kolonia macierzysta). Flagę czyta się przy tworzeniu kolonii: przełączenie w trakcie gry dotyczy tylko kolonii
+    //     założonych później.
     //     Stare kolonie zawsze płaskie (podwójna siatka, D-CS-4). Gazowe olbrzymy płaskie do CS-11.
     colonySphere:         false,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)

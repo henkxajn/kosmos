@@ -10,6 +10,7 @@ import { GroundUnitFactory } from '../systems/GroundUnitFactory.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { showConfirmModal } from './ConfirmModal.js';
 import { t } from '../i18n/i18n.js';
+import { tilePosLabel } from './ColonyTilePosLogic.js';   // CS-7 — płaska „q, r" jak dotąd, kula „#numer pola"
 
 const FACTION_COLORS = {
   humanity: '#94A3B8',
@@ -188,10 +189,10 @@ export function showUnitCard(unit) {
     // CS-5 — pola q,r jednostki; format „(q, r)” ze spacją ≠ id pola „q,r” (TileGraph.idOf), więc
     //   zostaje dosłownie (bez zmiany wyglądu) do migracji pozycji jednostek w CS-5.
     _addSection(body, '📍 POZYCJA', () => [
-      { label: 'Hex', value: `(${unit.q}, ${unit.r})` },
+      { label: 'Hex', value: `(${tilePosLabel(unit, ', ')})` },
       { label: 'Status', value: unit.status ?? 'idle' },
       ...(unit.deployState ? [{ label: 'Deploy', value: unit.deployState }] : []),
-      ...(unit.supportTarget ? [{ label: 'Wspiera bitwę', value: `(${unit.supportTarget.q}, ${unit.supportTarget.r})` }] : []),
+      ...(unit.supportTarget ? [{ label: 'Wspiera bitwę', value: `(${tilePosLabel(unit.supportTarget, ', ')})` }] : []),
     ]);
 
     panel.appendChild(body);

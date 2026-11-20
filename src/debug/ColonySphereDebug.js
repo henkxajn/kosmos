@@ -26,6 +26,9 @@
 //   cs2Latitude() / cs2Seam() / cs2Invasion() / cs2Strike() / cs2EquatorEvent() — CS-2: scenariusze bramki geometrii siatki
 //                    (Cs2GeometryDebug.js).
 //
+//   csSphere() / csSphereUnit() / csSphere2D() — CS-7: stan kuli kolonii, własna jednostka przy stolicy, wymuszony widok 2D
+//                    (ColonySphereHeroDebug.js).
+//
 // Wywołanie: `csWorlds()` / `csPeek()` / `csArchetypes()` (window) albo `KOSMOS.debug.csWorlds()` itd.
 // Importowalne pod node (bez THREE) — keeper colony_sphere_seeds_smoke wykonuje oba pomocniki.
 
@@ -40,6 +43,7 @@ import { climateModelOfWorld, equilibriumK, lookContradicts, KELVIN } from '../u
 import { orbitModelOfWorld, orbitZoneOf, frostLineAU, scaledMinOrbitAU, compactionOf } from '../utils/OrbitModel.js';
 import { csCollisionTest, csCollisionTestLowFps } from './CollisionTestDebug.js';   // CS-PHYS-c (Finding 776) — przemiatane wejście w walkę
 import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';
+import { colonySphereHeroDebugHelpers } from './ColonySphereHeroDebug.js';   // CS-7 — csSphere / csSphereUnit / csSphere2D
 import { csGeoGrid } from './GeoGridDebug.js';   // CS-5a — siatka geodezyjna aktywnego ciała nad mapą bohatera   // CS-4a / CS-4b — podgląd powierzchni + stan cache
 import { cs2GeometryDebugHelpers } from './Cs2GeometryDebug.js';   // CS-2 (Finding 779) — scenariusze bramki geometrii siatki
 
@@ -435,5 +439,5 @@ export function colonySphereDebugHelpers() {
     return summary;
   };
   return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps, csGeoGrid,
-    ...cs2GeometryDebugHelpers() };
+    ...cs2GeometryDebugHelpers(), ...colonySphereHeroDebugHelpers() };
 }

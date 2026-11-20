@@ -1,9 +1,10 @@
 // ColonyGridFactory — który rodzaj siatki dostaje NOWA kolonia (ARC COLONY SPHERE, krok CS-5a; D-CS-4 podwójna siatka).
 //
-// Reguła przejściowa do CS-7 (decyzja konserwatywna, zapisana w arkuszu kontaktowym CS-5a):
+// Reguła (CS-5a; od CS-7 żywa gra też pozwala na siatki geo — GameScene woła `setGeoGridsAllowed(true)`, bo okno
+// kolonii rysuje kulę; o rodzaju siatki NOWEJ kolonii decyduje więc sama flaga i uprawnienie ciała):
 //   • FEATURES.colonySphere OFF (default) → zawsze 'flat' (bit w bit jak dotąd).
-//   • ON → 'geo' tylko gdy (a) środowisko pozwala na siatki geo — `setGeoGridsAllowed(true)` woła WYŁĄCZNIE headless
-//     GameCore / narzędzia debug, bo żywy 2D ColonyOverlay nie umie narysować kuli przed CS-7 — oraz (b) ciało jest
+//   • ON → 'geo' tylko gdy (a) środowisko pozwala na siatki geo — `setGeoGridsAllowed(true)` wołają headless GameCore,
+//     narzędzia debug i (od CS-7) GameScene — oraz (b) ciało jest
 //     uprawnione (planeta / księżyc / planetoida z archetypem i surfaceSeed; gaz zostaje płaski do CS-11).
 //   • Stare kolonie (siatka już istnieje / wczytana z zapisu) nigdy nie zmieniają rodzaju.
 
@@ -13,7 +14,7 @@ import { PlanetMapGenerator } from './PlanetMapGenerator.js';
 
 let _geoAllowed = false;
 
-/** Przełącznik środowiska: true tylko w headless / debug (żywa gra: false do CS-7). */
+/** Przełącznik środowiska: true w headless / debug i — od CS-7 — w żywej grze (GameScene). */
 export function setGeoGridsAllowed(on) { _geoAllowed = on === true; }
 export function geoGridsAllowed() { return _geoAllowed; }
 

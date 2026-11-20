@@ -305,11 +305,11 @@ const SITES_B = [
   ['ui/ColonyOverlay.js', 25, true, {
     grid: [6, 'mapa 2D (CS-7/CS-8 wymienia): forEach ×4 — _findBestTileForCapital, _centerOnCapital, _drawMap, _applyBiomeMap (#761); get ×2 — przejścia/granice wg indeksu kierunku'],
     dirs: [3, 'import + _drawHex/_drawBorders: indeks krawędzi heksa (geometria 2D)'],
-    qr:   [1, 'CS-5: panel jednostki „Hex: (q, r)” ze spacją ≠ id pola — bez zmiany wyglądu'],
+    // qr: 1 → 0 w CS-7 — napis „Hex: (q, r)” idzie przez `tilePosLabel` (płaska bez zmiany wyglądu, kula „#n”)
   }],
   ['ui/BattleGroupPanel.js',   1, true,  {}],
   ['ui/EconomyOverlay.js',     2, true,  {}],
-  ['ui/UnitCardPanel.js',      0, false, { qr: [2, 'CS-5: „(q, r)” ze spacją ≠ id pola — bez zmiany wyglądu do migracji pozycji jednostek'] }],
+  ['ui/UnitCardPanel.js',      0, false, {}],   // qr: 2 → 0 w CS-7 — „(q, r)” przez `tilePosLabel` (ColonyTilePosLogic)
   ['ui/CargoLoadModal.js',     0, false, {}],
   ['scenes/GameScene.js',      5, true,  {}],
   ['renderer/PlanetGlobeRenderer.js', 5, true, {

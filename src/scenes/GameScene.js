@@ -186,6 +186,9 @@ import { shipHologramDebugHelpers } from '../debug/ShipHologramDebug.js'; // ARC
 import { warDebugHelpers } from '../debug/WarDebug.js';   // ARC KONSOLE K2 (Finding 735) — wymuś starcie / desant tylko z konsoli przeglądarki
 import { civConsoleDebugHelpers } from '../debug/CivConsoleDebug.js';   // ARC KONSOLE K5 — pomocniki bramki Cywilizacji / Dysona
 import { colonySphereDebugHelpers } from '../debug/ColonySphereDebug.js'; // ARC COLONY SPHERE CS-3a — csWorlds() / csPeek() (bez cudzysłowów)
+import { createColonyGrid, setGeoGridsAllowed } from '../map/ColonyGridFactory.js'; // CS-7 — nowe kolonie żywej gry: siatka geo przy fladze colonySphere
+import { scheduleCapitalHeroPrefetch, ColonySphereView } from '../ui/ColonySphereView.js';            // CS-7 — mapa bohatera stolicy w tle
+import { moveTargetFor } from '../ui/ColonyTilePosLogic.js';                        // CS-7 — cel rozkazu ruchu przez TileGraph
 import { SurfaceCache } from '../systems/SurfaceCache.js'; // ARC COLONY SPHERE CS-4b — mapy powierzchni (worker + LRU); dziś tylko podgląd debug
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
@@ -2485,12 +2488,26 @@ export class GameScene {
     window.csSurface    = window.KOSMOS.debug?.csSurface;      // CS-4a — podgląd powierzchni zaznaczonego ciała
     window.csSurfaceAll = window.KOSMOS.debug?.csSurfaceAll;   // CS-4a — miniatury wszystkich ciał układu
     window.csGeoGrid    = window.KOSMOS.debug?.csGeoGrid;      // CS-5a — siatka geodezyjna aktywnego ciała (pola, pięciokąty, lądowanie)
+    window.csSphere     = window.KOSMOS.debug?.csSphere;       // CS-7 — stan kuli kolonii
+    window.csSphereUnit = window.KOSMOS.debug?.csSphereUnit;   // CS-7 — własna jednostka przy stolicy (kontrola ruchu)
+    window.csSphere2D   = window.KOSMOS.debug?.csSphere2D;     // CS-7 — wymuszony widok 2D kuli (fallback bez WebGL)
     // CS-2 (Finding 779) — scenariusze bramki geometrii siatki (Cs2GeometryDebug.js): odczyt pasa, szew, desant, eskadra, zdarzenie.
     for (const k of ['cs2Latitude', 'cs2Seam', 'cs2Invasion', 'cs2Strike', 'cs2EquatorEvent']) window[k] = window.KOSMOS.debug?.[k];
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
     // Dziś czyta go tylko podgląd debug (csSurface / csSurfaceAll / csCache); renderer podepnie CS-6 / CS-7.
     window.KOSMOS.surfaceCache?.dispose?.();
     window.KOSMOS.surfaceCache = new SurfaceCache();
+    // CS-7 — żywa gra umie już narysować kulę kolonii: NOWE kolonie dostają siatkę geo, gdy flaga `colonySphere` jest ON
+    //   (flaga OFF → `createColonyGrid` to dokładnie dzisiejszy generator płaski). Stare kolonie zostają płaskie.
+    setGeoGridsAllowed(true);
+    this._cancelHeroPrefetch?.();
+    this._cancelHeroPrefetch = scheduleCapitalHeroPrefetch({
+      flag: GAME_CONFIG.FEATURES?.colonySphere === true,
+      getBody: () => {
+        const hp = window.KOSMOS?.homePlanet;
+        return hp && window.KOSMOS?.colonyManager?.getColony?.(hp.id)?.grid?.kind === 'geo' ? hp : null;
+      },
+    });
     window.csCache      = window.KOSMOS.debug?.csCache;        // CS-4b — stan SurfaceCache
     window.csNextSystem = window.KOSMOS.debug?.csNextSystem;   // CS-4b — widok na następny wygenerowany układ (kontrola)
     window.csShared     = window.KOSMOS.debug?.csShared;       // CS-6a — A/B wspólnego shadera powierzchni na mapie układu
@@ -3929,7 +3946,7 @@ export class GameScene {
           // Flota startowa: 1× science_vessel, 1× cargo_ship
           this._spawnPowerTestFleet(civPlanet.id);
           // Generuj grid i auto-buduj
-          const grid = PlanetMapGenerator.generate(civPlanet, true);
+          const grid = this._newHomeGrid(civPlanet);
           this._autoBuildPowerTest(grid);
           // Otwórz ColonyOverlay (stolica auto-place w _openGlobe)
           this.colonyManager.switchActiveColony(civPlanet.id);
@@ -3961,7 +3978,7 @@ export class GameScene {
           // Populacja startowa boosted — jedno źródło: StarterLoadout.
           this.civSystem.setPopulation(BOOSTED_STARTER_POP);
           // Generuj grid i postaw budynki (standardowe + boosted)
-          const grid = PlanetMapGenerator.generate(civPlanet, true);
+          const grid = this._newHomeGrid(civPlanet);
           this._autoPlaceBoostedBuildings(grid);
           this.colonyManager.switchActiveColony(civPlanet.id);
           this.uiManager?.overlayManager?.openPanel('colony');
@@ -3984,7 +4001,7 @@ export class GameScene {
         if (colony) colony.name = capitalName;
 
         // Generuj grid i postaw budynki startowe
-        const grid = PlanetMapGenerator.generate(civPlanet, true);
+        const grid = this._newHomeGrid(civPlanet);
         this._autoPlaceStarterBuildings(grid);
         // Otwórz ColonyOverlay (stolica auto-place w _openGlobe)
         this.colonyManager.switchActiveColony(civPlanet.id);
@@ -4802,13 +4819,35 @@ export class GameScene {
     }
   }
 
+  // CS-7 — siatka NOWEJ kolonii macierzystej. Flaga `colonySphere` OFF (albo ciało bez archetypu / gaz) → dokładnie
+  // dzisiejsze `PlanetMapGenerator.generate(planet, true)`: siatka tymczasowa do rozstawienia budynków, okno kolonii
+  // tworzy swoją przy pierwszym otwarciu. Flaga ON → siatka geo zostaje siatką kolonii od razu (okno jej nie odtwarza:
+  // `shouldReuseColonyGrid`), pola dostają właściciela jak w `ensureColonyGrid`; stolicę stawia okno kolonii.
+  // CS-7 — pola do rozstawienia budynków startowych: płaska jak dotąd (kolejność siatki), kula — od pola pod stolicę
+  // (indeksy pól kuli nie są sąsiedztwem: bez tego budynki startowe lądują rozsiane po całym globie).
+  _homeTilesInOrder(grid) {
+    return grid?.kind === 'geo' ? ColonySphereView.tilesNearCapital(grid) : tileGraphOf(grid).tiles();
+  }
+
+  _newHomeGrid(civPlanet) {
+    const grid = createColonyGrid(civPlanet, true);
+    if (grid?.kind === 'geo') {
+      const colony = this.colonyManager?.getColony?.(civPlanet.id);
+      const bSys = colony?.buildingSystem ?? window.KOSMOS?.buildingSystem;
+      for (const tile of tileGraphOf(grid).tiles()) if (tile.owner == null) tile.owner = 'player';
+      if (colony) colony.grid = grid;
+      if (bSys) { bSys._grid = grid; bSys.setDeposits?.(civPlanet.deposits ?? []); bSys.setRegionMode?.(false); }
+    }
+    return grid;
+  }
+
   // POWER TEST — auto-budowa budynków (grid przekazany jako parametr)
   _autoBuildPowerTest(grid) {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
     // Zbierz wolne, budowlane tile'y (nie ocean, nie damaged, nie zajęte)
-    const allTiles = tileGraphOf(grid).tiles();
+    const allTiles = this._homeTilesInOrder(grid);
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -4902,7 +4941,7 @@ export class GameScene {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
-    const allTiles = tileGraphOf(grid).tiles();
+    const allTiles = this._homeTilesInOrder(grid);
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -4972,7 +5011,7 @@ export class GameScene {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
-    const allTiles = tileGraphOf(grid).tiles();
+    const allTiles = this._homeTilesInOrder(grid);
     const freeTiles = allTiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
       return terrain?.buildable && !t.isOccupied && !t.damaged;
@@ -6351,7 +6390,9 @@ export class GameScene {
         for (const uid of selectedIds) {
           const u = gum?.getUnit?.(uid);
           if (u && (!u.owner || u.owner === 'player')) {
-            gum.moveUnit(uid, tile.q, tile.r);   // CS-5 — sygnatura (pid, q, r) jednostki
+            // CS-7 — cel z grafu ciała (id pola → pole): płaska jak dotąd (q, r), kula = pole z pickingu
+            const target = moveTargetFor(tileGraphOf(grid), tile);
+            if (target) gum.moveUnit(uid, target.q, target.r);
           }
         }
       }

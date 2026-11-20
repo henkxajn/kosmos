@@ -5,6 +5,7 @@
 // Kolejkuje wiele raportów — nie nadpisuje, stackuje.
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { tilePosLabel } from './ColonyTilePosLogic.js';   // CS-7 — płaska „q,r" jak dotąd, kula „#numer pola"
 
 const REPORT_DURATION_MS = 10000;
 const STACK_OFFSET = 10;    // odstęp między kolejnymi raportami
@@ -56,15 +57,15 @@ export function showBattleReport({
   let title, subtitle, color;
   if (winnerId === 'player') {
     title = '⚔ ZWYCIĘSTWO';
-    subtitle = `${planetName} (${q},${r})`;
+    subtitle = `${planetName} (${tilePosLabel({ q, r })})`;
     color = '#40D880';
   } else if (winnerId && winnerId !== 'player') {
     title = '💀 PORAŻKA';
-    subtitle = `${planetName} (${q},${r})`;
+    subtitle = `${planetName} (${tilePosLabel({ q, r })})`;
     color = '#D85A30';
   } else {
     title = '⚔ BITWA ZAKOŃCZONA';
-    subtitle = `${planetName} (${q},${r})`;
+    subtitle = `${planetName} (${tilePosLabel({ q, r })})`;
     color = '#C4A060';
   }
 

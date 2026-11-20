@@ -12,6 +12,8 @@ import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { applyModalAnchor } from './ModalAnchor.js';   // K7-C (751) — okno przy strefie konsoli (bez kotwicy: jak dziś)
 import { t, getName } from '../i18n/i18n.js';
+import { tileGraphOf } from '../map/TileGraph.js';              // CS-7 — pole wyładunku z grafu ciała
+import { unloadPosFor } from './ColonyTilePosLogic.js';
 import { cargoUnloadRefusal } from '../utils/WarGate.js';   // D13a / G2-2 — „Wyładuj” nigdy na ciele innego imperium
 
 // Ikony zasobów (wszystkie kategorie)
@@ -403,8 +405,10 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
                 refreshTroopSection();          // odmowa D13a — sekcja pokaże powód
                 return;
               }
-              // CS-5 — pola q,r jednostki + sygnatura (…, q, r) jak Vessel.unloadGroundUnit
-              if (!unloadGroundUnit(vessel, unit, planetId, unit.q ?? 0, unit.r ?? 0)) {
+              // CS-7 — pole wyładunku przez TileGraph ciała: płaska jak dotąd (pola q,r jednostki, brak → (0, 0)); kula →
+              //   pole jednostki, gdy należy do tej siatki, inaczej pole grafu (awaryjne (0, 0) na kuli nie istnieje).
+              const unloadPos = unloadPosFor(unit, tileGraphOf(colony?.grid));
+              if (!unloadGroundUnit(vessel, unit, planetId, unloadPos.q, unloadPos.r)) {
                 refreshTroopSection();          // odmowa metody (bramka wojny, brak argumentów) — odśwież sekcję
                 return;
               }

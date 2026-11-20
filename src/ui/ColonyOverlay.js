@@ -49,6 +49,9 @@ import { showRenameModal } from './ModalInput.js';                     // S3.4 F
 import { GroundUnitPanel } from './GroundUnitPanel.js';                // rekrutacja jednostek scoped do tej kolonii
 import { canIssueColonyOrders, isColonyOrderBlocked } from './ColonyOrderGuard.js';   // D4/OG-4 — bramka rozkazów
 import { isManageablePlayerColony } from '../utils/ColonyOwnership.js';               // D6/OG-5 — kanon własności
+import { ColonySphereView, isSphereGrid, bestGeoCapitalTile } from './ColonySphereView.js';   // CS-7 — kula kolonii (siatka geo)
+import { tilePosLabel } from './ColonyTilePosLogic.js';                               // CS-7 — napis pozycji pola (płaska „q,r", kula „#n")
+import { BUILDING_CATEGORY_COLORS } from '../data/BuildingCategoryColors.js';         // CS-7 — barwy kategorii (wspólne z kulą kolonii)
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
@@ -76,11 +79,7 @@ window.addEventListener('resize', () => {
   _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 });
 
-const CAT_COLORS = {
-  mining: '#cc9944', energy: '#ffdd44', food: '#44cc66', population: '#4488ff',
-  research: '#cc66ff', space: '#8888ff', military: '#ff6644', market: '#44ddcc',
-  civil: '#ddaa44',
-};
+const CAT_COLORS = BUILDING_CATEGORY_COLORS;
 
 const BUILDING_CATEGORIES = [
   { id: 'mining', icon: '⛏' }, { id: 'energy', icon: '⚡' },
@@ -284,7 +283,7 @@ export class ColonyOverlay extends BaseOverlay {
       if (!this.visible) return;
       const activePid = this._selectedColonyId ?? window.KOSMOS?.colonyManager?.activePlanetId;
       if (planetId !== activePid) return;
-      this._showFlash(`⚠ Kontakt (${q},${r}) — ruch przerwany`);
+      this._showFlash(`⚠ Kontakt (${tilePosLabel({ q, r })}) — ruch przerwany`);
     });
 
     // Victoria 2 stack combat: widoczny raport z walki (flash + event log entry)
@@ -294,11 +293,11 @@ export class ColonyOverlay extends BaseOverlay {
       const activePid = this._selectedColonyId ?? window.KOSMOS?.colonyManager?.activePlanetId;
       if (planetId !== activePid) return;
       if (winnerId === 'player') {
-        this._showFlash(`⚔ Zwycięstwo (${q},${r}) — straty ${playerKilled} · wrogów ${enemyKilled}`);
+        this._showFlash(`⚔ Zwycięstwo (${tilePosLabel({ q, r })}) — straty ${playerKilled} · wrogów ${enemyKilled}`);
       } else if (winnerId && winnerId !== 'player') {
-        this._showFlash(`💀 Przegrana (${q},${r}) — straty ${playerKilled}`);
+        this._showFlash(`💀 Przegrana (${tilePosLabel({ q, r })}) — straty ${playerKilled}`);
       } else {
-        this._showFlash(`⚔ Bitwa (${q},${r}) zakończona`);
+        this._showFlash(`⚔ Bitwa (${tilePosLabel({ q, r })}) zakończona`);
       }
     });
 
@@ -310,7 +309,7 @@ export class ColonyOverlay extends BaseOverlay {
       const ek = enemyLosses?.killed ?? 0;
       // Flash tylko gdy są ofiary (inaczej zasypaliby ekran)
       if (pk > 0 || ek > 0) {
-        this._showFlash(`⚔ (${q},${r}) runda ${round}: −${pk} / −${ek}`);
+        this._showFlash(`⚔ (${tilePosLabel({ q, r })}) runda ${round}: −${pk} / −${ek}`);
       }
     });
 
@@ -363,7 +362,9 @@ export class ColonyOverlay extends BaseOverlay {
         // Wycentruj kamerę na jednostce
         const colony = this._getColony();
         const grid = colony ? this._getGrid(colony) : null;
-        if (grid) {
+        if (grid && isSphereGrid(grid)) {
+          this._sphere?.turnToTile(unit);   // CS-7 — kula: obrót do pola jednostki
+        } else if (grid) {
           const pos = grid.tilePixelPos(unit.q, unit.r, this._hexSize);
           this._camX = pos.x;
           this._camY = pos.y;
@@ -471,6 +472,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedUnit = null;
     this._hideTooltip();
     this._teardownGlobe();   // zwolnij WebGL canvas globu (z-index 3 — nie może wisieć nad innymi overlay'ami)
+    this._sphere?.release(); this._sphereActive = false;   // CS-7 — zwolnij konteksty kuli kolonii
     document.getElementById('colony-open-backdrop')?.remove();
     // Wymuś reset active w OverlayManager (nie czekaj na draw)
     const om = window.KOSMOS?.overlayManager;
@@ -478,6 +480,7 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _fitMapToView(grid) {
+    if (isSphereGrid(grid)) return;   // CS-7 — kula ma własny kadr (ColonySphereRenderer)
     const canvas = document.getElementById('ui-canvas');
     if (!canvas) return;
     const _r = canvas.getBoundingClientRect(); const W = _r.width / _UI_SCALE, H = _r.height / _UI_SCALE;  // CSS-size (niezależne od DPR backing store)
@@ -589,6 +592,11 @@ export class ColonyOverlay extends BaseOverlay {
         const again = this._autoPlaceCapital(colony, colony.grid, bSys, isHostileColony);
         if (again) return again;
       }
+      // CS-7 — siatka geo NOWEJ kolonii macierzystej (GameScene `_newHomeGrid`, nie z zapisu) też nie ma jeszcze stolicy.
+      if (isSphereGrid(colony.grid) && !colony._gridEnsured && !colony._gridFromSave) {
+        const again = this._autoPlaceCapital(colony, colony.grid, bSys, isHostileColony);
+        if (again) return again;
+      }
       return colony.grid;
     }
 
@@ -647,6 +655,7 @@ export class ColonyOverlay extends BaseOverlay {
 
   // Znajdź najlepszy hex na stolicę (równiny/las w środku mapy)
   _findBestTileForCapital(grid) {
+    if (isSphereGrid(grid)) return bestGeoCapitalTile(grid);   // CS-7 — kula: budowalne pole najbliżej równika
     const center = grid.gridCenter(1); // pixel center at size=1
     let bestTile = null, bestDist = Infinity;
     const preferred = ['plains', 'forest'];
@@ -687,6 +696,7 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _centerOnCapital(grid) {
+    if (isSphereGrid(grid)) return;   // CS-7 — kula: widok startowy nad stolicą ustawia renderer
     // Centrujemy na bounding boxie wszystkich hexów. Wcześniej kamera celowała
     // w capital, ale gdy stolica wylądowała daleko od środka siatki (ocean/lód
     // w centrum + fallback na obrzeża), cała mapa była przesunięta. Bbox center
@@ -883,6 +893,10 @@ export class ColonyOverlay extends BaseOverlay {
 
   // ── Pozycja hexa na ekranie ──────────────────────────────────────────────
   _tileScreenPos(tile, grid, ox, oy, ow, oh) {
+    if (isSphereGrid(grid)) {   // CS-7 — kula: rzut pola na ekran
+      const rect = this._sphereRect();
+      if (rect && this._sphere) { const p = this._sphere.tileScreenPos(tile, rect); return { x: p.x, y: p.y }; }
+    }
     const pos = grid.tilePixelPos(tile.q, tile.r, this._hexSize);
     return {
       x: ox + ow / 2 - this._camX + pos.x,
@@ -894,6 +908,7 @@ export class ColonyOverlay extends BaseOverlay {
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    this._sphereActive = false;   // CS-7 — ustawiane w `_drawSphereMap`, gdy TĄ klatką rysowana jest kula
     this._infoView = null;   // C4 — pasmo scrolla ważne tylko gdy info panel narysowany TĄ klatką (nie: tryb stacji / brak planety)
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
@@ -924,7 +939,9 @@ export class ColonyOverlay extends BaseOverlay {
     const mapH = oh - HDR_H - BUILD_BAR_H;
     // G2-4 F7 — zaznaczenie trzyma tylko jednostki stojące na TEJ mapie (przed mapą, panelem jednostki i szufladą).
     if (colony) this._pruneUnitSelection(colony.planetId);
-    if (grid) {
+    if (grid && isSphereGrid(grid)) {
+      this._drawSphereMap(ctx, ox, mapY, mapW, mapH, grid, colony);   // CS-7 — kula zamiast mapy 2D
+    } else if (grid) {
       ctx.save();
       ctx.beginPath(); ctx.rect(ox, mapY, mapW, mapH); ctx.clip();
       this._drawMap(ctx, ox, mapY, mapW, mapH, grid, colony?.planet);
@@ -1332,7 +1349,13 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
     const discY = y + 8;
-    this._syncGlobe(discX, discY, discSize, discSize, planet, grid);
+    if (isSphereGrid(grid)) {
+      // CS-7 — kolonia geo: dekoracyjny globus mapy 2D nie zna siatki kuli; w jego miejscu mała kula tego samego ciała.
+      this._teardownGlobe();
+      this._sphereOf().drawMini(ctx, { x: discX, y: discY, w: discSize, h: discSize }, planet, grid);
+    } else {
+      this._syncGlobe(discX, discY, discSize, discSize, planet, grid);
+    }
 
     const cw = w - pad * 2;
     const lx = x + pad;
@@ -2448,6 +2471,77 @@ export class ColonyOverlay extends BaseOverlay {
     this._drawUnits(ctx, ox, oy, ow, oh, grid);
   }
 
+  // ── CS-7 — kula kolonii (siatka geo; plan COLONY_SPHERE §3.15) ───────────────────────────────────────────
+  // Kula zastępuje obszar mapy 2D; panele boczne, panel pola, menu budowy i rozkazy zostają dzisiejsze — dostają pole
+  // z pickingu kuli (`_screenToTile`) i pozycję pola z rzutu (`_tileScreenPos`). Siatka płaska nigdy tu nie wchodzi.
+  _sphereOf() {
+    if (!this._sphere) {
+      this._sphere = new ColonySphereView({
+        getBuildingIcon: (id) => (hasBuildingTexture(id) ? getBuildingTexture(id) : null),
+        // mapa gotowa / obrót do pola / utrata kontekstu → nowa klatka okna (płótno UI rysuje się na żądanie)
+        onChange: () => { if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; },
+      });
+    }
+    return this._sphere;
+  }
+
+  _sphereRect() {
+    const b = this._getMapBounds();
+    return b ? { x: b.ox, y: b.oy, w: b.ow, h: b.oh } : null;
+  }
+
+  _overFloatPanel(x, y) {
+    return !!this._selectedHex && x >= this._floatX && x <= this._floatX + Math.max(FLOAT_W, 240)
+      && y >= this._floatY && y <= this._floatY + (this._floatH ?? 300);
+  }
+
+  // LMB / MMB na tarczy kuli → obrót (nie nad panelem pola ani przyciskiem okna).
+  _sphereDragStart(x, y) {
+    if (!this._sphere || this._overFloatPanel(x, y) || this._hitTest(x, y)) return false;
+    const rect = this._sphereRect();
+    return !!rect && this._sphere.dragStart(x, y, rect);
+  }
+
+  _drawSphereMap(ctx, ox, oy, ow, oh, grid, colony) {
+    const sv = this._sphereOf();
+    this._sphereActive = true;
+    const rect = { x: ox, y: oy, w: ow, h: oh };
+    const sel = this._selectedHex;
+    const selTile = sel ? tileGraphOf(grid)?.tile(sel) : null;
+    // Tryb budowy = otwarte menu budowy na wolnym polu własnej kolonii; budynek pod kursorem w menu → werdykt dla NIEGO.
+    const buildMenu = !!selTile && !this._selectedUnit && !!colony && !colony.isPreview && !selTile.isOccupied;
+    const special = !!(this._landingMode || this._strikeMode || this._dropMode || this._supportMode);
+    sv.sync({
+      colony, grid, selected: sel, buildMenu,
+      hoveredBuilding: buildMenu && this._hoveredBuildId ? (BUILDINGS[this._hoveredBuildId] ?? null) : null,
+      supply: !!this._showSupplyCoverage,
+      coverage: this._showSupplyCoverage ? (window.KOSMOS?.supplyCoverageSystem?.getCoverage?.(colony?.planetId) ?? null) : null,
+      lock: special || !!this._selectedUnit || this._selectedUnits.size > 0,
+      techSystem: window.KOSMOS?.techSystem ?? null,
+    });
+    ctx.save();
+    ctx.beginPath(); ctx.rect(ox, oy, ow, oh); ctx.clip();
+    sv.draw(ctx, rect);
+    // Jednostki: DZISIEJSZY kod mapy 2D na siatce-adapterze (pozycja pola = rzut na ekran); kamera mapy 2D nietknięta.
+    const keep = [this._camX, this._camY, this._hexSize];
+    this._camX = 0; this._camY = 0; this._hexSize = Math.max(8, sv.markerHexSize(rect) * 0.8);
+    try { this._drawUnits(ctx, ox, oy, ow, oh, sv.gridAdapter(grid, rect)); }
+    finally { [this._camX, this._camY, this._hexSize] = keep; }
+    sv.drawChrome(ctx, rect);
+    ctx.restore();
+    // Płótno UI rysuje się na żądanie: po całej klatce okna (mała kula w panelu informacji rysuje się później) zamów
+    // następną w tempie kuli — co klatkę przy interakcji, ~30 /s przy auto-obrocie, ~10 /s gdy płyną same chmury.
+    queueMicrotask(() => this._scheduleSphereFrame(sv.nextFrameDelayMs()));
+  }
+
+  _scheduleSphereFrame(delayMs) {
+    if (!Number.isFinite(delayMs) || this._sphereTimer != null) return;
+    this._sphereTimer = setTimeout(() => {
+      this._sphereTimer = null;
+      if (this.visible && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+    }, Math.max(0, delayMs - 4));
+  }
+
   /** Rysuje tint coverage (green=capital, blue=barracks, orange=supplier). */
   _drawSupplyCoverage(ctx, ox, oy, ow, oh, grid) {
     const colony = this._getColony();
@@ -2741,7 +2835,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Hex pos
     ctx.font = `10px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`Hex: (${unit.q}, ${unit.r})`, px + 8, ly);
+    ctx.fillText(`Hex: (${tilePosLabel(unit, ', ')})`, px + 8, ly);
     ly += 18;
 
     // Deploy/Pack — label stanu + przycisk lub progress bar
@@ -4538,6 +4632,8 @@ export class ColonyOverlay extends BaseOverlay {
     // Po splicie 70/30: ignoruj kliknięcia/hover w prawej kolumnie info (poza
     // obszarem mapy) — inaczej klik w dossier wybierałby losowy hex.
     if (sx < b.ox || sx > b.ox + b.ow || sy < b.oy || sy > b.oy + b.oh) return null;
+    // CS-7 — kula: promień z kamery → pole o najbliższym środku (id pola TileGraph).
+    if (isSphereGrid(grid)) return this._sphereOf().pickTile(sx, sy, { x: b.ox, y: b.oy, w: b.ow, h: b.oh }, grid);
     const cx = b.ox + b.ow / 2 - this._camX;
     const cy = b.oy + b.oh / 2 - this._camY;
     return grid.pixelToTile(sx - cx, sy - cy, this._hexSize);
@@ -4758,6 +4854,7 @@ export class ColonyOverlay extends BaseOverlay {
       }
 
       if (tile) {
+        if (isSphereGrid(grid)) this._sphere?.clickTile(tile);   // CS-7 — dwuklik w pole obraca kulę do niego
         // Finding 379 — klik zaznacza wyłącznie jednostkę, którą gracz widzi; filtry jak `getUnitAt` (nie `moving`,
         //   nie `in_cargo`). Niewidoczna albo ukryta cudza jednostka — klik jak w pusty heks.
         const unitOnTile = visibleGroundUnitAt(window.KOSMOS, colony?.planetId, tile.q, tile.r);
@@ -5298,6 +5395,16 @@ export class ColonyOverlay extends BaseOverlay {
     // Rect-select aktywne → nic więcej nie rób (pan i hover nie dotyczą drag-select)
     if (this._rectSelect.active) return;
 
+    // CS-7 — kula kolonii: przeciąganie obraca kulę; kursor nad tarczą zatrzymuje auto-obrót (pole pod kursorem i
+    //   dymek liczy niżej dzisiejsza gałąź „Hover na hex" przez `_screenToTile`).
+    if (this._sphereActive && this._sphere) {
+      const rect = this._sphereRect();
+      const overUi = this._overFloatPanel(x, y) || !!this._hitTest(x, y);
+      const res = rect ? this._sphere.pointerMove(x, y, rect, overUi) : null;
+      if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;   // pole pod kursorem / obrót — nowa klatka
+      if (res?.dragging) { this._hasDragged = true; this._hoveredHex = null; this._hideTooltip(); return; }
+    }
+
     if (this._isDragging) {
       const dx = x - this._dragStartX, dy = y - this._dragStartY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this._hasDragged = true;
@@ -5431,6 +5538,7 @@ export class ColonyOverlay extends BaseOverlay {
   // Zwraca true gdy punkt (x,y) nadaje się na start prostokąta selekcji.
   _canStartRectSelect(x, y) {
     if (!this.visible) return false;
+    if (this._sphereActive) return false;   // CS-7 — na kuli LMB obraca; zaznaczanie jednostek klikiem (Shift / Ctrl)
     // Nie w floating panelu
     if (this._selectedHex && x >= this._floatX && x <= this._floatX + FLOAT_W &&
         y >= this._floatY && y <= this._floatY + (this._floatH ?? 300)) return false;
@@ -5499,11 +5607,13 @@ export class ColonyOverlay extends BaseOverlay {
     // LMB → pozwól BaseOverlay uruchomić rect-select jeśli _canStartRectSelect()
     if (button === 0) {
       this._hasDragged = false;  // reset dla click-vs-drag w handleClick
+      if (this._sphereActive && this._sphereDragStart(x, y)) return;   // CS-7 — LMB na tarczy kuli: obrót
       super.handleMouseDown(x, y, button);
       return; // brak pan-kamery pod LMB
     }
     // MMB → pan kamery
     if (button === 1) {
+      if (this._sphereActive) { this._hasDragged = false; this._sphereDragStart(x, y); return; }   // CS-7 — MMB też obraca kulę
       // Nie pan gdy klik w floating panel
       if (this._selectedHex && x >= this._floatX && x <= this._floatX + FLOAT_W &&
           y >= this._floatY && y <= this._floatY + (this._floatH ?? 300)) return;
@@ -5519,6 +5629,7 @@ export class ColonyOverlay extends BaseOverlay {
 
   handleMouseUp(x, y, button = 0) {
     if (!this.visible) return;
+    if (this._sphere && (button === 0 || button === 1)) this._sphere.dragEnd();   // CS-7 — koniec obrotu kuli
     // LMB → domknij rect-select (BaseOverlay wywoła _onRectSelectComplete)
     if (button === 0) {
       super.handleMouseUp(x, y, button);
@@ -5579,6 +5690,13 @@ export class ColonyOverlay extends BaseOverlay {
         y >= this._floatY && y <= this._floatY + (this._floatH ?? 300)) {
       this._floatScroll = (this._floatScroll ?? 0) + delta * 3;
       this._floatScroll = Math.max(0, this._floatScroll);
+      return true;
+    }
+
+    // CS-7 — kula kolonii: kółko = zbliżenie kuli
+    if (this._sphereActive && this._sphere) {
+      this._sphere.wheel(delta);
+      if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
       return true;
     }
 
@@ -5672,6 +5790,16 @@ export class ColonyOverlay extends BaseOverlay {
       return true;
     }
 
+    // CS-7 — kula kolonii: L przełącza soczewkę (Teren / Złoża / Własność), WASD / strzałki obracają kulę
+    if (this._sphereActive && this._sphere) {
+      if ((key === 'l' || key === 'L') && !mods.ctrl) {
+        const lens = this._sphere.cycleLens();
+        this._showFlash(lens === 'none' ? t('colonySphere.lensOff') : t('colonySphere.lens', t(`colonySphere.lens.${lens}`)));
+        return true;
+      }
+      if (this._sphere.key(key, mods)) return true;
+    }
+
     // Pan kamery klawiaturą: WASD / strzałki (gdy bez shift — Shift+S to supply)
     if (!mods.shift) {
       const PAN_STEP = 40;
@@ -5687,6 +5815,7 @@ export class ColonyOverlay extends BaseOverlay {
   // Fallback: PlanetMapGenerator biomy (jeśli biome.png nie istnieje)
   _loadBiomeMap(planet, grid, planetId) {
     if (!planet || !grid) return;
+    if (isSphereGrid(grid)) return;   // CS-7 — teren kuli pochodzi z SurfaceField (środki pól), nie z mapy biomów 2D
 
     const texType = planet._cachedTexType ?? null;
     if (!texType || texType.startsWith('gas')) return; // gas giganty → PlanetMapGenerator

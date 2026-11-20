@@ -24,5 +24,7 @@ export function shouldReuseColonyGrid(colony, isHostileColony) {
   // Obca kolonia: grid od spawnTestEnemy/EmpireGenerator (ma capital+owner) — nie regeneruj.
   // Gracz z gridem z save: kafle niosą stan (syntheticSlot, owner) — regeneracja by go zgubiła.
   // Grid z `ensureColonyGrid` (SB87): kafle mogą nieść stan z desantu (okupacja) — regeneracja by go zgubiła.
-  return !!isHostileColony || !!colony._gridFromSave || !!colony._gridEnsured;
+  // CS-7 — siatka geo (kula) NIGDY nie jest odtwarzana: powstaje tylko w fabryce nowej kolonii albo z zapisu, a
+  //   regeneracja (`ensureColonyGrid`) jest płaska — zamieniłaby kulę na mapę 2D i osierociła klucze budynków `g<i>`.
+  return !!isHostileColony || !!colony._gridFromSave || !!colony._gridEnsured || colony.grid.kind === 'geo';
 }
