@@ -2,6 +2,25 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
+## CS-5a + CS-5b — GeodesicTileGraph, geo save format, AI on geo grids + Finding 783 (2026-11-20)
+
+- CS-5a: `GeodesicTopology` (combinatorial ids, fixed neighbour order, BFS distances, straight A* — Finding 781),
+  `GeodesicTileGraph` (sphere bands D-CS-7, landing distance ≥ 2 D-CS-9, seamless step direction), `GeodesicGrid`,
+  `GeoColonyGridGenerator` (n from D-CS-8, terrain = `classify(evalAt)`), `ColonyGridFactory`, owner helper `csGeoGrid()`;
+  flag `FEATURES.colonySphere` (default OFF).
+- CS-5b: sparse geo save (`kind:'geo'`; no `kind` = flat, flat saves byte-identical, no version bump), `createColonyGrid` at
+  every new-colony site (live game flat until CS-7), supply coverage key from the body graph, disembark anchor `anyTile()`;
+  AI plays headless on geo grids with 0 exceptions.
+- Finding 783 ✅ (pre-commit check): a geo tile's `key` was flat `"i,-1"` instead of the graph id `"g<i>"`, so buildings
+  placed via `planet:buildRequest` (incl. the headless home capital) had unresolvable keys and the sync dropped them.
+  `GeoTile` (key = graph id). Capitals measured on 66 geo colonies / 11 galaxies: all on buildable land. The AI colony-count
+  excess on geo (6–7 vs 5) disappeared with the fix (5 = 5); re-check at balance.
+- Finding 782 ⚪ kept open (option B, re-evaluate at CS-8). D-CS-26 signed (live flat until CS-7, `(index, −1)` interim →
+  tile ids at CS-12, key strings unchanged, landing k = 2, `ensureColonyGrid` flat, gas flat until CS-11). Free 784.
+- Proof: keepers `colony_sphere_geogrid_smoke` 69 PASS (18/18 mutations red), `colony_sphere_geosave_smoke` 21 PASS
+  (10/10 mutations + 783 revert red); flag OFF traces seeds A / B = HEAD 641b7cf; sweep 442/442, i18n PASS; owner check PASS.
+- Next: CS-7.
+
 ## CS-2 — grid-geometry rules behind TileGraph + Finding 779 (2026-11-19)
 
 - `FlatHexTileGraph` gains `latitudeBand`, `equatorTile`, `isLandingEdge`, `stepDirection` (flat-only methods; CS-5 brings

@@ -49,6 +49,7 @@ for the record.
 | **D-CS-17 (new)** | Physical bodies must differ per new game, not only their surfaces. Foreign system RNG stream = f(galaxySeed, starId) instead of `hashString(starId)` alone; home system generation seeded from galaxySeed instead of unseeded `Math.random`. Old saves are unaffected (bodies are stored in full). This supersedes the §1.D remark that galaxy-seeded physical bodies are outside this arc. Implemented in CS-3a behind `FEATURES.seededSystems` (§3.1). |
 | **D-CS-18 (new, signed 2026-11-18)** | The system-seed mode is a property of the **world**, decided once at world creation (`GameScene.start()` / `GameCore.boot()`) and stamped in `galaxyData.seededSystems = true` (only when ON; saved whole, no version bump; unstamped = unseeded). `SystemGenerator.worldSeedContext(galaxyData)` is the only reader; generation and scan derive their seed from it, so flipping the flag after start changes nothing. Fail-closed: a seeded world without a galaxySeed logs `[CS-3a]` `console.error`, counts `emergencySeedUses()` and uses `EMERGENCY_GALAXY_SEED = 0`, never the old seed. Homeworld mutation seeded from galaxySeed in a seeded world. CS-3a-fix (§3.2, Finding 769). |
 | **D-CS-25 (signed 2026-11-19)** | Moon-orbit generation change in scaled-orbit worlds accepted: moon orbit radii × k at generation for `orbitModel: 2` worlds, no new RNG draws, legacy worlds unchanged, scaled test saves made before the change keep their old moon orbits (§3.9.3). |
+| **D-CS-26 (signed 2026-11-20)** | CS-5 overnight decisions signed as proposed (§3.13, §3.14). (1) The live game keeps new colonies **flat until CS-7**, even with `FEATURES.colonySphere` ON; geo grids only headless / debug. (2) A geo tile's coordinate `(index, −1)` is an **interim encoding**; it migrates to real tile ids at the CS-12 clean save break. (3) Key strings stay unchanged (minefield `${q}_${r}`, battle `pid\|q\|r`, `{q,r}` payloads, unit / army / Vessel `q,r`). (4) Landing zone = graph distance ≥ 2 from every held tile; watch in CS-8 / CS-10 balance — far more landing tiles than today's flat edge rows. (5) `ensureColonyGrid` stays flat. (6) Gas giants flat until CS-11. Finding 782: option B — no change now, re-evaluate after in-game tests (CS-8) with the D-CS-8 table (planetoid n=2 = 42 tiles is the ready option). |
 
 **Step order (signed): surface track first.**
 CS-3a → CS-3b → CS-4 → CS-6 → CS-1a → CS-1b → CS-2 → CS-5 → CS-7 → CS-8 → CS-9 → CS-10 → CS-11 → CS-12 → CS-Z.
@@ -801,7 +802,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-9** | VIS | Opus (Fable optional) | Building massing (procedural low-poly per category, `HudPalette` role emissives, instanced) on the hero; city lights per tile on the night side, also on the system map; under-construction / damaged states | CS-8 |
 | **CS-10** | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
 | **CS-11** | MECH | Opus | Gas giants per D-CS-5 (archetype → `GasGiantShader` params **only if at least as good as today; default and fallback = today's look**; platform grid on the geo graph or look-only); optional AI archetype "expected buildable tiles" table (D-CS-12) | CS-5, CS-6 |
-| **CS-12** | MECH | Opus | Save end-state per D-CS-4 (clean break or migration), version bump, fixture re-capture + README metadata, fix the 4 fixture-reading smokes | CS-8 |
+| **CS-12** | MECH | Opus | Save end-state per D-CS-4 (clean break or migration), version bump, fixture re-capture + README metadata, fix the 4 fixture-reading smokes; **migrate the interim geo tile coordinate `(index, −1)` to real tile ids** (unit / army / Vessel `q,r`, key strings, event payloads — D-CS-26) | CS-8 |
 | **CS-Z** | MECH (removal) | Opus | Flags permanent; remove the 2D colony map and the old globe pipeline (`PlanetGlobeRenderer`, `PlanetGlobeTexture`, `PlanetTerrainTexture`, `BiomeMapGenerator`, `BuildingMapGenerator`, `SurfaceMarkers`, `ColonyBuildingMarkers`, the dead `_loadBiomeMap` #761, `PlanetScene`, RegionSystem); `FlatHexTileGraph` removed if D-CS-4 = break; asset decision D-CS-15; before/after frame comparison per CLAUDE.md | CS-9…CS-12 |
 
 Critical files touched: `src/map/HexGrid.js` (CS-1/2: wrapped, not rewritten), `src/config/GameConfig.js` (flags),
@@ -3118,6 +3119,152 @@ band labels; a post-load build on a polar tile produces 4 = expected before and 
 ocean blocking; save / load mid-gate; equator event; seam crossing; invasion landing 3/3 on edge rows; strike squadron
 launched at the capital anchor; flat new game unchanged. Note: step 5 (cost deduction) could not be judged in game (large
 stockpile) — covered by keeper G9d and gate probe L4.
+
+### 3.13 CS-5a — GeodesicTileGraph (2026-11-20; overnight run; owner check PASS 2026-11-20, committed)
+
+**Owner check PASS (2026-11-20).** Flag OFF: an old save and a new game are flat, save / load OK. `csGeoGrid()`: home planet
+252 tiles, moon and planetoid 92, 12 pentagons each. Decisions below signed as proposed → **D-CS-26** (§0b). The helper's red X
+("hypothetical capital") is the equator tile on every body regardless of terrain — a preview anchor for the landing statistic
+only; real geo colonies place the capital on buildable land (measured in §3.14, Finding 783).
+
+Behind `FEATURES.colonySphere` (default OFF; OFF = today bit for bit). Contact sheet: `kosmos-handover/cs-5/cs5a-contact.md`.
+Critical files: `GameConfig.js` (flag only).
+
+**As built.**
+- `src/map/GeodesicTopology.js` (pure, no imports, arithmetic + sqrt only): icosahedron subdivided n times, **combinatorial
+  integer ids** (0…11 = the 12 pentagons, then edge interiors from the lower-numbered corner, then face interiors), neighbours
+  in a fixed counter-clockwise order (half-plane + cross-product comparator, no atan2), all-pairs BFS distance matrix,
+  `within` / `ring` (BFS discovery order), A*, `equatorTile`, `latitudeCutoffs(polarShare, subpolarShare)` (|y| clusters,
+  cut between clusters). Cached per n; 2–3 ms per build.
+- `GeodesicTileGraph` in `TileGraph.js`: id `"g<i>"`; a geo tile is a `HexTile` with `q = index`, `r = GEO_TILE_R = −1`, so
+  units / armies / event payloads / `samePos` keep working (decision 2 below). Own sphere rules: `latitudeBand` from the
+  centre |y| and the grid's cutoffs (D-CS-7), `equatorTile` (min |y|), `isLandingEdge` = graph distance ≥
+  `GEO_LANDING_MIN_DISTANCE` (2, `src/data/GeoGridRules.js`) from every held tile (owner / building / construction /
+  capital) — not the neighbour count (D-CS-9), `stepDirection` without a seam (facing from the step projected on local east).
+  `tileGraphOf` dispatches on `grid.kind === 'geo'`. No inheritance from `FlatHexTileGraph` (CS-2 keeper G7 still green).
+- A* (Finding 781): exact-distance heuristic; open-list tie-break f → h → distance of the tile centre from the start→goal
+  great-circle plane → id; path rebuilt from the goal choosing, among neighbours with g − 1 (exact by the triangle
+  inequality), the one closest to the great circle. Always optimal; mean great-circle deviation 0.48–0.63× the naive
+  first-in-queue tie-break.
+- `src/map/GeodesicGrid.js` (container: `kind`, `n`, `tiles`, `gridClass`, `latCutoffs`; HexGrid-style read helpers),
+  `src/map/GeoColonyGridGenerator.js` (n from `GRID_TILE_COUNTS` via `gridClassFor`, `largestHexMaps` → `largest_cap`;
+  terrain = `classify(evalAt(centre))`; anomalies with today's count and rarity, pentagons first, RNG from `surfaceSeed`;
+  gas / no archetype / no seed → `null`; archetype rule twinned from `SurfaceCache` without importing it),
+  `src/map/ColonyGridFactory.js` (interim rule, decision 1; not yet called — CS-5b wires colony creation).
+- `GEO_LATITUDE_SHARES` in `src/data/LatitudeBands.js` (measured on today's tapered grids; keeper G4c re-measures).
+- Owner helper `csGeoGrid()` (`src/debug/GeoGridDebug.js`), sheet `docs/design/prototypes/cs5a-geogrid.png`.
+
+**Measurements** (probe `probe-cs5a-geogrid-report.mjs`, 2 seeded galaxies; `probe-cs5a-geogrid.mjs` in headless Chrome):
+
+| Class | Bodies | Tiles today → geo | Buildable today → geo | Polar / polar+subpolar geo (target) |
+|---|---|---|---|---|
+| large_rocky | 195 | 295 → 252 | 282.5 → 229 (−19%) | 6.3 / 14.3% (6.7 / 13.5) |
+| small_rocky | 90 | 188 → 162 | 178.7 → 151.6 (−15%) | 8.6 / 18.5% (9.8 / 19.7) |
+| moon | 200 | 64 → 92 | 63.7 → 91.3 (**+43%**) | 8.7 / 30.4% (12.5 / 31.3) |
+| planetoid | 80 | 36 → 92 | 36 → 92 (**+156%**) | 21.7 / 52.2% (22.2 / 55.5) |
+
+Terran buildable share 100% → min 15 / median 29 / max 82% (ocean 71%, D-CS-20 accepted); jungle 83%, cryo_haze 93%,
+hazy_moon 96%, tidally_locked 100% median; all ocean-free archetypes 100%. Anomalies: 49% on pentagons. Landing tiles with a
+capital + 6 buildings: large 233/252, small 143/162, moon / planetoid 73/92; pentagon share among landing tiles = their share
+of the grid (no clustering). Cross-engine: Chrome topology and terrain hashes = node fixed vectors.
+
+**Finding 782 ⚪ (recorded, not tuned).** On geo grids moons and planetoids have +43% / +156% buildable tiles vs today,
+outside the D-CS-8 ±20% band: 92 tiles instead of 64 / 36 and fully buildable surfaces. Options: unbuildable share on small
+bodies (terrain balance), a smaller planetoid grid (n=2 rejected by D-CS-8), or accept. Re-evaluate after in-game tests (CS-8).
+hot_rocky had no sample in the two galaxies. **Owner (D-CS-26): option B** — no change now; moons +43% and planetoids +156%
+stay open and are re-evaluated after in-game tests (CS-8) using the D-CS-8 table (planetoid n=2 = 42 tiles is the ready option).
+
+**Decisions taken in the overnight run (signed 2026-11-20 as D-CS-26):** (1) live game keeps new colonies flat even
+with the flag ON until CS-7; geo only headless / debug (`setGeoGridsAllowed`). (2) Geo tile coordinates = (index, −1) instead
+of a new `tileId` unit field. (3) Landing k = 2, "held" = any owner / building / construction / capital. (4) Gas giants flat
+until CS-11. (5) `equatorTile` on this orientation is a pentagon (4 pentagons sit on the equator) — fallback only.
+
+**Proof.** Keeper `colony_sphere_geogrid_smoke` 69 PASS (G1 topology, G2 determinism incl. `worker_threads` and fixed
+vectors, G3 A* vs BFS on 1,600 random masks + straightness, G4 bands incl. G4c table re-measure, G5 landing, G6 step /
+equator, G7 terrain / anomalies / size / SurfaceCache twin, G8 interface, G9 factory, G10 source pins). Fail-first in a
+detached worktree at 641b7cf: 0 PASS / 45 FAIL. 18 mutations, 18 red. Flag OFF: `probe-cs1a-trace` seed A trace
+`21cf5df1…` / state `2037d7d3…`, seed B (`cs1b-seedB`, 60 y) trace `89251603…` / state `ea79a395…` = HEAD 641b7cf.
+`colony_sphere_surface_smoke` B7: the geo generator joined the signed SurfaceField consumers (callers pinned by G10d).
+
+### 3.14 CS-5b — tile ids, save format, AI on geo grids (2026-11-20; overnight run; owner check PASS 2026-11-20, committed)
+
+**Owner check PASS (2026-11-20)** (flag OFF: old save + new game flat, save / load OK). Decisions signed as proposed →
+**D-CS-26** (§0b): key strings unchanged, `(index, −1)` is interim and migrates to real tile ids at CS-12 (added to the CS-12
+row), `ensureColonyGrid` flat, live game flat until CS-7.
+
+Contact sheet: `kosmos-handover/cs-5/cs5b-contact.md`. No critical file touched (no save-version bump; D-CS-4 clean break
+stays in CS-12).
+
+**As built.**
+- Sparse geo save (`GeodesicGrid.serialize` / `restore`): `{kind:'geo', n, gridClass, terrain, base, tiles}` — terrain one
+  character per tile (`GEO_TERRAIN_CODES`; order is the format; unknown terrain → `?` + `type` in the tile record), `base` =
+  most common `explored` / `owner`, `tiles` = only tiles differing from the HexTile defaults + base. A fresh 162-tile colony
+  saves in 477 B (54,221 B as a full tile list). `ColonyManager.restore`: `kind === 'geo'` branch before the HexGrid branch;
+  **no `kind` = flat** (every old save); a flat grid writes no `kind`, so flat saves stay byte-identical.
+- `ColonyGridFactory.createColonyGrid(planet, isHome)` at every new-colony site (ColonyManager outpost + `_onColonyFounded`,
+  EmpireColonyBootstrap home + expansion, MissionSystem outpost, GameCore home); flag OFF / live game = exactly
+  `PlanetMapGenerator.generate`. GameCore calls `setGeoGridsAllowed(true)`. `ensureColonyGrid` (fallback for colonies without a
+  grid) stays flat so an old colony never becomes geo.
+- **Geo bug fixed:** `SupplyCoverageSystem` wrote the coverage map with graph ids (`g5`) but read it with a flat `"q,r"` key —
+  on a sphere supply would never refill. `_key(u, colony)` now uses the body graph (flat: same `"q,r"`).
+- `VesselManager` disembark fallback `(0,0)` → body graph `anyTile()` (flat (0,0), CS-2 G6a). `GeodesicGrid.tilePixelPos` =
+  tile centre (3D; read only by the dead `PlanetScene`).
+- **Key strings unchanged (decision):** minefield `${q}_${r}`, battle `pid|q|r`, `{q,r}` payloads, `getUnitAt(pid,q,r)`, unit /
+  army / Vessel `q,r` fields are geo-correct because a geo tile's coordinates are `(index, −1)` (CS-5a decision 2): unique, and
+  read back with the same syntax. Rewriting them to graph ids would change flat bytes (battle keys sit in state); only the two
+  sites that *missed* on a sphere were migrated. Alternative for the owner: full id migration + a new trace normalisation.
+
+**Headless AI on geo grids** (`probe-cs5b-geo-run.mjs`, same seed; overnight numbers — **before the Finding 783 fix**, see
+below for the re-measure):
+
+| Run | Colonies (grid) | AI colonies | Buildings | Invasion (landed) | Combat rounds | Exceptions / errors |
+|---|---|---|---|---|---|---|
+| geo 30 + 15 y | 6 (geo) | 5 | 53 | 1 (4) | 8 | 0 / 0 |
+| flat 30 + 15 y | 5 (flat) | 4 | 55 | 1 (4) | 5 | 0 / 0 |
+| geo 60 + 15 y | 7 (geo) | 6 | 57 | 1 (4) | 12 | 0 / 0 |
+| flat 60 + 15 y | 5 (flat) | 4 | 55 | 1 (4) | 2 | 0 / 0 |
+
+Two geo runs give the same state hash (`121925ea10bc20e3`); every grid round-trips exactly at the end. Scripted A* moves 12/12 on
+both. The AI founds more colonies on geo (not investigated; possibly Finding 782). No outposts were founded in these runs —
+outpost sites are covered by source pins only.
+
+**Finding 783 ✅ (found and fixed in the pre-commit check, 2026-11-20).** The owner asked to confirm that real geo colonies
+place the capital on buildable land. Terrain was always right — every placement path filters it (AI bootstrap
+`isStandableTile`, `autoPlaceBuilding` `TERRAIN_TYPES[type].buildable`, GameCore `_placeCapital` buildable). But a geo tile's
+`HexTile.key` was the flat `"q,r"` string (`"i,-1"`), while the graph id is `"g<i>"`: `BuildingSystem` (`_active`,
+construction queue, producer ids) and `ColonyAutoExpander` (pending / blacklist) key by `tile.key`, so every building placed
+through `planet:buildRequest` on a sphere — including the player's headless home capital, `capital_0,-1` — got a key the
+geo graph cannot resolve; `syncTileBuildings` / `_syncGridFromActive` then dropped the capital flag and the building from the
+tile (orphan keys; the tile looked free). Fix: `GeoTile extends HexTile` in `GeodesicGrid.js` with `key` = graph id, used for
+fresh and restored tiles; coordinates stay `(index, −1)` (D-CS-26); flat tiles untouched. Measured after the fix (probe over 11
+galaxy seeds, 40 y, flag ON headless): **66 geo colonies, 66 capitals, 0 on unbuildable / unstandable terrain** (plains,
+mountains, forest, desert, tundra, ice_sheet, wasteland). Keeper `colony_sphere_geosave_smoke` S8 (3 galaxies × 10 y: tile key
+= graph id fresh and restored, flat `"q,r"` unchanged; every capital key resolves to the capital tile on buildable land; no
+orphan `_active` key; `syncTileBuildings` keeps the capital); with the fix reverted S8a/S8b/S8c are red (15 orphan keys,
+3 capitals lost by sync). No nearest-buildable fallback was added: no placement path can choose ocean.
+
+Re-measure after the fix (same probe, flag ON; flag OFF rows unchanged):
+
+| Run | Colonies (grid) | AI colonies | Buildings | Invasion (landed) | Combat rounds | Exceptions / errors |
+|---|---|---|---|---|---|---|
+| geo 30 + 15 y | 5 (geo) | 4 | 53 | 1 (4) | 8 | 0 / 0 |
+| geo 60 + 15 y | 5 (geo) | 4 | 53 | 1 (4) | 12 | 0 / 0 |
+
+Scripted moves 12/12, every grid round-trips. **The AI colony-count excess (6 vs 5 at 30 y, 7 vs 5 at 60 y) disappears after
+the fix** in this scenario (geo 5 = flat 5 at both horizons) — the mis-keyed buildings were the likely cause. Owner's note
+kept: re-check the AI colony count on geo grids at balance (CS-8 / CS-11), together with Finding 782. Free finding number: 784.
+
+**Proof.** Keeper `colony_sphere_geosave_smoke` 21 PASS (18 overnight + S8 for Finding 783) (S1 sparse round-trip, S2 legacy fixture through the real
+`ColonyManager.restore` → 22 flat grids, byte-identical re-save, S3 geo world `ColonyManager` round-trip, S4 factory = flat
+generator byte for byte when OFF / live, S5 supply refill on geo, S6 two-process geo game: no exception, deterministic,
+invasion + combat, S7 source pins). Fail-first at 641b7cf: 3 PASS / 13 FAIL (S2a/S2b controls). 10 mutations, 10 red (N6
+vessel fallback by source pin only). Flag OFF: `probe-cs1a-trace` seeds A and B identical to HEAD 641b7cf (no normalisation),
+re-run after the Finding 783 fix: seed A `21cf5df1…` / `2037d7d3…`, seed B `89251603…` / `ea79a395…`. Sweep 442/442 OK, 0 FAIL;
+`check-i18n` PASS.
+
+**Remaining:** UI sites (`CargoLoadModal` `unit.q ?? 0`, `GameScene` `moveUnit(q,r)`, unit panels) → CS-8; `reveal_fog` cube loop
+(no listener); dead `GroundUnitManager._hexDistance` → CS-Z list; re-check the AI colony count on geo at balance (CS-8 /
+CS-11); geo coordinate → tile ids at CS-12 (D-CS-26); gas giants → CS-11.
 
 ## 4. Decisions for Filip (recommendation first)
 
