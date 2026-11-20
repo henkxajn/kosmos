@@ -429,11 +429,13 @@ const activeFn = stripComments(src('src/ui/ColonyConsoleLogic.js')).split('expor
 assert(iCall > 0 && iBg > iCall && /this\._consoleOn = false;/.test(consoleGate) && !/FEATURES/.test(consoleGate) && !/FEATURES|GAME_CONFIG|features/.test(activeFn),
   'K3a draw(): the console branch depends on the grid kind only (no flag read on the way), before today\'s background — a flat grid falls through to today\'s screen');
 const dc = body(co, '  _drawConsole(ctx, W, H, colony, grid) {');
-const dip = body(co, '  _drawInfoPanel(ctx, x, y, w, h, colony, grid, opts = null) {');
+// CS-8c — pin zmieniony celowo: konsola nie osadza już prawej kolumny okna (`_drawInfoPanel` bez `consoleTab`), strony rysuje
+//   `ColonyConsolePages` (pełne piny w `colony_console_pages_smoke` P3).
+const dip = body(co, '  _drawInfoPanel(ctx, x, y, w, h, colony, grid) {');
 assert(dc.length > 200 && !/drawMini\(/.test(dc) && /this\._teardownGlobe\(\);/.test(dc) && !/_syncGlobe\(/.test(dc) && !/drawMini\(/.test(cv) && !/_syncGlobe\(/.test(cv)
-  && /if \(embedTab\) \{\s*this\._teardownGlobe\(\);\s*\} else if \(isSphereGrid\(grid\)\) \{/.test(dip) && /const embedTab = opts\?\.consoleTab \?\? null;/.test(dip)
+  && dip.length > 200 && !/embedTab|consoleTab/.test(dip) && !/_drawInfoPanel\(/.test(cv)
   && (co.match(/\.drawMini\(/g) ?? []).length === 1,
-'K3b no small globe in the console: _drawConsole tears the globe down and never draws the mini sphere; the embedded tab skips it (the old right column keeps its single drawMini call)');
+'K3b no small globe in the console: _drawConsole tears the globe down and never draws the mini sphere; the console no longer embeds the old right column (the old right column keeps its single drawMini call)');
 const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{23E9}-\u{23FF}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/u;
 const portrait = body(cv.replace(/\nexport function /g, '\n  export function ').replace(/\n}\n/g, '\n  }\n'), '  export function drawBuildingPortrait(');
 assert(cv.length > 1000 && !EMOJI.test(cv) && EMOJI.test(co) && /categoryGlyphOf\(cat\)/.test(portrait) && /portraitSpecOf\(buildingId, hasBuildingTexture\)/.test(portrait)

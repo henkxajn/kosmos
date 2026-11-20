@@ -54,7 +54,9 @@ import { tilePosLabel } from './ColonyTilePosLogic.js';                         
 import { BUILDING_CATEGORY_COLORS } from '../data/BuildingCategoryColors.js';         // CS-7 — barwy kategorii (wspólne z kulą kolonii)
 // CS-8 — konsola Kolonii (szablon ARC KONSOLE) dla kolonii na kuli za flagą `colonySphere`
 import { colonyConsoleActive, colonyConsoleSpec, lensAfterChip, tileBuildRows, sortByCategory } from './ColonyConsoleLogic.js';
-import { drawColonyConsole, drawYieldLabels } from './ColonyConsoleView.js';
+import { drawColonyConsole, drawYieldLabels, drawZoneTip } from './ColonyConsoleView.js';
+import { drawGroupDrawer, drawRecruitWindow, drawStationPickerWindow } from './ColonyConsolePages.js';
+import { CONSOLE_PAGES, pageScrollKey } from './ColonyConsolePagesLogic.js';   // CS-8c — szuflada grupy i okna w idiomie konsol
 import { consoleZones, consoleClockRect } from './ConsoleLayoutLogic.js';
 import { applyConsoleHalo, withAdaptiveHalo, drawZoneFrame } from './ConsoleKit.js';
 import { consoleRoles } from './ConsoleRolesLogic.js';
@@ -1314,20 +1316,17 @@ export class ColonyOverlay extends BaseOverlay {
   // ── Panel info planety (prawa kolumna 30%) ────────────────────────────────
   // Górę zajmuje żywy globus 3D (PlanetGlobeRenderer, osobny DOM canvas nad
   // ui-canvas). Poniżej dossier: charakterystyka, pierwiastki, surowce, budynki.
-  _drawInfoPanel(ctx, x, y, w, h, colony, grid, opts = null) {
+  _drawInfoPanel(ctx, x, y, w, h, colony, grid) {
     const planet = colony?.planet ?? null;
-    // CS-8 — `opts.consoleTab`: treść JEDNEJ zakładki osadzona w inspektorze konsoli Kolonii (bez linii kolumny, bez globusa,
-    //   bez paska zakładek — zakładkę wybiera konsola). Bez `opts` — dzisiejsza prawa kolumna, bez zmian.
-    const embedTab = opts?.consoleTab ?? null;
+    // CS-8c — konsola Kolonii nie osadza już tej kolumny (strony Załoga / Populacja / Stacja rysuje `ColonyConsolePages`);
+    //   to wyłącznie prawa kolumna dzisiejszego okna kolonii (siatka płaska).
 
     // Pionowy separator mapa | panel (tło = standardowe ciemne tło overlayu)
-    if (!embedTab) {
-      ctx.strokeStyle = THEME.borderActive; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + h); ctx.stroke();
-    }
+    ctx.strokeStyle = THEME.borderActive; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + h); ctx.stroke();
 
     if (!planet) { this._teardownGlobe(); return; }
-    const pad = embedTab ? 0 : 12;
+    const pad = 12;
 
     // ── Globus 3D (góra) ──
     // Globus to osobny DOM canvas (z-index:3) NAD ui-canvas. availRight = prawy limit (krawędź info panelu).
@@ -1344,7 +1343,6 @@ export class ColonyOverlay extends BaseOverlay {
     // C6b — sanitacja aktywnej zakładki: gdy bieżąca zakładka NIE istnieje w tym kontekście (np. Stacja
     // otwarta, po czym przełączenie na kolonię bez orbital_construction / na podgląd / na outpost), reset
     // do Planety — inaczej switch(activeTab) rysowałby zakładkę spoza paska (stale render).
-    if (embedTab && canWorkforce && tabs.some(tt => tt.id === embedTab)) this._infoTab = embedTab;   // CS-8 — zakładkę wybiera konsola
     if (canWorkforce && !tabs.some(tt => tt.id === this._infoTab)) this._infoTab = 'planet';
     const activeTab = canWorkforce ? this._infoTab : 'planet';
     // C6c-2b-ii — floating picker stacji żyje TYLKO na zakładce Stacja. Gdy aktywna zakładka to nie Stacja
@@ -1387,9 +1385,7 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
     const discY = y + 8;
-    if (embedTab) {
-      this._teardownGlobe();   // CS-8 — mały globus zdjęty z konsoli (decyzja właściciela 2)
-    } else if (isSphereGrid(grid)) {
+    if (isSphereGrid(grid)) {
       // CS-7 — kolonia geo: dekoracyjny globus mapy 2D nie zna siatki kuli; w jego miejscu mała kula tego samego ciała.
       this._teardownGlobe();
       this._sphereOf().drawMini(ctx, { x: discX, y: discY, w: discSize, h: discSize }, planet, grid);
@@ -1400,8 +1396,8 @@ export class ColonyOverlay extends BaseOverlay {
     const cw = w - pad * 2;
     const lx = x + pad;
 
-    let cy = embedTab ? y + 4 : discY + discSize + 10;
-    if (canWorkforce && !embedTab) cy = this._drawInfoTabs(ctx, lx, cy, cw, tabs);
+    let cy = discY + discSize + 10;
+    if (canWorkforce) cy = this._drawInfoTabs(ctx, lx, cy, cw, tabs);
 
     // C6c-2b-ii FIX — Stacja-exists PINUJE nagłówek (nazwa + ✏ rename) NAD scrollem (mirror-image stopki
     // Załogi): bez tego ✏ w 1. wierszu body jest prunowany po przewinięciu (_pruneHitsOutside). Rezerwa u
@@ -2607,9 +2603,14 @@ export class ColonyOverlay extends BaseOverlay {
       drawYieldLabels(ctx, placeable.labels, roles);
       ctx.restore();
     }
-    // Zaznaczenie jednostek: dzisiejsza szuflada grupy (armie, łączenie, dzielenie) u dołu bohatera.
-    //   Jedną jednostkę obsługuje inspektor; szuflada pojawia się dopiero dla grupy.
-    if (this._selectedUnits.size > 1 && colony) this._drawBottomDrawer(ctx, hero.x, hero.y, hero.w, hero.h);
+    // Zaznaczenie jednostek: szuflada grupy (armie, łączenie, dzielenie) w idiomie konsol, obok strefy inspektora u dołu
+    //   bohatera (CS-8c). Jedną jednostkę obsługuje inspektor; szuflada pojawia się dopiero dla grupy.
+    if (this._selectedUnits.size > 1 && colony) drawGroupDrawer(this, ctx, z, roles);
+    // Okna modalne (rekrutacja, picker stacji) rysują własną podpowiedź nad sobą — konsola pod nimi swojej nie pokazuje.
+    const recruitOn = !!(this._draftOpen && !this._stationMode && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy);
+    const pickerOn = !!((this._stationPickerOpen || this._stationShipPickerOpen) && !this._stationMode && !recruitOn && colony && !colony.isPreview
+      && !colony.ownerEmpireId && !colony.isTestEnemy);
+    this._cModalOpen = recruitOn || pickerOn;
     this._drawConsoleModeBanner(ctx, hero, roles);
 
     ctx.save();
@@ -2631,16 +2632,29 @@ export class ColonyOverlay extends BaseOverlay {
       if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;   // wygaszanie komunikatu
     }
 
-    // Modale dzisiejszego okna (rekrutacja, pickery stacji) — rysowane ostatnie, nad konsolą; obsługa kliknięć bez zmian.
-    const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
-    if (this._draftOpen && !this._stationMode && colony && !colony.isPreview
-        && !colony.ownerEmpireId && !colony.isTestEnemy) {
-      this._drawDraftModal(ctx, ox, oy, ow, oh);
+    // Okna modalne (rekrutacja, pickery stacji) — w idiomie konsol, OBOK strefy inspektora (CS-8c), rysowane ostatnie;
+    //   obsługa kliknięć bez zmian (`_handleDraftClick` / `_handleStationPickerClick` — te same typy stref).
+    //   Picker żyje tylko przy stronie Stacji w inspektorze (dawniej: zakładka `stacja` okna).
+    if (pickerOn && this._cInspector?.kind !== 'station') { this._stationPickerOpen = false; this._stationShipPickerOpen = false; }
+    if (recruitOn || (pickerOn && this._cInspector?.kind === 'station')) {
+      const modalStart = this._hitZones.length;
+      ctx.save();
+      applyConsoleHalo(ctx);
+      try {
+        if (recruitOn) drawRecruitWindow(this, ctx, z, roles, colony);
+        else {
+          drawStationPickerWindow(this, ctx, z, roles);
+          const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
+          this._addHit(ox, oy, ow, oh, 'stationPickerBg');   // absorber PEŁNY, OSTATNI (strefy okna wygrywają)
+        }
+      } finally { ctx.restore(); }
+      // podpowiedź okna: strefa pod kursorem spośród stref okna (pierwsza wygrywa)
+      const mx = this._mouseX, my = this._mouseY;
+      const hit = this._hitZones.slice(modalStart).find((q) => mx >= q.x && mx <= q.x + q.w && my >= q.y && my <= q.y + q.h) ?? null;
+      this._hoverZone = hit;
+      if (hit) drawZoneTip(ctx, hit, z.frame, roles);
     }
-    if ((this._stationPickerOpen || this._stationShipPickerOpen) && !this._stationMode && this._infoTab === 'stacja'
-        && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy) {
-      this._drawStationPicker(ctx, ox, oy, ow, oh);
-    }
+    this._cModalOpen = false;
   }
 
   /** Winieta pod kulą: środek tarczy z ostatniej klatki (pierwsza klatka — środek strefy), krycie maleje do zera za limbem. */
@@ -2823,8 +2837,11 @@ export class ColonyOverlay extends BaseOverlay {
       case 'cQueueCancel': {
         const bSys = colony?.buildingSystem;
         if (!bSys) return true;
-        if (d.kind === 'construction') bSys.cancelConstruction(d.tileKey);
-        else {
+        if (d.kind === 'construction') {
+          // Finding 789 — odmowa nigdy cicha: bramki `_demolish` ogłaszają powód same; brak budowy w kolejce — tutaj
+          if (!bSys._constructionQueue?.has?.(d.tileKey)) this._showFlash(t('colonyPages.reason.nothingToCancel'));
+          else bSys.cancelConstruction(d.tileKey);
+        } else {
           bSys.cancelPending(d.tileKey);
           const qt = graph?.tile?.(d.tileKey) ?? null;
           if (qt) qt.pendingBuild = null;
@@ -2859,7 +2876,7 @@ export class ColonyOverlay extends BaseOverlay {
       return true;
     }
     this._cScroll ??= {};
-    for (const key of ['list', 'card', 'insp', 'queue']) {
+    for (const key of ['list', 'card', 'insp', 'queue', ...CONSOLE_PAGES.map(pageScrollKey)]) {   // CS-8c — strony Załoga / Populacja / Stacja
       if (!inR(this._cScrollRects?.[key])) continue;
       this._cScroll[key] = Math.max(0, (this._cScroll[key] ?? 0) + delta);   // górna klamra w rysowaniu strefy
       return true;
@@ -4992,10 +5009,11 @@ export class ColonyOverlay extends BaseOverlay {
   _handleDraftClick(x, y) {
     const z = this._hitZones.find(zn =>
       x >= zn.x && x <= zn.x + zn.w && y >= zn.y && y <= zn.y + zn.h &&
-      (zn.type === 'draft_close' || zn.type === 'draftDialogBg' || zn.type?.startsWith('ground:'))
+      (zn.type === 'draft_close' || zn.type === 'draftDialogBg' || zn.type?.startsWith('ground:') || zn.type === 'cReason')
     );
     if (!z) { this._draftOpen = false; return true; }          // klik poza panelem → zamknij
-    if (z.type === 'draft_close')          this._draftOpen = false;
+    if (z.type === 'cReason')              { if (z.data?.tip) this._showFlash(z.data.tip); }   // CS-8c — wyłączony element okna mówi dlaczego
+    else if (z.type === 'draft_close')     this._draftOpen = false;
     else if (z.type === 'draftDialogBg')   { /* konsumuj klik w pustą część panelu */ }
     else                                   this._draftPanel.onHit(z.type.slice(7), z.data ?? {});
     return true;
@@ -5006,7 +5024,8 @@ export class ColonyOverlay extends BaseOverlay {
   _handleStationPickerClick(x, y) {
     const z = this._hitZones.find(zn =>
       x >= zn.x && x <= zn.x + zn.w && y >= zn.y && y <= zn.y + zn.h &&
-      (zn.type?.startsWith('station_mgmt_') || zn.type === 'stationPickerBg'));
+      (zn.type?.startsWith('station_mgmt_') || zn.type === 'stationPickerBg' || zn.type === 'cReason'));
+    if (z?.type === 'cReason') { if (z.data?.tip) this._showFlash(z.data.tip); return true; }   // CS-8c — wyłączony wiersz pickera mówi dlaczego
     if (!z || z.type === 'stationPickerBg') { this._stationPickerOpen = false; this._stationShipPickerOpen = false; return true; }
     // C6c-2b-ii FIX — tło PUDEŁKA pickera KONSUMUJ (nie zamykaj): zamyka tylko ✕ (*_close) LUB klik POZA
     // pudełkiem (stationPickerBg). Bez tego klik w ciało pickera (nazwa/koszt/ikona/wiersz niebudowalny — brak
@@ -5633,20 +5652,20 @@ export class ColonyOverlay extends BaseOverlay {
         const pid = this._getColony()?.planetId;
         const stack = mgr.getUnitsAtHex(pid, zone.data.tileQ, zone.data.tileR)
           .filter(u => !u.owner || u.owner === 'player');
-        if (stack.length < 2) { this._showFlash('Potrzeba ≥2 jednostek'); break; }
+        if (stack.length < 2) { this._showFlash(t('colonyPages.flash.needTwo')); break; }
         const res = armySys.createArmy(stack.map(u => u.id));
-        if (res.success) this._showFlash(`🎖 Utworzono ${res.army.name}`);
-        else this._showFlash(`Błąd: ${res.reason}`);
+        if (res.success) this._showFlash(t('colonyPages.flash.armyCreated', res.army.name));
+        else this._showFlash(t('colonyPages.flash.error', res.reason));
         break;
       }
       case 'armyCreateFromSelection': {
         const armySys = window.KOSMOS?.armySystem;
         if (!armySys) break;
         const ids = [...this._selectedUnits];
-        if (ids.length < 2) { this._showFlash('Potrzeba ≥2 jednostek'); break; }
+        if (ids.length < 2) { this._showFlash(t('colonyPages.flash.needTwo')); break; }
         const res = armySys.createArmy(ids);
-        if (res.success) this._showFlash(`🎖 Utworzono ${res.army.name}`);
-        else this._showFlash(`Błąd: ${res.reason}`);
+        if (res.success) this._showFlash(t('colonyPages.flash.armyCreated', res.army.name));
+        else this._showFlash(t('colonyPages.flash.error', res.reason));
         break;
       }
       case 'armyDisband': {
@@ -5664,7 +5683,7 @@ export class ColonyOverlay extends BaseOverlay {
         }).then((confirmed) => {
           if (!confirmed) return;
           armySys.disbandArmy(armyId);
-          this._showFlash('💔 Armia rozwiązana');
+          this._showFlash(t('colonyPages.flash.armyDisbanded'));
         });
         break;
       }
@@ -5673,8 +5692,14 @@ export class ColonyOverlay extends BaseOverlay {
         if (!armySys || !zone.data?.armyId) break;
         const army = armySys.getArmy(zone.data.armyId);
         if (!army) break;
-        const name = window.prompt('Nowa nazwa armii:', army.name);
-        if (name) armySys.renameArmy(zone.data.armyId, name);
+        // CS-8c — okno zmiany nazwy gry (jak stacja / flota) zamiast okna przeglądarki; w konsoli obok strefy inspektora
+        const armyId = zone.data.armyId;
+        const cz = this._consoleOn ? this.consoleZones : null;
+        const anchor = cz?.inspector ? dialogAnchorCss(cz.inspector, _UI_SCALE, { frame: cz.frame ?? null, dy: 22, minW: Math.max(260, 440 / _UI_SCALE) }) : null;
+        showRenameModal(army.name ?? '', { anchor }).then((n) => {
+          const nm = n?.trim();
+          if (nm) armySys.renameArmy(armyId, nm);
+        });
         break;
       }
       case 'armySplit':
@@ -5686,20 +5711,20 @@ export class ColonyOverlay extends BaseOverlay {
         // Wyodrębnij zaznaczone z selektu (jeśli to członkowie tej armii)
         const split = [...this._selectedUnits].filter(id => army.members.has(id));
         if (split.length === 0) {
-          this._showFlash('Zaznacz członków armii do wydzielenia');
+          this._showFlash(t('colonyPages.flash.splitSelect'));
           break;
         }
         if (split.length >= army.members.size) {
-          this._showFlash('Nie można wydzielić całej armii');
+          this._showFlash(t('colonyPages.flash.splitAll'));
           break;
         }
         const res = armySys.splitArmy(zone.data.armyId, split);
         if (res.success && res.newArmy) {
-          this._showFlash(`➕ Wydzielono ${res.newArmy.name}`);
+          this._showFlash(t('colonyPages.flash.splitDone', res.newArmy.name));
         } else if (res.success) {
-          this._showFlash('➕ Jednostki wydzielone (za mało na armię)');
+          this._showFlash(t('colonyPages.flash.splitLoose'));
         } else {
-          this._showFlash(`Błąd: ${res.reason}`);
+          this._showFlash(t('colonyPages.flash.error', res.reason));
         }
         break;
       }

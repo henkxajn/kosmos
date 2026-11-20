@@ -1624,15 +1624,27 @@ export class BuildingSystem {
 
   // ── Anuluj budowę w toku (z outliner / UI) ─────────────────────────────
 
+  /**
+   * Finding 789 (CS-8c) — stan pola bierzemy z KOLEJKI, nie ze znaczników kafla. Znaczniki (`underConstruction` /
+   * `pendingBuild`) odświeża tylko synchronizacja okna kolonii (`syncTileBuildings`), więc budowa, która ruszyła z kolejki
+   * zamówień bez otwartego okna, zostawiała na kaflu stare `pendingBuild`: `_demolish` szedł gałęzią zamówienia, nic nie
+   * anulował i ogłaszał sukces (budowa trwała dalej, bez zwrotu). Przed delegacją kafel dostaje wpis kolejki.
+   * @returns {boolean} true — budowa zdjęta z kolejki
+   */
   cancelConstruction(tileKey) {
     const entry = this._constructionQueue.get(tileKey);
-    if (!entry) return;
+    if (!entry) return false;
     // Znajdź tile w gridzie
     const tile = tileGraphOf(this._grid)?.tile(tileKey);
-    if (tile) {
-      // Deleguj do _demolish — obsłuży zwrot kosztów i czyszczenie
-      this._demolish(tile);
+    if (!tile) {
+      EventBus.emit('planet:demolishResult', { success: false, tile: null, reason: t('colonyPages.reason.cancelNoTile') });
+      return false;
     }
+    tile.underConstruction = entry;
+    if (!this._pendingQueue.has(tileKey)) tile.pendingBuild = null;
+    // Deleguj do _demolish — obsłuży zwrot kosztów, czyszczenie i bramki własności
+    this._demolish(tile);
+    return !this._constructionQueue.has(tileKey);
   }
 
   // ── Anuluj oczekujące zamówienie ────────────────────────────────────────

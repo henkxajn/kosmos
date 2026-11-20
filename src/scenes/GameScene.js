@@ -2493,7 +2493,8 @@ export class GameScene {
     window.csSphereUnit = window.KOSMOS.debug?.csSphereUnit;   // CS-7 — własna jednostka przy stolicy (kontrola ruchu)
     window.csSphere2D   = window.KOSMOS.debug?.csSphere2D;     // CS-7 — wymuszony widok 2D kuli (fallback bez WebGL)
     // CS-8 — pomocniki kontroli konsoli Kolonii (ColonyConsoleDebug.js): stan, placówka, kolonia, technologia stacji, magazyn.
-    for (const k of ['csConsole', 'csOutpost', 'csColony', 'csStationTech', 'csPoor', 'csRich']) window[k] = window.KOSMOS.debug?.[k];
+    for (const k of ['csConsole', 'csOutpost', 'csColony', 'csStationTech', 'csPoor', 'csRich',
+      'csBarracks', 'csStation', 'csGroup', 'csCancelOutside']) window[k] = window.KOSMOS.debug?.[k];   // CS-8c — koszary, stacja, grupa, Finding 789
     // CS-2 (Finding 779) — scenariusze bramki geometrii siatki (Cs2GeometryDebug.js): odczyt pasa, szew, desant, eskadra, zdarzenie.
     for (const k of ['cs2Latitude', 'cs2Seam', 'cs2Invasion', 'cs2Strike', 'cs2EquatorEvent']) window[k] = window.KOSMOS.debug?.[k];
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).

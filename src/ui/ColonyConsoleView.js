@@ -32,6 +32,7 @@ import { drawZoneRule, drawEyebrow, drawKvRow, drawBar, drawList, drawActionChip
   drawTabular, chipLabel, CONSOLE_KIT } from './ConsoleKit.js';
 import { getBuildingTexture, hasBuildingTexture } from '../renderer/BuildingTextures.js';
 import { canIssueColonyOrders } from './ColonyOrderGuard.js';
+import { drawCrewPage, drawPopulationPage, drawStationPage, drawTipLines } from './ColonyConsolePages.js';   // CS-8c — strony w idiomie konsol
 import { tilePosLabel } from './ColonyTilePosLogic.js';
 import { COLONY_CONSOLE, colonyListRows, colonyListHeight, planetCardRows, tileStatsOf, inspectorStateOf, portraitSpecOf,
   categoryGlyphOf, CAPITAL_BUILDING_ID, tileBuildRows, sortByCategory, categoriesOf, queueRows, headerChips, BUILD_ROW,
@@ -192,12 +193,19 @@ export function drawColonyConsole(ov, ctx, W, H, colony, grid) {
 
   // Strefa pod kursorem z TEJ klatki (strefy zmieniają się bez ruchu myszy: zaznaczenie, przewinięcie, koniec budowy) —
   // podświetlenie następnej klatki i podpowiedź czytają świeżą strefę, nigdy tę sprzed zmiany.
-  if (Number.isFinite(ov._mouseX) && Number.isFinite(ov._mouseY)) ov._hoverZone = ov._hitTest(ov._mouseX, ov._mouseY);
+  //   Przy otwartym oknie modalnym strefę pod kursorem ustala okno (jego strefy powstają po konsoli).
+  if (!ov._cModalOpen && Number.isFinite(ov._mouseX) && Number.isFinite(ov._mouseY)) ov._hoverZone = ov._hitTest(ov._mouseX, ov._mouseY);
   const fresh = ov._hoverZone;
   // Podpowiedź (powód wyłączonego elementu / opis) — na wierzchu
-  const tipZone = fresh?.data?.tip ? fresh : null;
-  if (tipZone) drawConsoleTooltip(ctx, { text: tipZone.data.tip, x: tipZone.x, y: tipZone.y + tipZone.h + 4, above: tipZone.h + 6 }, z.frame, roles,
-    { tone: tipZone.data.tipTone ?? 'alert' });
+  //   (okno modalne — rekrutacja, picker stacji — rysuje własną podpowiedź nad sobą: `drawPageModalTip`)
+  if (!ov._cModalOpen) drawZoneTip(ctx, fresh, z.frame, roles);
+}
+
+/** CS-8c — podpowiedź strefy: wielowierszowa (`tipLines`, dzisiejsze podpowiedzi Załogi) albo jednowierszowa (`tip`). */
+export function drawZoneTip(ctx, zone, frame, roles) {
+  if (zone?.data?.tipLines?.length) { drawTipLines(ctx, zone.data.tipLines, { x: zone.x, y: zone.y + zone.h + 4, above: zone.h + 6 }, frame, roles); return; }
+  if (zone?.data?.tip) drawConsoleTooltip(ctx, { text: zone.data.tip, x: zone.x, y: zone.y + zone.h + 4, above: zone.h + 6 }, frame, roles,
+    { tone: zone.data.tipTone ?? 'alert' });
 }
 
 // ── Nagłówek ────────────────────────────────────────────────────────────────
@@ -437,15 +445,13 @@ function drawInspector(ov, ctx, iz, roles, colony, grid, graph, selTile, state, 
     case 'construction':
     case 'pending': return scrolled(ov, ctx, rect, 'insp', roles, (x, y, w, vis) => drawQueuedTile(ov, ctx, x, y, w, vis, roles, colony, graph, selTile, state, ordersOk));
     case 'tile': return scrolled(ov, ctx, rect, 'insp', roles, (x, y, w, vis) => drawTile(ov, ctx, x, y, w, vis, roles, colony, grid, graph, selTile, state, ordersOk, K, hz));
-    case 'station': return drawLegacyTab(ov, ctx, rect, colony, grid, 'stacja');
+    case 'station': return drawStationPage(ov, ctx, rect, roles, colony, PAGE_HELPERS);
     default: return drawSummary(ov, ctx, rect, roles, colony, grid, K, hz);
   }
 }
 
-/** Dzisiejsza zakładka okna kolonii (Załoga / Populacja / Stacja) osadzona w inspektorze: ta sama treść, sterowniki i przewijanie. */
-function drawLegacyTab(ov, ctx, rect, colony, grid, tab) {
-  ov._drawInfoPanel(ctx, rect.x, rect.y, rect.w, rect.h, colony, grid, { consoleTab: tab });
-}
+/** CS-8c — pomocniki konsoli dla stron (przewijane pasmo strefy, czip akcji ze strefą albo powodem). */
+const PAGE_HELPERS = Object.freeze({ scrolled: (...a) => scrolled(...a), actionChip: (...a) => actionChip(...a) });
 
 /** Blok terenu pola: nazwa, pozycja, pas szerokości z mnożnikami, mnożniki uzysku terenu, anomalia. Zwraca dolną krawędź. */
 function drawTerrainBlock(ctx, x, y0, w, roles, graph, tile) {
@@ -1049,7 +1055,8 @@ function drawSummary(ov, ctx, rect, roles, colony, grid, K, hz) {
     top += CONSOLE_KIT.CHIP_H + 8;
   }
   const body = { x: rect.x, y: top, w: rect.w, h: Math.max(0, rect.y + rect.h - top) };
-  if (ov._cInspTab !== 'summary') return drawLegacyTab(ov, ctx, body, colony, grid, ov._cInspTab);
+  if (ov._cInspTab === 'workforce') return drawCrewPage(ov, ctx, body, roles, colony, canIssueColonyOrders(colony) && !colony?.isPreview, PAGE_HELPERS);
+  if (ov._cInspTab === 'populacja') return drawPopulationPage(ov, ctx, body, roles, colony, PAGE_HELPERS);
 
   scrolled(ov, ctx, body, 'insp', roles, (x, y0, w, vis) => {
     let y = y0;

@@ -8,6 +8,14 @@
 //   csStationTech() — odkrywa technologię Konstrukcji orbitalnych (czip [ STACJA ] przestaje być wyłączony).
 //   csPoor()        — zeruje surowce budowlane pokazywanej kolonii (następne budowy trafią do kolejki zamówień);
 //                     csRich() — dosypuje surowców i towarów (budowy ruszają od razu).
+//   CS-8c:
+//   csBarracks()    — stawia od razu Koszary Lv1 na pierwszym wolnym polu lądowym pokazywanej kolonii (rekrutacja dostępna).
+//   csStation()     — stawia od razu stację orbitalną nad ciałem pokazywanej kolonii (strona Stacji: zarządzanie, pickery).
+//   csGroup()       — zaznacza w oknie kolonii wszystkie własne jednostki na pokazywanej kolonii (szuflada grupy przy 2+).
+//   csCancelOutside() — Finding 789: przy ZAMKNIĘTYM oknie kolonii zamawia budowę bez surowców (kolejka zamówień), dosypuje
+//                     surowce i opłaca zamówienie tak, jak robi to tik gry (budowa rusza), po czym anuluje ją publicznym
+//                     `cancelConstruction` — ścieżką spoza okna. Stan „okno nie widziało tej kolonii w tej sesji” (jak po F5
+//                     i Kontynuuj) — kopia siatki okna dla tej kolonii jest pomijana. Wypisuje kolejkę przed / po i zwrot.
 //
 // Importowalne pod node (bez THREE): czyta wyłącznie window.KOSMOS.
 
@@ -104,4 +112,69 @@ export function csRich() {
   return out;
 }
 
-export function colonyConsoleDebugHelpers() { return { csConsole, csOutpost, csColony, csStationTech, csPoor, csRich }; }
+function freeLandTile(col) {
+  const g = col?.grid ?? col?.buildingSystem?._grid;
+  const tiles = g?.tiles ?? (g?.toArray?.() ?? []);
+  const list = Array.isArray(tiles) ? tiles : [...(tiles?.values?.() ?? [])];
+  return list.find((t) => !t.capitalBase && !t.buildingId && !t.underConstruction && !t.pendingBuild && !t.isOccupied
+    && ['plains', 'forest', 'desert', 'tundra', 'mountains'].includes(t.type)) ?? null;
+}
+
+export function csBarracks() {
+  const { K, col, ov } = ctx();
+  const b = col?.buildingSystem, t = freeLandTile(col);
+  if (!b || !t) { console.warn('[csBarracks] no colony or no free land tile'); return null; }
+  b._activateBuilding(t.key, 'barracks_lv1', null, t.type, false);
+  if (ov?._gridCache?.[col.planetId]) ov._syncTileBuildings?.(ov._gridCache[col.planetId], b);
+  if (K?.uiManager) K.uiManager._dirty = true;
+  const out = { colony: col.planet?.name ?? col.planetId, tile: t.key, barracksLv: K?.colonyManager?._getBarracksLevel?.(col) ?? 0 };
+  console.log('[csBarracks]', JSON.stringify(out));
+  return out;
+}
+
+export function csStation() {
+  const { K, col } = ctx();
+  const st = col ? K?.debug?.spawnStation?.(col.planetId) : null;
+  if (K?.uiManager) K.uiManager._dirty = true;
+  const out = { colony: col?.planet?.name ?? col?.planetId ?? null, station: st?.id ?? null, name: st?.name ?? null };
+  console.log('[csStation]', JSON.stringify(out));
+  return out;
+}
+
+export function csGroup() {
+  const { K, col, ov } = ctx();
+  const mine = (K?.groundUnitManager?.getUnitsOnPlanet?.(col?.planetId) ?? []).filter((u) => u.owner === 'player' || u.factionId === 'humanity');
+  if (!ov || mine.length < 1) { console.warn('[csGroup] no own units on the shown colony (csSphereUnit places one)'); return null; }
+  ov._selectedUnits = new Set(mine.map((u) => u.id));
+  ov._selectedUnit = mine[0];
+  if (K?.uiManager) K.uiManager._dirty = true;
+  const out = { colony: col.planet?.name ?? col.planetId, selected: mine.map((u) => u.id) };
+  console.log('[csGroup]', JSON.stringify(out));
+  return out;
+}
+
+export function csCancelOutside() {
+  const { K, cm, ov } = ctx();
+  const col = cm?.getColony?.(cm?.activePlanetId) ?? null;
+  const b = col?.buildingSystem, t = freeLandTile(col);
+  if (!b || !t) { console.warn('[csCancelOutside] no active colony or no free land tile'); return null; }
+  if (ov?.visible) { if (K?.overlayManager) K.overlayManager.closeActive(); else ov.hide?.(); }
+  if (ov?._gridCache) delete ov._gridCache[col.planetId];   // okno nie widziało tej kolonii w tej sesji (jak po F5 + Kontynuuj)
+  const rs = col.resourceSystem, store = K?.systemPoolService?.getStore?.(rs) ?? rs;
+  const saved = Object.fromEntries(BUILD_RESOURCES.map((k) => [k, store.inventory?.get?.(k) ?? 0]));
+  for (const k of BUILD_RESOURCES) store.inventory?.set?.(k, 0);
+  K?.eventBus?.emit?.('planet:buildRequest', { tile: t, buildingId: 'solar_farm' });
+  const pending = b._pendingQueue.has(t.key);
+  for (const k of BUILD_RESOURCES) store.inventory?.set?.(k, (saved[k] ?? 0) + 500);
+  b._tickPendingQueue();
+  const started = b._constructionQueue.has(t.key);
+  const staleTile = !!t.pendingBuild && !t.underConstruction;
+  const fe0 = store.inventory?.get?.('Fe') ?? 0;
+  const ok = b.cancelConstruction(t.key);
+  const out = { colony: col.planet?.name ?? col.planetId, tile: t.key, pendingFirst: pending, constructionStarted: started, staleTileBeforeCancel: staleTile,
+    cancelReturned: ok, stillBuilding: b._constructionQueue.has(t.key), refundFe: (store.inventory?.get?.('Fe') ?? 0) - fe0 };
+  console.log('[csCancelOutside]', JSON.stringify(out));
+  return out;
+}
+
+export function colonyConsoleDebugHelpers() { return { csConsole, csOutpost, csColony, csStationTech, csPoor, csRich, csBarracks, csStation, csGroup, csCancelOutside }; }
