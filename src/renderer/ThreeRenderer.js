@@ -39,6 +39,7 @@ import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
+import { ColonyCityLights } from './ColonyCityLights.js';             // CS-9 — światła miast kolonii geo na mapie układu
 import { starDrawScale, innermostPeriapsisAU, starScreenFloorScale, bodyDrawScale, bodyScreenFloorScale } from '../utils/SystemScale.js';   // Finding 774, CS-PHYS-c
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
@@ -641,6 +642,12 @@ export class ThreeRenderer {
 
     // ── Ikony budynków na planecie (widok kosmiczny, bliski zoom) ──
     this._colonyMarkers = new ColonyBuildingMarkers();
+    // CS-9 — światła miast kolonii geo (powłoka-dziecko siatki powierzchni ciała; siatki płaskie: nic — plan §3.18)
+    this._cityLights = new ColonyCityLights({
+      THREE, logDepth: logDepthOn, shared: SurfaceShader.SURFACE_SHARED_UNIFORMS,
+      getColonies: () => window.KOSMOS?.colonyManager?.getAllColonies?.() ?? [],
+      getTarget: (bodyId) => this._cityLightTarget(bodyId),
+    });
 
     // Tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
     this._orbitFilter = 'planetoids'; // domyślny — planetoidy widoczne, planety wg reguł
@@ -1803,7 +1810,9 @@ export class ThreeRenderer {
         const colony = colMgr.getColony(entity.id);
         const pEntry = this._planets.get(entity.id);
         if (colony?.grid && pEntry) {
-          this._colonyMarkers.show(pEntry.group, r, colony.grid, entity.id);
+          // Finding 784 (CS-9): pola siatki geo leżą w układzie CIAŁA — ikony jadą z obracającą się siatką powierzchni;
+          // siatka płaska bez zmian (grupa planety).
+          this._colonyMarkers.show(colony.grid.kind === 'geo' ? (pEntry.mesh ?? pEntry.group) : pEntry.group, r, colony.grid, entity.id);
         }
       } else {
         this._colonyMarkers.hide();
@@ -2739,6 +2748,14 @@ export class ThreeRenderer {
       try { rec.sea = surfaceSeaLevelOf(rec.body); } catch (err) { /* bez morza */ }
     }
     return rec.sea;
+  }
+
+  /** CS-9 — cel powłoki świateł miast: siatka powierzchni ciała ze WSPÓLNYM shaderem (ten sam układ co pola geo) + promień. */
+  _cityLightTarget(bodyId) {
+    if (!this._sharedSurfaces.has(bodyId)) return null;
+    const mesh = this._sharedSurfaceMesh(bodyId);
+    const body = this._sharedSurfaces.get(bodyId)?.body;
+    return mesh && body ? { mesh, radius: this._getEntityRadius(body) } : null;
   }
 
   /** Siatka ciała ze wspólnym shaderem (planeta / księżyc / planetoida) albo null. */
@@ -5018,6 +5035,7 @@ export class ThreeRenderer {
         // Ikony budynków na planecie (visibility + pulsowanie)
         const camDist = this._cameraController?._dist ?? 100;
         this._colonyMarkers.tick(0.016, camDist);
+        this._cityLights.tick(performance.now());   // CS-9 — przegląd kolonii geo co 1,5 s (mapa świateł tylko przy zmianie)
 
         // Animacja chmur — niezaleznie od pauzy gry (real-time)
         this._tickClouds();

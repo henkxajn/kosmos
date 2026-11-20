@@ -18,6 +18,8 @@ import * as THREE_NS from 'three';
 import { SurfaceShader } from './SurfaceShader.js';
 import { SurfaceAirShader } from './SurfaceAirShader.js';
 import { ColonySphereOverlayShader as OV } from './ColonySphereOverlayShader.js';
+import { CityLightsShader as CL } from './CityLightsShader.js';
+import { CITY_LIGHTS } from './CityLightsLogic.js';
 import { resolveSurfaceLook, surfaceSeaLevelOf } from '../utils/SurfacePaletteLogic.js';
 import { resolveAirLook, isStarLocked, substellarDirOf, weatherRate } from '../utils/SurfaceAirLogic.js';
 import { geodesicTopology } from '../map/GeodesicTopology.js';
@@ -88,6 +90,7 @@ export class ColonySphereRenderer {
     this._drag = null;
     this._mode = { selectedTile: -1, gridAll: false, lock: false, work: false };
     this._overlay = null; this._overlayDirty = false;
+    this._city = null; this._cityDirty = false;   // CS-9 — mapa natężeń świateł miast { data, w, h, seed } albo null
     this._colors = null;
     this._fallbackColors = null;
     this._air = null;                    // { angle, phase } — zegar pogody
@@ -142,6 +145,7 @@ export class ColonySphereRenderer {
       : null;
     this._overlay = this._topo ? createOverlayData(this._topo.count) : null;
     this._overlayDirty = true;
+    this._city = null; this._cityDirty = true;   // światła należą do ciała — gospodarz poda mapę nowego
     this._fallbackColors = null;
     this._mapPhase = MAP_PHASE.NONE; this._mapFade = false; this._crossT0 = null; this._requested = false;
     this._viewInit = false; this._turn = null; this._drag = null;
@@ -158,6 +162,16 @@ export class ColonySphereRenderer {
     this._overlay.set(data);
     this._overlayDirty = true; this._dirty = true;
     return true;
+  }
+
+  /**
+   * CS-9 — światła miast: mapa natężeń `{ data, w, h, seed }` z `CityLightsLogic.rasterizeCityLights` (bufor gospodarza,
+   * nie kopiowany — gospodarz woła ponownie po każdej zmianie) albo null (brak świateł).
+   */
+  setCityLights(map) {
+    this._city = map && map.data && map.w > 0 && map.h > 0 ? { data: map.data, w: map.w, h: map.h, seed: map.seed ?? 0 } : null;
+    this._cityDirty = true; this._dirty = true;
+    return !!this._city;
   }
 
   /** Barwy nakładki z motywu: { grid, hover, selection, own, foreign } — każda [r, g, b, a] w 0…1. */
@@ -499,7 +513,8 @@ export class ColonySphereRenderer {
       uSunPos: { value: [0, 0, SUN_DISTANCE] }, uSunColor: { value: light.sun }, uAmbient: { value: light.ambient },
       uTune: { value: [1, 1, 1, 1] },
     };
-    const o = { surface: null, cross: null, shell: null, halo: null, overlay: null, overlayTex: null, camera: null, cloudAlpha: 0 };
+    const o = { surface: null, cross: null, shell: null, halo: null, overlay: null, overlayTex: null, camera: null, cloudAlpha: 0,
+      city: null, cityTex: null };
     const geo = new T.SphereGeometry(1, tn.sphereSegments[0], tn.sphereSegments[1]);
     const mat = SurfaceShader.createSurfaceMaterial(T, this._look, { logDepth: false, shared: this._shared, surfaceSeed: this._body.surfaceSeed });
     o.surface = new T.Mesh(geo, mat);
@@ -523,16 +538,43 @@ export class ColonySphereRenderer {
     this._obj = o;
     this._mapPhase = MAP_PHASE.NONE; this._mapFade = false; this._crossT0 = null; this._requested = false;
     this._overlayDirty = true;
+    this._cityDirty = true;
+  }
+
+  // CS-9 — powłoka świateł miast: tworzona przy pierwszej mapie, tekstura podmieniana przy zmianie rozmiaru, chowana bez mapy.
+  _syncCity() {
+    const T = this._THREE, o = this._obj, c = this._city;
+    this._cityDirty = false;
+    if (!c) { if (o.city) o.city.visible = false; return; }
+    if (o.cityTex && (o.cityTex.image?.width !== c.w || o.cityTex.image?.height !== c.h || o.cityTex.image?.data !== c.data)) {
+      try { o.cityTex.dispose(); } catch (e) { /* nic */ }
+      o.cityTex = null;
+    }
+    if (!o.cityTex) o.cityTex = CL.createCityTexture(T, c.data, c.w, c.h);
+    else o.cityTex.needsUpdate = true;
+    if (!o.city) {
+      const mat = CL.createCityMaterial(T, o.cityTex, { shared: this._shared, depthTest: false, density: CITY_LIGHTS.heroDensity,
+        gain: CITY_LIGHTS.heroGain, seed: c.seed });
+      o.city = new T.Mesh(new T.SphereGeometry(CITY_LIGHTS.heroRadius, 96, 64), mat);
+      o.city.renderOrder = 4;            // nad chmurami (2, 3), pod nakładką pól (5)
+      o.city.frustumCulled = false;
+      this._scene.add(o.city);
+    } else {
+      o.city.material.uniforms.uLights.value = o.cityTex;
+      o.city.material.uniforms.uSeed.value = CL.cityLightSeed(c.seed);
+    }
+    o.city.visible = true;
   }
 
   _disposeScene() {
     const o = this._obj;
     if (o) {
-      for (const m of [o.surface, o.cross, o.shell, o.halo, o.overlay]) {
+      for (const m of [o.surface, o.cross, o.shell, o.halo, o.overlay, o.city]) {
         if (!m) continue;
         try { if (m !== o.cross) m.geometry?.dispose?.(); m.material?.dispose?.(); } catch (e) { /* nic */ }
       }
       try { o.overlayTex?.dispose?.(); } catch (e) { /* nic */ }
+      try { o.cityTex?.dispose?.(); } catch (e) { /* nic */ }
     }
     this._obj = null; this._scene = null; this._shared = null;
     this._mapPhase = MAP_PHASE.NONE; this._mapFade = false; this._crossT0 = null; this._requested = false;
@@ -579,6 +621,9 @@ export class ColonySphereRenderer {
         SurfaceAirShader.setAirClock(o.shell.material, this._air.angle, this._air.phase);
         o.shell.material.uniforms.uCloud.value[1] = o.cloudAlpha * (this._mode.work ? tn.cloudAlphaWork : 1);
       }
+
+      if (this._cityDirty) this._syncCity();
+      if (o.city?.visible) o.city.material.uniforms.uGain.value = CITY_LIGHTS.heroGain * (this._mode.work ? CITY_LIGHTS.workGain : 1);
 
       const u = o.overlay.material.uniforms;
       if (this._overlayDirty) { o.overlayTex.needsUpdate = true; this._overlayDirty = false; }
@@ -693,7 +738,7 @@ export class ColonySphereRenderer {
       renders: this._renders, composites: this._composites, device: [this._devW, this._devH],
       renderMsMedian: ms.length ? ms[ms.length >> 1] : null, hoverTile: this.hoverTile, selectedTile: this._mode.selectedTile,
       gridAll: this._mode.gridAll, haze: this._obj?.shell ? SurfaceAirShader.hazeOpacityOf(this._obj.shell.material) : null,
-      hasAir: !!this._airLook, locked: !!this._lockedDir,
+      hasAir: !!this._airLook, locked: !!this._lockedDir, cityLights: !!this._city, cityMesh: !!this._obj?.city?.visible,
     };
   }
 }

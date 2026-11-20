@@ -8,6 +8,8 @@
 import * as THREE from 'three';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { HexGrid }   from '../map/HexGrid.js';
+import { geoTileDirOf } from './ColonyBillboardLogic.js';
+import { getBuildingTexture } from './BuildingTextures.js';
 
 // Kolory kategorii budynków
 const CAT_COLORS = {
@@ -164,8 +166,10 @@ export class ColonyBuildingMarkers {
       const pos = this._tileToXYZ(tile, markerRadius);
       if (!pos) return;
 
-      // Tekstura markera
-      const tex = this._createMarkerTexture(icon, category);
+      // Tekstura markera (CS-9: kolonia geo → portret budynku właściciela, gdy jest plik; siatka płaska bez zmian)
+      const isGeo = this._grid.kind === 'geo';
+      const portrait = isGeo ? getBuildingTexture(tile.capitalBase ? 'colony_base' : effectiveId) : null;
+      const tex = this._createMarkerTexture(icon, category, portrait);
       const mat = new THREE.SpriteMaterial({
         map: tex,
         transparent: true,
@@ -176,7 +180,7 @@ export class ColonyBuildingMarkers {
       });
 
       const sprite = new THREE.Sprite(mat);
-      const baseScale = this._planetRadius * 0.22;
+      const baseScale = this._planetRadius * (portrait ? 0.17 : 0.22);   // portret: mniejszy — rozwinięta kolonia nie zasłania ciała i świateł
       sprite.scale.setScalar(baseScale);
       sprite.position.copy(pos);
       sprite.userData = {
@@ -207,6 +211,11 @@ export class ColonyBuildingMarkers {
 
   // Hex → XYZ na sferze (equirectangular, identycznie jak SurfaceMarkers)
   _tileToXYZ(tile, r) {
+    // Finding 784 (CS-9): siatka geo — środek pola z topologii (układ ciała; rodzicem jest siatka powierzchni).
+    if (this._grid?.kind === 'geo') {
+      const d = geoTileDirOf(this._grid, tile);
+      return d ? new THREE.Vector3(d[0] * r, d[1] * r, d[2] * r) : null;
+    }
     if (tile.q === undefined || tile.r === undefined || !this._grid?.gridPixelSize) return null;
 
     const hexSize = this._calcHexSize(this._grid);
@@ -229,7 +238,8 @@ export class ColonyBuildingMarkers {
   }
 
   // Generuj teksturę markera (canvas 64×64)
-  _createMarkerTexture(icon, category) {
+  _createMarkerTexture(icon, category, portrait = null) {
+    if (portrait) return this._createPortraitTexture(portrait, category);
     const size = 64;
     const canvas = document.createElement('canvas');
     canvas.width = size;
@@ -264,6 +274,35 @@ export class ColonyBuildingMarkers {
   }
 
   // Deterministyczna faza pulsowania z klucza tile'a
+  // CS-9 (Finding 784) — marker kolonii geo: portret budynku w ciemnym krążku z obrysem w barwie kategorii.
+  _createPortraitTexture(portrait, category) {
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const c = size / 2, rad = size * 0.44;
+    ctx.beginPath();
+    ctx.arc(c, c, rad, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(6, 13, 24, 0.85)';
+    ctx.fill();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(c, c, rad - 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.imageSmoothingQuality = 'high';
+    try { ctx.drawImage(portrait, size * 0.10, size * 0.08, size * 0.80, size * 0.80); } catch (e) { /* obraz jeszcze się ładuje */ }
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(c, c, rad, 0, Math.PI * 2);
+    ctx.strokeStyle = CAT_COLORS[category] ?? '#888888';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
   _hashPhase(key) {
     let hash = 0;
     for (let i = 0; i < key.length; i++) {

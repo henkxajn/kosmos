@@ -136,7 +136,8 @@ if (!VIEW.ColonySphereView || !RMOD) { for (const n of ['P3a', 'P3b', 'P3c', 'P3
     return r;
   };
   const icons = [];
-  const view = new VIEW.ColonySphereView({ createRenderer: mkRenderer, getBuildingIcon: (id) => { icons.push(id); return id === 'mine' || id === 'colony_base' ? { png: true } : null; } });
+  const view = new VIEW.ColonySphereView({ createRenderer: mkRenderer, createCanvas: (w, h) => ({ width: w, height: h, getContext: () => fakeCtx() }),
+    getBuildingIcon: (id) => { icons.push(id); return id === 'mine' || id === 'colony_base' ? { png: true, width: 128, height: 128 } : null; } });
   const planet = terranBody();
   const grid = generateGeoGrid(planet, true);
   for (const t of grid.tiles) t.owner = 'player';
@@ -247,14 +248,15 @@ if (!VIEW.ColonySphereView || !RMOD) { for (const n of ['P3a', 'P3b', 'P3c', 'P3
   assert(dIdle === Infinity && dIdleMini === Infinity && miniHeld && dWait > 0 && dWait <= 1200 && dSpin >= 0 && dSpin <= 1000 / 30 + 1e-6 && miniSpins && dDrag === 0 && !!mini,
     `P3i frames on demand: idle (tile selected, weather paused) → no frame at all, mini sphere held too; after the mouse leaves → wake after the resume delay (${dWait.toFixed(0)} ms); spinning → ≤ 33 ms; dragging → next frame`);
 
-  // znaczniki budynków: ikona PNG (drawImage) dla budynku z teksturą, emoji dla reszty, poziom, pasek budowy
+  // CS-9 (pin zmieniony celowo): budynki = portrety-billboardy z atlasu (cień + portret na budynek; PNG albo znak kategorii —
+  //   bez emoji i bez paska budowy; stany pinuje `colony_sphere_buildings_smoke`)
   const ctx2 = fakeCtx();
   view.renderer.turnTo(cap); for (let i = 0; i < 60; i++) { env.now += 1000 / 60; view.sync({ colony, grid, selected: { q: cap, r: -1 } }); view.renderer.draw(ctx2, rect); }
   const d0 = ctx2.calls.drawImage, t0 = ctx2.calls.fillText, r0 = ctx2.calls.fillRect;
   icons.length = 0;
   view._drawMarkers(ctx2, rect);
-  assert(ctx2.calls.drawImage === d0 + 2 && ctx2.calls.fillText >= t0 + 2 && ctx2.calls.fillRect === r0 + 2 && icons.includes('mine') && icons.includes('farm') && icons.includes('colony_base'),
-    'P3j building markers: PNG portrait when the building has one (mine, capital), data icon otherwise, level number, construction bar — only for marked tiles');
+  assert(ctx2.calls.drawImage === d0 + 8 && ctx2.calls.fillText === t0 && ctx2.calls.fillRect === r0 && icons.includes('mine') && icons.includes('farm') && icons.includes('colony_base') && icons.includes('solar_farm'),
+    'P3j building billboards: each of the 4 marked tiles (capital, mine, farm, construction site) draws a ground shadow + one portrait from the atlas, no emoji text — only for marked tiles');
 
   // Stolica (właściciel 2026-11-20: „nie widzę stolicy"): wirtualna stolica nie ma `buildingId` — portret z `colony_base`,
   //   budynek na polu stolicy (farma startowa) = plakietka, nie zasłona; złoty pierścień, większy portret; widoczna także

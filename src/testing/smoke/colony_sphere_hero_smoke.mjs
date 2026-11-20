@@ -393,10 +393,16 @@ if (!OL.composeSphereOverlay || !L.writeOverlayTile) { for (const n of ['H6a', '
   const plain = OL.composeSphereOverlay({ topo: gt, tiles });
   const marked = [cap, mine, site];
   const others = tiles.map((t, i) => i).filter(i => !marked.includes(i));
-  assert(land.length > 10 && sea.length > 10 && marked.every(i => lineA(plain, i) > 0 && fillA(plain, i) > 0) && others.length > 100 && others.every(i => lineA(plain, i) === 0 && fillA(plain, i) === 0),
-    `H6b normal view: only own building / capital / construction tiles carry an outline and a tint (${marked.length} marked, ${others.length} clean) — the grid itself is the shader's cursor ring`);
-  assert(rgb(plain, mine).join() === OL.categoryBytes('mining').join() && tiles.every((t, i) => meta(plain, i)[0] === 0),
-    'H6c building tile tinted by its category colour; one owner everywhere → no border edge');
+  // CS-9 (pin zmieniony celowo): domyślnie barwa kategorii to cienki OBRYS pola (portret właściciela nie jest podbarwiany);
+  //   wariant A/B `tint: 'full'` = dawne podbarwienie pola z CS-7.
+  const full = OL.composeSphereOverlay({ topo: gt, tiles, tint: 'full' });
+  const lineRgb = (d, i) => Array.from(d.slice((N + i) * 4, (N + i) * 4 + 3));
+  assert(land.length > 10 && sea.length > 10 && marked.every(i => lineA(plain, i) > 0) && fillA(plain, mine) === 0 && fillA(plain, site) === 0 && fillA(plain, cap) > 0
+    && marked.every(i => lineA(full, i) > 0 && fillA(full, i) > 0) && lineA(full, mine) > lineA(plain, mine)
+    && others.length > 100 && others.every(i => lineA(plain, i) === 0 && fillA(plain, i) === 0 && lineA(full, i) === 0 && fillA(full, i) === 0),
+    `H6b normal view: only own building / capital / construction tiles carry an outline (${marked.length} marked, ${others.length} clean); the tile tint exists only in the A/B variant — the grid itself is the shader's cursor ring`);
+  assert(lineRgb(plain, mine).join() === OL.categoryBytes('mining').join() && rgb(full, mine).join() === OL.categoryBytes('mining').join() && tiles.every((t, i) => meta(plain, i)[0] === 0),
+    'H6c building tile outlined in its category colour (A/B variant: tinted by it); one owner everywhere → no border edge');
 
   const verdict = (t) => (t.buildingId || t.capitalBase || t.underConstruction ? 'occupied' : (TERRAIN_TYPES[t.type]?.buildable ? 'ok' : 'blocked'));
   const build = OL.composeSphereOverlay({ topo: gt, tiles, buildVerdict: verdict });

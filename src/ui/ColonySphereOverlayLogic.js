@@ -1,7 +1,8 @@
 // ColonySphereOverlayLogic — CZYSTA kompozycja stanu pól kuli kolonii (ARC COLONY SPHERE, krok CS-7; decyzje właściciela
 // 4 i 6 z 2026-11-20). Z pól siatki i trybu okna liczy bajty tekstury nakładki (`ColonySphereLogic.writeOverlayTile`):
 //
-//   • zwykły widok — pola z budynkami podbarwione barwą kategorii + obrys („własne pola"), stolica obrysem akcentu,
+//   • zwykły widok — pola z budynkami: cienki obrys w barwie kategorii (CS-9; wariant A/B `full` = podbarwione pole jak
+//     w CS-7), stolica złotym obrysem,
 //     budowa w toku na żółto; granice własności tylko na krawędziach między polami różnych właścicieli (jak mapa 2D);
 //     siatkę przy kursorze, obrys pola pod kursorem i zaznaczonego rysuje shader z uniformów;
 //   • tryb budowy — każde pole dostaje werdykt: dozwolone (zielone wypełnienie + obrys), zabronione (czerwone
@@ -23,6 +24,18 @@ export function nextLens(lens) {
   const i = SPHERE_LENSES.indexOf(lens);
   return SPHERE_LENSES[(i < 0 ? 0 : i + 1) % SPHERE_LENSES.length];
 }
+
+/**
+ * CS-9 — barwa kategorii na polu z budynkiem. Portret budynku jest grafiką właściciela, więc domyślnie barwa kategorii to
+ * tylko CIENKI OBRYS pola (`subtle`); `full` = dawne podbarwienie całego pola (CS-7) — zostaje jako wariant A/B.
+ */
+export const BUILDING_TINT = Object.freeze({ SUBTLE: 'subtle', FULL: 'full' });
+export const BUILDING_TINT_DEFAULT = BUILDING_TINT.SUBTLE;
+/** Krycie obrysu / wypełnienia pola z budynkiem i placu budowy per wariant (0…255) + szerokość obrysu [px]. */
+export const BUILDING_TINT_STYLE = Object.freeze({
+  subtle: Object.freeze({ line: 190, fill: 0, width: 1.3, constructionLine: 190, constructionFill: 0 }),
+  full:   Object.freeze({ line: 225, fill: 84, width: 1.6, constructionLine: 215, constructionFill: 64 }),
+});
 
 /** Werdykty pola w trybie budowy. */
 export const BUILD_VERDICT = Object.freeze({ OK: 'ok', BLOCKED: 'blocked', OCCUPIED: 'occupied' });
@@ -83,6 +96,7 @@ function ownerOf(tile) { return tile?.owner ?? ''; }
  * @param {null | Map<number, {type:string}>} [p.supply] pokrycie zaopatrzenia: indeks pola → { type }
  * @param {string} [p.playerOwner] właściciel gracza na polach (domyślnie 'player')
  * @param {number[]} [p.accent] barwa akcentu motywu [r, g, b] (obrys stolicy)
+ * @param {string} [p.tint] BUILDING_TINT — barwa kategorii jako cienki obrys (domyślnie) albo podbarwione pole (A/B)
  * @param {Uint8Array} [out] bufor do ponownego użycia
  * @returns {Uint8Array}
  */
@@ -93,6 +107,7 @@ export function composeSphereOverlay(p, out = null) {
   const lens = SPHERE_LENSES.includes(p.lens) ? p.lens : 'none';
   const player = p.playerOwner ?? 'player';
   const accent = p.accent ?? C.capital;
+  const ts = BUILDING_TINT_STYLE[p.tint] ?? BUILDING_TINT_STYLE[BUILDING_TINT_DEFAULT];
   for (let i = 0; i < n; i++) {
     const tile = tiles[i];
     const st = { fill: null, line: null, lineWidth: 1.5, hatch: false, borderMask: 0, foreign: false };
@@ -107,8 +122,8 @@ export function composeSphereOverlay(p, out = null) {
     // Budynki / stolica / budowa — obrys zawsze, wypełnienie tylko gdy nic ważniejszego go nie zajmuje.
     // Stolica (także AI) — złoty, gruby obrys, niezależny od motywu i od budynku na polu stolicy.
     if (tile?.capitalBase) { st.line = [...C.capital, 255]; st.lineWidth = 3.2; st.fill = [...C.capital, 60]; }
-    else if (hasBuilding) { const c = categoryBytes(b?.category); st.line = [...c, 225]; st.lineWidth = 1.6; st.fill = [...c, 84]; }
-    else if (tile?.underConstruction) { st.line = [...C.construction, 215]; st.lineWidth = 1.6; st.fill = [...C.construction, 64]; }
+    else if (hasBuilding) { const c = categoryBytes(b?.category); st.line = [...c, ts.line]; st.lineWidth = ts.width; st.fill = ts.fill ? [...c, ts.fill] : null; }
+    else if (tile?.underConstruction) { st.line = [...C.construction, ts.constructionLine]; st.lineWidth = ts.width; st.fill = ts.constructionFill ? [...C.construction, ts.constructionFill] : null; }
 
     if (lens === 'terrain') st.fill = [...terrainBytes(tile?.type), 150];
     else if (lens === 'deposits') { const d = depositLensOf(tile); st.fill = [...d.rgb, d.a]; }

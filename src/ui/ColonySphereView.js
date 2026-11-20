@@ -14,7 +14,10 @@
 import { ColonySphereRenderer } from '../renderer/ColonySphereRenderer.js';
 import { SPHERE_TUNING } from '../renderer/ColonySphereLogic.js';
 import { geodesicTopology } from '../map/GeodesicTopology.js';
-import { composeSphereOverlay, sphereLegend, fallbackColorsOf, nextLens, BUILD_VERDICT } from './ColonySphereOverlayLogic.js';
+import { composeSphereOverlay, sphereLegend, fallbackColorsOf, nextLens, BUILD_VERDICT, BUILDING_TINT } from './ColonySphereOverlayLogic.js';
+import { BILLBOARD, BILLBOARD_STATE, BILLBOARD_COLORS, billboardSpecOf, buildBillboardList, horizonAlpha, categoryCss } from '../renderer/ColonyBillboardLogic.js';
+import { ColonyBillboardAtlas } from '../renderer/ColonyBillboardAtlas.js';
+import { CITY_LIGHTS, cityLightsOf, rasterizeCityLights, populationOfColony } from '../renderer/CityLightsLogic.js';
 import { drawSphereChrome, sphereThemeColors } from './ColonySphereChrome.js';
 import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
@@ -24,13 +27,10 @@ import { themeEpoch, THEME } from '../config/ThemeConfig.js';
 import EntityManager from '../core/EntityManager.js';
 
 const HOME_SYSTEM = 'sys_home';
-const CAPITAL_BUILDING_ID = Object.keys(BUILDINGS).find(id => BUILDINGS[id].isCapital) ?? 'colony_base';
 const KEY_TURN_RAD = 0.14;            // obrót klawiszem [rad]
 const DOUBLE_CLICK_MS = 350;          // dwuklik w to samo pole → obrót do pola
-const MARKER_MIN_FACING = 0.16;       // znaczniki gasną przy limbie
-const MARKER_MIN_PX = 7;              // poniżej tego promienia pola znaczników nie rysujemy (stolica — zawsze)
-const CAPITAL_ICON_SCALE = 1.6;       // portret stolicy względem portretu zwykłego budynku
-const CAPITAL_RING = '#ffc83c';       // złoty pierścień pod portretem stolicy
+const MARKER_MIN_FACING = 0.16;       // jednostki gasną przy limbie (adapter siatki dla `_drawUnits`)
+const NOTE_MIN_PX = 7;                // poniżej tego promienia pola adnotacji (anomalia, okupacja) nie rysujemy
 const OCCUPATION_YEARS = 6 / 12;      // czas przejmowania budynku [lata gry] — jak mapa 2D
 const GEO_CAPITAL_NODE_PENALTY = 0.05;   // dopłata do kwadratu szerokości pola (≈ 13° od równika)
 const MINI_TUNING = Object.freeze({ ...SPHERE_TUNING, fitFraction: 0.94, spinRate: 0.16, resumeDelayMs: 0, easeInMs: 1 });
@@ -42,9 +42,9 @@ const MINI_TUNING = Object.freeze({ ...SPHERE_TUNING, fitFraction: 0.94, spinRat
  * @returns {null | {portraitId:string|null, scale:number, capital:boolean, badgeId:string|null}}
  */
 export function markerSpecOf(tile) {
-  if (tile?.capitalBase) return { portraitId: CAPITAL_BUILDING_ID, scale: CAPITAL_ICON_SCALE, capital: true, badgeId: tile.buildingId ?? null };
-  if (tile?.buildingId) return { portraitId: tile.buildingId, scale: 1, capital: false, badgeId: null };
-  return null;
+  const spec = billboardSpecOf(tile);
+  if (!spec || (!tile.capitalBase && !tile.buildingId)) return null;   // sama budowa → `billboardSpecOf` (CS-9)
+  return { portraitId: spec.portraitId, scale: spec.scale, capital: spec.capital, badgeId: spec.badgeId };
 }
 
 /** Czy siatka kolonii jest kulą (siatka geodezyjna). */
@@ -132,6 +132,12 @@ export class ColonySphereView {
     this._lastClick = { tile: -1, t: -Infinity };
     this._state = null;
     this._lastPos = new Map();
+    // CS-9 — billboardy budynków i światła miast
+    this._atlas = new ColonyBillboardAtlas({ createCanvas: o.createCanvas });
+    this.tint = BUILDING_TINT.SUBTLE;   // barwa kategorii: cienki obrys pola + podstawa (A/B: BUILDING_TINT.FULL = podbarwione pole)
+    this.lodBias = 1;                   // podgląd LOD (`csDots()`): < 1 = znaczniki jak z daleka (kropki kategorii)
+    this._markerStats = { ms: [], portraits: 0, dots: 0, frames: 0 };
+    this._lights = null; this._lightSig = null; this._lightMap = null;
   }
 
   /** Przełącz soczewkę klawiszem (brak → Teren → Złoża → Własność → brak). Zwraca nową. */
@@ -162,6 +168,7 @@ export class ColonySphereView {
       r.setFallbackColors(fallbackColorsOf(grid.tiles));
       this._grid = grid; this._topoCount = n; this._bytes = null; this._scratch = null; this._epoch = null;
       this._adapter = null; this._lastPos.clear();
+      this._lightSig = null;
     }
     const topo = r.topo;
     if (!topo) return;
@@ -182,7 +189,7 @@ export class ColonySphereView {
       }
     }
     this._scratch = composeSphereOverlay({
-      topo, tiles: grid.tiles, lens: this.lens, supply, accent: this._colors.accentBytes,
+      topo, tiles: grid.tiles, lens: this.lens, supply, accent: this._colors.accentBytes, tint: this.tint,
       buildVerdict: build ? (tile) => buildVerdictFor(tile, s.hoveredBuilding ?? null, ctx) : null,
     }, this._scratch);
     if (!sameBytes(this._scratch, this._bytes)) {
@@ -190,6 +197,15 @@ export class ColonySphereView {
       this._bytes.set(this._scratch);
       r.setOverlay(this._bytes);
       r.setFallbackColors(fallbackColorsOf(grid.tiles));
+    }
+    // CS-9 — światła miast: natężenie per pole (deterministyczne, rośnie z budynkami i ludnością) → mapa tylko przy zmianie.
+    this._lights = cityLightsOf(grid.tiles, populationOfColony(s.colony), this._lights);
+    if (this._lights.signature !== this._lightSig) {
+      this._lightSig = this._lights.signature;
+      if (this._lights.any) {
+        this._lightMap = rasterizeCityLights(topo, this._lights.data, CITY_LIGHTS.mapW, CITY_LIGHTS.mapH, this._lightMap);
+        r.setCityLights?.({ data: this._lightMap, w: CITY_LIGHTS.mapW, h: CITY_LIGHTS.mapH, seed: planet?.surfaceSeed ?? 0 });
+      } else r.setCityLights?.(null);
     }
     const sel = s.selected && s.selected.r === -1 && Number.isInteger(s.selected.q) ? s.selected.q : -1;
     r.setMode({ selectedTile: sel, gridAll: build, lock: sel >= 0 || build || !!s.lock, work: build || this.lens !== 'none' || !!s.supply });
@@ -215,61 +231,128 @@ export class ColonySphereView {
   /** Promień „heksa" znaczników na ekranie [jednostki gospodarza] (odpowiednik `_hexSize` mapy 2D). */
   markerHexSize(rect) { return this.renderer.tileScreenSize(rect) * 0.5; }
 
-  // Znaczniki budynków: ikona (PNG albo emoji z danych — jak mapa 2D), poziom, pasek budowy, anomalia, pasek okupacji.
+  // ── CS-9 — budynki jako portrety-billboardy (plan §3.18) ─────────────────────────────────────────────────
+  // Portret STOI na środku pola (linia gruntu grafiki = środek pola), zwrócony do kamery, pod nim cień i obrys podstawy
+  // w barwie kategorii; skala płynna z zoomem (klamry min / max), daleko → kropka kategorii, za horyzontem → nic.
+  // Stany: budowa (odbarwiony portret + pierścień postępu), rozbudowa (pierścień), uszkodzony (czerwień), poziom (pipsy).
+  // Wszystkie portrety klatki idą z kilku stron atlasu (`ColonyBillboardAtlas`) — bez filtrów i kompozycji per budynek.
   _drawMarkers(ctx, rect) {
     const grid = this._grid, r = this.renderer;
     if (!grid || !r.topo) return;
-    const base = this.markerHexSize(rect);
-    const small = base < MARKER_MIN_PX;   // za daleko na zwykłe znaczniki — stolica i tak (decyzja właściciela: zawsze widoczna)
-    const tiles = grid.tiles;
+    const clock = (typeof performance !== 'undefined') ? performance : Date;
+    const t0 = clock.now();
+    const tilePx = r.tileScreenSize(rect);
+    const list = buildBillboardList({ tiles: grid.tiles, project: (i) => r.project(i, rect), tilePx, lodBias: this.lodBias });
+    let dpr = 1;
+    try { dpr = Math.max(1, Math.abs(ctx.getTransform?.()?.a ?? 1) || 1); } catch (e) { dpr = 1; }
+    let portraits = 0, dots = 0;
     ctx.save();
+    for (const it of list) {
+      if (it.dotAlpha > 0.01) { this._drawDot(ctx, it); dots++; }
+      if (it.portraitAlpha > 0.01) { this._drawBillboard(ctx, it, dpr); portraits++; }
+    }
+    this._drawTileNotes(ctx, rect, tilePx * 0.5);
+    ctx.restore();
+    const ms = clock.now() - t0;
+    const st = this._markerStats;
+    st.ms.push(ms); if (st.ms.length > 240) st.ms.shift();
+    st.portraits = portraits; st.dots = dots; st.frames++;
+  }
+
+  _drawDot(ctx, it) {
+    ctx.globalAlpha = it.alpha * it.dotAlpha;
+    ctx.beginPath(); ctx.arc(it.x, it.y, it.dot, 0, Math.PI * 2);
+    ctx.fillStyle = it.spec.state === BILLBOARD_STATE.DAMAGED ? BILLBOARD_COLORS.damaged
+      : (it.spec.state === BILLBOARD_STATE.CONSTRUCTION ? BILLBOARD_COLORS.construction : categoryCss(it.spec.category));
+    ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = BILLBOARD_COLORS.ink; ctx.stroke();
+  }
+
+  _drawBillboard(ctx, it, dpr) {
+    const T = BILLBOARD, spec = it.spec, size = it.size, x = it.x, y = it.y;
+    const a = it.alpha * it.portraitAlpha;
+    const top = y - size * T.groundY;
+    const stateCss = spec.state === BILLBOARD_STATE.DAMAGED ? BILLBOARD_COLORS.damaged
+      : (spec.state === BILLBOARD_STATE.CONSTRUCTION ? BILLBOARD_COLORS.construction : categoryCss(spec.category));
+    // 1. cień / stopa na gruncie
+    const sh = this._atlas.shadow();
+    ctx.globalAlpha = a * T.shadowAlpha;
+    if (sh) ctx.drawImage(sh.canvas, sh.sx, sh.sy, sh.s, sh.s, x - size * T.shadowW / 2, y - size * T.shadowH / 2, size * T.shadowW, size * T.shadowH);
+    ctx.globalAlpha = a;
+    if (spec.capital) {
+      // Stolica: ciemny dysk + złoty pierścień za portretem (znak stolicy z CS-7 — bez zmian).
+      const cy = top + size / 2;
+      ctx.beginPath(); ctx.arc(x, cy, size * 0.56, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(8,10,14,0.55)'; ctx.fill();
+      ctx.lineWidth = Math.max(2, Math.min(5, size * 0.045)); ctx.strokeStyle = BILLBOARD_COLORS.capitalRing; ctx.stroke();
+    } else {
+      // 2. podstawa w barwie kategorii (albo stanu) — barwa kategorii NIE przykrywa grafiki
+      ctx.beginPath(); ctx.ellipse(x, y, size * T.baseW / 2, size * T.baseH / 2, 0, 0, Math.PI * 2);
+      ctx.lineWidth = Math.max(1, size * 0.022); ctx.strokeStyle = stateCss; ctx.stroke();
+    }
+    // 3. portret (PNG albo znak kategorii) z atlasu
+    const img = this._getIcon(spec.portraitId);
+    const sp = this._atlas.portrait(spec.portraitId, spec.state, spec.category, img, size * dpr);
+    if (sp) {
+      ctx.globalAlpha = a * (spec.state === BILLBOARD_STATE.CONSTRUCTION ? T.constructionAlpha : 1);
+      ctx.drawImage(sp.canvas, sp.sx, sp.sy, sp.s, sp.s, x - size / 2, top, size, size);
+      ctx.globalAlpha = a;
+    }
+    // 4. plakietka budynku na polu stolicy
+    if (spec.badgeId && size > 22) {
+      const bs = size * 0.42, bx = x + size * 0.42, by = top + size * 0.86;
+      ctx.beginPath(); ctx.arc(bx, by, bs * 0.58, 0, Math.PI * 2);
+      ctx.fillStyle = BILLBOARD_COLORS.ink; ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = BILLBOARD_COLORS.capitalRing; ctx.stroke();
+      const bCat = BUILDINGS[spec.badgeId]?.category ?? 'civil';
+      const bsp = this._atlas.portrait(spec.badgeId, BILLBOARD_STATE.BUILT, bCat, this._getIcon(spec.badgeId), bs * dpr);
+      if (bsp) ctx.drawImage(bsp.canvas, bsp.sx, bsp.sy, bsp.s, bsp.s, bx - bs / 2, by - bs * 0.56, bs, bs);
+    }
+    // 5. pierścień postępu (budowa / rozbudowa)
+    if (spec.progress != null && size >= T.ringMinPortraitPx) {
+      const rr = Math.max(4.5, size * 0.12), rx = x + size * 0.30, ry = top + size * 0.24;
+      ctx.beginPath(); ctx.arc(rx, ry, rr + 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = BILLBOARD_COLORS.ink; ctx.fill();
+      ctx.lineWidth = Math.max(1.6, rr * 0.36);
+      ctx.beginPath(); ctx.arc(rx, ry, rr * 0.72, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.20)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(rx, ry, rr * 0.72, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, spec.progress));
+      ctx.strokeStyle = BILLBOARD_COLORS.construction; ctx.stroke();
+    }
+    // 6. pipsy poziomu
+    if (spec.pips.count > 0 && size >= T.pipMinPortraitPx) {
+      const pr = Math.max(1.4, size * 0.034), gap = pr * 2.7, n = spec.pips.count;
+      const py = y + size * T.baseH / 2 + pr * 1.9;
+      for (let k = 0; k < n; k++) {
+        const px = x + (k - (n - 1) / 2) * gap;
+        ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.fillStyle = k < spec.pips.strong ? BILLBOARD_COLORS.pipStrong : BILLBOARD_COLORS.pip; ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = BILLBOARD_COLORS.ink; ctx.stroke();
+      }
+    }
+  }
+
+  // Adnotacje pól spoza budynków (jak w CS-7): anomalia, pasek okupacji.
+  _drawTileNotes(ctx, rect, base) {
+    if (base < NOTE_MIN_PX) return;
+    const tiles = this._grid.tiles, r = this.renderer;
     for (let i = 0; i < tiles.length; i++) {
       const tile = tiles[i];
-      if (small && !tile.capitalBase) continue;
-      const hasB = !!tile.buildingId || !!tile.capitalBase;
       const anomaly = tile.anomaly && tile.anomalyDetected;
       const occupying = tile.occupyEmpireId && tile.occupyStart != null;
-      if (!hasB && !tile.underConstruction && !anomaly && !occupying) continue;
+      if (!anomaly && !occupying) continue;
       const p = r.project(i, rect);
-      if (!p || !p.visible || p.facing < MARKER_MIN_FACING) continue;
-      const k = Math.sqrt(Math.min(1, p.facing));
-      const rad = base * k;
-      ctx.globalAlpha = Math.min(1, (p.facing - MARKER_MIN_FACING) * 5);
-      if (hasB) {
-        const spec = markerSpecOf(tile);
-        const size = Math.max(spec.capital ? 18 : 0, rad * 1.25 * spec.scale);
-        if (spec.capital) {
-          // Złoty pierścień + ciemny dysk pod portretem: stolica czytelna przy domyślnym zoomie i w trakcie obrotu.
-          ctx.beginPath(); ctx.arc(p.x, p.y, size * 0.56, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(8,10,14,0.55)'; ctx.fill();
-          ctx.lineWidth = Math.max(2, size * 0.07); ctx.strokeStyle = CAPITAL_RING; ctx.stroke();
-        }
-        this._drawIcon(ctx, spec.portraitId, p.x, p.y, size);
-        if (spec.badgeId && rad > 9) {
-          const bs = size * 0.42, bx = p.x + size * 0.42, by = p.y + size * 0.36;
-          ctx.beginPath(); ctx.arc(bx, by, bs * 0.58, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(8,10,14,0.75)'; ctx.fill();
-          ctx.lineWidth = 1; ctx.strokeStyle = CAPITAL_RING; ctx.stroke();
-          this._drawIcon(ctx, spec.badgeId, bx, by, bs);
-        }
-        if (!spec.capital && (tile.buildingLevel ?? 1) > 1 && rad > 12) {
-          ctx.font = `bold ${Math.max(7, rad * 0.24)}px ${THEME.fontFamily}`;
-          ctx.fillStyle = '#ffd700'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-          ctx.fillText(`${tile.buildingLevel}`, p.x + rad * 0.62, p.y + rad * 0.62);
-        }
-      }
-      if (tile.underConstruction && rad > 10) {
-        const prog = Math.max(0, Math.min(1, tile.underConstruction.progress ?? 0));
-        const bw = rad * 1.1, bh = Math.max(2, rad * 0.09);
-        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(p.x - bw / 2, p.y + rad * 0.42, bw, bh);
-        ctx.fillStyle = '#ffdd44'; ctx.fillRect(p.x - bw / 2, p.y + rad * 0.42, bw * prog, bh);
-      }
+      const alpha = p ? horizonAlpha(p.facing, p.visible !== false) : 0;
+      if (alpha <= 0) continue;
+      const rad = base * Math.sqrt(Math.min(1, p.facing));
+      const hasB = !!tile.buildingId || !!tile.capitalBase;
+      ctx.globalAlpha = alpha;
       if (anomaly && rad > 9) {
         const icon = tile.anomalyRevealed ? (ANOMALIES[tile.anomaly]?.icon ?? '⚠') : '❓';
         ctx.font = `${Math.max(8, Math.round(rad * 0.5))}px serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = '#ffdd44';
-        ctx.fillText(icon, p.x, hasB ? p.y + rad * 0.36 : p.y);
+        ctx.fillText(icon, p.x, hasB ? p.y + rad * 0.62 : p.y);
       }
       if (occupying) {
         const now = (typeof window !== 'undefined' ? window.KOSMOS?.timeSystem?.gameTime : 0) ?? 0;
@@ -281,19 +364,15 @@ export class ColonySphereView {
         }
       }
     }
-    ctx.restore();
   }
 
-  // Portret PNG budynku; brak pliku → ikona z danych (jak mapa 2D).
-  _drawIcon(ctx, id, x, y, size) {
-    const tex = id ? this._getIcon(id) : null;
-    if (tex) { ctx.drawImage(tex, x - size / 2, y - size / 2, size, size); return; }
-    const icon = BUILDINGS[id]?.icon ?? '';
-    if (!icon) return;
-    ctx.font = `${Math.max(8, Math.round(size * 0.5))}px serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(icon, x, y);
+  /** CS-9 — pomiar przebiegu znaczników i stan świateł (sonda, `csBuildings()`). */
+  markerInfo() {
+    const st = this._markerStats, ms = st.ms;
+    const sorted = [...ms].sort((a, b) => a - b);
+    return { portraits: st.portraits, dots: st.dots, frames: st.frames, tint: this.tint,
+      msMedian: sorted.length ? sorted[sorted.length >> 1] : 0, msMax: sorted.length ? sorted[sorted.length - 1] : 0,
+      atlas: this._atlas.stats(), lights: this._lights ? { any: this._lights.any, lit: this._lights.lit, factor: this._lights.factor } : null };
   }
 
   // ── Wejście ─────────────────────────────────────────────────────────────────────────
