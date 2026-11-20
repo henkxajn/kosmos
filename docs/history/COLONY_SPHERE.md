@@ -2,6 +2,15 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
+## CS-8c — colony pages on the console kit + Finding 789 (2026-11-20; owner check PASS)
+
+- Crew / Population / Station pages, recruitment, station pickers and the unit group drawer moved to `ColonyConsolePages` +
+  `ColonyConsolePagesLogic` (D-CS-28 items 2 and 9 done); windows and drawer next to the inspector; disabled elements give reasons;
+  Crew tooltips restored on canvas.
+- Finding 789 fixed (`cancelConstruction` takes the tile state from the queue); Finding 790 measured, open.
+- Proof: keeper 24 PASS (fail-first 2/21), mutations 43/43, real-game probe 18/18, flag-OFF trace unchanged, sweep 446/446,
+  i18n PASS; `cs8c-pages.png`.
+
 ## CS-8 — Colonies console on the CONSOLES template (2026-11-20; owner gate PASS)
 
 - Owner gate PASS incl. the re-check after the post-gate fixes (console for every geo colony regardless of the flag,

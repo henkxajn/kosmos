@@ -50,7 +50,7 @@ for the record.
 | **D-CS-18 (new, signed 2026-11-18)** | The system-seed mode is a property of the **world**, decided once at world creation (`GameScene.start()` / `GameCore.boot()`) and stamped in `galaxyData.seededSystems = true` (only when ON; saved whole, no version bump; unstamped = unseeded). `SystemGenerator.worldSeedContext(galaxyData)` is the only reader; generation and scan derive their seed from it, so flipping the flag after start changes nothing. Fail-closed: a seeded world without a galaxySeed logs `[CS-3a]` `console.error`, counts `emergencySeedUses()` and uses `EMERGENCY_GALAXY_SEED = 0`, never the old seed. Homeworld mutation seeded from galaxySeed in a seeded world. CS-3a-fix (§3.2, Finding 769). |
 | **D-CS-25 (signed 2026-11-19)** | Moon-orbit generation change in scaled-orbit worlds accepted: moon orbit radii × k at generation for `orbitModel: 2` worlds, no new RNG draws, legacy worlds unchanged, scaled test saves made before the change keep their old moon orbits (§3.9.3). |
 | **D-CS-26 (signed 2026-11-20)** | CS-5 overnight decisions signed as proposed (§3.13, §3.14). (1) The live game keeps new colonies **flat until CS-7**, even with `FEATURES.colonySphere` ON; geo grids only headless / debug. (2) A geo tile's coordinate `(index, −1)` is an **interim encoding**; it migrates to real tile ids at the CS-12 clean save break. (3) Key strings stay unchanged (minefield `${q}_${r}`, battle `pid\|q\|r`, `{q,r}` payloads, unit / army / Vessel `q,r`). (4) Landing zone = graph distance ≥ 2 from every held tile; watch in CS-8 / CS-10 balance — far more landing tiles than today's flat edge rows. (5) `ensureColonyGrid` stays flat. (6) Gas giants flat until CS-11. Finding 782: option B — no change now, re-evaluate after in-game tests (CS-8) with the D-CS-8 table (planetoid n=2 = 42 tiles is the ready option). |
-| **D-CS-28 (signed 2026-11-20)** | CS-8 decisions signed as proposed (§3.16), **item 1 amended at the owner gate**: the Colonies console is shown for **every geo colony regardless of `FEATURES.colonySphere`**; the flag only decides whether new colonies get a geo grid (§3.16.1). Items 2 and 9 are **INTERIM until CS-8c**: the embedded Crew / Population / Station pages and the unit group drawer stay in today's look inside the console and get restyled to kit primitives in CS-8c. Items 3–8 and 10 as written in §3.16 (no combat-strip slot in the header; unaffordable rows queue the order; Shift keeps the building armed; yield labels for all tiles at tile ≥ 34 px; founding an outpost neither switches the active colony nor opens the screen with the flag ON — Finding 740; body preview read-only in the console; tuning values). |
+| **D-CS-28 (signed 2026-11-20)** | CS-8 decisions signed as proposed (§3.16), **item 1 amended at the owner gate**: the Colonies console is shown for **every geo colony regardless of `FEATURES.colonySphere`**; the flag only decides whether new colonies get a geo grid (§3.16.1). Items 2 and 9 were interim until CS-8c — **done in CS-8c (2026-11-20, owner check PASS, §3.17)**: the Crew / Population / Station pages, recruitment, station pickers and the unit group drawer are on the console kit. Items 3–8 and 10 as written in §3.16 (no combat-strip slot in the header; unaffordable rows queue the order; Shift keeps the building armed; yield labels for all tiles at tile ≥ 34 px; founding an outpost neither switches the active colony nor opens the screen with the flag ON — Finding 740; body preview read-only in the console; tuning values). |
 
 **Step order (signed): surface track first.**
 CS-3a → CS-3b → CS-4 → CS-6 → CS-1a → CS-1b → CS-2 → CS-5 → CS-7 → CS-8 → CS-9 → CS-10 → CS-11 → CS-12 → CS-Z.
@@ -800,7 +800,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-5** | MECH | Opus | `GeodesicGrid` TileGraph (n by size class, D-CS-8), terrain via classify→terrain table (D-CS-3), anomalies, latitude bands, landing rule (D-CS-9), sparse save format, `grid.kind`. Behind `FEATURES.colonySphere` (new colonies only; old colonies stay flat = dual grid). Keepers: 10n²+2, 12 pentagons, neighbour symmetry, A* optimal vs BFS, determinism, terrain shares vs today's per type, save round-trip; AI bootstrap + auto-expander + invasion headless runs on geo grids | CS-2, CS-4 |
 | **CS-7** | VIS | **Fable** | `ColonySphereRenderer` hero: same shader, drag/zoom, picking → TileGraph id, hover/selection outlines, grid near the cursor / build mode, lens overlay, render-on-demand, context loss, 2D fallback. Contact sheet across the 5 UI themes (hero frame chrome) | CS-5, CS-6 |
 | **CS-8** | MECH (UI) — light loop, heavy gate for build flow + unit move orders | Opus | Colonies console on the CONSOLES template: list + planet card, inspector (tile/building/unit/planet), strip (queue), lenses; build flow (`evaluatePlacement` per tile) and unit move orders on the sphere; `_stationMode` sub-tab; i18n PL/EN; `ColonyModalLogic`. Behind `FEATURES.colonySphere` (OFF = today's ColonyOverlay) **Owner decisions for CS-8 (2026-11-20):** (1) restyle the colony screen panels to the console look; (2) remove the small globe in the right panel (D-CS-27 item 9 was interim only); (3) the right panel becomes the info area — tile / building / unit / planet inspector | CS-7 |
-| **CS-8c** | UI (visual) | Opus | Restyle the pages CS-8 embeds in today's look (D-CS-28 items 2 and 9, interim): Crew / Population / Station pages and the unit group drawer (armies: create / split / disband) to kit primitives inside the console | CS-8 |
+| **CS-8c** ✅ | UI (visual) | Opus | Restyle the pages CS-8 embeds in today's look (D-CS-28 items 2 and 9, interim): Crew / Population / Station pages and the unit group drawer (armies: create / split / disband) to kit primitives inside the console | CS-8 |
 | **CS-9** | VIS | Opus (Fable optional) | Building massing (procedural low-poly per category, `HudPalette` role emissives, instanced) on the hero; city lights per tile on the night side, also on the system map; under-construction / damaged states | CS-8 |
 | **CS-10** | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
 | **CS-11** | MECH | Opus | Gas giants per D-CS-5 (archetype → `GasGiantShader` params **only if at least as good as today; default and fallback = today's look**; platform grid on the geo graph or look-only); optional AI archetype "expected buildable tiles" table (D-CS-12) | CS-5, CS-6 |
@@ -3524,10 +3524,10 @@ missing — closed by a new pin). Flag OFF: `probe-cs1a-trace` default seed `21c
 
 **Findings.** 780 ✅ · 785 ✅ · 788 ✅ (new) · 791 ✅ · 792 ✅ (§3.16.1) · 740 ✅ behind the flag (closed in its registry rows,
 `CONSOLES_PLAN.md` §5 and `FINDINGS_BACKLOG.md`, at the CS-8 docs commit).
-- **Finding 789** ⚪ open — `BuildingSystem.cancelConstruction` relies on `tile.underConstruction`, which for an order started
+- **Finding 789** ✅ closed in CS-8c (§3.17) — `BuildingSystem.cancelConstruction` relies on `tile.underConstruction`, which for an order started
   from the pending queue is set only by the colony screen's tile sync (`syncTileBuildings` after `planet:pendingFulfilled`); with
   the screen never opened the cancel is a no-op. The console always has the synced grid; the Outliner path is exposed. Pre-existing.
-- **Finding 790** ⚪ open (from reading the code, not measured) — an own colony viewed without being the active one
+- **Finding 790** ⚪ open — measured in CS-8c (§3.17): misleading refusal, no wrong-colony build — an own colony viewed without being the active one
   (`show({ colonyId })`) would send `planet:buildRequest` to the *active* colony's BuildingSystem: the request carries no colony
   id and the listener only checks `window.KOSMOS.buildingSystem === this`. Pre-existing; the console list always switches the
   active colony, so the normal path does not reach it. Measure before fixing.
@@ -3571,6 +3571,46 @@ fallback frame). `probe-cs1a-trace` unchanged on both commands (the trace founds
 K2i only). Sweep 445 / 445 OK; `check-i18n` PASS. `cs8a-console.png` regenerated (frames "after reload" and "2D view" added).
 After Finding 792: keeper `colony_console_smoke` **37 PASS** (+K2j, K3m); sweep **445 / 445 OK, 0 FAIL**; `check-i18n` PASS.
 Free finding number: 793.
+
+### 3.17 CS-8c — colony pages on the console kit + Finding 789 (2026-11-20; owner check PASS)
+
+Contact sheet `kosmos-handover/cs-8/cs8c-contact.md`; proof `docs/design/prototypes/cs8c-pages.png` (before | after + 5 themes).
+D-CS-28 items 2 and 9 done. New files: `src/ui/ColonyConsolePages.js` (drawing, roles only, no emoji) and pure
+`src/ui/ColonyConsolePagesLogic.js` (rows, tones, enabled/disabled with an i18n reason, window placement). Same data and the same
+hit-zone types as today's pages, so `_onHit` / `_handleDraftClick` / `_handleStationPickerClick` are unchanged except that they
+accept `cReason` (disabled element inside a modal flashes its reason). The console no longer calls `_drawInfoPanel`,
+`_drawBottomDrawer`, `_drawDraftModal` or `_drawStationPicker`; the flat-colony screen still does.
+
+| Page | After |
+|---|---|
+| Crew | eyebrows, kv rows, 2 px bars, `[-] value [+]` steppers, `[ RECRUIT ]`, pinned summary; steppers without a zone today are disabled with a reason |
+| Crew tooltips | were not shown in CS-8 (DOM tooltips hidden in the console); now canvas `tipLines` (stratum buildings, growth, satisfaction, target preview) |
+| Population | six sections, alert role where today was red; read-only |
+| Station | pinned name + `[ RENAME ]`, modules `[ x ]`, pending orders, shipyard queue, depot; build form and pending state; full slots → `[ ADD MODULE ]` disabled with a reason |
+| Station pickers | window next to the inspector; unbuildable rows give a reason (tech by name / unique / slots / depot short by name) |
+| Recruitment | window next to the inspector; tiles, description, stats + supply, ability, counters, rules, starting stats, cost have/need, barracks, recruit or reason (same condition order) |
+| Group drawer | hero bottom against the inspector edge; HP bars, action chips; "form army" off one tile disabled with a reason; labels and army flashes i18n |
+
+**Leftovers kept on purpose:** cargo load window, unit card, group Details (shared DOM windows used by the map and Command / Fleet
+consoles); game-wide confirm / rename modals. Army rename moved from `window.prompt` to the game rename window.
+
+**Finding 789 ✅** — `cancelConstruction` checked the queue, then `_demolish(tile)` read tile flags refreshed only by the colony
+window's sync; a construction started from the pending queue without that sync left a stale `pendingBuild` → nothing cancelled, no
+refund, `demolishResult {success:true}`. Fix: the tile gets the queue entry before the hand-off (stale `pendingBuild` cleared when no
+pending order), the method returns whether the construction left the queue, missing tile → refusal with a reason; the console flashes a
+reason when nothing is left to cancel. Measured after: removed, half refunded (Fe 7 / 15), flag ON and OFF.
+
+**Finding 790 ⚪ (measured, `probe-cs8c-f790.mjs`)** — a build request for a tile of an own non-active colony reaches the active
+colony's BuildingSystem and is refused with "Pole nie należy do tej kolonii"; no queue changes, flag ON and OFF. Misleading refusal,
+no wrong-colony build. A fix needs the colony id in the build event contract (listener + every emitter).
+
+**Keepers.** `colony_console_pages_smoke` 24 PASS (fail-first on `023bf98`: 2 PASS controls / 21 FAIL); mutations 43 / 43 red (3 by
+crash); `colony_console_smoke` K3b updated on purpose (37 PASS); real-game probe `probe-cs8c-pages.mjs` 18 / 18; flag-OFF
+`probe-cs1a-trace` unchanged on all three commands. Debug helpers `csBarracks`, `csStation`, `csGroup`, `csCancelOutside`.
+**Tuning:** D-CS-28 values unchanged; new `COLONY_PAGES` (window 400, gap 8, crew row 34, stepper 92, summary 76, drawer 440 × 104/84).
+
+**After the arc (recorded):** restyle the shared windows (cargo load, unit card, group Details) to the console kit — affects the map
+and the Command / Fleet consoles too.
 
 ---
 
