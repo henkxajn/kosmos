@@ -2,6 +2,24 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
+## CS-7 — colony sphere hero + playable sphere colonies (2026-11-20; owner check PASS, not committed)
+
+- Owner check PASS; D-CS-27 signed (camera-locked light). Pre-commit fix: the capital marker used `buildingId` (null on the
+  virtual capital) → emoji; now `colony_base` portrait, gold ring, larger, farm on the capital as a badge, gold outline also for
+  AI capitals. Finding 787 (same lookup on the flat 2D map) recorded; free 788. CS-8 owner decisions recorded in the CS-8 row.
+
+- Part A: `ColonySphereRenderer` (own WebGL context, ShipHologram pattern) with the system map's `SurfaceShader` /
+  `SurfaceAirShader`, LOD-first map with a crossfade to the hero map, auto-rotation state machine, exact Voronoi-cell picking,
+  tile overlay shader fed by one tile-state texture (hover, selection, cursor grid, build mode, lenses), render on demand,
+  context-loss handling, 2D fallback, hero frame chrome.
+- Part B: with `FEATURES.colonySphere` ON new colonies of the live game (incl. the home colony) get the geo grid and today's
+  colony screen shows the sphere instead of the 2D map — tile panel, build menu, demolish, unit select / move, Shift+S, lenses
+  on the sphere; old flat colonies keep the 2D map; geo grids are never regenerated; UI coordinate sites moved to
+  `ColonyTilePosLogic`.
+- Proof and numbers: plan §3.15 (sheets `cs7a-hero-sheet.png`, `cs7b-*.png`; real-game probe 22 / 22; keepers 58 + 42 PASS;
+  mutations 29 + 25 red; flag OFF trace = HEAD `eb7144b`; sweep 444 / 444). Findings 784, 785, 786 recorded (open, ⚪); free 787.
+  Decisions proposed as D-CS-27 (to sign).
+
 ## CS-5a + CS-5b — GeodesicTileGraph, geo save format, AI on geo grids + Finding 783 (2026-11-20)
 
 - CS-5a: `GeodesicTopology` (combinatorial ids, fixed neighbour order, BFS distances, straight A* — Finding 781),

@@ -798,7 +798,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-2** | MECH (refactor) | Opus | Grid-geometry gameplay rules behind TileGraph, still bit-identical on flat: `latitudeBand` (BuildingSystem latitude + `tileR` derived from tile), one polar-penalty canon (×3 → 1, `_inferRows` gone), `isLandingEdge`, `stepDirection` (seam teleport/facing), RandomEvent equator fallback, `_gridHeight` removal, StrikeSquadron origin fallback → `TileGraph.anyTile()`. **Gate: owner live gate on a real save — flat game unchanged.** This is the gate before any visual work depends on TileGraph | CS-1b |
 | **CS-5** | MECH | Opus | `GeodesicGrid` TileGraph (n by size class, D-CS-8), terrain via classify→terrain table (D-CS-3), anomalies, latitude bands, landing rule (D-CS-9), sparse save format, `grid.kind`. Behind `FEATURES.colonySphere` (new colonies only; old colonies stay flat = dual grid). Keepers: 10n²+2, 12 pentagons, neighbour symmetry, A* optimal vs BFS, determinism, terrain shares vs today's per type, save round-trip; AI bootstrap + auto-expander + invasion headless runs on geo grids | CS-2, CS-4 |
 | **CS-7** | VIS | **Fable** | `ColonySphereRenderer` hero: same shader, drag/zoom, picking → TileGraph id, hover/selection outlines, grid near the cursor / build mode, lens overlay, render-on-demand, context loss, 2D fallback. Contact sheet across the 5 UI themes (hero frame chrome) | CS-5, CS-6 |
-| **CS-8** | MECH (UI) — light loop, heavy gate for build flow + unit move orders | Opus | Colonies console on the CONSOLES template: list + planet card, inspector (tile/building/unit/planet), strip (queue), lenses; build flow (`evaluatePlacement` per tile) and unit move orders on the sphere; `_stationMode` sub-tab; i18n PL/EN; `ColonyModalLogic`. Behind `FEATURES.colonySphere` (OFF = today's ColonyOverlay) | CS-7 |
+| **CS-8** | MECH (UI) — light loop, heavy gate for build flow + unit move orders | Opus | Colonies console on the CONSOLES template: list + planet card, inspector (tile/building/unit/planet), strip (queue), lenses; build flow (`evaluatePlacement` per tile) and unit move orders on the sphere; `_stationMode` sub-tab; i18n PL/EN; `ColonyModalLogic`. Behind `FEATURES.colonySphere` (OFF = today's ColonyOverlay) **Owner decisions for CS-8 (2026-11-20):** (1) restyle the colony screen panels to the console look; (2) remove the small globe in the right panel (D-CS-27 item 9 was interim only); (3) the right panel becomes the info area — tile / building / unit / planet inspector | CS-7 |
 | **CS-9** | VIS | Opus (Fable optional) | Building massing (procedural low-poly per category, `HudPalette` role emissives, instanced) on the hero; city lights per tile on the night side, also on the system map; under-construction / damaged states | CS-8 |
 | **CS-10** | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
 | **CS-11** | MECH | Opus | Gas giants per D-CS-5 (archetype → `GasGiantShader` params **only if at least as good as today; default and fallback = today's look**; platform grid on the geo graph or look-only); optional AI archetype "expected buildable tiles" table (D-CS-12) | CS-5, CS-6 |
@@ -3265,6 +3265,159 @@ re-run after the Finding 783 fix: seed A `21cf5df1…` / `2037d7d3…`, seed B `
 **Remaining:** UI sites (`CargoLoadModal` `unit.q ?? 0`, `GameScene` `moveUnit(q,r)`, unit panels) → CS-8; `reveal_fog` cube loop
 (no listener); dead `GroundUnitManager._hexDistance` → CS-Z list; re-check the AI colony count on geo at balance (CS-8 /
 CS-11); geo coordinate → tile ids at CS-12 (D-CS-26); gas giants → CS-11.
+
+### 3.15 CS-7 — colony sphere hero + playable sphere colonies (2026-11-20; not committed, owner check pending)
+
+Behind `FEATURES.colonySphere` (default OFF; OFF = today bit for bit). Contact sheets: `kosmos-handover/cs-7/cs7a-contact.md`,
+`cs7b-contact.md`. Critical file touched: `src/config/GameConfig.js` — **comment of the flag only**, no value change.
+
+**Owner decisions for CS-7 (2026-11-20, given with the task).** (1) Option A — after CS-7 the player plays on sphere colonies in
+today's colony screen (sphere replaces the 2D map area, side panels stay); simple markers, massing CS-9, unit models CS-10.
+(2) Old colonies from existing saves stay flat until CS-12; only new colonies get the sphere. (3) Slow auto-rotation; hovering
+stops it, drag rotates, resume after a short delay with an ease-in; no auto-rotation while a tile is selected or build mode is
+on; wheel zoom, double-click turns to the tile, initial view over the capital. (4) Grid only near the cursor + own-tile outlines
++ the selected tile; build mode = full grid with allowed / forbidden marked. (5) Light of the system's star with a visible
+terminator + a soft fill; initial view on the day side. (6) Lenses Terrain / Deposits / Ownership as an overlay mechanism on a key;
+buttons in CS-8.
+
+**Part A — as built (hero).**
+- `src/renderer/ColonySphereLogic.js` (pure): camera (lon / lat / distance around a fixed sphere), ray → tile, tile → screen,
+  auto-rotation state machine (`spin → hold → wait → ease`), map swap machine (`none → lod → cross → hero`), frame pacing, cell
+  mesh, tile-state texture packing, light. **Cells are the Voronoi cells of the tile centres** (corner = circumcentre direction of
+  the tile and two consecutive neighbours), so "nearest centre" picking equals the drawn cell exactly at borders.
+- `src/renderer/ColonySphereRenderer.js` (ShipHologram pattern, D-CS-11): own lazily created WebGL context on an off-DOM canvas,
+  composited into the UI canvas with `drawImage`; **the system map's `SurfaceShader` / `SurfaceAirShader` factories and looks**,
+  same ACES tone mapping and exposure, light from the star (`surfaceSunColor`). Map: the enlarged system-map LOD first, then the
+  hero map 1024×512 with a 450 ms crossfade done with two meshes and constant-alpha blending (the shared GLSL is untouched).
+  Venus / Titan decks thinned to `hazeOpacity ≤ 0.35`; clouds use the system map's weather clock (continuity through
+  `ThreeRenderer.bodyAirClock`). Render on demand; context loss → 2D fallback → back; no context / render exception → 2D fallback.
+- `src/renderer/ColonySphereOverlayShader.js`: one overlay mesh; all game state through one `count × 3` RGBA8 texture read by tile
+  id (fill, outline, border-edge mask / width / hatch) + uniforms (hover, selection, cursor ring, full grid). Constant pixel width
+  lines, fade at the limb, no tone mapping. **No depth test**: the flat fan triangles sag below the sphere (chord sag 0.0024 >
+  overlay offset 0.0015), which left only crumbs of each tile; the shell is convex, so front faces are exactly the visible ones.
+- `src/ui/ColonySphereOverlayLogic.js` (pure): normal view / build mode / lenses / supply coverage → tile state.
+  `src/ui/ColonySphereChrome.js`: hero frame (corner brackets, body caption, mode + legend, control hint) from HUD roles.
+- 2D fallback: the same camera and the same picking, tiles drawn as polygons in terrain colours (`csSphere2D()` shows it).
+- Light model: the sphere stands still, the camera circles it, the star keeps a fixed offset in the **camera frame** (48° left,
+  14° up) — the terminator is always in frame and the centre is always day, also over a polar capital (a body-equator offset put
+  far-south capitals in the night: caught by keeper H7c). A `tidally_locked` planet keeps its sub-stellar light fixed in the body
+  frame instead.
+
+**Part B — as built (playable).**
+- New-colony grid in the live game: `GameScene` calls `setGeoGridsAllowed(true)` (interim CS-5a rule lifted); the three home-colony
+  start scenarios go through `_newHomeGrid` → `createColonyGrid(planet, true)` (flag OFF = exactly `PlanetMapGenerator.generate`).
+  A geo home grid is adopted as the colony grid at once (owners set as `ensureColonyGrid` does); starter buildings are placed in
+  order of graph distance from the future capital (`ColonySphereView.tilesNearCapital`; tile indices are not adjacency — without
+  it they land scattered over the globe). `shouldReuseColonyGrid` returns true for a geo grid: `ensureColonyGrid` (flat) can never
+  replace a sphere. Capital on a sphere: buildable land nearest the equator, plains / forest preferred, pentagons and anomaly tiles
+  avoided (`bestGeoCapitalTile`).
+- `src/ui/ColonySphereView.js`: glue between `ColonyOverlay` and the renderer. `ColonyOverlay` dispatches on `grid.kind === 'geo'`
+  in a handful of places (`draw`, `_screenToTile`, `_tileScreenPos`, mouse down / move / up, wheel, keys, `_canStartRectSelect`,
+  `_loadBiomeMap`, `_fitMapToView`, `_centerOnCapital`, `_findBestTileForCapital`, `hide`); everything downstream — tile panel,
+  build menu, `planet:buildRequest`, demolish, landing / drop / strike / support modes, unit selection, the right-click move
+  order — is today's code fed with the picked tile. **Units are drawn by today's `_drawUnits`** through a grid adapter whose
+  `tilePixelPos` returns the tile's projection (sprites, stacks, HP bars, battle markers, move interpolation unchanged).
+  Building markers: PNG icon or data icon, level, construction bar, anomaly, occupation bar, drawn in Canvas 2D over the sphere.
+- Build mode = the build menu is open on a free tile; the building under the cursor in the menu gives the per-tile verdict
+  (`evaluatePlacement`), no building → "buildable terrain". Placement itself is today's menu click.
+- Keys: `L` cycles the lens, arrows / WASD rotate, Shift+S = supply coverage as a lens. LMB / MMB drag rotates; rectangle select
+  is off on a sphere (click, Shift / Ctrl-click and control groups still select).
+- The info-panel decorative globe (`PlanetGlobeRenderer`, built from the flat grid) is replaced for geo colonies by a small second
+  sphere of the same body that turns only while the main one turns.
+- **Frames:** the game's UI canvas draws on demand, so the overlay asks for its next frame through the existing dirty flag at the
+  sphere's pace (`nextFrameDelayMs`: next frame while interacting, ≤ 33 ms while rotating, ≤ 100 ms for weather, nothing when idle).
+  `UIManager` is untouched. View changes made outside a draw (turn to tile, key rotation, wheel, map ready, context loss) call the
+  renderer's `onChange`, which sets the same flag — found by the real-game probe: with the cursor resting on the sphere (rotation
+  held, no frames scheduled) a turn-to-tile did not animate until the next unrelated redraw, and the following click picked the
+  neighbouring tile.
+- UI sites that built coordinates themselves (`src/ui/ColonyTilePosLogic.js`): `CargoLoadModal` unload position (`unit.q ?? 0`
+  → own tile if it belongs to the body graph, else a graph tile), `GameScene` move order (target resolved through the graph id),
+  texts "(q, r)" in `ColonyOverlay` (5 flashes + unit panel), `UnitCardPanel` (2), `BattleReportModal` (3) → `tilePosLabel`
+  (flat: identical text; sphere: `#<tile>`). `BUILDING_CATEGORY_COLORS` moved from `ColonyOverlay` to `src/data/` unchanged.
+- Capital hero map prefetched after game start at idle priority (10, below the system LOD queue) when the home colony is geo.
+- Owner helpers: `csSphere()`, `csSphereUnit()`, `csSphere2D()`.
+
+**Measurements** (RTX 3070, headless Chrome over CDP, probe `probe-cs7a-hero.mjs`).
+
+| State | Sphere renders | Cost |
+|---|---|---|
+| Idle, tile selected, game paused (sheet page, 1375×1000 px) | 0 / frame | composite only, `draw()` ≈ 0.05 ms |
+| Weather only (clouds drift) | 10 / s | ≈ 7 ms per rendered frame incl. GPU wait |
+| Auto-rotation | 30 / s | 6.2–6.6 ms per rendered frame (airless body 4.5 ms) |
+| Drag / hover | 60 / s | ≈ 6.3 ms per frame |
+| Real game 1600×1041, colony screen open: idle selected + paused | 0 in 3 s | frame 16.7 ms median, p95 16.8 |
+| Real game: auto-rotation | 90 in 3 s | frame 16.7 ms median, p95 16.7–16.8 |
+| Real game: drag | every frame | frame 16.7 ms median, p95 16.8 |
+| Real game: colony screen closed (control) | — | frame 16.7 ms median |
+
+Hero map bake ≈ 0.6–1.1 s (CS-4b) — hidden behind the LOD stage; phases on the sheet `lod → cross → hero`.
+
+**Proof.** `docs/design/prototypes/cs7a-hero-sheet.png` (7 hero bodies; hover / selection / build mode / three lenses; terminator;
+night fill; Venus at system-map opacity for comparison; 2D fallback; frame chrome in the 5 themes), `cs7a-hero-swap.png`,
+`cs7b-colony-screen.png`, `cs7b-build-mode.png`, `cs7b-unit.png`, `cs7b-lens-terrain.png`, `cs7b-supply.png`,
+`cs7b-fallback-2d.png`, `cs7b-flag-off.png`. GLSL compile probe: overlay program OK, control fails (`cs7a_broken_control`).
+Real-game probe (`--game`): 22 / 22 checks (three consecutive runs) — new game geo home colony, capital `capital_g<i>`, auto-rotation / hover stop / resume,
+drag, wheel, double-click, build through the menu, demolish, Shift+S, lens cycle, unit select + right-click move + arrival, 2D
+fallback, save contains the geo grid, load restores the sphere, flag OFF new game flat with no sphere object, a flat save loaded
+with the flag ON keeps the 2D map.
+Keepers `colony_sphere_hero_smoke` 58 PASS, `colony_sphere_play_smoke` 42 PASS. Fail-first in a detached worktree at `eb7144b`:
+hero 0 PASS / 45 FAIL, play 2 PASS / 36 FAIL (the two green are controls: flat reuse truth table, demolish on the CS-5b headless
+path). Mutations: 29 / 29 red (hero; one equivalent mutant replaced — the normal-orientation guard in `circumDir` is dead code
+because neighbours are always counter-clockwise) + 25 / 25 red (play). Flag OFF: `probe-cs1a-trace` seed A `21cf5df1…` /
+`2037d7d3…`, seed B (60 y) `89251603…` / `ea79a395…` = HEAD `eb7144b`. Pins updated on purpose: `colony_sphere_tilegraph_smoke`
+T4 ledger (`qr` leftovers of `ColonyOverlay` 1 → 0 and `UnitCardPanel` 2 → 0 — migrated to `tilePosLabel`). Sweep 444 / 444 OK,
+0 FAIL; `check-i18n` PASS.
+
+**Decisions taken while the owner was away (proposed D-CS-27, to sign).**
+1. **Geo grids are shown as a sphere regardless of the current flag** (a geo colony from a save has no 2D map); the flag decides
+   only the grid kind of colonies created from now on. A flat grid never reaches the sphere code.
+2. **Light is a lamp in the camera frame**: drag and auto-rotation turn the body under it, the night is the crescent past the
+   terminator. Alternative: light fixed in the body frame with a camera that can fly to the night side (wanted for city lights in
+   CS-9?) — one tuning switch away, not built.
+3. **Build mode = build menu open on a free tile** (no new "pick a building, then paint tiles" flow before the CS-8 console).
+4. **LMB drag rotates; rectangle unit select is off on a sphere.**
+5. **Own-tile outlines = tiles with own buildings / capital / construction (category colour) + border edges between different
+   owners** (as the 2D map draws them). In a home colony every tile is the player's, so "outline every own tile" would be the
+   full grid.
+6. **Deposits lens shows where mining pays** (strategic resource, anomaly, terrain mining yield): deposits are per body (D-CS-6).
+7. **New AI colonies in the live game are geo too with the flag ON** (the factory is shared) — proven headless in CS-5b, not
+   watched in a long live game.
+8. **Starter buildings of a sphere home colony are placed next to the capital**, and the capital avoids pentagons.
+9. **Info-panel globe replaced by a second small sphere** for geo colonies (its own WebGL context).
+10. Tuning values to look at: auto-rotation 0.03 rad/s, resume delay 1.2 s, ease-in 1.8 s, star 48° off the view, night fill,
+    haze cap 0.35, clouds × 0.4 in build mode / lenses, zoom range (≈ 3.6 tiles across at the closest).
+
+**Findings.**
+- **Finding 784** ⚪ open — system-map building icons (`ColonyBuildingMarkers`) are not drawn for geo colonies (`_tileToXYZ`
+  returns null without `gridPixelSize`; no error). → CS-9 (city lights / massing replace them).
+- **Finding 785** ⚪ open — the body-map **preview** of a body without a colony (`ColonyOverlay` preview mode) always generates a
+  flat grid, also in a sphere world, so the preview and the later colony differ in layout. → CS-8.
+- **Finding 786** ⚪ open — the sphere drives whole-UI-canvas redraws (30 / s while rotating). Measured at 60 fps on the gate
+  machine; if a weaker GPU shows a cost, move the sphere to its own layer canvas (Shipyard `#holo-canvas` pattern, K1c-B).
+
+**Owner check (2026-11-20): PASS** — sphere look, clouds as they are, auto-rotation, drag / zoom / double-click, build,
+demolish, unit spawn + move (ocean blocks), Shift+S, lenses, 2D fallback, save / load, old save stays 2D, flag OFF unchanged.
+**D-CS-27 signed as proposed, including the camera-locked light** (item 9 — the small globe — is interim only, see CS-8 below).
+
+**Pre-commit fix — capital not visible (owner, 2026-11-20).** The capital tile showed a generic white emoji instead of a
+portrait. Root cause: the capital is *virtual* — `tile.capitalBase = true` while `tile.buildingId` stays null (or carries the
+building placed on the capital tile: the starter farm), and the sphere marker looked up the portrait only by `buildingId`, so
+it fell back to the `🏛` emoji; with the starter farm on the capital tile the capital was replaced by the farm portrait.
+Fix (`ColonySphereView.markerSpecOf`): a `capitalBase` tile draws the `colony_base` portrait (the `isCapital` building), ×1.6,
+on a dark disc with a gold ring; a building on the capital tile becomes a small badge; the capital is drawn even when the
+camera is too far for ordinary markers. Overlay: capital outline gold (`[255, 200, 60]`, 3.2 px) independent of the theme
+accent — AI capitals on the ownership lens get the same outline (headless: both AI geo capitals resolve to `colony_base`).
+Placeholder audit (all 61 `BUILDINGS` ids vs `assets/buildings/*.png`): the capital was the **only** marker falling back
+although a PNG exists; every other id with a PNG resolves by its own id; `shipyardB.png` is an orphan (no id); the 31 ids
+without a PNG keep their data icon (owner's asset to-do list in §0b). Keeper `colony_sphere_play_smoke` P3j (updated), P3l,
+P3m, P3n — 45 PASS; 4 mutations red. Real-game probe: 23 / 23 incl. "capital centred and drawn with the colony_base portrait".
+- **Finding 787** ⚪ open — the flat 2D colony map (`ColonyOverlay._drawHex`) has the same lookup: the capital shows the `🏛`
+  emoji although `colony_base.png` exists. Flat path left untouched (flag-OFF bit-identity); the 2D map retires in CS-Z.
+  Free finding number: 788.
+
+**Remaining for later steps:** CS-8 console (lens buttons, real build-mode flow, per-tile cost preview — Finding 780); CS-9
+massing + city lights + system-map markers (784); CS-10 unit models and great-circle step animation (units step tile to tile in
+screen space today); cloud shadows; balance re-checks (782, AI colony count on geo).
 
 ## 4. Decisions for Filip (recommendation first)
 
