@@ -52,6 +52,7 @@ for the record.
 | **D-CS-26 (signed 2026-11-20)** | CS-5 overnight decisions signed as proposed (§3.13, §3.14). (1) The live game keeps new colonies **flat until CS-7**, even with `FEATURES.colonySphere` ON; geo grids only headless / debug. (2) A geo tile's coordinate `(index, −1)` is an **interim encoding**; it migrates to real tile ids at the CS-12 clean save break. (3) Key strings stay unchanged (minefield `${q}_${r}`, battle `pid\|q\|r`, `{q,r}` payloads, unit / army / Vessel `q,r`). (4) Landing zone = graph distance ≥ 2 from every held tile; watch in CS-8 / CS-10 balance — far more landing tiles than today's flat edge rows. (5) `ensureColonyGrid` stays flat. (6) Gas giants flat until CS-11. Finding 782: option B — no change now, re-evaluate after in-game tests (CS-8) with the D-CS-8 table (planetoid n=2 = 42 tiles is the ready option). |
 | **D-CS-28 (signed 2026-11-20)** | CS-8 decisions signed as proposed (§3.16), **item 1 amended at the owner gate**: the Colonies console is shown for **every geo colony regardless of `FEATURES.colonySphere`**; the flag only decides whether new colonies get a geo grid (§3.16.1). Items 2 and 9 were interim until CS-8c — **done in CS-8c (2026-11-20, owner check PASS, §3.17)**: the Crew / Population / Station pages, recruitment, station pickers and the unit group drawer are on the console kit. Items 3–8 and 10 as written in §3.16 (no combat-strip slot in the header; unaffordable rows queue the order; Shift keeps the building armed; yield labels for all tiles at tile ≥ 34 px; founding an outpost neither switches the active colony nor opens the screen with the flag ON — Finding 740; body preview read-only in the console; tuning values). |
 | **D-CS-29 (signed 2026-11-20)** | CS-9 decisions signed as proposed at the owner gate (PASS, all 10 steps; §3.18): (1) building portraits are **Canvas 2D billboards from an atlas**; (2) the dot LOD is kept but not reachable at today's zoom range; (3) default tint = subtle outline + base ring (full tile tint stays the A/B variant); (4) no-PNG fallback = the console's vector category glyph; (5) capital × 1.35; (6) level pips (none at level 1, 2–5 pips, white for levels 6–10); (7) damaged = `tile.damaged` on a built tile (Finding 793 open); (8) lights come on at dusk; (9) lights fade to zero at the tile border; (10) smaller system-map portrait icons (0.17 r); (11) no lights in the 2D fallback. **Owner notes for later (after his trip, not now):** buildings may be a bit too big (one tuning value); the owner will decide portraits vs Meshy 3D building models after testing 2–3 models side by side; system-map icon clutter and hero light strength to re-check then. |
+| **D-CS-30 (signed 2026-11-20)** | CS-10 decisions signed at the owner gate (PASS, all 12 steps; §3.19) **as proposed, with items 3, 6 and 7 amended**: (1) units are a separate transparent GL pass above the building portraits, on a built tile in front (south) of the portrait; (2) LOD threshold 96 px per tile; (3) ~~models strictly on the tile normal~~ — **superseded by CS-10b: the owner wants the models leaning towards the camera**; (4) at most 3 models per side on a tile, the rest in the count badge; (5) enemy = red tint + red base ring, offline / starving = dimmed, HUD colours = the 2D map's fixed colours, no emoji status icons; (6) **amended:** the reflection environment (`RoomEnvironment`) is a local copy in `src/lib/addons/` (three r171, byte-identical to the CDN file it replaces) — the sphere unit renderer loads nothing from a CDN, so the Steam build runs offline; same lighting; (7) **amended:** `meshoptimizer` is a devDependency and the GLB tool uses it by default (`--meshopt <dir>` only overrides); supply models 59.9 k triangles; `.gitignore` line for `_originals/`; (8) landing effect = wall-clock visual, not replayed later; (9) marching unit travels centre → centre; (10) no low-poly LOD files now (Finding 795: before release). **Owner notes for later (after the owner's trip, not now):** the unit models themselves are only OK (art question); Finding 794 stays open — candidate rule = landing distance from buildings / units instead of held tiles, decided together with the other landing questions. |
 
 **Step order (signed): surface track first.**
 CS-3a → CS-3b → CS-4 → CS-6 → CS-1a → CS-1b → CS-2 → CS-5 → CS-7 → CS-8 → CS-9 → CS-10 → CS-11 → CS-12 → CS-Z.
@@ -803,7 +804,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-8** | MECH (UI) — light loop, heavy gate for build flow + unit move orders | Opus | Colonies console on the CONSOLES template: list + planet card, inspector (tile/building/unit/planet), strip (queue), lenses; build flow (`evaluatePlacement` per tile) and unit move orders on the sphere; `_stationMode` sub-tab; i18n PL/EN; `ColonyModalLogic`. Behind `FEATURES.colonySphere` (OFF = today's ColonyOverlay) **Owner decisions for CS-8 (2026-11-20):** (1) restyle the colony screen panels to the console look; (2) remove the small globe in the right panel (D-CS-27 item 9 was interim only); (3) the right panel becomes the info area — tile / building / unit / planet inspector | CS-7 |
 | **CS-8c** ✅ | UI (visual) | Opus | Restyle the pages CS-8 embeds in today's look (D-CS-28 items 2 and 9, interim): Crew / Population / Station pages and the unit group drawer (armies: create / split / disband) to kit primitives inside the console | CS-8 |
 | **CS-9** ✅ (§3.18) | VIS | Opus (Fable optional) | **Owner direction 2026-11-20: the owner's building portraits are the art** (replaces procedural low-poly massing). Portrait billboards on the hero (atlas-batched), category dot far away, states (construction / upgrade / damaged / level pips), city lights per built tile on the night side, also on the system map; system-map icons for geo colonies (784) | CS-8 |
-| **CS-10** | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
+| **CS-10** (✅ owner gate PASS, committed — §3.19) | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
 | **CS-11** | MECH | Opus | Gas giants per D-CS-5 (archetype → `GasGiantShader` params **only if at least as good as today; default and fallback = today's look**; platform grid on the geo graph or look-only); optional AI archetype "expected buildable tiles" table (D-CS-12) | CS-5, CS-6 |
 | **CS-12** | MECH | Opus | Save end-state per D-CS-4 (clean break or migration), version bump, fixture re-capture + README metadata, fix the 4 fixture-reading smokes; **migrate the interim geo tile coordinate `(index, −1)` to real tile ids** (unit / army / Vessel `q,r`, key strings, event payloads — D-CS-26) | CS-8 |
 | **CS-Z** | MECH (removal) | Opus | Flags permanent; remove the 2D colony map and the old globe pipeline (`PlanetGlobeRenderer`, `PlanetGlobeTexture`, `PlanetTerrainTexture`, `BiomeMapGenerator`, `BuildingMapGenerator`, `SurfaceMarkers`, `ColonyBuildingMarkers`, the dead `_loadBiomeMap` #761, `PlanetScene`, RegionSystem); `FlatHexTileGraph` removed if D-CS-4 = break; asset decision D-CS-15; before/after frame comparison per CLAUDE.md | CS-9…CS-12 |
@@ -3681,7 +3682,7 @@ Earlier runs with 13–32 markers in frame: billboard pass 0.10–0.20 ms, spher
 Keeper `colony_sphere_buildings_smoke` 39 PASS; fail-first on `d8514d9` 1 PASS / 38 FAIL (the green one is the control "flag
 default OFF"); mutations 41 / 41 red (one equivalent mutant replaced; one survivor closed by a stronger pin — the cell guard of
 the rasterizer was dead at edge floor 0). Pins changed on purpose: `colony_sphere_hero_smoke` H6b / H6c, `colony_sphere_play_smoke`
-P3j. Flag OFF: `probe-cs1a-trace --years 60` seed A `30c3d5c1…`, seed B `3152cd7f…` = HEAD. Sweep 447 / 447 OK, `check-i18n` PASS.
+P3j. Flag OFF: `probe-cs1a-trace --years 60` seed A trace `0d9527fd…` / state `45da8089…`, seed B (`KOSMOS_SEED=cs1b-seedB`) trace `89251603…` / state `ea79a395…` = HEAD (corrected at the CS-10 commit: the hashes first quoted here, `30c3d5c1…` / `3152cd7f…`, are not what this command prints at `941b6b3`). Sweep 447 / 447 OK, `check-i18n` PASS.
 
 **Decisions taken while the owner was away (D-CS-29 — signed 2026-11-20 as proposed, §0b).**
 1. Billboards in Canvas 2D from an atlas (sharp at UI resolution, shared with the 2D fallback, 0.3 ms for 37 markers) — not WebGL instanced
@@ -3707,6 +3708,101 @@ P3j. Flag OFF: `probe-cs1a-trace --years 60` seed A `30c3d5c1…`, seed B `3152c
 **Remaining:** owner look at light strength and portrait size; lights watched on the home planet only (moons / planetoids
 use the same code, not staged); system-map icons still exist for planets only; cloud dimming of lights; night-side dimming
 of portraits; CS-10 unit models.
+
+### 3.19 CS-10 — ground units on the sphere: GLB models near, markers far (2026-11-20; unattended run; owner gate PASS 2026-11-20, all 12 steps)
+
+**Gate (2026-11-20): PASS on all 12 steps. D-CS-30 signed as proposed with items 3, 6, 7 amended (§0b); Finding 794 open with the owner's
+note; Finding 795 new; pre-release Finding 796 new.** Fixed before the commit: (a) `RoomEnvironment` no longer comes from the three addons
+CDN — vendored as `src/lib/addons/RoomEnvironment.js` (r171, byte-identical to the file the import map loaded, so the lighting is
+unchanged; checked in Chrome with jsdelivr blocked: PMREM 768 × 1024 built); keeper pins U12a / U12b (no CDN path or URL in the
+sphere unit renderer, vendored file imports only `three`). (b) `meshoptimizer` 1.3.0 (the version used for the supply models) is a
+devDependency and `optimize-unit.mjs` uses it without `--meshopt`; pin U12c. Keeper 66 PASS. Item 3 (strictly upright models) is
+superseded by CS-10b (lean towards the camera). Owner note for later: the unit models themselves are only OK (art question, after
+the trip).
+
+Contact sheet: `kosmos-handover/cs-10/cs10-contact.md`; proof `docs/design/prototypes/cs10-units.png`. No critical file touched, no save
+format change, no gameplay change, no i18n keys. Flat colonies / flag OFF unchanged (the 2D map still draws units with `_drawUnits`).
+
+**Supply GLBs first.** `human_supply.glb` and `une_supply.glb` (byte-identical files) were 38 504 168 B each with 1 267 313 triangles —
+all geometry, textures are 4 × 256 px. `tools/unit-models/optimize-unit.mjs` (gltf-transform: dedup → weld → simplify with
+meshoptimizer → prune; textures above 512 px would be resized; output without Draco / meshopt / KTX2 because the game loader has
+no decoders): **38.50 MB → 2.10 MB each (−94.5 %), 59 921 triangles**; unit folder 108.8 MB → 36.0 MB. The simplifier stops at
+59.9 k triangles whatever the error limit (UV seams), so the budget is 2.5 MiB / 64 000 triangles per file (`UNIT_GLB_BUDGET`); the
+other 19 models have ~30 k triangles and 1.0–1.9 MB. Originals: `assets/units/ground/_originals/` (git-ignored, skipped by the
+tool, outside the game path). Before / after renders are on the sheet.
+
+**As built.**
+- `src/renderer/ColonyUnitLogic.js` (pure): LOD by on-screen tile size (`modelAbovePx` 96), `_mobile` / `_deployed` variant with the
+  2D map rule (mobile / deploying → `_mobile`, deployed / packing → `_deployed`, only `supportsDeploy` archetypes; variant file
+  missing → base GLB), placement (`unitPlacements`), great-circle step (`greatCircleStep`: slerp between tile centres, facing =
+  arc tangent), instance groups, instance matrix, compact marker list, HUD bars, frame pacing.
+- `src/renderer/ColonyUnitModels.js`: template cache (each GLB loaded once per session, node transforms baked, base at y = 0,
+  largest dimension 1), one `InstancedMesh` per template part and model key, own scene with a depth-only occluder sphere
+  (units behind the limb disappear), camera-following lights + `RoomEnvironment` reflections (PBR metals are black with lights only).
+- `ColonySphereRenderer`: `setUnits` / `unitModelState` / `drawUnits`; the model pass renders FIRST on a transparent
+  background and is copied to its own 2D layer canvas, the sphere renders second (the GL canvas still ends the frame with the
+  sphere, so render on demand and frame compositing are unchanged). A failing layer switches itself off — markers take over.
+- `src/ui/ColonySphereUnits.js`: frame state + Canvas 2D HUD — base ring in the side colour, HP / supply / org / morale bars
+  (2D map colours and conditions), selection ring, stack badges, battle marker (vector crossed blades), landing marker.
+- `ColonyOverlay._drawSphereMap`: `syncUnits` (same `visibleGroundUnits` rule, Finding 379) → sphere + portraits → `drawUnits`
+  → frame. The CS-7 path (2D `_drawUnits` through the grid adapter, screen-space interpolation) is gone from geo colonies.
+  `invasion:troopsLanded` on a geo colony starts the landing effect.
+- Rules: a unit stands on its tile centre, upright on the tile normal; on a tile with a building / site / capital it stands 0.30
+  tile south of the centre and is drawn above the portraits (never hidden behind one); a stack is a row of at most 3 models per
+  side plus the count badge; a contested tile puts own units west and enemy units east, facing each other; a marching unit
+  moves on the arc centre → centre and faces the direction of travel; far away one compact marker per tile and side with the
+  stack count.
+
+**Measured (real game, headless Chrome 1600 × 1041, `probe-cs10-units` 16 / 16).** Tile size at full disc: 65 px on a 252-tile
+home planet, 81 px on a 162-tile one → markers; two wheel steps in → 100 px → models; closest 154 px. 23 units = 23 instances,
+10 draw calls, 715 490 triangles: frame 16.7 ms median (p95 16.8) during auto-rotation and during drag — the same as with markers
+only; model pass 0.20 ms CPU (instances + submit + layer copy), sphere pass 6.0 ms with models vs 5.6 ms with markers (GPU-synced
+measurement), HUD 0.10 ms. Standing units ask for no frames: 0 renders in 1.5 s with the cursor on the sphere. March: 30 frames / s
+only while a unit moves and time runs; battle / landing effects 20 frames / s.
+
+**Proof.** Keeper `colony_sphere_units_smoke` 63 PASS (fail-first 1 / 49 at `941b6b3`); mutations 49 / 49 red (three survivors closed by
+stronger pins: site tile offset, baked node transforms, HUD projection radius). Pin changed on purpose: `colony_sphere_play_smoke`
+P5d (units on the sphere come from the unit view, not from `_drawUnits`). Debug helpers `csUnits`, `csUnitMove`, `csUnitLanding`,
+`csUnitBattle`, `csUnitLod`, `csUnitInfo`, `csUnitsClear`.
+
+Flag OFF: `probe-cs1a-trace --years 60` seed A trace `0d9527fd…` / state `45da8089…`, seed B (`KOSMOS_SEED=cs1b-seedB`) trace `89251603…` / state `ea79a395…` — identical to a `941b6b3` worktree run. Sweep 448 / 448 OK, `check-i18n` PASS.
+
+**Decisions taken while the owner was away (D-CS-30 — signed 2026-11-20, §0b; items 3, 6, 7 amended there).**
+1. Units are a separate transparent GL pass composited above the building portraits; on a built tile the unit stands in front
+   (south) of the portrait.
+2. LOD threshold 96 px per tile: full disc = compact markers, two wheel steps in = models. `csUnitLod()` previews both.
+3. Models stand strictly on the tile normal (seen from above at the disc centre, from the side near the limb). Alternative: lean
+   towards the camera.
+4. At most 3 models per side on a tile, the rest only in the count badge.
+5. Enemy = red tint + red base ring; offline / starving = dimmed model. HUD colours are the 2D map's fixed colours, not theme
+   roles. The 2D map's emoji status icons are not on the sphere.
+6. Reflection environment from the three addons CDN (`RoomEnvironment`); without it the lights-only look stays.
+7. Supply models at 59.9 k triangles; `meshoptimizer` is NOT in `package.json` (the tool takes `--meshopt <dir>`); `.gitignore`
+   line for `_originals/`.
+8. Landing effect = wall-clock visual (3.2 s, model comes down 1.3 s), only for landings that happen while the game runs; it is
+   not replayed when the screen opens later. The player's own drop has no effect yet.
+9. A marching unit travels centre → centre (a small hop when it leaves a stack or a built tile).
+10. The sphere uses the full ~30 k-triangle models (no low-poly LOD files).
+
+**Findings.**
+- **Finding 794** ⚪ open — on a body where every tile is held (the home colony: all tiles have an owner) the landing zone
+  (graph distance ≥ 2 from held tiles, D-CS-26 item 4) is empty, so `InvasionSystem._findLandingHexes` uses its fallback: any free
+  land tile, shuffled — including tiles next to the capital. Measured in the real game: 0 landing-zone tiles on the home planet.
+  → CS-11 / balance. **Owner note (gate 2026-11-20):** candidate rule = landing distance from buildings / units instead of held tiles;
+  decide after the owner's trip together with the other landing questions. No change now.
+- **Finding 795** ⚪ open (min-spec risk) — 23 units on screen = ~715 k triangles (full ~30 k-triangle models, 59.9 k for supply).
+  Fine on the dev GPU (frame 16.7 ms) but a risk for minimum-spec machines: low-poly sphere LODs (e.g. ≤ 5 k triangles, used below a
+  tile-size threshold) before release. No fix now.
+- **Finding 796** ⚪ open (pre-release) — three core is shipped locally (`src/lib/three.module.js`), but the import map in `index.html`
+  sends every other `three/addons/` import to `cdn.jsdelivr.net` (GLTFLoader — also used by the sphere unit renderer for its GLB
+  templates —, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, SMAAPass). An offline Steam build would fail to boot.
+  Fix before release: vendor `examples/jsm` r171 (the files actually imported plus their relative deps) and point the import map
+  at the local copy. Not changed now (project-wide loading, outside CS-10). Free finding number: 797.
+
+**Remaining:** status icons (offline / hungry / loaded) as vector pips; landing effect for the player's own drop;
+low-poly LOD files if weak GPUs matter; moons / planetoids not staged (same code); the 2D fallback (no WebGL) shows markers only
+— keeper-proven, not staged in the real game; `ColonySphereView.gridAdapter` is now unused by the host (kept, pinned) → remove
+at CS-Z.
 
 ---
 

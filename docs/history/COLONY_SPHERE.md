@@ -2,6 +2,24 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
+## CS-10 — ground units on the sphere: GLB models near, markers far (2026-11-20; owner gate PASS, all 12 steps)
+
+- Gate PASS 2026-11-20: D-CS-30 signed as proposed with items 3 (superseded by CS-10b: models lean towards the camera), 6 and 7
+  amended. Before the commit: `RoomEnvironment` vendored to `src/lib/addons/` (no CDN, Steam build offline, same lighting);
+  `meshoptimizer` added as a devDependency, the GLB tool uses it by default; keeper 63 → 66 PASS. Finding 794 open with the owner's
+  candidate rule (landing distance from buildings / units); Finding 795 (≈ 715 k triangles for 23 units → low-poly LODs before
+  release) and pre-release Finding 796 (all other three addons load from a CDN) opened. §3.18 trace hashes corrected.
+  Owner note for later: the unit models themselves are only OK (art question, after the trip).
+- Supply GLBs optimised first (`tools/unit-models/optimize-unit.mjs`): 38.50 MB → 2.10 MB each, 1 267 313 → 59 921 triangles;
+  originals in `assets/units/ground/_originals/` (git-ignored).
+- Units on the colony sphere are GLB models from a template cache, instanced per model (`ColonyUnitLogic` / `ColonyUnitModels`,
+  pass in `ColonySphereRenderer`, HUD in `ColonySphereUnits`); far away compact markers with the stack count (D-CS-14).
+  `_mobile` / `_deployed` swap as on the 2D map; march on the great-circle step between tile centres; battle marker on
+  contested tiles; landing marker + drop for invasions. The 2D `_drawUnits` path is gone from geo colonies, flat colonies untouched.
+- Finding 794 opened (no landing zone on a fully held body → invasions land on any free land tile).
+- Proof: keeper 63 PASS (fail-first 1/49), mutations 49/49, real-game probe 16/16, `cs10-units.png`; 23 units = 10 draw calls,
+  frame 16.7 ms during auto-rotation and drag. Flag-OFF trace unchanged on two seeds, sweep 448/448, i18n PASS.
+
 ## CS-9 — buildings as portraits on the sphere + city lights (2026-11-20; owner gate PASS, all 10 steps)
 
 - Gate PASS 2026-11-20: D-CS-29 signed as proposed; Finding 784 closed, Finding 793 open. Owner notes for later (after his
