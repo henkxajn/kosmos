@@ -2716,6 +2716,12 @@ export class ThreeRenderer {
     return value === undefined ? SurfaceAirShader.hazeOpacityOf(air.shell.material) : SurfaceAirShader.setHazeOpacity(air.shell.material, value);
   }
 
+  /** CS-7 — zegar pogody ciała (kąt dryfu, faza ewolucji chmur) albo null: kula kolonii zaczyna od tego samego stanu chmur. */
+  bodyAirClock(bodyId) {
+    const air = this._sharedSurfaces.get(bodyId)?.air;
+    return air ? { angle: air.angle, phase: air.phase } : null;
+  }
+
   /** Mapa z SurfaceCache → tekstura w materiale ciała. `instant` = trafienie w cache przy budowie (bez przejścia). */
   _applySharedSurfaceMap(bodyId, map, instant = false) {
     const rec = this._sharedSurfaces.get(bodyId);
