@@ -26,6 +26,7 @@ import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { createColonyGrid } from '../map/ColonyGridFactory.js';   // CS-5b — siatka nowej kolonii (geo tylko z FEATURES.colonySphere w headless)
 import { addMissionLog, loadCargo, canDoEnvoy, loadColonists, unloadColonists } from '../entities/Vessel.js';
 import { isSameSystem, systemIdOf } from '../utils/SystemScope.js';
 import { resolveTransferStore, isStationId } from '../utils/TransferStore.js';
@@ -2587,7 +2588,7 @@ export class MissionSystem {
 
     // Wygeneruj siatkę hex dla outpostu (potrzebna do autoPlaceBuilding)
     if (!outpost.grid && outpost.planet) {
-      const grid = PlanetMapGenerator.generate(outpost.planet, false);
+      const grid = createColonyGrid(outpost.planet, false);
       outpost.grid = grid;
       if (outpost.buildingSystem) {
         outpost.buildingSystem._grid = grid;

@@ -20,6 +20,7 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { ORBIT_SCALED, pickHabitableHomeworld } from '../utils/OrbitModel.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { createColonyGrid } from '../map/ColonyGridFactory.js';   // CS-5b — siatka nowej kolonii (geo tylko z FEATURES.colonySphere w headless)
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { TechSystem } from './TechSystem.js';
@@ -188,7 +189,7 @@ export class EmpireColonyBootstrap {
 
     // 5. Wygeneruj HexGrid (createColony NIE generuje grida — robimy to tu by
     //    autoPlaceBuilding miało siatkę do iteracji).
-    const grid = PlanetMapGenerator.generate(homePlanet, false);
+    const grid = createColonyGrid(homePlanet, false);
     colony.buildingSystem._grid       = grid;
     colony.grid                       = grid;
     // G2-3b C-S3 (Finding 318) — kafle kolonii AI niosą właściciela od urodzenia; bez tego `owner == null`
@@ -397,7 +398,7 @@ export class EmpireColonyBootstrap {
     colony.isHomePlanet  = false;
 
     // 6. HexGrid (createColony NIE generuje grida — potrzebny do _placeBuildingSmart)
-    const grid = PlanetMapGenerator.generate(planetEntity, false);
+    const grid = createColonyGrid(planetEntity, false);
     colony.buildingSystem._grid       = grid;
     colony.grid                       = grid;
     // G2-3b C-S3 (Finding 318) — kafle kolonii AI niosą właściciela od urodzenia; bez tego `owner == null`

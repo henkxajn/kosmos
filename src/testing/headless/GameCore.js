@@ -84,6 +84,8 @@ import { EmpireGenerator }   from '../../generators/EmpireGenerator.js';
 import { BUILDINGS }         from '../../data/BuildingsData.js';
 import { TERRAIN_TYPES }     from '../../map/HexTile.js';
 import { PlanetMapGenerator } from '../../map/PlanetMapGenerator.js';
+import { createColonyGrid, setGeoGridsAllowed } from '../../map/ColonyGridFactory.js';   // CS-5b — headless pozwala na siatki geo (flaga decyduje)
+setGeoGridsAllowed(true);
 import { tileGraphOf } from '../../map/TileGraph.js';   // CS-1b — przez TileGraph
 import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_BUILD_PLAN, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
 
@@ -359,7 +361,7 @@ export class GameCore {
     if (colony) colony.name = capitalName;
 
     // ── Grid + starter buildings ──
-    const grid = PlanetMapGenerator.generate(civPlanet, true);
+    const grid = createColonyGrid(civPlanet, true);
     this.buildingSystem._grid = grid;   // parytet z ColonyManager:2359 — BEZ tego droid-install
                                         // (_strataDroidBuildings) i inne grid-ops padają; pas szerokości z tej siatki (CS-2)
     colony.grid = grid;

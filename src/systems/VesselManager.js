@@ -1381,8 +1381,10 @@ export class VesselManager {
       const colony = unit.planetId ? colMgr?.getColony?.(unit.planetId) : null;
       const owned  = !!colony && (owner === 'player' ? isPlayerColony(colony) : colony.ownerEmpireId === owner);
       const standIn = { groundUnits: [unit.id], troopBayUsed: 0, colonyId: unit.planetId ?? null };
+      // CS-5b — brak pozycji → pierwsze pole grafu ciała (płaska siatka: (0,0) jak dotąd, keeper CS-2 G6a; kula: pole g0).
+      const anchor = (unit.q == null || unit.r == null) ? (tileGraphOf(colony?.grid)?.anyTile() ?? { q: 0, r: 0 }) : unit;
       if (owned && !cargoUnloadRefusal(owner, unit.planetId)
-          && unloadGroundUnit(standIn, unit, unit.planetId, unit.q ?? 0, unit.r ?? 0)) {
+          && unloadGroundUnit(standIn, unit, unit.planetId, unit.q ?? anchor.q, unit.r ?? anchor.r)) {
         out.disembarked.push(unit.id);
         continue;
       }

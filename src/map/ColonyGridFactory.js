@@ -8,7 +8,8 @@
 //   • Stare kolonie (siatka już istnieje / wczytana z zapisu) nigdy nie zmieniają rodzaju.
 
 import { GAME_CONFIG } from '../config/GameConfig.js';
-import { geoGridSpecFor } from './GeoColonyGridGenerator.js';
+import { geoGridSpecFor, generateGeoGrid } from './GeoColonyGridGenerator.js';
+import { PlanetMapGenerator } from './PlanetMapGenerator.js';
 
 let _geoAllowed = false;
 
@@ -23,4 +24,17 @@ export function geoGridsAllowed() { return _geoAllowed; }
 export function colonyGridKindFor(body, { flag = GAME_CONFIG.FEATURES.colonySphere === true, allowed = _geoAllowed } = {}) {
   if (!flag || !allowed) return 'flat';
   return geoGridSpecFor(body) ? 'geo' : 'flat';
+}
+
+/**
+ * Siatka NOWEJ kolonii / placówki (CS-5b): flaga OFF albo żywa gra → dokładnie dzisiejsze
+ * `PlanetMapGenerator.generate(planet, isHome)`; ON + headless / debug + ciało uprawnione → siatka geodezyjna.
+ * Ścieżki ODCZYTU zapisu i regeneracji starych kolonii NIE używają tej funkcji (podwójna siatka, D-CS-4).
+ */
+export function createColonyGrid(planet, isHome = false, opts = {}) {
+  if (colonyGridKindFor(planet, opts) === 'geo') {
+    const g = generateGeoGrid(planet, isHome);
+    if (g) return g;
+  }
+  return PlanetMapGenerator.generate(planet, isHome);
 }

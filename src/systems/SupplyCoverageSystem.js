@@ -89,7 +89,7 @@ export class SupplyCoverageSystem {
         if (u.transportStatus === 'loaded')    continue;
         if (u.owner && u.owner !== 'player')   continue;   // tylko gracz (na razie)
         if (u.isSupplier)                      continue;   // suppliery w fazie 2
-        const cov = coverage.get(this._key(u.q, u.r));
+        const cov = coverage.get(this._key(u, colony));
         if (!cov)                              continue;
         if (cov.type !== 'capital' && cov.type !== 'barracks') continue;
         if (!this._onOwnColony(u, colony))     continue;   // magazyn wyłącznie WŁASNEJ kolonii (442)
@@ -109,7 +109,7 @@ export class SupplyCoverageSystem {
       for (const u of units) {
         if (!u.isSupplier || u.transportStatus === 'loaded') continue;
         if (u.owner && u.owner !== 'player') continue;
-        const cov = coverage.get(this._key(u.q, u.r));
+        const cov = coverage.get(this._key(u, colony));
         if (!cov) continue;
         if (cov.type !== 'capital' && cov.type !== 'barracks') continue;
         if (!this._onOwnColony(u, colony)) continue;   // magazyn wyłącznie WŁASNEJ kolonii (442)
@@ -265,8 +265,10 @@ export class SupplyCoverageSystem {
     return [...pids];
   }
 
-  // Klucz mapy zasięgu = id pola (format płaskiej siatki „q,r”; czyta go też nakładka UI). CS-5: id grafu ciała.
-  _key(q, r) { return DETACHED_FLAT_GRAPH.idOf({ q, r }); }
+  // Klucz mapy zasięgu = id pola w grafie CIAŁA (płaska siatka: „q,r” jak dotąd; kula: „g<i>”) — ten sam, którym
+  // `_addHexAndNeighbors` pisze mapę i którym czyta ją nakładka UI. CS-5b: wcześniej zawsze płaski „q,r” → na kuli
+  // odczyt nigdy nie trafiał (zapis szedł przez graf). Ciało bez siatki → graf odłączony (jak w `_addHexAndNeighbors`).
+  _key(u, colony) { return (tileGraphOf(colony?.grid) ?? DETACHED_FLAT_GRAPH).idOf({ q: u.q, r: u.r }); }
 
   /**
    * SB78 (S4/3, Finding 442) — czy jednostka stoi na kolonii WŁASNEGO imperium (gracz: kolonia gracza — kanon

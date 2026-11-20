@@ -43,6 +43,8 @@ import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { tileGraphOf, isCapitalKey } from '../map/TileGraph.js';   // CS-1a — graf pól kolonii
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { createColonyGrid } from '../map/ColonyGridFactory.js';   // CS-5b — siatka nowej kolonii (geo tylko z FEATURES.colonySphere w headless)
+import { GeodesicGrid } from '../map/GeodesicGrid.js';   // CS-5b — odczyt siatki geo z zapisu
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { EmpireColonyBootstrap } from './EmpireColonyBootstrap.js';   // W3-1 — reuse resolvera tech imperium
 import { canReverseFate, describeNoReversal } from '../utils/PlayerViability.js';   // D9=W3 (AC-8)
@@ -647,7 +649,7 @@ export class ColonyManager {
     bSys.setPlanetId(planetId);
 
     // Generuj HexGrid — potrzebny do autoPlaceBuilding
-    const grid = PlanetMapGenerator.generate(entity, false);
+    const grid = createColonyGrid(entity, false);
     bSys._grid = grid;
 
     // FactorySystem per-outpost. Outpost GRACZA → tryb reaktywny (reforma).
@@ -2801,7 +2803,9 @@ export class ColonyManager {
       let savedGrid = null;
       if (colData.grid) {
         try {
-          if (colData.grid.version === 2) {
+          if (colData.grid.kind === 'geo') {
+            savedGrid = GeodesicGrid.restore(colData.grid);   // CS-5b — siatka geodezyjna (zapis rzadki)
+          } else if (colData.grid.version === 2) {
             savedGrid = RegionSystem.restore(colData.grid);
           } else if (colData.grid.tiles && colData.grid.width) {
             // Format HexGrid (tapered lub prostokątny) — przywróć z anomaliami
@@ -2914,7 +2918,7 @@ export class ColonyManager {
 
     // Generuj HexGrid — potrzebny do autoPlaceBuilding i stolicy
     if (colony?.buildingSystem && colony.planet) {
-      const grid = PlanetMapGenerator.generate(colony.planet, false);
+      const grid = createColonyGrid(colony.planet, false);
       colony.buildingSystem._grid = grid;
       colony.grid = grid;
 
