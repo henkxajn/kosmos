@@ -51,6 +51,7 @@ for the record.
 | **D-CS-25 (signed 2026-11-19)** | Moon-orbit generation change in scaled-orbit worlds accepted: moon orbit radii × k at generation for `orbitModel: 2` worlds, no new RNG draws, legacy worlds unchanged, scaled test saves made before the change keep their old moon orbits (§3.9.3). |
 | **D-CS-26 (signed 2026-11-20)** | CS-5 overnight decisions signed as proposed (§3.13, §3.14). (1) The live game keeps new colonies **flat until CS-7**, even with `FEATURES.colonySphere` ON; geo grids only headless / debug. (2) A geo tile's coordinate `(index, −1)` is an **interim encoding**; it migrates to real tile ids at the CS-12 clean save break. (3) Key strings stay unchanged (minefield `${q}_${r}`, battle `pid\|q\|r`, `{q,r}` payloads, unit / army / Vessel `q,r`). (4) Landing zone = graph distance ≥ 2 from every held tile; watch in CS-8 / CS-10 balance — far more landing tiles than today's flat edge rows. (5) `ensureColonyGrid` stays flat. (6) Gas giants flat until CS-11. Finding 782: option B — no change now, re-evaluate after in-game tests (CS-8) with the D-CS-8 table (planetoid n=2 = 42 tiles is the ready option). |
 | **D-CS-28 (signed 2026-11-20)** | CS-8 decisions signed as proposed (§3.16), **item 1 amended at the owner gate**: the Colonies console is shown for **every geo colony regardless of `FEATURES.colonySphere`**; the flag only decides whether new colonies get a geo grid (§3.16.1). Items 2 and 9 were interim until CS-8c — **done in CS-8c (2026-11-20, owner check PASS, §3.17)**: the Crew / Population / Station pages, recruitment, station pickers and the unit group drawer are on the console kit. Items 3–8 and 10 as written in §3.16 (no combat-strip slot in the header; unaffordable rows queue the order; Shift keeps the building armed; yield labels for all tiles at tile ≥ 34 px; founding an outpost neither switches the active colony nor opens the screen with the flag ON — Finding 740; body preview read-only in the console; tuning values). |
+| **D-CS-29 (signed 2026-11-20)** | CS-9 decisions signed as proposed at the owner gate (PASS, all 10 steps; §3.18): (1) building portraits are **Canvas 2D billboards from an atlas**; (2) the dot LOD is kept but not reachable at today's zoom range; (3) default tint = subtle outline + base ring (full tile tint stays the A/B variant); (4) no-PNG fallback = the console's vector category glyph; (5) capital × 1.35; (6) level pips (none at level 1, 2–5 pips, white for levels 6–10); (7) damaged = `tile.damaged` on a built tile (Finding 793 open); (8) lights come on at dusk; (9) lights fade to zero at the tile border; (10) smaller system-map portrait icons (0.17 r); (11) no lights in the 2D fallback. **Owner notes for later (after his trip, not now):** buildings may be a bit too big (one tuning value); the owner will decide portraits vs Meshy 3D building models after testing 2–3 models side by side; system-map icon clutter and hero light strength to re-check then. |
 
 **Step order (signed): surface track first.**
 CS-3a → CS-3b → CS-4 → CS-6 → CS-1a → CS-1b → CS-2 → CS-5 → CS-7 → CS-8 → CS-9 → CS-10 → CS-11 → CS-12 → CS-Z.
@@ -801,7 +802,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-7** | VIS | **Fable** | `ColonySphereRenderer` hero: same shader, drag/zoom, picking → TileGraph id, hover/selection outlines, grid near the cursor / build mode, lens overlay, render-on-demand, context loss, 2D fallback. Contact sheet across the 5 UI themes (hero frame chrome) | CS-5, CS-6 |
 | **CS-8** | MECH (UI) — light loop, heavy gate for build flow + unit move orders | Opus | Colonies console on the CONSOLES template: list + planet card, inspector (tile/building/unit/planet), strip (queue), lenses; build flow (`evaluatePlacement` per tile) and unit move orders on the sphere; `_stationMode` sub-tab; i18n PL/EN; `ColonyModalLogic`. Behind `FEATURES.colonySphere` (OFF = today's ColonyOverlay) **Owner decisions for CS-8 (2026-11-20):** (1) restyle the colony screen panels to the console look; (2) remove the small globe in the right panel (D-CS-27 item 9 was interim only); (3) the right panel becomes the info area — tile / building / unit / planet inspector | CS-7 |
 | **CS-8c** ✅ | UI (visual) | Opus | Restyle the pages CS-8 embeds in today's look (D-CS-28 items 2 and 9, interim): Crew / Population / Station pages and the unit group drawer (armies: create / split / disband) to kit primitives inside the console | CS-8 |
-| **CS-9** | VIS | Opus (Fable optional) | Building massing (procedural low-poly per category, `HudPalette` role emissives, instanced) on the hero; city lights per tile on the night side, also on the system map; under-construction / damaged states | CS-8 |
+| **CS-9** ✅ (§3.18) | VIS | Opus (Fable optional) | **Owner direction 2026-11-20: the owner's building portraits are the art** (replaces procedural low-poly massing). Portrait billboards on the hero (atlas-batched), category dot far away, states (construction / upgrade / damaged / level pips), city lights per built tile on the night side, also on the system map; system-map icons for geo colonies (784) | CS-8 |
 | **CS-10** | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
 | **CS-11** | MECH | Opus | Gas giants per D-CS-5 (archetype → `GasGiantShader` params **only if at least as good as today; default and fallback = today's look**; platform grid on the geo graph or look-only); optional AI archetype "expected buildable tiles" table (D-CS-12) | CS-5, CS-6 |
 | **CS-12** | MECH | Opus | Save end-state per D-CS-4 (clean break or migration), version bump, fixture re-capture + README metadata, fix the 4 fixture-reading smokes; **migrate the interim geo tile coordinate `(index, −1)` to real tile ids** (unit / army / Vessel `q,r`, key strings, event payloads — D-CS-26) | CS-8 |
@@ -3611,6 +3612,101 @@ crash); `colony_console_smoke` K3b updated on purpose (37 PASS); real-game probe
 
 **After the arc (recorded):** restyle the shared windows (cargo load, unit card, group Details) to the console kit — affects the map
 and the Command / Fleet consoles too.
+
+---
+
+### 3.18 CS-9 — buildings as the owner's portraits on the sphere + city lights (2026-11-20; unattended run; owner gate PASS 2026-11-20, all 10 steps)
+
+**Gate (2026-11-20): PASS on all 10 steps. D-CS-29 signed as proposed (§0b); Finding 784 closed; Finding 793 open.**
+Owner notes for later (after his trip, not now): buildings may be a bit too big (one tuning value — the billboard size
+factor); the owner will decide portraits vs Meshy 3D building models after testing 2–3 models side by side; system-map
+icon clutter and hero light strength to re-check then.
+
+**Owner direction (2026-11-20), replaces "procedural low-poly massing":** the owner's building portraits are the art; new PNGs
+must work by dropping the file in. Contact sheet: `kosmos-handover/cs-9/cs9-contact.md`. No critical file touched, no save
+format change, no gameplay change, no i18n keys. Flag OFF / flat colonies unchanged.
+
+**Art format (the whole pipeline).** One file per building id: `assets/buildings/{id}.png` (`id` from `BuildingsData.js`;
+the capital is `colony_base`). Square, RGBA with a transparent background, **128 px or larger — 256 and 512 give sharper
+close-ups** (larger files are reduced to 512). Draw the building standing on its ground: the ground line is read at **80 % of
+the height** from the top (`BILLBOARD.groundY`), centred horizontally — that point is placed on the tile centre. No code
+change, no list to edit: `BuildingTextures` tries every id at start, the atlas builds the mip chain and the state variants.
+A missing file shows the category glyph. Level-specific files (`barracks_lv2.png`) are ids of their own, not level art.
+
+**As built.**
+- `src/renderer/ColonyBillboardLogic.js` (pure): marker spec per tile (`billboardSpecOf`: built / construction / upgrade /
+  damaged, progress, level → pips, capital + badge, category), LOD (`billboardLod`), horizon culling (`horizonAlpha`), the
+  frame's draw list in painter order with the capital last (`buildBillboardList`), mip choice, `geoTileDirOf` (784).
+- `src/renderer/ColonyBillboardAtlas.js`: one canvas page per mip level (512 / 256 / 128 / 64 / 32, 1 px gutter); each
+  portrait × state is painted once (construction = `saturation` blend masked back to the art + a cool tone, damaged = red
+  `source-atop`), lower levels by successive halving; the key carries the image identity, so art that loads later replaces
+  the glyph. A paint error is recorded and the frame goes on without that portrait.
+- `ColonySphereView._drawMarkers` rewritten on the list: shadow, base ring (category colour, or state colour), portrait from
+  the atlas, capital disc + gold ring, badge, progress ring, pips. Anomaly icon and occupation bar are unchanged
+  (`_drawTileNotes`). `markerSpecOf` kept as a wrapper. Units are still drawn by today's `_drawUnits` after the buildings.
+- `ColonySphereOverlayLogic`: `BUILDING_TINT` — `subtle` (default: outline only) / `full` (CS-7 tile tint), `tint` parameter.
+- `src/renderer/CityLightsLogic.js` (pure): `tileLightWeight` (category weight × level, capital, construction glow),
+  `colonyLightFactor(buildings, population)` = `0.36 + 0.64 · (1 − e^−((b−1)/14 + pop/60))`, `cityLightsOf` (values +
+  signature), `rasterizeCityLights` (512×256 equirect map; a texel belongs to a tile when no neighbour centre is nearer).
+- `src/renderer/CityLightsShader.js` (zero three imports): additive shell just above the surface; point lights from a 3D
+  lattice cut by the sphere, lit when the cell's hash < intensity, two densities, warm / white mix, seed from `surfaceSeed`,
+  no clock; night mask from `uSunPos` (the surface shader's shared uniform); log-depth variant through `LogDepthChunks`.
+- Hero: `ColonySphereRenderer.setCityLights` — shell at radius 1.001, no depth test (convex), render order between clouds
+  and the tile overlay, gain × 0.3 in build mode / lenses. System map: `src/renderer/ColonyCityLights.js` — one shell per
+  geo colony whose body has the shared surface, child of the **spinning surface mesh**, reviewed every 1.5 s, rasterized only
+  when the signature changes, dropped with the colony / the body mesh. Wired in `ThreeRenderer` (constructor, frame tick,
+  `_cityLightTarget`).
+- **Finding 784 ✅** — `ColonyBuildingMarkers._tileToXYZ` has a geo branch (`geoTileDirOf` × marker radius) and geo icons
+  are parented to the surface mesh (they turn with the body); a geo icon shows the portrait in a category ring when a PNG
+  exists (0.17 r), else today's emoji disc. The flat branch is the old code.
+- Owner helpers (`src/debug/ColonyBuildingsDebug.js`): `csCity`, `csCityRepair`, `csTint`, `csDots`, `csNight`, `csDay`,
+  `csBuildings`.
+
+**Tuning** (`BILLBOARD`): size 0.96 × tile spacing, 20–176 px; dot below 13 px (+ 4 px band); horizon 0.10–0.34; ground line
+0.80; capital × 1.35, never below 18 px; shadow 0.70 × 0.22 at 0.55; construction alpha 0.80; pips up to 5.
+(`CITY_LIGHTS`): map 512×256; category weights 0.34 (food) … 1.0 (population); level +0.14 up to × 1.9; construction 0.16;
+night edge −0.05…0.10; density hero 210 / 84, system 64 / 26; gain hero 1.45, system 1.5, work 0.3; edge floor 0.
+
+**Measurements** (RTX 3070, headless Chrome over CDP, real game 1600×1041, colony of 35 buildings, paused).
+
+| State | Frame | Sphere renders | Sphere render | Billboard pass | Markers in frame |
+|---|---|---|---|---|---|
+| Auto-rotation, 3 s | 16.7 ms median, p95 16.7 | 85 | 1.3 ms | 0.30 ms median, 0.50 max | 37 |
+| Drag, 2.6 s | 16.7 ms median, p95 16.8 | 155 | 1.4 ms | 0.30 ms median, 0.50 max | 37 |
+
+Earlier runs with 13–32 markers in frame: billboard pass 0.10–0.20 ms, sphere render 1.9–3.3 ms, frame 16.7 ms.
+
+**Proof.** `docs/design/prototypes/cs9-buildings.png` (three zoom levels, A/B tint, states, night crescent, dot LOD through
+`csDots`, system map with icons and with lights only, 5 themes). Real-game probe `probe-cs9-buildings.mjs` 10 / 10.
+Keeper `colony_sphere_buildings_smoke` 39 PASS; fail-first on `d8514d9` 1 PASS / 38 FAIL (the green one is the control "flag
+default OFF"); mutations 41 / 41 red (one equivalent mutant replaced; one survivor closed by a stronger pin — the cell guard of
+the rasterizer was dead at edge floor 0). Pins changed on purpose: `colony_sphere_hero_smoke` H6b / H6c, `colony_sphere_play_smoke`
+P3j. Flag OFF: `probe-cs1a-trace --years 60` seed A `30c3d5c1…`, seed B `3152cd7f…` = HEAD. Sweep 447 / 447 OK, `check-i18n` PASS.
+
+**Decisions taken while the owner was away (D-CS-29 — signed 2026-11-20 as proposed, §0b).**
+1. Billboards in Canvas 2D from an atlas (sharp at UI resolution, shared with the 2D fallback, 0.3 ms for 37 markers) — not WebGL instanced
+   quads; revisit only with hundreds of buildings in frame.
+2. The dot LOD is built and pinned, but today's zoom range never reaches it in the console (≈ 80 px per tile at full disc on
+   the home planet); portraits kept. Alternative: raise `dotBelowPx`.
+3. Default tint = subtle outline + base ring; full tile tint stays as the A/B variant.
+4. No-PNG fallback = the console's vector category glyph (no emoji on the sphere).
+5. Capital × 1.35 with a ring ≤ 5 px (was × 1.6, 7 % ring).
+6. Pips: none at level 1, 2–5 pips, levels 6–10 turn pips white.
+7. Damaged = `tile.damaged` on a built tile (Finding 793).
+8. Lights come on at dusk and the hero gain is 1.45 — the camera-locked night crescent is narrow (D-CS-27 item 2).
+9. Lights fade to zero at the tile border (a brighter edge read as a honeycomb on the system map).
+10. System-map portrait icons 0.17 r (emoji icons stay 0.22 r).
+11. No lights in the 2D fallback; lights are drawn over the clouds.
+
+**Findings.**
+- **Finding 784** ✅ closed (above).
+- **Finding 793** ⚪ open — `tile.damaged` is never set on a built tile by the game (it only blocks placement), so the damaged
+  marker has no gameplay source yet. → bombardment / ground combat step.
+  Free finding number: 794.
+
+**Remaining:** owner look at light strength and portrait size; lights watched on the home planet only (moons / planetoids
+use the same code, not staged); system-map icons still exist for planets only; cloud dimming of lights; night-side dimming
+of portraits; CS-10 unit models.
 
 ---
 

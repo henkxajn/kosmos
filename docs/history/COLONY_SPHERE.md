@@ -2,6 +2,18 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
+## CS-9 — buildings as portraits on the sphere + city lights (2026-11-20; owner gate PASS, all 10 steps)
+
+- Gate PASS 2026-11-20: D-CS-29 signed as proposed; Finding 784 closed, Finding 793 open. Owner notes for later (after his
+  trip): buildings may be a bit too big (one tuning value); portraits vs Meshy 3D building models to be decided after a
+  side-by-side test of 2–3 models; system-map icon clutter and hero light strength to re-check.
+- Owner direction: his building portraits are the art. Billboards from an atlas (`ColonyBillboardLogic` / `ColonyBillboardAtlas`),
+  states (construction, upgrade, damaged, level pips), category colour as a subtle outline (A/B full tint), far dot LOD.
+- City lights: one intensity function + one shader on the colony sphere and on the system map (`CityLights*`, `ColonyCityLights`).
+- Finding 784 closed (system-map icons for geo colonies); Finding 793 opened (no game path damages a building).
+- Proof: keeper 39 PASS (fail-first 1/38), mutations 41/41, real-game probe 10/10, flag-OFF trace unchanged, sweep 447/447,
+  i18n PASS; `cs9-buildings.png`. Billboard pass 0.3 ms with 37 markers in frame.
+
 ## CS-8c — colony pages on the console kit + Finding 789 (2026-11-20; owner check PASS)
 
 - Crew / Population / Station pages, recruitment, station pickers and the unit group drawer moved to `ColonyConsolePages` +
