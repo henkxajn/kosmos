@@ -44,6 +44,7 @@ import { orbitModelOfWorld, orbitZoneOf, frostLineAU, scaledMinOrbitAU, compacti
 import { csCollisionTest, csCollisionTestLowFps } from './CollisionTestDebug.js';   // CS-PHYS-c (Finding 776) — przemiatane wejście w walkę
 import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';
 import { colonySphereHeroDebugHelpers } from './ColonySphereHeroDebug.js';   // CS-7 — csSphere / csSphereUnit / csSphere2D
+import { colonyUnitsPolishDebugHelpers } from './ColonyUnitsPolishDebug.js';   // CS-10b — csUnitLean / csUnitSelect3 / csUnitPath / csBattleWindow
 import { colonyUnitsDebugHelpers } from './ColonyUnitsDebug.js';             // CS-10 — csUnits / csUnitMove / csUnitLanding / csUnitBattle / csUnitLod / csUnitInfo / csUnitsClear
 import { colonyBuildingsDebugHelpers } from './ColonyBuildingsDebug.js';     // CS-9 — csCity / csCityRepair / csTint / csDots / csBuildings / csNight / csDay
 import { colonyConsoleDebugHelpers } from './ColonyConsoleDebug.js';         // CS-8 — csConsole / csOutpost / csColony / csStationTech / csPoor / csRich
@@ -442,5 +443,5 @@ export function colonySphereDebugHelpers() {
     return summary;
   };
   return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps, csGeoGrid,
-    ...cs2GeometryDebugHelpers(), ...colonySphereHeroDebugHelpers(), ...colonyConsoleDebugHelpers(), ...colonyBuildingsDebugHelpers(), ...colonyUnitsDebugHelpers() };
+    ...cs2GeometryDebugHelpers(), ...colonySphereHeroDebugHelpers(), ...colonyConsoleDebugHelpers(), ...colonyBuildingsDebugHelpers(), ...colonyUnitsDebugHelpers(), ...colonyUnitsPolishDebugHelpers() };
 }

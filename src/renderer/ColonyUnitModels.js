@@ -12,6 +12,7 @@
 // • THREE, loader i zegar wstrzykiwane — keeper wykonuje klasę pod node na prawdziwym three bez GL.
 
 import { instanceMatrix } from './ColonyUnitLogic.js';
+import { leanUp } from './ColonyUnitPolishLogic.js';   // CS-10b — pochylenie modeli ku kamerze
 
 export const UNIT_MODEL_STATE = Object.freeze({ LOADING: 'loading', READY: 'ready', MISSING: 'missing' });
 
@@ -122,9 +123,10 @@ export class ColonyUnitModels {
    * Ustaw instancje klatki.
    * @param {Map<string, {key:string, candidates:string[], items:object[]}>|null} groups grupy z `groupUnitInstances`
    * @param {number} spacing rozstaw pól [promień ciała]
+   * @param {{eye:number[], up:number[], lean:number}|null} [view] CS-10b — oko i „góra” ekranu w układzie kuli: model pochylony ku kamerze
    * @returns {number} liczba instancji z gotowym modelem
    */
-  setInstances(groups, spacing) {
+  setInstances(groups, spacing, view = null) {
     const T = this._T;
     let instances = 0, used = 0, calls = 0;
     const seen = new Set();
@@ -143,7 +145,8 @@ export class ColonyUnitModels {
         }
         for (let i = 0; i < n; i++) {
           const it = g.items[i];
-          m4.fromArray(instanceMatrix(it, spacing, undefined, arr));
+          const up = view && view.lean > 0 ? leanUp(it.dir, view.eye, view.up, view.lean) : null;
+          m4.fromArray(instanceMatrix(it, spacing, undefined, arr, up));
           col.setRGB(it.tint[0], it.tint[1], it.tint[2]);
           for (const im of e.list) { im.setMatrixAt(i, m4); im.setColorAt(i, col); }
         }

@@ -154,11 +154,14 @@ function tintOf(u, T) {
  * @param {object} [o.archetypes] UNIT_ARCHETYPES (wariant rozłożenia)
  * @param {Map<string, number>} [o.landings] id jednostki → czas lądowania [ms]
  * @param {number} [o.now] zegar [ms]
+ * @param {(tile:number)=>boolean} [o.battleAt] CS-10b (Finding 797) — czy na polu toczy się bitwa wg systemu walki
+ *   (`CombatSystem.isBattleAt`: wojna + żywe, walczące jednostki). Ścieżka gry podaje go zawsze; bez predykatu (czyste
+ *   wywołania CS-10) `battle` = `contested`.
  * @returns {{ items: object[], stacks: object[], moving: number, landing: number }}
  *   items: { id, unit, tile, dir, heading, share, enemy, moving, shown, tint, key, candidates, height, landing }
- *   stacks: { tile, dir, own, enemy, contested }
+ *   stacks: { tile, dir, own, enemy, contested, battle } — contested = układ obok siebie (dwie strony na polu), battle = znacznik bitwy
  */
-export function unitPlacements({ units, topo, tiles = null, archetypes = null, landings = null, now = 0 }, T = UNIT_VIEW) {
+export function unitPlacements({ units, topo, tiles = null, archetypes = null, landings = null, now = 0, battleAt = null }, T = UNIT_VIEW) {
   const items = [], stacks = [];
   if (!topo || !units) return { items, stacks, moving: 0, landing: 0 };
   const spacing = Math.sqrt(4 * Math.PI / topo.count);
@@ -198,7 +201,8 @@ export function unitPlacements({ units, topo, tiles = null, archetypes = null, l
   for (const s of byTile.values()) {
     const c = centre(topo, s.tile), basis = tangentBasis(c);
     const contested = s.own.length > 0 && s.enemy.length > 0;
-    stacks.push({ tile: s.tile, dir: c, own: s.own.length, enemy: s.enemy.length, contested });
+    const battle = contested && (typeof battleAt === 'function' ? !!battleAt(s.tile) : true);
+    stacks.push({ tile: s.tile, dir: c, own: s.own.length, enemy: s.enemy.length, contested, battle });
     if (contested) {
       for (const [side, sign] of [[s.own, -1], [s.enemy, 1]]) {
         const n = Math.min(side.length, T.maxModelsPerSide);
@@ -242,19 +246,23 @@ export function groupUnitInstances(items) {
 
 /**
  * Macierz instancji (16 liczb, kolumnami): model znormalizowany (podstawa w y = 0, przód +Z, największy wymiar 1) staje
- * na powierzchni — oś Y modelu = normalna pola, oś Z = zwrot, skala = udział × rozstaw pól.
+ * na powierzchni — oś Y modelu = normalna pola (CS-10b: albo podana oś pochylona ku kamerze, `leanUp`), oś Z = zwrot,
+ * skala = udział × rozstaw pól. Podstawa zawsze na polu (przesunięcie wzdłuż normalnej `item.dir`).
  */
-export function instanceMatrix(item, spacing, T = UNIT_VIEW, out = new Array(16)) {
-  const up = item.dir;
+export function instanceMatrix(item, spacing, T = UNIT_VIEW, out = new Array(16), upAxis = null) {
+  const up = upAxis ?? item.dir, base = item.dir;
   let f = item.heading;
   const d = dot(f, up);
-  f = norm([f[0] - up[0] * d, f[1] - up[1] * d, f[2] - up[2] * d]);
+  f = [f[0] - up[0] * d, f[1] - up[1] * d, f[2] - up[2] * d];
+  // Zwrot prawie równoległy do pochylonej osi — zwrot z bazy stycznej (bez zera w macierzy).
+  if (Math.hypot(f[0], f[1], f[2]) < 1e-4) { const e = tangentBasis(base).north; const k = dot(e, up); f = [e[0] - up[0] * k, e[1] - up[1] * k, e[2] - up[2] * k]; }
+  f = norm(f);
   const r = cross(up, f);
   const s = item.share * spacing, h = 1 + T.lift + (item.height || 0);
   out[0] = r[0] * s; out[1] = r[1] * s; out[2] = r[2] * s; out[3] = 0;
   out[4] = up[0] * s; out[5] = up[1] * s; out[6] = up[2] * s; out[7] = 0;
   out[8] = f[0] * s; out[9] = f[1] * s; out[10] = f[2] * s; out[11] = 0;
-  out[12] = up[0] * h; out[13] = up[1] * h; out[14] = up[2] * h; out[15] = 1;
+  out[12] = base[0] * h; out[13] = base[1] * h; out[14] = base[2] * h; out[15] = 1;
   return out;
 }
 
@@ -292,8 +300,8 @@ export function unitMarkerList(placement, needsMarker = () => true) {
   return out;
 }
 
-/** Pola sporne (znacznik bitwy): własne i obce jednostki na jednym polu. */
-export function battleTilesOf(placement) { return placement.stacks.filter(s => s.contested); }
+/** Pola bitwy (znacznik bitwy): własne i obce jednostki na jednym polu ORAZ bitwa wg systemu walki (Finding 797). */
+export function battleTilesOf(placement) { return placement.stacks.filter(s => s.battle); }
 
 /** Paski HUD jednostki — te same warunki i barwy co mapa 2D. Zwraca listę { pct, color, thick }. */
 export function unitBarsOf(u, C = UNIT_COLORS) {
@@ -318,6 +326,6 @@ export function unitBarsOf(u, C = UNIT_COLORS) {
 export function unitFrameDelayMs(placement, T = UNIT_VIEW) {
   if (!placement) return Infinity;
   if (placement.moving > 0) return 1000 / T.moveFps;
-  if (placement.landing > 0 || placement.stacks.some(s => s.contested)) return 1000 / T.effectFps;
+  if (placement.landing > 0 || placement.stacks.some(s => s.battle)) return 1000 / T.effectFps;
   return Infinity;
 }

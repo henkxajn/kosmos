@@ -95,6 +95,23 @@ export class CombatSystem {
     return owners.size >= 2 && hasHostilePair(owners);   // R1 (G2-4): dwóch właścicieli to jeszcze nie bitwa
   }
 
+  /**
+   * CS-10b (Finding 797) — czy na polu TOCZY SIĘ bitwa wg stanu systemu walki: dokładnie reguła `_findContestedHexes`
+   * dla jednego pola (żywe jednostki, bez `offline` / `in_cargo`, para WROGÓW — wojna, R1). Tylko odczyt dla UI (znacznik
+   * bitwy na kuli, okno bitwy); pętla walki dalej używa `_findContestedHexes` bez zmian.
+   */
+  isBattleAt(planetId, q, r) {
+    const gum = window.KOSMOS?.groundUnitManager;
+    if (!gum) return false;
+    const owners = new Set();
+    for (const u of gum.getUnitsAtHex?.(planetId, q, r) ?? []) {
+      if (u.hp <= 0) continue;
+      if (u.status === 'offline' || u.status === 'in_cargo') continue;
+      owners.add(u.owner ?? 'player');
+    }
+    return owners.size >= 2 && hasHostilePair(owners);
+  }
+
   // ── Stan bitwy do tooltip'a ─────────────────────────────────────────────
   getBattleStateAt(planetId, q, r) {
     const gum = window.KOSMOS?.groundUnitManager;
@@ -103,7 +120,8 @@ export class CombatSystem {
     if (units.length === 0) return null;
     const sides = this._groupByOwner(units);
     if (!hasHostilePair(Object.keys(sides))) return null;   // R1 (G2-4)
-    const key = `${planetId}_${q}_${r}`;
+    // Finding 798 — klucz jak w `_runAllBattles` (separator `|`); dawny `_` nigdy nie trafiał → runda zawsze 0.
+    const key = `${planetId}|${q}|${r}`;
     const round = this._battleRounds.get(key) ?? 0;
 
     const tile = this._getTile(planetId, q, r);

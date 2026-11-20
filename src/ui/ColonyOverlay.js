@@ -36,6 +36,8 @@ import { visibleGroundUnits, visibleGroundUnitAt, isGroundUnitVisibleToPlayer } 
 import { warGateRefusal, NOT_AT_WAR } from '../utils/WarGate.js';                        // D13/G2-2 — bramka wojny przy lądowaniu
 import { showUnitCard } from './UnitCardPanel.js';
 import { showBattleGroup } from './BattleGroupPanel.js';
+import { drawBattleWindow } from './ColonyBattleWindow.js';                       // CS-10b — okno bitwy naziemnej na kuli
+import { unitClickSelection } from '../renderer/ColonyUnitPolishLogic.js';        // CS-10b — zaznaczenie klikiem w model
 import { showConfirmModal } from './ConfirmModal.js';
 import { ANOMALIES }     from '../data/AnomalyData.js';
 import { t, getLocale, getName } from '../i18n/i18n.js';
@@ -782,6 +784,37 @@ export class ColonyOverlay extends BaseOverlay {
     return tileGraphOf(this._gridCache?.[planetId]) ?? DETACHED_FLAT_GRAPH;
   }
 
+  // ── CS-10b — klik na kuli ─────────────────────────────────────────────
+  /**
+   * Klik na kuli kolonii: (1) znacznik bitwy albo pole sporne → okno bitwy (`_cBattle`); (2) prostokąt narysowanego modelu /
+   * znacznika jednostki → zaznaczenie wg `unitClickSelection` (ta sama reguła co mapa płaska: Ctrl / Shift przełącza jednostkę,
+   * zwykły klik — armia / pojedyncza / odznacz). false → dalej dzisiejsza ścieżka pola (jednostka z pola, panel budowy).
+   */
+  _sphereClick(colony, grid, tile, x, y) {
+    const K = window.KOSMOS, gum = K?.groundUnitManager, units = this._sphere?.units;
+    const bt = units?.pickBattle?.(x, y) ?? null;
+    const hit = bt == null ? (units?.pickUnit?.(x, y) ?? null) : null;
+    const unit = hit ? (gum?.getUnit?.(hit.id) ?? null) : null;
+    const g = tileGraphOf(grid);
+    const at = bt != null ? g.tile({ q: bt, r: -1 }) : (unit ? g.tile(unit) : tile);
+    // Finding 797 — okno tylko dla bitwy, która się toczy (system walki), nie dla samego wspólnego pola
+    if (at && K?.combatSystem?.isBattleAt?.(colony.planetId, at.q, at.r)) this._cBattle = { planetId: colony.planetId, q: at.q, r: at.r };
+    if (bt != null) { if (at) this._selectedHex = { q: at.q, r: at.r }; this._hoveredBuildId = null; return true; }
+    if (!unit || !at || !isGroundUnitVisibleToPlayer(K, unit)) return false;
+    const mods = this._lastMouseMods ?? { shift: false, ctrl: false };
+    const multi = !!(mods.ctrl || mods.shift);
+    if (multi && unit.owner && unit.owner !== 'player') return true;   // jak `_toggleInSelection`: wroga nie dokłada się do zaznaczenia
+    const army = multi ? null : K?.armySystem?.getArmyForUnit?.(unit.id);
+    const res = unitClickSelection({ ids: [...this._selectedUnits], primaryId: this._selectedUnit?.id ?? null, clickedId: unit.id, mods,
+      armyIds: army?.members ? [...army.members].filter(id => !!gum?.getUnit?.(id)) : null });
+    this._selectedUnits.clear();
+    for (const id of res.ids) this._selectedUnits.add(id);
+    this._selectedUnit = res.primaryId ? (gum?.getUnit?.(res.primaryId) ?? null) : null;
+    this._selectedHex = res.ids.length ? { q: at.q, r: at.r } : null;
+    this._hoveredBuildId = null;
+    return true;
+  }
+
   // ── Multi-select helpers ──────────────────────────────────────────────
   /**
    * Zaznacz pojedynczą jednostkę (nadpisz cały select).
@@ -1309,7 +1342,7 @@ export class ColonyOverlay extends BaseOverlay {
     colMgr.switchActiveColony(planetId);
     this._selectedColonyId = planetId;
     this._selectedHex = null; this._hoveredHex = null;
-    this._selectedUnit = null; this._selectedUnits.clear();
+    this._selectedUnit = null; this._selectedUnits.clear(); this._cBattle = null;   // CS-10b — okno bitwy nie przechodzi na inną kolonię
     this._buildBarScroll = 0;
     this._previewMode = false; this._previewColony = null;   // CS-8 — lista konsoli wyprowadza z podglądu ciała
     this._cBuildMode = false; this._cPick = null; this._cStation = false; this._cPaletteCache = null;
@@ -2576,6 +2609,8 @@ export class ColonyOverlay extends BaseOverlay {
       grid, units: gum && colony ? visibleGroundUnits(window.KOSMOS, gum.getUnitsOnPlanet(colony.planetId)) : [],
       archetypes: this._deployArchetypes ?? null, selectedId: this._selectedUnit?.id ?? null, selectedIds: this._selectedUnits,
       paused: !!window.KOSMOS?.timeSystem?.isPaused,
+      // CS-10b (Finding 797) — znacznik bitwy wg stanu systemu walki (wojna + walczące jednostki), nie samego wspólnego pola
+      battleAt: colony ? (i) => !!window.KOSMOS?.combatSystem?.isBattleAt?.(colony.planetId, i, -1) : null,
     }, rect);
     sv.draw(ctx, rect);
     sv.drawUnits(ctx, rect);
@@ -2618,6 +2653,9 @@ export class ColonyOverlay extends BaseOverlay {
     // Zaznaczenie jednostek: szuflada grupy (armie, łączenie, dzielenie) w idiomie konsol, obok strefy inspektora u dołu
     //   bohatera (CS-8c). Jedną jednostkę obsługuje inspektor; szuflada pojawia się dopiero dla grupy.
     if (this._selectedUnits.size > 1 && colony) drawGroupDrawer(this, ctx, z, roles);
+    // CS-10b — okno bitwy naziemnej (pole sporne otwarte z kuli) u góry bohatera, obok strefy inspektora; koniec bitwy zamyka je.
+    if (this._cBattle && colony && this._cBattle.planetId === colony.planetId) drawBattleWindow(this, ctx, z, roles);
+    else if (this._cBattle && colony) this._cBattle = null;
     // Okna modalne (rekrutacja, picker stacji) rysują własną podpowiedź nad sobą — konsola pod nimi swojej nie pokazuje.
     const recruitOn = !!(this._draftOpen && !this._stationMode && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy);
     const pickerOn = !!((this._stationPickerOpen || this._stationShipPickerOpen) && !this._stationMode && !recruitOn && colony && !colony.isPreview
@@ -5236,6 +5274,9 @@ export class ColonyOverlay extends BaseOverlay {
 
       if (tile) {
         if (isSphereGrid(grid)) this._sphere?.clickTile(tile);   // CS-7 — dwuklik w pole obraca kulę do niego
+        // CS-10b — kula: znacznik bitwy / pole sporne otwiera okno bitwy; klik w narysowany model / znacznik jednostki zaznacza JĄ
+        //   (model stoi nad polem i, pochylony ku kamerze, sięga pola wyżej) — Ctrl / Shift dokłada / zdejmuje jak mapa płaska.
+        if (isSphereGrid(grid) && colony && this._sphereClick(colony, grid, tile, x, y)) return true;
         // Finding 379 — klik zaznacza wyłącznie jednostkę, którą gracz widzi; filtry jak `getUnitAt` (nie `moving`,
         //   nie `in_cargo`). Niewidoczna albo ukryta cudza jednostka — klik jak w pusty heks.
         const unitOnTile = visibleGroundUnitAt(window.KOSMOS, colony?.planetId, tile.q, tile.r);
@@ -5643,6 +5684,18 @@ export class ColonyOverlay extends BaseOverlay {
         // Toggle jednostki w selektcie
         const u = window.KOSMOS?.groundUnitManager?.getUnit?.(zone.data?.unitId);
         if (u) this._toggleInSelection(u);
+        break;
+      }
+      // CS-10b — okno bitwy na kuli: zamknij / zaznacz własne jednostki pola sporne (jak „zaznacz stos”)
+      case 'cBattleClose': { this._cBattle = null; break; }
+      case 'cBattleSelectOwn': {
+        const mgr = window.KOSMOS?.groundUnitManager;
+        const own = (mgr?.getUnitsAtHex?.(zone.data.planetId, zone.data.q, zone.data.r) ?? []).filter(u => (!u.owner || u.owner === 'player') && (u.hp ?? 1) > 0);
+        if (!own.length) break;
+        this._selectedUnits.clear();
+        for (const u of own) this._selectedUnits.add(u.id);
+        this._selectedUnit = own[0];
+        this._selectedHex = { q: zone.data.q, r: zone.data.r };
         break;
       }
       case 'stackSelectAll': {

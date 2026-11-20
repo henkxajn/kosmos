@@ -572,14 +572,14 @@ export function drawStationPickerWindow(ov, ctx, zones, roles) {
   ov._addHit(win.x, win.y, win.w, win.h, ship ? 'station_mgmt_shippicker_bg' : 'station_mgmt_picker_bg', {});
 }
 
-function archName(archId) {
+export function archName(archId) {   // CS-10b — także okno bitwy (ColonyBattleWindow)
   const own = HUMANITY_UNITS[archId]?.name;
   if (own) return own;
   const k = `unit.${archId}.name`, v = t(k);
   return v !== k ? v : t('groundPanel.unnamedArchetype');
 }
 /** Miniatura modelu archetypu z cache panelu rekrutacji (gotowa — obraz; inaczej null i odświeżenie, gdy się wczytuje). */
-function unitArt(ov, archId) {
+export function unitArt(ov, archId) {   // CS-10b — także okno bitwy
   const img = ov._draftPanel?._ensureSprite?.(archId) ?? null;
   const st = img?._kosmosAsset;
   if ((st === 'glb' || st === 'png') && img.complete !== false) return img;

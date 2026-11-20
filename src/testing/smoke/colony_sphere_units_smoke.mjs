@@ -340,9 +340,12 @@ if (!UV.ColonySphereUnits || !RMOD?.ColonySphereRenderer?.prototype?.setUnits) m
   sync(marching, { paused: true });
   assert(near(dMove, 1000 / UL.UNIT_VIEW.moveFps, 1e-9) && uv.nextFrameDelayMs() === Infinity, 'U9f a marching unit paces frames at the march rate; paused game → none');
   const fight = [...army, foe(A)];
-  sync(fight);
+  sync(fight);   // Finding 797 (CS-10b): wspólne pole bez bitwy w systemie walki (pokój / brak predykatu) — bez znacznika
   c = countCtx(); uv.draw(c, rect);
-  assert(uv.info().battles === 1 && near(uv.nextFrameDelayMs(), 1000 / UL.UNIT_VIEW.effectFps, 1e-9) && c.texts.includes('3') && c.texts.includes('1'), 'U9g contested tile: battle marker, both side counts, effect frame rate');
+  const peaceBattles = uv.info().battles;
+  sync(fight, { battleAt: () => true });
+  c = countCtx(); uv.draw(c, rect);
+  assert(peaceBattles === 0 && uv.info().battles === 1 && near(uv.nextFrameDelayMs(), 1000 / UL.UNIT_VIEW.effectFps, 1e-9) && c.texts.includes('3') && c.texts.includes('1'), 'U9g contested tile: battle marker (only when the combat system fights there, Finding 797), both side counts, effect frame rate');
   const lander = foe(nb[5]);
   uv.noteLanding([lander.id]);
   sync([lander]);

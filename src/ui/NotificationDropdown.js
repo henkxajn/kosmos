@@ -27,6 +27,7 @@ const GROUP_ICONS = {
   withdrawalWarning: '⚑',  // G2-4 (D14, R5) — miesiąc do terminu wycofania wojsk po pokoju
   withdrawalExpired: '⚑',  // G2-4 F5 — termin minął, wojska na ciele utracone
   armedContact:     '⚠',   // AI STRIKES BACK S3/2 (SB59) — uzbrojony wrogi okręt w układzie z kolonią gracza
+  groundBattle:     '⚔',   // CS-10b (D-CS-31) — bitwa naziemna na kolonii z kulą (klik → konsola z oknem bitwy)
 };
 
 function _groupTitle(type) {
@@ -40,6 +41,7 @@ function _groupTitle(type) {
     case 'withdrawalWarning': return t('notif.group.withdrawalWarning');
     case 'withdrawalExpired': return t('notif.group.withdrawalExpired');
     case 'armedContact':      return t('notif.group.armedContact');
+    case 'groundBattle':      return t('notif.group.groundBattle');
     default:               return type;
   }
 }

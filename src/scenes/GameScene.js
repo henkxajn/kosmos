@@ -196,6 +196,7 @@ import { SurfaceCache } from '../systems/SurfaceCache.js'; // ARC COLONY SPHERE 
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
 const INTRO_SETTLE_MS = 2500;
 import { SystemScale } from '../utils/SystemScale.js';   // CS-PHYS-b2 (D-CS-24) — K.systemScale
+import { ColonyBattleFeed, handleBattleStart, openBattleCard } from '../ui/ColonyBattleFeed.js';   // CS-10b (D-CS-31) — karta bitwy na żywo
 
 // ARC GALAXY G3-B — n-ta najbliższa gwiazda od aktywnego układu (przyrządy bramki; 1 = najbliższa).
 function galaxyNearestStar(K, n) {
@@ -2499,6 +2500,8 @@ export class GameScene {
     for (const k of ['csCity', 'csCityRepair', 'csTint', 'csDots', 'csBuildings', 'csNight', 'csDay']) window[k] = window.KOSMOS.debug?.[k];
     // CS-10 — jednostki na kuli kolonii: modele GLB / znaczniki, marsz, lądowanie, bitwa (ColonyUnitsDebug.js).
     for (const k of ['csUnits', 'csUnitMove', 'csUnitLanding', 'csUnitBattle', 'csUnitLod', 'csUnitInfo', 'csUnitsClear']) window[k] = window.KOSMOS.debug?.[k];
+    // CS-10b — pochylenie modeli, zaznaczenie Ctrl, trasa ruchu, okno bitwy (ColonyUnitsPolishDebug.js).
+    for (const k of ['csUnitLean', 'csUnitSelect3', 'csUnitPath', 'csBattleWindow', 'csGroundBattle', 'csBattleRound']) window[k] = window.KOSMOS.debug?.[k];
     // CS-2 (Finding 779) — scenariusze bramki geometrii siatki (Cs2GeometryDebug.js): odczyt pasa, szew, desant, eskadra, zdarzenie.
     for (const k of ['cs2Latitude', 'cs2Seam', 'cs2Invasion', 'cs2Strike', 'cs2EquatorEvent']) window[k] = window.KOSMOS.debug?.[k];
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
@@ -6458,6 +6461,21 @@ export class GameScene {
         });
       }).catch(() => { /* ignore */ });
     });
+
+    // CS-10b (D-CS-31) — karta bitwy naziemnej na żywo: rekord przebiegu z tych samych zdarzeń walki (bez zmiany reguł).
+    //   Start bitwy → okno w otwartej konsoli tej kolonii albo meldunek w dzwonku (klik → konsola kolonii z oknem bitwy).
+    //   Jeden słuchacz na scenę: restart sceny odpina poprzedni rekord.
+    window.KOSMOS.colonyBattleFeed?.detach?.();
+    window.KOSMOS.colonyBattleFeed = new ColonyBattleFeed({
+      onStart: (rec) => handleBattleStart(window.KOSMOS, rec, { t, nameOf: (id) => EntityManager.get(id)?.name ?? null }),
+      onChange: () => { if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; },
+    }).attach(EventBus);
+    if (!this._battleCardDetailHooked) {
+      this._battleCardDetailHooked = true;
+      EventBus.on('notify:openDetail', ({ notif } = {}) => {
+        if (notif?.source === 'groundBattle' && notif.payload) openBattleCard(window.KOSMOS, notif.payload);
+      });
+    }
 
     // ARKUSZ UI U1-3 (D-UI-5, decyzja 2b): dwuklik NIE otwiera już ColonyOverlay i NIE fokusuje statku — „drugi klik”
     // w ten sam obiekt (część każdego dwukliku) daje focus kamery, a mapę kolonii otwiera „Mapa ciała” w przypięciu etykiety

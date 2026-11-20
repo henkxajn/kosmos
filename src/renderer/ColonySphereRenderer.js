@@ -22,6 +22,7 @@ import { CityLightsShader as CL } from './CityLightsShader.js';
 import { CITY_LIGHTS } from './CityLightsLogic.js';
 import { ColonyUnitModels, UNIT_MODEL_STATE } from './ColonyUnitModels.js';
 import { unitLayerSignature } from './ColonyUnitLogic.js';
+import { UNIT_POLISH, screenUpOf } from './ColonyUnitPolishLogic.js';   // CS-10b — pochylenie modeli ku kamerze
 import { resolveSurfaceLook, surfaceSeaLevelOf } from '../utils/SurfacePaletteLogic.js';
 import { resolveAirLook, isStarLocked, substellarDirOf, weatherRate } from '../utils/SurfaceAirLogic.js';
 import { geodesicTopology } from '../map/GeodesicTopology.js';
@@ -340,6 +341,15 @@ export class ColonySphereRenderer {
     this._unitGroups = g;
   }
 
+  /**
+   * CS-10b — widok dla pochylenia modeli: oko (kierunek kamery) i „góra” ekranu w układzie kuli + stała pochylenia
+   * (`unitLean`, domyślnie `UNIT_POLISH.lean`; 0 = modele prosto na normalnej). HUD jednostek liczy z tego głowy modeli.
+   */
+  unitView() {
+    const v = this._view, eye = [Math.cos(v.lat) * Math.cos(v.lon), Math.sin(v.lat), Math.cos(v.lat) * Math.sin(v.lon)];
+    return { eye, up: screenUpOf(eye), lean: this.unitLean ?? UNIT_POLISH.lean };
+  }
+
   /** Złóż ostatnio wyrenderowaną warstwę modeli w `rect` (po portretach budynków). Zwraca true, gdy coś narysowano. */
   drawUnits(ctx, rect) {
     if (!this._unitDrawn || !this._unitCanvas || this.fallback().fallback) return false;
@@ -353,7 +363,7 @@ export class ColonySphereRenderer {
     if (this._unitFailed || !this._unitGroups || !this._unitLayer) { this._unitLayer?.setInstances?.(null, 1); return; }
     try {
       const t0 = this._now();
-      const n = this._unitLayer.setInstances(this._unitGroups, Math.sqrt(4 * Math.PI / this._topo.count));
+      const n = this._unitLayer.setInstances(this._unitGroups, Math.sqrt(4 * Math.PI / this._topo.count), this.unitView());
       if (n <= 0 || !this._unitLayer.render(this._gl, camera, sun, eye)) return;
       if (!this._unitCanvas || this._unitCanvas.width !== this._devW || this._unitCanvas.height !== this._devH) {
         this._unitCanvas = this._createCanvas(this._devW, this._devH);

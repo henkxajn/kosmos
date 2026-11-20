@@ -15,6 +15,7 @@ import {
   UNIT_VIEW, UNIT_LOD, UNIT_LOD_BIAS, UNIT_COLORS, unitLodOf, unitPlacements, groupUnitInstances, unitMarkerList, unitBarsOf, unitFrameDelayMs,
 } from '../renderer/ColonyUnitLogic.js';
 import { THEME } from '../config/ThemeConfig.js';
+import { UNIT_POLISH, leanUp, movePathTiles, pathPolyline, arrowHead, pathAlpha, pickUnitBox } from '../renderer/ColonyUnitPolishLogic.js';   // CS-10b
 
 const READY = 'ready';
 const clockNow = () => ((typeof performance !== 'undefined') ? performance.now() : Date.now());
@@ -28,6 +29,38 @@ export class ColonySphereUnits {
     this._landings = new Map();      // id jednostki → czas lądowania [ms]
     this._frame = null;              // ostatni stan klatki (sync)
     this._stats = { ms: [], models: 0, markers: 0, frames: 0, lod: null };
+    this._paths = new Map();         // CS-10b — id jednostki → { tiles, startT, arrivedAt } (trasa rozkazu ruchu, gaśnie po dojściu)
+    this._boxes = [];                // CS-10b — prostokąty trafienia narysowanych jednostek (klik w model / znacznik)
+    this._battleBoxes = [];          // CS-10b — znaczniki bitwy (klik → okno bitwy)
+    this._pathStats = { drawn: 0, fading: 0 };
+  }
+
+  /** CS-10b — pole sporne, którego znacznik bitwy jest pod kursorem, albo null. */
+  pickBattle(x, y) {
+    const b = pickUnitBox(this._battleBoxes, x, y);
+    return b ? b.tile : null;
+  }
+
+  /** CS-10b — jednostka pod kursorem (prostokąt narysowanego modelu / znacznika z ostatniej klatki) albo null. */
+  pickUnit(x, y) {
+    const b = pickUnitBox(this._boxes, x, y);
+    return b ? { id: b.id, ids: b.ids ?? [b.id] } : null;
+  }
+
+  // CS-10b — trasy rozkazów ruchu własnych jednostek: zapamiętaj w marszu, po dojściu zostaw do wygaszenia.
+  _syncPaths(items, now) {
+    const seen = new Set();
+    for (const it of items) {
+      const u = it.unit;
+      if (it.enemy || !u) continue;
+      seen.add(u.id);
+      const tiles = movePathTiles(u);
+      if (tiles.length) this._paths.set(u.id, { tiles, startT: Math.max(0, Math.min(1, u._animT ?? 0)), arrivedAt: null });
+      else { const e = this._paths.get(u.id); if (e && e.arrivedAt == null) e.arrivedAt = now; }
+    }
+    for (const [id, e] of this._paths) {
+      if (!seen.has(id) || (e.arrivedAt != null && pathAlpha({ moving: false, arrivedAt: e.arrivedAt, now }) <= 0)) this._paths.delete(id);
+    }
   }
 
   /** Przełącz podgląd LOD: auto → zawsze modele → zawsze znaczniki → auto. Zwraca nowy tryb. */
@@ -58,7 +91,10 @@ export class ColonySphereUnits {
     if (!topo || !rect) { this._frame = null; r?.setUnits?.(null); return; }
     const now = this._now();
     for (const [id, t0] of this._landings) if (now - t0 >= UNIT_VIEW.landingMs) this._landings.delete(id);
-    const placement = unitPlacements({ units: s.units ?? [], topo, tiles: s.grid?.tiles ?? null, archetypes: s.archetypes ?? null, landings: this._landings, now });
+    // Finding 797 — znacznik bitwy tylko tam, gdzie system walki toczy bitwę; bez predykatu w stanie — żadnego znacznika.
+    const battleAt = typeof s.battleAt === 'function' ? s.battleAt : () => false;
+    const placement = unitPlacements({ units: s.units ?? [], topo, tiles: s.grid?.tiles ?? null, archetypes: s.archetypes ?? null, landings: this._landings, now, battleAt });
+    this._syncPaths(placement.items, now);
     const tilePx = r.tileScreenSize(rect);
     const lod = unitLodOf(tilePx, { bias: this.lodBias, gl: r.unitModelsAvailable?.() ?? false });
     const modelIds = new Set();
@@ -77,8 +113,9 @@ export class ColonySphereUnits {
   nextFrameDelayMs() {
     const f = this._frame;
     if (!f) return Infinity;
-    if (f.paused && f.placement.moving > 0) return unitFrameDelayMs({ ...f.placement, moving: 0 });
-    return unitFrameDelayMs(f.placement);
+    let d = (f.paused && f.placement.moving > 0) ? unitFrameDelayMs({ ...f.placement, moving: 0 }) : unitFrameDelayMs(f.placement);
+    for (const e of this._paths.values()) if (e.arrivedAt != null) { d = Math.min(d, 1000 / UNIT_VIEW.effectFps); break; }   // CS-10b — trasa gaśnie
+    return d;
   }
 
   /** Rysunek jednostek nad kulą i portretami budynków. */
@@ -89,7 +126,8 @@ export class ColonySphereUnits {
     const C = UNIT_COLORS, T = UNIT_VIEW;
     const proj = (dir, radius = 1) => r.projectDirection(dir[0], dir[1], dir[2], rect, radius);
     const spacing = Math.sqrt(4 * Math.PI / r.topo.count);
-    const models = [];
+    const view = r.unitView?.() ?? null;   // CS-10b — pochylenie modeli: głowa / prostokąt trafienia liczone z tej samej osi co warstwa GL
+    const models = [], boxes = [], battles = [];
     ctx.save();
 
     // 1. Podstawy (cień w barwie strony) — pod warstwą modeli.
@@ -116,13 +154,19 @@ export class ColonySphereUnits {
       ctx.beginPath(); ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
     }
 
+    // 1b. CS-10b — trasy rozkazów ruchu na powierzchni (pod modelami).
+    this._drawPaths(ctx, rect, f);
+
     // 2. Warstwa modeli GLB (obraz z renderera kuli).
     r.drawUnits?.(ctx, rect);
 
     // 3. HUD modeli: zaznaczenie, paski, postęp skanu.
     for (const m of models) {
       const { it, p, size } = m, u = it.unit;
-      const head = proj(it.dir, 1 + (it.height || 0) + it.share * spacing * 0.95);
+      const hb = 1 + (it.height || 0), hl = it.share * spacing * 0.95;
+      const up = view && view.lean > 0 ? leanUp(it.dir, view.eye, view.up, view.lean) : it.dir;
+      const head = r.projectDirection(it.dir[0] * hb + up[0] * hl, it.dir[1] * hb + up[1] * hl, it.dir[2] * hb + up[2] * hl, rect, 1);
+      boxes.push({ id: it.id, ids: [it.id], x0: Math.min(p.x, head.x) - size * 0.36, x1: Math.max(p.x, head.x) + size * 0.36, y0: Math.min(p.y, head.y) - size * 0.08, y1: Math.max(p.y, head.y) + size * 0.3, facing: p.facing });
       const sel = f.selectedId === it.id, multi = !!f.selectedIds?.has?.(it.id);
       if (sel || multi) {
         const rx = size * 0.74, ry = rx * Math.max(0.25, p.facing);
@@ -143,6 +187,7 @@ export class ColonySphereUnits {
       const x = p.x + mk.side * ms * 0.62, y = p.y;
       const sel = mk.ids.some(id => id === f.selectedId || f.selectedIds?.has?.(id));
       this._drawMarker(ctx, x, y, ms, mk.enemy, mk.count, sel);
+      boxes.push({ id: mk.ids[0], ids: mk.ids, x0: x - ms * 0.6, x1: x + ms * 0.6, y0: y - ms * 0.6, y1: y + ms * 0.6, facing: p.facing - 1e-3 });
       const first = f.placement.items.find(it => it.id === mk.ids[0]);
       if (first && mk.count === 1) this._drawBars(ctx, first.unit, x, y - ms * 0.72 - 4, ms * 1.3);
       if (first?.landing > 0) this._drawLanding(ctx, { x, y }, { x, y: y - ms }, ms, first.landing, f.now);
@@ -153,17 +198,64 @@ export class ColonySphereUnits {
     for (const st of f.placement.stacks) {
       const p = proj(st.dir);
       if (!p.visible || p.facing < T.minFacing) continue;
-      if (st.contested) this._drawBattle(ctx, p.x, p.y - Math.max(ms, f.tilePx * 0.42), Math.max(12, Math.min(26, f.tilePx * 0.24)), f.now);
+      if (st.battle) {
+        const by = p.y - Math.max(ms, f.tilePx * 0.42), bs = Math.max(12, Math.min(26, f.tilePx * 0.24));
+        this._drawBattle(ctx, p.x, by, bs, f.now);
+        battles.push({ id: 'battle:' + st.tile, tile: st.tile, x0: p.x - bs, x1: p.x + bs, y0: by - bs, y1: by + bs, facing: p.facing });
+      }
       if (f.lod !== UNIT_LOD.MODEL) continue;
       const by = p.y + f.tilePx * 0.3, dx = st.contested ? f.tilePx * 0.26 : 0;
       if (st.own > 1 || (st.contested && st.own > 0)) this._drawBadge(ctx, p.x - dx, by, String(st.own), C.own);
       if (st.enemy > 1 || (st.contested && st.enemy > 0)) this._drawBadge(ctx, p.x + dx, by, String(st.enemy), C.enemy);
     }
     ctx.restore();
+    this._boxes = boxes; this._battleBoxes = battles;
 
     const st = this._stats;
     st.ms.push(clockNow() - t0); if (st.ms.length > 240) st.ms.shift();
     st.models = models.length; st.markers = markers; st.frames++; st.lod = f.lod;
+  }
+
+  // CS-10b — trasa: łuki wielkiego koła przez pola A* (wierzchołki = środki pól), grot na końcu, znacznik celu; gaśnie po dojściu.
+  _drawPaths(ctx, rect, f) {
+    const r = this.renderer, T = UNIT_POLISH, C = UNIT_COLORS;
+    let drawn = 0, fading = 0;
+    for (const [id, e] of this._paths) {
+      const moving = e.arrivedAt == null;
+      const a = pathAlpha({ moving, arrivedAt: e.arrivedAt, now: f.now });
+      if (a <= 0) continue;
+      if (!moving) fading++;
+      const sel = f.selectedId === id || !!f.selectedIds?.has?.(id);
+      const { points } = pathPolyline(r.topo, e.tiles, { startT: e.startT });
+      const pts = points.map(d => r.projectDirection(d[0], d[1], d[2], rect, 1 + T.pathLift));
+      ctx.save();
+      ctx.globalAlpha = a * (sel ? 1 : 0.7);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (const [w, col] of [[sel ? 5 : 4, 'rgba(4,8,16,0.55)'], [sel ? 2.5 : 1.6, sel ? C.ownEdge : C.own]]) {
+        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+        let on = false;
+        for (const q of pts) {
+          if (!q.visible || q.facing < 0.02) { on = false; continue; }
+          if (on) ctx.lineTo(q.x, q.y); else { ctx.moveTo(q.x, q.y); on = true; }
+        }
+        ctx.stroke();
+      }
+      const last = pts[pts.length - 1];
+      if (last?.visible && last.facing >= 0.02) {
+        const ah = arrowHead(pts.filter(q => q.visible), Math.max(7, Math.min(14, f.tilePx * 0.16)));
+        if (ah) {
+          ctx.fillStyle = sel ? C.ownEdge : C.own;
+          ctx.beginPath(); ctx.moveTo(ah.tip.x, ah.tip.y); ctx.lineTo(ah.left.x, ah.left.y); ctx.lineTo(ah.right.x, ah.right.y); ctx.closePath(); ctx.fill();
+        }
+        const rx = Math.max(6, f.tilePx * 0.28), ry = rx * Math.max(0.25, last.facing);
+        ctx.strokeStyle = sel ? C.ownEdge : C.own; ctx.lineWidth = 1.5; ctx.setLineDash?.([4, 3]);
+        ctx.beginPath(); ctx.ellipse(last.x, last.y, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash?.([]);
+      }
+      ctx.restore();
+      drawn++;
+    }
+    this._pathStats = { drawn, fading };
   }
 
   _drawBar(ctx, cx, y, w, h, pct, color) {
@@ -250,8 +342,9 @@ export class ColonySphereUnits {
     const f = this._frame, ms = this._stats.ms.slice().sort((a, b) => a - b);
     return {
       lod: f?.lod ?? null, lodBias: this.lodBias, tilePx: f?.tilePx ?? 0, units: f?.placement.items.length ?? 0, models: f?.modelIds.size ?? 0,
-      markers: f?.markers.length ?? 0, stacks: f?.placement.stacks.length ?? 0, battles: f?.placement.stacks.filter(s => s.contested).length ?? 0,
+      markers: f?.markers.length ?? 0, stacks: f?.placement.stacks.length ?? 0, battles: f?.placement.stacks.filter(s => s.battle).length ?? 0,
       moving: f?.placement.moving ?? 0, landing: f?.placement.landing ?? 0, hudMsMedian: ms.length ? ms[ms.length >> 1] : null, frames: this._stats.frames,
+      paths: { ...this._pathStats }, hitBoxes: this._boxes.length, lean: this.renderer?.unitView?.().lean ?? null,   // CS-10b
     };
   }
 }

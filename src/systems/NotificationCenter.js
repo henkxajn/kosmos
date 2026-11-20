@@ -203,6 +203,8 @@ export class NotificationCenter {
     EventBus.emit('notify:listChanged', { count: this.getActiveCount() });
 
     // Równolegle do EventLog (searchable history) — EventLogSystem.push() emituje 'eventLog:push'
+    // CS-10b — `noLog`: meldunek, którego zdarzenie ma już własny wpis w Dzienniku (bitwa naziemna: `combat:round` 1).
+    if (notif.noLog) return notif.id;
     const logChannel = notif.logChannel ?? 'intel';
     const logSeverity = (notif.severity === 'danger' || notif.severity === 'alert') ? 'alert'
                       : (notif.severity === 'warning' || notif.severity === 'warn') ? 'warn'
