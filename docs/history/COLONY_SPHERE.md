@@ -2,6 +2,25 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
+## CS-10b — unit polish: lean, live battle card, multi-select, move path (2026-11-20; owner gate PASS, committed `d31bc9c`)
+
+- Gate PASS 2026-11-20: D-CS-31 signed as proposed with item 3 amended — the ground battle window opens by itself when a battle starts on
+  the colony in the console and shows it live (round, HP bars per round, losses, log of the last events, outcome kept until closed); with the
+  console closed a bell entry opens the colony console with the window. Built on the existing combat events (`ColonyBattleFeed`), no combat
+  rule change, no save change.
+- Finding 797 fixed (battle marker and window only where the combat system fights: `CombatSystem.isBattleAt`); Finding 798 fixed
+  (`getBattleStateAt` round was always 0, key mismatch). Finding 796 handed to the offline-boot step.
+- Proof: keeper `colony_battle_card_smoke` 27 PASS (fail-first 0/13), mutations 22/22; real-game probe `probe-cs10b-battle` 10/10
+  (`cs10b-battle.png`), `probe-cs10b-units` 14/14; flag-OFF trace bit-identical on two seeds; sweep 450 / 450, i18n PASS.
+
+First run (built before the gate):
+
+- Models lean towards the camera (one constant, `leanUp`); Ctrl / Shift multi-select fixed on the sphere (clicks now hit the drawn
+  model, not the tile under it); read-only ground battle window from the battle marker / contested tile; move-order path on the
+  surface with arrow head and destination ring, fading on arrival.
+- Finding 797 opened (battle marker shown without a war). Proof: keeper 49 PASS (fail-first 1/43), mutations 25/25, real-game probe,
+  `cs10b-units.png`.
+
 ## CS-10 — ground units on the sphere: GLB models near, markers far (2026-11-20; owner gate PASS, all 12 steps)
 
 - Gate PASS 2026-11-20: D-CS-30 signed as proposed with items 3 (superseded by CS-10b: models lean towards the camera), 6 and 7

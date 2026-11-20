@@ -53,6 +53,7 @@ for the record.
 | **D-CS-28 (signed 2026-11-20)** | CS-8 decisions signed as proposed (§3.16), **item 1 amended at the owner gate**: the Colonies console is shown for **every geo colony regardless of `FEATURES.colonySphere`**; the flag only decides whether new colonies get a geo grid (§3.16.1). Items 2 and 9 were interim until CS-8c — **done in CS-8c (2026-11-20, owner check PASS, §3.17)**: the Crew / Population / Station pages, recruitment, station pickers and the unit group drawer are on the console kit. Items 3–8 and 10 as written in §3.16 (no combat-strip slot in the header; unaffordable rows queue the order; Shift keeps the building armed; yield labels for all tiles at tile ≥ 34 px; founding an outpost neither switches the active colony nor opens the screen with the flag ON — Finding 740; body preview read-only in the console; tuning values). |
 | **D-CS-29 (signed 2026-11-20)** | CS-9 decisions signed as proposed at the owner gate (PASS, all 10 steps; §3.18): (1) building portraits are **Canvas 2D billboards from an atlas**; (2) the dot LOD is kept but not reachable at today's zoom range; (3) default tint = subtle outline + base ring (full tile tint stays the A/B variant); (4) no-PNG fallback = the console's vector category glyph; (5) capital × 1.35; (6) level pips (none at level 1, 2–5 pips, white for levels 6–10); (7) damaged = `tile.damaged` on a built tile (Finding 793 open); (8) lights come on at dusk; (9) lights fade to zero at the tile border; (10) smaller system-map portrait icons (0.17 r); (11) no lights in the 2D fallback. **Owner notes for later (after his trip, not now):** buildings may be a bit too big (one tuning value); the owner will decide portraits vs Meshy 3D building models after testing 2–3 models side by side; system-map icon clutter and hero light strength to re-check then. |
 | **D-CS-30 (signed 2026-11-20)** | CS-10 decisions signed at the owner gate (PASS, all 12 steps; §3.19) **as proposed, with items 3, 6 and 7 amended**: (1) units are a separate transparent GL pass above the building portraits, on a built tile in front (south) of the portrait; (2) LOD threshold 96 px per tile; (3) ~~models strictly on the tile normal~~ — **superseded by CS-10b: the owner wants the models leaning towards the camera**; (4) at most 3 models per side on a tile, the rest in the count badge; (5) enemy = red tint + red base ring, offline / starving = dimmed, HUD colours = the 2D map's fixed colours, no emoji status icons; (6) **amended:** the reflection environment (`RoomEnvironment`) is a local copy in `src/lib/addons/` (three r171, byte-identical to the CDN file it replaces) — the sphere unit renderer loads nothing from a CDN, so the Steam build runs offline; same lighting; (7) **amended:** `meshoptimizer` is a devDependency and the GLB tool uses it by default (`--meshopt <dir>` only overrides); supply models 59.9 k triangles; `.gitignore` line for `_originals/`; (8) landing effect = wall-clock visual, not replayed later; (9) marching unit travels centre → centre; (10) no low-poly LOD files now (Finding 795: before release). **Owner notes for later (after the owner's trip, not now):** the unit models themselves are only OK (art question); Finding 794 stays open — candidate rule = landing distance from buildings / units instead of held tiles, decided together with the other landing questions. |
+| **D-CS-31 (signed 2026-11-20)** | CS-10b decisions signed at the owner gate (PASS 2026-11-20; §3.20) **as proposed, with item 3 amended**: (1) models lean towards the camera, up' = norm(n + k·(n·e)·(u − e)), one constant k = 0.55 (≈ 51° at the disc centre, none at the limb); (2) on the sphere a click on a drawn model / marker wins over the tile under the cursor (Ctrl / Shift as on the flat map); flat maps unchanged; (3) **amended (owner: "still no battle card, we don't see how the battle goes") — live battle card:** the ground battle window opens by itself when a ground battle starts on the colony shown in the console (once per battle; the player can close it) and shows the battle live — round counter, both sides with HP bars updated every round, units destroyed / retreated, a short log of the last events — and at the end the outcome, kept until closed; with the console closed or on another colony, a battle start puts a "Ground battle" entry in the bell that opens that colony's console with the window; (4) move paths for own units only, 1.2 s fade after arrival, no queue display (the game has no queued orders); (5) `csBattleWindow` declares war for the owner check; `csGroundBattle` / `csBattleRound` stage a real battle to watch. Finding 797 fixed (marker and window only for a battle the combat system fights); Finding 798 fixed (round readout); Finding 796 handed to the offline-boot step. |
 
 **Step order (signed): surface track first.**
 CS-3a → CS-3b → CS-4 → CS-6 → CS-1a → CS-1b → CS-2 → CS-5 → CS-7 → CS-8 → CS-9 → CS-10 → CS-11 → CS-12 → CS-Z.
@@ -805,6 +806,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-8c** ✅ | UI (visual) | Opus | Restyle the pages CS-8 embeds in today's look (D-CS-28 items 2 and 9, interim): Crew / Population / Station pages and the unit group drawer (armies: create / split / disband) to kit primitives inside the console | CS-8 |
 | **CS-9** ✅ (§3.18) | VIS | Opus (Fable optional) | **Owner direction 2026-11-20: the owner's building portraits are the art** (replaces procedural low-poly massing). Portrait billboards on the hero (atlas-batched), category dot far away, states (construction / upgrade / damaged / level pips), city lights per built tile on the night side, also on the system map; system-map icons for geo colonies (784) | CS-8 |
 | **CS-10** (✅ owner gate PASS, committed — §3.19) | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
+| **CS-10b** (✅ owner gate PASS, committed `d31bc9c` — §3.20) | VIS + UI | Opus | Owner feedback from the CS-10 gate: models lean towards the camera (one constant), live ground battle card (auto-open, D-CS-31 amended), Ctrl / Shift multi-select on the models, move-order path with arrow head. |
 | **CS-11** | MECH | Opus | Gas giants per D-CS-5 (archetype → `GasGiantShader` params **only if at least as good as today; default and fallback = today's look**; platform grid on the geo graph or look-only); optional AI archetype "expected buildable tiles" table (D-CS-12) | CS-5, CS-6 |
 | **CS-12** | MECH | Opus | Save end-state per D-CS-4 (clean break or migration), version bump, fixture re-capture + README metadata, fix the 4 fixture-reading smokes; **migrate the interim geo tile coordinate `(index, −1)` to real tile ids** (unit / army / Vessel `q,r`, key strings, event payloads — D-CS-26) | CS-8 |
 | **CS-Z** | MECH (removal) | Opus | Flags permanent; remove the 2D colony map and the old globe pipeline (`PlanetGlobeRenderer`, `PlanetGlobeTexture`, `PlanetTerrainTexture`, `BiomeMapGenerator`, `BuildingMapGenerator`, `SurfaceMarkers`, `ColonyBuildingMarkers`, the dead `_loadBiomeMap` #761, `PlanetScene`, RegionSystem); `FlatHexTileGraph` removed if D-CS-4 = break; asset decision D-CS-15; before/after frame comparison per CLAUDE.md | CS-9…CS-12 |
@@ -3803,6 +3805,105 @@ Flag OFF: `probe-cs1a-trace --years 60` seed A trace `0d9527fd…` / state `45da
 low-poly LOD files if weak GPUs matter; moons / planetoids not staged (same code); the 2D fallback (no WebGL) shows markers only
 — keeper-proven, not staged in the real game; `ColonySphereView.gridAdapter` is now unused by the host (kept, pinned) → remove
 at CS-Z.
+
+### 3.20 CS-10b — unit polish on the sphere: lean, battle window, multi-select, move path (2026-11-20; unattended runs; owner gate PASS 2026-11-20, battle card amended — §3.20.1)
+
+Contact sheet: `kosmos-handover/cs-10b/cs10b-contact.md`; proof `docs/design/prototypes/cs10b-units.png`. Owner feedback from the CS-10 gate.
+No critical file touched, no save format change, no gameplay rule change (the battle window only reads `CombatSystem.getBattleStateAt`).
+
+**As built.**
+- `src/renderer/ColonyUnitPolishLogic.js` (new, pure): `leanUp` — up' = norm(n + k·(n·e)·(u − e)) (n tile normal, e eye, u screen-up,
+  **one constant `UNIT_POLISH.lean` = 0.55**): at the disc centre the model tilts atan(k/(1−k)) ≈ 51° towards screen-up and reads from
+  the side; at the limb it stays on the normal; always above its tangent plane. `movePathTiles` / `pathPolyline` (great-circle arcs
+  between consecutive A* tile centres, vertices exactly on the centres, first arc trimmed at the unit) / `arrowHead` / `pathAlpha`
+  (opaque while moving, fades 1.2 s after arrival); `unitClickSelection` (the flat-map rule); `pickUnitBox`; `battleWindowModel`,
+  `battleWindowRect`.
+- Lean: `instanceMatrix(…, upAxis)` (base stays on the tile, heading kept; no axis = the CS-10 matrix bit for bit),
+  `ColonyUnitModels.setInstances(groups, spacing, view)`, `ColonySphereRenderer.unitView()` (`unitLean` override). The HUD bars and
+  hit boxes use the same leaned head.
+- Multi-select: **cause of the owner's report** — on the sphere a click selected the unit of the tile UNDER the cursor, but a model
+  is drawn above its tile (and in front of portraits, in a stack row), so clicking the model body hit the neighbouring tile and
+  Ctrl / Shift had nothing to toggle. Now `ColonySphereUnits` keeps a hit box per drawn model / marker (stack marker = all its ids,
+  first id clicked, as the flat map) and `ColonyOverlay._sphereClick` applies `unitClickSelection` with `_lastMouseMods`
+  (Ctrl / Shift add / remove, enemy never added, plain click = army / single / deselect). No model under the cursor → today's tile path.
+  Group actions = the existing CS-8c group drawer (> 1 selected).
+- Ground battle window (`src/ui/ColonyBattleWindow.js`, console kit): the flat game has **no** ground battle window (combat is
+  automatic: unit panel "⚔ W BITWIE", stack panel, the `I` battle-group list) and nothing opens automatically, so CS-10b adds a small
+  read-only window at the top of the hero next to the inspector zone: both sides with HP, round, terrain, "select our units",
+  retreat hint. Opened by clicking the crossed blades or a contested tile / a unit on it; closes with ✕, on colony switch or when the
+  battle ends. i18n `colonyBattle.*` EN + PL.
+- Move path: own units with an order (`unit._path`) get the path on the surface (dark outline + side colour, brighter when selected),
+  arrow head, dashed destination ring; fades after arrival. Enemy orders are not shown. **The game has no queued orders** (one A* path
+  per unit) — nothing to draw for queues.
+- Owner helpers (`src/debug/ColonyUnitsPolishDebug.js`): `csUnitLean`, `csUnitSelect3` (through the real click path),
+  `csUnitPath`, `csBattleWindow` (declares war when needed — R1: no war, no battle).
+
+**Proof.** Keeper `colony_sphere_units_polish_smoke` 49 PASS (fail-first on `348dbe1`: 1 PASS / 43 FAIL); mutations 25 / 25 red;
+CS-10 keeper 66 PASS unchanged. Real-game probe `probe-cs10b-units` (real CDP mouse events with Ctrl / Shift modifiers): lean
+toggle, 3-unit Ctrl selection + Shift removal, battle window from the marker, path drawn; 12 models = 8 draw calls, HUD 0.1 ms.
+
+**Decisions taken while the owner was away (D-CS-31 — signed 2026-11-20 with item 3 amended, §0b, §3.20.1).**
+1. Lean formula above, k = 0.55 (≈ 51° at the disc centre); `csUnitLean()` compares with upright.
+2. Picking by drawn hit boxes takes precedence over the tile under the cursor on the sphere; flat maps unchanged.
+3. Battle window = new read-only console window (no flat equivalent exists); not auto-opened (the flat game opens nothing either).
+4. Paths for own units only; drawn while moving (selected = brighter), 1.2 s fade; no queue display (no queues in the game).
+5. Debug helper `csBattleWindow` declares war on the helper's enemy empire if needed (owner-check staging only).
+
+**Findings.**
+- **Finding 797** ✅ closed in §3.20.1 — the CS-10 battle marker (crossed blades) appeared whenever own and foreign units share a tile, but
+  CombatSystem fights only between owners at war (R1, G2-4): in peace the marker shows a battle that does not happen (the window
+  correctly refuses to open). Fix candidate: feed `isHexContested` into the view's contested flag. Not changed (CS-10 rule, owner call).
+  Free finding number: 798.
+
+**Remaining (first run):** owner check; D-CS-31; Finding 797; the battle window has no history of rounds — all done in §3.20.1 (the history
+of rounds now comes from the combat events).
+
+#### 3.20.1 Owner gate 2026-11-20 — PASS with the battle card amendment; Findings 797 and 798 fixed (second unattended run)
+
+**Gate (2026-11-20): PASS on steps 1–4 and 6–8.** Step 5 owner note: "still no battle card, we don't see how the battle goes". D-CS-31
+signed as proposed with item 3 amended (§0b): the window opens by itself on battle start and shows the battle live. Fixed in this run,
+before the commit (`d31bc9c` feat(CS-10b)):
+
+- **Live battle card.** New `src/ui/ColonyBattleFeed.js` (pure, read-only, node-importable): listens to the combat events that already
+  exist — `groundUnit:attacked` (HP of the target), `groundUnit:destroyed` (cause `combat`), `groundUnit:disbanded` (`morale_collapse`),
+  `groundUnit:routed`, `combat:round`, `combat:hexResolved` — and keeps one record per battle tile: roster of both sides with HP, lost /
+  retreated units, round, log (per-round damage balance, losses, retreats, morale breaks, result; the card shows the last 5) and the outcome.
+  Events before `combat:round` belong to round `rec.round + 1` (one combat tick = hits → losses → routs → round). Records live in the session
+  only (no save change). `ColonyBattleWindow` draws from the record (live HP from `getBattleStateAt` while the battle runs): round + "live",
+  both sides with HP bars, lost units dimmed with their state and not clickable, the log, and after the end the outcome in the footer — the
+  window no longer closes itself when the battle ends (✕ closes it; a window opened on a tile with no battle and no record still closes).
+- **Opening.** `handleBattleStart` (GameScene glue on the feed's first round, once per record): the console shows that colony → the window
+  opens by itself, unless it already shows another live battle (that one stays; the new one has its marker); otherwise, if the player has
+  units in the battle and the colony is a sphere colony (the console exists), one bell entry "Ground battle: <colony>" (`groundBattle`
+  group ⚔, `noLog` — the Event Log already gets "ground battle" from round 1); its click (`notify:openDetail`) runs `openBattleCard` →
+  `openPanel('colony', { colonyId })` + the window. Flat colonies: unchanged (no window exists there; Event Log + end report as today).
+- **Finding 797 ✅.** `CombatSystem.isBattleAt(planetId, q, r)` — read-only mirror of the combat loop's per-tile rule (`_findContestedHexes`:
+  alive, not `offline` / `in_cargo`, hostile pair = war, R1). `unitPlacements` gets a `battleAt` predicate and a `battle` flag per stack
+  (`contested` keeps the side-by-side layout); `ColonySphereUnits` draws the crossed blades (and its hit box, effect frame rate) only on `battle`
+  stacks and defaults to no marker without a predicate; the console passes `isBattleAt`; `_sphereClick` opens the window only for
+  `isBattleAt` (was `isHexContested`, which counts offline units). CS-10 keeper U9g now checks the peace control.
+- **Finding 798 ✅ (new, pre-existing).** `CombatSystem.getBattleStateAt` read the round with the key `planetId_q_r` while the combat loop writes
+  `planetId|q|r` (separator changed for ids with `_`), so the round was always 0. Readout key fixed; no rule change.
+- Owner helpers: `csGroundBattle()` (war with the first empire if needed, 3 vs 3 on a free land tile near the capital through the game seams
+  `createUnit` / `createAIUnit`; the card opens on round 1 through the real start path) and `csBattleRound()` (one round now = the public
+  `combatSystem.tick(1)`, to watch while paused). `csBattleWindow` unchanged.
+
+**Proof.** New keeper `colony_battle_card_smoke` **27 PASS** (real world: real diplomacy, GroundUnitManager and CombatSystem rounds; fail-first
+on `348dbe1` **0 / 13**), mutations **22 / 22 red**; `colony_sphere_units_polish_smoke` 49 PASS, `colony_sphere_units_smoke` 66 PASS.
+Real-game probe `probe-cs10b-battle` **10 / 10** (`docs/design/prototypes/cs10b-battle.png`): peace → 0 battle markers, war → 1; real 3 vs 3
+battle: no window before round 1, window opened by itself on round 1, rounds 2–3 HP down and log up, outcome kept after the end (player won
+in 3 rounds), console closed → one bell entry → click → console + card; 0 page exceptions. `probe-cs10b-units` re-run **14 / 14**
+(`cs10b-units.png` regenerated). Flag OFF / flat: `probe-cs1a-trace --years 60` seed A `0d9527fd…` / `45da8089…`, seed B `89251603…` /
+`ea79a395…` — bit-identical to `348dbe1`. Sweep **450 / 450 OK, 0 FAIL**; `check-i18n` PASS (+16 `colonyBattle.*`, +3 `notif.*` keys, EN + PL).
+Critical files touched: none (`CombatSystem.js`, `NotificationCenter.js` are not on the list); no save format change; no combat rule change.
+
+**Decisions taken in the run (conservative, for the owner).** (a) The bell entry only when the player has units in the battle and the colony
+is a sphere colony; (b) a new battle never replaces a window that shows another live battle; (c) the card starts at round 1 (the first round
+fought), not at the war declaration; (d) the bell entry adds no Event Log line (the log already has "ground battle" at round 1); (e) the old
+end-of-battle report popup still appears (unchanged); (f) records are session-only — after loading a save the card shows the live state and
+the log starts with the next round; (g) the log shows the per-round damage balance plus losses / retreats / morale breaks / result.
+
+**Findings (this run).** 797 ✅ · 798 ✅ (new) · 796 → offline-boot step (not in this commit). Free finding number: 799.
 
 ---
 
