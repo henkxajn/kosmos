@@ -39,7 +39,8 @@ import { HOMEWORLD_TEMP_MIN_C, HOMEWORLD_TEMP_MAX_C } from '../utils/HomeworldCl
 import { climateModelOfWorld, equilibriumK, lookContradicts, KELVIN } from '../utils/ClimateModel.js';
 import { orbitModelOfWorld, orbitZoneOf, frostLineAU, scaledMinOrbitAU, compactionOf } from '../utils/OrbitModel.js';
 import { csCollisionTest, csCollisionTestLowFps } from './CollisionTestDebug.js';   // CS-PHYS-c (Finding 776) — przemiatane wejście w walkę
-import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';   // CS-4a / CS-4b — podgląd powierzchni + stan cache
+import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';
+import { csGeoGrid } from './GeoGridDebug.js';   // CS-5a — siatka geodezyjna aktywnego ciała nad mapą bohatera   // CS-4a / CS-4b — podgląd powierzchni + stan cache
 import { cs2GeometryDebugHelpers } from './Cs2GeometryDebug.js';   // CS-2 (Finding 779) — scenariusze bramki geometrii siatki
 
 function bodyTypeOf(body, kind) {
@@ -433,6 +434,6 @@ export function colonySphereDebugHelpers() {
     console.log('[csHaze]', JSON.stringify(summary));
     return summary;
   };
-  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps,
+  return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps, csGeoGrid,
     ...cs2GeometryDebugHelpers() };
 }

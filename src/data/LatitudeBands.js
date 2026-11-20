@@ -23,3 +23,18 @@ export function latitudeModifierOf(band) {
 export function neutralLatitudeModifier() {
   return latitudeModifierOf(LATITUDE_BAND.EQUATORIAL);
 }
+
+// ── Siatka geodezyjna (CS-5a, D-CS-7) ────────────────────────────────────────
+// Docelowe udziały pól polarnych / przedbiegunowych per klasa rozmiaru siatki (klucze GRID_TILE_COUNTS). Zmierzone
+// 2026-11-19 na dzisiejszych płaskich siatkach tapered (PlanetMapGenerator): planetoida 8×6, księżyc 12×8, hot_rocky
+// 16×10, small_rocky = średnia rocky + ice przy masach 0.3/0.5/0.8/1/1.2/1.5 M⊕, large_rocky = rocky przy 2/3/5/8 M⊕.
+// GeodesicTopology.latitudeCutoffs dobiera progi |y| środka pola najbliżej tych udziałów (klastry symetryczne).
+export const GEO_LATITUDE_SHARES = Object.freeze({
+  planetoid:   Object.freeze({ polar: 0.2222, subpolar: 0.3333 }),
+  moon:        Object.freeze({ polar: 0.1250, subpolar: 0.1875 }),
+  gas:         Object.freeze({ polar: 0.1250, subpolar: 0.1875 }),   // dziś gas 14×10 — siatki geo gazu dopiero w CS-11
+  hot_rocky:   Object.freeze({ polar: 0.1154, subpolar: 0.1154 }),
+  small_rocky: Object.freeze({ polar: 0.0984, subpolar: 0.0984 }),
+  large_rocky: Object.freeze({ polar: 0.0674, subpolar: 0.0674 }),
+  largest_cap: Object.freeze({ polar: 0.0674, subpolar: 0.0674 }),
+});

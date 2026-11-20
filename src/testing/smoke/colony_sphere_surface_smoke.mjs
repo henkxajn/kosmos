@@ -247,7 +247,10 @@ const importers = files.filter(f => /(SurfaceField|SurfacePreviewLogic)\.js['"]/
 // morza = ten sam kanon co klasyfikacja terenu); pilnuje tego colony_sphere_shader_smoke (S8).
 // CS-6b: logika powietrza / orientacji bierze z SurfaceField WYŁĄCZNIE surfaceInfo (punkt podgwiezdny przepisu tidally_locked —
 // kanon jest w polu); pilnuje tego colony_sphere_air_smoke (A6).
-const CS4B_OWNERS = ['src/systems/SurfaceCache.js', 'src/workers/surface.worker.js', 'src/utils/SurfacePaletteLogic.js', 'src/utils/SurfaceAirLogic.js'];
+// CS-5a (plan §2: teren kafla = classify(evalAt(środek kafla))): generator siatki geodezyjnej jest podpisanym konsumentem
+// ścieżki rozgrywki SurfaceField; kto woła generator, pilnuje colony_sphere_geogrid_smoke (G10d).
+const CS4B_OWNERS = ['src/systems/SurfaceCache.js', 'src/workers/surface.worker.js', 'src/utils/SurfacePaletteLogic.js', 'src/utils/SurfaceAirLogic.js',
+  'src/map/GeoColonyGridGenerator.js'];
 const wired = importers.filter(f => !f.startsWith('src/debug/') && !f.startsWith('src/testing/') && f !== 'src/utils/SurfacePreviewLogic.js'
   && !CS4B_OWNERS.includes(f));
 assert(importers.includes('src/debug/SurfacePreviewDebug.js'), 'świadek: SurfacePreviewDebug importuje SurfaceField');

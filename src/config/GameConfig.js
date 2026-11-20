@@ -89,6 +89,12 @@ export const GAME_CONFIG = {
     //     walka startuje w punkcie największego zbliżenia); MovementOrderSystem — przechwyt kończy się, gdy KROK przechodzi
     //     przez próg celu. OFF: tylko pozycje końcowe (bit w bit jak dotąd). Zmiana w konsoli działa od następnego tiku.
     sweptProximity:       true,
+    // ── ARC COLONY SPHERE CS-5 — geodezyjna siatka kolonii (GeodesicTileGraph, 10n²+2 pól, D-CS-8). OFF (default): każda
+    //     siatka kolonii płaska, bit w bit jak dotąd. ON: NOWE kolonie na planetach / księżycach / planetoidach z archetypem
+    //     dostają siatkę geo — ale do CS-7 (hero kuli) TYLKO poza żywą grą (headless GameCore / debug), bo 2D ColonyOverlay
+    //     nie umie narysować siatki geo; w żywej grze nowe kolonie zostają płaskie (ColonyGridFactory.geoGridsAllowed).
+    //     Stare kolonie zawsze płaskie (podwójna siatka, D-CS-4). Gazowe olbrzymy płaskie do CS-11.
+    colonySphere:         false,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
     // ⚠ W3-8 — `fleetMaterialization` i `unifiedAggregator` USUNIĘTE razem z warstwą

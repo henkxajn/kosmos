@@ -11,7 +11,7 @@
 // składać kluczy ani rozbierać współrzędnych.
 //
 // Interfejs (każda implementacja):
-//   kind                              — 'flat' (CS-5 doda 'geo')
+//   kind                              — 'flat' | 'geo' (CS-5a: GeodesicTileGraph)
 //   tiles()                           — wszystkie pola, stała kolejność iteracji
 //   forEachTile(cb)                   — cb(tile) w kolejności tiles()
 //   anyTile()                         — pierwsze pole w kolejności iteracji albo null
@@ -30,6 +30,8 @@
 //   stepDirection(from, to)           — {crossesSeam, facingLeft}: krok przez szew mapy + zwrot sprite'a
 
 import { HexGrid, HEX_DIRECTIONS } from './HexGrid.js';
+import { geodesicTopology } from './GeodesicTopology.js';
+import { GEO_LANDING_MIN_DISTANCE } from '../data/GeoGridRules.js';
 
 // ── Klucze z prefiksem ───────────────────────────────────────────────────────
 // Prefiksy kluczy budynków: wirtualna stolica w `_active` ('capital_q,r') i id producenta zasobów
@@ -246,20 +248,159 @@ export class FlatHexTileGraph {
 // idOf / klucze; tile()/neighbors()/within() wymagają siatki.
 export const DETACHED_FLAT_GRAPH = new FlatHexTileGraph(null);
 
+// ── GeodesicTileGraph — siatka geodezyjna kuli (CS-5a) ─────────────────────
+// Id pola = "g<indeks>" (indeks z GeodesicTopology: 0…11 pięciokąty). Pole siatki geo to HexTile z q = indeks i
+// r = GEO_TILE_R (−1, na płaskiej siatce r ≥ 0 zawsze) — para (q, r) jednostki / armii / zdarzenia nadal wskazuje pole,
+// więc obiekty osadzone na siatce i `samePos` działają bez zmian; klucze składa WYŁĄCZNIE graf (idOf / formatKey).
+// Reguły geometrii kuli (D-CS-7, D-CS-9) są metodami TEJ klasy — nie dziedziczy nic po FlatHexTileGraph.
+export const GEO_TILE_R = -1;
+export const GEO_ID_PREFIX = 'g';
+
+export class GeodesicTileGraph {
+  /** @param {object} grid — GeodesicGrid (kind 'geo', n, tiles[], latCutoffs) */
+  constructor(grid) {
+    this.grid = grid;
+    this.kind = 'geo';
+    this.topo = geodesicTopology(grid.n);
+  }
+
+  // ref → indeks pola (NaN, gdy ref nie wskazuje pola tej siatki).
+  _idx(ref) {
+    if (typeof ref === 'string') {
+      if (!ref.startsWith(GEO_ID_PREFIX)) return NaN;
+      const s = ref.slice(GEO_ID_PREFIX.length);
+      return /^[0-9]+$/.test(s) ? Number(s) : NaN;
+    }
+    if (typeof ref === 'number') return ref;
+    if (ref && ref.r === GEO_TILE_R && Number.isInteger(ref.q)) return ref.q;
+    return NaN;
+  }
+
+  _ok(i) { return Number.isInteger(i) && i >= 0 && i < this.topo.count; }
+
+  // ── Iteracja ────────────────────────────────────────────────────────────
+  tiles() { return this.grid.tiles.slice(); }
+  forEachTile(cb) { for (const t of this.grid.tiles) cb(t); }
+  anyTile() { return this.grid.tiles[0] ?? null; }
+
+  // ── Pola i klucze ───────────────────────────────────────────────────────
+  tile(ref) {
+    const i = this._idx(ref);
+    return this._ok(i) ? this.grid.tiles[i] : undefined;
+  }
+
+  idOf(ref) {
+    if (typeof ref === 'string') return ref;
+    return GEO_ID_PREFIX + this._idx(ref);
+  }
+
+  parseKey(key) { return parseTileKey(key); }
+  formatKey(ref, prefix = '') { return formatTileKey(this.idOf(ref), prefix); }
+
+  /** Czy pole jest pięciokątem (5 sąsiadów — „węzeł anomalii", D-CS-9). */
+  isPentagon(ref) { return this.topo.isPentagon(this._idx(ref)); }
+
+  /** Środek pola (wektor jednostkowy) — dla rysunku i wyboru; rozgrywka czyta tylko arytmetykę. */
+  centerOf(ref) {
+    const i = this._idx(ref);
+    return this._ok(i) ? { x: this.topo.cx[i], y: this.topo.cy[i], z: this.topo.cz[i] } : null;
+  }
+
+  // ── Sąsiedzi i odległości (crossSeam bez znaczenia — kula nie ma szwu) ──
+  neighbors(ref) {
+    const i = this._idx(ref);
+    if (!this._ok(i)) return [];
+    return this.topo.neighbors(i).map(j => this.grid.tiles[j]);
+  }
+
+  distance(a, b) {
+    const i = this._idx(a), j = this._idx(b);
+    if (!this._ok(i) || !this._ok(j)) return NaN;
+    return this.topo.distance(i, j);
+  }
+
+  within(ref, k) {
+    const i = this._idx(ref);
+    if (!this._ok(i)) return [];
+    return this.topo.within(i, k).map(j => this.grid.tiles[j]);
+  }
+
+  ring(ref, k) {
+    const i = this._idx(ref);
+    if (!this._ok(i)) return [];
+    return this.topo.ring(i, k).map(j => this.grid.tiles[j]);
+  }
+
+  // A* (GeodesicTopology.path): optymalny, remisy deterministyczne, trasa najbliżej wielkiego koła (Finding 781).
+  // passable(tile) === false blokuje wejście. Zwraca [{q, r}, …] bez startu, z celem; null = brak.
+  path(from, to, { passable = () => true, maxIterations = 2000 } = {}) {
+    const a = this._idx(from), b = this._idx(to);
+    if (!this._ok(a) || !this._ok(b)) return null;
+    const tiles = this.grid.tiles;
+    const steps = this.topo.path(a, b, (j) => passable(tiles[j]) !== false, maxIterations);
+    return steps ? steps.map(j => ({ q: j, r: GEO_TILE_R })) : null;
+  }
+
+  // ── Reguły geometrii kuli ───────────────────────────────────────────────
+  // Pas szerokości z |y| środka pola i progów siatki (GEO_LATITUDE_SHARES klasy rozmiaru, D-CS-7).
+  latitudeBand(ref) {
+    const i = this._idx(ref);
+    if (!this._ok(i)) return LATITUDE_BAND.EQUATORIAL;
+    const c = this.grid.latCutoffs;
+    const ay = Math.abs(this.topo.cy[i]);
+    if (c && ay >= c.polar) return LATITUDE_BAND.POLAR;
+    if (c && ay >= c.subpolar) return LATITUDE_BAND.SUBPOLAR;
+    return LATITUDE_BAND.EQUATORIAL;
+  }
+
+  // Pole o najmniejszym |y| środka (remis → mniejszy indeks).
+  equatorTile() { return this.grid.tiles[this.topo.equatorTile()] ?? null; }
+
+  // Strefa lądowania (D-CS-9): pole w odległości grafowej ≥ GEO_LANDING_MIN_DISTANCE od KAŻDEGO pola zajętego
+  // (właściciel, budynek, budowa, stolica). Ciało bez zajętych pól → całe jest strefą lądowania. NIE „mniej niż 6
+  // sąsiadów" — to byłyby dokładnie pięciokąty.
+  isLandingEdge(ref) {
+    const i = this._idx(ref);
+    if (!this._ok(i)) return false;
+    const held = this._heldTiles();
+    for (const h of held) if (this.topo.distance(i, h) < GEO_LANDING_MIN_DISTANCE) return false;
+    return true;
+  }
+
+  _heldTiles() {
+    const out = [];
+    const tiles = this.grid.tiles;
+    for (let j = 0; j < tiles.length; j++) {
+      const t = tiles[j];
+      if (t.owner != null || t.buildingId != null || t.underConstruction != null || t.capitalBase) out.push(j);
+    }
+    return out;
+  }
+
+  // Krok jednostki: szwu nie ma; zwrot sprite'a z rzutu kroku na lokalny kierunek wschodni (−z, 0, x) w punkcie startu.
+  stepDirection(from, to) {
+    const a = this._idx(from), b = this._idx(to);
+    if (!this._ok(a) || !this._ok(b)) return { crossesSeam: false, facingLeft: false };
+    const t = this.topo;
+    const east = (t.cx[b] - t.cx[a]) * -t.cz[a] + (t.cz[b] - t.cz[a]) * t.cx[a];
+    return { crossesSeam: false, facingLeft: east < 0 };
+  }
+}
+
 // ── Wejście: siatka → graf ───────────────────────────────────────────────────
 const _graphs = new WeakMap();
 
 /**
  * Graf pól dla siatki kolonii. Falsy siatka → null (jak `grid?.…`). Graf jest buforowany per
- * instancja siatki. Do CS-5 jedynym rodzajem jest płaski hex.
- * @param {HexGrid|null|undefined} grid
- * @returns {FlatHexTileGraph|null}
+ * instancja siatki: płaski hex albo (CS-5a) siatka geodezyjna (`grid.kind === 'geo'`).
+ * @param {HexGrid|GeodesicGrid|null|undefined} grid
+ * @returns {FlatHexTileGraph|GeodesicTileGraph|null}
  */
 export function tileGraphOf(grid) {
   if (!grid) return null;
   let g = _graphs.get(grid);
   if (!g) {
-    g = new FlatHexTileGraph(grid);
+    g = grid.kind === 'geo' ? new GeodesicTileGraph(grid) : new FlatHexTileGraph(grid);
     _graphs.set(grid, g);
   }
   return g;

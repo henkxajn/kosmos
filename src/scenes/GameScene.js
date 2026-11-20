@@ -2484,6 +2484,7 @@ export class GameScene {
     window.csCollisionTestLowFps = window.KOSMOS.debug?.csCollisionTestLowFps;   // CS-PHYS-c (776) — ta sama mijanka z wymuszonymi długimi tikami
     window.csSurface    = window.KOSMOS.debug?.csSurface;      // CS-4a — podgląd powierzchni zaznaczonego ciała
     window.csSurfaceAll = window.KOSMOS.debug?.csSurfaceAll;   // CS-4a — miniatury wszystkich ciał układu
+    window.csGeoGrid    = window.KOSMOS.debug?.csGeoGrid;      // CS-5a — siatka geodezyjna aktywnego ciała (pola, pięciokąty, lądowanie)
     // CS-2 (Finding 779) — scenariusze bramki geometrii siatki (Cs2GeometryDebug.js): odczyt pasa, szew, desant, eskadra, zdarzenie.
     for (const k of ['cs2Latitude', 'cs2Seam', 'cs2Invasion', 'cs2Strike', 'cs2EquatorEvent']) window[k] = window.KOSMOS.debug?.[k];
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).

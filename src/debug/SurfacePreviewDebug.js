@@ -90,7 +90,7 @@ function openOverlay() {
   return box;
 }
 
-function selectedBody() {
+export function selectedBody() {
   const K = window.KOSMOS ?? {};
   const tr = K.threeRenderer;
   const ids = [tr?._selectedEntityId, tr?._focusEntityId];
