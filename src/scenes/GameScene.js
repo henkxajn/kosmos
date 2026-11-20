@@ -188,6 +188,7 @@ import { civConsoleDebugHelpers } from '../debug/CivConsoleDebug.js';   // ARC K
 import { colonySphereDebugHelpers } from '../debug/ColonySphereDebug.js'; // ARC COLONY SPHERE CS-3a — csWorlds() / csPeek() (bez cudzysłowów)
 import { createColonyGrid, setGeoGridsAllowed } from '../map/ColonyGridFactory.js'; // CS-7 — nowe kolonie żywej gry: siatka geo przy fladze colonySphere
 import { scheduleCapitalHeroPrefetch, ColonySphereView } from '../ui/ColonySphereView.js';            // CS-7 — mapa bohatera stolicy w tle
+import { shouldActivateFoundedOutpost } from '../ui/ColonyConsoleLogic.js';                            // CS-8 (Finding 740) — placówka nie zmienia aktywnej kolonii
 import { moveTargetFor } from '../ui/ColonyTilePosLogic.js';                        // CS-7 — cel rozkazu ruchu przez TileGraph
 import { SurfaceCache } from '../systems/SurfaceCache.js'; // ARC COLONY SPHERE CS-4b — mapy powierzchni (worker + LRU); dziś tylko podgląd debug
 
@@ -2491,6 +2492,8 @@ export class GameScene {
     window.csSphere     = window.KOSMOS.debug?.csSphere;       // CS-7 — stan kuli kolonii
     window.csSphereUnit = window.KOSMOS.debug?.csSphereUnit;   // CS-7 — własna jednostka przy stolicy (kontrola ruchu)
     window.csSphere2D   = window.KOSMOS.debug?.csSphere2D;     // CS-7 — wymuszony widok 2D kuli (fallback bez WebGL)
+    // CS-8 — pomocniki kontroli konsoli Kolonii (ColonyConsoleDebug.js): stan, placówka, kolonia, technologia stacji, magazyn.
+    for (const k of ['csConsole', 'csOutpost', 'csColony', 'csStationTech', 'csPoor', 'csRich']) window[k] = window.KOSMOS.debug?.[k];
     // CS-2 (Finding 779) — scenariusze bramki geometrii siatki (Cs2GeometryDebug.js): odczyt pasa, szew, desant, eskadra, zdarzenie.
     for (const k of ['cs2Latitude', 'cs2Seam', 'cs2Invasion', 'cs2Strike', 'cs2EquatorEvent']) window[k] = window.KOSMOS.debug?.[k];
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).
@@ -2858,10 +2861,19 @@ export class GameScene {
       // Kolonie imperiów AI NIE otwierają panelu graczowi — to przeciek szczegółów przeciwnika.
       if (!ColonyManager.isPlayerColony(colony)) return;
       this.colonyManager.switchActiveColony(colony.planetId);
-      this.uiManager?.overlayManager?.openPanel('colony');
+      // CS-8 (Finding 788) — `colony:founded` leci ze środka `createColony`, ZANIM `ColonyManager._onColonyFounded` przypisze
+      //   kolonii siatkę z fabryki i postawi stolicę. Okno otwarte w tej chwili tworzyło własną siatkę PŁASKĄ ze stolicą
+      //   `capital_q,r`, a kolonia dostawała potem siatkę geo — mapa 2D nad kulą i martwy klucz stolicy. Z flagą `colonySphere`
+      //   okno otwiera się po zakończeniu założenia (mikrozadanie). Flaga OFF — jak dotąd, synchronicznie.
+      if (GAME_CONFIG.FEATURES?.colonySphere === true) queueMicrotask(() => this.uiManager?.overlayManager?.openPanel('colony'));
+      else this.uiManager?.overlayManager?.openPanel('colony');
     });
     EventBus.on('outpost:founded', ({ colony }) => {
       if (!ColonyManager.isPlayerColony(colony)) return;
+      // CS-8 (Finding 740, decyzja 2026-11-18) — z flagą `colonySphere` założenie placówki NIE zmienia aktywnej kolonii
+      //   (placówka trafia na listę konsoli Kolonii); przełączamy tylko, gdy gracz nie ma aktywnej pełnej kolonii. Flaga OFF — jak dotąd.
+      const activeCol = this.colonyManager.getColony?.(this.colonyManager.activePlanetId) ?? null;
+      if (!shouldActivateFoundedOutpost(GAME_CONFIG.FEATURES, activeCol)) return;
       this.colonyManager.switchActiveColony(colony.planetId);
       this.uiManager?.overlayManager?.openPanel('colony');
     });

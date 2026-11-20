@@ -51,6 +51,9 @@ export const ALWAYS_ALLOWED_HITS = new Set([
   // 3. absorbery / zamknięcia modali
   'station_mgmt_picker_close', 'station_mgmt_picker_bg',
   'station_mgmt_shippicker_close', 'station_mgmt_shippicker_bg',
+  // CS-8 — nawigacja konsoli Kolonii (widok, soczewki, podzakładki, powód wyłączonego elementu, paleta, skok do pola kolejki).
+  //   Rozkazy kolejki (`cQueueCancel`, `cQueueMove`) NIE są tu wpisane — na cudzej kolonii dostają odmowę z powodem.
+  'cChip', 'cInspTab', 'cReason', 'cCat', 'cPick', 'cBuildExit', 'cQueueFocus',
 ]);
 
 /**

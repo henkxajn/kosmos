@@ -52,6 +52,18 @@ import { isManageablePlayerColony } from '../utils/ColonyOwnership.js';         
 import { ColonySphereView, isSphereGrid, bestGeoCapitalTile } from './ColonySphereView.js';   // CS-7 — kula kolonii (siatka geo)
 import { tilePosLabel } from './ColonyTilePosLogic.js';                               // CS-7 — napis pozycji pola (płaska „q,r", kula „#n")
 import { BUILDING_CATEGORY_COLORS } from '../data/BuildingCategoryColors.js';         // CS-7 — barwy kategorii (wspólne z kulą kolonii)
+// CS-8 — konsola Kolonii (szablon ARC KONSOLE) dla kolonii na kuli za flagą `colonySphere`
+import { colonyConsoleActive, colonyConsoleSpec, lensAfterChip, tileBuildRows, sortByCategory } from './ColonyConsoleLogic.js';
+import { drawColonyConsole, drawYieldLabels } from './ColonyConsoleView.js';
+import { consoleZones, consoleClockRect } from './ConsoleLayoutLogic.js';
+import { applyConsoleHalo, withAdaptiveHalo, drawZoneFrame } from './ConsoleKit.js';
+import { consoleRoles } from './ConsoleRolesLogic.js';
+import { NAV_GROUPS } from './CivPanelDrawer.js';
+import { createColonyGrid } from '../map/ColonyGridFactory.js';                       // CS-8 (Finding 785) — siatka podglądu jak siatka nowej kolonii
+import { buildVerdictFor } from './ColonySphereView.js';
+import { BUILD_VERDICT } from './ColonySphereOverlayLogic.js';
+import { showCargoLoadModal } from './CargoLoadModal.js';                             // CS-8 — załadunek / rozładunek wojsk z inspektora jednostki
+import { dialogAnchorCss } from './CommandInspectorLogic.js';                          // okno DOM przy strefie konsoli
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
@@ -74,6 +86,8 @@ const STATION_HEADER_H = 24;
 const WF_SUMMARY_H   = 54;   // 3 × 18px  (Bezrobotni|Satysfakcja · Prosperity|Wzrost · Bilans)
 const WF_SUMMARY_GAP = 12;   // odstęp/separator między pasmem scrolla a podsumowaniem
 
+// CS-8 — winieta pod kulą w bohaterze konsoli (strojenie na bramce): krycie przy tarczy i zasięg w promieniach tarczy
+const HERO_VIGNETTE = { alpha: 0.62, reach: 1.55 };
 let _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 window.addEventListener('resize', () => {
   _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
@@ -473,6 +487,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._hideTooltip();
     this._teardownGlobe();   // zwolnij WebGL canvas globu (z-index 3 — nie może wisieć nad innymi overlay'ami)
     this._sphere?.release(); this._sphereActive = false;   // CS-7 — zwolnij konteksty kuli kolonii
+    this._consoleOn = false; this._cBuildMode = false; this._cPick = null;   // CS-8 — tryb budowy konsoli nie przeżywa zamknięcia
     document.getElementById('colony-open-backdrop')?.remove();
     // Wymuś reset active w OverlayManager (nie czekaj na draw)
     const om = window.KOSMOS?.overlayManager;
@@ -559,13 +574,17 @@ export class ColonyOverlay extends BaseOverlay {
     // z realną kolonią gdyby powstała na tym samym ciele.
     if (colony.isPreview) {
       if (this._previewGridCache[pid]) return this._previewGridCache[pid];
-      const g = PlanetMapGenerator.generate(colony.planet, false);
+      const g = createColonyGrid(colony.planet, false);   // CS-8 (Finding 785): flaga ON → siatka geo jak późniejsza kolonia
       this._previewGridCache[pid] = g;
       colony.grid = g;
       this._loadBiomeMap(colony.planet, g, pid);   // async — biomy 1:1 z teksturą 3D
       return g;
     }
 
+    // CS-8 (Finding 788) — siatka geo przypisana kolonii PO pierwszym `_getGrid` wypiera płaską kopię z pamięci okna:
+    //   `colony:founded` otwiera okno (i tworzy tu siatkę płaską), ZANIM `ColonyManager._onColonyFounded` przypisze kolonii siatkę
+    //   z fabryki. Bez tego okno pokazywało mapę 2D, a BuildingSystem pracował na kuli. Flaga OFF: siatek geo nie ma — gałąź martwa.
+    if (this._gridCache[pid] && colony.grid && colony.grid !== this._gridCache[pid] && isSphereGrid(colony.grid)) delete this._gridCache[pid];
     if (this._gridCache[pid]) return this._gridCache[pid];
 
     // Uszanuj istniejący grid zamiast regenerować, gdy:
@@ -912,6 +931,16 @@ export class ColonyOverlay extends BaseOverlay {
     this._infoView = null;   // C4 — pasmo scrolla ważne tylko gdy info panel narysowany TĄ klatką (nie: tryb stacji / brak planety)
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
+
+    // CS-8 — kolonia na kuli (siatka geo) → konsola Kolonii (szablon ARC KONSOLE), niezależnie od bieżącej flagi: flaga
+    //   `colonySphere` decyduje tylko o siatce NOWYCH kolonii (F5 ją zeruje, kolonia z zapisu zostaje na kuli). Siatka płaska
+    //   nigdy tu nie wchodzi — dalej dzisiejsze okno.
+    this._consoleOn = false;
+    {
+      const cCol = this._getColony();
+      const cGrid = cCol ? this._getGrid(cCol) : null;
+      if (colonyConsoleActive(cGrid)) { this._drawConsole(ctx, W, H, cCol, cGrid); return; }
+    }
 
     // Ciemne tło
     ctx.fillStyle = 'rgba(2, 4, 8, 0.92)';
@@ -1272,6 +1301,9 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedHex = null; this._hoveredHex = null;
     this._selectedUnit = null; this._selectedUnits.clear();
     this._buildBarScroll = 0;
+    this._previewMode = false; this._previewColony = null;   // CS-8 — lista konsoli wyprowadza z podglądu ciała
+    this._cBuildMode = false; this._cPick = null; this._cStation = false; this._cPaletteCache = null;
+    if (this._cScroll) { this._cScroll.insp = 0; this._cScroll.card = 0; this._cScroll.queue = 0; }
     this._stationPickerOpen = false; this._stationShipPickerOpen = false;   // C6c-3 — reset floating pickerów przy zmianie kolonii
     const colony = this._getColony();
     const grid = colony ? this._getGrid(colony) : null;
@@ -1282,15 +1314,20 @@ export class ColonyOverlay extends BaseOverlay {
   // ── Panel info planety (prawa kolumna 30%) ────────────────────────────────
   // Górę zajmuje żywy globus 3D (PlanetGlobeRenderer, osobny DOM canvas nad
   // ui-canvas). Poniżej dossier: charakterystyka, pierwiastki, surowce, budynki.
-  _drawInfoPanel(ctx, x, y, w, h, colony, grid) {
+  _drawInfoPanel(ctx, x, y, w, h, colony, grid, opts = null) {
     const planet = colony?.planet ?? null;
+    // CS-8 — `opts.consoleTab`: treść JEDNEJ zakładki osadzona w inspektorze konsoli Kolonii (bez linii kolumny, bez globusa,
+    //   bez paska zakładek — zakładkę wybiera konsola). Bez `opts` — dzisiejsza prawa kolumna, bez zmian.
+    const embedTab = opts?.consoleTab ?? null;
 
     // Pionowy separator mapa | panel (tło = standardowe ciemne tło overlayu)
-    ctx.strokeStyle = THEME.borderActive; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + h); ctx.stroke();
+    if (!embedTab) {
+      ctx.strokeStyle = THEME.borderActive; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + h); ctx.stroke();
+    }
 
     if (!planet) { this._teardownGlobe(); return; }
-    const pad = 12;
+    const pad = embedTab ? 0 : 12;
 
     // ── Globus 3D (góra) ──
     // Globus to osobny DOM canvas (z-index:3) NAD ui-canvas. availRight = prawy limit (krawędź info panelu).
@@ -1307,6 +1344,7 @@ export class ColonyOverlay extends BaseOverlay {
     // C6b — sanitacja aktywnej zakładki: gdy bieżąca zakładka NIE istnieje w tym kontekście (np. Stacja
     // otwarta, po czym przełączenie na kolonię bez orbital_construction / na podgląd / na outpost), reset
     // do Planety — inaczej switch(activeTab) rysowałby zakładkę spoza paska (stale render).
+    if (embedTab && canWorkforce && tabs.some(tt => tt.id === embedTab)) this._infoTab = embedTab;   // CS-8 — zakładkę wybiera konsola
     if (canWorkforce && !tabs.some(tt => tt.id === this._infoTab)) this._infoTab = 'planet';
     const activeTab = canWorkforce ? this._infoTab : 'planet';
     // C6c-2b-ii — floating picker stacji żyje TYLKO na zakładce Stacja. Gdy aktywna zakładka to nie Stacja
@@ -1349,7 +1387,9 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
     const discY = y + 8;
-    if (isSphereGrid(grid)) {
+    if (embedTab) {
+      this._teardownGlobe();   // CS-8 — mały globus zdjęty z konsoli (decyzja właściciela 2)
+    } else if (isSphereGrid(grid)) {
       // CS-7 — kolonia geo: dekoracyjny globus mapy 2D nie zna siatki kuli; w jego miejscu mała kula tego samego ciała.
       this._teardownGlobe();
       this._sphereOf().drawMini(ctx, { x: discX, y: discY, w: discSize, h: discSize }, planet, grid);
@@ -1360,8 +1400,8 @@ export class ColonyOverlay extends BaseOverlay {
     const cw = w - pad * 2;
     const lx = x + pad;
 
-    let cy = discY + discSize + 10;
-    if (canWorkforce) cy = this._drawInfoTabs(ctx, lx, cy, cw, tabs);
+    let cy = embedTab ? y + 4 : discY + discSize + 10;
+    if (canWorkforce && !embedTab) cy = this._drawInfoTabs(ctx, lx, cy, cw, tabs);
 
     // C6c-2b-ii FIX — Stacja-exists PINUJE nagłówek (nazwa + ✏ rename) NAD scrollem (mirror-image stopki
     // Załogi): bez tego ✏ w 1. wierszu body jest prunowany po przewinięciu (_pruneHitsOutside). Rezerwa u
@@ -2491,6 +2531,7 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _overFloatPanel(x, y) {
+    if (this._consoleOn) return false;   // CS-8 — konsola nie ma pływającego panelu pola (inspektor)
     return !!this._selectedHex && x >= this._floatX && x <= this._floatX + Math.max(FLOAT_W, 240)
       && y >= this._floatY && y <= this._floatY + (this._floatH ?? 300);
   }
@@ -2509,11 +2550,14 @@ export class ColonyOverlay extends BaseOverlay {
     const sel = this._selectedHex;
     const selTile = sel ? tileGraphOf(grid)?.tile(sel) : null;
     // Tryb budowy = otwarte menu budowy na wolnym polu własnej kolonii; budynek pod kursorem w menu → werdykt dla NIEGO.
-    const buildMenu = !!selTile && !this._selectedUnit && !!colony && !colony.isPreview && !selTile.isOccupied;
+    let buildMenu = !!selTile && !this._selectedUnit && !!colony && !colony.isPreview && !selTile.isOccupied;
+    const palette = !!this._consoleOn && !!this._cBuildMode;   // CS-8 — paleta: podświetl pola dla wybranego budynku
+    if (palette) buildMenu = true;
     const special = !!(this._landingMode || this._strikeMode || this._dropMode || this._supportMode);
     sv.sync({
       colony, grid, selected: sel, buildMenu,
-      hoveredBuilding: buildMenu && this._hoveredBuildId ? (BUILDINGS[this._hoveredBuildId] ?? null) : null,
+      hoveredBuilding: palette ? (BUILDINGS[this._cPick] ?? null)
+        : (buildMenu && this._hoveredBuildId ? (BUILDINGS[this._hoveredBuildId] ?? null) : null),
       supply: !!this._showSupplyCoverage,
       coverage: this._showSupplyCoverage ? (window.KOSMOS?.supplyCoverageSystem?.getCoverage?.(colony?.planetId) ?? null) : null,
       lock: special || !!this._selectedUnit || this._selectedUnits.size > 0,
@@ -2532,6 +2576,301 @@ export class ColonyOverlay extends BaseOverlay {
     // Płótno UI rysuje się na żądanie: po całej klatce okna (mała kula w panelu informacji rysuje się później) zamów
     // następną w tempie kuli — co klatkę przy interakcji, ~30 /s przy auto-obrocie, ~10 /s gdy płyną same chmury.
     queueMicrotask(() => this._scheduleSphereFrame(sv.nextFrameDelayMs()));
+  }
+
+  // ═══ CS-8 — konsola Kolonii (szablon ARC KONSOLE; siatka geo + flaga `colonySphere`) ═══════════════════════════════
+  // Stan: `_consoleOn` (ta klatka narysowała konsolę), `consoleZones`, `_cStation` (widok stacji), `_cInspTab` (podzakładka
+  // podsumowania), `_cBuildMode` + `_cCat` + `_cPick` (paleta „budynek → pola"), `_cScroll` / `_cScrollRects` (przewijanie stref).
+
+  _drawConsole(ctx, W, H, colony, grid) {
+    this._consoleOn = true;
+    this._teardownGlobe();   // mały globus mapy 2D (osobne płótno DOM) nie należy do konsoli — także po przejściu z kolonii płaskiej
+    const z = consoleZones(this._getOverlayBounds(W, H), colonyConsoleSpec(consoleClockRect(W, H, NAV_GROUPS.length)));
+    this.consoleZones = z;
+    this._cScrollRects = {};
+    if (colony) this._pruneUnitSelection(colony.planetId);
+    const ordersOk = canIssueColonyOrders(colony) && !colony?.isPreview;
+    if (this._cBuildMode && !ordersOk) this._exitBuildMode();
+    if (this._selectedHex || this._selectedUnit) this._cStation = false;   // zaznaczenie zawsze zmienia inspektor
+    const roles = consoleRoles(THEME);
+
+    // Bohater: kula CS-7 w ramie bohatera na ŻYWEJ, przyciemnionej scenie (płótno kuli jest przezroczyste poza tarczą, jak
+    //   w pozostałych konsolach). Pod samą kulą miękka winieta w barwie tła motywu — tarcza i poświata atmosfery nie zlewają
+    //   się z gwiazdami i orbitami za nią; krawędzie strefy zostają czyste.
+    const hero = z.hero;
+    this._drawHeroVignette(ctx, hero);
+    const placeable = this._consolePlaceable(colony, grid);
+    this._drawSphereMap(ctx, hero.x, hero.y, hero.w, hero.h, grid, colony);
+    if (placeable?.labels?.length) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(hero.x, hero.y, hero.w, hero.h); ctx.clip();
+      drawYieldLabels(ctx, placeable.labels, roles);
+      ctx.restore();
+    }
+    // Zaznaczenie jednostek: dzisiejsza szuflada grupy (armie, łączenie, dzielenie) u dołu bohatera.
+    //   Jedną jednostkę obsługuje inspektor; szuflada pojawia się dopiero dla grupy.
+    if (this._selectedUnits.size > 1 && colony) this._drawBottomDrawer(ctx, hero.x, hero.y, hero.w, hero.h);
+    this._drawConsoleModeBanner(ctx, hero, roles);
+
+    ctx.save();
+    applyConsoleHalo(ctx);
+    try { withAdaptiveHalo(ctx, W, H, () => drawColonyConsole(this, ctx, W, H, colony, grid)); } finally { ctx.restore(); }
+
+    // Komunikat (flash) — nad pasem, w rolach konsoli
+    if (this._flashMsg && Date.now() < this._flashEnd) {
+      const fA = Math.min(1, (this._flashEnd - Date.now()) / 500);
+      ctx.save(); ctx.globalAlpha = fA;
+      ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      const tw = ctx.measureText(this._flashMsg).width;
+      const fx = Math.round(hero.x + hero.w / 2 - tw / 2 - 10), fy = Math.round(hero.y + hero.h - 34);
+      ctx.fillStyle = THEME.bgPrimary; ctx.fillRect(fx, fy, tw + 20, 22);
+      ctx.strokeStyle = roles.alert; ctx.lineWidth = 1; ctx.strokeRect(fx + 0.5, fy + 0.5, tw + 19, 21);
+      ctx.fillStyle = roles.primary; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(this._flashMsg, hero.x + hero.w / 2, fy + 11);
+      ctx.restore();
+      if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;   // wygaszanie komunikatu
+    }
+
+    // Modale dzisiejszego okna (rekrutacja, pickery stacji) — rysowane ostatnie, nad konsolą; obsługa kliknięć bez zmian.
+    const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
+    if (this._draftOpen && !this._stationMode && colony && !colony.isPreview
+        && !colony.ownerEmpireId && !colony.isTestEnemy) {
+      this._drawDraftModal(ctx, ox, oy, ow, oh);
+    }
+    if ((this._stationPickerOpen || this._stationShipPickerOpen) && !this._stationMode && this._infoTab === 'stacja'
+        && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy) {
+      this._drawStationPicker(ctx, ox, oy, ow, oh);
+    }
+  }
+
+  /** Winieta pod kulą: środek tarczy z ostatniej klatki (pierwsza klatka — środek strefy), krycie maleje do zera za limbem. */
+  _drawHeroVignette(ctx, hero) {
+    let disc = null;
+    try { disc = this._sphere?.renderer?.discOnScreen?.({ x: hero.x, y: hero.y, w: hero.w, h: hero.h }) ?? null; } catch { disc = null; }
+    const cx = Number.isFinite(disc?.x) ? disc.x : hero.x + hero.w / 2, cy = Number.isFinite(disc?.y) ? disc.y : hero.y + hero.h / 2;
+    const r = Number.isFinite(disc?.r) && disc.r > 0 ? disc.r : Math.min(hero.w, hero.h) * 0.42;
+    const rgb = hexToRgb(THEME.bgPrimary);
+    const col = (a) => (rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : `rgba(2,4,8,${a})`);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(hero.x, hero.y, hero.w, hero.h); ctx.clip();
+    const g = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * HERO_VIGNETTE.reach);
+    g.addColorStop(0, col(HERO_VIGNETTE.alpha)); g.addColorStop(0.55, col(HERO_VIGNETTE.alpha * 0.75)); g.addColorStop(1, col(0));
+    ctx.fillStyle = g;
+    ctx.fillRect(hero.x, hero.y, hero.w, hero.h);
+    ctx.restore();
+  }
+
+  /** Pas trybu specjalnego u góry bohatera (lądowanie / ostrzał / desant / wsparcie / tryb budowy) — kontekst zawsze na ekranie. */
+  _drawConsoleModeBanner(ctx, hero, roles) {
+    const key = this._landingMode ? 'landing' : this._strikeMode ? 'strike' : this._dropMode ? 'drop' : this._supportMode ? 'support'
+      : this._cBuildMode ? (this._cPick ? 'buildPick' : 'build') : null;
+    if (!key) return;
+    const text = t(`colonyConsole.mode.${key}`, this._cPick ? getName(BUILDINGS[this._cPick], 'building') : '');
+    ctx.save();
+    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(text).width + 24;
+    const bx = Math.round(hero.x + hero.w / 2 - tw / 2), by = hero.y + 46;
+    ctx.globalAlpha = 0.9; ctx.fillStyle = THEME.bgPrimary; ctx.fillRect(bx, by, tw, 22); ctx.globalAlpha = 1;
+    drawZoneFrame(ctx, { x: bx, y: by, w: tw, h: 22 }, roles, { tone: 'primary', arm: 5 });
+    ctx.fillStyle = roles.primary;
+    ctx.fillText(text, hero.x + hero.w / 2, by + 11);
+    ctx.restore();
+  }
+
+  _enterBuildMode() {
+    this._cBuildMode = true; this._cPick = null; this._cStation = false; this._cPaletteCache = null;
+    this._selectedHex = null; this._clearSelection();
+    if (this._cScroll) this._cScroll.insp = 0;
+  }
+
+  _exitBuildMode() { this._cBuildMode = false; this._cPick = null; }
+
+  /**
+   * Katalog palety trybu budowy: budynki, które przechodzą DZISIEJSZĄ bramkę listy pola (`_getAvailableBuildings`) na co
+   * najmniej jednym polu — te same werdykty co tryb „pole → budynek", z konstrukcji. Koszt w palecie = najtańsze pole
+   * (pas równikowy); rzeczywisty koszt wybranego pola pokazuje blok pola pod kursorem. Pamięć podręczna ~0,5 s i do zmiany budynków.
+   */
+  _consolePaletteCatalog(colony, grid) {
+    const now = Date.now();
+    const c = this._cPaletteCache;
+    if (c && c.grid === grid && c.colonyId === colony?.planetId && now - c.at < 500) return c.rows;
+    const bSys = colony?.buildingSystem ?? null;
+    const ok = new Map(), locked = new Map();
+    for (const tile of grid?.tiles ?? []) {
+      if (!tile || tile.buildingId || tile.underConstruction || tile.pendingBuild) continue;
+      for (const e of this._getAvailableBuildings(tile)) {
+        if (e.locked) { if (!locked.has(e.id)) locked.set(e.id, e.reason); continue; }
+        const cost = bSys?.previewBuildCost?.(tile, e.id) ?? {};
+        const sum = Object.values(cost).reduce((a, v) => a + v, 0);
+        const prev = ok.get(e.id);
+        if (!prev || sum < prev.sum) ok.set(e.id, { cost, sum });
+      }
+    }
+    const entries = [...ok.keys()].map((id) => ({ id, locked: false, reason: null }));
+    for (const [id, reason] of locked) if (!ok.has(id)) entries.push({ id, locked: true, reason });
+    const res = colony?.resourceSystem ?? null;
+    const store = window.KOSMOS?.systemPoolService?.getStore?.(res) ?? res;
+    const ordersOk = canIssueColonyOrders(colony);
+    const rows = sortByCategory(tileBuildRows({
+      entries, ordersOk,
+      costOf: (id) => ok.get(id)?.cost ?? null,
+      haveOf: (key) => store?.getAmount?.(key) ?? store?.inventory?.get?.(key) ?? 0,
+    }));
+    this._cPaletteCache = { grid, colonyId: colony?.planetId ?? null, at: now, rows };
+    return rows;
+  }
+
+  /**
+   * Pola, na których stanie wybrany budynek palety (werdykt = `buildVerdictFor`, ten sam co podświetlenie kuli), z napisami
+   * spodziewanego uzysku. Napis ma każde podświetlone pole, gdy pola są dość duże na ekranie; inaczej tylko pole pod kursorem.
+   */
+  _consolePlaceable(colony, grid) {
+    this._cPlaceable = null;
+    if (!this._cBuildMode || !this._cPick || !this._sphere || !grid) return null;
+    const b = BUILDINGS[this._cPick];
+    const hero = this.consoleZones?.hero;
+    if (!b || !hero) return null;
+    const sv = this._sphere, bSys = colony?.buildingSystem ?? null;
+    const ctxV = { techSystem: window.KOSMOS?.techSystem ?? null, planet: colony?.planet ?? null };
+    const rect = { x: hero.x, y: hero.y, w: hero.w, h: hero.h };
+    const big = (sv.renderer?.tileScreenSize?.(rect) ?? 0) >= 34;
+    const hov = this._hoveredHex;
+    const labels = [];
+    let count = 0;
+    for (const tile of grid.tiles) {
+      if (!tile || buildVerdictFor(tile, b, ctxV) !== BUILD_VERDICT.OK) continue;
+      count++;
+      const isHov = !!hov && samePos(hov, tile);
+      if (!big && !isHov) continue;
+      const pr = sv.renderer?.project?.(tile.q, rect);
+      if (!pr?.visible || (pr.facing ?? 1) < 0.25) continue;
+      const y = bSys?.previewTileYield?.(tile, b.id) ?? null;
+      const lat = bSys?._latitudeModifier?.(tile) ?? null;
+      let text = y && y.key != null ? `+${Math.abs(y.value) >= 100 ? y.value.toFixed(0) : Number(y.value.toFixed(1))}` : '';
+      if (lat && lat.buildCost !== 1) text += `${text ? ' ' : ''}${t('colonyConsole.costMult', lat.buildCost)}`;
+      if (text) labels.push({ x: pr.x, y: pr.y, text, tone: lat && lat.buildCost !== 1 ? 'alert' : 'primary' });
+    }
+    this._cPlaceable = { count, labels };
+    return this._cPlaceable;
+  }
+
+  /** Tryb budowy: postaw wybrany budynek na polu. Odmowa zawsze z powodem (flash); Shift zostawia budynek uzbrojony. */
+  _consolePlace(tile, colony, keepArmed) {
+    const id = this._cPick;
+    const b = id ? BUILDINGS[id] : null;
+    if (!b) { this._showFlash(t('colonyConsole.flash.pickFirst')); return false; }
+    const ctxV = { techSystem: window.KOSMOS?.techSystem ?? null, planet: colony?.planet ?? null };
+    const v = buildVerdictFor(tile, b, ctxV);
+    if (v === BUILD_VERDICT.OCCUPIED) { this._showFlash(t('colonyConsole.flash.occupied')); return false; }
+    if (v !== BUILD_VERDICT.OK) {
+      const ev = evaluatePlacement(tile, b, ctxV);
+      this._showFlash(`${t(ev.reason ?? 'ui.terrainForbidden')} — ${t('colonyConsole.fix.otherTile')}`);
+      return false;
+    }
+    EventBus.emit('planet:buildRequest', { tile, buildingId: id });
+    this._cPaletteCache = null;
+    if (!keepArmed) this._cPick = null;
+    return true;
+  }
+
+  /** Strefy konsoli (`c…`). True — strefa obsłużona. */
+  _onConsoleHit(zone, colony, graph) {
+    const d = zone.data ?? {};
+    switch (zone.type) {
+      case 'cReason':
+        if (d.tip) this._showFlash(d.tip);
+        return true;
+      case 'cChip': {
+        const id = d.id ?? '';
+        if (d.enabled === false) { if (d.tip) this._showFlash(d.tip); return true; }
+        if (id === 'view:colony') { this._cStation = false; closeFullBoundsModals(this); }
+        else if (id === 'view:station') {
+          this._exitBuildMode();
+          this._selectedHex = null; this._clearSelection();
+          this._cStation = true;
+        } else if (id === 'build') {
+          if (this._cBuildMode) this._exitBuildMode(); else this._enterBuildMode();
+        } else if (id.startsWith('lens:')) {
+          const sv = this._sphereOf();
+          const next = lensAfterChip({ lens: sv.lens, supply: !!this._showSupplyCoverage }, id.slice(5));
+          sv.lens = next.lens; this._showSupplyCoverage = next.supply;
+        }
+        return true;
+      }
+      case 'cInspTab':
+        this._cInspTab = d.id ?? 'summary';
+        closeFullBoundsModals(this);
+        return true;
+      case 'cBuildExit': this._exitBuildMode(); return true;
+      case 'cCat':
+        this._cCat = d.id ?? null; this._cPick = null;
+        if (this._cScroll) this._cScroll.insp = 0;
+        return true;
+      case 'cPick':
+        this._cPick = (this._cPick === d.buildingId) ? null : (d.buildingId ?? null);
+        return true;
+      case 'cQueueFocus': {
+        const qt = graph?.tile?.(d.tileKey) ?? null;
+        if (!qt) return true;
+        this._exitBuildMode();
+        this._clearSelection();
+        this._selectedHex = { q: qt.q, r: qt.r };
+        if (this._cScroll) this._cScroll.insp = 0;
+        this._sphere?.turnToTile?.(qt);
+        return true;
+      }
+      case 'cQueueCancel': {
+        const bSys = colony?.buildingSystem;
+        if (!bSys) return true;
+        if (d.kind === 'construction') bSys.cancelConstruction(d.tileKey);
+        else {
+          bSys.cancelPending(d.tileKey);
+          const qt = graph?.tile?.(d.tileKey) ?? null;
+          if (qt) qt.pendingBuild = null;
+        }
+        this._onBuildingChanged();
+        return true;
+      }
+      case 'cCargo': {
+        // Dzisiejsze okno załadunku wojsk (tryb `troopsOnly`) dla statku z ładownią, otwarte przy strefie inspektora.
+        const vessel = window.KOSMOS?.vesselManager?.getVessel?.(d.vesselId) ?? null;
+        if (!vessel || !colony) { this._showFlash(t('colonyConsole.reason.noTransport')); return true; }
+        const z = this.consoleZones;
+        const anchor = z?.inspector ? dialogAnchorCss(z.inspector, _UI_SCALE, { frame: z.frame ?? null, dy: 22, minW: Math.max(260, 440 / _UI_SCALE) }) : null;
+        try { showCargoLoadModal(vessel, colony, { troopsOnly: true, anchor })?.catch?.(() => {}); } catch { /* anulowano */ }
+        return true;
+      }
+      case 'cQueueMove':
+        if (!colony?.buildingSystem?.movePending?.(d.tileKey, d.delta)) this._showFlash(t(d.delta < 0 ? 'colonyConsole.reason.first' : 'colonyConsole.reason.last'));
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /** Kółko myszy w konsoli: strefa przewijania pod kursorem → osadzona zakładka → kula. */
+  _consoleScroll(delta, x, y) {
+    const inR = (r) => !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    const iv = this._infoView;
+    if (iv && iv.scrollable && x >= iv.x && x <= iv.x + iv.w && y >= iv.top && y <= iv.bot) {
+      this._infoScroll ??= {};
+      this._infoScroll[iv.tab] = Math.max(0, (this._infoScroll[iv.tab] ?? 0) + delta);
+      return true;
+    }
+    this._cScroll ??= {};
+    for (const key of ['list', 'card', 'insp', 'queue']) {
+      if (!inR(this._cScrollRects?.[key])) continue;
+      this._cScroll[key] = Math.max(0, (this._cScroll[key] ?? 0) + delta);   // górna klamra w rysowaniu strefy
+      return true;
+    }
+    const z = this.consoleZones;
+    if (z?.hero && inR(z.hero) && this._sphere) {
+      this._sphere.wheel(delta);
+      if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+      return true;
+    }
+    return !!z?.frame && inR(z.frame);
   }
 
   _scheduleSphereFrame(delayMs) {
@@ -4621,6 +4960,11 @@ export class ColonyOverlay extends BaseOverlay {
     if (!canvas) return null;
     const _r = canvas.getBoundingClientRect(); const W = _r.width / _UI_SCALE, H = _r.height / _UI_SCALE;  // CSS-size (niezależne od DPR backing store)
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
+    // CS-8 — konsola Kolonii: mapa = strefa bohatera (policzona w ostatniej klatce).
+    if (this._consoleOn && this.consoleZones?.hero) {
+      const h = this.consoleZones.hero;
+      return { ox: h.x, oy: h.y, ow: h.w, oh: h.h };
+    }
     // Mapa: overlay POMNIEJSZONY o prawą kolumnę info (szer.) oraz pasek budynków (wys.).
     return { ox, oy: oy + HDR_H + BUILD_BAR_H, ow: ow - this._infoW(ow), oh: oh - HDR_H - BUILD_BAR_H };
   }
@@ -4696,7 +5040,7 @@ export class ColonyOverlay extends BaseOverlay {
     // S3.4 FAZA 3 — w trybie stacji brak mapy hex: klik poza przyciskiem konsumowany (bez logiki kafla).
     if (this._stationMode) return true;
     // Podgląd — read-only: klik w mapę nic nie buduje/selekcjonuje (pan/zoom działają osobno).
-    if (this._previewMode) return true;
+    if (this._previewMode && !this._consoleOn) return true;
 
     if (!this._hasDragged) {
       const colony = this._getColony();
@@ -4853,6 +5197,12 @@ export class ColonyOverlay extends BaseOverlay {
         return true;
       }
 
+      // CS-8 — tryb budowy konsoli: klik w pole stawia wybrany budynek (Shift — kolejne pola); odmowa zawsze z powodem.
+      if (tile && this._consoleOn && this._cBuildMode) {
+        this._consolePlace(tile, colony, !!this._lastMouseMods?.shift);
+        return true;
+      }
+
       if (tile) {
         if (isSphereGrid(grid)) this._sphere?.clickTile(tile);   // CS-7 — dwuklik w pole obraca kulę do niego
         // Finding 379 — klik zaznacza wyłącznie jednostkę, którą gracz widzi; filtry jak `getUnitAt` (nie `moving`,
@@ -4943,6 +5293,8 @@ export class ColonyOverlay extends BaseOverlay {
     const grid = colony ? this._getGrid(colony) : null;
     const graph = tileGraphOf(grid);
     const tile = this._selectedHex && grid ? graph.tile(this._selectedHex) : null;
+
+    if (this._onConsoleHit(zone, colony, graph)) return;   // CS-8 — strefy konsoli Kolonii (typy `c…`)
 
     switch (zone.type) {
       case 'close':
@@ -5417,6 +5769,7 @@ export class ColonyOverlay extends BaseOverlay {
     const hit = this._hitTest(x, y);
     const oldHov = this._hoveredBuildId;
     this._hoveredBuildId = (hit?.type === 'build') ? hit.data?.buildingId : null;
+    if (this._consoleOn && hit) { this._hoveredHex = null; this._hideTooltip(); return; }   // CS-8 — podpowiedzi rysuje konsola
 
     // Faza 3: generyczny tooltip z pola zone.data.tooltip (focus slider, lista budynków warstw).
     if (hit?.data?.tooltip) { this._showTooltip(hit.data.tooltip, x * _UI_SCALE, y * _UI_SCALE); return; }
@@ -5657,6 +6010,8 @@ export class ColonyOverlay extends BaseOverlay {
       return true;
     }
 
+    if (this._consoleOn) return this._consoleScroll(delta, x, y);   // CS-8 — strefy przewijania konsoli Kolonii
+
     const mb = this._getMapBounds();
     // Scroll poziomy zakładek kolonii (kursor nad pasmem nagłówka)
     if (mb && x >= mb.ox && y >= mb.oy - HDR_H - BUILD_BAR_H && y <= mb.oy - BUILD_BAR_H) {
@@ -5759,6 +6114,7 @@ export class ColonyOverlay extends BaseOverlay {
       if (this._strikeMode)  { this._strikeMode = false; this._strikeVesselId = null; this._strikePlanetId = null; this._showFlash('💥 Ostrzał anulowany'); return true; }
       if (this._supportMode) { this._supportMode = false; this._supportSourceUnitId = null; this._showFlash('🎯 Wybór wsparcia anulowany'); return true; }
       if (this._landingMode) { this._landingMode = false; this._landingVesselId = null; this._showFlash('🤖 Away Team anulowany'); return true; }
+      if (this._consoleOn && this._cBuildMode) { this._exitBuildMode(); return true; }   // CS-8 — Esc wychodzi z trybu budowy
       if (this._selectedUnit) { this._selectedUnit = null; this._selectedHex = null; return true; }
       if (this._selectedHex) { this._selectedHex = null; return true; }
       this.hide();
@@ -5782,6 +6138,14 @@ export class ColonyOverlay extends BaseOverlay {
       const grid = colony ? this._getGrid(colony) : null;
       const tile = tileGraphOf(grid)?.tile(this._selectedHex);
       if (tile?.buildingId) { EventBus.emit('planet:demolishRequest', { tile }); return true; }
+      // CS-8 — konsola: Delete na polu z budową / zamówieniem przerywa je (jak czip inspektora); na pustym polu mówi dlaczego nic.
+      if (this._consoleOn && tile) {
+        if (!canIssueColonyOrders(colony) || colony?.isPreview) { this._showFlash(t('colonyConsole.reason.foreign')); return true; }
+        if (tile.underConstruction || tile.pendingBuild) {
+          this._onConsoleHit({ type: 'cQueueCancel', data: { tileKey: tileGraphOf(grid).idOf(tile), kind: tile.underConstruction ? 'construction' : 'pending' } }, colony, tileGraphOf(grid));
+        } else this._showFlash(t('colonyConsole.flash.nothingToDemolish'));
+        return true;
+      }
     }
 
     // Opcja C v3: toggle Supply Coverage overlay — Shift+S (żeby samo 's' mogło być pan)

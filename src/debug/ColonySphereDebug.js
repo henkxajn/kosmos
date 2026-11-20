@@ -44,6 +44,7 @@ import { orbitModelOfWorld, orbitZoneOf, frostLineAU, scaledMinOrbitAU, compacti
 import { csCollisionTest, csCollisionTestLowFps } from './CollisionTestDebug.js';   // CS-PHYS-c (Finding 776) — przemiatane wejście w walkę
 import { csSurface, csSurfaceAll, csCache } from './SurfacePreviewDebug.js';
 import { colonySphereHeroDebugHelpers } from './ColonySphereHeroDebug.js';   // CS-7 — csSphere / csSphereUnit / csSphere2D
+import { colonyConsoleDebugHelpers } from './ColonyConsoleDebug.js';         // CS-8 — csConsole / csOutpost / csColony / csStationTech / csPoor / csRich
 import { csGeoGrid } from './GeoGridDebug.js';   // CS-5a — siatka geodezyjna aktywnego ciała nad mapą bohatera   // CS-4a / CS-4b — podgląd powierzchni + stan cache
 import { cs2GeometryDebugHelpers } from './Cs2GeometryDebug.js';   // CS-2 (Finding 779) — scenariusze bramki geometrii siatki
 
@@ -439,5 +440,5 @@ export function colonySphereDebugHelpers() {
     return summary;
   };
   return { csWorlds, csPeek, csArchetypes, csTemp, csLifeTick, csClimate, csOrbits, csSurface, csSurfaceAll, csCache, csNextSystem, csShared, csDeck, csLocked, csHaze, csCollisionTest, csCollisionTestLowFps, csGeoGrid,
-    ...cs2GeometryDebugHelpers(), ...colonySphereHeroDebugHelpers() };
+    ...cs2GeometryDebugHelpers(), ...colonySphereHeroDebugHelpers(), ...colonyConsoleDebugHelpers() };
 }

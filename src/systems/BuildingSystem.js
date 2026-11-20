@@ -827,6 +827,98 @@ export class BuildingSystem {
     }
   }
 
+  // ── Koszty (jedno źródło dla pobrania i podglądu) ───────────────────────
+
+  /**
+   * Rzeczywisty koszt budowy `building` na polu `tile`: surowce × pas szerokości × dopłata środowiskowa, towary z dopłatą
+   * środowiskową, wyjątek habitatu (gęsta atmosfera), dopłata Si na planecie ekstremalnej. `_build` pobiera DOKŁADNIE to.
+   * @returns {Object<string, number>}
+   */
+  _buildCostOn(tile, building, buildingId = building?.id) {
+    // Modyfikator polarny (wyłączony dla RegionSystem — polarność wbudowana w biom)
+    const latMod = this._latitudeModifier(tile);
+
+    // Oblicz koszt surowców: modyfikator polarny (latMod) × dopłata środowiskowa (Stage 2).
+    // Wspólny helper z UI (computeBuildResourceCost) → podgląd == rzeczywisty koszt dla części środowiskowej.
+    const actualCost = {};
+    Object.assign(actualCost, computeBuildResourceCost(building, this._resolveOwnPlanet(), latMod.buildCost));
+    // Commodity cost: bez modyfikatora polarnego, ale Z dopłatą środowiskową (Stage 3 Part A) —
+    // ta sama premia % co surowce, żeby harsh planeta nie była do obejścia komponentami.
+    Object.assign(actualCost, computeBuildCommodityCost(building, this._resolveOwnPlanet()));
+
+    // Habitat na planecie z atmosferą thick/dense — nie wymaga habitat_modules
+    if (buildingId === 'habitat') {
+      const atmo = window.KOSMOS?.homePlanet?.atmosphere;
+      if (atmo === 'thick' || atmo === 'dense') {
+        delete actualCost.pressure_modules;
+      }
+    }
+
+    // Surcharge Si na ekstremalnych planetach (brak atmo, gorąco, zimno)
+    if (this._isPlanetExtreme() && (building.jobs ?? 0) > 0 && !building.isAutonomous) {
+      actualCost.Si = (actualCost.Si || 0) + 5;
+    }
+    return actualCost;
+  }
+
+  /**
+   * CS-8 (Finding 780) — podgląd kosztu budowy na polu: ta sama funkcja, którą `_build` pobiera koszt.
+   * @returns {Object<string, number>|null} null — nieznany budynek / brak pola
+   */
+  previewBuildCost(tile, buildingId) {
+    const building = BUILDINGS[buildingId];
+    if (!tile || !building) return null;
+    return this._buildCostOn(tile, building, buildingId);
+  }
+
+  /**
+   * CS-8 — spodziewany uzysk budynku na polu (poziom 1, pełna obsada): stawki bazowe z `_calcBaseRates` (teren, pas szerokości,
+   * klimat, anomalie) + mnożnik pola względem stawki z danych. Budynek bez dodatnich stawek (kopalnia — urobek liczony ze złóż
+   * CIAŁA, nie z pola, D-CS-6; habitat) → `mult: null`: pole nie zmienia uzysku.
+   * @returns {{ rates:Object<string, number>, key:string|null, value:number|null, mult:number|null }|null}
+   */
+  previewTileYield(tile, buildingId) {
+    const building = BUILDINGS[buildingId];
+    if (!tile || !building) return null;
+    const rates = this._calcBaseRates(building, tile, 1);
+    let key = null;
+    for (const [k, v] of Object.entries(building.rates ?? {})) {
+      if (v > 0 && (key == null || v > building.rates[key])) key = k;
+    }
+    if (key != null) return { rates, key, value: rates[key] ?? 0, mult: (rates[key] ?? 0) / building.rates[key] };
+    return { rates, key: null, value: null, mult: null };
+  }
+
+  /** Koszt ulepszenia do `nextLevel`: baseCost × level × 1.2 × dopłata środowiskowa; towary od poziomu 3. */
+  _upgradeCostOf(building, nextLevel) {
+    const upgradeEnvMult = envMultiplier(building.category, this._resolveOwnPlanet(), { building });
+    const upgradeCost = {};
+    if (building.cost) {
+      for (const [k, v] of Object.entries(building.cost)) {
+        upgradeCost[k] = Math.ceil(v * nextLevel * 1.2 * upgradeEnvMult);
+      }
+    }
+    if (nextLevel >= 3 && building.commodityCost) {
+      for (const [k, v] of Object.entries(building.commodityCost)) {
+        upgradeCost[k] = Math.ceil(v * (nextLevel - 1) * upgradeEnvMult);
+      }
+    }
+    return upgradeCost;
+  }
+
+  /**
+   * CS-8 — podgląd ulepszenia budynku na polu: koszt następnego poziomu (ta sama funkcja co `_upgrade`).
+   * @returns {{ nextLevel:number, maxLevel:number, cost:Object<string, number> }|null} null — brak budynku / poziom maksymalny
+   */
+  previewUpgradeCost(tileKey) {
+    const entry = this._active.get(tileKey);
+    if (!entry?.building) return null;
+    const maxLevel = this.getMaxLevel();
+    const nextLevel = (entry.level || 1) + 1;
+    if (nextLevel > maxLevel) return null;
+    return { nextLevel, maxLevel, cost: this._upgradeCostOf(entry.building, nextLevel) };
+  }
+
   // ── Budowa ──────────────────────────────────────────────────────────────
 
   _build(tile, buildingId) {
@@ -936,29 +1028,8 @@ export class BuildingSystem {
       }
     }
 
-    // Modyfikator polarny (wyłączony dla RegionSystem — polarność wbudowana w biom)
-    const latMod = this._latitudeModifier(tile);
-
-    // Oblicz koszt surowców: modyfikator polarny (latMod) × dopłata środowiskowa (Stage 2).
-    // Wspólny helper z UI (computeBuildResourceCost) → podgląd == rzeczywisty koszt dla części środowiskowej.
-    const actualCost = {};
-    Object.assign(actualCost, computeBuildResourceCost(building, this._resolveOwnPlanet(), latMod.buildCost));
-    // Commodity cost: bez modyfikatora polarnego, ale Z dopłatą środowiskową (Stage 3 Part A) —
-    // ta sama premia % co surowce, żeby harsh planeta nie była do obejścia komponentami.
-    Object.assign(actualCost, computeBuildCommodityCost(building, this._resolveOwnPlanet()));
-
-    // Habitat na planecie z atmosferą thick/dense — nie wymaga habitat_modules
-    if (buildingId === 'habitat') {
-      const atmo = window.KOSMOS?.homePlanet?.atmosphere;
-      if (atmo === 'thick' || atmo === 'dense') {
-        delete actualCost.pressure_modules;
-      }
-    }
-
-    // Surcharge Si na ekstremalnych planetach (brak atmo, gorąco, zimno)
-    if (this._isPlanetExtreme() && (building.jobs ?? 0) > 0 && !building.isAutonomous) {
-      actualCost.Si = (actualCost.Si || 0) + 5;
-    }
+    // Koszt budowy NA TYM POLU — jedna funkcja dla pobrania i dla podglądu w oknie kolonii (Finding 780).
+    const actualCost = this._buildCostOn(tile, building, buildingId);
 
     // Mutex: farm vs synthesized_food_plant (nie mogą istnieć na tej samej planecie)
     if (building.isSynthFood) {
@@ -1095,19 +1166,8 @@ export class BuildingSystem {
     // budowa, tylko część SUROWCOWA; commodityCost bez zmian, spójnie z computeBuildResourceCost).
     // Planeta TEJ kolonii (nie homePlanet); fail-open: brak planety → envMultiplier=1. Zamyka lukę
     // „upgrade omija premię środowiskową" z REFORM_STAGE2_REPORT (Part B, known scope gap).
-    const upgradeEnvMult = envMultiplier(building.category, this._resolveOwnPlanet(), { building });
-    const upgradeCost = {};
-    if (building.cost) {
-      for (const [k, v] of Object.entries(building.cost)) {
-        upgradeCost[k] = Math.ceil(v * nextLevel * 1.2 * upgradeEnvMult);
-      }
-    }
     // Commodities od poziomu 3 — Z dopłatą środowiskową (Stage 3 Part A; ta sama premia % co surowce).
-    if (nextLevel >= 3 && building.commodityCost) {
-      for (const [k, v] of Object.entries(building.commodityCost)) {
-        upgradeCost[k] = Math.ceil(v * (nextLevel - 1) * upgradeEnvMult);
-      }
-    }
+    const upgradeCost = this._upgradeCostOf(building, nextLevel);
 
     // Sprawdzenie POPów i surowców — brak → dodaj do pending queue
     const popCost = this._isOutpost ? 0 : (entry.popCost ?? building.popCost ?? POP_PER_BUILDING);
@@ -1583,6 +1643,28 @@ export class BuildingSystem {
     this._pendingQueue.delete(tileKey);
     // Tile pendingBuild jest czyszczony przez _syncBuildingIds() po evencie
     EventBus.emit('planet:pendingCancelled', { tileKey });
+  }
+
+  // ── Kolejność zamówień oczekujących (CS-8 — pas kolejki w konsoli Kolonii) ──
+
+  /**
+   * Przesuń zamówienie oczekujące o `delta` pozycji (−1 = wcześniej, +1 = później). Kolejność mapy = kolejność, w jakiej
+   * `_tickPendingQueue` próbuje je opłacić, więc wcześniejsze zamówienie pierwsze dostaje brakujące surowce.
+   * Zapis zachowuje kolejność mapy — bez zmiany formatu.
+   * @returns {boolean} true — kolejność się zmieniła
+   */
+  movePending(tileKey, delta) {
+    const keys = [...this._pendingQueue.keys()];
+    const from = keys.indexOf(tileKey);
+    const step = Math.sign(Number(delta) || 0);
+    const to = from + step;
+    if (from < 0 || step === 0 || to < 0 || to >= keys.length) return false;
+    [keys[from], keys[to]] = [keys[to], keys[from]];
+    const next = new Map(keys.map((k) => [k, this._pendingQueue.get(k)]));
+    this._pendingQueue.clear();
+    for (const [k, v] of next) this._pendingQueue.set(k, v);
+    EventBus.emit('planet:pendingReordered', { planetId: this._planetId, tileKey });
+    return true;
   }
 
   // ── Demand z pending orders (dla CivilianTradeSystem) ────────────────

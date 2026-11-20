@@ -493,7 +493,6 @@ export class ColonyManager {
     // FactorySystem per-kolonia. Kolonia gracza = tryb reaktywny (reforma:
     // gracz produkuje wyłącznie reactive + jednorazowe zlecenia; brak manual/priority w UI).
     const factSys = new FactorySystem(resourceSystem);
-    factSys.setMode('reactive');
     if (buildingSystem) {
       buildingSystem.setFactorySystem(factSys);
       buildingSystem.setPlanetId(planet.id);
@@ -528,6 +527,10 @@ export class ColonyManager {
       tradeOverrides:  {},
     };
     this._colonies.set(planet.id, colony);
+    // Finding 792 — tryb reaktywny dopiero PO rejestracji (jak Finding 791 w `createColony` / `createOutpost`): `setMode` od razu
+    //   liczy popyt, a `isRecipeAvailable` szuka kolonii-właściciela w rejestrze (wcześniej: fail-closed, 3 ostrzeżenia, pierwsza
+    //   alokacja bez towarów konsumpcyjnych). Zmienia pierwszą alokację każdej nowej gry → nowy bazowy hash probe-cs1a-trace.
+    factSys.setMode('reactive');
     this._activePlanetId = planet.id;
     window.KOSMOS.factorySystem = factSys;
     window.KOSMOS.prosperitySystem = prospSys;
@@ -573,7 +576,6 @@ export class ColonyManager {
     // FactorySystem per-kolonia. Kolonia GRACZA (ownerEmpireId=null) startuje
     // w trybie reaktywnym (reforma); kolonie AI ustawia EmpireColonyBootstrap.
     const factSys = new FactorySystem(resSys);
-    if (!ownerEmpireId) factSys.setMode('reactive');
     bSys.setFactorySystem(factSys);
 
     // ProsperitySystem per-kolonia
@@ -606,6 +608,10 @@ export class ColonyManager {
     };
 
     this._colonies.set(planetId, colony);
+    // Finding 791 — tryb reaktywny dopiero PO rejestracji kolonii: `setMode` od razu liczy popyt (`_reactiveAllocate`), a
+    //   `isRecipeAvailable` szuka kolonii-właściciela w rejestrze. Wołane wcześniej nie znajdowało jej (fail-closed) i pierwsza
+    //   alokacja pomijała towary konsumpcyjne (basic_supplies, civilian_goods, neurostimulants) z ostrzeżeniem w konsoli.
+    if (!ownerEmpireId) factSys.setMode('reactive');
 
     EventBus.emit('colony:founded', { colony });
     EventBus.emit('colony:listChanged', {});
@@ -654,7 +660,6 @@ export class ColonyManager {
 
     // FactorySystem per-outpost. Outpost GRACZA → tryb reaktywny (reforma).
     const factSys = new FactorySystem(resSys);
-    if (!ownerEmpireId) factSys.setMode('reactive');
     bSys.setFactorySystem(factSys);
 
     // ProsperitySystem per-outpost (pop=0 → prosperity=0, brak demand/epoch)
@@ -694,6 +699,7 @@ export class ColonyManager {
     };
 
     this._colonies.set(planetId, colony);
+    if (!ownerEmpireId) factSys.setMode('reactive');   // Finding 791 — po rejestracji (jak `createColony`)
 
     EventBus.emit('outpost:founded', { colony });
     EventBus.emit('colony:listChanged', {});

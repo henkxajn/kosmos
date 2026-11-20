@@ -39,12 +39,12 @@ function defaultCreateCanvas(w, h) {
 }
 
 function defaultCreateGL(THREE, canvas) {
-  const r = new THREE.WebGLRenderer({ canvas, alpha: false, antialias: true, preserveDrawingBuffer: true });
+  const r = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });   // CS-8 — przezroczyste tło kadru
   r.setPixelRatio(1);
   r.toneMapping = THREE.ACESFilmicToneMapping;          // jak mapa układu (ThreeRenderer)
   r.toneMappingExposure = SPHERE_LIGHT.exposure;
   r.outputColorSpace = THREE.SRGBColorSpace;
-  r.setClearColor(BACKGROUND_HEX, 1);
+  r.setClearColor(BACKGROUND_HEX, 0);   // poza tarczą widać to, co gospodarz narysował pod kulą (żywa, przyciemniona scena)
   return r;
 }
 
@@ -631,7 +631,7 @@ export class ColonySphereRenderer {
     const ov = this._overlay, n = topo.count;
     ctx.save();
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
-    ctx.fillStyle = '#020408'; ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    // CS-8 — bez pełnego tła kadru (jak WebGL: przezroczyste poza tarczą); sama tarcza ma ciemny podkład
     ctx.fillStyle = '#0a0f16'; ctx.beginPath(); ctx.arc(disc.x, disc.y, disc.r, 0, Math.PI * 2); ctx.fill();
     const sx = (nx) => rect.x + (nx + 1) * 0.5 * rect.w, sy = (ny) => rect.y + (1 - ny) * 0.5 * rect.h;
     const hov = this._hover.on ? this._hover.tile : -1, sel = this._mode.selectedTile;
