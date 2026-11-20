@@ -366,9 +366,9 @@ assert(/isSphereGrid\(grid\)/.test(tsp) && /this\._sphere\.tileScreenPos\(tile, 
 assert(/if \(grid && isSphereGrid\(grid\)\) \{\s*this\._drawSphereMap\(ctx, ox, mapY, mapW, mapH, grid, colony\);\s*\} else if \(grid\) \{\s*ctx\.save\(\);\s*ctx\.beginPath\(\); ctx\.rect\(ox, mapY, mapW, mapH\); ctx\.clip\(\);\s*this\._drawMap\(ctx, ox, mapY, mapW, mapH, grid, colony\?\.planet\);/.test(co),
   'P5c draw(): geo grid → sphere, any other grid → today\'s clipped _drawMap call');
 const dsm = body(co, '  _drawSphereMap(ctx, ox, oy, ow, oh, grid, colony) {');
-assert(/this\._drawUnits\(ctx, ox, oy, ow, oh, sv\.gridAdapter\(grid, rect\)\)/.test(dsm) && /finally \{ \[this\._camX, this\._camY, this\._hexSize\] = keep; \}/.test(dsm)
+assert(/sv\.syncUnits\(\{\s*grid, units: gum && colony \? visibleGroundUnits\(window\.KOSMOS, gum\.getUnitsOnPlanet\(colony\.planetId\)\) : \[\],/.test(dsm) && /sv\.draw\(ctx, rect\);\s*sv\.drawUnits\(ctx, rect\);/.test(dsm) && !/_drawUnits\(/.test(dsm)
   && /buildMenu = !!selTile && !this\._selectedUnit && !!colony && !colony\.isPreview && !selTile\.isOccupied/.test(dsm) && /this\._sphereActive = true/.test(dsm),
-'P5d sphere map: units drawn by today\'s _drawUnits through the grid adapter, flat camera restored; build mode = build menu on a free tile');
+'P5d sphere map: units drawn by the sphere unit view (CS-10: models / markers, same visibility rule), no 2D unit code on the sphere; build mode = build menu on a free tile');
 assert(/_canStartRectSelect\(x, y\) \{\s*if \(!this\.visible\) return false;\s*if \(this\._sphereActive\) return false;/.test(co)
   && /_loadBiomeMap\(planet, grid, planetId\) \{\s*if \(!planet \|\| !grid\) return;\s*if \(isSphereGrid\(grid\)\) return;/.test(co)
   && /this\._sphere\?\.release\(\); this\._sphereActive = false;/.test(co)

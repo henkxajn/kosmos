@@ -294,6 +294,14 @@ export class ColonyOverlay extends BaseOverlay {
       this._showFlash(`💥 Wybierz hex ostrzału (${vessel.orbitalStrike.ammoCurrent} pocisków)`);
     });
 
+    // CS-10 — desant na kolonii geo: kula pokazuje lądowanie (model opada na pole + znacznik); siatka płaska — nic.
+    EventBus.on('invasion:troopsLanded', ({ planetId, unitIds }) => {
+      const grid = window.KOSMOS?.colonyManager?.getColony?.(planetId)?.grid;
+      if (grid?.kind !== 'geo' || !unitIds?.length) return;
+      this._sphereOf().units.noteLanding(unitIds);
+      if (this.visible && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+    });
+
     // Intercept movement — unit wpadł w kontakt z wrogiem, ruch przerwany
     EventBus.on('groundUnit:intercepted', ({ unitId, planetId, q, r }) => {
       if (!this.visible) return;
@@ -2561,12 +2569,16 @@ export class ColonyOverlay extends BaseOverlay {
     });
     ctx.save();
     ctx.beginPath(); ctx.rect(ox, oy, ow, oh); ctx.clip();
+    // CS-10 — jednostki na kuli: modele GLB z bliska, zwarte znaczniki z daleka (ColonySphereUnits); lista przez TĘ SAMĄ
+    //   regułę widoczności co mapa 2D (Finding 379). Stan przed rysunkiem kuli — renderer renderuje modele w tej samej klatce.
+    const gum = window.KOSMOS?.groundUnitManager;
+    sv.syncUnits({
+      grid, units: gum && colony ? visibleGroundUnits(window.KOSMOS, gum.getUnitsOnPlanet(colony.planetId)) : [],
+      archetypes: this._deployArchetypes ?? null, selectedId: this._selectedUnit?.id ?? null, selectedIds: this._selectedUnits,
+      paused: !!window.KOSMOS?.timeSystem?.isPaused,
+    }, rect);
     sv.draw(ctx, rect);
-    // Jednostki: DZISIEJSZY kod mapy 2D na siatce-adapterze (pozycja pola = rzut na ekran); kamera mapy 2D nietknięta.
-    const keep = [this._camX, this._camY, this._hexSize];
-    this._camX = 0; this._camY = 0; this._hexSize = Math.max(8, sv.markerHexSize(rect) * 0.8);
-    try { this._drawUnits(ctx, ox, oy, ow, oh, sv.gridAdapter(grid, rect)); }
-    finally { [this._camX, this._camY, this._hexSize] = keep; }
+    sv.drawUnits(ctx, rect);
     sv.drawChrome(ctx, rect);
     ctx.restore();
     // Płótno UI rysuje się na żądanie: po całej klatce okna (mała kula w panelu informacji rysuje się później) zamów

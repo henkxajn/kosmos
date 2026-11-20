@@ -19,6 +19,7 @@ import { BILLBOARD, BILLBOARD_STATE, BILLBOARD_COLORS, billboardSpecOf, buildBil
 import { ColonyBillboardAtlas } from '../renderer/ColonyBillboardAtlas.js';
 import { CITY_LIGHTS, cityLightsOf, rasterizeCityLights, populationOfColony } from '../renderer/CityLightsLogic.js';
 import { drawSphereChrome, sphereThemeColors } from './ColonySphereChrome.js';
+import { ColonySphereUnits } from './ColonySphereUnits.js';
 import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { ANOMALIES } from '../data/AnomalyData.js';
@@ -138,6 +139,8 @@ export class ColonySphereView {
     this.lodBias = 1;                   // podgląd LOD (`csDots()`): < 1 = znaczniki jak z daleka (kropki kategorii)
     this._markerStats = { ms: [], portraits: 0, dots: 0, frames: 0 };
     this._lights = null; this._lightSig = null; this._lightMap = null;
+    // CS-10 — jednostki: modele GLB z bliska, zwarte znaczniki z daleka (ColonySphereUnits)
+    this.units = new ColonySphereUnits({ renderer: this.renderer });
   }
 
   /** Przełącz soczewkę klawiszem (brak → Teren → Złoża → Własność → brak). Zwraca nową. */
@@ -213,12 +216,21 @@ export class ColonySphereView {
     this._state = { build, supply: !!s.supply, name: s.colony?.name ?? planet?.name ?? '', archetype: planet?.bodyArchetype ?? null };
   }
 
-  /** Kula + znaczniki budynków + rama. Jednostki dorysowuje gospodarz MIĘDZY `draw` a `drawChrome` (przez `gridAdapter`). */
+  /**
+   * Kula + znaczniki budynków. Jednostki: gospodarz woła `syncUnits` PRZED `draw` (renderer musi znać instancje modeli)
+   * i `drawUnits` po nim — jednostki są nad portretami budynków; rama (`drawChrome`) na końcu.
+   */
   draw(ctx, rect) {
     const res = this.renderer.draw(ctx, rect);
     this._drawMarkers(ctx, rect);
     return res;
   }
+
+  /** CS-10 — stan jednostek klatki (lista po regule widoczności gospodarza, zaznaczenie, pauza). */
+  syncUnits(s, rect) { this.units.sync({ ...s, grid: s.grid ?? this._grid }, rect); }
+
+  /** CS-10 — jednostki nad kulą i portretami: modele GLB / zwarte znaczniki, paski, stosy, bitwy, lądowania. */
+  drawUnits(ctx, rect) { this.units.draw(ctx, rect); }
 
   drawChrome(ctx, rect) {
     const st = this._state ?? {};
@@ -485,7 +497,7 @@ export class ColonySphereView {
     const a = this.renderer.nextFrameDelayMs();
     const b = this._mini && this._miniDrawn ? this._mini.nextFrameDelayMs() : Infinity;
     this._miniDrawn = false;
-    return Math.min(a, b);
+    return Math.min(a, b, this.units.nextFrameDelayMs());
   }
 
   /** Zwolnij konteksty WebGL (okno ukryte). */

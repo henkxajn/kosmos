@@ -2497,6 +2497,8 @@ export class GameScene {
       'csBarracks', 'csStation', 'csGroup', 'csCancelOutside']) window[k] = window.KOSMOS.debug?.[k];   // CS-8c — koszary, stacja, grupa, Finding 789
     // CS-9 — budynki-portrety, światła miast, wariant A/B barwy kategorii (ColonyBuildingsDebug.js).
     for (const k of ['csCity', 'csCityRepair', 'csTint', 'csDots', 'csBuildings', 'csNight', 'csDay']) window[k] = window.KOSMOS.debug?.[k];
+    // CS-10 — jednostki na kuli kolonii: modele GLB / znaczniki, marsz, lądowanie, bitwa (ColonyUnitsDebug.js).
+    for (const k of ['csUnits', 'csUnitMove', 'csUnitLanding', 'csUnitBattle', 'csUnitLod', 'csUnitInfo', 'csUnitsClear']) window[k] = window.KOSMOS.debug?.[k];
     // CS-2 (Finding 779) — scenariusze bramki geometrii siatki (Cs2GeometryDebug.js): odczyt pasa, szew, desant, eskadra, zdarzenie.
     for (const k of ['cs2Latitude', 'cs2Seam', 'cs2Invasion', 'cs2Strike', 'cs2EquatorEvent']) window[k] = window.KOSMOS.debug?.[k];
     // CS-4b — SurfaceCache: jedyne wejście do map powierzchni ciał (worker tworzony leniwie przy pierwszym zamówieniu).

@@ -20,6 +20,8 @@ import { SurfaceAirShader } from './SurfaceAirShader.js';
 import { ColonySphereOverlayShader as OV } from './ColonySphereOverlayShader.js';
 import { CityLightsShader as CL } from './CityLightsShader.js';
 import { CITY_LIGHTS } from './CityLightsLogic.js';
+import { ColonyUnitModels, UNIT_MODEL_STATE } from './ColonyUnitModels.js';
+import { unitLayerSignature } from './ColonyUnitLogic.js';
 import { resolveSurfaceLook, surfaceSeaLevelOf } from '../utils/SurfacePaletteLogic.js';
 import { resolveAirLook, isStarLocked, substellarDirOf, weatherRate } from '../utils/SurfaceAirLogic.js';
 import { geodesicTopology } from '../map/GeodesicTopology.js';
@@ -68,6 +70,7 @@ export class ColonySphereRenderer {
    * @param {() => object|null} [o.getCache] SurfaceCache (domyślnie window.KOSMOS.surfaceCache)
    * @param {() => number} [o.getWeatherRate] mnożnik zegara pogody (pauza gry = 0)
    * @param {object} [o.tuning] pokrętła (domyślnie wspólne SPHERE_TUNING)
+   * @param {(opts:object) => object} [o.createUnitLayer] warstwa modeli jednostek (CS-10; domyślnie ColonyUnitModels)
    */
   constructor(o = {}) {
     this._THREE = o.THREE ?? THREE_NS;
@@ -102,6 +105,11 @@ export class ColonySphereRenderer {
     this._devW = 0; this._devH = 0;
     this._dirty = true; this._lastNow = null; this._lastRenderT = -Infinity;
     this._renders = 0; this._composites = 0; this._renderMs = []; this._measureSync = false;
+    // CS-10 — warstwa modeli jednostek: osobna scena renderowana na przezroczystym tle PRZED kulą i kopiowana do
+    // płótna 2D (`_unitCanvas`) — gospodarz składa ją NAD portretami budynków; płótno GL zostaje z obrazem kuli.
+    this._createUnitLayer = o.createUnitLayer ?? ((opts) => new ColonyUnitModels(opts));
+    this._unitLayer = null; this._unitGroups = null; this._unitSig = ''; this._unitFailed = false;
+    this._unitCanvas = null; this._unitCtx = null; this._unitDrawn = false; this._unitMs = []; this._unitPasses = 0;
   }
 
   // ── API gospodarza ─────────────────────────────────────────────────────────────────────
@@ -290,8 +298,8 @@ export class ColonySphereRenderer {
     return this.projectDirection(this._topo.cx[tile], this._topo.cy[tile], this._topo.cz[tile], rect);
   }
 
-  projectDirection(x, y, z, rect) {
-    const p = projectDir(this._view, rect.w / rect.h, x, y, z, 1, this.tuning);
+  projectDirection(x, y, z, rect, radius = 1) {
+    const p = projectDir(this._view, rect.w / rect.h, x, y, z, radius, this.tuning);
     return { x: rect.x + (p.nx + 1) * 0.5 * rect.w, y: rect.y + (1 - p.ny) * 0.5 * rect.h, visible: p.front, facing: p.facing };
   }
 
@@ -305,6 +313,62 @@ export class ColonySphereRenderer {
   /** Środek i promień tarczy na ekranie. */
   discOnScreen(rect) {
     return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, r: discRadiusNdc(this._view, this.tuning) * rect.h / 2 };
+  }
+
+  // ── CS-10 — modele jednostek ─────────────────────────────────────────────────────────────────────────
+
+  /** Czy warstwa modeli może działać (WebGL żyje i warstwa nie padła) — inaczej gospodarz rysuje znaczniki. */
+  unitModelsAvailable() { return !this._unitFailed && !this.fallback().fallback; }
+
+  /** Stan modelu grupy: 'ready' | 'loading' | 'missing' (pierwsze pytanie zaczyna wczytywanie GLB). */
+  unitModelState(key, candidates) {
+    if (this._unitFailed || !key) return UNIT_MODEL_STATE.MISSING;
+    try {
+      if (!this._unitLayer) this._unitLayer = this._createUnitLayer({ THREE: this._THREE, onChange: () => { this._dirty = true; this._onChange(); } });
+      return this._unitLayer.stateOf(key, candidates);
+    } catch (e) { this._unitFailed = true; return UNIT_MODEL_STATE.MISSING; }
+  }
+
+  /**
+   * Ustaw grupy instancji modeli tej klatki (`groupUnitInstances`) albo null. Zmiana podpisu → render klatki.
+   * Wołane przez gospodarza PRZED `draw`.
+   */
+  setUnits(groups) {
+    const g = groups && groups.size ? groups : null;
+    const sig = g ? unitLayerSignature(g) : '';
+    if (sig !== this._unitSig) { this._unitSig = sig; this._dirty = true; }
+    this._unitGroups = g;
+  }
+
+  /** Złóż ostatnio wyrenderowaną warstwę modeli w `rect` (po portretach budynków). Zwraca true, gdy coś narysowano. */
+  drawUnits(ctx, rect) {
+    if (!this._unitDrawn || !this._unitCanvas || this.fallback().fallback) return false;
+    ctx.drawImage(this._unitCanvas, rect.x, rect.y, rect.w, rect.h);
+    return true;
+  }
+
+  // Przebieg modeli: przezroczyste tło, ta sama kamera; wynik → płótno 2D. Błąd wyłącza warstwę (zostają znaczniki), nie kulę.
+  _renderUnits(camera, sun, eye) {
+    this._unitDrawn = false;
+    if (this._unitFailed || !this._unitGroups || !this._unitLayer) { this._unitLayer?.setInstances?.(null, 1); return; }
+    try {
+      const t0 = this._now();
+      const n = this._unitLayer.setInstances(this._unitGroups, Math.sqrt(4 * Math.PI / this._topo.count));
+      if (n <= 0 || !this._unitLayer.render(this._gl, camera, sun, eye)) return;
+      if (!this._unitCanvas || this._unitCanvas.width !== this._devW || this._unitCanvas.height !== this._devH) {
+        this._unitCanvas = this._createCanvas(this._devW, this._devH);
+        this._unitCtx = this._unitCanvas.getContext?.('2d') ?? null;
+      }
+      if (!this._unitCtx) return;
+      this._unitCtx.clearRect(0, 0, this._devW, this._devH);
+      this._unitCtx.drawImage(this._canvas, 0, 0);
+      this._unitDrawn = true; this._unitPasses++;
+      const ms = this._now() - t0;
+      this._unitMs.push(ms); if (this._unitMs.length > 240) this._unitMs.shift();
+    } catch (e) {
+      this._unitFailed = true; this._unitDrawn = false; this._glUnitError = String(e?.message ?? e);
+      this._onChange();
+    }
   }
 
   fallback() {
@@ -586,6 +650,8 @@ export class ColonySphereRenderer {
       this._canvas.removeEventListener?.('webglcontextrestored', this._listeners.restored, false);
     }
     this._disposeScene();
+    try { this._unitLayer?.disposeGL?.(); } catch (e) { /* nic */ }
+    this._unitCanvas = null; this._unitCtx = null; this._unitDrawn = false;
     if (this._gl) {
       try { this._gl.dispose?.(); } catch (e) { /* nic */ }
       try { this._gl.forceContextLoss?.(); } catch (e) { /* nic */ }
@@ -648,6 +714,7 @@ export class ColonySphereRenderer {
         u.uCursorCos.value = [2, 2];   // poza zakresem cosinusa → brak siatki przy kursorze
       }
 
+      this._renderUnits(o.camera, sun, d);   // CS-10 — przed kulą: płótno GL kończy klatkę z obrazem kuli
       const t0 = this._now();
       this._gl.render(this._scene, o.camera);
       if (this._measureSync) {
@@ -723,7 +790,7 @@ export class ColonySphereRenderer {
   /** Zwolnij kontekst i zasoby (gospodarz ukryty). Ciało i widok zostają — kolejny `draw` odtworzy scenę. */
   release() {
     this._teardownGL();
-    this._glFailed = false; this._glError = null;
+    this._glFailed = false; this._glError = null; this._unitFailed = false;
     this._dirty = true; this._lastNow = null; this._lastRenderT = -Infinity;
     this._drag = null; this._hover = { on: false, tile: -1, dir: null };
   }
@@ -739,6 +806,8 @@ export class ColonySphereRenderer {
       renderMsMedian: ms.length ? ms[ms.length >> 1] : null, hoverTile: this.hoverTile, selectedTile: this._mode.selectedTile,
       gridAll: this._mode.gridAll, haze: this._obj?.shell ? SurfaceAirShader.hazeOpacityOf(this._obj.shell.material) : null,
       hasAir: !!this._airLook, locked: !!this._lockedDir, cityLights: !!this._city, cityMesh: !!this._obj?.city?.visible,
+      units: { ...(this._unitLayer?.info?.() ?? { instances: 0, groups: 0, drawCalls: 0, triangles: 0, states: {} }), failed: this._unitFailed, error: this._glUnitError ?? null,
+        drawn: this._unitDrawn, passes: this._unitPasses, passMsMedian: (() => { const u = this._unitMs.slice().sort((a, b) => a - b); return u.length ? u[u.length >> 1] : null; })() },
     };
   }
 }

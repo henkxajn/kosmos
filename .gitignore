@@ -41,3 +41,6 @@ src/testing/reports/balans/
 # ARC COMBAT VISUALS CV-1b — archiwum normalizatora modeli statków (stare sloty, stare hardpointy, kopie sprzed przebiegu po
 # starych modelach); tylko lokalnie — historia git i tak trzyma poprzednie wersje.
 /assets/models/ships/_archive/
+
+# ARC COLONY SPHERE CS-10 — oryginały odchudzonych modeli jednostek (36,7 MB każdy) — poza ścieżką gry i poza git
+/assets/units/ground/_originals/
