@@ -50,6 +50,7 @@ for the record.
 | **D-CS-18 (new, signed 2026-11-18)** | The system-seed mode is a property of the **world**, decided once at world creation (`GameScene.start()` / `GameCore.boot()`) and stamped in `galaxyData.seededSystems = true` (only when ON; saved whole, no version bump; unstamped = unseeded). `SystemGenerator.worldSeedContext(galaxyData)` is the only reader; generation and scan derive their seed from it, so flipping the flag after start changes nothing. Fail-closed: a seeded world without a galaxySeed logs `[CS-3a]` `console.error`, counts `emergencySeedUses()` and uses `EMERGENCY_GALAXY_SEED = 0`, never the old seed. Homeworld mutation seeded from galaxySeed in a seeded world. CS-3a-fix (§3.2, Finding 769). |
 | **D-CS-25 (signed 2026-11-19)** | Moon-orbit generation change in scaled-orbit worlds accepted: moon orbit radii × k at generation for `orbitModel: 2` worlds, no new RNG draws, legacy worlds unchanged, scaled test saves made before the change keep their old moon orbits (§3.9.3). |
 | **D-CS-26 (signed 2026-11-20)** | CS-5 overnight decisions signed as proposed (§3.13, §3.14). (1) The live game keeps new colonies **flat until CS-7**, even with `FEATURES.colonySphere` ON; geo grids only headless / debug. (2) A geo tile's coordinate `(index, −1)` is an **interim encoding**; it migrates to real tile ids at the CS-12 clean save break. (3) Key strings stay unchanged (minefield `${q}_${r}`, battle `pid\|q\|r`, `{q,r}` payloads, unit / army / Vessel `q,r`). (4) Landing zone = graph distance ≥ 2 from every held tile; watch in CS-8 / CS-10 balance — far more landing tiles than today's flat edge rows. (5) `ensureColonyGrid` stays flat. (6) Gas giants flat until CS-11. Finding 782: option B — no change now, re-evaluate after in-game tests (CS-8) with the D-CS-8 table (planetoid n=2 = 42 tiles is the ready option). |
+| **D-CS-28 (signed 2026-11-20)** | CS-8 decisions signed as proposed (§3.16), **item 1 amended at the owner gate**: the Colonies console is shown for **every geo colony regardless of `FEATURES.colonySphere`**; the flag only decides whether new colonies get a geo grid (§3.16.1). Items 2 and 9 are **INTERIM until CS-8c**: the embedded Crew / Population / Station pages and the unit group drawer stay in today's look inside the console and get restyled to kit primitives in CS-8c. Items 3–8 and 10 as written in §3.16 (no combat-strip slot in the header; unaffordable rows queue the order; Shift keeps the building armed; yield labels for all tiles at tile ≥ 34 px; founding an outpost neither switches the active colony nor opens the screen with the flag ON — Finding 740; body preview read-only in the console; tuning values). |
 
 **Step order (signed): surface track first.**
 CS-3a → CS-3b → CS-4 → CS-6 → CS-1a → CS-1b → CS-2 → CS-5 → CS-7 → CS-8 → CS-9 → CS-10 → CS-11 → CS-12 → CS-Z.
@@ -799,6 +800,7 @@ previous step in the order is closed. **Model policy (signed):** Fable only for 
 | **CS-5** | MECH | Opus | `GeodesicGrid` TileGraph (n by size class, D-CS-8), terrain via classify→terrain table (D-CS-3), anomalies, latitude bands, landing rule (D-CS-9), sparse save format, `grid.kind`. Behind `FEATURES.colonySphere` (new colonies only; old colonies stay flat = dual grid). Keepers: 10n²+2, 12 pentagons, neighbour symmetry, A* optimal vs BFS, determinism, terrain shares vs today's per type, save round-trip; AI bootstrap + auto-expander + invasion headless runs on geo grids | CS-2, CS-4 |
 | **CS-7** | VIS | **Fable** | `ColonySphereRenderer` hero: same shader, drag/zoom, picking → TileGraph id, hover/selection outlines, grid near the cursor / build mode, lens overlay, render-on-demand, context loss, 2D fallback. Contact sheet across the 5 UI themes (hero frame chrome) | CS-5, CS-6 |
 | **CS-8** | MECH (UI) — light loop, heavy gate for build flow + unit move orders | Opus | Colonies console on the CONSOLES template: list + planet card, inspector (tile/building/unit/planet), strip (queue), lenses; build flow (`evaluatePlacement` per tile) and unit move orders on the sphere; `_stationMode` sub-tab; i18n PL/EN; `ColonyModalLogic`. Behind `FEATURES.colonySphere` (OFF = today's ColonyOverlay) **Owner decisions for CS-8 (2026-11-20):** (1) restyle the colony screen panels to the console look; (2) remove the small globe in the right panel (D-CS-27 item 9 was interim only); (3) the right panel becomes the info area — tile / building / unit / planet inspector | CS-7 |
+| **CS-8c** | UI (visual) | Opus | Restyle the pages CS-8 embeds in today's look (D-CS-28 items 2 and 9, interim): Crew / Population / Station pages and the unit group drawer (armies: create / split / disband) to kit primitives inside the console | CS-8 |
 | **CS-9** | VIS | Opus (Fable optional) | Building massing (procedural low-poly per category, `HudPalette` role emissives, instanced) on the hero; city lights per tile on the night side, also on the system map; under-construction / damaged states | CS-8 |
 | **CS-10** | VIS + MECH | Opus (Fable optional for the visual part) | Ground units on the sphere: GLB template cache + instancing near, marker far (D-CS-14), `_mobile`/`_deployed` swap, great-circle step animation via `stepDirection`, battle markers; optimize the 38.5 MB supply GLBs first | CS-8 |
 | **CS-11** | MECH | Opus | Gas giants per D-CS-5 (archetype → `GasGiantShader` params **only if at least as good as today; default and fallback = today's look**; platform grid on the geo graph or look-only); optional AI archetype "expected buildable tiles" table (D-CS-12) | CS-5, CS-6 |
@@ -3418,6 +3420,159 @@ P3m, P3n — 45 PASS; 4 mutations red. Real-game probe: 23 / 23 incl. "capital c
 **Remaining for later steps:** CS-8 console (lens buttons, real build-mode flow, per-tile cost preview — Finding 780); CS-9
 massing + city lights + system-map markers (784); CS-10 unit models and great-circle step animation (units step tile to tile in
 screen space today); cloud shadows; balance re-checks (782, AI colony count on geo).
+
+### 3.16 CS-8 — Colonies console on the CONSOLES template (2026-11-20; owner gate PASS incl. the re-check after the post-gate fixes)
+
+**Owner gate 2026-11-20: PASS**, including the re-check after the fixes of §3.16.1 (console for every geo colony regardless of the
+flag, transparent hero background with vignette, Finding 791). **D-CS-28 signed as proposed with item 1 amended** (§0b); items 2
+and 9 (embedded Crew / Population / Station pages, unit group drawer in today's look) are **INTERIM until CS-8c**. Findings
+**740, 780, 785, 788, 791, 792 ✅ closed**; **789, 790 ⚪ open**.
+
+Shown for **every geo colony whatever the flag says** (owner, gate 2026-11-20 — see §3.16.1); `FEATURES.colonySphere` only decides
+whether new colonies get a geo grid. Flat colonies keep today's colony screen until CS-12 (owner decision 6); flag OFF with no
+geo colony = today bit for bit. Contact sheets: `kosmos-handover/cs-8/cs8a-contact.md`, `cs8b-contact.md`. No critical file
+touched. Owner decisions 1–6 for CS-8 (2026-11-20) were given with the task and are implemented as written.
+
+**Part A — as built (console).**
+- `src/ui/ColonyConsoleLogic.js` (pure): console gate (`colonyConsoleActive(grid)` = `grid.kind === 'geo'`), zone
+  spec, list rows, planet card rows, tile stats, inspector state per selection, portrait spec + category glyphs, build rows,
+  queue rows, header chips + lens state, unit orders, transport rows, colony summary, the Finding 740 predicate.
+- `src/ui/ColonyConsoleView.js` (drawing; `consoleZones` geometry, `consoleRoles` + category colours only, no emoji): header
+  (colony name + population line, `[ COLONY ] [ STATION ]`, lens chips Terrain / Deposits / Ownership / Supply, `[ BUILD MODE ]`,
+  `[ x ]`), left zone (all player colonies and outposts — click switches the active colony — and the planet card: archetype,
+  tile stats, temperature / gravity / atmosphere / water / mass / radius with band and effect lines, deposits with richness, ratio
+  and depletion ETA), inspector by selection (below), strip (build queue).
+- Inspector states: **tile** (terrain, tile number, latitude band with its production / cost multipliers, terrain yield
+  multipliers, anomaly, units standing on the tile, build list by category with the real cost on this tile, expected yield and
+  the row state) · **building** (portrait, level, production or extraction, upkeep, energy, staffing, droids, staffing priority,
+  upgrade with its cost, demolish, the tile under it) · **construction / pending order** (progress, cost, cancel) · **unit**
+  (card, stats, orders, transport) · **palette** (build mode) · **station** (header switch) · **summary** when nothing is
+  selected (population, housing, growth, satisfaction, crew per stratum, buildings per category, ground units).
+- Portrait slot: `assets/buildings/{id}.png`, else a vector category glyph in the category colour in the same slot (12 glyphs,
+  one per building category in the data); the capital tile shows the `colony_base` portrait.
+- Hero = the CS-7 sphere in the hero zone (`ColonyOverlay._drawSphereMap` with the hero rect; `_getMapBounds` returns the hero
+  rect in console mode, so every click / hover / right-click path of CS-7 is unchanged). The small globe / mini sphere of the
+  right column is gone (D-CS-27 item 9 was interim); the 2D globe canvas is torn down when a flat colony screen hands over.
+- Strip: one card per queue entry — constructions with progress and years left, pending orders with `[ < ] [ > ]` (payment
+  order) — `[ x ]` cancels, a click on the card selects the tile and turns the sphere to it. New intent
+  `BuildingSystem.movePending(tileKey, delta)` (Map order = the order `_tickPendingQueue` pays in; the save keeps it, no format change).
+- Today's Crew / Population / Station tabs are **embedded as they are** in the inspector (`_drawInfoPanel(..., { consoleTab })`:
+  same content, controls, scroll and modals, no globe, no tab bar) behind the summary sub-chips and the header station switch.
+- **Finding 785 ✅** — the preview of a body without a colony builds its grid through `createColonyGrid` (geo with the flag,
+  `PlanetMapGenerator.generate` without it) and opens in the console read-only (terrain inspector, no build list, no palette).
+- Rules of the CONSOLES arc: every disabled chip / row keeps a hit zone that shows the reason and what to do (tooltip + flash on
+  click); the hover zone is recomputed from the cursor after every frame, so a tooltip never comes from a zone that is gone.
+
+**Part B — as built (build flow, unit orders).**
+- **Finding 780 ✅** — one cost function: `BuildingSystem._buildCostOn(tile, building)` is what `_build` charges and what
+  `previewBuildCost(tile, id)` returns (latitude band × environment, commodities, habitat exception, extreme-planet Si);
+  `previewUpgradeCost(tileKey)` shares `_upgradeCostOf` with `_upgrade`. The console never calls the latitude-less helper.
+  `previewTileYield(tile, id)` = base rates of the tile (terrain, band, climate, anomalies); mines have no tile yield (D-CS-6).
+- **Tile → building**: the tile inspector's list = today's gate (`_getAvailableBuildings` → `evaluatePlacement`) with the real cost;
+  rows are `ok` / `queue` (short of resources — the click queues the order, as today) / `locked` (reason of the gate) / `foreign`.
+- **Building → tiles** (decision 3): `[ BUILD MODE ]` turns the inspector into a palette (category bar → buildings); the catalogue
+  is the union of today's tile gate over all free tiles, so both modes admit the same (tile, building) pairs by construction.
+  The sphere highlights allowed tiles (`buildVerdictFor`, the CS-7 overlay), each with the expected yield and the band's cost
+  multiplier (all labels when tiles are large enough on screen, otherwise the tile under the cursor); the palette shows the real
+  cost and the verdict for the tile under the cursor. Click places through the same `planet:buildRequest`; Shift keeps the
+  building armed; Esc leaves the mode; every refusal flashes its reason.
+- Upgrade / demolish from the building inspector; the Delete key also cancels a construction / pending order on the selected
+  tile and says so when there is nothing to demolish.
+- Unit inspector: orders fire today's `unit*` hit types (deploy / pack / cancel, support / withdraw support, survey, analyse,
+  unit card, deselect), unavailable ones stay listed as disabled with a reason; move = right click on a tile (CS-7 path);
+  stack cycling on the tile; a group selection keeps today's bottom drawer (armies: create / split / disband) in the hero zone;
+  **transport**: own docked ships with a troop bay open today's troop loading window next to the inspector.
+- **Finding 740 ✅ (behind the flag)** — `outpost:founded` asks `shouldActivateFoundedOutpost`: with the flag ON the active
+  colony changes only when the player has no active full colony, and the colony screen is not forced open; the outpost appears in
+  the console list. Flag OFF as today. Other automatic switches (reported, unchanged): `colony:founded` still switches to the new
+  full colony and opens the screen.
+- **Finding 788 ✅ (new — CS-7 live-flow bug, found by the real-game probe).** `colony:founded` is emitted from inside
+  `createColony`, before `ColonyManager._onColonyFounded` assigns the factory grid. The listener opened the colony screen at that
+  moment; `_getGrid` built a **flat** grid and placed the capital on it. With the flag ON the colony then received its geo grid:
+  the screen showed the 2D map over a sphere colony, and the colony kept a dead capital key (`capital_10,8`) with no capital on
+  the sphere. Fix: with the flag the screen opens after the founding transaction (microtask), and `_getGrid` drops a cached flat
+  copy when the colony carries a different geo grid. Measured after the fix: active keys `capital_g4, g5, g6`. Flag OFF untouched
+  (the flat generator is deterministic, so both grids were equal there).
+
+**Proof.** `docs/design/prototypes/cs8a-console.png` (summary, tile, building, unit, queue, station, embedded Crew tab, outpost,
+body preview, flag-OFF control; then 5 themes × nothing / tile / building / unit) and `cs8b-build-flow.png` (polar tile list, palette,
+highlighted tiles with yields, refusal with a reason, disabled element with a reason, unit move). Real-game probe
+`src/testing/headless/probe-cs8-console.mjs [--build]` (headless Chrome over CDP, 1600×1041, real mouse and key events): **51 / 51**
+in three consecutive runs — console on a new game, list switch, planet card, every inspector state, lens chips + `L`, station
+switch (disabled with a reason, then enabled), sub-tabs, queue cancel / reorder, outpost, preview (785), polar build with shown
+== charged (farm Fe 15 on a polar tile), both build modes, Shift multi-place, refusal, Esc, upgrade, Delete, right-click move,
+save / load (queue order kept), flag OFF = today's screen, a flat colony with the flag ON keeps today's screen.
+Keeper `colony_console_smoke` 32 PASS. Fail-first in a detached worktree at `29d0978`: 1 PASS / 28 FAIL (the green one is the
+control: verdict equality on the old path). Mutations **75 / 75 red** (one surviving mutant — "have exactly the cost" counted as
+missing — closed by a new pin). Flag OFF: `probe-cs1a-trace` default seed `21cf5df1…` / `2037d7d3…` and `--years 60`
+`0d9527fd…` / `45da8089…`, both equal to HEAD `29d0978` run with the same command. Pins updated on purpose: none. Sweep
+445 / 445 OK, 0 FAIL; `check-i18n` PASS (194 new keys in PL and EN).
+
+**Decisions taken while the owner was away (D-CS-28 — signed 2026-11-20 with item 1 amended; items 2 and 9 interim until CS-8c).**
+1. ~~The console needs the flag and a geo grid.~~ **Changed at the owner gate:** the console is shown for every geo colony
+   regardless of the flag (same rule as D-CS-27 item 1); the flag only decides the grid of new colonies.
+2. Crew / Population / Station pages are embedded in today's look inside the inspector; restyling them to kit primitives is a
+   separate visual step (≈ 650 lines of drawing code with steppers, tooltips and modals).
+3. The header has no combat-strip slot (chips need the width); the combat strip stays where it is over the colony screen today.
+4. An unaffordable build row stays clickable and queues the order (today's rule); it is marked "to queue" with the missing amounts.
+5. Build mode: a plain click places and disarms the building, Shift keeps it armed; the mode itself ends with Esc or the chip.
+6. Yield labels on highlighted tiles appear for every tile only when zoomed in (tile ≥ 34 px), otherwise for the hovered tile.
+7. With the flag, founding an outpost neither switches the active colony nor opens the colony screen (740).
+8. The body preview opens in the console read-only; the list in preview mode switches to the clicked colony.
+9. Group selection keeps today's bottom drawer in the hero zone (old look); a single unit is handled by the inspector only.
+10. Tuning values: list 236 px, inspector 336 px, strip 78 px, portrait 72 px, hero vignette alpha 0.62 / reach 1.55 disc radii.
+
+**Findings.** 780 ✅ · 785 ✅ · 788 ✅ (new) · 791 ✅ · 792 ✅ (§3.16.1) · 740 ✅ behind the flag (closed in its registry rows,
+`CONSOLES_PLAN.md` §5 and `FINDINGS_BACKLOG.md`, at the CS-8 docs commit).
+- **Finding 789** ⚪ open — `BuildingSystem.cancelConstruction` relies on `tile.underConstruction`, which for an order started
+  from the pending queue is set only by the colony screen's tile sync (`syncTileBuildings` after `planet:pendingFulfilled`); with
+  the screen never opened the cancel is a no-op. The console always has the synced grid; the Outliner path is exposed. Pre-existing.
+- **Finding 790** ⚪ open (from reading the code, not measured) — an own colony viewed without being the active one
+  (`show({ colonyId })`) would send `planet:buildRequest` to the *active* colony's BuildingSystem: the request carries no colony
+  id and the listener only checks `window.KOSMOS.buildingSystem === this`. Pre-existing; the console list always switches the
+  active colony, so the normal path does not reach it. Measure before fixing.
+  Free finding number: 791 (791–792 used by §3.16.1).
+
+**Remaining for later steps:** restyle of the embedded Crew / Population / Station pages and of the group drawer; cargo of
+resources from the colony side (only troop loading is offered); CS-9 massing / city lights; CS-10 unit models.
+
+#### 3.16.1 Owner gate 2026-11-20 — steps 1–11 PASS, three fixes, re-check PASS; Finding 792 fixed before the commit
+
+Step 12 showed the CS-7 window after save + F5 + Continue: F5 resets the flag and the console was tied to it.
+1. **Console for every geo colony.** `colonyConsoleActive(grid)` reads the grid kind only; `ColonyOverlay.draw` no longer reads the
+   flag on the way to the console. A geo colony from a save opens in the console after a page reload (real-game probe: flag
+   `false` after reload, console on, no mini sphere). The CS-7 right column with the mini sphere is now unreachable for geo grids
+   (CS-Z cleanup list). Findings 740 / 788 behaviour stays behind the flag (they concern founding, i.e. new colonies).
+2. **Hero backdrop.** The sphere's WebGL canvas is transparent outside the disc (`alpha: true`, clear alpha 0) and the 2D fallback
+   no longer paints the frame; the console's opaque hero backing is gone, so the dimmed live scene shows behind the sphere as in
+   the other consoles. A soft vignette in the theme background colour sits just under the sphere (`HERO_VIGNETTE`, tunable).
+3. **Finding 791 ✅ (new, pre-existing, real founding path — not the debug helper).** `ColonyManager.createColony` /
+   `createOutpost` called `factSys.setMode('reactive')` before the colony was put into the registry. `setMode` runs
+   `_reactiveAllocate` at once; `isRecipeAvailable` looks its owner colony up in the registry, found none and failed closed —
+   three console warnings (basic_supplies, civilian_goods, neurostimulants) and a first allocation without consumer goods. The
+   next allocation repaired it, so the effect was one skipped planning pass. Fix: reactive mode is set right after registration,
+   before `colony:founded` / `outpost:founded`. Not behind the flag (measured with the flag OFF and ON: 6 warnings → 0).
+4. **Finding 792 ✅ (owner: fix now, 2026-11-20).** The home colony had the same order (`ColonyManager.registerHomePlanet`:
+   `setMode('reactive')` before `_colonies.set`): every new game logged the same 3 fail-closed warnings (flag OFF and ON). Fix:
+   `setMode('reactive')` moved right after `this._colonies.set(planet.id, colony)`, same as 791. Not behind the flag.
+   **Flag-OFF baseline after the fix (old → new):** default seed 30 y trace `21cf5df1…` → `21cf5df1…`, state `2037d7d3…` →
+   `2037d7d3…`; default seed `--years 60` `0d9527fd…` → `0d9527fd…` / `45da8089…` → `45da8089…`; seed B
+   (`KOSMOS_SEED=cs1b-seedB --years 60`) `89251603…` → `89251603…` / `ea79a395…` → `ea79a395…`. **The baseline did not move**
+   (expected a new one): at `registerHomePlanet` the home colony has no factory buildings yet (starter buildings are placed
+   afterwards), so the skipped first reactive pass allocated nothing either way and the next pass — the first that sees the
+   factories — is identical. The fix removes the warnings without changing the simulation. No keeper pins the trace hashes in
+   code (they live in this plan only), so no pin needed updating. New keeper pins: **K2j** (real new game, flag OFF and ON: 0
+   fail-closed warnings, owner found, reactive mode) and **K3m** (source: `registerHomePlanet` sets reactive only after
+   registration); fail-first on the pre-fix `registerHomePlanet`: K2j red (3 warnings flag OFF, 3 flag ON) and K3m red.
+
+Keeper `colony_console_smoke` 35 PASS (K1a / K3a / K4a rewritten for item 1; new K2i, K3k, K3l); fail-first of the new pins on the
+pre-fix `ColonyManager`: K2i and K3l red. Mutations 83 / 83 red. Real-game probe 54 / 54 (adds the reload check and the 2D
+fallback frame). `probe-cs1a-trace` unchanged on both commands (the trace founds no player colony, so Finding 791 is covered by
+K2i only). Sweep 445 / 445 OK; `check-i18n` PASS. `cs8a-console.png` regenerated (frames "after reload" and "2D view" added).
+After Finding 792: keeper `colony_console_smoke` **37 PASS** (+K2j, K3m); sweep **445 / 445 OK, 0 FAIL**; `check-i18n` PASS.
+Free finding number: 793.
+
+---
 
 ## 4. Decisions for Filip (recommendation first)
 

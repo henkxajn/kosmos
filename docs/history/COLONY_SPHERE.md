@@ -2,7 +2,23 @@
 
 Plan, decisions and findings registry: `docs/design/COLONY_SPHERE_PLAN.md`.
 
-## CS-7 — colony sphere hero + playable sphere colonies (2026-11-20; owner check PASS, not committed)
+## CS-8 — Colonies console on the CONSOLES template (2026-11-20; owner gate PASS)
+
+- Owner gate PASS incl. the re-check after the post-gate fixes (console for every geo colony regardless of the flag,
+  transparent hero background with vignette, Finding 791). D-CS-28 signed with item 1 amended (the flag only decides the grid
+  of new colonies); items 2 and 9 (embedded Crew / Population / Station pages, unit group drawer in today's look) interim
+  until CS-8c (new step row).
+- Part A: `ColonyConsoleLogic` / `ColonyConsoleView` — colony list, planet card, inspector (tile / building / construction /
+  unit / palette / station / summary), queue strip with reorder (`BuildingSystem.movePending`), lens chips, CS-7 sphere as hero.
+- Part B: one cost function (780), tile → building and building → tiles build modes admitting the same pairs, upgrade /
+  demolish, unit orders and troop loading; 740 behind the flag (founding an outpost keeps the active colony).
+- Fixes: 780, 785, 788 (geo colony opened on a flat grid in the live founding flow), 791 (new colony / outpost factory set
+  reactive before registration), 792 (same for the home colony — 3 fail-closed warnings per new game → 0; flag-OFF trace
+  baseline unchanged on both seeds, so no hash moved). Findings 789, 790 open; free 793.
+- Proof and numbers: plan §3.16 / §3.16.1 (sheets `cs8a-console.png`, `cs8b-build-flow.png`; real-game probe 54 / 54; keeper
+  `colony_console_smoke` 37 PASS; mutations 83 / 83 red).
+
+## CS-7 — colony sphere hero + playable sphere colonies (2026-11-20; owner check PASS)
 
 - Owner check PASS; D-CS-27 signed (camera-locked light). Pre-commit fix: the capital marker used `buildingId` (null on the
   virtual capital) → emoji; now `colony_base` portrait, gold ring, larger, farm on the capital as a badge, gold outline also for
